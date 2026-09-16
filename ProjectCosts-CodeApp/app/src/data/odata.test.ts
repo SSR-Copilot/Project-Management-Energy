@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quote, guid, eq, lookupEq, and, or, lookupIn, chunk, ACTIVE } from "./odata";
+import { quote, guid, eq, lookupEq, and, or, lookupIn, chunk, ACTIVE, dateOnly } from "./odata";
 
 const G1 = "33b9cc79-5b4f-f111-bec6-000d3a3855c2";
 const G2 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -94,5 +94,30 @@ describe("chunk", () => {
 describe("ACTIVE", () => {
   it("UT-OD-014 is statecode 0", () => {
     expect(ACTIVE).toBe("statecode eq 0");
+  });
+});
+
+describe("dateOnly", () => {
+  it("UT-OD-015 emits YYYY-MM-DD, never a timestamp", () => {
+    // Saving a BoP contract failed with
+    //   Cannot convert the literal '2026-09-17T18:30:00.000Z' to the expected type 'Edm.Date'
+    // because the write sent `Date.toISOString()` into a Date-Only column.
+    expect(dateOnly(new Date(2026, 8, 18))).toBe("2026-09-18");
+    expect(dateOnly(new Date(2026, 8, 18))).not.toContain("T");
+  });
+
+  it("UT-OD-016 zero-pads single-digit months and days", () => {
+    expect(dateOnly(new Date(2025, 0, 5))).toBe("2025-01-05");
+  });
+
+  it("UT-OD-017 keeps the local calendar day when UTC is a day behind", () => {
+    // 18 Sep 00:00 in a UTC+5:30 browser IS 17 Sep 18:30 UTC, so anything derived from the ISO
+    // string stores the wrong day. Built from local parts, midnight local stays the 18th.
+    const midnightLocal = new Date(2026, 8, 18, 0, 0, 0);
+    expect(dateOnly(midnightLocal)).toBe("2026-09-18");
+  });
+
+  it("UT-OD-018 ignores the time component entirely", () => {
+    expect(dateOnly(new Date(2026, 8, 18, 23, 59, 59))).toBe("2026-09-18");
   });
 });

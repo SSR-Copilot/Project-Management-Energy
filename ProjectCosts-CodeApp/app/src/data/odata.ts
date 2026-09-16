@@ -80,6 +80,24 @@ export function chunk<T>(items: readonly T[], size = CHUNK): T[][] {
   return out;
 }
 
+/**
+ * `YYYY-MM-DD` for a Date-Only (`Edm.Date`) column.
+ *
+ * A Dataverse column whose behavior is Date Only rejects a full timestamp outright:
+ *
+ *   Cannot convert the literal '2026-09-17T18:30:00.000Z' to the expected type 'Edm.Date'
+ *
+ * which is what `Date.toISOString()` produces, and it is why saving a BoP contract failed.
+ *
+ * The parts must be read in LOCAL time, never from the ISO string. A date the user picked as
+ * 18 Sep in a UTC+5:30 browser is held as `2026-09-17T18:30:00Z`, so `toISOString().slice(0, 10)`
+ * would silently store the 17th — the same off-by-one-day the timestamp above is showing.
+ */
+export function dateOnly(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 /** Dataverse `statecode` 0 = Active for every custom table in this solution. */
 export const ACTIVE = "statecode eq 0";
 

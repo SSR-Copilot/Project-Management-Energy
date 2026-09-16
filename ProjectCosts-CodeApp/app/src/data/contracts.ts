@@ -30,7 +30,7 @@ import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountl
 import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexprojectcontractsModel";
 import { unwrap } from "@/platform/errors";
 import { fetchAll } from "./client";
-import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
+import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn } from "./odata";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
   type AccountRow, type BopContract, type CapexCostRow, type CapexProjectContract,
@@ -54,9 +54,20 @@ export const ES = {
 /* ═══════════════════════════════════════════════════════════════════ mapping */
 
 /** Dataverse dates arrive as ISO strings; a blank column is absent, not empty. */
+/**
+ * A Dataverse date into a local `Date`.
+ *
+ * A Date-Only column comes back bare (`"2026-09-18"`), and `new Date("2026-09-18")` is defined to
+ * parse that as UTC midnight — which renders as the 17th everywhere west of Greenwich. Splitting
+ * the parts and using the local constructor keeps the calendar day the user picked. Full
+ * timestamps still go through `new Date` unchanged.
+ */
 function toDate(value: string | undefined): Date | undefined {
   if (!value) return undefined;
-  const d = new Date(value);
+  const dateOnlyParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const d = dateOnlyParts
+    ? new Date(Number(dateOnlyParts[1]), Number(dateOnlyParts[2]) - 1, Number(dateOnlyParts[3]))
+    : new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
@@ -398,7 +409,7 @@ function contractPayload(w: ContractWrite) {
     vsb_name: w.name,
     "vsb_Project@odata.bind": `/${ES.projects}(${w.projectId})`,
     vsb_description: w.description.trim(),
-    vsb_closingdate: w.closingDate.toISOString(),
+    vsb_closingdate: dateOnly(w.closingDate),
     vsb_contracttypes: w.contractType,
     vsb_costsuntilclosingdate: w.costsUntilClosingType,
     vsb_costsuntilclosingdateplan: untilPlan ? w.costsUntilClosingPlan ?? null : null,
