@@ -196,7 +196,16 @@ const useStyles = makeStyles({
     "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
   },
   panelColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
-  duration: { display: "flex", gap: space.s },
+  /*
+   * `drp_…_DurationYears.Width = 100`, `…_DurationMonths.Width = 120`, months placed at
+   * `DurationYears.X + Width + 20` (`OpexCostScreenCode.txt:5989`, `:6053`). Fluent's Dropdown
+   * `min-width: 160px` overrode both, so the pair sized off its own text and overflowed.
+   */
+  duration: { display: "flex", gap: "20px" },
+  durationYears: { width: "100px", minWidth: "100px" },
+  durationMonths: { width: "120px", minWidth: "120px" },
+  /** Every other panel dropdown is `Parent.Width - Self.X*2`, i.e. the full column. */
+  panelDropdown: { width: "100%", minWidth: "unset" },
   dateRow: { display: "flex", alignItems: "center", gap: space.xs },
   toggleRow: { display: "flex", alignItems: "center", gap: space.s },
   indent: { paddingLeft: space.xl, display: "flex", flexDirection: "column", gap: space.m },
@@ -794,16 +803,27 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // Patch(…))` runs. `savePeriod` performs the row write AND the cascade in one call, so only
     // one of the two can be named; the cascade is the phase worth naming when there is one.
     const cascades = selected !== null && childrenOf(allCosts, selected.id).length > 0;
+    /*
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS.
+     *
+     * The canvas Save raises the spinner and dismisses the panel in ONE `UpdateContext` —
+     * `{locSpinnerInformationText: "Saving OPEX cost...", locIsVisiblePopUpSpinner: true,
+     * locIsVisibleRightPanelNewEditOpexCost: false, locResetStartDate: false}`
+     * (`OpexCostScreenCode.txt:8695`) — and only then runs the `Patch`.
+     *
+     * This used to close after awaiting, so the spinner was drawn on top of the panel it was
+     * saving. The failure branch is just `Notify(…)`: the panel is already gone by then, so the
+     * error surfaces as the screen banner below, not inside a panel.
+     */
     setBusyLabel(cascades ? OPEX_MSG.updatingChildCosts : OPEX_MSG.savingCost);
+    setPanel(null);
+    setForm(null);
     try {
       await save.mutateAsync({
         ...book,
         periods: [...book.periods.filter((p) => p.id !== saved.id), saved],
       });
-      setPanel(null);
-      setForm(null);
     } catch (e) {
-      // `Notify(…)` on failure, and the panel is NOT closed.
       const message = e instanceof Error ? e.message : String(e);
       setBanner(OPEX_MSG.saveFailed("Save", message));
     } finally {
@@ -1282,6 +1302,7 @@ function OpexPanel({
             <div className={styles.duration}>
               <Dropdown
                 aria-label="Duration years"
+                className={styles.durationYears}
                 data-testid="opex-years"
                 disabled={disabled(modes.durationYears)}
                 value={DURATION_YEAR_OPTIONS.find((o) => o.value === form.durationYears)?.name ?? ""}
@@ -1294,6 +1315,7 @@ function OpexPanel({
               </Dropdown>
               <Dropdown
                 aria-label="Duration months"
+                className={styles.durationMonths}
                 data-testid="opex-months"
                 disabled={disabled(modes.durationMonths)}
                 value={DURATION_MONTH_OPTIONS.find((o) => o.value === form.durationMonths)?.name ?? ""}
@@ -1312,6 +1334,7 @@ function OpexPanel({
             {/* `drp_…_Currency.DisplayMode: =DisplayMode.Disabled` — always (`:6206`). */}
             <Dropdown
               aria-label={OPEX_PANEL_LABELS.currency}
+              className={styles.panelDropdown}
               data-testid="opex-currency"
               disabled
               value={form.currencyId ?? ""}
@@ -1340,6 +1363,7 @@ function OpexPanel({
             {fieldLabel(required.aggregation, OPEX_PANEL_LABELS.aggregation)}
             <Dropdown
               aria-label={OPEX_PANEL_LABELS.aggregation}
+              className={styles.panelDropdown}
               data-testid="opex-aggregation"
               disabled={disabled(modes.aggregation)}
               value={form.aggregation === null ? "" : OPEX_AGGREGATION_LABEL[form.aggregation] ?? ""}
@@ -1360,6 +1384,7 @@ function OpexPanel({
             )}
             <Dropdown
               aria-label={OPEX_PANEL_LABELS.distributionFrequency}
+              className={styles.panelDropdown}
               data-testid="opex-frequency"
               disabled={disabled(modes.distributionFrequency)}
               value={OPEX_DISTRIBUTION_FREQUENCY
@@ -1430,6 +1455,7 @@ function OpexPanel({
                   {fieldLabel(required.inflationCountryArea, OPEX_PANEL_LABELS.area)}
                   <Dropdown
                     aria-label={OPEX_PANEL_LABELS.area}
+                    className={styles.panelDropdown}
                     data-testid="opex-area"
                     disabled={disabled(modes.inflationCountryArea)}
                     value={form.inflationCountryArea ?? ""}

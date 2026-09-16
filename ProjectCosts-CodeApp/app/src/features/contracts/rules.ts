@@ -163,8 +163,16 @@ export const MSG = {
   paymentDateFormat: "Payment date must be in format MM/YYYY.",
 
   /** `cmp_OpexCosts_PopUpConfirmation_DeleteContracts` / `..._DeletePaymentTarget` */
+  /*
+   * `locContractSpinnerInformationText` — the canvas picks a DIFFERENT string per operation, on
+   * the Save/Confirm that starts it. A single "Saving Contract data..." for all five, which is
+   * what this screen showed, is wrong for four of them.
+   */
   spinnerSavingContract: "Saving Contract data...",
+  spinnerSavingRightsContract: "Saving Project Right Contract data...",
   spinnerSavingPaymentTarget: "Saving payment target data...",
+  spinnerDeletingContract: "Deleting contract...",
+  spinnerDeletingPaymentTarget: "Deleting payment target...",
 } as const;
 
 /**

@@ -268,7 +268,8 @@ describe("the Add Costs panel — left column", () => {
   it("refuses a total cost outside the country ceiling", () => {
     mountAndOpen();
     fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "900000000" } });
-    expect(screen.getByText("Value must be between 1 and 500,000,000.")).toBeInTheDocument();
+    // Canvas wording: lower bound 0, and no trailing full stop — see `validateTotalCost`.
+    expect(screen.getByText("Value must be between 0 and 500,000,000")).toBeInTheDocument();
   });
 
   it("refuses the reserved word Standard in a description", () => {

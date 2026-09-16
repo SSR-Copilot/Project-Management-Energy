@@ -187,6 +187,8 @@ export default function ContractsScreen() {
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [recalculated, setRecalculated] = useState(false);
   const [confirm, setConfirm] = useState<"none" | "contract" | "target">("none");
+  /** Which `locContractSpinnerInformationText` the overlay is showing, or `null` for none. */
+  const [savingLabel, setSavingLabel] = useState<string | null>(null);
   const [banner, setBanner] = useState<string>();
 
   const selectedContract = contracts.find((c) => c.id === selectedContractId);
@@ -374,6 +376,20 @@ export default function ContractsScreen() {
     if (!project || !projectId) return;
     const leaves = selectedLeafAccounts(tree);
     const num = (raw: string) => parseNumber(raw, locale);
+    /*
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS.
+     *
+     * DIVERGENCE FROM CANVAS, requested by the client for every screen. The Contracts canvas is
+     * the odd one out: its Save raises only the spinner
+     * (`{locContractSpinnerInformationText: "Saving Contract data...",
+     * locIsContractVisiblePopUpSpinner: true}`, `ContractsScreenCode.txt:7317`) and closes the
+     * panel afterwards, in the same `UpdateContext` that clears the spinner (`:7490`). CAPEX,
+     * OPEX and Land Lease all close it up front, and the client asked for that order everywhere,
+     * so the panel is dismissed here instead — the spinner is never drawn over the panel.
+     */
+    setSavingLabel(form.contractType === CONTRACT_TYPE.ProjectRights
+      ? MSG.spinnerSavingRightsContract : MSG.spinnerSavingContract);
+    setPanel("none");
     try {
       await saveContractMutation.mutateAsync({
         write: {
@@ -403,14 +419,19 @@ export default function ContractsScreen() {
         },
         accounts: leaves.map((n) => ({ id: n.id, name: devCoCostName(n) })),
       });
-      setPanel("none");
     } catch (error) {
       handleError(error, "save this contract");
+    } finally {
+      setSavingLabel(null);
     }
   };
 
   const saveTargetNow = async () => {
     if (!selectedContract || !project) return;
+    // Panel first, spinner second — see `saveContractNow`.
+    setSavingLabel(MSG.spinnerSavingPaymentTarget);
+    setPanel("none");
+    setTargetForm(EMPTY_TARGET_FORM);
     try {
       await saveTargetMutation.mutateAsync({
         ...(selectedTargetId ? { id: selectedTargetId } : {}),
@@ -422,10 +443,10 @@ export default function ContractsScreen() {
         totalCostsContract: parseNumber(targetForm.totalCostsContract, locale) ?? 0,
         note: targetForm.note,
       });
-      setPanel("none");
-      setTargetForm(EMPTY_TARGET_FORM);
     } catch (error) {
       handleError(error, "save this payment target");
+    } finally {
+      setSavingLabel(null);
     }
   };
 
@@ -879,12 +900,15 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedContract) return;
+          setSavingLabel(MSG.spinnerDeletingContract);
           try {
             await deleteContractMutation.mutateAsync(selectedContract.id);
             setSelectedContractId(undefined);
             setSelectedTargetId(undefined);
           } catch (error) {
             handleError(error, "delete this contract");
+          } finally {
+            setSavingLabel(null);
           }
         }}
       />
@@ -903,16 +927,20 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedTargetId) return;
+          setSavingLabel(MSG.spinnerDeletingPaymentTarget);
           try {
             await deleteTargetMutation.mutateAsync(selectedTargetId);
             setSelectedTargetId(undefined);
           } catch (error) {
             handleError(error, "delete this payment target");
+          } finally {
+            setSavingLabel(null);
           }
         }}
       />
 
-      {busy ? <LoadingOverlay label={MSG.spinnerSavingContract} /> : null}
+      {/* The canvas names the operation in the spinner; `savingLabel` carries which one. */}
+      {busy ? <LoadingOverlay label={savingLabel ?? MSG.spinnerSavingContract} /> : null}
     </div>
   );
 }

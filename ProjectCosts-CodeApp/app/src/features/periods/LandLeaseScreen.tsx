@@ -167,7 +167,23 @@ const useStyles = makeStyles({
     "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
   },
   panelColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
-  duration: { display: "flex", gap: space.s },
+  /*
+   * `drp_…_DurationYears_1.Width = 100`, `…_DurationMonths_1.Width = 120`, and the months box
+   * sits at `DurationYears.X + DurationYears.Width + 20` — so a 20px gap (`LL:2543`, `:2607`).
+   * Fluent's Dropdown carries `min-width: 160px`, which overrode both and let the two boxes size
+   * themselves off their content instead ("1 year" vs "11 months" came out different widths and
+   * overflowed the panel). `minWidth` has to be reset for `width` to take effect at all.
+   */
+  duration: { display: "flex", gap: "20px" },
+  durationYears: { width: "100px", minWidth: "100px" },
+  durationMonths: { width: "120px", minWidth: "120px" },
+  /*
+   * Every OTHER dropdown in this panel is `Width: Parent.Width - Self.X*2` — i.e. the full
+   * column (`LL:2762` currency, `:3567` aggregation, `:3674` frequency, `:4400` area). Fluent
+   * sizes a Dropdown to its content above a 160px floor instead, so they all came out narrower
+   * than the panel and ragged against each other.
+   */
+  panelDropdown: { width: "100%", minWidth: "unset" },
   dateRow: { display: "flex", alignItems: "flex-end", gap: space.xs },
   toggleRow: { display: "flex", alignItems: "center", gap: space.s },
   required: { color: palette.Error, marginRight: "2px" },
@@ -467,8 +483,18 @@ export default function LandLeaseScreen() {
       panelState: panel.state,
       locale,
     });
+    /*
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS — the canvas raises the spinner and
+     * dismisses the panel in ONE `UpdateContext`: `{locSpinnerInformationText: "Saving Land
+     * Lease Contract...", locIsVisiblePopUpSpinner: true, locIsVisibleRightPanelNewEditPeriod:
+     * false}`, before any write. Closing after the await drew the spinner over the panel.
+     *
+     * Only the panel moves. Clearing the SELECTION stays below, where the canvas keeps it —
+     * that is a separate, later `UpdateContext` (LL:5895).
+     */
     setBusy(LEASE_MSG.savingContract);
     setError(null);
+    closePanel();
     try {
       // The plan's order IS the canvas': header first (so a brand-new contract has an id
       // before the allocations and the period bind to it), then the allocation upserts, the
@@ -479,7 +505,6 @@ export default function LandLeaseScreen() {
       // `UpdateContext({locSelectedLandLeaseCost: Blank(), locSelectedLandLeasePeriod: Blank()})`
       // — `clearsSelectionAfterSave`, LL:5895.
       setSelection(NO_LEASE_SELECTION);
-      closePanel();
     } catch (e) {
       const source = plan.writesHeader ? "Land Lease Project Costs" : "Land Lease Periods";
       setError(plan.writesHeader
@@ -965,6 +990,7 @@ function LeasePanelBody({
                 // picked, which is what makes the Save gate's blank-months arm reachable.
                 durationMonths: form.durationMonths ?? 0,
               })}
+              className={styles.durationYears}
               data-testid="lease-years"
             >
               {DURATION_YEAR_OPTIONS.map((y) => (
@@ -976,6 +1002,7 @@ function LeasePanelBody({
               value={form.durationMonths === null ? "" : durationMonthLabel(form.durationMonths)}
               selectedOptions={form.durationMonths === null ? [] : [String(form.durationMonths)]}
               onOptionSelect={(_, d) => patch({ durationMonths: Number(d.optionValue) })}
+              className={styles.durationMonths}
               data-testid="lease-months"
             >
               {DURATION_MONTH_OPTIONS.map((m) => (
@@ -990,6 +1017,7 @@ function LeasePanelBody({
           <Text className={styles.label}>{LEASE_LABELS.currency}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.currency}
+            className={styles.panelDropdown}
             value={currencyName}
             selectedOptions={[currencyName]}
             disabled={!currencyEditable()}
@@ -1026,6 +1054,7 @@ function LeasePanelBody({
           <Text className={styles.label}>{LEASE_LABELS.aggregation}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.aggregation}
+            className={styles.panelDropdown}
             value={form.aggregation === null ? "" : AGGREGATION_LABELS[form.aggregation] ?? ""}
             selectedOptions={form.aggregation === null ? [] : [String(form.aggregation)]}
             onOptionSelect={(_, d) => patch({ aggregation: Number(d.optionValue) })}
@@ -1043,6 +1072,7 @@ function LeasePanelBody({
           </Text>
           <Dropdown
             aria-label={LEASE_LABELS.distributionFrequency}
+            className={styles.panelDropdown}
             value={DISTRIBUTION_FREQUENCIES
               .find((f) => f.value === form.distributionFrequency)?.label ?? ""}
             selectedOptions={form.distributionFrequency === null
@@ -1097,6 +1127,7 @@ function LeasePanelBody({
               <Dropdown
                 multiselect
                 aria-label={LEASE_LABELS.allocation}
+                className={styles.panelDropdown}
                 disabled={!allocationEnabled}
                 selectedOptions={form.allocatedGeneratorIds}
                 value={generators
@@ -1180,6 +1211,7 @@ function LeasePanelBody({
                 </Text>
                 <Dropdown
                   aria-label={LEASE_LABELS.area}
+                  className={styles.panelDropdown}
                   value={form.inflationCountryArea ?? ""}
                   selectedOptions={form.inflationCountryArea ? [form.inflationCountryArea] : []}
                   disabled={!headerOn}

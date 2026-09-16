@@ -58,7 +58,7 @@ import {
   needsClusterLinkageConfirmation,
   proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
   applyDescriptionChange, describeDescriptionError, paidToggleNeedsConfirmation,
-  resolvePaidTarget, validateMonthYear, validateTotalCost,
+  resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
 } from "./rules";
 import {
   LOADING_COST, LOADING_DATA, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TITLE,
@@ -443,9 +443,10 @@ export default function CapexCostsScreen() {
     : null;
   const showsDates = edit?.distribution === "equal" && edit.equalMode === "dates";
   const startDateError = showsDates
-    ? validateMonthYear(startText, allowedStart.date, "start")
+    ? validateStartMonthYear(startText, allowedStart.date)
     : null;
-  const endDateError = showsDates ? validateMonthYear(endText, allowedStart.date, "end") : null;
+  // The end date is checked against the typed START date, not the allowed start — see the rule.
+  const endDateError = showsDates ? validateEndMonthYear(endText, startText) : null;
 
   const valid = canSaveContract(edit, costValue, rawProposed)
     && !descriptionError && !totalCostError && !startDateError && !endDateError;

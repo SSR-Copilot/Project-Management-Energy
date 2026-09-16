@@ -17,7 +17,8 @@ import {
   newCostLine, paidToggleNeedsConfirmation, panelTitle, parseByClusterJson,
   parseStartEndJson, paymentIdsByMonth, planDeleteContract, proposedPayments, reconcilePayments,
   resolveCategory, resolveEqualMode, resolvePaidTarget, startEndJson,
-  totalCostForPercent, totalCostMax, validateMonthYear, validateTotalCost,
+  totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
+  validateTotalCost,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
 
@@ -328,28 +329,77 @@ describe("totalCostMax / validateTotalCost", () => {
   });
 });
 
-describe("validateMonthYear", () => {
+describe("validateStartMonthYear", () => {
   const allowed = new Date(2025, 3, 1);
 
   it("UT-CAPEXR-038 accepts a blank value", () => {
-    expect(validateMonthYear("", allowed)).toBeNull();
+    expect(validateStartMonthYear("", allowed)).toBeNull();
   });
 
   it("UT-CAPEXR-039 rejects the wrong format", () => {
-    expect(validateMonthYear("2025-04", allowed)).toBe("Date must be in MM/YYYY format");
-    expect(validateMonthYear("4/2025", allowed)).toBe("Date must be in MM/YYYY format");
+    expect(validateStartMonthYear("2025-04", allowed)).toBe("Date must be in MM/YYYY format");
+    expect(validateStartMonthYear("4/2025", allowed)).toBe("Date must be in MM/YYYY format");
   });
 
   it("UT-CAPEXR-040 rejects a date before the allowed start", () => {
-    expect(validateMonthYear("03/2025", allowed, "start"))
+    expect(validateStartMonthYear("03/2025", allowed))
       .toBe("Start Date must be in or after 04/2025");
-    expect(validateMonthYear("03/2025", allowed, "end"))
-      .toBe("End Date must be in or after 04/2025");
   });
 
   it("UT-CAPEXR-041 accepts a date on or after the allowed start", () => {
-    expect(validateMonthYear("04/2025", allowed)).toBeNull();
-    expect(validateMonthYear("05/2025", allowed)).toBeNull();
+    expect(validateStartMonthYear("04/2025", allowed)).toBeNull();
+    expect(validateStartMonthYear("05/2025", allowed)).toBeNull();
+  });
+});
+
+describe("validateEndMonthYear", () => {
+  it("UT-CAPEXR-042 rejects the wrong format before comparing anything", () => {
+    expect(validateEndMonthYear("2025-04", "01/2025")).toBe("Date must be in MM/YYYY format");
+  });
+
+  it("UT-CAPEXR-043 compares against the TYPED start date, not the allowed start", () => {
+    // `DateValue("01/" & Start) >= DateValue("01/" & End)` — `CapexScreenCode.txt`, the
+    // `…EndDate_ErrorMessage_1.Text`. An end before the start is the error the canvas names.
+    expect(validateEndMonthYear("03/2025", "06/2025"))
+      .toBe("End Date must take place after Start Date");
+  });
+
+  it("UT-CAPEXR-044 rejects an end in the SAME month as the start", () => {
+    // The canvas comparison is `>=`, so equal months are an error too — the old shared
+    // "must be in or after" check accepted this.
+    expect(validateEndMonthYear("03/2026", "03/2026"))
+      .toBe("End Date must take place after Start Date");
+  });
+
+  it("UT-CAPEXR-045 accepts an end after the start", () => {
+    expect(validateEndMonthYear("07/2025", "06/2025")).toBeNull();
+  });
+
+  it("UT-CAPEXR-046 says nothing while the start date is still unusable", () => {
+    // Both halves of the canvas condition require `IsMatch(Start, …)`; with a half-typed start
+    // there is nothing to compare against yet.
+    expect(validateEndMonthYear("07/2025", "")).toBeNull();
+    expect(validateEndMonthYear("07/2025", "6/2025")).toBeNull();
+  });
+});
+
+describe("validateTotalCost message", () => {
+  it("UT-CAPEXR-047 reads 'between 0 and …', with no full stop", () => {
+    // `$"Value must be between 0 and {…}"` — the bound in the SENTENCE is 0, and the canvas
+    // label carries no trailing period.
+    expect(validateTotalCost("0", null, "en-GB").message)
+      .toBe("Value must be between 0 and 500,000,000");
+  });
+
+  it("UT-CAPEXR-048 raises the ceiling for Poland", () => {
+    expect(validateTotalCost("0", "Poland", "en-GB").message)
+      .toBe("Value must be between 0 and 2,250,000,000");
+  });
+
+  it("UT-CAPEXR-049 groups with dots outside English", () => {
+    // `If(Lower(First(Split(Language(), "-")).Value) = "en", "2,250,000,000", "2.250.000.000")`.
+    expect(validateTotalCost("0", "Poland", "de-DE").message)
+      .toBe("Value must be between 0 and 2.250.000.000");
   });
 });
 

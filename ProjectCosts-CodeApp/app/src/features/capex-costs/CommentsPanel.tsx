@@ -434,7 +434,15 @@ export function CommentsPanel(props: CommentsPanelProps) {
 
   const commit = async () => {
     if (!contractId) return;
+    /*
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS — the same order every other save on
+     * this app follows (`CapexScreenCode.txt:17413`, `OpexCostScreenCode.txt:8695`), and the
+     * one the client's reference screenshot names outright: "Panel Closes and Spinner is shown".
+     * Dismissing after the writes drew the saving spinner on top of the panel it was saving,
+     * which on a thread with several changed comments is the whole visible duration of the save.
+     */
     setSaving(true);
+    onDismiss();
     try {
       for (const id of deletedIds) await writes.remove.mutateAsync(id);
 
@@ -490,7 +498,6 @@ export function CommentsPanel(props: CommentsPanelProps) {
       }
       // NOTES 4 of the integration spec: re-fetch so the grid's red dots refresh.
       writes.invalidate();
-      onDismiss();
     } finally {
       setSaving(false);
     }

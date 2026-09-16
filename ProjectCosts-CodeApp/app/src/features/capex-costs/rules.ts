@@ -366,7 +366,22 @@ export function totalCostMax(countryName: string | null | undefined): number {
   return countryName === "Poland" ? 2_250_000_000 : 500_000_000;
 }
 
-/** `lbl_AddContract_RightPanel_TotalCost_ErrorMessage_1` — `"Value must be between 1 and {max}."`. */
+/**
+ * `lbl_AddContract_RightPanel_TotalCost_ErrorMessage_1`:
+ *
+ *   If(Country.Name = "Poland",
+ *      $"Value must be between 0 and {If(Lower(…Language()…) = "en", "2,250,000,000",
+ *                                                                   "2.250.000.000")}",
+ *      $"Value must be between 0 and {If(… = "en", "500,000,000", "500.000.000")}")
+ *
+ * Three things this had wrong, all visible in the message itself: the lower bound reads **0**,
+ * not 1; there is **no full stop** at the end; and the thousands separator follows the app
+ * LANGUAGE — `en` gets commas, every other language gets dots — which `Intl` reproduces with the
+ * `en-GB`/`de-DE` pair the canvas is choosing between.
+ *
+ * The accepted RANGE is left alone: the canvas Save gate rejects 0 elsewhere, so only the
+ * sentence changes here.
+ */
 export function validateTotalCost(
   value: string,
   countryName: string | null | undefined,
@@ -374,41 +389,62 @@ export function validateTotalCost(
 ): { valid: boolean; message: string | null } {
   const max = totalCostMax(countryName);
   const ok = isInteger(value, locale) && inRange(value, 1, max, locale);
-  return {
-    valid: ok,
-    message: ok
-      ? null
-      : `Value must be between 1 and ${new Intl.NumberFormat(locale ?? "en-GB").format(max)}.`,
-  };
+  const grouped = new Intl.NumberFormat(
+    (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
+  ).format(max);
+  return { valid: ok, message: ok ? null : `Value must be between 0 and ${grouped}` };
 }
 
 const MM_YYYY = /^(0[1-9]|1[0-2])\/[0-9]{4}$/;
 const mmYYYY = (month: number, year: number) => `${String(month).padStart(2, "0")}/${year}`;
 
 /**
- * `lbl_AddContract_RightPanel_StartDate_ErrorMessage_1` / `…EndDate…`.
+ * `lbl_AddContract_RightPanel_StartDate_ErrorMessage_1`.
  *
  * A blank value is valid — blankness is handled by the Save gate, not here. Anything not in
  * `MM/YYYY` fails the format check before the "must be on or after" check even runs.
+ *
+ *   If(Not(IsMatch(…, "^(0[1-9]|1[0-2])/[0-9]{4}$")), "Date must be in MM/YYYY format",
+ *      If(varEnteredDate < locCostAllowedStartDate,
+ *         "Start Date must be in or after " & Text(locCostAllowedStartDate, "mm/yyyy")))
+ *
+ * (`CapexScreenCode.txt:11413-11444`; the older `Start Date must take place after the milestone
+ * Project Start` version directly above it is commented out in the source and never renders.)
  */
-export function validateMonthYear(
-  value: string,
-  allowedStart: Date,
-  kind: "start" | "end" = "start",
-): string | null {
+export function validateStartMonthYear(value: string, allowedStart: Date): string | null {
   if (!value.trim()) return null;
   if (!MM_YYYY.test(value)) return "Date must be in MM/YYYY format";
   const parts = value.split("/").map(Number);
-  const mm = parts[0] as number;
-  const yyyy = parts[1] as number;
-  const entered = new Date(yyyy, mm - 1, 1);
+  const entered = new Date(parts[1] as number, (parts[0] as number) - 1, 1);
   if (entered < allowedStart) {
-    const label = mmYYYY(allowedStart.getMonth() + 1, allowedStart.getFullYear());
-    return kind === "start"
-      ? `Start Date must be in or after ${label}`
-      : `End Date must be in or after ${label}`;
+    return `Start Date must be in or after ${
+      mmYYYY(allowedStart.getMonth() + 1, allowedStart.getFullYear())}`;
   }
   return null;
+}
+
+/**
+ * `lbl_AddContract_RightPanel_EndDate_ErrorMessage_1` — a DIFFERENT rule from the start date's,
+ * not the same one re-pointed:
+ *
+ *   If(Not(IsMatch(End, MM/YYYY)), "Date must be in MM/YYYY format",
+ *      IsMatch(End, …) && IsMatch(Start, …) && DateValue("01/" & Start) >= DateValue("01/" & End),
+ *      "End Date must take place after Start Date")
+ *
+ * The end date is compared against the START DATE the user typed, never against
+ * `locCostAllowedStartDate` — and the comparison is `>=`, so an end date in the SAME month as
+ * the start is an error too. This used to reuse the start date's "must be in or after {month}"
+ * check and message, which accepted `03/2026 → 03/2026` and rejected nothing the canvas rejects.
+ */
+export function validateEndMonthYear(value: string, startValue: string): string | null {
+  if (!value.trim()) return null;
+  if (!MM_YYYY.test(value)) return "Date must be in MM/YYYY format";
+  if (!MM_YYYY.test(startValue.trim())) return null;
+  const end = value.split("/").map(Number);
+  const start = startValue.trim().split("/").map(Number);
+  const endDate = new Date(end[1] as number, (end[0] as number) - 1, 1);
+  const startDate = new Date(start[1] as number, (start[0] as number) - 1, 1);
+  return startDate >= endDate ? "End Date must take place after Start Date" : null;
 }
 
 /**
