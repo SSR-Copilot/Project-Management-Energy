@@ -11,7 +11,7 @@ import {
   contractName, paymentTargetName, devCoCostName, contractCardTitle, panelTitle,
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
-  cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME,
+  cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
 
@@ -670,6 +670,16 @@ describe("contract card body (canvas parity)", () => {
   it("UT-CON-083 degrades to 'Total [cur]' when the type is missing", () => {
     expect(cardTotalLabel(undefined, "EUR")).toBe("Total [EUR]");
     expect(cardTotalLabel(CONTRACT_TYPE.None, "EUR")).toBe("Total [EUR]");
+  });
+
+  it("UT-CON-085 renders the closing date LongAbbreviated", () => {
+    // `dtp_…_ClosingDate.Format = 'DatePickerCanvas.Format'.LongAbbreviated` — "Sun, Apr 13,
+    // 2025" in the reference shot, where a bare `toLocaleDateString()` gave "4/13/2025".
+    expect(longAbbreviatedDate(new Date(2025, 3, 13), "en-US")).toBe("Sun, Apr 13, 2025");
+  });
+
+  it("UT-CON-086 shows a dash when there is no closing date", () => {
+    expect(longAbbreviatedDate(undefined, "en-US")).toBe("-");
   });
 
   it("UT-CON-084 labels the card's date 'Closing Date', not the panel's wording", () => {

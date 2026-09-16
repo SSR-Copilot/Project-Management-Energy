@@ -56,6 +56,20 @@ export function cardShowsClosingCosts(contractType: number | undefined): boolean
  * (`lbl_Contracts_RightPanel_NewEdit_TotalCosts_Contract`, `:6200`) and rendering it on the card
  * was this screen's visible mismatch against canvas.
  */
+/**
+ * The card's closing date.
+ *
+ * `dtp_Contracts_List_Card_Body_Fields_ClosingDate.Format = 'DatePickerCanvas.Format'
+ * .LongAbbreviated` (`:1056`) — abbreviated weekday, abbreviated month, day, year, e.g.
+ * `Sun, Apr 13, 2025`. `toLocaleDateString()` with no options gave `4/13/2025`.
+ */
+export function longAbbreviatedDate(value: Date | undefined, locale?: string): string {
+  if (!value) return "-";
+  return value.toLocaleDateString(locale, {
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
+  });
+}
+
 export function cardTotalLabel(contractType: number | undefined, currency: string): string {
   const name = contractType === undefined ? "" : CONTRACT_TYPE_NAME[contractType] ?? "";
   return `Total ${name} [${currency}]`.replace("Total  [", "Total [");

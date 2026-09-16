@@ -11,7 +11,9 @@
  *    overview does not, because no project is selected yet.
  */
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
+import { languageLabel, loadCurrentUser } from "@/data/currentUser";
 import { AppShell, LoadingOverlay, EmptyState } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { AppRoutes } from "@/app/routes";
@@ -23,8 +25,29 @@ export default function App() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [reportOpen, setReportOpen] = useState(false);
+  /*
+   * The badge's own two Dataverse rows, loaded once per session. Separate from `useSession` on
+   * purpose: neither is needed to render a screen, so a slow or forbidden read of the Graph
+   * virtual table behind `companyName` must not hold up the app's first paint.
+   */
+  const currentUser = useQuery({
+    queryKey: ["current-user", session?.entraObjectId ?? ""],
+    enabled: Boolean(session?.entraObjectId),
+    staleTime: Infinity,
+    queryFn: () => loadCurrentUser(session?.entraObjectId),
+  });
 
   if (loading) return <LoadingOverlay mode="blocking" label="Please wait..." />;
+
+  /*
+   * The header name is the DATAVERSE one, falling back to the host's. `User().FullName` — what
+   * the canvas pill shows — is the systemuser row ("Shakti Singh Rajput"), while
+   * `getContext().user.fullName` is the Entra display name, which at VSB reads
+   * "Singh Rajput, Shakti (external)". Same person, and the header was showing the wrong string.
+   */
+  const userName = currentUser.data?.fullName ?? session?.fullName;
+  const userEmail = currentUser.data?.mail ?? session?.userPrincipalName;
+  const userLanguage = languageLabel(navigator.language);
 
   const onCostScreen = pathname.startsWith("/costs/");
 
@@ -32,8 +55,12 @@ export default function App() {
     <AppShell
       showRail={onCostScreen}
       {...(onCostScreen && project?.projectName ? { pageTitle: project.projectName } : {})}
-      {...(session?.fullName ? { userName: session.fullName } : {})}
-      {...(session?.userPrincipalName ? { userEmail: session.userPrincipalName } : {})}
+      {...(userName ? { userName } : {})}
+      {...(userEmail ? { userEmail } : {})}
+      {...(userLanguage ? { userLanguage } : {})}
+      {...(currentUser.data?.companyName
+        ? { userBusinessUnit: currentUser.data.companyName }
+        : {})}
       {...(envVars.vsb_AppVersion ? { appVersion: envVars.vsb_AppVersion } : {})}
       {...(envVars.vsb_EnvironmentName ? { environmentName: envVars.vsb_EnvironmentName } : {})}
       {...(envVars.vsb_VSBCloudInfoCenterUrl

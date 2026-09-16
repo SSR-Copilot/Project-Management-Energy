@@ -39,7 +39,7 @@ import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
   canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
-  contractCardTitle, contractCommands, contractErrors,
+  contractCardTitle, contractCommands, contractErrors, longAbbreviatedDate,
   contractName, costLabel, currencyCode, devCoCostName,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm, remainingPercent,
   contractTotalFromForm, selectedLeafAccounts,
@@ -1078,7 +1078,7 @@ function ContractCardBody({
   const showsClosingCosts = cardShowsClosingCosts(contract.contractType);
   const closingDateField = (
     <ReadOnlyField label={MSG.closingDate}
-      value={contract.closingDate ? contract.closingDate.toLocaleDateString() : "-"} />
+      value={longAbbreviatedDate(contract.closingDate)} />
   );
   const totalField = (
     <ReadOnlyField label={cardTotalLabel(contract.contractType, currency)}
@@ -1137,9 +1137,13 @@ function ContractCardBody({
         </div>
       </div>
 
-      {targets.length === 0 ? (
-        <Text>-</Text>
-      ) : (
+      {/*
+        * With no periods the canvas shows the command bar and nothing else
+        * (`Cost App - Contracts Tab Selected - Expanded Contract.png`); the header row is
+        * `Visible: =gal_…_PaymentTargets.AllItemsCount > 0` (`:1477`). A lone "-" under the
+        * toolbar was ours, not the canvas'.
+        */}
+      {targets.length === 0 ? null : (
         <Table size="small" aria-label={`${MSG.paymentTargets} for ${contract.description ?? ""}`}>
           <TableHeader>
             <TableRow>
