@@ -21,6 +21,46 @@ export const CONTRACT_TYPE = {
 } as const;
 export type ContractType = (typeof CONTRACT_TYPE)[keyof typeof CONTRACT_TYPE];
 
+/**
+ * The `BoP Contract Types` choice labels, as Power Fx renders them when a choice is
+ * interpolated into a string (`$"Total {ThisItem.'Contract Types'} […]"`, `:1163`).
+ */
+export const CONTRACT_TYPE_NAME: Record<number, string> = {
+  [CONTRACT_TYPE.Development]: "Development Contract",
+  [CONTRACT_TYPE.Construction]: "Construction Contract",
+  [CONTRACT_TYPE.ProjectRights]: "Project Rights Contract",
+};
+
+/**
+ * Whether a contract card shows the closing-cost block.
+ *
+ * Every card field except `Closing Date` is gated on
+ * `Not(ThisItem.'Contract Types' = 'BoP Contract Types'.'Project Rights Contract')`
+ * (`con_Contracts_List_Card_Body_Fields_{CostsUntilClosing,Margins,TotalDevContract,
+ * CostsAfterClosing,TotalCosts}.Visible`). A Project Rights contract shows only its own
+ * total (`…_TotalCosts_RC`, the mirror-image `Visible`) plus the closing date.
+ */
+export function cardShowsClosingCosts(contractType: number | undefined): boolean {
+  return contractType !== CONTRACT_TYPE.ProjectRights;
+}
+
+/**
+ * The contract card's total-cost label.
+ *
+ * Two DIFFERENT controls, not one with a conditional:
+ *   - `lbl_…_Card_Body_Fields_TotalDevContract` = $"Total {Contract Types} [{cur}]"  (:1163)
+ *   - `lbl_…_Card_Body_Fields_TotalCosts_RC`    = "Total Project Rights Contract […]" (:1023)
+ *
+ * They coincide for a Project Rights contract, which is why one function covers both. Note this
+ * is NOT `"Total cost of contract"` — that label belongs to the right-hand EDIT PANEL
+ * (`lbl_Contracts_RightPanel_NewEdit_TotalCosts_Contract`, `:6200`) and rendering it on the card
+ * was this screen's visible mismatch against canvas.
+ */
+export function cardTotalLabel(contractType: number | undefined, currency: string): string {
+  const name = contractType === undefined ? "" : CONTRACT_TYPE_NAME[contractType] ?? "";
+  return `Total ${name} [${currency}]`.replace("Total  [", "Total [");
+}
+
 /** `vsb_costsuntilclosingdate` / `vsb_costsafterclosingdate`. */
 export const CLOSING_DATE_TYPE = {
   None: 952850000,
@@ -92,6 +132,9 @@ export const MSG = {
   notes: "Notes",
   paymentDate: "Payment Date",
   percentOfTotalCosts: "% of Total Costs",
+
+  /** `lbl_Contracts_List_Card_Body_Fields_ClosingDate.Text` — the CARD's label (`:1099`). */
+  closingDate: "Closing Date",
 
   /** Right-panel field labels */
   description: "Description",

@@ -11,6 +11,7 @@ import {
   contractName, paymentTargetName, devCoCostName, contractCardTitle, panelTitle,
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
+  cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
 
@@ -636,5 +637,46 @@ describe("contractTotalFromForm", () => {
       totalCostsCalculated: "", totalCostsOverwrite: "",
     };
     expect(contractTotalFromForm(blank, "en-GB")).toBe(0);
+  });
+});
+
+describe("contract card body (canvas parity)", () => {
+  it("UT-CON-079 shows the closing-cost block for Development and Construction", () => {
+    expect(cardShowsClosingCosts(CONTRACT_TYPE.Development)).toBe(true);
+    expect(cardShowsClosingCosts(CONTRACT_TYPE.Construction)).toBe(true);
+  });
+
+  it("UT-CON-080 hides the closing-cost block for a Project Rights contract", () => {
+    // `con_…_Fields_{CostsUntilClosing,Margins,TotalDevContract,CostsAfterClosing,TotalCosts}
+    // .Visible = Not(Contract Types = Project Rights Contract)`.
+    expect(cardShowsClosingCosts(CONTRACT_TYPE.ProjectRights)).toBe(false);
+  });
+
+  it("UT-CON-081 names the total after the contract type, not 'cost of contract'", () => {
+    // `$"Total {ThisItem.'Contract Types'} [{cur}]"` (`:1163`). "Total cost of contract" is the
+    // EDIT PANEL's label (`:6200`) and must never appear on the card.
+    expect(cardTotalLabel(CONTRACT_TYPE.Development, "EUR"))
+      .toBe("Total Development Contract [EUR]");
+    expect(cardTotalLabel(CONTRACT_TYPE.Construction, "PLN"))
+      .toBe("Total Construction Contract [PLN]");
+  });
+
+  it("UT-CON-082 uses the Project Rights wording for an RC card", () => {
+    // The separate `lbl_…_TotalCosts_RC` control (`:1023`) resolves to the same string.
+    expect(cardTotalLabel(CONTRACT_TYPE.ProjectRights, "EUR"))
+      .toBe("Total Project Rights Contract [EUR]");
+  });
+
+  it("UT-CON-083 degrades to 'Total [cur]' when the type is missing", () => {
+    expect(cardTotalLabel(undefined, "EUR")).toBe("Total [EUR]");
+    expect(cardTotalLabel(CONTRACT_TYPE.None, "EUR")).toBe("Total [EUR]");
+  });
+
+  it("UT-CON-084 labels the card's date 'Closing Date', not the panel's wording", () => {
+    // `lbl_…_Card_Body_Fields_ClosingDate.Text = "Closing Date"`; the right panel's
+    // "Contract Closing Date" is a different control and stays available for it.
+    expect(MSG.closingDate).toBe("Closing Date");
+    expect(MSG.contractClosingDate).toBe("Contract Closing Date");
+    expect(CONTRACT_TYPE_NAME[CONTRACT_TYPE.Development]).toBe("Development Contract");
   });
 });

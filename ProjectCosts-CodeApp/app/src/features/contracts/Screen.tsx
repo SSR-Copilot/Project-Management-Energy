@@ -38,7 +38,8 @@ import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
-  canSaveContract, canSavePaymentTarget, contractCardTitle, contractCommands, contractErrors,
+  canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
+  contractCardTitle, contractCommands, contractErrors,
   contractName, costLabel, currencyCode, devCoCostName,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm, remainingPercent,
   contractTotalFromForm, selectedLeafAccounts,
@@ -1035,27 +1036,77 @@ function ContractCardBody({
     contract.marginType === MARGIN_TYPE.Percentage
       ? contract.marginPercentage : contract.marginFixedValue;
 
+  /*
+   * Canvas lays the card out in four COLUMNS, each up to two fields deep
+   * (`con_Contracts_List_Card_Body_Columns_1..4`), which reads left-to-right as:
+   *
+   *   Costs Until Closing | Closing Date | Costs After Closing | Total Costs
+   *   Margin              | Total <Type> |
+   *
+   * A Project Rights contract hides all of those except the closing date and shows its own
+   * total in column 1 instead — see `cardShowsClosingCosts`.
+   */
+  const selectedTarget = targets.find((t) => t.id === selectedTargetId);
+  const showsClosingCosts = cardShowsClosingCosts(contract.contractType);
+  const closingDateField = (
+    <ReadOnlyField label={MSG.closingDate}
+      value={contract.closingDate ? contract.closingDate.toLocaleDateString() : "-"} />
+  );
+  const totalField = (
+    <ReadOnlyField label={cardTotalLabel(contract.contractType, currency)}
+      value={fmt(contract.totalCostOfContract)} />
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: space.m }}>
       <div className={styles.fieldGrid}>
-        <ReadOnlyField label={MSG.contractClosingDate}
-          value={contract.closingDate ? contract.closingDate.toLocaleDateString() : "-"} />
-        <ReadOnlyField label={`Costs Until Closing [${currency}]`} value={fmt(untilClosing)} />
-        <ReadOnlyField label={`Costs After Closing [${currency}]`} value={fmt(afterClosing)} />
-        <ReadOnlyField label={`Total Costs [${currency}]`} value={fmt(totalCosts)} />
-        <ReadOnlyField label={`Margin [${marginUnit}]`} value={fmt(marginValue)} />
-        <ReadOnlyField
-          label={`Total ${contract.contractType === CONTRACT_TYPE.ProjectRights
-            ? "Project Rights Contract" : "cost of contract"} [${currency}]`}
-          value={fmt(contract.totalCostOfContract)}
-        />
+        {showsClosingCosts ? (
+          <>
+            <ReadOnlyField label={`Costs Until Closing [${currency}]`} value={fmt(untilClosing)} />
+            {closingDateField}
+            <ReadOnlyField label={`Costs After Closing [${currency}]`} value={fmt(afterClosing)} />
+            <ReadOnlyField label={`Total Costs [${currency}]`} value={fmt(totalCosts)} />
+            <ReadOnlyField label={`Margin [${marginUnit}]`} value={fmt(marginValue)} />
+            {totalField}
+          </>
+        ) : (
+          <>
+            {totalField}
+            {closingDateField}
+          </>
+        )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: space.s }}>
+      {/*
+        * `lbl_…_Card_Body_PaymentTargets` sits ABOVE its own command bar
+        * (`pcf_…_Card_Body_PaymentTargets_CommandBar`, `:1388`) rather than beside it, and the
+        * bar — not a per-row icon — is what edits and deletes. Edit/Delete act on
+        * `gal_…_PaymentTargets.Selected` (`:1446`, `:1453`), so they stay disabled until a
+        * period row is selected.
+        */}
+      <div style={{ display: "flex", flexDirection: "column", gap: space.s }}>
         <Text weight="semibold">{MSG.paymentTargets}</Text>
-        <Button appearance="transparent" icon={<AddRegular />} onClick={onAddTarget}>
-          {MSG.addPeriod}
-        </Button>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Button appearance="transparent" icon={<AddRegular />} onClick={onAddTarget}>
+            {MSG.addPeriod}
+          </Button>
+          <Button
+            appearance="transparent"
+            icon={<EditRegular />}
+            disabled={!selectedTarget}
+            onClick={() => { if (selectedTarget) onEditTarget(selectedTarget); }}
+          >
+            {MSG.edit}
+          </Button>
+          <Button
+            appearance="transparent"
+            icon={<DeleteRegular />}
+            disabled={!selectedTarget}
+            onClick={() => { if (selectedTarget) onDeleteTarget(selectedTarget); }}
+          >
+            {MSG.delete}
+          </Button>
+        </div>
       </div>
 
       {targets.length === 0 ? (
@@ -1071,7 +1122,6 @@ function ContractCardBody({
                 {MSG.percentOfTotalCosts}
               </TableHeaderCell>
               <TableHeaderCell>{MSG.notes}</TableHeaderCell>
-              <TableHeaderCell />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1092,20 +1142,6 @@ function ContractCardBody({
                 <TableCell>{t.paymentDate ?? "-"}</TableCell>
                 <TableCell className={styles.numeric}>{fmt(t.totalCostsContract)}</TableCell>
                 <TableCell>{t.note ?? "-"}</TableCell>
-                <TableCell>
-                  <Button
-                    appearance="subtle"
-                    icon={<EditRegular />}
-                    aria-label={`Edit ${t.description ?? ""}`}
-                    onClick={(e) => { e.stopPropagation(); onEditTarget(t); }}
-                  />
-                  <Button
-                    appearance="subtle"
-                    icon={<DeleteRegular />}
-                    aria-label={`Delete ${t.description ?? ""}`}
-                    onClick={(e) => { e.stopPropagation(); onDeleteTarget(t); }}
-                  />
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
