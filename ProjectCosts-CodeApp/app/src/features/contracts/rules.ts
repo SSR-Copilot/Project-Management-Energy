@@ -158,7 +158,10 @@ export const MSG = {
   calculated: "Calculated",
   overwrite: "Overwrite",
   margin: "Margin",
+  /** `lbl_…_MarginPercentage.Text`. */
   marginPercent: "Margin [%]",
+  /** `lbl_…_MarginFixedValues.Text` — the PANEL's label; the card says just "Margin [cur]". */
+  marginFixedValue: "Margin Fixed Value",
   devCoCostsFrom: "DevCo Costs From",
   comment: "Comment",
   totalCostsContractPercent: "Total Costs Contract [%]",
@@ -503,6 +506,98 @@ export function applySelection(
 /** The level-3 accounts currently ticked — what a save writes DevCo-cost rows for. */
 export function selectedLeafAccounts(tree: readonly AccountNode[]): AccountNode[] {
   return tree.filter((n) => n.level === 3 && n.selected);
+}
+
+/* ════════════════════════════════════ the DevCo picker's rows and checkboxes */
+
+/**
+ * The level-1 rows the picker lists — `gal_Contracts_RightPanel_NewEdit_DevCoCosts.Items`,
+ * `Sort(Filter(colSelectedConratctWithDevCoCosts, Level = 1), Order, SortOrder.Ascending)`.
+ */
+export function devCoParents(tree: readonly AccountNode[]): AccountNode[] {
+  return tree.filter((n) => n.level === 1).sort((a, b) => a.order - b.order);
+}
+
+/**
+ * The leaf rows under one level-1 row — `gal_Contracts_RightPanel_NewEdit_Costs.Items`,
+ * `Filter(colSelectedConratctWithDevCoCosts, ParentId = ThisItem.Id, Level = 3)`.
+ *
+ * LEVEL 2 IS NOT RENDERED. `buildAccountTree` files every leaf's `parentId` under its level-1
+ * ancestor exactly as the canvas collection does, so the picker is two levels deep even
+ * though the account tree behind it is three.
+ */
+export function devCoLeaves(
+  tree: readonly AccountNode[],
+  parentId: string,
+): AccountNode[] {
+  return tree.filter((n) => n.level === 3 && n.parentId === parentId);
+}
+
+/**
+ * Whether a leaf's checkbox accepts a click —
+ * `chb_..._CostssRow.DisplayMode: =If(And(ThisItem.TotalCost>0, Not(ThisItem.Used)), Edit, View)`.
+ *
+ * An account with no DevCo cost behind it is NOT selectable, which the previous renderer
+ * missed: it disabled only the ones another contract had already claimed.
+ */
+export function leafSelectable(node: AccountNode): boolean {
+  return node.totalCost > 0 && !node.used;
+}
+
+/** The four states `img_Contracts_DevCoCosts_ParentCheckbox.Image` draws. */
+export type ParentCheckState = "locked" | "unchecked" | "checked" | "partial";
+
+/**
+ * Which of them a level-1 row is in.
+ *
+ * Transcribed from the `With(...)` chain in that control's `Image`: the pool is the row's
+ * level-3 children with `TotalCost > 0`; `_AvailableCount` counts those not claimed by
+ * another contract and `_SelectedCount` those ticked and not claimed.
+ *
+ *   `_AvailableCount = 0`            → LOCKED    (grey; with a tick if the pool is non-empty)
+ *   `_SelectedCount = 0`             → UNCHECKED (outline)
+ *   `_SelectedCount = _Available`    → CHECKED   (blue + tick)
+ *   otherwise                        → PARTIAL   (blue + dash)
+ */
+export function parentCheckState(
+  tree: readonly AccountNode[],
+  parentId: string,
+): ParentCheckState {
+  const pool = devCoLeaves(tree, parentId).filter((n) => n.totalCost > 0);
+  const available = pool.filter((n) => !n.used);
+  if (available.length === 0) return "locked";
+  const selected = available.filter((n) => n.selected);
+  if (selected.length === 0) return "unchecked";
+  return selected.length === available.length ? "checked" : "partial";
+}
+
+/** LOCKED draws a tick only when the row HAS children, just none of them available. */
+export function parentCheckHasChildren(
+  tree: readonly AccountNode[],
+  parentId: string,
+): boolean {
+  return devCoLeaves(tree, parentId).some((n) => n.totalCost > 0);
+}
+
+/**
+ * The selection after clicking a level-1 checkbox —
+ * `img_Contracts_DevCoCosts_ParentCheckbox.OnSelect`.
+ *
+ * The canvas targets only children with `TotalCost > 0` and `Used = false`, and toggles on
+ * "is anything selected": nothing selected selects all of them, anything else clears them.
+ * So PARTIAL clears rather than filling, which is the opposite of what a tri-state checkbox
+ * usually does — kept deliberately.
+ */
+export function toggleParentAccounts(
+  tree: readonly AccountNode[],
+  parentId: string,
+  selectedAccountIds: readonly string[],
+): string[] {
+  const targets = devCoLeaves(tree, parentId).filter(leafSelectable);
+  const targetIds = new Set(targets.map((n) => n.id));
+  const kept = selectedAccountIds.filter((id) => !targetIds.has(id));
+  const anySelected = targets.some((n) => n.selected);
+  return anySelected ? kept : [...kept, ...targetIds];
 }
 
 /* ══════════════════════════════════════════ the closing-date cost split */

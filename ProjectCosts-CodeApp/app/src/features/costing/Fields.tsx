@@ -72,12 +72,20 @@ const useStyles = makeStyles({
   },
 });
 
-export function CostField({ label, required, value, onChange, type = "text", disabled = false, error, maxLength, placeholder, children }: {
+/**
+ * `counter` is the `{Len}/N` label the canvas puts on the LABEL LINE, right-aligned —
+ * `lbl_…_PaymentTarget_Note_Details` is `Align: =Align.Right`, `X: =label.X + label.Width`,
+ * `Y: =8`, i.e. beside the caption, not under the box. Same for the contract panel's
+ * `Comment  0/255`.
+ */
+export function CostField({ label, required, value, onChange, type = "text", disabled = false, error, maxLength, placeholder, counter, children }: {
   label: string; required?: boolean; value?: string | number; onChange?: (value: string) => void;
   type?: string; disabled?: boolean; error?: string; maxLength?: number; placeholder?: string;
-  children?: ReactNode;
+  counter?: string; children?: ReactNode;
 }) {
-  return <label className="canvas-field" data-invalid={error ? true : undefined}><span data-required={required}>{label}</span>
+  return <label className="canvas-field" data-invalid={error ? true : undefined}>
+    <span data-required={required} data-counter={counter ? true : undefined}>{label}
+      {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
     {children ?? <input type={type} value={value ?? ""} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </label>;
@@ -106,14 +114,20 @@ export function CostSelect({ label, value, options, onChange, required, error }:
   </div>;
 }
 
-export function Choices({ label, value, options, onChange, required, disabled }: {
+/**
+ * `action` is the slot for a control the canvas parks beside a radio group's caption — the
+ * Contracts panel's Reload icon at `X: =90`, 16 px, right of the `Margin` label. An empty
+ * `label` renders the group with no caption at all, which is the Margin Type radio: the
+ * canvas gives it no `lbl_` of its own, it simply follows the Yes/No group.
+ */
+export function Choices({ label, value, options, onChange, required, disabled, action }: {
   label: string; value: string; options: readonly string[]; onChange: (value: string) => void;
-  required?: boolean; disabled?: boolean;
+  required?: boolean; disabled?: boolean; action?: ReactNode;
 }) {
   const styles = useStyles();
   return <fieldset className={mergeClasses("canvas-radio-group", disabled && styles.choicesDisabled)}
     disabled={disabled} aria-disabled={disabled || undefined}>
-    <legend><span data-required={required}>{label}</span></legend>
+    {label || action ? <legend><span data-required={required}>{label}</span>{action}</legend> : null}
     {options.map(option => <label key={option}>
       <input type="radio" checked={value === option} onChange={() => onChange(option)} />{option}</label>)}
   </fieldset>;

@@ -81,6 +81,10 @@
 .canvas-field input, .canvas-field select, .canvas-field textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
 .canvas-field textarea { height: 64px; resize: vertical; }
 .canvas-field input:focus, .canvas-field select:focus { outline: 1px solid #0078d4; }
+/* A `DisplayMode.View` TextInput keeps the editable fill and text colour in the canvas —
+   `txt_…_CostsUntilClosingDate_Plan` and `…_TotalCosts_Calculated` in the Edit-panel
+   screenshot are the same #f4f4f4/#242424 as the fields above them. */
+.canvas-field input:disabled, .canvas-field textarea:disabled { background: #f4f4f4; color: #242424; -webkit-text-fill-color: #242424; opacity: 1; }
 .canvas-inline-fields { display: flex; gap: 20px; }
 .canvas-inline-fields > * { flex: 1; min-width: 0; }
 .canvas-radio-group { border: 0; margin: 0; padding: 0; font-size: 14px; }
@@ -184,3 +188,139 @@
 /* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
 .canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
 .canvas-field[data-invalid] input, .canvas-field[data-invalid] select { outline: 1px solid #d20532; }
+
+/* ===========================================================================
+   Contracts screen — `Src/Contracts Screen.pa.yaml`.
+
+   Geometry is transcribed from the named controls and cross-checked against
+   `UI Screenshots/Cost App - Contracts Tab Selected - Expanded Contract.png`
+   (1919 x 1018) and `…Contract Edit Add Panel Open[ - Expanded Devex Capex
+   Account In panel].png`.
+   =========================================================================== */
+
+/* `con_Contracts_Content` — a vertical autolayout, `PaddingLeft: =20`, `PaddingRight: =10`.
+   Measured: the content area starts at x 211 and the first card's stripe at x 231. */
+.canvas-contract-screen { display: flex; flex-direction: column; min-width: 0; flex: 1; min-height: 0; padding: 0 10px 0 20px; gap: 4px; }
+/* `gal_Contracts_List` — `Width: =Parent.Width-20`, cards `Parent.Width-10`. */
+.canvas-contract-list { overflow: auto; flex: 1; padding: 0 10px 10px 0; }
+
+/* `con_Contracts_List_Card` — `Fill: =white`, `BorderStyle: =BorderStyle.None`. */
+.canvas-contract-card { background: #fff; }
+
+/* `con_Contracts_List_CardHeader` — `Height: =42`, `Fill: =ColorValue("#fdffff")`. */
+.canvas-contract-head { position: relative; display: flex; align-items: center; height: 42px; background: #fdffff; padding-left: 10px; }
+/* `rec_Contracts_List_CardHeader_Type` — `Width: =3`, `Height: =Parent.Height`, no X, so it
+   sits hard against the card's left edge rather than inside the content flow. */
+.canvas-contract-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--contract-type, transparent); }
+/* `shp_Contracts_List_CardHeader_BottomLine` — `Visible: =ThisItem.IsFolded`,
+   `Fill: =gblAppStyles.Divider.Color` = palette.Grayscale20. */
+.canvas-contract-card:not([data-open="true"]) .canvas-contract-head { border-bottom: 1px solid #e3e3e3; }
+/* `img_Contracts_List_CardHeaderRadioSelection` — 18 px at `X: =10`. */
+.canvas-contract-head > input[type="radio"] { accent-color: #006eb9; width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+/* `lbl_Contracts_List_CardHeader_Description` at `X: =36`; Semibold only while selected. */
+.canvas-contract-title { flex: 1; min-width: 0; height: 100%; margin-left: 8px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-contract-card[data-selected="true"] .canvas-contract-title { font-weight: 600; }
+/* `ico_…_CardHeader_Down` / `_Up` — 20 x 18, `X: =Parent.Width-Self.Width-6`. */
+.canvas-contract-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin-right: 6px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
+
+/* `con_Contracts_List_Card_Body` — `BorderThickness: =1`, `Fill: =white`, +20 of padding. */
+.canvas-contract-body { border: 1px solid #dedede; border-top: 0; padding: 10px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+/*
+ * `con_Contracts_List_Card_Body_Columns` — a horizontal autolayout of FOUR columns with
+ * `LayoutWrap: =true`, each column 320 wide with a 20 gap (measured: the first field box
+ * runs x 251-570, the second column's label starts at 591).
+ */
+.canvas-contract-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 320px)); gap: 10px 20px; }
+/* The card samples a hair lighter than the panel: #f5f5f5 against #f4f4f4 (measured at
+   x 251-570, y 203-234 on the expanded-contract screenshot). */
+.canvas-contract-body .canvas-field input:disabled { background: #f5f5f5; }
+
+.canvas-contract-targets-head { display: flex; flex-direction: column; gap: 4px; }
+.canvas-contract-targets-bar { display: flex; align-items: center; }
+.canvas-contract-targets-bar button { color: #006eb9; font-size: 14px; }
+
+/*
+ * `con_Contracts_List_Card_Body_PaymentTargetsHeader` — `Fill: =Grayscale40`, `Height: =34`,
+ * `Period` at `X: =40`; Payment Date 120, % of Total Costs 160 (right), Notes 340. Rows are
+ * `Height: =30`. Both header and gallery are only drawn when there is at least one period.
+ */
+.canvas-contract-targets { border-collapse: collapse; table-layout: fixed; width: min(835px, 100%); font-size: 14px; }
+.canvas-contract-targets th { background: #fafafa; height: 34px; padding: 0 6px; text-align: left; font-weight: 600; color: #242424; }
+.canvas-contract-targets td { height: 30px; padding: 0 6px; color: #242424; }
+.canvas-contract-targets tr[aria-selected="true"] td { background: #edebe9; }
+.canvas-contract-targets tbody tr { cursor: pointer; }
+.canvas-contract-targets :is(th, td):first-child { width: 40px; }
+.canvas-contract-targets :is(th, td):nth-child(2) { width: 175px; }
+.canvas-contract-targets :is(th, td):nth-child(3) { width: 120px; }
+.canvas-contract-targets :is(th, td):nth-child(4) { width: 160px; }
+.canvas-contract-targets .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.canvas-contract-targets input[type="radio"] { accent-color: #006eb9; width: 16px; height: 16px; margin: 0; }
+
+/* ---------------------------------------------------------------- the panel */
+
+/*
+ * `con_Contracts_RightPanel_NewEdit_Body_Content` — two columns, the right one
+ * `If(Parent.Width >= 800, Parent.Width/2, Parent.Width)`, i.e. an even split above 800 and
+ * stacked below it.
+ */
+.canvas-panel-columns { display: grid; grid-template-columns: max(400px, 33.333%) minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; }
+.canvas-panel-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* Only the form column scrolls; the DevCo tree and Comment stay put beside it. */
+.canvas-panel-column:first-child { overflow-y: auto; min-height: 0; padding-top: 10px; padding-right: 10px; }
+.canvas-panel-column:last-child { align-self: start; }
+@media (max-width: 899px) {
+  .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .canvas-panel-column:first-child { overflow-y: visible; padding-right: 0; }
+}
+
+/* The `{Len}/N` counter on the label line — `Align: =Align.Right`, `Size: =12`. */
+.canvas-field > span[data-counter] { display: flex; align-items: baseline; }
+.canvas-field-counter { margin-left: auto; padding-left: 10px; font-style: normal; font-size: 12px; font-weight: 400; color: #242424; }
+
+/*
+ * `but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_2` — `Icon: =Icon.Reload`,
+ * `Color: =RGBA(0, 120, 212, 1)`, 16 px, `X: =90`, i.e. just right of the `Margin` caption.
+ */
+.canvas-radio-group legend { display: flex; align-items: center; gap: 12px; }
+.canvas-field-reset { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; background: none; cursor: pointer; color: #0078d4; font-size: 16px; }
+.canvas-field-reset:hover:enabled { color: #106ebe; }
+.canvas-field-reset:disabled { color: #e1dfdd; cursor: default; }
+
+/* ------------------------------------------------- the DevCo account picker */
+
+/*
+ * `gal_Contracts_RightPanel_NewEdit_DevCoCosts` — level-1 cards, `TemplateSize: =32`. The
+ * whole list scrolls; the canvas grows the gallery instead, which a panel cannot do.
+ */
+.canvas-devco { background: #fff; }
+.canvas-devco-card { background: #fff; }
+/* `con_…_DevCoCosts_CardHeader` — `Height: =32`, description at `X: =20`. */
+.canvas-devco-head { position: relative; display: flex; align-items: center; height: 32px; padding-left: 20px; }
+/* `rec_…_DevCoCosts_Selected` — a 3 px akzent1 stripe on the row that is unfolded. */
+.canvas-devco-card[data-open="true"] .canvas-devco-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #469bd7; }
+/* `shp_…_DevCoCosts_BottomLine` — `Visible: =ThisItem.IsFolded`. */
+.canvas-devco-card:not([data-open="true"]) .canvas-devco-head { border-bottom: 1px solid #e3e3e3; }
+.canvas-devco-title { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* `img_Contracts_DevCoCosts_ParentCheckbox` — 32 wide at `X: =Parent.Width-Self.Width-40`,
+   so the checkbox column clears the 20 px chevron and its 6 px gutter. */
+.canvas-devco-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; }
+.canvas-devco-check:disabled { cursor: default; }
+/* `ico_…_DevCoCosts_Down` / `_Up` — 20 x 18 at `X: =Parent.Width-Self.Width-6`. The 14 on
+   its left is what puts the checkbox before it at `Parent.Width-32-40`. */
+.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; margin: 0 6px 0 14px; color: #006eb9; font-size: 18px; }
+
+/* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, inset `X: =10`. It has no
+   height cap in the canvas; the panel column it sits in is what bounds it, so one is set
+   here rather than letting a 40-account group push Comment off the panel. */
+.canvas-devco-leaves { max-height: 330px; overflow-y: auto; padding-bottom: 10px; border-bottom: 1px solid #e3e3e3; }
+/* `con_…_CostssRow` — `Height: =30`; name at `X: =40` of the inset gallery, a 120-wide
+   right-aligned total, then the checkbox, and finally the 40 px the header spends on its
+   chevron so the two checkbox columns line up. */
+.canvas-devco-row { display: flex; align-items: center; height: 30px; padding-left: 28px; }
+.canvas-devco-name { flex: 1; min-width: 0; font-size: 14px; color: #242424; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-devco-total { flex-shrink: 0; width: 120px; margin-right: 22px; text-align: right; font-size: 14px; color: #242424; font-variant-numeric: tabular-nums; }
+.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; margin: 0 48px 0 8px; accent-color: #0078d4; }
+/* `chb_…_CostssRow.FontColor: =If(ThisItem.Used, gblAppColors.Warning, Blank())` — a leaf
+   another contract has claimed reads as taken, not as merely unavailable. */
+.canvas-devco-row[data-used="true"] input[type="checkbox"] { accent-color: #ee940c; opacity: 1; }
+.canvas-devco-row[data-used="true"] .canvas-devco-name { color: #6c6c6c; }

@@ -41,7 +41,7 @@ import type { ReactNode } from "react";
 import {
   Dialog, DialogSurface, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
-import { CheckmarkRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
+import { CheckmarkRegular, DeleteRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
 import { fontFamily, palette } from "@/theme/tokens";
 
 /** Canvas `Size:` is in points; Power Apps renders them at 96/72 px per point. */
@@ -50,18 +50,28 @@ const pt = (size: number) => `${(size * 4) / 3}px`;
 const useStyles = makeStyles({
   /** `con_PopUpConfirmation_2` — the scrim. `Fill: =RGBA(0, 0, 0, 0.1)`, not Fluent's 40 %. */
   backdrop: { backgroundColor: "rgba(0, 0, 0, 0.10)" },
-  /** `con_PopUpConfirmation_Body_2` — the surface itself, with Fluent's own padding removed. */
+  /**
+   * `con_PopUpConfirmation_Body_2` — the surface itself, with Fluent's own padding removed.
+   *
+   * `Height: =260` is fixed, not content-driven (`cmp_PopUp_Confirmation:88`,
+   * `cmp_PopUp_Confirmation_2:88`); the ⓘ variant `cmp_PopUp_Confirmation_New:81` is 320.
+   * A short description therefore leaves a tall gap above the buttons — which is what the
+   * Delete Contract / Delete Payment Target screenshots show.
+   */
   surface: {
     width: "450px", maxWidth: "calc(100vw - 32px)",
+    height: "260px", maxHeight: "calc(100vh - 32px)",
     paddingTop: "0", paddingRight: "0", paddingBottom: "0", paddingLeft: "0",
     // `RadiusTopLeft/…: =0` on the header, and the card sets none, so the corners are square.
     borderRadius: "0",
     borderTopStyle: "none", borderRightStyle: "none",
     borderBottomStyle: "none", borderLeftStyle: "none",
     backgroundColor: palette.white,
-    display: "block",
+    display: "flex", flexDirection: "column",
     fontFamily,
   },
+  /** `cmp_PopUp_Confirmation_New` is the taller of the two. */
+  surfaceInfo: { height: "320px" },
   /** `con_PopUpConfirmation_BodyHeader_2` — `Height: =42`, themePrimary, title at `X: =20`. */
   header: {
     display: "flex", alignItems: "center", columnGap: "10px",
@@ -88,9 +98,10 @@ const useStyles = makeStyles({
   closeIcon: { fontSize: "20px" },
   /** `con_PopUpConfirmation_BodyDescription_2` — the padded band the description sits in. */
   body: {
+    flexGrow: 1, minHeight: "0",
     paddingTop: "16px", paddingBottom: "16px",
     paddingLeft: "10px", paddingRight: "10px",
-    maxHeight: "50vh", overflowY: "auto",
+    overflowY: "auto",
   },
   /**
    * `pre-line`, because the canvas builds some of these descriptions with `Char(10)` and a `•`
@@ -116,6 +127,7 @@ const useStyles = makeStyles({
   infoText: { fontSize: pt(9) },
   /** `con_PopUpConfirmation_BodyButtons_2` — `Height: =60`, Confirm then Cancel, 20 px apart. */
   actions: {
+    flexShrink: 0,
     display: "flex", alignItems: "center", justifyContent: "flex-end", columnGap: "20px",
     height: "60px", paddingLeft: "20px", paddingRight: "20px",
   },
@@ -166,10 +178,12 @@ const useStyles = makeStyles({
  * (`CapexScreenCode.txt:19884`), which is not an icon in the PowerCAT set and therefore renders
  * nothing — which is exactly what the client's screenshot shows next to "Confirm All".
  */
-export type ConfirmDialogIcon = "checkmark" | "dismiss" | "none";
+export type ConfirmDialogIcon = "checkmark" | "delete" | "dismiss" | "none";
 
 const ICONS: Record<ConfirmDialogIcon, ReactNode> = {
   checkmark: <CheckmarkRegular />,
+  /** `IconConfirmButton: ="Delete"` — both Contracts confirmations and every OPEX one. */
+  delete: <DeleteRegular />,
   dismiss: <DismissRegular />,
   none: null,
 };
@@ -226,7 +240,7 @@ export function ConfirmDialog({
       onOpenChange={(_, data) => { if (!data.open) onCancel(); }}
     >
       <DialogSurface
-        className={styles.surface}
+        className={mergeClasses(styles.surface, variant === "info" && styles.surfaceInfo)}
         aria-label={title}
         backdrop={{ className: styles.backdrop }}
       >

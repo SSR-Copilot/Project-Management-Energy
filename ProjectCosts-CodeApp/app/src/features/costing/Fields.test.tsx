@@ -66,6 +66,27 @@ describe("Choices", () => {
     fireEvent.click(screen.getByRole("radio", { name: "DevCo" }));
     expect(onChange).toHaveBeenCalledWith("DevCo");
   });
+
+  it("puts an action beside the legend", () => {
+    // The Contracts panel's Reload icon sits at `X: =90`, just right of the `Margin` caption.
+    mount(
+      <Choices label="Margin" value="Yes" options={["Yes", "No"]} onChange={vi.fn()}
+        action={<button type="button" aria-label="Reset to standard assumption." />} />,
+    );
+    const action = screen.getByRole("button", { name: "Reset to standard assumption." });
+    expect(action.closest("legend")).not.toBeNull();
+  });
+
+  it("drops the legend entirely when there is no label and no action", () => {
+    // `rad_Contracts_RightPanel_NewEdit_MarginType` has no `lbl_` of its own — it simply
+    // follows the Yes/No group, so an empty caption must not reserve a line.
+    const { container } = mount(
+      <Choices label="" value="Percentage" options={["Percentage", "Fixed Value"]}
+        onChange={vi.fn()} />,
+    );
+    expect(container.querySelector("legend")).toBeNull();
+    expect(screen.getByRole("radio", { name: "Percentage" })).toBeChecked();
+  });
 });
 
 describe("CostField", () => {
@@ -75,6 +96,20 @@ describe("CostField", () => {
         onChange={vi.fn()} />,
     );
     expect(screen.getByPlaceholderText("MM/YYYY")).toHaveValue("04/2025");
+  });
+
+  it("puts the character counter on the label line, not under the box", () => {
+    // `lbl_…_PaymentTarget_Note_Details` is `Align: =Align.Right`, `Y: =8` — level with the
+    // caption. Ours used to sit below the textarea.
+    const { container } = mount(
+      <CostField label="Notes" counter="2/55">
+        <textarea aria-label="Notes" defaultValue="22" />
+      </CostField>,
+    );
+    const caption = container.querySelector('span[data-counter="true"]');
+    expect(caption).not.toBeNull();
+    expect(caption).toHaveTextContent("Notes");
+    expect(caption?.querySelector(".canvas-field-counter")).toHaveTextContent("2/55");
   });
 
   it("flags the input when an error is present", () => {

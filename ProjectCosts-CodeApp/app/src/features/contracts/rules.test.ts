@@ -3,6 +3,8 @@ import {
   CONTRACT_TYPE, CLOSING_DATE_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
   CAPEX_ROOT_NUMBER, CAPEX_EXCLUDED_ROOT_NUMBER, CONTRACT_COSTS_MAX, RESX, MSG,
   buildAccountTree, applyUsage, applySelection, selectedLeafAccounts,
+  devCoParents, devCoLeaves, leafSelectable,
+  parentCheckState, parentCheckHasChildren, toggleParentAccounts,
   costsUntilClosing, costsAfterClosing,
   totalCostsCalculated, totalCostOfContract, totalCostOfContractCanvasParity,
   validateCostField, validateDescription, validateMarginPercentage,
@@ -139,6 +141,110 @@ describe("applySelection and selectedLeafAccounts", () => {
     // not produce a row.
     const out = applySelection(buildAccountTree(accounts, []), ["l1a", "l2a", "l3a"]);
     expect(selectedLeafAccounts(out).map((n) => n.id)).toEqual(["l3a"]);
+  });
+});
+
+/* --------------------------------------------- the DevCo picker's checkboxes */
+
+describe("devCoParents / devCoLeaves", () => {
+  // `l1a` has one level-2 child (`l2a`) with two leaves; `buildAccountTree` files both
+  // leaves' `parentId` under `l1a`, which is what the picker lists them by.
+  const tree = buildAccountTree(accounts, [
+    { id: "c1", accountId: "l3a", totalCost: 400 },
+    { id: "c2", accountId: "l3b", totalCost: 600 },
+  ]);
+
+  it("UT-CON-012a lists the level-1 rows in Order, not in Nummer order", () => {
+    expect(devCoParents(tree).map((n) => n.id)).toEqual(["l1a", "l1b"]);
+  });
+
+  it("UT-CON-012b hangs the level-3 leaves off their level-1 ancestor", () => {
+    // The canvas picker is two levels deep even though the account tree is three: the
+    // inner gallery filters `ParentId = ThisItem.Id AND Level = 3`.
+    expect(devCoLeaves(tree, "l1a").map((n) => n.id)).toEqual(["l3a", "l3b"]);
+    expect(devCoLeaves(tree, "l1b")).toEqual([]);
+  });
+
+  it("UT-CON-012c refuses a leaf with no DevCo cost behind it", () => {
+    const bare = buildAccountTree(accounts, []);
+    expect(devCoLeaves(bare, "l1a").every(leafSelectable)).toBe(false);
+    expect(devCoLeaves(tree, "l1a").every(leafSelectable)).toBe(true);
+  });
+});
+
+describe("parentCheckState", () => {
+  const costed = [
+    { id: "c1", accountId: "l3a", totalCost: 400 },
+    { id: "c2", accountId: "l3b", totalCost: 600 },
+  ];
+  const tree = buildAccountTree(accounts, costed);
+
+  it("UT-CON-012d is unchecked when nothing under it is ticked", () => {
+    expect(parentCheckState(tree, "l1a")).toBe("unchecked");
+  });
+
+  it("UT-CON-012e is partial when some of the available leaves are ticked", () => {
+    expect(parentCheckState(applySelection(tree, ["l3a"]), "l1a")).toBe("partial");
+  });
+
+  it("UT-CON-012f is checked when every available leaf is ticked", () => {
+    expect(parentCheckState(applySelection(tree, ["l3a", "l3b"]), "l1a")).toBe("checked");
+  });
+
+  it("UT-CON-012g is locked when every leaf belongs to another contract", () => {
+    const used = applyUsage(tree, [
+      { accountId: "l3a", contractId: "other" },
+      { accountId: "l3b", contractId: "other" },
+    ], "mine");
+    expect(parentCheckState(used, "l1a")).toBe("locked");
+    // LOCKED draws its tick only when the row had a pool to begin with.
+    expect(parentCheckHasChildren(used, "l1a")).toBe(true);
+  });
+
+  it("UT-CON-012h is locked, and tickless, when the row has no costed leaves at all", () => {
+    const bare = buildAccountTree(accounts, []);
+    expect(parentCheckState(bare, "l1a")).toBe("locked");
+    expect(parentCheckHasChildren(bare, "l1a")).toBe(false);
+  });
+
+  it("UT-CON-012i counts a leaf this contract already owns as available", () => {
+    // `applyUsage` leaves `used` false for the contract being edited, so its own accounts
+    // stay clickable — the picker must not lock the row you opened to change.
+    const mine = applyUsage(tree, [{ accountId: "l3a", contractId: "mine" }], "mine");
+    expect(parentCheckState(mine, "l1a")).toBe("unchecked");
+  });
+});
+
+describe("toggleParentAccounts", () => {
+  const tree = buildAccountTree(accounts, [
+    { id: "c1", accountId: "l3a", totalCost: 400 },
+    { id: "c2", accountId: "l3b", totalCost: 600 },
+  ]);
+
+  it("UT-CON-012j selects every available leaf when none is selected", () => {
+    expect(toggleParentAccounts(tree, "l1a", []).sort()).toEqual(["l3a", "l3b"]);
+  });
+
+  it("UT-CON-012k CLEARS from partial rather than filling", () => {
+    // `img_..._ParentCheckbox.OnSelect` branches on `CountRows(Filter(TargetChildren,
+    // Selected)) = 0`, so partial deselects — the opposite of a usual tri-state.
+    const partial = applySelection(tree, ["l3a"]);
+    expect(toggleParentAccounts(partial, "l1a", ["l3a"])).toEqual([]);
+  });
+
+  it("UT-CON-012l leaves other rows' selections alone", () => {
+    const other = buildAccountTree(
+      [...accounts, { id: "l2b", number: "80001_0", name: "Other", parentId: "l1b", order: 1 },
+        { id: "l3c", number: "80001_0_1", name: "Crane", parentId: "l2b", order: 1 }],
+      [{ id: "c1", accountId: "l3a", totalCost: 400 },
+        { id: "c3", accountId: "l3c", totalCost: 100 }],
+    );
+    expect(toggleParentAccounts(other, "l1a", ["l3c"]).sort()).toEqual(["l3a", "l3c"]);
+  });
+
+  it("UT-CON-012m never selects a leaf another contract has claimed", () => {
+    const used = applyUsage(tree, [{ accountId: "l3b", contractId: "other" }], "mine");
+    expect(toggleParentAccounts(used, "l1a", [])).toEqual(["l3a"]);
   });
 });
 
