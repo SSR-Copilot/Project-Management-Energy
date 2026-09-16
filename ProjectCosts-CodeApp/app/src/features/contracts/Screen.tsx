@@ -188,6 +188,11 @@ export default function ContractsScreen() {
    * clicked.
    */
   const [expandedAccountId, setExpandedAccountId] = useState<string>();
+  /**
+   * Whether the open panel has been edited yet. Validation is computed from the first
+   * render, but a panel the user has not touched shows none of it — see `errorFor`.
+   */
+  const [panelTouched, setPanelTouched] = useState(false);
   const [recalculated, setRecalculated] = useState(false);
   const [confirm, setConfirm] = useState<"none" | "contract" | "target">("none");
   /** Which `locContractSpinnerInformationText` the overlay is showing, or `null` for none. */
@@ -291,11 +296,18 @@ export default function ContractsScreen() {
       const rows = costRowsForAccounts(
         capexCostRows.data ?? [], devCoContractsQuery.data ?? [], leafIds,
       );
+      setPanelTouched(true);
       setForm((f) => recalculateForm(f, rows, locale));
       setRecalculated(true);
     },
     [tree, capexCostRows.data, devCoContractsQuery.data, locale],
   );
+
+  /** The payment-target twin of `updateForm`; `panelTouched` gates that panel's errors too. */
+  const updateTargetForm = useCallback((patch: Partial<PaymentTargetForm>) => {
+    setPanelTouched(true);
+    setTargetForm((f) => ({ ...f, ...patch }));
+  }, []);
 
   /** `chb_Contracts_RightPanel_NewEdit_CostssRow.OnCheck` / `.OnUncheck`. */
   const toggleLeafAccount = useCallback(
@@ -325,6 +337,7 @@ export default function ContractsScreen() {
    */
   const updateForm = useCallback(
     (patch: Partial<ContractForm>, thenRecalculate = false) => {
+      setPanelTouched(true);
       setForm((f) => {
         const next = { ...f, ...patch };
         return thenRecalculate ? recalculateForm(next, capexCosts, locale) : next;
@@ -387,6 +400,7 @@ export default function ContractsScreen() {
     setSelectedAccountIds([]);
     setForm(emptyContractForm(contractType));
     setExpandedAccountId(undefined);
+    setPanelTouched(false);
     setRecalculated(false);
     setPanel(kind);
   };
@@ -401,6 +415,7 @@ export default function ContractsScreen() {
         .map((l) => l.accountId),
     );
     setExpandedAccountId(undefined);
+    setPanelTouched(false);
     setRecalculated(false);
     setPanel(
       selectedContract.contractType === CONTRACT_TYPE.ProjectRights ? "rights" : "contract",
@@ -557,7 +572,8 @@ export default function ContractsScreen() {
 
   const currency = currencyCode(project ?? {});
   const errors = contractErrors(form, tree, locale);
-  const errorFor = (field: string) => errors.find((e) => e.field === field)?.message;
+  const errorFor = (field: string) =>
+    (panelTouched ? errors.find((e) => e.field === field)?.message : undefined);
   const targetErrors = paymentTargetErrors({
     form: targetForm,
     projectStart: project?.startDate,
@@ -566,7 +582,7 @@ export default function ContractsScreen() {
     locale,
   });
   const targetErrorFor = (field: string) =>
-    targetErrors.find((e) => e.field === field)?.message;
+    (panelTouched ? targetErrors.find((e) => e.field === field)?.message : undefined);
 
   /* ── render ─────────────────────────────────────────────────────────── */
 
@@ -670,6 +686,7 @@ export default function ContractsScreen() {
                         setSelectedContractId(contract.id);
                         setSelectedTargetId(undefined);
                         setTargetForm(EMPTY_TARGET_FORM);
+                        setPanelTouched(false);
                         setPanel("target");
                       }}
                       onEditTarget={(t) => {
@@ -682,6 +699,7 @@ export default function ContractsScreen() {
                             t.totalCostsContract === undefined ? "" : String(t.totalCostsContract),
                           note: t.note ?? "",
                         });
+                        setPanelTouched(false);
                         setPanel("target");
                       }}
                       onDeleteTarget={(t) => {
@@ -951,7 +969,7 @@ export default function ContractsScreen() {
           required
           value={targetForm.description}
           error={targetErrorFor("description")}
-          onChange={(v) => setTargetForm((f) => ({ ...f, description: v }))}
+          onChange={(v) => updateTargetForm({ description: v })}
         />
         {/*
           `vsb_paymentdate` is an nvarchar column and the canvas control is a TextInput with
@@ -964,14 +982,14 @@ export default function ContractsScreen() {
           placeholder={MSG.paymentDatePlaceholder}
           value={targetForm.paymentDate}
           error={targetErrorFor("paymentDate")}
-          onChange={(v) => setTargetForm((f) => ({ ...f, paymentDate: v }))}
+          onChange={(v) => updateTargetForm({ paymentDate: v })}
         />
         <CostField
           label={MSG.totalCostsContractPercent}
           required
           value={targetForm.totalCostsContract}
           error={targetErrorFor("totalCostsContract")}
-          onChange={(v) => setTargetForm((f) => ({ ...f, totalCostsContract: v }))}
+          onChange={(v) => updateTargetForm({ totalCostsContract: v })}
         />
         {/*
           The "N % of this contract is still unallocated" line that used to sit here was ours.
@@ -990,7 +1008,7 @@ export default function ContractsScreen() {
             value={targetForm.note}
             maxLength={NOTE_MAX_LENGTH}
             aria-label={MSG.notes}
-            onChange={(e) => setTargetForm((f) => ({ ...f, note: e.target.value }))}
+            onChange={(e) => updateTargetForm({ note: e.target.value })}
             data-testid="target-note"
           />
         </CostField>

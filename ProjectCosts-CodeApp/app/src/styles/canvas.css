@@ -58,7 +58,10 @@
    Height 50, LayoutGap 10, PaddingRight 20, LayoutJustifyContent.End. Measured on
    `Cost App - Edit Panel - Popup Design…png`: the footer runs y 966-1016 (50 px) with its
    32 px buttons 10 px apart and 20 px clear of the panel's right edge. */
-.canvas-panel-footer { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; height: 50px; padding: 9px 20px; border-top: 1px solid #f0f0f0; }
+.canvas-panel-footer { flex-shrink: 0; display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 10px; height: 50px; padding: 9px 20px; border-top: 1px solid #f0f0f0; }
+/* Save is the first child; the auto margin carries it and everything after it to the right
+   even where the row itself has not stretched. */
+.canvas-panel-footer > *:first-child { margin-left: auto; }
 .canvas-panel-footer button { min-width: 96px; border-radius: 2px; }
 .canvas-panel :is(.fui-Input,.fui-Dropdown,.fui-Textarea) { background: #f4f4f4; border: 0; border-radius: 3px; }
 .canvas-panel .fui-Field label { font-weight: 400; }
@@ -78,13 +81,17 @@
    Distribution, Cost Paid By); `.canvas-field > span` is every boxed field. */
 .canvas-field > span[data-required="true"]::before,
 .canvas-radio-group legend > span[data-required="true"]::before { content: '* '; color: #d20532; }
-.canvas-field input, .canvas-field select, .canvas-field textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
-.canvas-field textarea { height: 64px; resize: vertical; }
-.canvas-field input:focus, .canvas-field select:focus { outline: 1px solid #0078d4; }
+.canvas-field > input, .canvas-field > select, .canvas-field > textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
+.canvas-field > textarea { height: 64px; resize: vertical; }
+.canvas-field > input:focus, .canvas-field > select:focus { outline: 1px solid #0078d4; }
+/* A Fluent control dropped into a `.canvas-field` still has to fill it. `DatePicker` merges
+   `fui-DatePicker` onto an `Input` root, so it is that root — not a wrapper — that needs the
+   width; its calendar glyph is a `contentAfter` and lays itself out inside. */
+.canvas-field > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { width: 100%; min-width: 0; }
 /* A `DisplayMode.View` TextInput keeps the editable fill and text colour in the canvas —
    `txt_…_CostsUntilClosingDate_Plan` and `…_TotalCosts_Calculated` in the Edit-panel
    screenshot are the same #f4f4f4/#242424 as the fields above them. */
-.canvas-field input:disabled, .canvas-field textarea:disabled { background: #f4f4f4; color: #242424; -webkit-text-fill-color: #242424; opacity: 1; }
+.canvas-field > input:disabled, .canvas-field > textarea:disabled { background: #f4f4f4; color: #242424; -webkit-text-fill-color: #242424; opacity: 1; }
 .canvas-inline-fields { display: flex; gap: 20px; }
 .canvas-inline-fields > * { flex: 1; min-width: 0; }
 .canvas-radio-group { border: 0; margin: 0; padding: 0; font-size: 14px; }
@@ -187,7 +194,8 @@
 /* Conditional validation message under a panel field (Add/Edit Period, Add/Edit Costs). */
 /* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
 .canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
-.canvas-field[data-invalid] input, .canvas-field[data-invalid] select { outline: 1px solid #d20532; }
+.canvas-field[data-invalid] > input, .canvas-field[data-invalid] > select,
+.canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; }
 
 /* ===========================================================================
    Contracts screen — `Src/Contracts Screen.pa.yaml`.
@@ -200,7 +208,7 @@
 
 /* `con_Contracts_Content` — a vertical autolayout, `PaddingLeft: =20`, `PaddingRight: =10`.
    Measured: the content area starts at x 211 and the first card's stripe at x 231. */
-.canvas-contract-screen { display: flex; flex-direction: column; min-width: 0; flex: 1; min-height: 0; padding: 0 10px 0 20px; gap: 4px; }
+.canvas-contract-screen { display: flex; flex-direction: column; min-width: 0; max-width: 100%; overflow-x: hidden; flex: 1; min-height: 0; padding: 0 10px 0 20px; gap: 4px; }
 /* `gal_Contracts_List` — `Width: =Parent.Width-20`, cards `Parent.Width-10`. */
 .canvas-contract-list { overflow: auto; flex: 1; padding: 0 10px 10px 0; }
 
@@ -233,7 +241,7 @@
 .canvas-contract-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 320px)); gap: 10px 20px; }
 /* The card samples a hair lighter than the panel: #f5f5f5 against #f4f4f4 (measured at
    x 251-570, y 203-234 on the expanded-contract screenshot). */
-.canvas-contract-body .canvas-field input:disabled { background: #f5f5f5; }
+.canvas-contract-body .canvas-field > input:disabled { background: #f5f5f5; }
 
 .canvas-contract-targets-head { display: flex; flex-direction: column; gap: 4px; }
 .canvas-contract-targets-bar { display: flex; align-items: center; }

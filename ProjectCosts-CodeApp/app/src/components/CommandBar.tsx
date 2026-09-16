@@ -7,11 +7,14 @@
  * string the canvas app had to pass it (`Theme: =gblAppThemeJson`) — Fluent inherits the
  * theme from `FluentProvider`.
  *
- * Screenshot r07 shows the rendered form: blue text buttons with a leading icon, and
- * disabled commands greyed out.
+ * The rendered form, sampled off `UI Screenshots/Cost App - Contracts Tab Selected -
+ * Expanded Contract.png`, is a BLACK label with a blue leading icon — not a blue button.
+ * "Add Development Contract" reads (0, 0, 0) across its glyphs and its `+` reads the VSB
+ * blue; the disabled "Edit"/"Delete" read #595959 with a #c8c6c4 icon. An earlier note here
+ * claimed blue text, which is what the whole bar had become.
  */
 import {
-  Button, Toolbar, makeStyles, tokens, mergeClasses,
+  Button, Toolbar, makeStyles, mergeClasses,
 } from "@fluentui/react-components";
 import {
   AddRegular, EditRegular, DeleteRegular, ArrowSyncRegular, SaveRegular,
@@ -19,7 +22,7 @@ import {
   GlassesRegular, OpenRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
-import { space } from "@/theme/tokens";
+import { palette, space } from "@/theme/tokens";
 
 /**
  * The PowerCAT `ItemIconName` values both apps actually use, mapped to their Fluent v9
@@ -60,13 +63,17 @@ const useStyles = makeStyles({
     minHeight: "40px",
   },
   command: {
-    color: tokens.colorBrandForegroundLink,
-    fontWeight: tokens.fontWeightRegular,
+    // `palette.neutralPrimary` is #000000 — the canvas label colour, sampled.
+    color: palette.neutralPrimary,
+    fontWeight: "400",
+    // Only the leading icon carries the brand colour.
+    "& .fui-Button__icon": { color: palette.themePrimary },
   },
   disabled: {
-    // Fluent already dims a disabled button; this matches the canvas' heavier greying so
-    // the two apps read the same side by side.
-    color: tokens.colorNeutralForegroundDisabled,
+    // Fluent already dims a disabled button; the canvas greys the label to #595959
+    // (`neutralTertiary`) and the icon to #c8c6c4 (`neutralTertiaryAlt`), which is heavier.
+    color: palette.neutralTertiary,
+    "& .fui-Button__icon": { color: palette.neutralTertiaryAlt },
   },
 });
 
