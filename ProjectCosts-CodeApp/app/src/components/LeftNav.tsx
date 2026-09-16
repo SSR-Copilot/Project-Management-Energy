@@ -10,8 +10,8 @@
  */
 import { Button, makeStyles, mergeClasses, tokens, Tooltip } from "@fluentui/react-components";
 import {
-  DocumentBulletListRegular, DocumentRegular, MoneyRegular, TableSimpleRegular,
-  ChevronDownRegular, ChevronUpRegular, NavigationRegular,
+  DocumentEditRegular, DocumentTextRegular, MoneyRegular, ReadingListFilled,
+  TableSimpleRegular, ChevronDownRegular, ChevronUpRegular, NavigationRegular,
 } from "@fluentui/react-icons";
 import { useMemo, useState, type ReactElement } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -20,12 +20,19 @@ import { useSession } from "@/app/SessionContext";
 import { costLocation, COST_PATHS } from "@/app/deepLinks";
 import { layout, palette, space } from "@/theme/tokens";
 
+/*
+ * `LeftNavigationMenu.ItemIconName` (`App.pa.yaml:87-140`), which names Fabric icons, mapped to
+ * their Fluent v9 equivalents. Every rail item used to render `DocumentRegular` — a plain sheet —
+ * so DEVEX/CAPEX lost its solid reading-mode glyph, the OPEX items lost the pencil that makes
+ * them editable pages, and Contracts was indistinguishable from its siblings.
+ */
 const ICONS: Record<NavItem["icon"], ReactElement> = {
   projects: <TableSimpleRegular />,
-  capex: <DocumentBulletListRegular />,
-  opex: <DocumentRegular />,
-  document: <DocumentRegular />,
-  currency: <MoneyRegular />,
+  capex: <ReadingListFilled />,      // ReadingModeSolid — the only FILLED icon in the rail
+  opex: <DocumentEditRegular />,     // PageEdit
+  document: <DocumentEditRegular />, // PageEdit
+  contract: <DocumentTextRegular />, // TextDocumentShared
+  currency: <MoneyRegular />,        // AllCurrency
 };
 
 const useStyles = makeStyles({
@@ -53,11 +60,16 @@ const useStyles = makeStyles({
     borderLeftColor: "transparent",
     ":hover": { backgroundColor: palette.hoverButton },
   },
+  /*
+   * Selected reads as a grey band with a blue edge and BOLD DARK text — not blue text on a
+   * blue tint (`Cost App - Left Panel.png`, the Contracts row). The accent is the theme blue,
+   * not the green used elsewhere in the shell.
+   */
   itemSelected: {
-    backgroundColor: palette.themeLighterAlt,
-    borderLeftColor: palette.Green,
+    backgroundColor: palette.Grayscale30,
+    borderLeftColor: palette.themePrimary,
     fontWeight: tokens.fontWeightSemibold,
-    color: palette.themePrimary,
+    color: tokens.colorNeutralForeground1,
   },
   child: { paddingLeft: space.xxl },
   group: {
@@ -111,10 +123,16 @@ export function LeftNav() {
         if (isGroup) {
           return (
             <div key={item.key}>
+              {/*
+                * The group header shows the expand CHEVRON where its siblings show an icon, and
+                * shows no icon of its own — see `Cost App - Left Panel.png`, where OPEX reads
+                * "⌃ OPEX" against "📄 Land Lease" below it. Rendering `ItemIconName` here as
+                * well, with the chevron pushed to the right, is what made this row the odd one.
+                */}
               <Button
                 appearance="transparent"
                 className={styles.group}
-                icon={ICONS[item.icon]}
+                icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
                 iconPosition="before"
                 aria-expanded={open}
                 onClick={() =>
@@ -126,12 +144,7 @@ export function LeftNav() {
                   })
                 }
               >
-                {expanded ? (
-                  <>
-                    <span className={styles.label}>{item.label}</span>
-                    {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-                  </>
-                ) : null}
+                {expanded ? <span className={styles.label}>{item.label}</span> : null}
               </Button>
               {open
                 ? children.map((child) => (

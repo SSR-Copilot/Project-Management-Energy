@@ -1,7 +1,10 @@
 /* Visual baseline: Existing Solution/UI Screenshots, 1919 x ~1018.
    Shared chrome and form styling is owned here; the PCF owns its own grid CSS. */
 .canvas-shell { background: #f1f1f1; padding: 0 5px 4px; gap: 4px; color: #000; }
-.canvas-shell > header { height: 70px; min-height: 70px; padding: 0 8px 0 3px; gap: 0; border: 0; flex-shrink: 0; }
+/* Right padding clears the AVATAR, not the pill: the avatar is 48 px and hangs off the pill's
+   right edge, so an 8 px gutter left it flush against the window (and dragged a page-level
+   horizontal scrollbar with it). The canvas leaves a visible margin after it. */
+.canvas-shell > header { height: 70px; min-height: 70px; padding: 0 20px 0 3px; gap: 0; border: 0; flex-shrink: 0; }
 .canvas-brand { width: 202px; height: 68px; gap: 14px; }
 .canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 30px; }
 .canvas-brand-version { color: #111; font-size: 10px; line-height: 14px; }
@@ -46,6 +49,11 @@
 .canvas-panel-header h2 { font-size: 18px; line-height: 26px; color: white; }
 .canvas-panel-header button { color: white; }
 .canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; }
+/* A panel scrolls VERTICALLY. Anything wide enough to scroll it sideways is a layout bug in the
+   field that is too wide, not something the reader should have to drag — the comments card is
+   the one that kept doing it. Its own children may still scroll (tables opt in explicitly). */
+.canvas-panel .canvas-panel-body { overflow-x: hidden; }
+.canvas-panel .canvas-panel-body > * { min-width: 0; max-width: 100%; }
 /* `con_GeneratorData_RightPanel_Form_PvModuleType_Buttons_2` (`CapexScreenCode.txt:17323-17345`):
    Height 50, LayoutGap 10, PaddingRight 20, LayoutJustifyContent.End. Measured on
    `Cost App - Edit Panel - Popup Design…png`: the footer runs y 966-1016 (50 px) with its
@@ -92,11 +100,18 @@
 .canvas-cost-toolbar { display: flex; align-items: center; gap: 20px; flex-shrink: 0; min-height: 50px; padding: 0 18px; overflow-x: auto; white-space: nowrap; }
 /* "Add Cost from Table" is semibold VSB blue in the canvas, not regular Fluent blue. */
 .canvas-cost-toolbar button { color: #006eb9; font-size: 14px; font-weight: 600; }
+/* The two FILTERS — "Show All Cost" and the year — are plain dark text, not commands. The blue
+   belongs to the toolbar's command buttons and the year arrows either side of the picker, so
+   the rule above must not reach the dropdown triggers. */
+.canvas-cost-toolbar .fui-Dropdown,
+.canvas-cost-toolbar .fui-Dropdown button { color: #242424; font-weight: 400; }
 /* Switch labels and the two selects are 14px/#242424 in the canvas, not 13px. */
 .canvas-cost-toolbar .fui-Switch label { font-size: 14px; color: #242424; }
 .canvas-cost-toolbar select { height: 30px; background: white; border: 1px solid #ccc; border-radius: 2px; font-size: 14px; color: #242424; padding: 0 12px; }
 .canvas-capex-summary { margin: 20px 10px; width: 360px; max-width: calc(100% - 20px); border-collapse: collapse; font-size: 13px; }
-.canvas-capex-summary td { padding: 9px 12px; border-bottom: 1px solid #eee; background: #fcfefe; }
+/* Both columns are semibold in `Cost App Landing Screen - Devex Capex Screen.png` — the summary
+   reads as a block of headings, not as body text with a bold total. */
+.canvas-capex-summary td { padding: 9px 12px; border-bottom: 1px solid #eee; background: #fcfefe; font-weight: 600; color: #242424; }
 .canvas-capex-summary td:last-child { text-align: right; white-space: nowrap; border-right: 1px solid #eee; }
 .canvas-capex-summary tr:last-child { border: 1px solid #ddd; }
 .canvas-pcf-host { flex: 1; min-height: 300px; min-width: 0; margin: 0 5px; overflow: hidden; }

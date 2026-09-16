@@ -18,8 +18,17 @@
 export interface NavItem {
   key: string;
   label: string;
-  /** Fluent icon name, mapped in `LeftNav`. The canvas used PowerCAT icon names. */
-  icon: "projects" | "capex" | "opex" | "document" | "currency";
+  /**
+   * Mapped to a Fluent v9 icon in `LeftNav`. The keys track `LeftNavigationMenu.ItemIconName`
+   * in `App.pa.yaml`, which is a Fabric icon set:
+   *
+   *   capex    -> ReadingModeSolid      (DEVEX/CAPEX)
+   *   opex     -> PageEdit              (the OPEX group; the rail draws a chevron for it)
+   *   document -> PageEdit              (O&M, Land Lease, Other OPEX Costs)
+   *   contract -> TextDocumentShared    (Contracts — NOT the same icon as its siblings)
+   *   currency -> AllCurrency           (Total Summary, hidden)
+   */
+  icon: "projects" | "capex" | "opex" | "document" | "contract" | "currency";
   path?: string;
   parentKey?: string;
   enabled: boolean;
@@ -85,7 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: "ContractsKey",
     label: "Contracts",
-    icon: "document",
+    icon: "contract",
     path: "/costs/contracts",
     enabled: true,
     visible: true,

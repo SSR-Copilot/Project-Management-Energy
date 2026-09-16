@@ -483,7 +483,13 @@ export default function ProjectOverviewScreen() {
 
       {/* ── the grid ──────────────────────────────────────────────────── */}
       {pageQuery.isLoading ? (
-        <LoadingOverlay mode="inline" label="Loading projects…" />
+        /*
+         * The app's FIRST load is the canvas' full-screen wait card, not a small inline spinner
+         * in an otherwise-empty grid — `AppLoadingScreen.png`: the 500 x 240 white card on a
+         * dimmed ground with "Please wait...". `LoadingOverlay`'s blocking mode already is that
+         * card, transcribed from `cmp_PopUp_Loading`; the overview simply was not using it.
+         */
+        <LoadingOverlay label="Please wait..." />
       ) : pageQuery.isError ? (
         <EmptyState
           title="Projects could not be loaded"

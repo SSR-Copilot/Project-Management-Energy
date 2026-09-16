@@ -145,7 +145,16 @@ const useStyles = makeStyles({
    * not the date fields are showing — stretching it to the full width when the comment is General,
    * which is what fractional columns did, is visibly not the canvas card.
    */
-  typeRow: { display: "grid", columnGap: "22px", minWidth: 0 },
+  /*
+   * Fluent's Dropdown carries `min-width: 160px`. A 100 px grid column cannot hold it, so the
+   * Year and Month boxes pushed past the card, overlapped each other and gave the whole panel a
+   * horizontal scrollbar — the "distorted" comments panel. The floor has to be lifted for the
+   * hand-laid canvas widths above to mean anything.
+   */
+  typeRow: {
+    display: "grid", columnGap: "22px", minWidth: 0,
+    "& .fui-Dropdown": { minWidth: "unset", width: "100%" },
+  },
   typeOnly: { gridTemplateColumns: "250px" },
   typeWithDate: { gridTemplateColumns: "250px 100px 100px" },
   /*
@@ -186,6 +195,13 @@ const useStyles = makeStyles({
   },
   /* `lbl_Draft_Edit_Comment_Length`: `Align.Right`, `RGBA(89,89,89,1)`, Lighter, `Size: =14`. */
   counter: { color: "#595959", fontSize: tokens.fontSizeBase300 },
+  /*
+   * `txt_Draft_Edit_Comment_Value.Width = Parent.Width - 40` — the box spans the card, under the
+   * whole Type/Year/Month row. Fluent sizes a Textarea to its own content, which left it about a
+   * third of the card wide (see `Cost App - Comment Panel contract Row - Comment to payment
+   * date.png` for the width it should be).
+   */
+  commentBox: { width: "100%", maxWidth: "100%" },
   addRow: { marginTop: space.l, display: "flex" },
   addButton: { color: tokens.colorBrandForeground1, paddingLeft: 0 },
 });
@@ -795,7 +811,7 @@ function DraftCard(props: {
           <Text className={styles.readLabel}>Comment</Text>
           <Text className={styles.counter}>{counter}</Text>
         </div>
-        <Textarea value={comment.text} rows={3} aria-label="Comment"
+        <Textarea className={styles.commentBox} value={comment.text} rows={3} aria-label="Comment"
           onChange={(_, d) => onChangeText(d.value)} maxLength={COMMENT_MAX_LENGTH} />
       </div>
     </div>

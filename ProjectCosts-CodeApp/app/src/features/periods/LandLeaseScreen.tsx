@@ -137,8 +137,10 @@ const useStyles = makeStyles({
   command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
   scroll: { overflowX: "auto", paddingBottom: space.xs },
   table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  /** `Color: gblAppStyles.Label.Color` + Semibold — dark labels, not the card's link blue. */
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
     fontSize: tokens.fontSizeBase200,
     paddingTop: space.s, paddingBottom: space.s,
     paddingLeft: space.s, paddingRight: space.s,

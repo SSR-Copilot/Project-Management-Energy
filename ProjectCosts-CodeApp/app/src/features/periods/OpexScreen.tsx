@@ -155,8 +155,15 @@ const useStyles = makeStyles({
   command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
   scroll: { overflowX: "auto", paddingBottom: space.xs },
   table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  /*
+   * `lbl_…_CardBody_CostsTableHeader_*` — `Color: gblAppStyles.Label.Color` (the app's dark
+   * label colour) with `FontWeight.Semibold`. Without an explicit colour these headings picked
+   * up the link blue from the card around them, which is what made the row of column titles
+   * read as blue rather than as plain dark labels.
+   */
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
     fontSize: tokens.fontSizeBase200,
     paddingTop: space.s, paddingBottom: space.s,
     paddingLeft: space.s, paddingRight: space.s,

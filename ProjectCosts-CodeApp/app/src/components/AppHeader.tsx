@@ -21,7 +21,8 @@ import {
   Text, Tooltip, makeStyles, tokens,
 } from "@fluentui/react-components";
 import {
-  BugRegular, InfoRegular, PersonRegular, WarningFilled, ChevronDownRegular,
+  BugRegular, BuildingRegular, GlobeRegular, InfoRegular, LocalLanguageRegular, MailRegular,
+  PersonRegular, WarningFilled, ChevronDownRegular,
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
 import { layout, palette, space } from "@/theme/tokens";
@@ -87,6 +88,11 @@ export interface AppHeaderProps {
   pageTitle?: string;
   userName?: string;
   userEmail?: string;
+  /** The remaining user-badge rows. Each is omitted from the menu when this app has no value. */
+  userLanguage?: string;
+  userBusinessUnit?: string;
+  userCountries?: string;
+  userDataScope?: string;
   appVersion?: string;
   environmentName?: string;
   infoCenterUrl?: string;
@@ -98,8 +104,8 @@ export interface AppHeaderProps {
 }
 
 export function AppHeader({
-  pageTitle, userName, userEmail, appVersion, environmentName,
-  infoCenterUrl, hasError, onReportProblem, commandSlotRef,
+  pageTitle, userName, userEmail, userLanguage, userBusinessUnit, userCountries, userDataScope,
+  appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, commandSlotRef,
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
@@ -167,10 +173,28 @@ export function AppHeader({
               <span className="canvas-user-avatar"><PersonRegular /></span>
             </Button>
           </MenuTrigger>
+          {/*
+            * `EveryScreen - Current LoggedIn User Badge.png`: a list of FACTS about the signed-in
+            * user, each with its own icon — mail, language, business unit, countries, data scope,
+            * version. Two unlabelled grey lines was not that list. Rows whose data this app does
+            * not hold are omitted rather than shown blank.
+            */}
           <MenuPopover>
             <MenuList>
-              {userEmail ? <MenuItem disabled>{userEmail}</MenuItem> : null}
-              <MenuItem disabled>
+              {userEmail ? <MenuItem icon={<MailRegular />} disabled>{userEmail}</MenuItem> : null}
+              {userLanguage
+                ? <MenuItem icon={<LocalLanguageRegular />} disabled>{userLanguage}</MenuItem>
+                : null}
+              {userBusinessUnit
+                ? <MenuItem icon={<BuildingRegular />} disabled>{userBusinessUnit}</MenuItem>
+                : null}
+              {userCountries
+                ? <MenuItem icon={<BuildingRegular />} disabled>{userCountries}</MenuItem>
+                : null}
+              {userDataScope
+                ? <MenuItem icon={<GlobeRegular />} disabled>{userDataScope}</MenuItem>
+                : null}
+              <MenuItem icon={<InfoRegular />} disabled>
                 {`version ${appVersion ?? ""} (${environmentName ?? ""})`}
               </MenuItem>
             </MenuList>
