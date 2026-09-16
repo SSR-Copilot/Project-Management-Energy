@@ -386,8 +386,25 @@ export interface ContractWrite {
  * Rule: EVERY create on a project-scoped table writes the owning business unit explicitly.
  * Omitting it never errors — Dataverse derives it from the CALLER — so a row created by a
  * German user on a French project simply becomes invisible to the French BU-scoped team
- * later. `OwningBusinessUnit@odata.bind` is the write form (note the casing: that is what
- * the generated model declares, not the lower-case spelling).
+ * later. The write form is `owningbusinessunit@odata.bind`, LOWER-case.
+ *
+ * The casing is not cosmetic and not a matter of taste. `@odata.bind` must name the OData
+ * NAVIGATION PROPERTY, and for the system-owned lookups Dataverse declares those in lower case
+ * (`owningbusinessunit`), while custom lookups keep their schema-name casing — which is why
+ * `vsb_Project@odata.bind` above is capitalised and this one is not. The generated TypeScript
+ * model spells the field `OwningBusinessUnit` because the generator uses schema names; binding
+ * that spelling makes the Web API reject the whole request:
+ *
+ *   An undeclared property 'OwningBusinessUnit' which only has property annotations in the
+ *   payload but no property value was found in the payload.
+ *
+ * Every other write in this app (`capexWrites`, `addCostSheet`, `comments`) already uses the
+ * lower-case form.
+ *
+ * It is also written on CREATE ONLY. Ownership is not an editable field on an existing row —
+ * re-sending the bind on every update asks Dataverse to reassign the record on each save, which
+ * is what `Assign` is for. `comments.ts` places the bind inside its create branch for the same
+ * reason; here the payload is shared by both calls, so it is gated on `w.id` instead.
  *
  * The canvas Save also wrote two constants that are reproduced here:
  *   'BoP Standard Assumption Contract': Blank()   — the link is never persisted, even when
@@ -395,7 +412,7 @@ export interface ContractWrite {
  *   'Is Standard Contract': No                    — always, for the same reason
  * Both are on the open-decision list; they are copied unchanged for now.
  */
-function contractPayload(w: ContractWrite) {
+export function contractPayload(w: ContractWrite) {
   const untilPlan = w.costsUntilClosingType === CLOSING_DATE_TYPE.Plan;
   const untilActual = w.costsUntilClosingType === CLOSING_DATE_TYPE.Actual;
   const afterPlan = w.costsAfterClosingType === CLOSING_DATE_TYPE.Plan;
@@ -428,8 +445,9 @@ function contractPayload(w: ContractWrite) {
     vsb_comment: w.comment.trim(),
     vsb_ismarginstandardassumption: w.isMarginStandardAssumption,
     vsb_isstandardcontract: false,
-    ...(w.owningBusinessUnitId
-      ? { "OwningBusinessUnit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
+    // CREATE only — see the note above `contractPayload`.
+    ...(w.owningBusinessUnitId && !w.id
+      ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
       : {}),
   };
 }
@@ -482,7 +500,7 @@ export async function replaceDevCoLinks(args: {
         "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
         "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
         ...(args.owningBusinessUnitId
-          ? { "OwningBusinessUnit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
+          ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
           : {}),
       } as never),
     ),
@@ -509,8 +527,9 @@ export async function savePaymentTarget(w: PaymentTargetWrite): Promise<PaymentT
     vsb_paymentdate: w.paymentDate.trim(),
     vsb_totalcostscontract: w.totalCostsContract,
     vsb_note: w.note,
-    ...(w.owningBusinessUnitId
-      ? { "OwningBusinessUnit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
+    // CREATE only, same rule as the contract itself.
+    ...(w.owningBusinessUnitId && !w.id
+      ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
       : {}),
   };
   const result = w.id
