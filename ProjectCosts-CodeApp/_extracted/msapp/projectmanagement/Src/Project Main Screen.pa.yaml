@@ -1,0 +1,2672 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Project Main Screen:
+    Properties:
+      Fill: =gblAppColors.Screen.Fill
+      LoadingSpinner: =If(locRefreshOverviewList, LoadingSpinner.None, LoadingSpinner.Data)
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: |-
+        =Clear(colProjectManagersPreSelected);
+
+            UpdateContext(
+                {
+                    locProjectDelitionDialog: false,
+                    locRefreshOverviewList: false
+                }
+            );
+            If(
+                gblAppStarted,
+                Select(but_Main_Project_Overview_Context_Filter_Apply)
+            );
+            ClearCollect(
+                colReportViewers,
+                Table(
+                    {Mail: "alexander.pilevski@vsb.energy"},
+                    {Mail: "andreas.laeubli@vsb.energy"},
+                    {Mail: "andriy.chevychalov@vsb.energy"},
+                    {Mail: "dominik.simon@vsb.energy"},
+                    {Mail: "christoph.sperling@vsb.energy"},
+                    {Mail: "thomas.lorenz@vsb.energy"},
+                    {Mail: "benjamin.goepfert@vsb.energy"},
+                    {Mail: "ravindra.mund@vsb.energy"},
+                    {Mail: "test-vsbcloud-01@vsb.energy"},
+                    {Mail: "test-vsbcloud-02@vsb.energy"}
+                )
+            )
+    Children:
+      - psf_HotfixCDNFluentUI_Main:
+          Control: CodeComponent
+          ComponentName: ckfix_CreatorKit.Hotfix.HotfixCDNFluentUI
+          Properties:
+            Height: =10
+            Width: =10
+      - con_Main_Project_Overview:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Fill: =RGBA(241, 241, 241, 0)
+            Height: =Parent.Height
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =4
+            PaddingBottom: =4
+            PaddingLeft: =4
+            PaddingRight: =4
+            PaddingTop: =4
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Width: =Parent.Width
+          Children:
+            - con_Main_Project_Overview_Header:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  DropShadow: =DropShadow.None
+                  Fill: |-
+                    =Switch(
+                        gblEnvironmentName,
+                        "Hotfix",
+                        ColorValue("#9831A850"),
+                        "Nightly",
+                        ColorValue("#AAAAAA60"),
+                        "Budgeting",
+                        ColorValue("#85AD3760"),
+                        "QA",
+                        ColorValue("#E66C3780"),
+                        RGBA(
+                            255,
+                            255,
+                            255,
+                            1
+                        )
+                    )
+                  FillPortions: =0
+                  Height: =70
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                Children:
+                  - con_Main_Project_Overview_Header_logo:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =70
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        LayoutMinWidth: =50
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =200
+                      Children:
+                        - GeneralData_Header_Logo_Container:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =Parent.Height-4
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =60
+                            Children:
+                              - img_cmpHeader_Logo:
+                                  Control: Image@2.2.3
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =60
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Image: ='vsb-logo'
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Tooltip: ="VSB Cloud"
+                                    Width: =56
+                                    X: =4
+                                    Y: =4
+                              - img_cmpHeader_Button:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    Color: =RGBA(255, 255, 255, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    DisabledFill: =RGBA(242, 242, 241, 0)
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Font: =Font.'Segoe UI'
+                                    Height: =Parent.Height
+                                    HoverBorderColor: =ColorValue(gblAppTheme.palette.hoverButton)
+                                    HoverColor: =ColorValue(gblAppTheme.palette.hoverButton)
+                                    HoverFill: =
+                                    PaddingBottom: =2
+                                    PaddingTop: =2
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(255, 255, 255, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Text: =
+                                    Width: =Parent.Width
+                        - con_cmp_Header_Logo_Title_1:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinWidth: =Parent.Width
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - but_Main_Project_Overview_Header_Redirect_1:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    AccessibleLabel: ="Redirect"
+                                    Appearance: ='ButtonCanvas.Appearance'.Secondary
+                                    Height: =12
+                                    OnSelect: "=Switch(\n    Text(Param(\"screen\")),\n    \"general\",\n    Trace($\"Navigate to Project Main Screen: with ProjectId=>{Param(\"projectId\")}\");\n    Navigate(\n        'Project General Data Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    ),\n    \"generators\",\n    Trace($\"Navigate to Project General Data Screen: with ProjectId=>{Param(\"projectId\")}\");\n    \n    Navigate(\n        'Project Generators Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    )\n);\n"
+                                    Text: =""
+                                    Visible: =false
+                                    Width: =12
+                              - con_cmp_Header_Title_1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =Parent.Height/2
+                                    PaddingLeft: =10
+                                    Size: =18
+                                    Text: ="Cloud"
+                                    Width: =Parent.Width-60
+                                    Y: =Parent.Height/2-Self.Height/2
+                              - con_cmp_Header_Version_1:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =RGBA(50, 49, 48, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Lighter
+                                    Height: =12
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Version " & gblAppVersion & If(gblEnvironmentName="Dev"," (" & gblEnvironmentName & ")","")
+                                    Visible: |
+                                      =/*If(
+                                          gblEnvironmentName = "Prod",
+                                          false,
+                                          true
+                                      )*/
+                                      gblEnvironmentName = "Prod" || gblEnvironmentName = "Dev"
+                                    Width: =Parent.Width-ico_cmp_Header_Info_1.Width
+                                    X: |-
+                                      =//ico_cmp_Header_Info_1.X+ico_cmp_Header_Info_1.Width
+                                      7
+                                    Y: =ico_cmp_Header_Info_1.Y+4
+                              - ico_cmp_Header_Info_1:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning, "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =16
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(16, 110, 190, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Information
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Visible: |-
+                                      =/*If(
+                                          gblEnvironmentName = "Dev",
+                                          true,
+                                          false
+                                      )*/
+                                      false
+                                    Width: =16
+                                    X: =5
+                                    Y: =Parent.Height-Self.Height-6
+                  - con_Main_Project_Overview_Header_SuitBar:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Height: =Parent.Height
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =6
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - con_Main_Project_Overview_Header_SuitBar_CommandBar:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              Height: =Parent.Height/2
+                              Items: |-
+                                =With(
+                                    {
+                                        varCanEdit: If(
+                                            IsBlank(
+                                                LookUp(
+                                                    Projects,
+                                                    ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                )
+                                            ),
+                                            false,
+                                            And(
+                                                DataSourceInfo(
+                                                    Projects,
+                                                    DataSourceInfo.CreatePermission
+                                                ),
+                                                Coalesce(
+                                                    RecordInfo(
+                                                        LookUp(
+                                                            Projects,
+                                                            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                        ),
+                                                        RecordInfo.EditPermission
+                                                    ),
+                                                    false
+                                                )
+                                            )
+                                        )
+                                    },
+                                    Table(
+                                        {
+                                            ItemKey: "addProject",
+                                            ItemDisplayName: "Add Project",
+                                            ItemIconName: "Add",
+                                            ItemEnabled: DataSourceInfo(
+                                                Projects,
+                                                DataSourceInfo.CreatePermission
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "editProject",
+                                            ItemDisplayName: If(
+                                                IsBlank(locDetailsListRowKey),
+                                                "Edit Project",
+                                                If(
+                                                    varCanEdit,
+                                                    "Edit Project",
+                                                    "View Project"
+                                                )
+                                            ),
+                                            ItemIconName: If(
+                                                IsBlank(locDetailsListRowKey),
+                                                "Edit",
+                                                If(
+                                                    varCanEdit,
+                                                    "Edit",
+                                                    "ReadingMode"
+                                                )
+                                            ),
+                                            ItemEnabled: Not(IsBlank(locDetailsListRowKey))
+                                        },
+                                        {
+                                            ItemKey: "editCosts",
+                                            ItemDisplayName: If(
+                                                IsBlank(locDetailsListRowKey),
+                                                "Edit Costs",
+                                                If(
+                                                    varCanEdit,
+                                                    "Edit Costs",
+                                                    "View Costs"
+                                                )
+                                            ),
+                                            ItemIconName: If(
+                                                IsBlank(locDetailsListRowKey),
+                                                "Edit",
+                                                If(
+                                                    varCanEdit,
+                                                    "Edit",
+                                                    "ReadingMode"
+                                                )
+                                            ),
+                                            ItemEnabled: !IsBlank(locDetailsListRowKey)/*,
+                                            ItemIconColor: If(
+                                                Or(
+                                                    gblRecordSelectedProject.'Cluster State'.Name = "Draft",
+                                                    IsBlank(gblRecordSelectedProject)
+                                                ),
+                                                "#8FBCE4",
+                                                "#006EB9"
+                                            )*/
+                                /*,
+                                            ItemVisible: Or(
+                                                gblEnvironmentName in [
+                                                    "Dev",
+                                                    "Nightly",
+                                                    "QA"
+                                                ],
+                                                User().Email in varUserCanEditCost
+                                            )*/
+                                        },
+                                        {
+                                            ItemKey: "deleteProject",
+                                            ItemDisplayName: "Delete Project",
+                                            ItemIconName: "Delete",
+                                            ItemEnabled: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                And(
+                                                    Not(IsBlank(locDetailsListRowKey)),
+                                                    RecordInfo(
+                                                        varProjectRecord,
+                                                        RecordInfo.EditPermission
+                                                    ),
+                                                    varProjectRecord.'Approval States' <> 'Approval States'.Approved
+                                                )
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "simulateProject",
+                                            ItemDisplayName: "Simulate",
+                                            ItemIconName: "Play",
+                                            ItemEnabled: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                And(
+                                                    Not(IsBlank(locDetailsListRowKey)),
+                                                    RecordInfo(
+                                                        varProjectRecord,
+                                                        RecordInfo.EditPermission
+                                                    ),
+                                                    varProjectRecord.'Cluster State'.Order > 0
+                                                )
+                                            ),
+                                            ItemVisible: User().Email in colAnalyticsAppUsers
+                                        },
+                                        {
+                                            ItemKey: "ViewSharepoint",
+                                            ItemDisplayName: "View Sharepoint Site",
+                                            ItemIconName: "View",
+                                            ItemEnabled: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                And(
+                                                    Not(IsBlank(locDetailsListRowKey)),
+                                                    Not(IsBlank(varProjectRecord.'SPO Sharepoint URL')),
+                                                    Not(IsBlank(varProjectRecord.'SPO Teams URL'))
+                                                )
+                                            ),
+                                            ItemVisible: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                varProjectRecord.Country.Name = "Croatia"
+                                            )
+                                        }
+                                            /*,
+                                            ItemVisible: gblEnvironmentName in [
+                                                "Dev",
+                                                "Nightly",
+                                                "QA"
+                                            ]*/
+                                ,
+                                        {
+                                            ItemKey: "ViewTeams",
+                                            ItemDisplayName: "View Teams",
+                                            ItemIconName: "View",
+                                            ItemEnabled: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                And(
+                                                    Not(IsBlank(locDetailsListRowKey)),
+                                                    Not(IsBlank(varProjectRecord.'SPO Sharepoint URL')),
+                                                    Not(IsBlank(varProjectRecord.'SPO Teams URL'))
+                                                )
+                                            ),
+                                            ItemVisible: With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                varProjectRecord.Country.Name = "Croatia"
+                                            )
+                                            /*,
+                                            ItemVisible: gblEnvironmentName in [
+                                                "Dev",
+                                                "Nightly",
+                                                "QA"
+                                            ]*/
+                                        },
+                                        {
+                                            ItemKey: "viewProjectOverviewPowerBI",
+                                            ItemDisplayName: "Show Project Overview (Beta)",
+                                            ItemIconName: "View",
+                                            ItemVisible: CountIf(
+                                                Filter(
+                                                    colReportViewers,
+                                                    ThisRecord.Mail = gblCurrentUser.Mail
+                                                ),
+                                                true
+                                            ) > 0,
+                                            ItemEnabled: Not(IsBlank(locDetailsListRowKey))
+                                        },
+                                        {
+                                            ItemKey: "viewPortfolioOverviewPowerBI",
+                                            ItemDisplayName: "Show Portfolio Overview (Beta)",
+                                            ItemIconName: "View",
+                                            ItemVisible: CountIf(
+                                                Filter(
+                                                    colReportViewers,
+                                                    ThisRecord.Mail = gblCurrentUser.Mail
+                                                ),
+                                                true
+                                            ) > 0
+                                        },
+                                        {
+                                            ItemKey: "viewDashboardFunctionality",
+                                            ItemDisplayName: "Dashboard",
+                                            ItemIconName: "BIDashboard",
+                                            ItemVisible: true
+                                        }
+                                    )
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: "=If(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"addProject\",\n    Set(\n        gblRecordSelectedProject,\n        Blank()\n    );\n    Set(\n        gblProjectHeaderData,\n        Blank()\n    );\n    Set(\n        gblReportError,\n        Blank()\n    );\n    Set(\n        gblLeftNavigationSelected,\n        LookUp(\n            LeftNavigationMenu,\n            ItemKey = \"GeneralDataCommonKey\"\n        )\n    );\n    Navigate(\n        'Project General Data Screen',\n        ScreenTransition.Fade\n    );\n    \n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"editProject\",\n    Trace($\"OnSelect MainCommandBar: {psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid}\");\n    Set(\n        gblRecordSelectedProject,\n        LookUp(\n            Projects,\n            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n        )\n    );\n    If(\n        gblProduction,\n        Launch(\n            gblPMAppURL,\n            {projectid: GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)}\n        ),\n        Set(\n            gblRecordSelectedProjectCountry,\n            LookUp(\n                Countries,\n                Country = gblRecordSelectedProject.Country.Country\n            )\n        );\n        Set(\n            gblCurrentUser,\n            Patch(\n                gblCurrentUser,\n                {\n                    CanEditSelectedProject: And(\n                        DataSourceInfo(\n                            Projects,\n                            DataSourceInfo.CreatePermission\n                        ),\n                        Coalesce(\n                            RecordInfo(\n                                gblRecordSelectedProject,\n                                RecordInfo.EditPermission\n                            ),\n                            false\n                        )\n                    )\n                }\n            )\n        );\n        Set(\n            gblProjectHeaderData,\n            {\n                ID: gblRecordSelectedProject.Project,\n                Name: gblRecordSelectedProject.'Project Name',\n                Technology: Text(gblRecordSelectedProject.Technology),\n                Capacity: gblRecordSelectedProject.'Plant WTG Capacity [MW]',\n                Status: LookUp(\n                    'Project States',\n                    ThisRecord.'Project State' = gblRecordSelectedProject.'Cluster State'.'Project State'\n                ).Name,\n                Approval: Text(gblRecordSelectedProject.'Approval States')\n            }\n        );\n        Set(\n            gblLeftNavigationSelected,\n            LookUp(\n                LeftNavigationMenu,\n                ThisRecord.ItemKey = \"GeneralDataCommonKey\"\n            )\n        );\n        Navigate(\n            'Project General Data Screen',\n            ScreenTransition.Fade,\n            {locGeneralDataTabSelected: \"generalDataTab\"}\n        )\n    );\n    \n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"editCosts\",\n    If(\n        With(\n            {\n                varProjectRecord: LookUp(\n                    Projects,\n                    ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n                )\n            },\n            varProjectRecord.'Cluster State'.Name = \"Draft\"\n        ),\n        UpdateContext({locPreventEditCostPopUp: true}),\n        Set(\n            gblRecordSelectedProject,\n            LookUp(\n                Projects,\n                ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n            )\n        );\n        Launch(\n            gblCostAppLaunchUrl,\n            {projectId: GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)}\n        )\n    )\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"deleteProject\",\n    UpdateContext({locProjectDelitionDialog: true});\n    Set(\n        gblRecordSelectedProject,\n        First(\n            Filter(\n                Projects,\n                ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n            )\n        )\n    );\n    Set(\n        gblProjectHeaderData,\n        {\n            ID: gblRecordSelectedProject.Project,\n            Name: gblRecordSelectedProject.'Project Name',\n            Technology: Text(gblRecordSelectedProject.Technology),\n            Capacity: gblRecordSelectedProject.'Plant WTG Capacity [MW]',\n            Status: gblRecordSelectedProject.'Cluster State'.Name,\n            Approval: Text(gblRecordSelectedProject.'Approval States')\n        }\n    );\n    Refresh(Projects);\n    Set(\n        gblRecordSelectedProjectCountry,\n        Blank()\n    );\n    \n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"viewProjectOverviewPowerBI\",\n    Set(\n        gblRecordSelectedProject,\n        LookUp(\n            Projects,\n            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n        )\n    );\n    Launch($\"https://app.powerbi.com/reportEmbed?reportId={gblProjectOverviewPowerBIReportID}&autoAuth=true&ctid={gblPowerBITenantID}&filter=Project/id eq '{gblRecordSelectedProject.Project}'&navContentPaneEnabled=false\")\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"viewPortfolioOverviewPowerBI\",\n    Set(\n        gblRecordSelectedProject,\n        LookUp(\n            Projects,\n            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n        )\n    );\n    Launch($\"https://app.powerbi.com/reportEmbed?reportId={gblPortfolioOverviewPowerBIReportID}&autoAuth=true&ctid={gblPowerBITenantID}&navContentPaneEnabled=false\")\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"ViewSharepoint\",\n    Set(\n        gblRecordSelectedProject,\n        LookUp(\n            Projects,\n            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n        )\n    );\n    If(\n        IsBlank(gblRecordSelectedProject.'SPO Sharepoint URL'),\n        Notify(\"For this Project, No Sharepoint site is available.\"),\n        Launch(gblRecordSelectedProject.'SPO Sharepoint URL')\n    )\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"ViewTeams\",\n    Set(\n        gblRecordSelectedProject,\n        LookUp(\n            Projects,\n            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n        )\n    );\n    If(\n        IsBlank(gblRecordSelectedProject.'SPO Teams URL'),\n        Notify(\"For this Project, No Teams channel is available.\"),\n        Launch(gblRecordSelectedProject.'SPO Teams URL')\n    )\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"viewDashboardFunctionality\",\n    Launch(gblPowerBIDashboardLink)\n);\nIf(\n    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = \"simulateProject\",\n    If(\n        With(\n            {\n                varProjectRecord: LookUp(\n                    Projects,\n                    ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n                )\n            },\n            varProjectRecord.'Cluster State'.Name = \"Draft\"\n        ),\n        UpdateContext({locPreventEditCostPopUp: true}),\n        Set(\n            gblRecordSelectedProject,\n            LookUp(\n                Projects,\n                ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)\n            )\n        );\n        Launch(\n            gblAnalyticsAppLaunchUrl,\n            {projectId: GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)}\n        )\n    )\n);\n"
+                              Theme: =gblCommandBarSurfaceThemeJson
+                              Tooltip: ="Home screen navigation"
+                              Width: =Parent.Width
+                  - con_Main_Project_Overview_Header_Service:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =Parent.Height
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =6
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        LayoutMinWidth: =200
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =(Parent.Width/3)+120
+                      Children:
+                        - con_cmp_Header_Logo_Title_3:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinWidth: =120
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - but_Main_Project_Overview_Header_Redirect_3:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    AccessibleLabel: ="Redirect"
+                                    Appearance: ='ButtonCanvas.Appearance'.Secondary
+                                    Height: =12
+                                    OnSelect: "=Switch(\n    Text(Param(\"screen\")),\n    \"general\",\n    Trace($\"Navigate to Project Main Screen: with ProjectId=>{Param(\"projectId\")}\");\n    Navigate(\n        'Project General Data Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    ),\n    \"generators\",\n    Trace($\"Navigate to Project General Data Screen: with ProjectId=>{Param(\"projectId\")}\");\n    \n    Navigate(\n        'Project Generators Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    )\n);\n"
+                                    Text: =""
+                                    Visible: =false
+                                    Width: =12
+                              - con_cmp_Header_Version_3:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =RGBA(50, 49, 48, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Lighter
+                                    Height: =12
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Version " & gblAppVersion /*& " (" & gblEnvironmentName & ")"*/
+                                    Visible: |
+                                      =If(
+                                          gblEnvironmentName = "Prod" || gblEnvironmentName = "Dev",
+                                          false,
+                                          true
+                                      )
+
+                                      //gblEnvironmentName = "Prod"
+                                    Width: =Parent.Width-Self.X
+                                    X: |-
+                                      =//ico_cmp_Header_Info_1.X+ico_cmp_Header_Info_1.Width
+                                      7
+                                    Y: =ico_cmp_Header_Info_3.Y
+                              - ico_cmp_Header_Info_3:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning, "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =16
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(16, 110, 190, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Information
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Visible: |-
+                                      =/*If(
+                                          gblEnvironmentName = "Prod",
+                                          false,
+                                          true
+                                      )*/
+                                    Width: =16
+                                    X: =5
+                                    Y: =Parent.Height-Self.Height-6
+                              - con_cmp_Header_Title_3:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: |-
+                                      =Color.Black
+
+                                      /*Switch(
+                                          gblEnvironmentName,
+                                          "Hotfix",
+                                          ColorValue("#9831A8"),
+                                          "Nightly",
+                                          ColorValue("#AAAAAA60"),
+                                          "Budgeting",
+                                          ColorValue("#85AD3760"),
+                                          "QA",
+                                          ColorValue("#E66C3780"),
+                                          RGBA(
+                                              255,
+                                              255,
+                                              255,
+                                              0
+                                          )
+                                      )*/
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =Parent.Height/2
+                                    PaddingLeft: =10
+                                    Size: =12
+                                    Text: |-
+                                      =Switch(
+                                          gblEnvironmentName,
+                                          "Hotfix",
+                                          "Hotfix",
+                                          "Nightly",
+                                          "Nightly",
+                                          "Budgeting",
+                                          "Budgeting",
+                                          "QA",
+                                          "Quality Assurance"
+                                      )
+                                    Width: =Parent.Width
+                                    Y: =Parent.Height/2-Self.Height/2
+                        - con_Main_Project_Overview_Header_Service_ReportError:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutJustifyContent: =LayoutJustifyContent.End
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinHeight: =74
+                              LayoutMinWidth: =150
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =140
+                            Children:
+                              - pcf_HeaderContainerReportError_WarningIcon_1:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.Icon
+                                  Properties:
+                                    Height: =40
+                                    IconColor: ="Red"
+                                    IconName: ="Warning"
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                    Theme: =gblCommandBarSurfaceThemeJson
+                                    Tooltip: |-
+                                      ="An error has occurred!
+
+                                      If you encounter any issues, please report them via Help --> Report problem. 
+                                      Technical details will be automatically included.
+                                      Your input helps us improve. Thank you for your cooperation."
+                                    Visible: =!IsBlank(gblReportError)
+                                    Width: =40
+                              - pcf_HeaderContainerReportError_CommandBar_1:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.CommandBar
+                                  Properties:
+                                    Height: =40
+                                    Items: |-
+                                      =Table(
+                                          {
+                                              ItemKey: "help",
+                                              ItemDisplayName: "Help"
+                                              //ItemIconName: "help"
+                                          },
+                                          {
+                                              ItemKey: "raiseBug",
+                                              ItemDisplayName: "Report Problem",
+                                              ItemIconName: "bug",
+                                              ItemParentKey: "help"
+                                          },
+                                          {
+                                              ItemKey: "goToInfoCenter",
+                                              ItemDisplayName: "VSB Cloud InfoCenter",
+                                              ItemIconName: "Info",
+                                              ItemParentKey: "help"
+                                          }
+                                      )
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnSelect: |-
+                                      =Switch(
+                                          Self.Selected.ItemKey,
+                                          "raiseBug",
+                                          Set(
+                                              gblShowReportProblemPanel,
+                                              true
+                                          ),
+                                          "goToInfoCenter",
+                                          Launch(
+                                              gblInfoCenterLaunchUrl,
+                                              Blank(),
+                                              LaunchTarget.Replace
+                                          ),
+                                          /* Default action */
+                                          false
+                                      )
+                                    Theme: =gblCommandBarSurfaceThemeJson
+                                    Width: =100
+                        - cml_Main_User_Badge:
+                            Control: CanvasComponent
+                            ComponentName: cmp_User_Badge
+                            Properties:
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              ToolTipVisibility: =true
+                              Width: =Max(260, Parent.Width/3 - con_Main_Project_Overview_Header_Service_ReportError.Width)
+            - con_Main_Project_Overview_Context:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(255, 255, 255, 1)
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =4
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                Children:
+                  - con_Main_Project_Overview_Context_Filter:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderColor: =RGBA(241, 241, 241, 0)
+                        BorderThickness: =2
+                        FillPortions: =0
+                        Height: =124
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =6
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        Width: =Parent.Width-12
+                      Children:
+                        - con_Main_Project_Overview_Context_Filter1:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width/6
+                            Children:
+                              - con_Main_Project_Overview_Context_Filter_ProjectKeyword:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =56
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_ProjectKeyword:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          OnSelect: =
+                                          Size: =10
+                                          Text: ="Project"
+                                          Tooltip: ="Search (Project name, Short Name, ID)"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - inp_Main_Project_Overview_Context_Filter_ProjectKeyword:
+                                        Control: TextInput@0.0.54
+                                        Properties:
+                                          Align: =Align.Left
+                                          OnChange: |
+                                            =If(
+                                                Or(
+                                                    IsBlank(Self.Value),
+                                                    Len(Self.Value) >= 3
+                                                ),
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {ProjectKeyword: Self.Value}
+                                                );
+                                                Select(but_Main_Project_Overview_Context_Filter_Apply)
+                                            );
+                                          Placeholder: ="Search for Project Name, Short Name and ID"
+                                          TriggerOutput: ='TextInputCanvas.TriggerOutput'.Delayed
+                                          Value: =First(colFiltersOverview).ProjectKeyword
+                                          Width: =Parent.Width-54
+                                          X: =12
+                                          Y: =24
+                                    - ico_Main_Project_Overview_Context_Filter_ProjectKeyword:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(And(IsBlank(First(colFiltersOverview).ProjectKeyword),Len(First(colFiltersOverview).ProjectKeyword) < 4), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).ProjectKeyword)), "ClearFilter", "Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {ProjectKeyword: ""}
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                              - con_Main_Project_Overview_Context_Filter_ProjectManager:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =Parent.Height- con_Main_Project_Overview_Context_Filter_ProjectKeyword.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_ProjectManager:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Project Manager"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - pcf_Main_Project_Overview_Context_Filter_ProjectManager:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.PeoplePicker
+                                        Properties:
+                                          Height: =40
+                                          HintText: ="Search for project manager"
+                                          InputEvent: =
+                                          Items: =colProjectManagersPreSelected
+                                          MaxPeople: =1
+                                          MinimumSearchTermLength: =0
+                                          OnChange: |
+                                            =If(
+                                                IsBlank(First(Self.SelectedPeople)),
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {ProjectManager: Blank()}
+                                                );
+                                                Clear(colProjectManagersPreSelected),
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {
+                                                        ProjectManager: RenameColumns(
+                                                            AddColumns(
+                                                                LookUp(
+                                                                    'Microsoft Entra IDs',
+                                                                    ThisRecord.Id = GUID(First(Self.SelectedPeople).PersonaKey)
+                                                                ),
+                                                                PersonaImgUrl,
+                                                                ""
+                                                            ),
+                                                            Id,
+                                                            PersonaKey,
+                                                            'Display Name',
+                                                            PersonaName,
+                                                            Mail,
+                                                            PersonaRole
+                                                        )
+                                                    }
+                                                )
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          OnFocus: |
+                                            =/*ClearCollect(
+                                                ProjectManagersCollection,
+                                                AddColumns(
+                                                    Filter(
+                                                        Projects,
+                                                        Or(
+                                                            IsBlank(locFilteredCountry),
+                                                            ThisRecord.Country.Country = locFilteredCountry.Country
+                                                        )
+                                                    ),
+                                                    "SuggestionKey",
+                                                    'Project Manager'.Id,
+                                                    "SuggestionName",
+                                                    'Project Manager'.'Display Name',
+                                                    "SuggestionRole",
+                                                    'Project Manager'.'Job Title'
+                                                )
+                                            );*/
+                                          OnSearch: |
+                                            =ClearCollect(
+                                                ProjectManagersCollection,
+                                                If(
+                                                    IsBlank(Trim(Self.SearchText)),
+                                                    Blank(),
+                                                    AddColumns(
+                                                        RenameColumns(
+                                                            Search(
+                                                                Filter(
+                                                                    'Microsoft Entra IDs',
+                                                                    'Microsoft Entra ID Account Enabled' = 'Microsoft Entra ID Account Enabled (Microsoft Entra IDs)'.Yes
+                                                                ),
+                                                                Trim(Self.SearchText),
+                                                                'Display Name',
+                                                                'Given Name',
+                                                                Surname,
+                                                                Mail
+                                                            ),
+                                                            'Display Name',
+                                                            DisplayName,
+                                                            Mail,
+                                                            EMail
+                                                        ),
+                                                        UniqueKey,
+                                                        'A unique identifer for Microsoft Entra ID'
+                                                    )
+                                                )
+                                            );
+                                          OnSelect: |
+                                            =/*ClearCollect(
+                                                colProjectManagersPreSelected,
+                                                User()
+                                            );*/
+                                            ClearCollect(
+                                                colProjectManagersPreSelected,
+                                                Blank()
+                                            );
+                                          PersonaKey: ="PersonaKey"
+                                          PersonaName: ="PersonaName"
+                                          PersonaRole: |
+                                            ="PersonaRole"
+                                          SuggestionKey: ="UniqueKey"
+                                          SuggestionName: ="DisplayName"
+                                          SuggestionRole: ="EMail"
+                                          Suggestions_Items: =ProjectManagersCollection
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Search for project manager"
+                                          Width: =Parent.Width - 14
+                                          X: =12
+                                          Y: =28
+                        - con_Main_Project_Overview_Context_Filter2:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width/6
+                            Children:
+                              - con_Main_Project_Overview_Context_Filter_Country:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =56
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_Country:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Country"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - cbx_Main_Project_Overview_Context_Filter_Country:
+                                        Control: DropDown@0.0.45
+                                        Properties:
+                                          DefaultSelectedItems: =First(colFiltersOverview).Country
+                                          Items: =Countries
+                                          OnChange: |-
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Country: Self.Selected}
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply)
+                                          Width: =Parent.Width-48
+                                          X: =6
+                                          Y: =24
+                                        Children:
+                                          - Country4:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Country"
+                                                FieldName: ="vsb_name"
+                                                FieldType: ="s"
+                                                Order: =1
+                                          - Title2:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Title"
+                                                FieldName: ="vsb_title"
+                                                FieldType: ="s"
+                                                Order: =2
+                                    - ico_Main_Project_Overview_Context_Filter_Country:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(IsBlank(First(colFiltersOverview).Country), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).Country)), "ClearFilter", "Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Country: Blank()}
+                                            );
+                                            UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Area: Blank()}
+                                            );
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_Country);
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_Area);
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                              - con_Main_Project_Overview_Context_Filter_Area:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =Parent.Height - con_Main_Project_Overview_Context_Filter_Country.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_Area:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Area/State/Province"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - cbx_Main_Project_Overview_Context_Filter_Area:
+                                        Control: DropDown@0.0.45
+                                        Properties:
+                                          DefaultSelectedItems: |-
+                                            =If(
+                                                Not(IsBlank(First(colFiltersOverview).Area)),
+                                                LookUp(
+                                                    CountryAreas,
+                                                    CountryArea = First(colFiltersOverview).Area.CountryArea
+                                                )
+                                            )
+                                          Items: =Filter(CountryAreas, ThisRecord.Country.Country = First(colFiltersOverview).Country.Country)
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Area: Self.Selected}
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          Width: =Parent.Width-48
+                                          X: =7
+                                          Y: =28
+                                        Children:
+                                          - Name1:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Name"
+                                                FieldName: ="vsb_name"
+                                                FieldType: ="s"
+                                                Order: =1
+                                          - Erstellt am1:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Erstellt am"
+                                                FieldName: ="createdon"
+                                                FieldType: ="d"
+                                                Order: =2
+                                    - ico_Main_Project_Overview_Context_Filter_Area:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(IsBlank(First(colFiltersOverview).Area), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).Area)), "ClearFilter", "Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Area: Blank()}
+                                            );
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_Area);
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =28
+                        - con_Main_Project_Overview_Context_Filter3:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width/6
+                            Children:
+                              - con_Main_Project_Overview_Context_Filter_Technology:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =56
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_Technology:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Technology"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - cbx_Main_Project_Overview_Context_Filter_TechnologyTechnology:
+                                        Control: DropDown@0.0.45
+                                        Properties:
+                                          AccessibleLabel: =
+                                          BasePaletteColor: =RGBA(255, 255, 255, 1)
+                                          DefaultSelectedItems: |-
+                                            =If(
+                                                Not(IsBlank(First(colFiltersOverview).Technology)),
+                                                LookUp(Choices(Projects.Technology), Value = First(colFiltersOverview).Technology.Value)
+                                            )
+                                          Items: =Choices(Projects.Technology)
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Technology: Self.Selected}
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          Width: =Parent.Width-48
+                                          X: =6
+                                          Y: =24
+                                        Children:
+                                          - Value3:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Value"
+                                                FieldName: ="Value"
+                                                FieldType: ="l"
+                                                Order: =1
+                                    - ico_Main_Project_Overview_Context_Filter_Texnology:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(IsBlank(First(colFiltersOverview).Technology), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).Technology)),"ClearFilter","Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Technology: Blank()}
+                                            );
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_TechnologyTechnology);
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                              - con_Main_Project_Overview_Context_Filter_Capacity:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =Parent.Height - con_Main_Project_Overview_Context_Filter_Technology.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - ico_Main_Project_Overview_Context_Filter_Capacity:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(IsBlank(First(colFiltersOverview).Capacity), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).Capacity)), "ClearFilter", "Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {Capacity: Blank()}
+                                            );
+                                            UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {CapacityOperator: Blank()}
+                                            );
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_Capacity_Operator);
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =28
+                                    - cbx_Main_Project_Overview_Context_Filter_Capacity_Operator:
+                                        Control: ComboBox@0.0.51
+                                        Properties:
+                                          DefaultSelectedItems: |-
+                                            =If(
+                                                Not(IsBlank(First(colFiltersOverview).CapacityOperator)),
+                                                LookUp(
+                                                    colFilterOperators,
+                                                    Name = First(colFiltersOverview).CapacityOperator
+                                                )
+                                            )
+                                          InputTextPlaceholder: ="Select operator"
+                                          Items: =colFilterOperators
+                                          OnChange: |
+                                            =If(
+                                                fn_Numeric_MS.IsTwoDecimal(txt_Main_Project_Overview_Context_Filter_Capacity.Value),
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {Capacity: Value(txt_Main_Project_Overview_Context_Filter_Capacity.Value)}
+                                                );
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {CapacityOperator: Self.Selected.Name}
+                                                );
+                                                Select(but_Main_Project_Overview_Context_Filter_Apply)
+                                            );
+                                          Width: =Parent.Width - txt_Main_Project_Overview_Context_Filter_Capacity.Width - ico_Main_Project_Overview_Context_Filter_Capacity.Width - 20
+                                          X: =txt_Main_Project_Overview_Context_Filter_Capacity.X + txt_Main_Project_Overview_Context_Filter_Capacity.Width + 6
+                                          Y: =28
+                                        Children:
+                                          - Name9:
+                                              Control: ComboBoxDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Name"
+                                                FieldName: ="Name"
+                                                FieldType: ="s"
+                                                Order: =1
+                                    - txt_Main_Project_Overview_Context_Filter_Capacity:
+                                        Control: TextInput@0.0.54
+                                        Properties:
+                                          Align: =Align.Left
+                                          OnChange: |
+                                            =If(
+                                                fn_Numeric_MS.IsTwoDecimal(Self.Value),
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {Capacity:Self.Value}
+                                                );
+                                                UpdateIf(
+                                                    colFiltersOverview,
+                                                    true,
+                                                    {CapacityOperator: First(colFilterOperators).Name}
+                                                );
+                                                Select(but_Main_Project_Overview_Context_Filter_Apply)
+                                            );
+                                          TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                          Value: =First(colFiltersOverview).Capacity
+                                          Width: =100
+                                          X: =6
+                                          Y: =28
+                                    - lbl_Main_Project_Overview_Context_Filter_Capacity_ErrorMessage:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Size: =gblAppSizes.Font.ExtraExtraSmall
+                                          Text: |-
+                                            =If(
+                                                And(
+                                                    Not(IsBlank(txt_Main_Project_Overview_Context_Filter_Capacity.Value)),
+                                                    Not(fn_Numeric_MS.IsTwoDecimal(txt_Main_Project_Overview_Context_Filter_Capacity.Value))
+                                                ),
+                                                $"Value must be a numeric"
+                                            )
+                                          Visible: |-
+                                            =And(
+                                                Not(IsBlank(txt_Main_Project_Overview_Context_Filter_Capacity.Value)),
+                                                Not(fn_Numeric_MS.IsTwoDecimal(txt_Main_Project_Overview_Context_Filter_Capacity.Value))
+                                            )
+                                          Width: =Parent.Width-lbl_Main_Project_Overview_Context_Filter_Capacity.Width - 10
+                                          Wrap: =false
+                                          X: =lbl_Main_Project_Overview_Context_Filter_Capacity.X + lbl_Main_Project_Overview_Context_Filter_Capacity.Width
+                                          Y: =6
+                                    - lbl_Main_Project_Overview_Context_Filter_Capacity:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Capacity"
+                                          Width: =Parent.Width/4
+                                          X: =6
+                                          Y: =2
+                        - con_Main_Project_Overview_Context_Filter4:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width/6
+                            Children:
+                              - con_Main_Project_Overview_Context_Filter_Empty:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =56
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - but_Main_Project_Overview_Context_Filter_Apply:
+                                        Control: Button@0.0.45
+                                        Properties:
+                                          AccessibleLabel: ="Apply Filter"
+                                          OnSelect: "=\n//Optimized Version\nUpdateContext(\n    {\n        locRefreshOverviewList: true,\n        locFilterValues: LookUp(\n            colFiltersOverview,\n            true\n        )\n    }\n);\nWith(\n    {\n        \n        baseFiltered: Filter(\n            Projects,\n            And(\n                Or(\n                    IsBlank(locFilterValues.ProjectManager),\n                    ThisRecord.'Project Manager'.Id = GUID(locFilterValues.ProjectManager.PersonaKey)\n                ),\n                Or(\n                    IsBlank(locFilterValues.Country),\n                    ThisRecord.Country.Country = locFilterValues.Country.Country\n                ),\n                Or(\n                    IsBlank(locFilterValues.Area),\n                    ThisRecord.'Area/State/Province'.Name = locFilterValues.Area.Name\n                ),\n                Or(\n                    IsBlank(locFilterValues.Technology),\n                    ThisRecord.Technology = locFilterValues.Technology.Value\n                ),\n                Or(\n                    IsBlank(locFilterValues.ProjectStatus),\n                    ThisRecord.'Cluster State'.'Project State' = locFilterValues.ProjectStatus.'Project State'\n                )\n            )\n        )\n    },\n    With(\n        {\n            keywordFiltered: If(\n                Or(\n                    IsBlank(locFilterValues.ProjectKeyword),\n                    Len(locFilterValues.ProjectKeyword) < 3\n                ),\n                baseFiltered,\n                Filter(\n                    baseFiltered,\n                    Or(\n                        locFilterValues.ProjectKeyword in ThisRecord.'Project Name',\n                        locFilterValues.ProjectKeyword in ThisRecord.'Project ID',\n                        locFilterValues.ProjectKeyword in ThisRecord.'Internal Project ID',\n                        locFilterValues.ProjectKeyword in ThisRecord.'Short Name'\n                    )\n                )\n            )\n        },\n        ClearCollect(\n            colFilteredProjects,\n            If(\n                IsBlank(locFilterValues.Capacity),\n                keywordFiltered,\n                If(\n                    locFilterValues.CapacityOperator = gblAppConstants.FilterOperators.Equals,\n                    Filter(\n                        keywordFiltered,\n                        ThisRecord.'Total Capacity' = Value(locFilterValues.Capacity)\n                    ),\n                    If(\n                        locFilterValues.CapacityOperator = gblAppConstants.FilterOperators.GreaterThan,\n                        Filter(\n                            keywordFiltered,\n                            ThisRecord.'Total Capacity' > Value(locFilterValues.Capacity)\n                        ),\n                        If(\n                            locFilterValues.CapacityOperator = gblAppConstants.FilterOperators.GreaterThanOrEqualTo,\n                            Filter(\n                                keywordFiltered,\n                                ThisRecord.'Total Capacity' >= Value(locFilterValues.Capacity)\n                            ),\n                            If(\n                                locFilterValues.CapacityOperator = gblAppConstants.FilterOperators.LessThan,\n                                Filter(\n                                    keywordFiltered,\n                                    ThisRecord.'Total Capacity' < Value(locFilterValues.Capacity)\n                                ),\n                                If(\n                                    locFilterValues.CapacityOperator = gblAppConstants.FilterOperators.LessThanOrEqualsTo,\n                                    Filter(\n                                        keywordFiltered,\n                                        ThisRecord.'Total Capacity' <= Value(locFilterValues.Capacity)\n                                    ),\n                                    keywordFiltered// Default case\n                                )\n                            )\n                        )\n                    )\n                )\n            )\n        )\n    )\n);\nWith(\n    {\n        totalRows: CountRows(colFilteredProjects),\n        currentPage: locFilterValues.Page,\n        pageSize: Coalesce(locFilterValues.PageSize,1)\n    },\n    With(\n        {\n            calculatedTotalPages: RoundUp(\n                totalRows / pageSize,\n                0\n            ) + If(\n                totalRows = 0,\n                1,\n                0\n            ),\n            adjustedPage: If(\n                currentPage > Value(\n                    RoundUp(\n                        totalRows / pageSize,\n                        0\n                    ) + If(\n                        totalRows = 0,\n                        1,\n                        0\n                    )\n                ),\n                1,\n                currentPage\n            )\n        },\n        UpdateIf(\n            colFiltersOverview,\n            true,\n            {\n                TotalRows: totalRows,\n                TotalPages: calculatedTotalPages,\n                Page: adjustedPage\n            }\n        )\n    )\n);\nUpdateContext({locRefreshOverviewList: false});\n"
+                                          Text: ="Apply"
+                                          Visible: =false
+                                          X: =Parent.Width - 100
+                              - con_Main_Project_Overview_Context_Filter_Status:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =Parent.Height - con_Main_Project_Overview_Context_Filter_Empty.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =36
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_Status:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderThickness: =1
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =10
+                                          Text: ="Status"
+                                          Width: =Parent.Width-10
+                                          X: =6
+                                          Y: =2
+                                    - cbx_Main_Project_Overview_Context_Filter_Status:
+                                        Control: DropDown@0.0.45
+                                        Properties:
+                                          BasePaletteColor: =RGBA(255, 255, 255, 1)
+                                          DefaultSelectedItems: |-
+                                            =If(
+                                                Not(IsBlank(First(colFiltersOverview).ProjectStatus)),
+                                                LookUp(
+                                                    'Project States',
+                                                    ThisRecord.'Project State' = First(colFiltersOverview).ProjectStatus.'Project State'
+                                                )
+                                            )
+                                          Items: =Sort('Project States',Order,SortOrder.Ascending)
+                                          OnChange: |-
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {ProjectStatus: Self.Selected}
+                                            );
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          Width: =Parent.Width-48
+                                          X: =6
+                                          Y: =28
+                                        Children:
+                                          - Name3:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Name"
+                                                FieldName: ="vsb_name"
+                                                FieldType: ="s"
+                                                Order: =2
+                                          - vsb_order2:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="vsb_order"
+                                                FieldName: ="vsb_order"
+                                                FieldType: ="n"
+                                                Order: =3
+                                          - Project State1:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Project State"
+                                                FieldName: ="vsb_projectstateid"
+                                                FieldType: ="g"
+                                                Order: =3
+                                    - ico_Main_Project_Overview_Context_Filter_Status:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(IsBlank(First(colFiltersOverview).ProjectStatus), DisplayMode.Disabled, DisplayMode.View)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: =If(Not(IsBlank(First(colFiltersOverview).ProjectStatus)), "ClearFilter", "Filter")
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {ProjectStatus: Blank()}
+                                            );
+                                            Reset(cbx_Main_Project_Overview_Context_Filter_Status);
+                                            Select(but_Main_Project_Overview_Context_Filter_Apply);
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Filter projects details list view."
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =28
+                  - con_Main_Project_Overview_Context_Filter_Results:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =4
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        PaddingBottom: =4
+                        PaddingLeft: =4
+                        PaddingRight: =4
+                        PaddingTop: =4
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Main_Project_Overview_Context_Filter_Results_Context:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinWidth: =Parent.Width
+                              LayoutOverflowY: =LayoutOverflow.Scroll
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - psf_MainScreen_DetailList_Container_FluentDetailsList:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.FluentDetailsList
+                                  Properties:
+                                    AccessibilityLabel: ="Projects"
+                                    AlternateRowColor: =gblAppTheme.palette.themeLighter
+                                    CurrentSortColumn: =First(colFiltersOverview).SortCol
+                                    CurrentSortDirection: |-
+                                      =If(
+                                          First(colFiltersOverview).SortAsc,
+                                          'PowerCAT.FluentDetailsList.CurrentSortDirection'.Ascending,
+                                          'PowerCAT.FluentDetailsList.CurrentSortDirection'.Descending
+                                      )
+                                    FillPortions: =1
+                                    Height: =Parent.Height
+                                    InputEvent: =First(colFiltersOverview).GridEvent
+                                    Items: |-
+                                      =With(
+                                          {
+                                              locFilteredDetailsList: ForAll(
+                                                  AddColumns(
+                                                      colFilteredProjects,
+                                                      loc_iconstate,
+                                                      "loc_iconcolor",
+                                                      loc_iconview,
+                                                      "loc_iconedit"
+                                                  ),
+                                                  {
+                                                      vsb_projectid: ThisRecord.Project,
+                                                      vsb_name: ThisRecord.'Internal Project ID',
+                                                      vsb_projectname: ThisRecord.'Project Name',
+                                                      vsb_shortname: ThisRecord.'Short Name',
+                                                      vsb_projectmanager: If(
+                                                          IsBlank(ThisRecord.'Project Manager'),
+                                                          "",
+                                                          ThisRecord.'Project Manager'.'Display Name'
+                                                      ),
+                                                      vsb_projectstate: ThisRecord.'Cluster State'.Name,
+                                                      vsb_country: ThisRecord.Country.Name,
+                                                      vsb_countryarea: ThisRecord.'Area/State/Province'.Name,
+                                                      vsb_technology: ThisRecord.Technology,
+                                                      vsb_capacitymwwtg: Text(
+                                                          ThisRecord.'Total Capacity',
+                                                          "#,##0.0#"
+                                                      ),
+                                                      vsb_numberwtgs: 0,
+                                                      loc_wMW: ThisRecord.WeightedMW,
+                                                      vsb_projectstartdate: If(
+                                                          IsBlank(ThisRecord.'Project Start Date'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'Project Start Date'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_feasibilitystudies: If(
+                                                          IsBlank(ThisRecord.'1-Feasibility studies'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'1-Feasibility studies'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_projectdevelopmentstarted: If(
+                                                          IsBlank(ThisRecord.'2-Project development started'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'2-Project development started'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_applicationsubmitted: If(
+                                                          IsBlank(ThisRecord.'3-Application submitted'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'3-Application submitted'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_legallybindingpermits: If(
+                                                          IsBlank(ThisRecord.'4-Legally binding permits'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'4-Legally binding permits'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_construction: If(
+                                                          IsBlank(ThisRecord.'5-Construction'),
+                                                          "",
+                                                          Text(
+                                                              DateValue(ThisRecord.'5-Construction'),
+                                                              "dd.mm.yyyy"
+                                                          )
+                                                      ),
+                                                      vsb_approvalstates: ThisRecord.'Approval States',
+                                                      loc_iconstate: Switch(
+                                                          Text(ThisRecord.'Approval States'),
+                                                          "Draft",
+                                                          "icon:StatusCircleOuter",
+                                                          "Approving",
+                                                          "icon:AwayStatus",
+                                                          "Approved",
+                                                          "icon:SkypeCircleCheck",
+                                                          "Rejected",
+                                                          "icon:StatusErrorFull",
+                                                          "Canceled",
+                                                          "icon:Cancel"
+                                                      ),
+                                                      loc_statetag: Switch(
+                                                          Text(ThisRecord.'Approval States'),
+                                                          "Draft",
+                                                          "draft",
+                                                          "Approving",
+                                                          "inreview",
+                                                          "Approved",
+                                                          "approved",
+                                                          "Rejected",
+                                                          "rejected",
+                                                          "Canceled",
+                                                          "canceled"
+                                                      ),
+                                                      loc_iconcolor: Switch(
+                                                          Text(ThisRecord.'Approval States'),
+                                                          "Draft",
+                                                          gblAppTheme.palette.akzent2,
+                                                          "Approving",
+                                                          gblAppTheme.palette.akzent4,
+                                                          "Approved",
+                                                          gblAppTheme.palette.akzent3,
+                                                          "Rejected",
+                                                          gblAppTheme.palette.akzent5,
+                                                          "Canceled",
+                                                          gblAppTheme.palette.akzent4
+                                                      ),
+                                                      loc_iconview: "icon:View",
+                                                      loc_iconedit: "icon:Edit",
+                                                      RecordKey: ThisRecord.Project
+                                                  }
+                                              )
+                                          },
+                                          SortByColumns(
+                                              locFilteredDetailsList,
+                                              First(colFiltersOverview).SortCol,
+                                              If(
+                                                  First(colFiltersOverview).SortAsc,
+                                                  SortOrder.Ascending,
+                                                  SortOrder.Descending
+                                              )
+                                          )
+                                      )
+                                    LargeDatasetPaging: =true
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    LayoutMinHeight: =100
+                                    OnChange: |
+                                      =UpdateContext({locDetailsListRowKey: Self.EventRowKey});
+                                      If(
+                                          Self.EventName = "Sort",
+                                          UpdateIf(
+                                              colFiltersOverview,
+                                              true,
+                                              {
+                                                  SortCol: Self.SortEventColumn,
+                                                  SortAsc: If(
+                                                      Self.SortEventDirection = 'PowerCAT.FluentDetailsList.SortEventDirection'.Ascending,
+                                                      true,
+                                                      false
+                                                  )
+                                              }
+                                          )
+                                      );
+                                      If(
+                                          Self.EventName = "CellAction",
+                                          Launch(
+                                              "https://app.powerbi.com/groups/" & gblPowerBIGroupID & "/reports/" & gblProjectOverviewPowerBIReportID & "/" & gblPowerBIReportSection & "?filter=Project/Id eq '" & Self.EventRowKey & "'",
+                                              {},
+                                              LaunchTarget.New
+                                          )
+                                      );
+                                    OnSelect: |
+                                      =Trace($"OnSelect DetailsList_> Self.Selected.vsb_projectid : {Self.Selected.vsb_projectid}");
+                                    PageSize: =First(colFiltersOverview).PageSize
+                                    RaiseOnRowSelectionChangeEvent: =true
+                                    SelectRowsOnFocus: =true
+                                    SelectionAlwaysVisible: =true
+                                    Theme: =gblAppThemeJson
+                                    Tooltip: ="Project overview list"
+                                    Width: =Parent.Width
+                                    columns_Items: |-
+                                      =With(
+                                          {
+                                              availableWidth: Self.Width,
+                                              titleWidth: 350,
+                                              defaulPMtWidth: 200,
+                                              defaultWidth: 100,
+                                              stateWidth: 200,
+                                              areaWidth: 220,
+                                              wcapacityWidth: 180,
+                                              capacityWidth: 160,
+                                              iconWidth: 60,
+                                              dateWidth: 100,
+                                              padding: 32,
+                                              scrollWidth: 20
+                                          },
+                                          Table(
+                                              {
+                                                  ColName: "loc_statetag",
+                                                  ColDisplayName: "",
+                                                  ColCellType: "tag",
+                                                  ColWidth: 4,
+                                                  ColTagColorColumn: "loc_iconcolor",
+                                                  ColVerticalAlign: "Center"
+                                              },
+                                              {
+                                                  ColName: "vsb_projectname",
+                                                  ColDisplayName: "Project Name",
+                                                  ColWidth: titleWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                                  // For Alex requests untill there are no reports on QA the link could navigate to
+                                      //ColCellType: "link"
+                                              },
+                                              {
+                                                  ColName: "vsb_shortname",
+                                                  ColDisplayName: "Short Name",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_projectstate",
+                                                  ColDisplayName: "Status",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_projectmanager",
+                                                  ColDisplayName: "Project Manager",
+                                                  ColWidth: defaulPMtWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_country",
+                                                  ColDisplayName: "Country",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_countryarea",
+                                                  ColDisplayName: "Area/State/Province/Voivodeship",
+                                                  ColWidth: areaWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_technology",
+                                                  ColDisplayName: "Technology",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_totalcapacity",
+                                                  ColDisplayName: "Technology",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColVerticalAlign: "Center",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_capacitymwwtg",
+                                                  ColDisplayName: "Capacity [MW(p)]",
+                                                  ColWidth: capacityWidth,
+                                                  ColSortable: true,
+                                                  ColHorizontalAlign: "Right",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "loc_wMW",
+                                                  ColDisplayName: "Weighted Capacity [MWp]",
+                                                  ColWidth: wcapacityWidth,
+                                                  ColSortable: true,
+                                                  ColHorizontalAlign: "Right",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "vsb_name",
+                                                  ColDisplayName: "Project ID",
+                                                  ColWidth: defaultWidth,
+                                                  ColSortable: true,
+                                                  ColHorizontalAlign: "Right",
+                                                  ColResizable: true
+                                              },
+                                              {
+                                                  ColName: "loc_iconstate",
+                                                  ColDisplayName: "Approval",
+                                                  ColCellType: "Image",
+                                                  ColWidth: iconWidth,
+                                                  ColTagColorColumn: "loc_iconcolor",
+                                                  ColVerticalAlign: "Center",
+                                                  ColHorizontalAlign: "Center",
+                                                  ColResizable: true
+                                              }
+                                          )
+                                      )
+                        - con_Main_Project_Overview_Context_Filter_Pagination:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =1
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =32
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                            Children:
+                              - con_Main_Project_Overview_Context_Filter_Pagination_Buttons:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    Height: =Parent.Height
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    LayoutGap: =10
+                                    PaddingLeft: =10
+                                    PaddingRight: =20
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Visible: =If(First(colFiltersOverview).TotalPages > 1, true, false)
+                                    Width: =Parent.Width-con_Main_Project_Overview_Context_Filter_Pagination_Info.Width
+                                    X: =con_Main_Project_Overview_Context_Filter_Pagination_Info.X+con_Main_Project_Overview_Context_Filter_Pagination_Info.Width
+                                  Children:
+                                    - ico_Main_Project_Overview_Context_Pagination_FirstPage:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: ="Previous"
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          OnChange: |-
+                                            =UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {
+                                                    GridEvent: "LoadFirstPage" & Text(Rand()),
+                                                    Page: 1
+                                                }
+                                            )
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Navigate to first page"
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                                    - ico_Main_Project_Overview_Context_Pagination_PageLeft:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: =If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: ="Back"
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          OnChange: |-
+                                            =With(
+                                                {varPage: First(colFiltersOverview).Page},
+                                                UpdateContext({locCtxPage: varPage + -1})
+                                            );
+                                            UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {
+                                                    GridEvent: "LoadPreviousPage" & Text(Rand()),
+                                                    Page: locCtxPage
+                                                }
+                                            )
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Navigate to previous page"
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                                    - lbl_Main_Project_Overview_Context_Filter_Pagination:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Center
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingTop: =6
+                                          Size: =12
+                                          Text: |-
+                                            =If(First(colFiltersOverview).TotalPages>1,$"Page: {First(colFiltersOverview).Page} from {First(colFiltersOverview).TotalPages}","")
+                                    - ico_Main_Project_Overview_Context_Pagination_PageRight:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.Icon
+                                        Properties:
+                                          DisplayMode: |-
+                                            =//If(psf_MainScreen_DetailList_Container_FluentDetailsList.HasNextPage,DisplayMode.Edit,DisplayMode.Disabled)
+                                            With(
+                                                {varRecPage: First(colFiltersOverview)},
+                                                If(
+                                                    varRecPage.Page < varRecPage.TotalPages,
+                                                    DisplayMode.Edit,
+                                                    DisplayMode.Disabled
+                                                )
+                                            )
+                                          FillColor: =gblAppTheme.palette.themePrimary
+                                          FontColor: =gblAppTheme.palette.white
+                                          FontSize: =16
+                                          Height: =32
+                                          HoverFillColor: =gblAppTheme.palette.themeLighter
+                                          HoverFontColor: =gblAppTheme.palette.themePrimary
+                                          IconName: ="Forward"
+                                          IconType: ='PowerCAT.Icon.IconType'.IconButon
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          OnChange: |-
+                                            =With(
+                                                {varPage: First(colFiltersOverview).Page},
+                                                UpdateContext({locCtxPage: varPage + 1})
+                                            );
+                                            UpdateIf(
+                                                colFiltersOverview,
+                                                true,
+                                                {
+                                                    GridEvent: "LoadNextPage" & Text(Rand()),
+                                                    Page: locCtxPage
+                                                }
+                                            )
+                                          TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Navigate to next page"
+                                          Width: =32
+                                          X: =Parent.Width - 35
+                                          Y: =24
+                              - con_Main_Project_Overview_Context_Filter_Pagination_Info:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    Height: =Parent.Height
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutDirection: =LayoutDirection.Horizontal
+                                    PaddingLeft: =10
+                                    PaddingRight: =10
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =120
+                                  Children:
+                                    - lbl_Main_Project_Overview_Context_Filter_Pagination_Info:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingTop: =6
+                                          Text: |-
+                                            ="Total Rows: " & First(colFiltersOverview).TotalRows
+                                          Width: =Parent.Width
+      - cmp_MS_Spinner:
+          Control: CanvasComponent
+          ComponentName: cmp_Spinner
+          Properties:
+            Height: =con_Main_Project_Overview_Context.Height
+            Visible: =locRefreshOverviewList
+            Width: =Parent.Width
+            Y: =con_Main_Project_Overview_Header.Height+10
+      - cmp_Project_PopUp_ConfirmationDeleteProject:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Delete"
+            Description: =$"Are you sure you want to delete the project ""{gblRecordSelectedProject.'Project Name'}""?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="Trash"
+            OnCancel: |-
+              =UpdateContext({locProjectDelitionDialog: false});
+            OnConfirm: |
+              =IfError(
+                  Remove(
+                      Projects,
+                      gblRecordSelectedProject
+                  );
+                  Notify(
+                      $"The project '{gblRecordSelectedProject.'Project Name'}' was successfully deleted!",
+                      NotificationType.Success,
+                      1000
+                  ),
+                  Notify(
+                      "Error: Permit could not be deleted. " & "Internal error: originated on " & FirstError.Source & ". Message: " & FirstError.Message & FirstError.Details.HttpResponse,
+                      NotificationType.Error
+                  )
+              );
+              Refresh(Projects);
+              Set(
+                  gblRecordSelectedProject,
+                  Blank()
+              );
+              Set(
+                  gblProjectHeaderData,
+                  Blank()
+              );
+              UpdateContext({locProjectDelitionDialog: false});
+              If(
+                  gblAppStarted,
+                  Select(but_Main_Project_Overview_Context_Filter_Apply)
+              );
+            Title: ="Delete project?"
+            Visible: =locProjectDelitionDialog
+            Width: =Parent.Width
+      - cmp_ReportErrorRightPanel_ProjectMain:
+          Control: CanvasComponent
+          ComponentName: cmp_ReportErrorRightPanel
+          Properties:
+            Height: =Parent.Height
+            Visible: =gblShowReportProblemPanel
+            Width: =Parent.Width
+      - fn_Numeric_MS:
+          Control: CanvasComponent
+          ComponentName: fn_Numeric
+          Properties:
+            Height: =10
+            Width: =10
+            Y: =Parent.Height-Self.Height
+      - con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information_2:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            Fill: =RGBA(0, 0, 0, 0.5)
+            Height: =Parent.Height
+            Visible: =locPreventEditCostPopUp
+            Width: =Parent.Width
+          Children:
+            - con_PopUp_Common_Generators_PreventTotalCapacity_Information_2:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  Fill: =RGBA(255, 255, 255, 1)
+                  Height: =con_Milestones_Page_LockMessage_9.Height+con_Header_PopUp_Common_Generators_PreventTotalCapacity_Information_2.Height+btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close_2.Height+32
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutDirection: =LayoutDirection.Vertical
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =600
+                  X: =(Parent.Width-Self.Width)/2
+                  Y: =(Parent.Height-Self.Height)/2
+                Children:
+                  - con_Header_PopUp_Common_Generators_PreventTotalCapacity_Information_2:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(0, 110, 185, 1)
+                        FillPortions: =0
+                        Height: =64
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMinHeight: =16
+                        LayoutMinWidth: =16
+                        PaddingLeft: =32
+                        PaddingRight: =32
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - txt_PopUp_Common_Generators_PreventTotalCapacity_Title_2:
+                            Control: Text@0.0.51
+                            Properties:
+                              Align: ='TextCanvas.Align'.Start
+                              FillPortions: =1
+                              FontColor: =RGBA(255, 255, 255, 1)
+                              Height: =Parent.Height
+                              LayoutMinHeight: =16
+                              LayoutMinWidth: =16
+                              Size: =16
+                              Text: |-
+                                ="Cost Module (" & LookUp(
+                                    Projects,
+                                    ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                ).'Project Name' & ")"
+                              VerticalAlign: =VerticalAlign.Middle
+                              Weight: ='TextCanvas.Weight'.Regular
+                        - icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_2:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              Color: =RGBA(255, 255, 255, 1)
+                              DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                              DisabledColor: =RGBA(225, 223, 221, 1)
+                              DisabledFill: =RGBA(0, 0, 0, 0)
+                              FocusedBorderThickness: =4
+                              Height: =20
+                              HoverBorderColor: =RGBA(0, 0, 0, 0)
+                              HoverColor: =RGBA(255, 255, 255, 1)
+                              HoverFill: =RGBA(0, 0, 0, 0)
+                              Icon: =Icon.Cancel
+                              LayoutMinHeight: =16
+                              LayoutMinWidth: =16
+                              OnSelect: =UpdateContext({locPreventEditCostPopUp:false})
+                              PressedBorderColor: =RGBA(0, 0, 0, 0)
+                              PressedColor: =RGBA(16, 110, 190, 1)
+                              PressedFill: =RGBA(0, 0, 0, 0)
+                              Width: =20
+                  - con_Body_PopUp_Common_Generators_PreventTotalCapacity_Information_2:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =15
+                        LayoutMinHeight: =16
+                        LayoutMinWidth: =16
+                        PaddingBottom: =13
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - con_Milestones_Page_LockMessage_9:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              Fill: =RGBA(89, 89, 89, 1)
+                              FillPortions: =0
+                              Height: |-
+                                =With(
+                                    {
+                                        varProjectRecord: LookUp(
+                                            Projects,
+                                            ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                        )
+                                    },
+                                    If(
+                                        And(
+                                            IsBlank(varProjectRecord.'Project ID'),
+                                            IsBlank(varProjectRecord.'Project Start Date'),
+                                            Or(
+                                                varProjectRecord.'Total Capacity' = 0,
+                                                IsBlank(varProjectRecord.'Total Capacity')
+                                            ),
+                                            Or(
+                                                varProjectRecord.'Net Yield p50' = 0,
+                                                IsBlank(varProjectRecord.'Net Yield p50')
+                                            ),
+                                            varProjectRecord.'Cluster State'.Name = "Draft"
+                                        ),
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height * 7,
+                                        IsBlank(varProjectRecord.'Project Start Date'),
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height * 6,
+                                        Or(
+                                            varProjectRecord.'Total Capacity' = 0,
+                                            IsBlank(varProjectRecord.'Total Capacity')
+                                        ),
+                                    // else / default height when none of the above conditions are true
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height * 5,
+                                        Or(
+                                            varProjectRecord.'Net Yield p50' = 0,
+                                            IsBlank(varProjectRecord.'Net Yield p50')
+                                        ),
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height * 4,
+                                        varProjectRecord.'Cluster State'.Name = "Draft",
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height * 3,
+                                        lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Height
+                                    )
+                                )
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutGap: =10
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =Parent.Width
+                              LayoutMinHeight: =
+                              PaddingLeft: =20
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              X: =40
+                              Y: =40
+                            Children:
+                              - icon_milestones_lock_9:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =RGBA(255, 255, 255, 1)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =20
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(255, 255, 255, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Lock
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Width: =20
+                                    X: =40
+                                    Y: =Parent.Height-Self.Height
+                              - con_Milestones_pagelock_section_9:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutMaxHeight: =
+                                    LayoutMinHeight: =
+                                    LayoutMinWidth: =16
+                                    PaddingBottom: =8
+                                    PaddingLeft: =8
+                                    PaddingRight: =8
+                                    PaddingTop: =8
+                                  Children:
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =20
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          Text: ="Cost module is locked. To unlock it, please complete the following sections:"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          X: =icon_milestones_lock_9.Width+icon_milestones_lock_9.X+10
+                                          Y: =Parent.Height-Self.Height
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_47:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.X
+                                          PaddingTop: =0
+                                          Text: ="• Milestones"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: |-
+                                            =With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                IsBlank(varProjectRecord.'Project Start Date')
+                                            )
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_48:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.X
+                                          PaddingTop: =0
+                                          Text: ="• Generator"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: |
+                                            =With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                Or(varProjectRecord.'Total Capacity' = 0,IsBlank(varProjectRecord.'Total Capacity'))
+                                            )
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_49:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.X
+                                          PaddingTop: =0
+                                          Text: ="• Production"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: |-
+                                            =With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                Or(
+                                                    varProjectRecord.'Net Yield p50' = 0,
+                                                    IsBlank(varProjectRecord.'Net Yield p50')
+                                                )
+                                            )
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_50:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.X
+                                          PaddingTop: =0
+                                          Text: ="• Change the project status from Draft"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: |
+                                            =With(
+                                                {
+                                                    varProjectRecord: LookUp(
+                                                        Projects,
+                                                        ThisRecord.Project = GUID(psf_MainScreen_DetailList_Container_FluentDetailsList.Selected.vsb_projectid)
+                                                    )
+                                                },
+                                                varProjectRecord.'Cluster State'.Name = "Draft"
+                                            )
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                        - Container14:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMinHeight: =16
+                              LayoutMinWidth: =16
+                              PaddingLeft: =32
+                              PaddingRight: =32
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close_2:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.End
+                                    Appearance: ='ButtonCanvas.Appearance'.Secondary
+                                    BorderColor: =RGBA(0, 110, 185, 1)
+                                    FontColor: =RGBA(0, 110, 185, 1)
+                                    IconStyle: ='ButtonCanvas.IconStyle'.Outline
+                                    LayoutMinHeight: =16
+                                    LayoutMinWidth: =16
+                                    OnSelect: =UpdateContext({locPreventEditCostPopUp:false})
+                                    Text: ="Close"
+                                    VerticalAlign: =VerticalAlign.Middle

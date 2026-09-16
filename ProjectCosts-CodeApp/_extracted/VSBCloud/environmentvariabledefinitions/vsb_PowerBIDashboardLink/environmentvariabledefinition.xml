@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_PowerBIDashboardLink">
+  <displayname default="Power BI Dashboard Link">
+    <label description="Power BI Dashboard Link" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.21.261</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

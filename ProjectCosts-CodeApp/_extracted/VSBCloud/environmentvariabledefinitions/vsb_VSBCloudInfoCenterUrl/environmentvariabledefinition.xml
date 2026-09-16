@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="vsb_VSBCloudInfoCenterUrl">
+  <description default="Directly have access to the Sharepoint Learning modules.">
+    <label description="Directly have access to the Sharepoint Learning modules." languagecode="1033" />
+  </description>
+  <displayname default="VSB Cloud InfoCenter Url">
+    <label description="VSB Cloud InfoCenter Url" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.14.1</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

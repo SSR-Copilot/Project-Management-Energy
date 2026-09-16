@@ -1,0 +1,42 @@
+/* Global reset and the few things Fluent's makeStyles cannot own. */
+:root {
+  color-scheme: light dark;
+  --vsb-primary: #006eb9;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: 'Segoe UI', 'Segoe UI Web (West European)', -apple-system,
+    BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+img, svg, video { max-width: 100%; }
+
+/* Keyboard focus is visible everywhere, which the canvas apps never guaranteed. */
+:focus-visible { outline: 2px solid var(--vsb-primary); outline-offset: 2px; border-radius: 2px; }
+
+/* Skip link for keyboard users. */
+.skip-link {
+  position: absolute; left: -9999px; top: 8px; z-index: 100;
+  background: var(--vsb-primary); color: #fff; padding: 8px 14px; border-radius: 4px;
+}
+.skip-link:focus { left: 8px; }
+
+/* Thin scrollbars that do not steal layout width. */
+* { scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: rgba(128,128,128,.35); border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,.55); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important; scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  body { background: #fff; }
+}

@@ -1,0 +1,126 @@
+{
+  "uniquename": "vsb_CreateCapexStandardContract",
+  "name": "vsb_CreateCapexStandardContract",
+  "displayname": "Create CAPEX standard contract",
+  "description": "Instantiates one standard CAPEX contract and its monthly cost rows from a Devex/Capex Standard Assumption. THIS IS THE WRITE THE CODE APP CANNOT MAKE. The whole computation already exists and is unit-tested in src/features/cost/capex-costs/rules.ts, and Screen.tsx's `addStandard` handler ends at `setNotice(\"... will be created with N cost period(s).\")` — it computes the answer, describes it to the user, and then does nothing, because creating a contract plus N CAPEX Cost rows is a multi-row write that dataClient.batch() cannot make atomic (it bounds concurrency over individual writes; any plan with two or more writes can half-apply). A half-applied standard contract is a contract with a total cost and no schedule, which reads on the grid as a real cost line that is silently wrong. This API is the transaction the app has no way to open.",
+  "bindingtype": "Global",
+  "isfunction": false,
+  "enabledforworkflow": false,
+  "allowedcustomprocessingsteptype": "None",
+  "isprivate": false,
+  "executeprivilegename": null,
+  "notes": [
+    "allowedcustomprocessingsteptype is None: nothing may register a step on a message whose only job is to be one transaction. An async step here would run after the commit and could re-open exactly the window this API closes.",
+    "executeprivilegename is null, which means any authenticated caller may INVOKE the message. That is correct and deliberate: the plugin runs in the CALLING USER's context, so Dataverse table security still decides whether the writes land. A user with no create privilege on vsb_capexprojectcontract gets a refusal from the platform, not from this API. matrix.json models no custom-API privileges, so there is nothing here to resolve — see solution/README.md.",
+    "The three identity parameters are required and are all the server needs. The four computed parameters are OPTIONAL and exist so the plugin can ASSERT that the client agreed with it and fault on a mismatch. The client's arithmetic is already pinned by UT-CAPEX-031/032/033/034; a disagreement means the two implementations have diverged and is worth a hard failure rather than a silent server-wins."
+  ],
+  "requestParameters": [
+    {
+      "uniquename": "ProjectId",
+      "displayname": "Project",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_project row id. Bound to CONTRACT_COL.project (`vsb_Project`) on the created contract, and the source of totalCapacity and startClusterNo when those are not supplied. Derived from CapexProject.projectId in rules.ts; the canvas's hard-coded fallback LookUp(Projects, GUID(\"33b9cc79-...\")) is a deleted workaround and must never reappear (UT-CAPEX-058)."
+    },
+    {
+      "uniquename": "SubAccountId",
+      "displayname": "CAPEX sub-account",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_capexaccountlist row id of the level-3 sub-account the contract hangs under. Bound to CONTRACT_COL.account (`_vsb_account_value`). Derived from buildStandardOptions' `subaccountIdsInCategory` filter and from checkStandardContractClick, which refuses when no sub-account row is selected (MSG.noSubaccountSelected, UT-CAPEX-037)."
+    },
+    {
+      "uniquename": "StandardAssumptionId",
+      "displayname": "Devex/Capex standard assumption",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_devexcapexstandardassumptions row id. Bound to CONTRACT_COL.standardAssumption (`_vsb_capexstandardassumptioncontract_value`) and is half of the duplicate key `${subaccountId}|${standardAssumptionId}` that buildStandardOptions uses to suppress an already-used assumption (UT-CAPEX-036)."
+    },
+    {
+      "uniquename": "TotalCapacity",
+      "displayname": "Total capacity (MWp)",
+      "type": "Decimal",
+      "isoptional": true,
+      "description": "The EUR/MW(p) multiplier. standardAssumptionAmount() ctx.totalCapacity — CapexProject.totalCapacity. Optional: the plugin reads vsb_totalcapacity off the project. Supply it to have the plugin assert agreement (UT-CAPEX-032 pins 2000 x 42.5 = 85 000)."
+    },
+    {
+      "uniquename": "ActiveWtgCount",
+      "displayname": "Active generator count",
+      "type": "Integer",
+      "isoptional": true,
+      "description": "The EUR/WTG multiplier. standardAssumptionAmount() ctx.activeWtgCount, produced by activeWtgCount() which sums vsb_numberofgenerators over ACTIVE generator types only. Optional for the same reason as TotalCapacity (UT-CAPEX-031 pins 6 + 4, inactive 99 excluded, x 1500 = 15 000)."
+    },
+    {
+      "uniquename": "StartClusterNo",
+      "displayname": "Project start cluster number",
+      "type": "Integer",
+      "isoptional": true,
+      "description": "locProjectStartClusterNo, 0 (Greenfield) to 6. The plugin applies applicableStartCluster() — anything >= 5 caps to 5 — and drops every cluster below the cap. UT-CAPEX-033 and UT-CAPEX-034."
+    },
+    {
+      "uniquename": "ClusterDurationsJson",
+      "displayname": "Cluster windows (JSON)",
+      "type": "String",
+      "isoptional": true,
+      "description": "The project's own cluster windows as [{order,startYear,startMonth,endYear,endMonth}], i.e. gblClusterDurations. Optional: where it is absent the plugin synthesises clusters 1-4 from Milestones Standard Assumptions exactly as synthesiseClusterDates() does. Clusters 5 and 6 are NEVER synthesised — the source comment is \"Cluster 6 / COD should not be calculated from standard assumptions. Use actual project value only.\" — so a contract that needs cluster 5 or 6 MUST supply this parameter or it will find no eligible period and be refused."
+    }
+  ],
+  "responseProperties": [
+    {
+      "uniquename": "Refused",
+      "displayname": "Refused",
+      "type": "Boolean",
+      "description": "True when the API declined to create anything. A refusal is a RESPONSE, not a fault, because the canvas showed it as an information message and the code app shows it in a MessageBar. standardContractRefusal() and checkStandardContractClick() are the two refusals."
+    },
+    {
+      "uniquename": "RefusalMessage",
+      "displayname": "Refusal message",
+      "type": "String",
+      "description": "Empty unless Refused. One of the two strings already frozen in MSG: MSG.noApplicableCluster (\"Standard cost was not created because no applicable cost period was found for the project's Start Cluster.\", UT-CAPEX-035) or MSG.duplicateStandard (\"This standard contract is already created for this project and subaccount.\", UT-CAPEX-037). G-LABEL applies: the plugin must return these strings verbatim, not paraphrase them."
+    },
+    {
+      "uniquename": "RemoveOption",
+      "displayname": "Remove option from list",
+      "type": "Boolean",
+      "description": "True on the duplicate refusal only. checkStandardContractClick returns `{ok:false, message, removeOption:true}` in that case so the stale option can be dropped from the sub-menu (UT-CAPEX-037)."
+    },
+    {
+      "uniquename": "ContractId",
+      "displayname": "Created contract",
+      "type": "Guid",
+      "description": "vsb_capexprojectcontract row id, or empty when Refused."
+    },
+    {
+      "uniquename": "TotalCost",
+      "displayname": "Total cost",
+      "type": "Decimal",
+      "description": "What the plugin wrote to CONTRACT_COL.totalCost — standardAssumptionAmount(unit, costAmount, ctx), Round(...,0) for the per-WTG and per-MW units and pass-through for plain EUR/PLN."
+    },
+    {
+      "uniquename": "AveragePayment",
+      "displayname": "Average payment",
+      "type": "Decimal",
+      "description": "What the plugin wrote to CONTRACT_COL.averagePayment — equalDistributionAmounts().averagePayment, which is RoundDown(total / n, 0). NOT the mean of the rows it created: the whole remainder sits on the final payment and the stored average is the rounded-down figure. That asymmetry is canvas behaviour and is deliberate."
+    },
+    {
+      "uniquename": "CostRowsCreated",
+      "displayname": "Cost rows created",
+      "type": "Integer",
+      "description": "Count of vsb_capexcost rows written, one per distributionSchedule() point. This is the number the app already shows the user before the write exists: `${option.eligible.length} cost period(s)` in Screen.tsx's setNotice."
+    }
+  ],
+  "portFrom": {
+    "computation": "src/features/cost/capex-costs/rules.ts",
+    "functions": [
+      "standardAssumptionAmount", "applicableStartCluster", "eligibleClusters",
+      "standardContractRefusal", "buildStandardOptions", "checkStandardContractClick",
+      "synthesiseClusterDates", "distributionSchedule", "equalDistributionAmounts",
+      "planEqualDistribution", "activeWtgCount"
+    ],
+    "callSite": "src/features/cost/capex-costs/Screen.tsx — `addStandard`, which computes the notice and stops",
+    "tests": [
+      "UT-CAPEX-031", "UT-CAPEX-032", "UT-CAPEX-033", "UT-CAPEX-034", "UT-CAPEX-035",
+      "UT-CAPEX-036", "UT-CAPEX-037"
+    ]
+  }
+}

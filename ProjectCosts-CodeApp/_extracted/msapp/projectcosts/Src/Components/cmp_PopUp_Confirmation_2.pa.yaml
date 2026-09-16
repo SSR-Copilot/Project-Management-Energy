@@ -1,0 +1,198 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_PopUp_Confirmation_2:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      Description:
+        PropertyKind: Input
+        DisplayName: Description
+        Description: Description text
+        DataType: Text
+        Default: ="Description..."
+      IconCancelButton:
+        PropertyKind: Input
+        DisplayName: Icon Cancel Button
+        Description: Icon Fluent UI Name Cancel Button
+        DataType: Text
+        Default: ="Cancel"
+      IconConfirmButton:
+        PropertyKind: Input
+        DisplayName: Icon Confirm Button
+        Description: Icon Fluent UI Name Confirm Button
+        DataType: Text
+        Default: ="CheckMark"
+      OnCancel:
+        PropertyKind: Event
+        DisplayName: OnCancel
+        Description: OnCancel action of cancel button
+        ReturnType: Boolean
+        Default: =true
+      OnConfirm:
+        PropertyKind: Event
+        DisplayName: OnConfirm
+        Description: OnConfirm action of confirm button
+        ReturnType: Boolean
+        Default: =true
+      TextCancelButton:
+        PropertyKind: Input
+        DisplayName: Text Cancel Button
+        Description: Cancel Button Text
+        DataType: Text
+        Default: ="Cancel"
+      TextConfirmButton:
+        PropertyKind: Input
+        DisplayName: Text Confirm Button
+        Description: Confirm Button Text
+        DataType: Text
+        Default: ="Confirm"
+      Title:
+        PropertyKind: Input
+        DisplayName: Title
+        Description: Title text
+        DataType: Text
+        Default: ="Title"
+      WidthConfirmButton:
+        PropertyKind: Input
+        DisplayName: Width Confirm Button
+        Description: Width Confirm Button
+        DataType: Number
+        Default: =96
+    Children:
+      - con_PopUpConfirmation_1:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.1)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Width: =Parent.Width
+          Children:
+            - con_PopUpConfirmation_Body_1:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  DropShadow: =DropShadow.None
+                  Fill: =Color.White
+                  Height: =260
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Min(450, Parent.Width)
+                  X: =Parent.Width/2-Self.Width/2
+                  Y: =Parent.Height/2-Self.Height/2
+                Children:
+                  - con_PopUpConfirmation_BodyHeader_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(AppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =42
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_PopUpConfirmation_BodyHeader_1:
+                            Control: Label@2.5.1
+                            Properties:
+                              AutoHeight: =true
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              Color: =Color.White
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(161, 159, 157, 1)
+                              DisplayMode: =DisplayMode.View
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =11
+                              Text: =cmp_PopUp_Confirmation_2.Title
+                              Width: =Parent.Width-Self.X-ico_PopUpConfirmation_BodyHeader_1.Width-20
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_PopUpConfirmation_BodyHeader_1:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(AppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              Height: =20
+                              HoverColor: =Self.Color
+                              Icon: =Icon.Cancel
+                              OnSelect: =cmp_PopUp_Confirmation_2.OnCancel()
+                              PressedColor: =ColorValue(AppTheme.palette.themeLighter)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_PopUpConfirmation_BodyDescription_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        PaddingTop: =16
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_PopUpConfirmation_BodyDescription_1:
+                            Control: Label@2.5.1
+                            Properties:
+                              AutoHeight: =true
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              Color: =RGBA(50, 49, 48, 1)
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(161, 159, 157, 1)
+                              DisplayMode: =DisplayMode.View
+                              Font: =Font.'Open Sans'
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LineHeight: =1.4
+                              PaddingBottom: =0
+                              PaddingLeft: =20
+                              PaddingRight: =20
+                              PaddingTop: =0
+                              Size: =11
+                              Text: =cmp_PopUp_Confirmation_2.Description
+                              Width: =Parent.Width
+                  - con_PopUpConfirmation_BodyButtons_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        Fill: =Color.Transparent
+                        FillPortions: =0
+                        Height: =60
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width

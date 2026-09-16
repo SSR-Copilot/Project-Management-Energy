@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_AnalyticsAppUsers">
+  <displayname default="Analytics App Users">
+    <label description="Analytics App Users" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.21.708</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

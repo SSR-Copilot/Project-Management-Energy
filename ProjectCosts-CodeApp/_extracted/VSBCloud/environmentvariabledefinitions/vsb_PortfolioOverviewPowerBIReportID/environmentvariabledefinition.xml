@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_PortfolioOverviewPowerBIReportID">
+  <displayname default="Portfolio Overview Power BI Report ID">
+    <label description="Portfolio Overview Power BI Report ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.19.57</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_PowerBIReportSection">
+  <displayname default="Power BI Report Section">
+    <label description="Power BI Report Section" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.9.2</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

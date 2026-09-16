@@ -1,0 +1,68 @@
+parameters:
+# Solution name
+- name: solutionName
+  default: ''
+# Environment name
+- name: environmentName
+  default: 'Dev'
+  type: string
+  values: 
+  - Dev
+  - Nightly
+  - QA
+  - Prod
+  - Hotfix
+  - Budgeting
+# Environment name
+- name: pipelineResourceName
+  type: string
+# Solution Type
+- name: solutionType
+  default: 'Unmanaged'
+  type: string
+  values: 
+  - Managed
+  - Unmanaged
+# Version
+- name: version
+  type: string
+# Stage and upgrade
+- name: stageAndUpgrade
+  type: boolean
+  default: true
+
+steps:
+  - checkout: self
+    persistCredentials: true
+  # Installs PowerPlatform Tools (including PAC CLI)
+  - task: PowerPlatformToolInstaller@2
+    displayName: 'Install Power Platform Build Tools'
+    inputs:
+      DefaultVersion: true 
+
+  #Copy the solution files to the build artifacts directory.
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: '$(Agent.BuildDirectory)/${{ parameters.solutionName }}'
+      Contents: '*.zip'
+      TargetFolder: '$(Build.SourcesDirectory)'
+
+
+  # Set publisherList work directory
+  - powershell: |
+      dir $(Build.SourcesDirectory)
+    displayName: 'List work directory'
+
+  #Deploy solution on Dev environment.
+  - task: PowerPlatformImportSolution@2
+    inputs:
+      authenticationType: 'PowerPlatformSPN'
+      PowerPlatformSPN:  'PA VSB-Cloud [VSBCloud_${{ lower(parameters.environmentName) }}] Environment Connection'
+      ${{ if eq(parameters.solutionType, 'Managed') }}:
+        SolutionInputFile: '${{ parameters.solutionName }}_${{ parameters.version }}_managed.zip'
+      ${{ if eq(parameters.solutionType, 'Unmanaged') }}:
+        SolutionInputFile: '${{ parameters.solutionName }}_${{ parameters.version }}.zip'
+      AsyncOperation: true
+      MaxAsyncWaitTime: '60'
+      ConvertToManaged: true
+      PublishCustomizationChanges: true

@@ -1,0 +1,230 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Screen1:
+    Properties:
+      OnVisible: |+
+        =ClearCollect(
+            colDeviceTypesInProject,
+            AddColumns(
+                Filter(
+                    DeviceTypesInProjects,
+                    AsType(
+                        TypeInProject,
+                        GeneratorTypeInProjects
+                    ).Project.Project = gblSelectedProject.Project
+                ),
+                IsFolded,
+                true
+            )
+        );
+        Collect(
+            colDeviceTypesInProject,
+            AddColumns(
+                Filter(
+                    DeviceTypesInProjects,
+                    AsType(
+                        TypeInProject,
+                        PVModuleTypeInProjects
+                    ).Project.Project = gblSelectedProject.Project
+                ),
+                IsFolded,
+                true
+            )
+        );
+        ClearCollect(
+            colOpexProjectCosts,
+            Filter(
+                'Opex Project Costs',
+                Project.Project = gblSelectedProject.Project
+            )
+        );
+    Children:
+      - cmp_Header_1:
+          Control: CanvasComponent
+          ComponentName: cmp_Header
+          Properties:
+            ApprovalStatesColor: |-
+              =Table(
+                  {
+                      State: "Draft",
+                      Color: "#41aab4"
+                  },
+                  {
+                      State: "Approving",
+                      Color: "#f5911e"
+                  },
+                  {
+                      State: "Approved",
+                      Color: "#82a51e"
+                  },
+                  {
+                      State: "Rejected",
+                      Color: "#d20532"
+                  }
+              )
+            Height: =74
+            LogoWidth: =210
+            MainScreen: =App.ActiveScreen
+            OnLogoClick: =true
+            Project: =gblProjectHeaderData
+            Width: =1366
+      - Button1:
+          Control: Classic/Button@2.2.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            HoverColor: =RGBA(255, 255, 255, 1)
+            OnSelect: =
+            X: =603
+            Y: =348
+      - cmp_ReportErrorRightPanel_LandLeaseCosts_1:
+          Control: CanvasComponent
+          ComponentName: cmp_ReportErrorRightPanel
+          Properties:
+            Height: =Parent.Height
+            Visible: =gblShowReportProblemPanel
+            Width: =Parent.Width
+      - ComboboxCanvas1:
+          Control: ComboBox@0.0.51
+          Properties:
+            SelectMultiple: =true
+            X: =220
+            Y: =185
+      - ComboBox1:
+          Control: Classic/ComboBox@2.4.0
+          Properties:
+            ChevronFill: =RGBA(255, 255, 255, 1)
+            ChevronHoverFill: =RGBA(255, 255, 255, 1)
+            PressedColor: =RGBA(255, 255, 255, 1)
+            SelectionColor: =RGBA(255, 255, 255, 1)
+            X: =180
+            Y: =325
+      - ButtonCanvas1:
+          Control: Button@0.0.45
+          Properties:
+            OnSelect: |
+              =
+                      // Step 1: Get all first periods (cost types) for the current subaccount
+              ClearCollect(
+                  colFirstPeriods,
+                  Filter(
+                      colOpexProjectCosts,
+                      Subaccount.'Opex Subaccount' = First(colOpexSubaccounts).'Opex Subaccount' && IsBlank('Parent Cost')
+                  )
+              );
+              ClearCollect(
+                  colLastPeriods,
+                  ForAll(
+                      colFirstPeriods As FirstPeriod,
+                      With(
+                          {
+                              costTypePeriods: Filter(
+                                  colOpexProjectCosts,
+                                  Subaccount.'Opex Subaccount' = First(colOpexSubaccounts).'Opex Subaccount' && ('Parent Cost'.'Opex Project Cost' = FirstPeriod.'Opex Project Cost' || 'Opex Project Cost' = FirstPeriod.'Opex Project Cost')
+                              )
+                          },
+                                  // Last periods: where no other period references them as parent
+                          Last(
+                              Sort(
+                                  costTypePeriods,
+                                  Name,
+                                  SortOrder.Ascending
+                              )
+                          )
+                                  /*
+                                  First(
+                                      Filter(
+                                          costTypePeriods,
+                                          CountRows(
+                                              Filter(
+                                                  costTypePeriods,
+                                                  'Parent Cost'.'Opex Project Cost' = 'Opex Project Cost'
+                                              )
+                                          ) = 0
+                                      )
+                                  )*/
+                      )
+                  )
+              );
+            X: =975
+            Y: =217
+      - TextCanvas2:
+          Control: Text@0.0.51
+          Properties:
+            Text: =
+            X: =1083
+            Y: =456
+      - TextInputCanvas1:
+          Control: TextInput@0.0.54
+          Properties:
+            Height: =344
+            Mode: ='TextInputCanvas.Mode'.Multiline
+            Value: =
+            Width: =366
+            X: =929
+            Y: =320
+      - TextInputCanvas2:
+          Control: TextInput@0.0.54
+          Properties:
+            Value: =
+            X: =40
+            Y: =40
+      - Table2:
+          Control: Table@1.0.278
+          Properties:
+            Height: =492
+            Items: =colNewEditPanelCostProcessed
+            Width: =1336
+            Y: =276
+          Children:
+            - CAPEX Cost1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="CAPEX Cost"
+                  FieldName: ="CAPEX Cost"
+                  FieldType: ="![_ownerid_value:P, createdby:E, createdon:d, createdonbehalfby:E, importsequencenumber:n, modifiedby:E, modifiedon:d, modifiedonbehalfby:E, overriddencreatedon:d, owningbusinessunit:E, owningteam:E, owninguser:E, statecode:l, statuscode:l, timezoneruleversionnumber:n, utcconversiontimezonecode:n, versionnumber:n, vsb_Contract:E, vsb_capexcost_AsyncOperations:E, vsb_capexcost_BulkDeleteFailures:E, vsb_capexcost_MailboxTrackingFolders:E, vsb_capexcost_PrincipalObjectAttributeAccesses:E, vsb_capexcost_ProcessSession:E, vsb_capexcost_SyncErrors:E, vsb_capexcostid:g, vsb_cost:n, vsb_month:l, vsb_name:s, vsb_year:n]"
+                  Order: =1
+            - Contract1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Contract"
+                  FieldName: ="Contract"
+                  FieldType: ="![_ownerid_value:P, createdby:E, createdon:d, createdonbehalfby:E, importsequencenumber:n, modifiedby:E, modifiedon:d, modifiedonbehalfby:E, overriddencreatedon:d, owningbusinessunit:E, owningteam:E, owninguser:E, statecode:l, statuscode:l, timezoneruleversionnumber:n, utcconversiontimezonecode:n, versionnumber:n, vsb_Account:E, vsb_Project:E, vsb_applyvat:l, vsb_autoid:s, vsb_averagepayment:s, vsb_byclusterjson:s, vsb_bystartenddatejson:s, vsb_capexcost_Contract_vsb_capexprojectcontract:E, vsb_capexprojectcontract_AsyncOperations:E, vsb_capexprojectcontract_BulkDeleteFailures:E, vsb_capexprojectcontract_MailboxTrackingFolders:E, vsb_capexprojectcontract_PrincipalObjectAttributeAccesses:E, vsb_capexprojectcontract_ProcessSession:E, vsb_capexprojectcontract_SyncErrors:E, vsb_capexprojectcontractid:g, vsb_costtype:l, vsb_depreciation:l, vsb_description:s, vsb_distribution:l, vsb_distributionfrequency:n, vsb_distributionscheme:l, vsb_initialcontractsource:l, vsb_iseditedfrompcf:l, vsb_isstandardcontract:l, vsb_name:s, vsb_totalcost:n]"
+                  Order: =2
+            - Cost1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Cost"
+                  FieldName: ="Cost"
+                  FieldType: ="N"
+                  Order: =3
+            - Month1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Month"
+                  FieldName: ="Month"
+                  FieldType: ="l"
+                  Order: =4
+            - Year1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Year"
+                  FieldName: ="Year"
+                  FieldType: ="n"
+                  Order: =5

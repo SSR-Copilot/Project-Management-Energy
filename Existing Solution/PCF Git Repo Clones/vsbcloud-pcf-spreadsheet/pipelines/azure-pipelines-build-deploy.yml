@@ -1,0 +1,328 @@
+# Build the VSBCloud Custom Component project utilizing npm and MSBuild
+# Builds TWO PCF controls (from two separate repos) into ONE solution,
+# then flows that single managed artifact through Dev -> Nightly -> QA -> Hotfix -> Prod.
+name: $(BuildVersionMajor).0.$(BuildVersionPatch).$(BuildVersionRevision)
+
+trigger: none
+  # branches:
+  #   include:
+  #   - master
+  # paths:
+  #   exclude:
+  #   - *.md
+  #   - *.yml
+
+pr: none
+
+# --- SECOND REPO DECLARED HERE ---------------------------------------------
+# Same org (vsbazure) => type: git, no service connection needed.
+resources:
+  repositories:
+    - repository: capexsummary                  # alias used in the checkout step below
+      type: git
+      name: vsbcloud/DevexCapexSummaryPCF        # Project/RepoName
+      ref: refs/heads/main                       # <-- change if its default branch isn't 'main'
+# ---------------------------------------------------------------------------
+
+variables:
+  PACEXEPATH: ""
+  SolutionName: "VSBCustomComponents"
+  #BUILD VERSION INFORMATION
+  BuildVersionMajor: 1
+  BuildVersionMinor: 1
+  BuildVersionPatch: 0
+  #sets a counter for the version number changing the Major or Minor version will reset this counter
+  #back to it's seed value
+  BuildVersionRevision: $[counter(format('{0}.{1}.{2}', variables['BuildVersionMajor'], variables['BuildVersionMinor'],variables['BuildVersionPatch']), 1)]
+  BuildVersionRevisionStr:  "$(BuildVersionMajor)_$(BuildVersionPatch)_$(BuildVersionRevision)"
+
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    displayName: Build PCF Component
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+
+    steps:
+    # --- CHECKOUT BOTH REPOS INTO PREDICTABLE FOLDERS ----------------------
+    # As soon as there is more than one checkout, the implicit 'self' checkout
+    # is disabled, so 'self' MUST be listed explicitly.
+    # 'path' is relative to $(Agent.BuildDirectory); $(Build.SourcesDirectory) = .../s
+    # so these land at $(Build.SourcesDirectory)/spreadsheet and /capexsummary.
+    - checkout: self
+      path: s/spreadsheet
+    - checkout: capexsummary
+      path: s/capexsummary
+    # -----------------------------------------------------------------------
+
+    # Installs PowerPlatform Tools (including PAC CLI)
+    - task: PowerPlatformToolInstaller@2
+      displayName: 'Install Power Platform Build Tools'
+      inputs:
+        DefaultVersion: true
+
+    # npm install for PCF #1 (SpreadSheet) - package.json is at that repo's root
+    - task: Npm@1
+      displayName: 'npm install - SpreadSheet PCF'
+      inputs:
+        command: 'install'
+        workingDir: '$(Build.SourcesDirectory)/spreadsheet'
+
+    # npm install for PCF #2 (DevexCapexSummary) - package.json is at that repo's root (confirmed)
+    - task: Npm@1
+      displayName: 'npm install - CapexSummary PCF'
+      inputs:
+        command: 'install'
+        workingDir: '$(Build.SourcesDirectory)/capexsummary'
+
+    # Add code first projects(csproj,pcfproj) to cdsproj
+    - powershell: |
+        $pacExePath = $env:POWERPLATFORMTOOLS_PACCLIPATH + "\pac\tools\pac.exe"
+
+        echo "##vso[task.setvariable variable=PACEXEPATH]$pacExePath"
+      displayName: 'Find pac folder'
+
+    # Add the outputted path of the previous step to the path environment variable
+    - powershell: |
+        Write-Host "Pac path - $(PACEXEPATH)"
+        $env:PATH = $env:PATH + ";" + "$(PACEXEPATH)"
+
+        Write-Host "Path: $env:PATH"
+      displayName: 'Update path environment variable'
+
+    # Set publisher
+    - powershell: |
+        New-Item -Path $(Build.SourcesDirectory)/$(SolutionName) -ItemType directory -Force
+        cd $(SolutionName)
+
+        $pacCommand = "solution init --publisher-name VSBCloud --publisher-prefix vsb"
+        Write-Host "Pac command - $(PACEXEPATH) $pacCommand"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand"
+
+        dir $(Build.SourcesDirectory)/$(SolutionName)
+      displayName: 'Set publisher'
+
+    # --- ALIGN SOLUTION PROJECT TARGET FRAMEWORK TO net48 ------------------
+    # The generated .cdsproj is an old-style MSBuild project (has the 2003 xml
+    # namespace) and declares its framework as <TargetFrameworkVersion>v4.6.2.
+    # The CapexSummary PCF is locked to net48 by the PCF SDK, and a v4.6.2
+    # consumer cannot reference it (NU1201). We raise the .cdsproj to v4.8.
+    # net48 still consumes the net462 SpreadSheet PCF fine, so no PCF changes.
+    # Text replace (not XML DOM) so we don't disturb the document namespace.
+    - powershell: |
+        $cdsproj = "$(Build.SourcesDirectory)/$(SolutionName)/$(SolutionName).cdsproj"
+
+        Write-Host "----- cdsproj BEFORE patch -----"
+        Get-Content -Path $cdsproj -Raw
+
+        $content = Get-Content -Path $cdsproj -Raw
+
+        if ($content -match '<TargetFrameworkVersion\s*>') {
+          $content = [regex]::Replace($content, '<TargetFrameworkVersion\s*>.*?</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>')
+        }
+        elseif ($content -match '<TargetFramework\s*>') {
+          $content = [regex]::Replace($content, '<TargetFramework\s*>.*?</TargetFramework>', '<TargetFramework>net48</TargetFramework>')
+        }
+        else {
+          Write-Host "##vso[task.logissue type=warning]No TargetFramework(Version) element found to patch - review the dump above."
+        }
+
+        Set-Content -Path $cdsproj -Value $content -NoNewline
+
+        Write-Host "----- cdsproj AFTER patch -----"
+        Get-Content -Path $cdsproj -Raw
+      displayName: 'Set solution TargetFramework to net48'
+    # -----------------------------------------------------------------------
+
+    # --- ADD BOTH PCF PROJECTS AS REFERENCES -------------------------------
+    # SpreadSheet: SpreadSheet_Dev.pcfproj is the only project at that repo root,
+    #   so pointing at the folder is unambiguous (matches the original pipeline).
+    # CapexSummary: this repo ALSO contains DevexCapex_POC/DevexCapex_POC.cdsproj,
+    #   so we point directly at the .pcfproj file to be certain pac references the
+    #   PCF project and not that solution project.
+    - powershell: |
+        cd $(Build.SourcesDirectory)/$(SolutionName)
+        dir $(System.DefaultWorkingDirectory)
+
+        $ref1 = "solution add-reference --path $(Build.SourcesDirectory)/spreadsheet"
+        Write-Host "Pac command - $(PACEXEPATH) $ref1"
+        Invoke-Expression -Command "$(PACEXEPATH) $ref1"
+
+        $ref2 = "solution add-reference --path $(Build.SourcesDirectory)/capexsummary/TableConnectedToDataversePCF.pcfproj"
+        Write-Host "Pac command - $(PACEXEPATH) $ref2"
+        Invoke-Expression -Command "$(PACEXEPATH) $ref2"
+      displayName: 'Add references (SpreadSheet + CapexSummary)'
+    # -----------------------------------------------------------------------
+
+    # Set solution version (--allmanifests versions BOTH controls)
+    - powershell: |
+        $pacCommand = "pcf version --patchversion $(BuildVersionMajor).$(BuildVersionPatch).$(BuildVersionRevision) --path $(Build.SourcesDirectory)\$(SolutionName) --allmanifests"
+        Write-Host "Pac command set - $(PACEXEPATH) $pacCommand"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand"
+
+        $pacCommand1 = "solution version --revisionversion $(BuildVersionRevision) --solutionPath $(Build.SourcesDirectory)\$(SolutionName)"
+        Write-Host "Pac command set - $(PACEXEPATH) $pacCommand1"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand1"
+
+      displayName: 'Set Solution version'
+
+    #The build unmanaged solution.
+    - task: MSBuild@1
+      inputs:
+        solution: './$(SolutionName)/*.cdsproj'
+        msbuildArguments: '/t:build /restore'
+
+    #The build managed solution.
+    - task: MSBuild@1
+      inputs:
+        solution: './$(SolutionName)/*.cdsproj'
+        msbuildArguments: '/t:build /p:Configuration=Release /restore'
+
+    #Copy the managed solution files to the build artifacts directory.
+    - task: CopyFiles@2
+      displayName: Copy managed solution
+      inputs:
+        SourceFolder: './$(SolutionName)/bin/Release'
+        Contents: '*.zip'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - powershell: |
+        Rename-Item -Path "$(Build.ArtifactStagingDirectory)/$(SolutionName).zip" -NewName "$(SolutionName)_$(BuildVersionRevisionStr)_managed.zip"
+      displayName: 'Rename managed solution to $(SolutionName)_$(BuildVersionRevisionStr)_managed'
+
+    #Copy the unmanaged solution files to the build artifacts directory.
+    - task: CopyFiles@2
+      displayName: Copy unmanaged solution
+      inputs:
+        SourceFolder: './$(SolutionName)/bin/Debug'
+        Contents: '*.zip'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - powershell: |
+        Rename-Item -Path "$(Build.ArtifactStagingDirectory)/$(SolutionName).zip" -NewName "$(SolutionName)_$(BuildVersionRevisionStr).zip"
+      displayName: 'Rename unmanaged solution to $(SolutionName)_$(BuildVersionRevisionStr)'
+
+    #Publish the build artifacts.
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)'
+        artifact: 'VSBCustomComponents'
+        publishLocation: 'pipeline'
+
+- stage: Dev
+  dependsOn: Build
+  jobs:
+  - deployment:
+    displayName: Deploy to Dev
+    environment: 'Dev'
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - template: templates/import-solution.yml
+              parameters:
+                solutionName: '$(SolutionName)'
+                environmentName: Dev
+                solutionType: Managed
+                pipelineResourceName: build-pcf-components
+                version: '$(BuildVersionRevisionStr)'
+                stageAndUpgrade: true
+
+- stage: Nightly
+  dependsOn: Dev
+  jobs:
+  - deployment:
+    displayName: Deploy to Nightly
+    environment: 'Nightly'
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - template: templates/import-solution.yml
+              parameters:
+                solutionName: '$(SolutionName)'
+                environmentName: Nightly
+                solutionType: Managed
+                pipelineResourceName: build-pcf-components
+                version: '$(BuildVersionRevisionStr)'
+                stageAndUpgrade: true
+
+- stage: QA
+  dependsOn: Nightly
+  jobs:
+  - deployment:
+    displayName: Deploy to QA
+    environment: 'QA'
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - template: templates/import-solution.yml
+              parameters:
+                solutionName: '$(SolutionName)'
+                environmentName: QA
+                solutionType: Managed
+                pipelineResourceName: build-pcf-components
+                version: '$(BuildVersionRevisionStr)'
+                stageAndUpgrade: true
+
+- stage: Hotfix
+  dependsOn: QA
+  jobs:
+  - deployment:
+    displayName: Deploy to Hotfix
+    environment: 'Hotfix'
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - template: templates/import-solution.yml
+              parameters:
+                solutionName: '$(SolutionName)'
+                environmentName: Hotfix
+                solutionType: Managed
+                pipelineResourceName: build-pcf-components
+                version: '$(BuildVersionRevisionStr)'
+                stageAndUpgrade: true
+
+- stage: Prod
+  dependsOn: Hotfix
+  jobs:
+  - deployment:
+    displayName: Deploy to Prod
+    environment: 'Prod'
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - template: templates/import-solution.yml
+              parameters:
+                solutionName: '$(SolutionName)'
+                environmentName: Prod
+                solutionType: Managed
+                pipelineResourceName: build-pcf-components
+                version: '$(BuildVersionRevisionStr)'
+                stageAndUpgrade: true

@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_EnvironmentName">
+  <displayname default="Environment Name">
+    <label description="Environment Name" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.7.22</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

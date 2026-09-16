@@ -1,0 +1,517 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_a_row_is_added,_modified_or_deleted": {
+          "metadata": {
+            "operationMetadataId": "7af3e69b-308b-489f-b2fd-b4f7530ab8ba"
+          },
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "subscriptionRequest/message": 3,
+              "subscriptionRequest/entityname": "vsb_project",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "vsb_clusterstate",
+              "subscriptionRequest/name": "fa38c60c-2c7c-f011-b4cb-000d3abcc0b0"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "conditions": []
+        }
+      },
+      "actions": {
+        "List_rows": {
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "603855a9-c38c-46d4-a3ef-5598f824521a"
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "audits",
+              "$filter": "objecttypecode eq 'vsb_project' and _objectid_value eq '@{triggerOutputs()?['body/vsb_projectid']}'",
+              "$orderby": "createdon desc",
+              "$top": 1
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "ListRecords"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Parse_JSON": {
+          "runAfter": {
+            "List_rows": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1e631e1e-9c22-4309-b286-28adc2398944"
+          },
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@first(outputs('List_rows')?['body/value'])?['changedata']",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "changedAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "logicalName": {
+                        "type": "string"
+                      },
+                      "oldValue": {},
+                      "newValue": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "logicalName",
+                      "oldValue",
+                      "newValue"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Filter_array": {
+          "runAfter": {
+            "Parse_JSON": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "00c036ec-8db1-420d-a384-575620812d00"
+          },
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Parse_JSON')?['changedAttributes']",
+            "where": "@equals(item()?['logicalName'],'vsb_clusterstate')"
+          }
+        },
+        "Condition_1": {
+          "actions": {
+            "Try": {
+              "actions": {
+                "Get_Project_Manager": {
+                  "runAfter": {
+                    "Get_a_row_by_ID_for_Project": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a4ec3cf0-aa3d-4616-805c-09596912ad68"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "systemusers",
+                      "fetchXml": "<fetch>\n  <entity name='systemuser'>\n    <all-attributes />\n    <filter>\n      <condition attribute='azureactivedirectoryobjectid' operator='eq' value='@{outputs('Get_a_row_by_ID_for_Project')?['body/_vsb_projectmanager_value']}' />\n    </filter>\n  </entity>\n</fetch>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "connectionName": "shared_commondataserviceforapps",
+                      "operationId": "ListRecords"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Set_Project_Manager_Email": {
+                  "runAfter": {
+                    "Get_Project_Manager": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "8d29fd30-8909-444d-a006-91039702022e"
+                  },
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Project Manager Email",
+                    "value": "@first(outputs('Get_Project_Manager')?['body/value'])?['internalemailaddress']"
+                  }
+                },
+                "Get_Country_Details": {
+                  "runAfter": {
+                    "Set_Project_Manager_Email": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "f6e609a8-c727-4f12-a7bb-42c4dc74ade6"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_countries",
+                      "fetchXml": "<fetch>\n  <entity name='vsb_country'>\n    <all-attributes />\n    <filter>\n      <condition attribute='vsb_countryid' operator='eq' value='@{outputs('Get_a_row_by_ID_for_Project')?['body/_vsb_country_value']}' />\n    </filter>\n  </entity>\n</fetch>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "connectionName": "shared_commondataserviceforapps",
+                      "operationId": "ListRecords"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Set_Country_Name": {
+                  "runAfter": {
+                    "Get_Country_Details": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "0b9ad279-2bcf-4ce4-bf8f-9caef3c74504"
+                  },
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Country Name",
+                    "value": "@first(outputs('Get_Country_Details')?['body/value'])?['vsb_name']"
+                  }
+                },
+                "Get_Cooperation_Details": {
+                  "runAfter": {
+                    "Set_Country_Name": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "fa42c904-276e-485c-bca6-4254f2627661"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "stringmaps",
+                      "fetchXml": "<fetch>\n  <entity name='stringmap'>\n    <all-attributes />\n    <filter>\n       <condition attribute='attributename' operator='eq' value='vsb_cooperation' />\n      <condition attribute='attributevalue' operator='eq' value='@{first(outputs('Get_Project_Planning_Details')?['body/value'])?['vsb_cooperation']}' />\n    </filter>\n  </entity>\n</fetch>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "connectionName": "shared_commondataserviceforapps",
+                      "operationId": "ListRecords"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Set_Cooperation": {
+                  "runAfter": {
+                    "Get_Cooperation_Details": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7c3d5d1e-ee49-42cb-be4b-1bbcc3a20020"
+                  },
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Cooperation",
+                    "value": "@first(outputs('Get_Cooperation_Details')?['body/value'])?['value']"
+                  }
+                },
+                "Get_a_row_by_ID_for_Project": {
+                  "metadata": {
+                    "operationMetadataId": "7c7ff7c5-0f9f-4287-81b7-6a8de780bc24"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projects",
+                      "recordId": "@triggerOutputs()?['body/vsb_projectid']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "connectionName": "shared_commondataserviceforapps",
+                      "operationId": "GetItem"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Get_Technology_Name": {
+                  "runAfter": {
+                    "Set_Cooperation": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "64b56e9d-859f-4a4c-b51f-1f25ae90c77e"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "stringmaps",
+                      "fetchXml": "<fetch xmlns:generator='MarkMpn.SQL4CDS'>\n  <entity name='stringmap'>\n    <all-attributes />\n    <filter>\n      <condition attribute='attributename' operator='eq' value='vsb_technology' />\n      <condition attribute='objecttypecode' operator='eq' value='10388' />\n      <condition attribute='attributevalue' operator='eq' value='@{outputs('Get_a_row_by_ID_for_Project')?['body/vsb_technology']}' />\n    </filter>\n  </entity>\n</fetch>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "connectionName": "shared_commondataserviceforapps",
+                      "operationId": "ListRecords"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Set_Technology": {
+                  "runAfter": {
+                    "Get_Technology_Name": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "bba6c7d6-219c-4eef-a3f9-c996325d46d2"
+                  },
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "Technology",
+                    "value": "@first(outputs('Get_Technology_Name')?['body/value'])?['value']"
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "815d72c1-b2f8-4e52-9f37-0b5901e59330"
+              },
+              "type": "Scope"
+            },
+            "HTTP_POST_Create_Project_Teams_and_SharePoint_Site": {
+              "runAfter": {
+                "Try": [
+                  "Succeeded"
+                ]
+              },
+              "limit": {
+                "timeout": "PT10M"
+              },
+              "metadata": {
+                "operationMetadataId": "43c1b435-0979-4a4d-9c58-b286b44285fa"
+              },
+              "type": "Http",
+              "inputs": {
+                "uri": "https://func-provisioning-prd-euw-1.azurewebsites.net/api/update?code=REDACTED_AZURE_FUNCTION_KEY",
+                "method": "PATCH",
+                "headers": {
+                  "content-type": "application/json"
+                },
+                "body": {
+                  "webUrl": "@{outputs('Get_a_row_by_ID_for_Project')?['body/vsb_sposharepointurl']}",
+                  "country": "@{variables('Country Name')}",
+                  "projectName": "@{outputs('Get_a_row_by_ID_for_Project')?['body/vsb_projectname']}",
+                  "projectShortName": "@{outputs('Get_a_row_by_ID_for_Project')?['body/vsb_shortname']}",
+                  "internalProjectId": "@outputs('Get_a_row_by_ID_for_Project')?['body/vsb_internalprojectid']",
+                  "status": "@{outputs('Get_a_row_by_ID_for_Project')?['body/_vsb_clusterstate_value@OData.Community.Display.V1.FormattedValue']}",
+                  "technology": "@{outputs('Get_a_row_by_ID_for_Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']}",
+                  "projectManager": "@{variables('Project Manager Email')}",
+                  "vsbCloudProjectId": "@outputs('Get_a_row_by_ID_for_Project')?['body/vsb_name']",
+                  "cooperation": "@{variables('Cooperation')}"
+                }
+              },
+              "description": "Call Azure Function to update existing Microsoft Teams / Microsoft 365 Group and the connected SharePoint Online Team Site. PnP Provisioning Engine will be called to apply a Site template to the SharePoint Online Site."
+            }
+          },
+          "runAfter": {
+            "Get_a_row_by_ID_For_Country_Name": [
+              "Succeeded"
+            ]
+          },
+          "else": {
+            "actions": {
+              "Terminate": {
+                "metadata": {
+                  "operationMetadataId": "6d668db7-2ff1-447f-b84f-eba40ac798df"
+                },
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Cancelled"
+                }
+              }
+            }
+          },
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@empty(body('Filter_array'))",
+                  "@false"
+                ]
+              },
+              {
+                "equals": [
+                  "@outputs('Get_a_row_by_ID_For_Country_Name')?['body/vsb_name']",
+                  "Croatia"
+                ]
+              }
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "76cff9f1-9025-4bef-a51b-394e19780a20"
+          },
+          "type": "If"
+        },
+        "Initialize_Project_Manager_Email": {
+          "runAfter": {
+            "Get_Project_Planning_Details": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "f7650257-aabb-4304-8eeb-e90d517e8f59"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Project Manager Email",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Get_Project_Planning_Details": {
+          "runAfter": {
+            "Filter_array": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "a7867366-5a90-4c31-b1d7-ff87e4820d01"
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_projectplannings",
+              "fetchXml": "<fetch>\n  <entity name='vsb_projectplanning'>\n    <all-attributes />\n    <filter>\n      <condition attribute='vsb_project' operator='eq' value='@{triggerOutputs()?['body/vsb_projectid']}' />\n    </filter>\n  </entity>\n</fetch>"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "ListRecords"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Compose": {
+          "runAfter": {
+            "Initialize_Project_Manager_Email": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "beec0a81-aa99-45ae-a223-0ed0ce7c96da"
+          },
+          "type": "Compose",
+          "inputs": "@first(outputs('Get_Project_Planning_Details')?['body/value'])?['vsb_cooperation@OData.Community.Display.V1.FormattedValue']"
+        },
+        "Initialize_Country_Name": {
+          "runAfter": {
+            "Compose": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "dbe7a680-8426-46ff-9782-b3551f1cccf0"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Country Name",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Initialize_Cooperation": {
+          "runAfter": {
+            "Initialize_Country_Name": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "80c6b7af-ed66-4905-92f7-cacbc22a71a6"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Cooperation",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Initialize_variable_Technology": {
+          "runAfter": {
+            "Initialize_Cooperation": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "68cc29ac-1eb0-4f17-953d-6c1615feb87c"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Technology",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Get_a_row_by_ID_For_Country_Name": {
+          "runAfter": {
+            "Initialize_variable_Technology": [
+              "Succeeded"
+            ]
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_countries",
+              "recordId": "@triggerOutputs()?['body/_vsb_country_value']"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "connectionName": "shared_commondataserviceforapps",
+              "operationId": "GetItem"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

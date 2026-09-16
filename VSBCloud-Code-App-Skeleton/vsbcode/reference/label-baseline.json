@@ -1,0 +1,799 @@
+{
+  "$schema": "label-baseline/1",
+  "generatedBy": "node scripts/check-labels.mjs --update-baseline",
+  "note": "The known-violation set for G-LABEL. It is a TO-DO LIST, NOT A PERMISSION: every entry is work someone still owes. The gate fails on anything not listed here, and on any entry that no longer matches, so a fixed violation cannot leave a slot open for a different one. Never run --update-baseline to make a red build green.",
+  "owners": {
+    "copy-owner": "A wording decision: restore the canvas text, or record the source defect and add a `…CanvasParity` twin.",
+    "refactor": "The string is right, it is in the wrong place: move it into rules.ts and cite the canvas control from there.",
+    "data-value": "Not canvas-authored text (a Dataverse data value or option-set label) and not resolvable from the corpus."
+  },
+  "counts": {
+    "total": 67,
+    "refactor": 51,
+    "copy-owner": 16
+  },
+  "entries": [
+    {
+      "id": "8d42897bf667df7c",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-capex-accounts/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading the chart of accounts…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "41cbae54ee2f3d4e",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-contract/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading contracts…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "9d32d4f336ee4c9f",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-cost/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "A per-WTG unit can only be used for Wind.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. It is ALREADY a constant — `UNIT_ERROR` in `admin/admin-cost/devexRules.ts` — so this is a duplicated literal, not a new one: reference the constant. Note that `UNIT_ERROR` itself is a copy-owner entry in this baseline (canvas: \"/WTG only applicable for Wind\")."
+    },
+    {
+      "id": "daf2c25999eb5b0a",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-cost/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this standard cost?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete Standard Cost\" (`btn_AdminCost_DevexCapex_Delete_StandardCost_Confirm.Text`)."
+    },
+    {
+      "id": "705652ee289e545d",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-default-checklists/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading scopes…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "7f8eeca0fdbec80e",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-default-checklists/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading gates…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "72d375a37ef4343d",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-gates-approvals/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading countries…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "79c65075c48c5088",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-milestones/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading countries…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "d29d95d66dfa01ee",
+      "check": "inline-literal",
+      "file": "src/features/admin/admin-milestones/Screen.tsx",
+      "path": "title=",
+      "payload": "Apply standard milestones?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "291a8a9517259c01",
+      "check": "inline-literal",
+      "file": "src/features/cost/add-costs-from-table/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading the cost table…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "ff5b0b2b17790a6a",
+      "check": "inline-literal",
+      "file": "src/features/cost/capex-costs/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading the DEVEX/CAPEX cost tree…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "90cac3796d806867",
+      "check": "inline-literal",
+      "file": "src/features/cost/contracts/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading BoP contracts…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "f77094575d8bd7fd",
+      "check": "inline-literal",
+      "file": "src/features/cost/land-lease/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading land lease costs…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "d17fad18e7f21b4c",
+      "check": "inline-literal",
+      "file": "src/features/cost/opex-costs/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading OPEX costs…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "65571c34ff02bf5d",
+      "check": "inline-literal",
+      "file": "src/features/pm/app-loading/Screen.tsx",
+      "path": "label=",
+      "payload": "Please wait...",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. Canvas match, verbatim, but only in behaviour formulas — `pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval.OnChange` and `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.OnConfirm` set it as the spinner text; the App Loading screen itself has no label control carrying it. Cite one of those two. `pm/app-loading` has no rules.ts yet, so create one for this string."
+    },
+    {
+      "id": "cb806d95ce4e6d3a",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "You can read this project but not change it. Every action is disabled.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "c1d757996dde176e",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Nothing has been recorded for this yet.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "28ac78ca857beef8",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "No personas are configured on this gate.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "88121ff3040bffc4",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Nothing has been recorded for this yet.",
+      "occurrence": 2,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "ce4b61ada74b2710",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading the cluster checklist…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "068331ea8026b72b",
+      "check": "inline-literal",
+      "file": "src/features/pm/checklist/Screen.tsx",
+      "path": "label=",
+      "payload": "Updating the project state, please wait…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "f54640b06f35b23f",
+      "check": "inline-literal",
+      "file": "src/features/pm/finance/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "No repayment years — the tenor is not longer than the repayment start.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "17c0f049a8f1cb9e",
+      "check": "inline-literal",
+      "file": "src/features/pm/finance/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Its repayment amounts and step-up margins are deleted with it.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "99895764c47351bb",
+      "check": "inline-literal",
+      "file": "src/features/pm/finance/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this senior-debt tranche?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete Tranche\" (`cmp_PopUp_ActivationForSeniorDebtTranche.Title`, whose title switches between \"Activation\"/\"Deletion\" wording)."
+    },
+    {
+      "id": "34a9fefadf1e349c",
+      "check": "inline-literal",
+      "file": "src/features/pm/general-data/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Set Latitude and Longitude to place a pin.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "5eb7d4a9b6f463e4",
+      "check": "inline-literal",
+      "file": "src/features/pm/general-data/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading project…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "3977bff5023d291c",
+      "check": "inline-literal",
+      "file": "src/features/pm/general-data/Screen.tsx",
+      "path": "label=",
+      "payload": "The project is being saved, please wait…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"The project is being saved, please wait..\" (`btn_GeneralData_Save_Actual.OnSelect`) — TWO ASCII dots, not an ellipsis character. Occurs on both General Data and Milestones."
+    },
+    {
+      "id": "680f19cdfe5c5c9a",
+      "check": "inline-literal",
+      "file": "src/features/pm/general-data/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this shareholding entity?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete Shareholding Entity?\" (`cmp_GeneralData_PopUp_ConfirmationDeleteShareholdingEntity.Title`) — title case."
+    },
+    {
+      "id": "082555a0adb58773",
+      "check": "inline-literal",
+      "file": "src/features/pm/generators/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "None recorded.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "653da1ddc0be0b7f",
+      "check": "inline-literal",
+      "file": "src/features/pm/generators/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "The status change is propagated to every turbine of this type.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "631b58607da59503",
+      "check": "inline-literal",
+      "file": "src/features/pm/generators/Screen.tsx",
+      "path": "title=",
+      "payload": "Override the height limitation?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Height Limitation Exceeded\" (`cmp_GeneratorData_PopUp_ConfirmationHeightLimitationForGenerator.Title`) — a statement, not a question."
+    },
+    {
+      "id": "f16280adbe7a42e2",
+      "check": "inline-literal",
+      "file": "src/features/pm/grid-operator/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "You can read this project but not change it. Every field is read-only.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "1f242a0ff748b090",
+      "check": "inline-literal",
+      "file": "src/features/pm/grid-operator/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading grid operator data…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "76e5724d08862409",
+      "check": "inline-literal",
+      "file": "src/features/pm/grid-operator/Screen.tsx",
+      "path": "label=",
+      "payload": "Saving grid operator data…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "50811c0b10d373ac",
+      "check": "inline-literal",
+      "file": "src/features/pm/milestones/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading milestones…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "90e501f24f9f9e1e",
+      "check": "inline-literal",
+      "file": "src/features/pm/milestones/Screen.tsx",
+      "path": "label=",
+      "payload": "The project is being saved, please wait…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"The project is being saved, please wait..\" (`btn_GeneralData_Save_Actual.OnSelect`) — TWO ASCII dots, not an ellipsis character. Occurs on both General Data and Milestones."
+    },
+    {
+      "id": "12559e10e3398804",
+      "check": "inline-literal",
+      "file": "src/features/pm/milestones/Screen.tsx",
+      "path": "placeholder=",
+      "payload": "Select a date...",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. Canvas match: `dtp_Milestones_DisplayProject_Body_General_Content_Cluster1_1.Placeholder` — citing it will pass verbatim."
+    },
+    {
+      "id": "8149f1cd40e3233e",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "The planning record could not be loaded or created",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "f08b1bd2ef94fa54",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Creating the missing acquisition rows…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "0f7ca6ac14052f84",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading planning data…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "d2b2eea5e37ecb64",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "label=",
+      "payload": "Saving planning data…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. No canvas string carries this text — the canvas spinner on this screen is driven by `locSpinnerInformationText`, and the nearest match is a TOOLTIP (\"Save Planning data\"), not this label. Expect a NEW marker."
+    },
+    {
+      "id": "fa0e7a8deec0b004",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this permit?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete permit?\" (`cmp_ProjectPlanning_PopUp_ConfirmationDeletePermit.Title`)."
+    },
+    {
+      "id": "7ee0dac988e361b1",
+      "check": "inline-literal",
+      "file": "src/features/pm/planning/Screen.tsx",
+      "path": "title=",
+      "payload": "Clear this acquisition row?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "358f27d22b2c4f64",
+      "check": "inline-literal",
+      "file": "src/features/pm/production/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Editing any month clears the “standard value” flag on all twelve.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "bb1154c4172dc8fc",
+      "check": "inline-literal",
+      "file": "src/features/pm/production/Screen.tsx",
+      "path": "label=",
+      "payload": "Please wait, saving….",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. No canvas string carries this text. The canvas spinner texts of this family read \"Please wait, saving...\" / \"Please wait, saving costs...\"; if this is meant to be one of them, cite it and drop the fourth dot, otherwise it needs a NEW marker."
+    },
+    {
+      "id": "f4a7675d2b556f73",
+      "check": "inline-literal",
+      "file": "src/features/pm/project-main/Screen.tsx",
+      "path": "placeholder=",
+      "payload": "Search for Project Name, Short Name and ID",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. Canvas match: `inp_Main_Project_Overview_Context_Filter_ProjectKeyword.Placeholder` — citing it will pass verbatim."
+    },
+    {
+      "id": "e5a26c3af8183782",
+      "check": "inline-literal",
+      "file": "src/features/pm/project-main/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this project?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete project?\" (`cmp_Project_PopUp_ConfirmationDeleteProject.Title`) — lower-case \"project\", no \"this\"."
+    },
+    {
+      "id": "fdc93e964532453a",
+      "check": "inline-literal",
+      "file": "src/features/pm/revenues/Screen.tsx",
+      "path": "JSX text child",
+      "payload": "Its individual hedge volumes are deleted with it.",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "1839940396372a56",
+      "check": "inline-literal",
+      "file": "src/features/pm/revenues/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this revenue contract?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete revenue contract?\" (`cmp_ProjectRevenues_PopUp_Confirmation_DeleteContract.Title`)."
+    },
+    {
+      "id": "3f5515dec62243d8",
+      "check": "inline-literal",
+      "file": "src/features/pm/revenues/Screen.tsx",
+      "path": "title=",
+      "payload": "Delete this balancing period?",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control from there; the wording itself is not in question. NOTE — once cited this will surface a SECOND violation, a text-mismatch against the canvas string below. That gap is PRE-EXISTING: the move exposes it, it does not cause it. Do not treat it as a regression — hand it to copy-owner. Canvas: \"Delete balancing price\" (`cmp_ProjectRevenues_PopUp_Confirmation_DeleteContract_1.Title`) — different noun AND no question mark, so this one is a wording decision as much as a move."
+    },
+    {
+      "id": "2e60992b4cb3a2e8",
+      "check": "inline-literal",
+      "file": "src/features/pm/team/Screen.tsx",
+      "path": "label=",
+      "payload": "Loading the project team…",
+      "occurrence": 1,
+      "expected": null,
+      "owner": "refactor",
+      "reason": "Move into the feature's rules.ts and cite the canvas control; the string itself is not in question. No canvas string carries this text, so it will need a NEW marker."
+    },
+    {
+      "id": "742cf4798dc2e2b7",
+      "check": "text-mismatch",
+      "file": "src/features/admin/admin-contract/rules.ts",
+      "path": "MSG.deleteTitle",
+      "payload": "Delete this BoP standard contract?",
+      "occurrence": 1,
+      "expected": [
+        "Delete BoP Standard Contract"
+      ],
+      "owner": "copy-owner",
+      "reason": "Reworded and re-punctuated. Canvas: \"Delete BoP Standard Contract\" (`cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.Title`) — title case, no question mark. Decide: restore it, or record the defect and add a `…CanvasParity` twin."
+    },
+    {
+      "id": "be312f58433d53db",
+      "check": "text-mismatch",
+      "file": "src/features/admin/admin-contract/rules.ts",
+      "path": "MSG.marginFixedValue",
+      "payload": "Enter a value between 0 and 1,000,000,000 with two decimals.",
+      "occurrence": 1,
+      "expected": [
+        "###,###0,00",
+        "Please select a value between 0 and "
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten. The canvas `lbl_Add_Edit_AdminContracts_MarginFixedValue_ErrorMessage.Text` builds \"Please select a value between 0 and {bound}\". Same decision as MSG.marginPercentage."
+    },
+    {
+      "id": "d118199a34363d3b",
+      "check": "text-mismatch",
+      "file": "src/features/admin/admin-contract/rules.ts",
+      "path": "MSG.marginPercentage",
+      "payload": "Enter a percentage between 0 and 100 with one decimal.",
+      "occurrence": 1,
+      "expected": [
+        "###,###0.0",
+        "Please select a value between 0 and "
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten. The canvas `lbl_Add_Edit_AdminContracts_MarginPercentage_ErrorMessage.Text` builds \"Please select a value between 0 and {bound}\". Decide: restore the canvas wording (interpolating the bound, as `MSG.terrainRange` does), or record the source defect and keep the canvas string reachable as a `…CanvasParity` twin."
+    },
+    {
+      "id": "0e23283aec7a958c",
+      "check": "text-mismatch",
+      "file": "src/features/admin/admin-cost/devexRules.ts",
+      "path": "UNIT_ERROR.UNIT_ERROR",
+      "payload": "A per-WTG unit can only be used for Wind.",
+      "occurrence": 1,
+      "expected": [
+        "Poland",
+        "PLN",
+        "EUR",
+        "/WTG only applicable for Wind"
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten. Canvas: \"/WTG only applicable for Wind\" (`lbl_AdminCost_RightPanel_Form_AddCost_Fields_Unit_ErrorMessage.Text`). The code app's sentence is clearer English, which is exactly the kind of improvement G-LABEL does not let through silently. Restore it, or record the decision."
+    },
+    {
+      "id": "ea86d19e5c42ddcc",
+      "check": "text-mismatch",
+      "file": "src/features/admin/admin-gates-approvals/rules.ts",
+      "path": "MSG.deleteChecklistTitle",
+      "payload": "Delete this check-list approval?",
+      "occurrence": 1,
+      "expected": [
+        "Delete Check List Approval Item?"
+      ],
+      "owner": "copy-owner",
+      "reason": "Reworded. Canvas: \"Delete Check List Approval Item?\" (`cmp_DeleteChecklistApprovalItem_AdminScreen.Title`), including the spaced \"Check List\". Restore it, or record the decision."
+    },
+    {
+      "id": "c9cbb9d98a79a58c",
+      "check": "text-mismatch",
+      "file": "src/features/cost/capex-costs/rules.ts",
+      "path": "CAPEX_TOOLBAR_LABELS.addCostFromTable",
+      "payload": "+ Add Cost from Table",
+      "occurrence": 1,
+      "expected": [
+        "Add Cost from Table"
+      ],
+      "owner": "copy-owner",
+      "reason": "A \"+ \" glyph prefix was added to the canvas caption \"Add Cost from Table\" (`btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable.Text`). If the plus is a deliberate affordance, it belongs in the icon slot of the command, not in the caption; otherwise drop it."
+    },
+    {
+      "id": "5fcb414ca8db3d26",
+      "check": "text-mismatch",
+      "file": "src/features/cost/capex-costs/rules.ts",
+      "path": "ROW_ADD_MENU_ITEM_LABEL.ROW_ADD_MENU_ITEM_LABEL",
+      "payload": "+ Add New Cost",
+      "occurrence": 1,
+      "expected": [
+        "Add New Cost",
+        "Add Standard Contract",
+        "Edit",
+        "Delete Cost"
+      ],
+      "owner": "copy-owner",
+      "reason": "Same \"+ \" prefix over the canvas caption \"Add New Cost\" (`cmd_Costs_ProjectCosts_TableCommandBar.Items.ItemDisplayName`)."
+    },
+    {
+      "id": "cc03711c8be3807f",
+      "check": "text-mismatch",
+      "file": "src/features/cost/land-lease/rules.ts",
+      "path": "LEASE_MSG.deleteContractBody",
+      "payload": "This deletes the contract and all related Periods?",
+      "occurrence": 1,
+      "expected": [
+        "Are you sure that you want to permanently delete Land Lease \"",
+        "\" and all related Periods?"
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten and de-personalised. Canvas: \"Are you sure that you want to permanently delete Land Lease \\\"{name}\\\" and all related Periods?\" (`cmp_LandLease_PopUpConfirmation_DeleteLandLeaseCost.Description`) — it names the lease. Either restore the interpolated canvas body (an `INTERPOLATED` citation then covers it), or record the decision."
+    },
+    {
+      "id": "5d5f7cba921180da",
+      "check": "text-mismatch",
+      "file": "src/features/cost/land-lease/rules.ts",
+      "path": "LEASE_MSG.deletePeriodBody",
+      "payload": "This deletes only the selected period.",
+      "occurrence": 1,
+      "expected": [
+        "Are you sure that you want to permanently delete ",
+        " expense in the \"",
+        "\"  Land Lease?"
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten. Canvas: \"Are you sure that you want to permanently delete {n} expense in the \\\"{lease}\\\"  Land Lease?\" (`cmp_LandLease_PopUpConfirmation_DeletePeriod.Description`, double space included). Same decision as LEASE_MSG.deleteContractBody."
+    },
+    {
+      "id": "04076ecd69d78dca",
+      "check": "text-mismatch",
+      "file": "src/features/pm/finance/rules.ts",
+      "path": "TRANCHE_FORM_LABEL.upfrontFeeValue",
+      "payload": "Upfront fee [%]",
+      "occurrence": 1,
+      "expected": [
+        "Upfront Fee [%]"
+      ],
+      "owner": "copy-owner",
+      "reason": "Case only: canvas reads \"Upfront Fee [%]\" (`lbl_DSRA_DRSFData_Upfront_Fee_Percentage.Text`). The cheapest fix in this baseline — one capital F restores parity."
+    },
+    {
+      "id": "f8c99bb805834788",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "ADD_GENERATOR_LABEL.ADD_GENERATOR_LABEL",
+      "payload": "+ Add Generator",
+      "occurrence": 1,
+      "expected": [
+        "Add Generator",
+        "Add Generator"
+      ],
+      "owner": "copy-owner",
+      "reason": "Same \"+ \" prefix over the canvas caption \"Add Generator\" (`pcf_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_CommandBar.Items.ItemDisplayName`). Fix all three plus-prefixed captions together."
+    },
+    {
+      "id": "3270ff7ed28c19ee",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "LAST_CAPACITY_MESSAGES.deactivate",
+      "payload": "Before deactivating the last generator, activate another one so that the project's capacity never drops to zero.",
+      "occurrence": 1,
+      "expected": [
+        "Before removing/deactivating the last generator, add/activate another one so that the project's capacity never drops to zero."
+      ],
+      "owner": "copy-owner",
+      "reason": "The deactivate half of the same split — see LAST_CAPACITY_MESSAGES.delete."
+    },
+    {
+      "id": "db9034e111280637",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "LAST_CAPACITY_MESSAGES.delete",
+      "payload": "Before removing the last generator, add another one so that the project's capacity never drops to zero.",
+      "occurrence": 1,
+      "expected": [
+        "Before removing/deactivating the last generator, add/activate another one so that the project's capacity never drops to zero."
+      ],
+      "owner": "copy-owner",
+      "reason": "Split. The canvas has ONE body for both actions, \"Before removing/deactivating the last generator, add/activate another one so that the project's capacity never drops to zero.\" (`lbl_PopUp_Common_Generators_PreventTotalCapacity_Information.Text`). Decide with LAST_CAPACITY_TITLES."
+    },
+    {
+      "id": "ac0eaf4890f1603b",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "LAST_CAPACITY_TITLES.deactivate",
+      "payload": "Generator can't be deactivated",
+      "occurrence": 1,
+      "expected": [
+        "Generator can’t be deleted/deactivated"
+      ],
+      "owner": "copy-owner",
+      "reason": "The deactivate half of the same split — see LAST_CAPACITY_TITLES.delete. Canvas: \"Generator can’t be deleted/deactivated\"."
+    },
+    {
+      "id": "7fcb1cfec51bfd47",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "LAST_CAPACITY_TITLES.delete",
+      "payload": "Generator can't be deleted",
+      "occurrence": 1,
+      "expected": [
+        "Generator can’t be deleted/deactivated"
+      ],
+      "owner": "copy-owner",
+      "reason": "Split and re-typed. The canvas has ONE title for both actions, \"Generator can’t be deleted/deactivated\" (`txt_PopUp_Common_Generators_PreventTotalCapacity_Title.Text`), with a curly apostrophe; the code app raises a separate dialog per action and uses an ASCII apostrophe. Decide whether the split is a UX improvement worth recording as a divergence, or whether the canvas title returns."
+    },
+    {
+      "id": "a647e2160599c800",
+      "check": "text-mismatch",
+      "file": "src/features/pm/generators/rules.ts",
+      "path": "MSG.percentageRange",
+      "payload": "Value must be a percentage between 0 and 100.",
+      "occurrence": 1,
+      "expected": [
+        "Numeric value with maximum of three decimals",
+        "Please select a value between 0 and 100."
+      ],
+      "owner": "copy-owner",
+      "reason": "Rewritten. Canvas: \"Please select a value between 0 and 100.\" (`lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_ErrorMessage.Text`). Restore it, or record the decision."
+    }
+  ]
+}

@@ -1,0 +1,505 @@
+{
+  "source": "VSBCloud (3).zip -> customizations.xml <entity Name> + <EntitySetName>",
+  "note": "primaryIdAttribute is the Dataverse convention <logicalName>id. Verify against pac code add-data-source output before relying on it for writes.",
+  "count": 83,
+  "entities": [
+    {
+      "schemaName": "SystemUser",
+      "logicalName": "systemuser",
+      "entitySetName": "systemusers",
+      "primaryIdAttribute": "systemuserid"
+    },
+    {
+      "schemaName": "vsb_ApplyandApplyAllTracking",
+      "logicalName": "vsb_applyandapplyalltracking",
+      "entitySetName": "vsb_applyandapplyalltrackings",
+      "primaryIdAttribute": "vsb_applyandapplyalltrackingid"
+    },
+    {
+      "schemaName": "vsb_AquisitionStatus",
+      "logicalName": "vsb_aquisitionstatus",
+      "entitySetName": "vsb_aquisitionstatuses",
+      "primaryIdAttribute": "vsb_aquisitionstatusid"
+    },
+    {
+      "schemaName": "vsb_AquisitionType",
+      "logicalName": "vsb_aquisitiontype",
+      "entitySetName": "vsb_aquisitiontypes",
+      "primaryIdAttribute": "vsb_aquisitiontypeid"
+    },
+    {
+      "schemaName": "vsb_AssumptionsLocalTaxFrance",
+      "logicalName": "vsb_assumptionslocaltaxfrance",
+      "entitySetName": "vsb_assumptionslocaltaxfrances",
+      "primaryIdAttribute": "vsb_assumptionslocaltaxfranceid"
+    },
+    {
+      "schemaName": "vsb_AssumptionsLocalTaxGermany",
+      "logicalName": "vsb_assumptionslocaltaxgermany",
+      "entitySetName": "vsb_assumptionslocaltaxgermanies",
+      "primaryIdAttribute": "vsb_assumptionslocaltaxgermanyid"
+    },
+    {
+      "schemaName": "vsb_BalancingPrice",
+      "logicalName": "vsb_balancingprice",
+      "entitySetName": "vsb_balancingprices",
+      "primaryIdAttribute": "vsb_balancingpriceid"
+    },
+    {
+      "schemaName": "vsb_BoPContractsDevCoCosts",
+      "logicalName": "vsb_bopcontractsdevcocosts",
+      "entitySetName": "vsb_bopcontractsdevcocostses",
+      "primaryIdAttribute": "vsb_bopcontractsdevcocostsid"
+    },
+    {
+      "schemaName": "vsb_BoPContractsPaymentTargets",
+      "logicalName": "vsb_bopcontractspaymenttargets",
+      "entitySetName": "vsb_bopcontractspaymenttargetses",
+      "primaryIdAttribute": "vsb_bopcontractspaymenttargetsid"
+    },
+    {
+      "schemaName": "vsb_BoPContractsStandardAssumptionDevCoCosts",
+      "logicalName": "vsb_bopcontractsstandardassumptiondevcocosts",
+      "entitySetName": "vsb_bopcontractsstandardassumptiondevcocostses",
+      "primaryIdAttribute": "vsb_bopcontractsstandardassumptiondevcocostsid"
+    },
+    {
+      "schemaName": "vsb_BoPContractsStandardAssumptions",
+      "logicalName": "vsb_bopcontractsstandardassumptions",
+      "entitySetName": "vsb_bopcontractsstandardassumptionses",
+      "primaryIdAttribute": "vsb_bopcontractsstandardassumptionsid"
+    },
+    {
+      "schemaName": "vsb_BoPProjectsContracts",
+      "logicalName": "vsb_bopprojectscontracts",
+      "entitySetName": "vsb_bopprojectscontractses",
+      "primaryIdAttribute": "vsb_bopprojectscontractsid"
+    },
+    {
+      "schemaName": "vsb_CAPEXAccountList",
+      "logicalName": "vsb_capexaccountlist",
+      "entitySetName": "vsb_capexaccountlists",
+      "primaryIdAttribute": "vsb_capexaccountlistid"
+    },
+    {
+      "schemaName": "vsb_CapexComments",
+      "logicalName": "vsb_capexcomments",
+      "entitySetName": "vsb_capexcommentses",
+      "primaryIdAttribute": "vsb_capexcommentsid"
+    },
+    {
+      "schemaName": "vsb_CAPEXCost",
+      "logicalName": "vsb_capexcost",
+      "entitySetName": "vsb_capexcosts",
+      "primaryIdAttribute": "vsb_capexcostid"
+    },
+    {
+      "schemaName": "vsb_CAPEXProjectContract",
+      "logicalName": "vsb_capexprojectcontract",
+      "entitySetName": "vsb_capexprojectcontracts",
+      "primaryIdAttribute": "vsb_capexprojectcontractid"
+    },
+    {
+      "schemaName": "vsb_CAPEXProjectCostsMargin",
+      "logicalName": "vsb_capexprojectcostsmargin",
+      "entitySetName": "vsb_capexprojectcostsmargins",
+      "primaryIdAttribute": "vsb_capexprojectcostsmarginid"
+    },
+    {
+      "schemaName": "vsb_ChecklistCountryAndTechnology",
+      "logicalName": "vsb_checklistcountryandtechnology",
+      "entitySetName": "vsb_checklistcountryandtechnologies",
+      "primaryIdAttribute": "vsb_checklistcountryandtechnologyid"
+    },
+    {
+      "schemaName": "vsb_CheckListDefaultApprovals",
+      "logicalName": "vsb_checklistdefaultapprovals",
+      "entitySetName": "vsb_checklistdefaultapprovalses",
+      "primaryIdAttribute": "vsb_checklistdefaultapprovalsid"
+    },
+    {
+      "schemaName": "vsb_Country",
+      "logicalName": "vsb_country",
+      "entitySetName": "vsb_countries",
+      "primaryIdAttribute": "vsb_countryid"
+    },
+    {
+      "schemaName": "vsb_CountryArea",
+      "logicalName": "vsb_countryarea",
+      "entitySetName": "vsb_countryareas",
+      "primaryIdAttribute": "vsb_countryareaid"
+    },
+    {
+      "schemaName": "vsb_CountryInflationProfile",
+      "logicalName": "vsb_countryinflationprofile",
+      "entitySetName": "vsb_countryinflationprofiles",
+      "primaryIdAttribute": "vsb_countryinflationprofileid"
+    },
+    {
+      "schemaName": "vsb_CustomChoiceValue",
+      "logicalName": "vsb_customchoicevalue",
+      "entitySetName": "vsb_customchoicevalues",
+      "primaryIdAttribute": "vsb_customchoicevalueid"
+    },
+    {
+      "schemaName": "vsb_DevexCapexStandardAssumptions",
+      "logicalName": "vsb_devexcapexstandardassumptions",
+      "entitySetName": "vsb_devexcapexstandardassumptionses",
+      "primaryIdAttribute": "vsb_devexcapexstandardassumptionsid"
+    },
+    {
+      "schemaName": "vsb_DeviceCost",
+      "logicalName": "vsb_devicecost",
+      "entitySetName": "vsb_devicecosts",
+      "primaryIdAttribute": "vsb_devicecostid"
+    },
+    {
+      "schemaName": "vsb_DeviceTypesInProject",
+      "logicalName": "vsb_devicetypesinproject",
+      "entitySetName": "vsb_devicetypesinprojects",
+      "primaryIdAttribute": "vsb_devicetypesinprojectid"
+    },
+    {
+      "schemaName": "vsb_EnergyYieldGenerator",
+      "logicalName": "vsb_energyyieldgenerator",
+      "entitySetName": "vsb_energyyieldgenerators",
+      "primaryIdAttribute": "vsb_energyyieldgeneratorid"
+    },
+    {
+      "schemaName": "vsb_EnergyYield",
+      "logicalName": "vsb_energyyield",
+      "entitySetName": "vsb_energyyields",
+      "primaryIdAttribute": "vsb_energyyieldid"
+    },
+    {
+      "schemaName": "vsb_EstimationPriceInflation",
+      "logicalName": "vsb_estimationpriceinflation",
+      "entitySetName": "vsb_estimationpriceinflations",
+      "primaryIdAttribute": "vsb_estimationpriceinflationid"
+    },
+    {
+      "schemaName": "vsb_FabricJobType",
+      "logicalName": "vsb_fabricjobtype",
+      "entitySetName": "vsb_fabricjobtypes",
+      "primaryIdAttribute": "vsb_fabricjobtypeid"
+    },
+    {
+      "schemaName": "vsb_FabricSyncJob",
+      "logicalName": "vsb_fabricsyncjob",
+      "entitySetName": "vsb_fabricsyncjobs",
+      "primaryIdAttribute": "vsb_fabricsyncjobid"
+    },
+    {
+      "schemaName": "vsb_FinancingCategory",
+      "logicalName": "vsb_financingcategory",
+      "entitySetName": "vsb_financingcategories",
+      "primaryIdAttribute": "vsb_financingcategoryid"
+    },
+    {
+      "schemaName": "vsb_FinancingInput",
+      "logicalName": "vsb_financinginput",
+      "entitySetName": "vsb_financinginputs",
+      "primaryIdAttribute": "vsb_financinginputid"
+    },
+    {
+      "schemaName": "vsb_FinancingInputsRepaymentAmount",
+      "logicalName": "vsb_financinginputsrepaymentamount",
+      "entitySetName": "vsb_financinginputsrepaymentamounts",
+      "primaryIdAttribute": "vsb_financinginputsrepaymentamountid"
+    },
+    {
+      "schemaName": "vsb_FinancingInputStepUpmargins",
+      "logicalName": "vsb_financinginputstepupmargins",
+      "entitySetName": "vsb_financinginputstepupmarginses",
+      "primaryIdAttribute": "vsb_financinginputstepupmarginsid"
+    },
+    {
+      "schemaName": "vsb_GeneratorInProject",
+      "logicalName": "vsb_generatorinproject",
+      "entitySetName": "vsb_generatorinprojects",
+      "primaryIdAttribute": "vsb_generatorinprojectid"
+    },
+    {
+      "schemaName": "vsb_Generator",
+      "logicalName": "vsb_generator",
+      "entitySetName": "vsb_generators",
+      "primaryIdAttribute": "vsb_generatorid"
+    },
+    {
+      "schemaName": "vsb_GeneratorTypeInProject",
+      "logicalName": "vsb_generatortypeinproject",
+      "entitySetName": "vsb_generatortypeinprojects",
+      "primaryIdAttribute": "vsb_generatortypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_GridOperator",
+      "logicalName": "vsb_gridoperator",
+      "entitySetName": "vsb_gridoperators",
+      "primaryIdAttribute": "vsb_gridoperatorid"
+    },
+    {
+      "schemaName": "vsb_Hydrogen",
+      "logicalName": "vsb_hydrogen",
+      "entitySetName": "vsb_hydrogens",
+      "primaryIdAttribute": "vsb_hydrogenid"
+    },
+    {
+      "schemaName": "vsb_HydrogenTypeInProject",
+      "logicalName": "vsb_hydrogentypeinproject",
+      "entitySetName": "vsb_hydrogentypeinprojects",
+      "primaryIdAttribute": "vsb_hydrogentypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_Inverter",
+      "logicalName": "vsb_inverter",
+      "entitySetName": "vsb_inverters",
+      "primaryIdAttribute": "vsb_inverterid"
+    },
+    {
+      "schemaName": "vsb_InverterTypeInProject",
+      "logicalName": "vsb_invertertypeinproject",
+      "entitySetName": "vsb_invertertypeinprojects",
+      "primaryIdAttribute": "vsb_invertertypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_LandLeaseAccount",
+      "logicalName": "vsb_landleaseaccount",
+      "entitySetName": "vsb_landleaseaccounts",
+      "primaryIdAttribute": "vsb_landleaseaccountid"
+    },
+    {
+      "schemaName": "vsb_LandLeaseAllocationWTG",
+      "logicalName": "vsb_landleaseallocationwtg",
+      "entitySetName": "vsb_landleaseallocationwtgs",
+      "primaryIdAttribute": "vsb_landleaseallocationwtgid"
+    },
+    {
+      "schemaName": "vsb_LandLeasePeriod",
+      "logicalName": "vsb_landleaseperiod",
+      "entitySetName": "vsb_landleaseperiods",
+      "primaryIdAttribute": "vsb_landleaseperiodid"
+    },
+    {
+      "schemaName": "vsb_LandLeaseProjectCost",
+      "logicalName": "vsb_landleaseprojectcost",
+      "entitySetName": "vsb_landleaseprojectcosts",
+      "primaryIdAttribute": "vsb_landleaseprojectcostid"
+    },
+    {
+      "schemaName": "vsb_LandLeaseSubaccount",
+      "logicalName": "vsb_landleasesubaccount",
+      "entitySetName": "vsb_landleasesubaccounts",
+      "primaryIdAttribute": "vsb_landleasesubaccountid"
+    },
+    {
+      "schemaName": "vsb_MilestonesStandardAssumptions",
+      "logicalName": "vsb_milestonesstandardassumptions",
+      "entitySetName": "vsb_milestonesstandardassumptionses",
+      "primaryIdAttribute": "vsb_milestonesstandardassumptionsid"
+    },
+    {
+      "schemaName": "vsb_NegativePriceStandardAssumptions",
+      "logicalName": "vsb_negativepricestandardassumptions",
+      "entitySetName": "vsb_negativepricestandardassumptionses",
+      "primaryIdAttribute": "vsb_negativepricestandardassumptionsid"
+    },
+    {
+      "schemaName": "vsb_OpexAccount",
+      "logicalName": "vsb_opexaccount",
+      "entitySetName": "vsb_opexaccounts",
+      "primaryIdAttribute": "vsb_opexaccountid"
+    },
+    {
+      "schemaName": "vsb_OPEXLandLeaseStandardAssumptions",
+      "logicalName": "vsb_opexlandleasestandardassumptions",
+      "entitySetName": "vsb_opexlandleasestandardassumptionses",
+      "primaryIdAttribute": "vsb_opexlandleasestandardassumptionsid"
+    },
+    {
+      "schemaName": "vsb_OpexProjectCost",
+      "logicalName": "vsb_opexprojectcost",
+      "entitySetName": "vsb_opexprojectcosts",
+      "primaryIdAttribute": "vsb_opexprojectcostid"
+    },
+    {
+      "schemaName": "vsb_OpexSubaccount",
+      "logicalName": "vsb_opexsubaccount",
+      "entitySetName": "vsb_opexsubaccounts",
+      "primaryIdAttribute": "vsb_opexsubaccountid"
+    },
+    {
+      "schemaName": "vsb_Permit",
+      "logicalName": "vsb_permit",
+      "entitySetName": "vsb_permits",
+      "primaryIdAttribute": "vsb_permitid"
+    },
+    {
+      "schemaName": "vsb_ProjectChecklist",
+      "logicalName": "vsb_projectchecklist",
+      "entitySetName": "vsb_projectchecklists",
+      "primaryIdAttribute": "vsb_projectchecklistid"
+    },
+    {
+      "schemaName": "vsb_ProjectChecklistTrackingNote",
+      "logicalName": "vsb_projectchecklisttrackingnote",
+      "entitySetName": "vsb_projectchecklisttrackingnotes",
+      "primaryIdAttribute": "vsb_projectchecklisttrackingnoteid"
+    },
+    {
+      "schemaName": "vsb_ProjectDefaultApprovals",
+      "logicalName": "vsb_projectdefaultapprovals",
+      "entitySetName": "vsb_projectdefaultapprovalses",
+      "primaryIdAttribute": "vsb_projectdefaultapprovalsid"
+    },
+    {
+      "schemaName": "vsb_ProjectDefaultChecklists",
+      "logicalName": "vsb_projectdefaultchecklists",
+      "entitySetName": "vsb_projectdefaultchecklistses",
+      "primaryIdAttribute": "vsb_projectdefaultchecklistsid"
+    },
+    {
+      "schemaName": "vsb_ProjectMemberDescriptions",
+      "logicalName": "vsb_projectmemberdescriptions",
+      "entitySetName": "vsb_projectmemberdescriptionses",
+      "primaryIdAttribute": "vsb_projectmemberdescriptionsid"
+    },
+    {
+      "schemaName": "vsb_ProjectMembers",
+      "logicalName": "vsb_projectmembers",
+      "entitySetName": "vsb_projectmemberses",
+      "primaryIdAttribute": "vsb_projectmembersid"
+    },
+    {
+      "schemaName": "vsb_ProjectPlanning",
+      "logicalName": "vsb_projectplanning",
+      "entitySetName": "vsb_projectplannings",
+      "primaryIdAttribute": "vsb_projectplanningid"
+    },
+    {
+      "schemaName": "vsb_ProjectRevenue",
+      "logicalName": "vsb_projectrevenue",
+      "entitySetName": "vsb_projectrevenues",
+      "primaryIdAttribute": "vsb_projectrevenueid"
+    },
+    {
+      "schemaName": "vsb_Project",
+      "logicalName": "vsb_project",
+      "entitySetName": "vsb_projects",
+      "primaryIdAttribute": "vsb_projectid"
+    },
+    {
+      "schemaName": "vsb_ProjectState",
+      "logicalName": "vsb_projectstate",
+      "entitySetName": "vsb_projectstates",
+      "primaryIdAttribute": "vsb_projectstateid"
+    },
+    {
+      "schemaName": "vsb_ProjectStateTrackingNote",
+      "logicalName": "vsb_projectstatetrackingnote",
+      "entitySetName": "vsb_projectstatetrackingnotes",
+      "primaryIdAttribute": "vsb_projectstatetrackingnoteid"
+    },
+    {
+      "schemaName": "vsb_ProjectStateTracking",
+      "logicalName": "vsb_projectstatetracking",
+      "entitySetName": "vsb_projectstatetrackings",
+      "primaryIdAttribute": "vsb_projectstatetrackingid"
+    },
+    {
+      "schemaName": "vsb_PVModule",
+      "logicalName": "vsb_pvmodule",
+      "entitySetName": "vsb_pvmodules",
+      "primaryIdAttribute": "vsb_pvmoduleid"
+    },
+    {
+      "schemaName": "vsb_PVModuleTypeInProject",
+      "logicalName": "vsb_pvmoduletypeinproject",
+      "entitySetName": "vsb_pvmoduletypeinprojects",
+      "primaryIdAttribute": "vsb_pvmoduletypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_PVNegativePrices",
+      "logicalName": "vsb_pvnegativeprices",
+      "entitySetName": "vsb_pvnegativepriceses",
+      "primaryIdAttribute": "vsb_pvnegativepricesid"
+    },
+    {
+      "schemaName": "vsb_PVSeasonalityValues",
+      "logicalName": "vsb_pvseasonalityvalues",
+      "entitySetName": "vsb_pvseasonalityvalueses",
+      "primaryIdAttribute": "vsb_pvseasonalityvaluesid"
+    },
+    {
+      "schemaName": "vsb_RevenueAccount",
+      "logicalName": "vsb_revenueaccount",
+      "entitySetName": "vsb_revenueaccounts",
+      "primaryIdAttribute": "vsb_revenueaccountid"
+    },
+    {
+      "schemaName": "vsb_RevenueIndividualHedgeVolume",
+      "logicalName": "vsb_revenueindividualhedgevolume",
+      "entitySetName": "vsb_revenueindividualhedgevolumes",
+      "primaryIdAttribute": "vsb_revenueindividualhedgevolumeid"
+    },
+    {
+      "schemaName": "vsb_RevenueSubaccount",
+      "logicalName": "vsb_revenuesubaccount",
+      "entitySetName": "vsb_revenuesubaccounts",
+      "primaryIdAttribute": "vsb_revenuesubaccountid"
+    },
+    {
+      "schemaName": "vsb_ShareholderEntitiy",
+      "logicalName": "vsb_shareholderentitiy",
+      "entitySetName": "vsb_shareholderentitiies",
+      "primaryIdAttribute": "vsb_shareholderentitiyid"
+    },
+    {
+      "schemaName": "vsb_SPVDevCoMappingCapexDevex",
+      "logicalName": "vsb_spvdevcomappingcapexdevex",
+      "entitySetName": "vsb_spvdevcomappingcapexdevexes",
+      "primaryIdAttribute": "vsb_spvdevcomappingcapexdevexid"
+    },
+    {
+      "schemaName": "vsb_Storage",
+      "logicalName": "vsb_storage",
+      "entitySetName": "vsb_storages",
+      "primaryIdAttribute": "vsb_storageid"
+    },
+    {
+      "schemaName": "vsb_StorageTypeInProject",
+      "logicalName": "vsb_storagetypeinproject",
+      "entitySetName": "vsb_storagetypeinprojects",
+      "primaryIdAttribute": "vsb_storagetypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_Substation",
+      "logicalName": "vsb_substation",
+      "entitySetName": "vsb_substations",
+      "primaryIdAttribute": "vsb_substationid"
+    },
+    {
+      "schemaName": "vsb_SubstationTypeInProject",
+      "logicalName": "vsb_substationtypeinproject",
+      "entitySetName": "vsb_substationtypeinprojects",
+      "primaryIdAttribute": "vsb_substationtypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_Substructure",
+      "logicalName": "vsb_substructure",
+      "entitySetName": "vsb_substructures",
+      "primaryIdAttribute": "vsb_substructureid"
+    },
+    {
+      "schemaName": "vsb_SubstructureTypeInProject",
+      "logicalName": "vsb_substructuretypeinproject",
+      "entitySetName": "vsb_substructuretypeinprojects",
+      "primaryIdAttribute": "vsb_substructuretypeinprojectid"
+    },
+    {
+      "schemaName": "vsb_TarrifPriceStandardAssumption",
+      "logicalName": "vsb_tarrifpricestandardassumption",
+      "entitySetName": "vsb_tarrifpricestandardassumptions",
+      "primaryIdAttribute": "vsb_tarrifpricestandardassumptionid"
+    }
+  ]
+}

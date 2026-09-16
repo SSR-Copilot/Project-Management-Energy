@@ -1,0 +1,967 @@
+Set(
+    gblAppStarted,
+    false
+);
+Set(
+    gblInfoCenterLaunchUrl,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_VSBCloudInfoCenterUrl"
+    ).Value
+);
+Set(
+    gblProjectApprovalServiceGroupID,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_VSBcloudControllingApprovalGroup"
+    ).Value
+);
+Set(
+    gblTenantID,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_TenantID"
+    ).Value
+);
+Set(
+    gblEnvironmentID,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_EnvironmentID"
+    ).Value
+);
+Set(
+    gblProjectManagementAppID,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_ProjectManagementAppID"
+    ).Value
+);
+Set(
+    gblPMAppURL,
+    "https://apps.powerapps.com/play/e/" & gblEnvironmentID & "/a/" & gblProjectManagementAppID & "?tenantId=" & gblTenantID
+);
+Set(
+    gblLeftNavigationSelected,
+    First(LeftNavigationMenu)
+);
+Set(
+    gblAppTheme,
+    AppTheme
+);
+Set(
+    gblAppThemeJson,
+    JSON(
+        gblAppTheme,
+        JSONFormat.Compact
+    )
+);
+Set(
+    gblCurrentUser,
+    varCurrentUserProfile
+);
+Collect(
+    colProjectApprovals,
+    Blank()
+);
+Collect(
+    colProjectApprovalsExtended,
+    Blank()
+);
+Collect(
+    colProjectCountryApprovals,
+    Blank()
+);
+Collect(
+    colDistinctCurrentUserTeamsRoles,
+    Blank()
+);
+ClearCollect(
+    colCurrentUserTeamsDirect,
+    LookUp(
+        Users,
+        ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+    ).'Teams (teammembership_association)'
+);
+ClearCollect(
+    colCurrentUserSystemsDirect,
+    LookUp(
+        Users,
+        ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+    ).'Security Roles (systemuserroles_association)'
+);
+Trace(
+    $"User teams {Concat(
+        colCurrentUserTeamsDirect,
+        'Team Name' & " ; "
+    )}",
+    TraceSeverity.Information
+);
+ClearCollect(
+    colAllCurrentUserTeamsRoles,
+    Blank()
+);
+// This block added for Functionality to get editable countries
+IfError(
+    Trace(
+        $"Try get user individuelle roles",
+        TraceSeverity.Information
+    );
+    ClearCollect(
+        colCurrentUserRoles,
+        ForAll(
+            colCurrentUserSystemsDirect As UR,
+            {
+                BussinessUnit: UR.'Business Unit'.Name,
+                Name: UR.Name,
+                Country: LookUp(
+                    Countries_1,
+                    'Business Unit'.'Business Unit' = UR.'Business Unit'.'Business Unit'
+                ),
+                UniqueID: UR.Role
+            }
+        )
+    );
+    ClearCollect(
+        colCurrentUserTeamsRoles,
+        Blank()
+    );
+    Trace(
+        $"Try get user team security roles",
+        TraceSeverity.Information
+    );
+    ClearCollect(
+        colCurrentUserTeamsDirectTemp,
+        colCurrentUserTeamsDirect
+    );
+    ForAll(
+        colCurrentUserTeamsDirect,
+        Collect(
+            colAllCurrentUserTeamsRoles,
+            LookUp(
+                colCurrentUserTeamsDirect,
+                'Team Name' = First(colCurrentUserTeamsDirectTemp).'Team Name'
+            ).'Security Roles'
+        );
+        Remove(
+            colCurrentUserTeamsDirectTemp,
+            First(colCurrentUserTeamsDirectTemp)
+        );
+    );
+    ClearCollect(
+        colCurrentUserTeamsRoles,
+        ForAll(
+            colAllCurrentUserTeamsRoles As TR,
+            {
+                BussinessUnit: TR.'Business Unit'.Name,
+                Name: TR.Name,
+                Country: LookUp(
+                    Countries_1,
+                    'Business Unit'.'Business Unit' = TR.'Business Unit'.'Business Unit'
+                ),
+                UniqueID: TR.Role
+            }
+        )
+    );
+    ClearCollect(
+        colAllCurrentUserRoles,
+        Filter(
+            colCurrentUserRoles,
+            StartsWith(
+                Name,
+                "VSB"
+            )
+        ),
+        Filter(
+            colCurrentUserTeamsRoles,
+            StartsWith(
+                Name,
+                "VSB"
+            )
+        )
+    );
+    ClearCollect(
+        colDistinctCurrentUserTeamsRoles,
+        ForAll(
+            Distinct(
+                colAllCurrentUserRoles,
+                ThisRecord
+            ),
+            Value
+        )
+    );
+    Trace(
+        $"Success: User roles {JSON(
+            DropColumns(
+                colAllCurrentUserRoles,
+                Country
+            )
+        )}",
+        TraceSeverity.Information
+    );
+    ,
+    Trace(
+        $"Error: User cann't read 'Security Roles'. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}",
+        TraceSeverity.Critical
+    )
+);
+IfError(
+    ClearCollect(
+        colUserCountries,
+        ForAll(
+            Filter(
+                colDistinctCurrentUserTeamsRoles,
+                And(
+                    Not(IsBlank(Country)),
+                    Name in [
+                        "VSB - Project Manager Own Projects",
+                        "VSB - Project Data Own Country"
+                    ]
+                )
+            ),
+            {
+                id: Country.Country,
+                name: Country.Name
+            }
+        )
+    ),
+    Trace(
+        $"Error: User can't read available countries. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}",
+        TraceSeverity.Critical
+    )
+);
+Set(
+    gblCurrentUser,
+    {
+        Id: varCurrentUserProfile.Id,
+        DisplayName: varCurrentUserProfile.DisplayName,
+        Mail: varCurrentUserProfile.Mail,
+        CompanyName: LookUp(
+            'Microsoft Entra IDs',
+            'A unique identifer for Microsoft Entra ID' = varCurrentUserProfile.Id
+        ).'Company Name',
+        Language: Language(),
+        Lang: Lower(
+            First(
+                Split(
+                    Language(),
+                    "-"
+                )
+            ).Value
+        ),
+        IsControlling: false,
+        IsControllerOwnData: Not(
+            IsBlankOrError(
+                First(
+                    Filter(
+                        colDistinctCurrentUserTeamsRoles,
+                        Name = "VSB - Controller Own Data"
+                    )
+                )
+            )
+        ),
+        IsProjectDataAllCountries: Not(
+            IsBlankOrError(
+                First(
+                    Filter(
+                        colDistinctCurrentUserTeamsRoles,
+                        Name = "VSB - Project Data All Countries"
+                    )
+                )
+            )
+        ),
+        CanEditSelectedProject: false,
+        EditableCounties: colUserCountries,
+        EditableCountiesAsString: Concat(
+            colUserCountries,
+            name & " ; "
+        )
+    }
+);
+Trace(
+    $"User: is controller own data {gblCurrentUser.IsControllerOwnData}; is project data all countries {gblCurrentUser.IsProjectDataAllCountries}; editable countries {gblCurrentUser.EditableCountiesAsString}",
+    TraceSeverity.Information
+);
+IfError(
+    ClearCollect(
+        colProjectApprovals,
+        Office365Groups.ListGroupMembers(
+            gblProjectApprovalServiceGroupID,
+            {'$top': 100}
+        ).value
+    ),
+    Trace(
+        $"Error: User can't read 'ProjectApprovalServiceGroup'. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}",
+        TraceSeverity.Critical
+    )
+);
+// Sizes for classic controls
+Set(
+    gblAppSizes,
+    {
+        Padding: {Page: 0},
+        Form: {
+            X: 20,
+            Space: 20,
+            Label200Width: 150,
+            LabelBeforeHeight: 52,
+            LabelBeforeHeightErr: 42
+        },
+        Font: {
+            ExtraExtraSmall: 8,
+            ExtraSmall: 9,
+            Small: 10,
+            Medium: 11,
+            Large: 12,
+            ExtraLarge: 14,
+            ExtraExtraLarge: 16
+        },
+        LeftNavigation: {
+            ExpandedWidth: 200,
+            DecreasedWidth: 32
+        },
+        Position: {
+            X: 20,
+            Y: 2
+        },
+        RightPanel: {
+            MinWidth: 450,
+            Top: 20,
+            Left: 20,
+            Right: 20
+        }
+    }
+);
+Set(
+    gblLeftNavigationMenuIsExpanded,
+    true
+);
+Set(
+    gblAppConstants,
+    {
+        NotifyTimeOut: 500,
+        Form: {
+            New: "New",
+            Edit: "Edit",
+            Display: "Display"
+        }
+    }
+);
+// Colors below for classic controls
+Set(
+    gblAppStyles,
+    {
+        Error: ColorValue(gblAppTheme.palette.akzent5),
+        Success: ColorValue(gblAppTheme.palette.akzent3),
+        Warning: ColorValue("#EE940C"),
+        Screen: {
+            Fill: ColorValue(gblAppTheme.palette.Grayscale30),
+            LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)
+        },
+        Container: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Fill: Color.Transparent
+        },
+        Label: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.black),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.black),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: ColorValue(gblAppTheme.palette.black),
+            PressedFill: Color.Transparent,
+            Font: Font.'Open Sans'
+        },
+        ButtonTransparent: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.Grayscale00),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: Color.Transparent,
+            PressedFill: Color.Transparent,
+            RadiusBottomLeft: 2,
+            RadiusBottomRight: 2,
+            RadiusTopLeft: 2,
+            RadiusTopRight: 2,
+            Font: Font.'Open Sans'
+        },
+        Icon: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.themePrimary),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.themePrimary),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: ColorValue(gblAppTheme.palette.themePrimary),
+            PressedFill: Color.Transparent
+        },
+        Divider: {
+            BorderColor: Color.Transparent,
+            BorderStyle: BorderStyle.None,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.Grayscale20),
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),
+            PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)
+        },
+        Gallery: {
+            BorderColor: Color.Transparent,
+            BorderStyle: BorderStyle.None,
+            BorderThickness: 0,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),
+            TemplateFill: Color.Transparent
+        }
+    }
+);
+Set(
+    gblAppColors,
+    {
+        Screen: {
+            Fill: ColorValue(gblAppTheme.palette.Grayscale30),
+            LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)
+        },
+        BorderColor: ColorValue(gblAppTheme.palette.Grayscale30),
+        Transparent: Color.Transparent,
+        Error: ColorValue(gblAppTheme.palette.akzent5),
+        ErrorBg: ColorValue($"{gblAppTheme.palette.Error}20"),
+        Success: ColorValue(gblAppTheme.palette.akzent3),
+        SuccessLight: ColorValue(gblAppTheme.palette.akzent3),
+        SuccessBg: ColorValue($"{gblAppTheme.palette.Green}20"),
+        Warning: ColorValue(gblAppTheme.palette.Warning),
+        GeneratorChangedData: ColorValue(gblAppTheme.palette.themePrimary),
+        WarningBg: ColorValue($"{gblAppTheme.palette.Warning}20"),
+        ButtonDisabledBg: ColorValue("#bdbdbd"),
+        GallerySeparatorBg: ColorValue(gblAppTheme.palette.hoverButton),
+        ApprovalClusterStates: {
+            NotStarted: ColorValue($"{gblAppTheme.palette.Grayscale20}90"),
+            InProgress: ColorValue($"{gblAppTheme.palette.Success}60"),
+            Completed: ColorValue($"{gblAppTheme.palette.Success}"),
+            Abandoned: ColorValue($"{gblAppTheme.palette.Warning}20"),
+            Inactive: ColorValue($"{gblAppTheme.palette.Warning}20")
+        },
+        Icon: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.themePrimary),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.themePrimary),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: ColorValue(gblAppTheme.palette.themePrimary),
+            PressedFill: Color.Transparent
+        },
+        Label: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.black),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.black),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: ColorValue(gblAppTheme.palette.black),
+            PressedFill: Color.Transparent,
+            Font: Font.'Open Sans'
+        },
+        Gallery: {
+            Header: ColorValue("#fdffff"),
+            BorderColor: Color.Transparent,
+            BorderStyle: BorderStyle.None,
+            BorderThickness: 0,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),
+            TemplateFill: Color.Transparent
+        },
+        ButtonTransparent: {
+            BorderColor: Color.Transparent,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.Grayscale00),
+            DisabledBorderColor: Color.Transparent,
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            DisabledFill: Color.Transparent,
+            Fill: Color.Transparent,
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverBorderColor: Color.Transparent,
+            HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            HoverFill: Color.Transparent,
+            PressedBorderColor: Color.Transparent,
+            PressedColor: Color.Transparent,
+            PressedFill: Color.Transparent,
+            RadiusBottomLeft: 2,
+            RadiusBottomRight: 2,
+            RadiusTopLeft: 2,
+            RadiusTopRight: 2,
+            Font: Font.'Open Sans'
+        },
+        Divider: {
+            BorderColor: Color.Transparent,
+            BorderStyle: BorderStyle.None,
+            BorderThickness: 0,
+            Color: ColorValue(gblAppTheme.palette.Grayscale20),
+            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+            FocusedBorderColor: Color.Transparent,
+            FocusedBorderThickness: 0,
+            HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),
+            PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)
+        }
+    }
+);
+// Project data loading
+If(
+    Not(IsBlank(Param("projectId"))),
+    Set(
+        gblSelectedProject,
+        LookUp(
+            Projects,
+            Project = GUID(Param("projectId"))
+        )
+    ),
+    //Set(gblSelectedProject, Blank())
+    Set(
+        gblSelectedProject,
+        LookUp(
+            Projects,
+            Project = GUID("33b9cc79-5b4f-f111-bec6-000d3a3855c2")
+            //'Project ID' = "9999940"
+        )
+    )// for testing
+);
+Set(
+    gblProjectHeaderData,
+    {
+        ID: gblSelectedProject.Project,
+        Name: gblSelectedProject.'Project Name',
+        Technology: Text(gblSelectedProject.Technology),
+        Approval: Text(gblSelectedProject.'Approval States')
+    }
+);
+Set(
+    gblRecordSelectedProjectCountry,
+    LookUp(
+        Countries_1,
+        Country = gblSelectedProject.Country.Country
+    )
+);
+/*Set(
+    gblSelectedProjectYear,
+    Max(
+        Year(gblSelectedProject.'Project Start Date'),
+        Year(Now())
+    )
+);*/Set(
+    gblSelectedProjectYear,
+    Year(
+        If(
+            gblSelectedProject.'Start Cluster' <> 'Cluster States'.Greenfield,
+            If(
+                Year(gblSelectedProject.'Acquisition date') > Year(Today()),
+                gblSelectedProject.'Acquisition date',
+                Today()
+            ),
+            If(
+                Year(gblSelectedProject.'Project Start Date') > Year(Today()),
+                gblSelectedProject.'Project Start Date',
+                Today()
+            )
+        )
+    )
+);
+// this is changed for Capex Project Costs --
+Set(
+    gblSelectedProjectCODYear,
+    With(
+        {varProjectCODYear: Year(gblSelectedProject.'Operations start date (COD)')},
+        varProjectCODYear
+    )
+);
+// Get values for capex summary view
+ClearCollect(
+    colOpexAccounts,
+    Sort(
+        'Opex Accounts',
+        Order,
+        SortOrder.Ascending
+    )
+);
+ClearCollect(
+    colOpexSubaccounts,
+    AddColumns(
+        Sort(
+            'Opex Subaccounts',
+            Order,
+            SortOrder.Ascending
+        ),
+        IsFolded,
+        true
+    )
+);
+ClearCollect(
+    colLandLeaseSubaccounts,
+    Sort(
+        'Land Lease Subaccounts',
+        Order,
+        SortOrder.Ascending
+    )
+);
+Set(
+    gblAppVersion,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_AppVersion"
+    ).Value
+);
+Set(
+    gblEnvironmentName,
+    LookUp(
+        'Environment Variable Values',
+        'Environment Variable Definition'.'Schema Name' = "vsb_EnvironmentName"
+    ).Value
+);
+// This is Pasted for New Refactored View
+ClearCollect(
+    colCapexAccountCategoriesNew,
+    {
+        'CAPEX Account List': Blank(),
+        Name: "DEVEX/CAPEX Summary",
+        Order: 0
+    }
+);
+Collect(
+    colCapexAccountCategoriesNew,
+    SortByColumns(
+        Filter(
+            'CAPEX Account Lists',
+            And(
+                Not(IsBlank('Parent Account')),
+                'Parent Account'.Number = "00001"
+            )
+        ),
+        "vsb_order",
+        SortOrder.Ascending
+    )
+);
+ClearCollect(
+    colCapexAccountsNew,
+    Sort(
+        Filter(
+            'CAPEX Account Lists',
+            'Parent Account'.'CAPEX Account List' in Filter(
+                colCapexAccountCategoriesNew,
+                Not(IsBlank(ThisRecord.'CAPEX Account List'))
+            ).'CAPEX Account List',
+            Status = 'Status (CAPEX Account Lists)'.Active
+        ),
+        Order,
+        SortOrder.Ascending
+    )
+);
+ClearCollect(
+    colCapexSubaccountsNew,
+    Sort(
+        Filter(
+            'CAPEX Account Lists',
+            'Parent Account'.'CAPEX Account List' in colCapexAccountsNew.'CAPEX Account List',
+            Status = 'Status (CAPEX Account Lists)'.Active
+        ),
+        Order,
+        SortOrder.Ascending
+    )
+);
+ClearCollect(
+    colCapexProjectContracts,
+    Filter(
+        'CAPEX Project Contracts',
+        Project.Project = gblSelectedProject.Project
+    )
+);
+ClearCollect(
+    colCapexCosts,
+    Defaults('CAPEX Costs')
+);
+Collect(
+    colCapexCosts,
+    Ungroup(
+        ShowColumns(
+            AddColumns(
+                colCapexProjectContracts As Item,
+                Value,
+                ShowColumns(
+                    Filter(
+                        'CAPEX Costs',
+                        Contract.'CAPEX Project Contract' = Item.'CAPEX Project Contract'
+                    ),
+                    Year,
+                    Name,
+                    Month,
+                    Cost,
+                    Contract,
+                    'CAPEX Cost',
+                    'Cost Paid'
+                )
+            ),
+            Value
+        ),
+        Value
+    )
+);
+ClearCollect(
+    colContractDistributionTypes,
+    Choices('Distribution Type')
+);
+ClearCollect(
+    colContractDistributionScheme,
+    Choices('Distribution Scheme')
+);
+ClearCollect(
+    colCostPaidType,
+    LastN(
+        Choices('Cost paid type'),
+        2
+    )
+);
+// Optimized Version
+ClearCollect(
+    colCapexSummaryCategories,
+    Filter(
+        colCapexAccountCategoriesNew,
+        Not(IsBlank('CAPEX Account List'))
+    )
+);
+ClearCollect(
+    colDevexCapexSummaryView,
+    ForAll(
+        colCapexSummaryCategories As Item,
+        With(
+            {
+                lclSubAccounts: Filter(
+                    colCapexSubaccountsNew,
+                    'Parent Account'.'CAPEX Account List' in Filter(
+                        colCapexAccountsNew,
+                        'Parent Account'.'CAPEX Account List' = Item.'CAPEX Account List'
+                    ).'CAPEX Account List',
+                    Status = 'Status (CAPEX Account Lists)'.Active
+                )
+            },
+            With(
+                {
+                    lclContracts: Filter(
+                        colCapexProjectContracts,
+                        Account.'CAPEX Account List' in lclSubAccounts.'CAPEX Account List'
+                    )
+                },
+                {
+                    Id: Item.'CAPEX Account List',
+                    Name: Item.Name,
+                    Sum: Max(
+                        Sum(
+                            Filter(
+                                colCapexCosts,
+                                Contract.'CAPEX Project Contract' in lclContracts.'CAPEX Project Contract'
+                            ),
+                            Cost
+                        ),
+                        0
+                    ),
+                    //IsSubCategory: Not(IsBlank(AccountCategory.vsb_accountcategory)),
+                    ParentId: Item.'Parent Account'.'CAPEX Account List'
+                }
+            )
+        )
+    )
+);
+// Till here
+Concurrent(
+    Set(
+        gblTableApprovalStateColors,
+        Table(
+            {
+                State: "Draft",
+                Color: gblAppTheme.palette.akzent2
+            },
+            {
+                State: "Approving",
+                Color: gblAppTheme.palette.akzent4
+            },
+            {
+                State: "Approved",
+                Color: gblAppTheme.palette.akzent3
+            },
+            {
+                State: "Rejected",
+                Color: gblAppTheme.palette.akzent5
+            }
+        )
+    ),
+    Set(
+        gblAppResx,
+        {
+            NumericOneDecimals: "Numeric value with maximum of one decimals",
+            NumericTwoDecimals: "Numeric value with maximum of two decimals",
+            NumericThreeDecimals: "Numeric value with maximum of three decimals",
+            Numeric: "Numeric value without decimals",
+            InputBlank: "Input must not be blank"
+        }
+    ),
+    Set(
+        gblClusterDurations,
+        Table(
+            {
+                Order: 1,
+                Name: "Cluster 1",
+                StartMonth: Month(gblSelectedProject.'1-Feasibility studies'),
+                StartYear: Year(gblSelectedProject.'1-Feasibility studies'),
+                EndMonth: Month(gblSelectedProject.'2-Project development started'),
+                EndYear: Year(gblSelectedProject.'2-Project development started')
+            },
+            {
+                Order: 2,
+                Name: "Cluster 2",
+                StartMonth: Month(gblSelectedProject.'2-Project development started'),
+                StartYear: Year(gblSelectedProject.'2-Project development started'),
+                EndMonth: Month(gblSelectedProject.'3-Application submitted'),
+                EndYear: Year(gblSelectedProject.'3-Application submitted')
+            },
+            {
+                Order: 3,
+                Name: "Cluster 3",
+                StartMonth: Month(gblSelectedProject.'3-Application submitted'),
+                StartYear: Year(gblSelectedProject.'3-Application submitted'),
+                EndMonth: Month(gblSelectedProject.'4-Legally binding permits'),
+                EndYear: Year(gblSelectedProject.'4-Legally binding permits')
+            },
+            {
+                Order: 4,
+                Name: "Cluster 4",
+                StartMonth: Month(gblSelectedProject.'4-Legally binding permits'),
+                StartYear: Year(gblSelectedProject.'4-Legally binding permits'),
+                EndMonth: Month(gblSelectedProject.'5-Construction'),
+                EndYear: Year(gblSelectedProject.'5-Construction')
+            },
+            {
+                Order: 5,
+                Name: "Cluster 5",
+                StartMonth: Month(gblSelectedProject.'5-Construction'),
+                StartYear: Year(gblSelectedProject.'5-Construction'),
+                EndMonth: Month(gblSelectedProject.'Operations start date (COD)'),
+                EndYear: Year(gblSelectedProject.'Operations start date (COD)')
+            },
+            {
+                Order: 6,
+                Name: "Cluster 6",
+                StartMonth: Month(gblSelectedProject.'Operations start date (COD)'),
+                StartYear: Year(gblSelectedProject.'Operations start date (COD)'),
+                EndMonth: Month(gblSelectedProject.'End Date'),
+                EndYear: Year(gblSelectedProject.'End Date')
+            }
+        )
+    ),
+    If(
+        gblSelectedProject.Country.Name = "Italy",
+        Set(
+            gblAreaWithRegion,
+            With(
+                {
+                    _area: Trim(
+                        Coalesce(
+                            gblSelectedProject.'Area/State/Province'.Name,
+                            ""
+                        )
+                    )
+                },
+                Switch(
+                    _area,
+                    "Lazio",
+                    "Italy_Centre - South",
+                    "Lombardia",
+                    "Italy_North",
+                    "Emilia Romagna",
+                    "Italy_North",
+                    "Sicilia",
+                    "Italy_Sicily",
+                    "Valle d’Aosta",
+                    "Italy_North",
+                    "Veneto",
+                    "Italy_North",
+                    "Friuli Venezia Giulia",
+                    "Italy_North",
+                    "Puglia",
+                    "Italy_South",
+                    "Marche",
+                    "Italy_Centre - North",
+                    "Molise",
+                    "Italy_South",
+                    "Calabria",
+                    "Italy_Calabria",
+                    "Abruzzo",
+                    "Italy_Centre - South",
+                    "Piemonte",
+                    "Italy_North",
+                    "Sardegna",
+                    "Italy_Sardinia",
+                    "Toscana",
+                    "Italy_Centre - North",
+                    "Trentino Alto Adige",
+                    "Italy_North",
+                    "Campania",
+                    "Italy_Centre - South",
+                    "Liguria",
+                    "Italy_North",
+                    "Basilicata",
+                    "Italy_South",
+                    "Umbria",
+                    "Italy_Centre - South",
+                    Blank()
+                )
+            )
+        )
+    );
+    
+);
+Set(
+    gblAppStarted,
+    true
+);

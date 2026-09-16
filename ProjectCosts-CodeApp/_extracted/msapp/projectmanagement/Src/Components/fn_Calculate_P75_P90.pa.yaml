@@ -1,0 +1,98 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  fn_Calculate_P75_P90:
+    DefinitionType: CanvasComponent
+    CustomProperties:
+      calculateUncertainty:
+        PropertyKind: OutputFunction
+        DisplayName: calculateUncertainty
+        Description: A custom property
+        DataType: Text
+        Parameters:
+          - p50:
+              Description: A parameter
+              DataType: Text
+              Default: ="1000"
+          - p90:
+              Description: A parameter
+              IsOptional: true
+              DataType: Text
+              Default: ="500"
+          - p75:
+              Description: A parameter
+              IsOptional: true
+              DataType: Text
+              Default: ="600"
+      p75:
+        PropertyKind: OutputFunction
+        DisplayName: p75
+        Description: A custom property
+        DataType: Text
+        Parameters:
+          - p50:
+              Description: A parameter
+              DataType: Text
+              Default: ="0"
+          - Uncertainty:
+              Description: A parameter
+              DataType: Text
+              Default: ="0"
+      p90:
+        PropertyKind: OutputFunction
+        DisplayName: p90
+        Description: A custom property
+        DataType: Text
+        Parameters:
+          - p50:
+              Description: A parameter
+              DataType: Text
+              Default: ="0"
+          - Uncertainty:
+              Description: A parameter
+              DataType: Text
+              Default: ="0"
+    Properties:
+      calculateUncertainty: |-
+        =If(
+            Not(IsBlank(p75)),
+            Round(
+                (Value(p50) - Value(p75) / Value(p50)*Value(0.674490)),
+                1
+            ),
+            Not(IsBlank(p90)),
+            Round(
+                (Value(p50) - Value(p90) / Value(p50)*Value(1.281551)),
+                1
+            )
+        )
+      p75: |-
+        =If(
+            And(
+                IsNumeric(p50),
+                IsNumeric(Uncertainty)
+            ),
+            Round(
+                Value(p50) + (-0.674490 * (Value(p50) * Value(Uncertainty))),
+                0
+            ),
+            -1
+        )
+      p90: |-
+        =If(
+            And(
+                IsNumeric(p50),
+                IsNumeric(Uncertainty)
+            ),
+            Round(
+                Value(p50) + (-1.281551 * (Value(p50) * Value(Uncertainty))),
+                0
+            ),
+            -1
+        )

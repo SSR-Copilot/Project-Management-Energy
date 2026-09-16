@@ -1,0 +1,254 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps_1": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "title": "Check List GUID ",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your CheckList Guid",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "601b73c4-d85a-444c-9019-bf8c8714c2a0"
+          }
+        }
+      },
+      "actions": {
+        "Try_cancell_gate_cluster_instance": {
+          "type": "Scope",
+          "actions": {
+            "Update_a_row_aprovals_for_request_permission": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "msdyn_flow_approvals",
+                  "recordId": "@variables('ApprovalId')",
+                  "item/msdyn_flow_approval_stage": 192351000,
+                  "item/statuscode": 192350004,
+                  "item/msdyn_flow_approval_title": "@variables('CancelationTitle')",
+                  "item/msdyn_flow_approval_completedon": "@utcNow()",
+                  "item/msdyn_flow_approval_result": "Canceled",
+                  "item/statecode": 1
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "7f6c8103-f308-4b17-b044-c6eb0034e923"
+              }
+            },
+            "Update_a_row_project_state_tracking": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectchecklists",
+                  "recordId": "@outputs('Get_a_row_by_ID')?['body/vsb_projectchecklistid']",
+                  "item/vsb_approvalcheckliststate": 952850000,
+                  "item/vsb_approvalstepstatecode": 952850003,
+                  "item/vsb_flowapprovalid": "@null",
+                  "item/vsb_flowrunid": "@null",
+                  "item/vsb_taskstate": 952850000
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "7119e1e6-359a-42f2-9626-ce8a3e4dfcf0"
+              }
+            },
+            "Add_a_new_row": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectchecklisttrackingnotes",
+                  "item/vsb_name": "Approval request for Check List '@{outputs('Get_a_row_by_ID')?['body/vsb_name']}' Completion was canceled",
+                  "item/vsb_comment": "Approval request for Check List '@{outputs('Get_a_row_by_ID')?['body/vsb_name']}' Completion was canceled",
+                  "item/vsb_notetype": 952850001,
+                  "item/vsb_ProjectChecklist@odata.bind": "@outputs('Get_a_row_by_ID')?['body/@odata.id']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "CreateRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              }
+            },
+            "Respond_to_a_Power_App_or_flow": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "title": "Success",
+                      "type": "boolean",
+                      "x-ms-content-hint": "BOOLEAN",
+                      "x-ms-dynamically-added": true
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "success": "@true"
+                }
+              },
+              "runAfter": {
+                "Update_a_row_project_state_tracking": [
+                  "Succeeded"
+                ],
+                "Update_a_row_aprovals_for_request_permission": [
+                  "Succeeded"
+                ],
+                "Add_a_new_row": [
+                  "Succeeded",
+                  "TimedOut",
+                  "Skipped",
+                  "Failed"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_CancelationTitle": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "cff3ebbb-976a-4051-ba65-3aac9be91699"
+          }
+        },
+        "Initialize_ApprovalId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ApprovalId",
+                "type": "string",
+                "value": "@outputs('Get_a_row_by_ID')?['body/vsb_flowapprovalid']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Get_a_row_by_ID": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1538e4be-96ae-4669-8078-451feb042e14"
+          }
+        },
+        "Initialize_CancelationTitle": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "CancelationTitle",
+                "type": "string",
+                "value": "Request canceled for Check List '@{outputs('Get_a_row_by_ID')?['body/vsb_name']}' approval"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ApprovalId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "4e39842c-cc0a-4e42-b62b-a506bb83ea60"
+          }
+        },
+        "Get_a_row_by_ID": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_projectchecklists",
+              "recordId": "@triggerBody()?['text']"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "GetItem",
+              "connectionName": "shared_commondataserviceforapps_1"
+            }
+          },
+          "runAfter": {}
+        },
+        "Respond_to_a_Power_App_or_flow_1": {
+          "type": "Response",
+          "kind": "PowerApp",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "title": "Success",
+                  "type": "boolean",
+                  "x-ms-content-hint": "BOOLEAN",
+                  "x-ms-dynamically-added": true
+                }
+              },
+              "additionalProperties": {}
+            },
+            "statusCode": 200,
+            "body": {
+              "success": "@false"
+            }
+          },
+          "runAfter": {
+            "Try_cancell_gate_cluster_instance": [
+              "TimedOut",
+              "Skipped",
+              "Failed"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

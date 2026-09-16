@@ -1,0 +1,367 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  fn_Numeric_With_Separtors:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      InRange:
+        PropertyKind: OutputFunction
+        DisplayName: InRange
+        Description: A custom property
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A candidate parameter as input number in string format
+              DataType: Text
+              Default: ="125"
+          - min:
+              Description: A min parameter range value
+              DataType: Number
+              Default: =100
+          - max:
+              Description: A min parameter range value
+              DataType: Number
+              Default: =100
+      InRangeAbs:
+        PropertyKind: OutputFunction
+        DisplayName: InRangeAbs
+        Description: Validates numeric candidate within min..max by absolute value (supports negatives).
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: Candidate number as text (supports '-' sign)
+              DataType: Text
+              Default: ="-1.5"
+          - min:
+              Description: Minimum magnitude
+              DataType: Number
+              Default: =-5
+          - max:
+              Description: Maximum magnitude
+              DataType: Number
+              Default: =10
+      InRangeCulture:
+        PropertyKind: OutputFunction
+        DisplayName: InRangeCulture
+        Description: A custom property
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A candidate parameter as input number in string format
+              DataType: Text
+              Default: =0
+          - min:
+              Description: A min parameter range value
+              DataType: Number
+              Default: =100
+          - max:
+              Description: A max parameter range value
+              DataType: Number
+              Default: =100
+          - culture:
+              Description: A culture name parameter for candidate
+              DataType: Text
+              Default: ="en-US"
+      IsInteger:
+        PropertyKind: OutputFunction
+        DisplayName: IsInteger
+        Description: A custom property check if candidate string is integer.
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A candidate parameter as string
+              DataType: Text
+              Default: ="125"
+      IsOneDecimal:
+        PropertyKind: OutputFunction
+        DisplayName: IsOneDecimal
+        Description: This current method checks whether the entered "candidate string" can be converted to deciml with  one decimal place.
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A parameter as candiadte string
+              DataType: Text
+              Default: ="Text"
+      IsSixDecimal:
+        PropertyKind: OutputFunction
+        DisplayName: IsSixDecimal
+        Description: A custom property
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A parameter
+              DataType: Text
+              Default: ="Text"
+      IsThreeDecimal:
+        PropertyKind: OutputFunction
+        DisplayName: IsThreeDecimal
+        Description: This current method checks whether the entered "candidate string" can be converted to decimal with tree points
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A parameter as candidate string
+              DataType: Text
+              Default: ="Text"
+      IsTwoDecimal:
+        PropertyKind: OutputFunction
+        DisplayName: IsTwoDecimal
+        Description: This current method checks whether the entered "candidate string" can be converted to deciml with  one decimal place.
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A parameter as candiadte string
+              DataType: Text
+              Default: ="Text"
+      toNumber:
+        PropertyKind: OutputFunction
+        DisplayName: toNumber
+        Description: A custom property
+        DataType: Number
+        Parameters:
+          - candidate:
+              Description: A parameter
+              DataType: Text
+              Default: ="Text"
+    Properties:
+      Height: =0
+      InRange: |-
+        =With(
+            {
+                _txt: Trim(candidate),
+                _isEnglish: Lower(First(Split(Language(), "-")).Value) = "en"
+            },
+            If(
+                IsBlank(_txt),
+                false,
+                With(
+                    {
+                        _isValidNumber: If(
+                            _isEnglish,
+                            IsMatch(
+                                _txt,
+                                "^[+-]?\d+(,\d+)*(\.\d+)?$",
+                                MatchOptions.Complete
+                            ),
+                            IsMatch(
+                                _txt,
+                                "^[+-]?\d+(\.\d+)*(,\d+)?$",
+                                MatchOptions.Complete
+                            )
+                        ),
+                        _normalizedNumberText: If(
+                            _isEnglish,
+                            Substitute(_txt, ",", ""),
+                            Substitute(
+                                Substitute(_txt, ".", ""),
+                                ",",
+                                "."
+                            )
+                        )
+                    },
+                    IfError(
+                        And(
+                            _isValidNumber,
+                            Value(_normalizedNumberText, "en-US") >= min,
+                            Value(_normalizedNumberText, "en-US") <= max
+                        ),
+                        false
+                    )
+                )
+            )
+        )
+      InRangeAbs: |+
+        =IfError(
+            With({ v: Value(candidate) },
+                And(
+                    v >= min,
+                    v <= max
+                )
+            ),
+            false
+        )
+      InRangeCulture: |-
+        =IfError(
+            And(
+                Value(
+                    candidate,
+                    culture
+                ) >= min,
+                Value(
+                    candidate,
+                    culture
+                ) <= max
+            ),
+            false
+        )
+      IsInteger: |-
+        =/*With(
+            {
+                _txt: Trim(candidate),
+                _isEnglish: Lower(First(Split(Language(), "-")).Value) = "en"
+            },
+            If(
+                _isEnglish,
+                IsMatch(
+                    _txt,
+                    "[0-9]+([,][0-9]+)*([.]0+)?",
+                    MatchOptions.Complete
+                ),
+                IsMatch(
+                    _txt,
+                    "[0-9]+([.][0-9]+)*(,0+)?",
+                    MatchOptions.Complete
+                )
+            )
+        )*/
+        With(
+            {
+                _txt: Trim(candidate),
+                _isEnglish: Lower(First(Split(Language(), "-")).Value) = "en"
+            },
+            If(
+                IsBlank(_txt),
+                false,
+                If(
+                    _isEnglish,
+                    IsMatch(
+                        _txt,
+                        "^[+-]?\d+(,\d+)*$",
+                        MatchOptions.Complete
+                    ),
+                    IsMatch(
+                        _txt,
+                        "^[+-]?\d+(\.\d+)*$",
+                        MatchOptions.Complete
+                    )
+                )
+            )
+        )
+      IsOneDecimal: |-
+        =With(
+            {
+                varLang: Lower(
+                    First(
+                        Split(
+                            Language(),
+                            "-"
+                        )
+                    ).Value
+                )
+            },
+            Switch(
+                varLang,
+                "en",
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\.\d{0,1})?$"
+                ),
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\,\d{0,1})?$"
+                )
+            )
+        )
+      IsSixDecimal: |-
+        =With(
+            {
+                varLang: Lower(
+                    First(
+                        Split(
+                            Language(),
+                            "-"
+                        )
+                    ).Value
+                )
+            },
+            Switch(
+                varLang,
+                "en",
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\.\d{0,6})?$"
+                ),
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\,\d{0,6})?$"
+                )
+            )
+        )
+      IsThreeDecimal: |-
+        =With(
+            {
+                _txt: Trim(candidate),
+                _isEnglish: Lower(First(Split(Language(), "-")).Value) = "en"
+            },
+            If(
+                IsBlank(_txt),
+                false,
+                If(
+                    _isEnglish,
+                    IsMatch(
+                        _txt,
+                        "[0-9]+([,][0-9]+)*([.][0-9]{1,3})?",
+                        MatchOptions.Complete
+                    ),
+                    IsMatch(
+                        _txt,
+                        "[0-9]+([.][0-9]+)*(,[0-9]{1,3})?",
+                        MatchOptions.Complete
+                    )
+                )
+            )
+        )
+      IsTwoDecimal: |-
+        =With(
+            {
+                varLang: Lower(
+                    First(
+                        Split(
+                            Language(),
+                            "-"
+                        )
+                    ).Value
+                )
+            },
+            Switch(
+                varLang,
+                "en",
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\.\d{0,2})?$"
+                ),
+                IsMatch(
+                    candidate,
+                    "^[+-]?\d+(?:\,\d{0,2})?$"
+                )
+            )
+        )
+      Width: =0
+      toNumber: |-
+        =With(
+            {
+                _txt: Trim(candidate),
+                _isEnglish: Lower(First(Split(Language(), "-")).Value) = "en"
+            },
+            IfError(
+                Value(
+                    If(
+                        _isEnglish,
+                        Substitute(_txt, ",", ""),
+                        Substitute(
+                            Substitute(_txt, ".", ""),
+                            ",",
+                            "."
+                        )
+                    ),
+                    "en-US"
+                ),
+                Blank()
+            )
+        )

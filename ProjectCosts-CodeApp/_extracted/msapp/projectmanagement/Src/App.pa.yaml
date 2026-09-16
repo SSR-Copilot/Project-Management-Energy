@@ -1,0 +1,1637 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+App:
+  Properties:
+    Formulas: |-
+      =varThemePalette = {
+          palette: {
+              themePrimary: "#006eb9",
+              themeLighterAlt: "#f2f8fc",
+              themeLighter: "#cde4f4",
+              themeLight: "#a4ceea",
+              themeTertiary: "#55a2d6",
+              themeSecondary: "#177ec2",
+              themeDarkAlt: "#0065a8",
+              themeDark: "#00558d",
+              themeDarker: "#003f68",
+              neutralLighterAlt: "#faf9f8",
+              neutralLighter: "#f3f2f1",
+              neutralLight: "#edebe9",
+              neutralQuaternaryAlt: "#e1dfdd",
+              neutralQuaternary: "#d0d0d0",
+              neutralTertiaryAlt: "#c8c6c4",
+              neutralTertiary: "#595959",
+              neutralSecondary: "#373737",
+              neutralPrimaryAlt: "#2f2f2f",
+              neutralPrimary: "#000000",
+              neutralDark: "#151515",
+              black: "#0b0b0b",
+              white: "#ffffff",
+              akzent1: "#469bd7",
+              akzent2: "#41aab4",
+              akzent3: "#82a51e",
+              akzent4: "#f5911e",
+              akzent5: "#d20532",
+              akzent6: "#af2887",
+              hoverButton: "#CCE2F1",
+              Grayscale00: "#0D0D0D",
+              Grayscale10: "#6C6C6C",
+              Grayscale20: "#E3E3E3",
+              Grayscale30: "#F1F1F1",
+              Grayscale40: "#FFFFFF",
+              Grayscale50: "#FFFFFF",
+              Error: "#B22727",
+              Success: "#3C9856",
+              SuccessLight: "#E9F3EC",
+              Warning: "#EE940C",
+              Green: "#82a51e",
+              GreenDark: "#75941c",
+              GreenLight: "#a0cb24",
+              BlueLight: "#cce2f1"
+          }
+      };
+      varCommandBarThemePalette = {
+          palette: {
+              themePrimary: "#0078D4",
+              themeLighterAlt: "#f3f9fd",
+              themeLighter: "#d0e7f8",
+              themeLight: "#a9d3f2",
+              themeTertiary: "#5ca9e5",
+              themeSecondary: "#1984d1",
+              themeDarkAlt: "#006cbe",
+              themeDark: "#005b9f",
+              themeDarker: "#004274",
+              neutralLighterAlt: "#fafafa",
+              neutralLighter: "#f5f5f5",
+              neutralLight: "#eeeeee",
+              neutralQuaternaryAlt: "#e1e1e1",
+              neutralQuaternary: "#d2d2d2",
+              neutralTertiaryAlt: "#8dbfe8",
+              neutralTertiary: "#5ca9e5",
+              // Light blue text
+              neutralSecondary: "#1984d1",
+              // Medium blue text
+              neutralPrimaryAlt: "#006cbe",
+              neutralPrimary: "#0078D4",
+              // MAIN TEXT COLOR (blue)
+              neutralDark: "#005b9f",
+              black: "#004274",
+              white: "#ffffff",
+              akzent1: "#0078D4",
+              akzent2: "#41aab4",
+              akzent3: "#82a51e",
+              akzent4: "#f5911e",
+              akzent5: "#d20532",
+              akzent6: "#af2887",
+              hoverButton: "#E5F2FB",
+              Grayscale00: "#0D0D0D",
+              Grayscale10: "#6C6C6C",
+              Grayscale20: "#E3E3E3",
+              Grayscale30: "#F1F1F1",
+              Grayscale40: "#FAFAFA",
+              Grayscale50: "#FFFFFF",
+              Error: "#B22727",
+              Success: "#3C9856",
+              SuccessLight: "#E9F3EC",
+              Warning: "#EE940C",
+              Green: "#82a51e",
+              GreenDark: "#75941c",
+              GreenLight: "#a0cb24",
+              BlueLight: "#E5F2FB"
+          }
+      };
+      varCurrentUserProfile = RenameColumns(
+          LookUp(
+              Users,
+              ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+          ),
+          'Azure AD Object ID',
+          Id,
+          'Full Name',
+          DisplayName,
+          'Primary Email',
+          Mail,
+          'Job Title',
+          CompanyName
+      );
+      varCurrentUserPPickerRecord = RenameColumns(
+          AddColumns(
+              LookUp(
+                  'Microsoft Entra IDs',
+                  ThisRecord.Id = User().EntraObjectId
+              ),
+              PersonaImgUrl,
+              ""
+          ),
+          Id,
+          PersonaKey,
+          'Display Name',
+          PersonaName,
+          Mail,
+          PersonaRole
+      );
+      /*AddColumns(
+          LookUp(
+              Users,
+              ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+          ),
+          PersonaImgUrl,
+          "",
+          PersonaKey,
+          'Azure AD Object ID',
+          PersonaName,
+          'Full Name',
+          PersonaRole,
+          'Primary Email'
+      )*/
+      varCurrentUserRoles = (LookUp(
+          Users,
+          ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+      ).'Security Roles (systemuserroles_association)').Name;
+      LeftNavigationMenu = Table(
+          {
+              ItemKey: "GeneralDataCommonKey",
+              ItemDisplayName: "General",
+              ItemIconName: "PageEdit",
+              TargetScreen: 'Project General Data Screen',
+              ItemVisible: true,
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  IsBlank(gblRecordSelectedProject),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "GeneralDataMilestonesKey",
+              ItemDisplayName: "Milestones",
+              ItemIconName: "Flag",
+              TargetScreen: 'Project General Milestones Screen',
+              ItemVisible: true,
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  IsBlank(gblRecordSelectedProject.'Project ID'),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "GeneratorKey",
+              ItemDisplayName: "Generator",
+              ItemIconName: "TriggerApproval",
+              TargetScreen: 'Project Generators Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  IsBlank(gblRecordSelectedProject.'Project Start Date'),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "ProductionKey",
+              ItemDisplayName: "Production",
+              ItemIconName: "ProductVariant",
+              TargetScreen: 'Project Production Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  Or(
+                      gblRecordSelectedProject.'Total Capacity' = 0,
+                      IsBlank(gblRecordSelectedProject.'Total Capacity')
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "GeneralDataCheckListKey",
+              ItemDisplayName: "Cluster Check List",
+              ItemIconName: "CheckList",
+              TargetScreen: 'Project General CheckList Screen',
+              ItemVisible: true,
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  Or(
+                      gblRecordSelectedProject.'Net Yield p50' = 0,
+                      IsBlank(gblRecordSelectedProject.'Net Yield p50')
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "GeneralDataProjectTeamKey",
+              ItemDisplayName: "Project Team",
+              ItemIconName: "Teamwork",
+              TargetScreen: 'Project General Team Screen',
+              ItemVisible: true,
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  Or(
+                      IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                      gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "PlanningKey",
+              ItemDisplayName: "Planning",
+              ItemIconName: "PlanView",
+              TargetScreen: 'Project Planning Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  Or(
+                      IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                      gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "GridOperatorKey",
+              ItemDisplayName: "Grid Operator",
+              ItemIconName: "FollowUser",
+              TargetScreen: 'Grid Operator Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                   Or(
+                      IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                      gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "RevenueKey",
+              ItemDisplayName: "Revenue",
+              ItemIconName: "Money",
+              TargetScreen: 'Project Revenues Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                  Or(
+                      IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                      gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )
+          },
+          {
+              ItemKey: "FinanceKey",
+              ItemDisplayName: "Financing",
+              ItemIconName: "Financial",
+              TargetScreen: 'Project Finance Screen',
+              ItemEnabled: true,
+              ItemIconColor: If(
+                      Or(
+                      IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                      gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                  ),
+                  "#8FBCE4",
+                  "#006EB9"
+              )/*,
+              ItemVisible: 
+               gblEnvironmentName in [
+                  "Dev",
+                  "Nightly",
+                  "QA"
+              ]*/
+
+          }
+      );
+      LeftAdminNavigationMenu = Table(
+          {
+              ItemKey: "GatesKey",
+              ItemDisplayName: "Project Gate",
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "GatesSettingKey",
+              ItemDisplayName: "Check List Settings",
+              ItemIconName: "CheckList",
+              ItemParentKey: "GatesKey",
+              TargetScreen: 'Admin Project Default Checklists Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "GatesApprovalsKey",
+              ItemDisplayName: "Project Gates",
+              ItemIconName: "ReminderGroup",
+              ItemParentKey: "GatesKey",
+              TargetScreen: 'Admin Project Gates Approvals Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          /*
+          {
+              ItemKey: "GatesApprovalsKey",
+              ItemDisplayName: "Approval Settings",
+              ItemIconName: "ReminderGroup",
+              ItemParentKey: "GatesApprovalsKey",
+              TargetScreen: 'Admin Project Gates Approvals Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "GatesApprovalsKey",
+              ItemDisplayName: "Approval Settings",
+              ItemIconName: "ReminderGroup",
+              ItemParentKey: "GatesApprovalsKey",
+              TargetScreen: 'Admin Project Gates Approvals Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          */
+          {
+              ItemKey: "CAPEX AccountsKey",
+              ItemDisplayName: "CAPEX Accounts",
+              ItemIconName: "AccountManagement",
+              ItemParentKey: "GatesKey",
+              TargetScreen: 'Admin CAPEX Accounts',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "StandardAssumptionsKey",
+              ItemDisplayName: "Standard Assumptions",
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "MilestonesSettingsKey",
+              ItemDisplayName: "Milestones",
+              ItemParentKey: "StandardAssumptionsKey",
+              ItemIconName: "DateTime",
+              ItemEnabled: true,
+              TargetScreen: 'Admin Milestones Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "CostSettingKey",
+              ItemDisplayName: "Costs",
+              ItemParentKey: "StandardAssumptionsKey",
+              ItemIconName: "AllCurrency",
+              ItemEnabled: true,
+              TargetScreen: 'Admin Cost Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          },
+          {
+              ItemKey: "ContractSettingKey",
+              ItemDisplayName: "Contracts",
+              ItemParentKey: "StandardAssumptionsKey",
+              ItemIconName: "TextDocumentShared",
+              ItemEnabled: true,
+              TargetScreen: 'Admin Contract Screen',
+              ItemVisible: Or(
+                  gblCurrentUser.IsApplicationAdministrator,
+                  gblCurrentUser.IsControllerOwnData
+              )
+          }
+      );
+      varUserCanEditCost = [
+          "alexander.pilevski@vsb.energy",
+          "andreas.giesa@vsb.energy",
+          "andreas.laeubli@vsb.energy",
+          "ayushi.gupta@vsb.energy",
+          "benjamin.goepfert@vsb.energy",
+          "christoph.sperling@vsb.energy",
+          "dominik.simon@vsb.energy",
+          "ext-chhitiz.buchasia@vsb.energy",
+          "ext-martin.couturier@vsb.energy",
+          "ext-matthias.vierkoetter@vsb.energy",
+          "lucas.georg@vsb.energy",
+          "markus.hartmann@vsb.energy",
+          "Marsel.Strokov@vsb.energy",
+          "miriam.hunger@vsb.energy",
+          "philip.wagner@vsb.energy",
+          "rounak.mathur@vsb.energy",
+          "shakti.singh@vsb.energy",
+          "thomas.lorenz@vsb.energy"
+      ];
+      colYearsForDuration = ForAll(
+          Sequence(100),
+          {
+              Name: ThisRecord.Value - 1 & If(
+                  ThisRecord.Value - 1 = 1 || ThisRecord.Value - 1 = 0,
+                  " year",
+                  " years"
+              ),
+              Value: ThisRecord.Value - 1
+          }
+      );
+      colMonthsForDuration = ForAll(
+          Sequence(12),
+          {
+              Name: ThisRecord.Value - 1 & If(
+                  ThisRecord.Value - 1 = 1 || ThisRecord.Value - 1 = 0,
+                  " month",
+                  " months"
+              ),
+              Value: ThisRecord.Value - 1
+          }
+      );
+      colFrequencyInMonths = Table(
+          {
+              Name: "1 Month",
+              Value: 1
+          },
+          {
+              Name: "2 Months",
+              Value: 2
+          },
+          {
+              Name: "3 Months",
+              Value: 3
+          },
+          {
+              Name: "6 Months",
+              Value: 6
+          },
+          {
+              Name: "12 Months",
+              Value: 12
+          }
+      );
+      varCommentIcon = "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='#006eb9' class='bi bi-chat-left-text' viewBox='0 0 16 16'>
+        <path d='M14 1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4.414A2 2 0 0 0 3 11.586l-2 2V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z'/>
+        <path d='M3 3.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5M3 6a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 6m0 2.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5'/>
+      </svg>";
+      EmptyGUID = GUID("00000000-0000-0000-0000-000000000000");
+
+
+
+      // For Matching Command bar with color coding 
+      gblCommandBarSurfaceThemeJson = JSON(
+          {
+              palette: Patch(
+                  varThemePalette.palette,
+                  {
+                      white:              "#00000000",   // bar surface  -> transparent
+                      neutralLighterAlt:  "#00000000",   // standout bg  -> transparent
+                      neutralLighter:     "#0000000F",   // hover  (~6% dark overlay)
+                      neutralLight:       "#0000001F",   // pressed (~12% dark overlay)
+                      neutralQuaternaryAlt: "#0000001F"  // selected
+                  }
+              )
+          },
+          JSONFormat.IndentFour
+      );
+    OnError: |-
+      =If(
+          StartsWith(
+              FirstError.Message,
+              "JSON parsing error"
+          ),
+          Blank(),
+          Set(
+              gblReportError,
+              {
+                  User: User().Email,
+                  ErrorScreen: App.ActiveScreen.Name,
+                  ErrorSource: FirstError.Source,
+                  ErrorMessage: FirstError.Message,
+                  Timestamp: Now()
+              }
+          )
+      );
+      /*
+      Notify(
+              "An error has occurred! If you encounter the issue, please report them via Help --> Report problem. Technical details will be automatically included. Your input helps us improve. Thank you for your cooperation.",
+              NotificationType.Error
+      )
+      */
+    OnStart: |
+      =Set(
+          gblAppStarted,
+          false
+      );
+      Concurrent(
+          If(
+              IsBlank(Host.Version) || IsBlank(
+                  Find(
+                      "PowerApps-Studio",
+                      Host.Version
+                  )
+              ),
+              Set(
+                  gblProduction,
+                  true
+              ),
+              Set(
+                  gblProduction,
+                  false
+              )
+          ),
+          Set(
+              gblEnvVarsCollection,
+              AddColumns(
+                  Filter(
+                      'Environment Variable Values',
+                      'Environment Variable Definition'.'Schema Name' in [
+                          "vsb_ProjectManagementAppID",
+                          "vsb_AppVersion",
+                          "vsb_EnvironmentName",
+                          "vsb_TenantID",
+                          "vsb_EnvironmentID",
+                          "vsb_ProjectCostsAppID",
+                          "vsb_PowerBIDashboardLink",
+                          "vsb_PrimarilyApprovalGroupID",
+                          "vsb_PowerBIGroupID",
+                          "vsb_ProjectOverviewPowerBIReportID",
+                          "vsb_PortfolioOverviewPowerBIReportID",
+                          "vsb_PowerBITenantID",
+                          "vsb_PowerBIReportSection",
+                          "vsb_VSBCloudInfoCenterUrl","vsb_AnalyticsAppID","vsb_AnalyticsAppUsers"
+                      ]
+                  ),
+                  SchemaName,
+                  'Environment Variable Definition'.'Schema Name'
+              )
+          ),
+          Set(
+              gblCurrentUserData,
+              LookUp(
+                  Users,
+                  ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+              )
+          ),
+          ClearCollect(
+              colCurrentUserTeamsDirect,
+              LookUp(
+                  Users,
+                  ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+              ).'Teams (teammembership_association)'
+          ),
+          ClearCollect(
+              colCurrentUserSystemsDirect,
+              LookUp(
+                  Users,
+                  ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+              ).'Security Roles (systemuserroles_association)'
+          ),
+          ClearCollect(
+              colRevenueSubaccounts,
+              Sort(
+                  'Revenue Subaccounts',
+                  Order,
+                  SortOrder.Ascending
+              )
+          ),
+          ClearCollect(
+              colCustomChoiceValues,
+              ShowColumns(
+                  Sort(
+                      'Custom Choice Values',
+                      Order,
+                      SortOrder.Ascending
+                  ),
+                  Value,
+                  Country,
+                  'Field Name',
+                  'Custom Choice Value',
+                  Order
+              )
+          )
+      );
+      With(
+          {envVars: gblEnvVarsCollection},
+          Concurrent(
+              Set(
+                  gblProjectManagmentAppID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_ProjectManagementAppID"
+                  ).Value
+              ),
+              Set(
+                  gblAppVersion,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_AppVersion"
+                  ).Value
+              ),
+              Set(
+                  gblEnvironmentName,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_EnvironmentName"
+                  ).Value
+              ),
+              Set(
+                  gblTenantID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_TenantID"
+                  ).Value
+              ),
+              Set(
+                  gblEnvironmentID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_EnvironmentID"
+                  ).Value
+              ),
+              Set(
+                  gblProjectManagementAppID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_ProjectManagementAppID"
+                  ).Value
+              ),
+              Set(
+                  gblProjectCostsAppID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_ProjectCostsAppID"
+                  ).Value
+              ),
+              Set(
+                  gblPowerBIDashboardLink,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PowerBIDashboardLink"
+                  ).Value
+              ),
+              Set(
+                  gblPrimarilyApprovalGroupID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PrimarilyApprovalGroupID"
+                  ).Value
+              ),
+              Set(
+                  gblPowerBIGroupID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PowerBIGroupID"
+                  ).Value
+              ),
+              Set(
+                  gblProjectOverviewPowerBIReportID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_ProjectOverviewPowerBIReportID"
+                  ).Value
+              ),
+              Set(
+                  gblPortfolioOverviewPowerBIReportID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PortfolioOverviewPowerBIReportID"
+                  ).Value
+              ),
+              Set(
+                  gblPowerBITenantID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PowerBITenantID"
+                  ).Value
+              ),
+              Set(
+                  gblPowerBIReportSection,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_PowerBIReportSection"
+                  ).Value
+              ),
+              Set(
+                  gblInfoCenterLaunchUrl,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_VSBCloudInfoCenterUrl"
+                  ).Value
+              ),
+              Set(
+                  gblAnalyticsAppID,
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_AnalyticsAppID"
+                  ).Value
+              )
+              ,
+              ClearCollect(
+                  colAnalyticsAppUsers,
+                  Split(
+                  LookUp(
+                      envVars,
+                      SchemaName = "vsb_AnalyticsAppUsers"
+                  ).Value,";")
+              )
+          )
+      );
+      Concurrent(
+          Set(
+              gblReportError,
+              Blank()
+          ),
+          Set(
+              gblRecordSelectedProjectCountry,
+              Blank()
+          ),
+          Set(
+              gblRecordProjectPlanning,
+              Blank()
+          ),
+          Set(
+              gblTextParamProjectId,
+              Param("projectid")
+          ),
+          Set(
+              gblCurrentUser,
+              varCurrentUserProfile
+          ),
+          Set(
+              gblFilteredProjectManager,
+              varCurrentUserPPickerRecord
+          );
+          Set(
+              gblFilteredProjectManager,
+              Blank()
+          ),
+          Set(
+              gblPMAppURL,
+              "https://apps.powerapps.com/play/e/" & gblEnvironmentID & "/a/" & gblProjectManagementAppID & "?tenantId=" & gblTenantID
+          ),
+          Set(
+              gblCostAppLaunchUrl,
+              "https://apps.powerapps.com/play/e/" & gblEnvironmentID & "/a/" & gblProjectCostsAppID & "?tenantId=" & gblTenantID
+          ),Set(
+              gblAnalyticsAppLaunchUrl,
+              "https://apps.powerapps.com/play/e/" & gblEnvironmentID & "/a/" & gblAnalyticsAppID & "?tenantId=" & gblTenantID
+          ),
+
+          Set(
+              gblDefaultProjectManager,
+              varCurrentUserPPickerRecord
+          ),
+          Set(
+              gblTextControllingSecurityRoleName,
+              "VSB - Functional Approval Confirmation"
+          ),
+          /*ClearCollect(
+              colTemp_ProjectBuffer,
+              ShowColumns(
+                  AddColumns(
+                      Filter(
+                          Projects,
+                          1 = 1
+                      ),
+                      ForceLoad,
+                      Concatenate(
+                          'Project Manager'.'Display Name',
+                          Country.Name,
+                          'Cluster State'.Name,
+                          Text(Technology)
+                      )
+                  ),
+                  Project,
+                  ForceLoad,
+                  createdon
+              )
+          ),*/
+          ClearCollect(
+              colFilteredProjects,
+              //Projects
+              Blank()
+          ),
+          ClearCollect(
+              colProjectManagersPreSelected,
+              varCurrentUserPPickerRecord
+          );
+          Clear(colProjectManagersPreSelected),
+          Collect(
+              colProjectManagers,
+              Blank()
+          ),
+          Collect(
+              colFormValidation,
+              Blank()
+          ),
+          Collect(
+              colProcessingSteps,
+              Blank()
+          ),
+          Collect(
+              colStepsCompleted,
+              Blank()
+          ),
+          Collect(
+              colDistinctCurrentUserTeamsRoles,
+              Blank()
+          ),
+          Collect(
+              colFilterOperators,
+              Blank()
+          ),
+          Set(
+              gblLeftNavigationSelected,
+              First(LeftNavigationMenu)
+          )
+      );
+      Trace(
+          $"User teams {Concat(
+              colCurrentUserTeamsDirect,
+              'Team Name' & " ; "
+          )}",
+          TraceSeverity.Information
+      );
+      ClearCollect(
+          colAllCurrentUserTeamsRoles,
+          Blank()
+      );
+      // This block added for Functionality to get editable countries
+      IfError(
+          Trace(
+              $"Try get user individuelle roles",
+              TraceSeverity.Information
+          );
+          ClearCollect(
+              colCurrentUserRoles,
+              ForAll(
+                  colCurrentUserSystemsDirect As UR,
+                  {
+                      BussinessUnit: UR.'Business Unit'.Name,
+                      Name: UR.Name,
+                      Country: LookUp(
+                          Countries,
+                          'Business Unit'.'Business Unit' = UR.'Business Unit'.'Business Unit'
+                      ),
+                      UniqueID: UR.Role
+                  }
+              )
+          );
+          ClearCollect(
+              colCurrentUserTeamsRoles,
+              Blank()
+          );
+          Trace(
+              $"Try get user team security roles",
+              TraceSeverity.Information
+          );
+          ClearCollect(
+              colCurrentUserTeamsDirectTemp,
+              colCurrentUserTeamsDirect
+          );
+          ForAll(
+              colCurrentUserTeamsDirect,
+              Collect(
+                  colAllCurrentUserTeamsRoles,
+                  LookUp(
+                      colCurrentUserTeamsDirect,
+                      'Team Name' = First(colCurrentUserTeamsDirectTemp).'Team Name'
+                  ).'Security Roles'
+              );
+              Remove(
+                  colCurrentUserTeamsDirectTemp,
+                  First(colCurrentUserTeamsDirectTemp)
+              );
+          );
+          ClearCollect(
+              colCurrentUserTeamsRoles,
+              ForAll(
+                  colAllCurrentUserTeamsRoles As TR,
+                  {
+                      BussinessUnit: TR.'Business Unit'.Name,
+                      Name: TR.Name,
+                      Country: LookUp(
+                          Countries,
+                          'Business Unit'.'Business Unit' = TR.'Business Unit'.'Business Unit'
+                      ),
+                      UniqueID: TR.Role
+                  }
+              )
+          );
+          ClearCollect(
+              colAllCurrentUserRoles,
+              Filter(
+                  colCurrentUserRoles,
+                  StartsWith(
+                      Name,
+                      "VSB"
+                  )
+              ),
+              Filter(
+                  colCurrentUserTeamsRoles,
+                  StartsWith(
+                      Name,
+                      "VSB"
+                  )
+              )
+          );
+          ClearCollect(
+              colDistinctCurrentUserTeamsRoles,
+              ForAll(
+                  Distinct(
+                      colAllCurrentUserRoles,
+                      ThisRecord
+                  ),
+                  Value
+              )
+          ),
+          Trace(
+              $"Error: User cann't read 'Security Roles'. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}",
+              TraceSeverity.Critical
+          )
+      );
+      IfError(
+          ClearCollect(
+              colUserCountries,
+              ForAll(
+                  Filter(
+                      colDistinctCurrentUserTeamsRoles,
+                      And(
+                          Not(IsBlank(Country)),
+                          Name in [
+                              "VSB - Project Manager Own Projects",
+                              "VSB - Project Data Own Country"
+                          ]
+                      )
+                  ),
+                  {
+                      id: Country.Country,
+                      name: Country.Name
+                  }
+              )
+          ),
+          Trace(
+              $"Error: User cann't read available counties. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}",
+              TraceSeverity.Critical
+          )
+      );
+      Set(
+          gblCurrentUser,
+          {
+              Language: Language(),
+              Lang: Lower(
+                  First(
+                      Split(
+                          Language(),
+                          "-"
+                      )
+                  ).Value
+              ),
+              IsApplicationAdministrator: Not(
+                  IsBlankOrError(
+                      First(
+                          Filter(
+                              colDistinctCurrentUserTeamsRoles,
+                              Name = "VSB - Application Administrator"
+                          )
+                      )
+                  )
+              ),
+              IsControlling: false,
+              IsControllerOwnData: Not(
+                  IsBlankOrError(
+                      First(
+                          Filter(
+                              colDistinctCurrentUserTeamsRoles,
+                              Name = "VSB - Controller Own Data"
+                          )
+                      )
+                  )
+              ),
+              IsProjectDataAllCountries: Not(
+                  IsBlankOrError(
+                      First(
+                          Filter(
+                              colDistinctCurrentUserTeamsRoles,
+                              Name = "VSB - Project Data All Countries"
+                          )
+                      )
+                  )
+              ),
+              CanEditSelectedProject: false,
+              EditableCounties: colUserCountries,
+              EditableCountiesAsString: Concat(
+                  colUserCountries,
+                  name & " ; "
+              )
+          }
+      );
+      Trace(
+          $"User: is controller own data {gblCurrentUser.IsControllerOwnData}; is project data all countries {gblCurrentUser.IsProjectDataAllCountries}; editable countries {gblCurrentUser.EditableCountiesAsString}",
+          TraceSeverity.Information
+      );
+      ClearCollect(
+          colFiltersOverview,
+          {
+              IsApplied: false,
+              ProjectKeyword: "",
+              ProjectManager: gblFilteredProjectManager,
+              Country: LookUp(
+                  Countries,
+                  IsBlank(Name)
+              ),
+              Area: LookUp(
+                  CountryAreas,
+                  IsBlank(Name)
+              ),
+              Technology: LookUp(
+                  Choices(Projects.Technology),
+                  IsBlank(Value)
+              ),
+              Capacity: "",
+              CapacityOperator: "",
+              ProjectStatus: First(
+                  FirstN(
+                      'Project States',
+                      0
+                  )
+              ),
+              TotalRows: 0,
+              TotalPages: 0,
+              PageSize: 200,
+              Page: 1,
+              GridEvent: "",
+              SortCol: "vsb_projectname",
+              SortAsc: true
+          }
+      );
+      With(
+          {
+              varTotalRows: CountIf(
+                  colFilteredProjects,
+                  true
+              ),
+              varPage: First(colFiltersOverview).Page
+          },
+          With(
+              {
+                  varTotalPages: RoundUp(
+                      varTotalRows / First(colFiltersOverview).PageSize,
+                      0
+                  ) + If(
+                      varTotalRows = 0,
+                      1
+                  )
+              },
+              UpdateIf(
+                  colFiltersOverview,
+                  true,
+                  {
+                      TotalRows: varTotalRows,
+                      TotalPages: varTotalPages,
+                      Page: If(
+                          varPage > varTotalPages,
+                          1,
+                          varPage
+                      )
+                  }
+              )
+          )
+      );
+      Concurrent(
+          Set(
+              gblCommandBarThemeJson,
+              JSON(
+                  varCommandBarThemePalette,
+                  JSONFormat.IndentFour
+              )
+          );
+          Set(
+              gblAppTheme,
+              varThemePalette
+          );
+          Set(
+              gblAppThemeJson,
+              JSON(
+                  gblAppTheme,
+                  JSONFormat.IndentFour
+              )
+          ),
+          Set(
+              gblAppSizes,
+              {
+                  Position: {
+                      X: 20,
+                      Y: 2
+                  },
+                  Padding: {Page: 10},
+                  RightPanel: {
+                      MinWidth: 450,
+                      Top: 20,
+                      Left: 20,
+                      Right: 20
+                  },
+                  Font: {
+                      ExtraExtraSmall: 8,
+                      ExtraSmall: 9,
+                      Small: 10,
+                      Medium: 11,
+                      Large: 12,
+                      ExtraLarge: 14,
+                      ExtraExtraLarge: 16
+                  },
+                  LeftNavigation: {
+                      ExpandedWidth: 200,
+                      DecreasedWidth: 32
+                  }
+              }
+          ),
+          Set(
+              gblLeftNavigationMenuIsExpanded,
+              true
+          ),
+          Set(
+              gblRecordClusterStateAbandoned,
+              LookUp(
+                  'Project States',
+                  ThisRecord.Name = "Abandoned"
+              )
+          ),
+          Set(
+              gblRecordClusterStateInactive,
+              LookUp(
+                  'Project States',
+                  "Inactive" in ThisRecord.Name
+              )
+          ),
+          Set(
+              gblAppConstants,
+              {
+                  DefaultMaxLength: 55,
+                  DefaultMiddleMaxLength: 100,
+                  DefaultDefMaxLength: 256,
+                  DefaultLongMaxLength: 300,
+                  DefNotifyTimeoutMilliseconds: 1000,
+                  DateTime: {DefaultFormat: "ddd, mmm. dd, yyyy hh:mm"},
+                  ApprovalState: {
+                      Draft: 952850000,
+                      Approving: 952850001,
+                      Approved: 952850002,
+                      Rejected: 952850003
+                  },
+                  ProjectState: {
+                      Abandoned: 952850006,
+                      Inactive: 952850007
+                  },
+                  MilestonesAssumptions: {
+                      AverageDurationYears: "average duration [years]",
+                      AverageDurationMonths: "average duration [months]",
+                      SuccessRate: "success rate [-]"
+                  },
+                  Texnology: {
+                      Wind: 952850000,
+                      PV: 952850001
+                  },
+                  ModuleType: {
+                      Generator: 952850000,
+                      PV: 952850001,
+                      Inverter: 952850002,
+                      Substructure: 952850003
+                  },
+                  AquisitionStatus: {
+                      UnderLawOfObligationId: 952850000,
+                      InRemId: 952850001
+                  },
+                  RequestPermission: {
+                      PermissionApproved: 952850000,
+                      PermissionDeclined: 952850001,
+                      PermissionPending: 952850002,
+                      PermissionCanceled: 952850003
+                  },
+                  Repowering: {
+                      Yes: 952850000,
+                      No: 952850001,
+                      Unknown: 952850002
+                  },
+                  FilterOperators: {
+                      Equals: "Equals",
+                      GreaterThan: "Greater than",
+                      GreaterThanOrEqualTo: "Greater than or equal to",
+                      LessThan: "Less than",
+                      LessThanOrEqualsTo: "Less than or equal to"
+                  },
+                  LefNavigation: {
+                      GeneralDataKey: "GeneralDataKey",
+                      CostsKey: "CostsKey"
+                  },
+                  ApprovalClusterStates: {
+                      NotStarted: 952850000,
+                      InProgress: 952850001,
+                      Completed: 952850002,
+                      Rejected: 952850003,
+                      RequestCanceled: 952850004,
+                      Abandoned: 952850005,
+                      Inactive: 952850006
+                  },
+                  ApprovalClusterStatesLabels: {
+                      NotStarted: "Not Started",
+                      InProgress: "In Progress",
+                      Completed: "Completed",
+                      Rejected: "Rejected",
+                      RequestCanceled: "Canceled",
+                      Abandoned: "Abandoned",
+                      Inactive: "Inactive/ On-hold"
+                  }
+              }
+          )
+      );
+      Concurrent(
+          Set(
+              gblAppStyles,
+              {
+                  Error: ColorValue(gblAppTheme.palette.akzent5),
+                  Success: ColorValue(gblAppTheme.palette.akzent3),
+                  Warning: ColorValue("#EE940C"),
+                  Screen: {
+                      Fill: ColorValue(gblAppTheme.palette.Grayscale30),
+                      LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)
+                  },
+                  Container: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Fill: Color.Transparent
+                  },
+                  Label: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.black),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.black),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: ColorValue(gblAppTheme.palette.black),
+                      PressedFill: Color.Transparent,
+                      Font: Font.'Open Sans'
+                  },
+                  ButtonTransparent: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.Grayscale00),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: Color.Transparent,
+                      PressedFill: Color.Transparent,
+                      RadiusBottomLeft: 2,
+                      RadiusBottomRight: 2,
+                      RadiusTopLeft: 2,
+                      RadiusTopRight: 2,
+                      Font: Font.'Open Sans'
+                  },
+                  Icon: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.themePrimary),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      PressedFill: Color.Transparent
+                  },
+                  Divider: {
+                      BorderColor: Color.Transparent,
+                      BorderStyle: BorderStyle.None,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.Grayscale20),
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),
+                      PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)
+                  },
+                  Gallery: {
+                      BorderColor: Color.Transparent,
+                      BorderStyle: BorderStyle.None,
+                      BorderThickness: 0,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      TemplateFill: Color.Transparent
+                  }
+              }
+          ),
+          Set(
+              gblAppColors,
+              {
+                  Screen: {
+                      Fill: ColorValue(gblAppTheme.palette.Grayscale30),
+                      LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)
+                  },
+                  BorderColor: ColorValue(gblAppTheme.palette.Grayscale30),
+                  ButtonSelectedBg: ColorValue(gblAppTheme.palette.Grayscale40),
+                  Transparent: Color.Transparent,
+                  Error: ColorValue(gblAppTheme.palette.akzent5),
+                  ErrorBg: ColorValue($"{gblAppTheme.palette.Error}20"),
+                  Success: ColorValue(gblAppTheme.palette.akzent3),
+                  SuccessLight: ColorValue(gblAppTheme.palette.akzent3),
+                  SuccessBg: ColorValue($"{gblAppTheme.palette.Green}20"),
+                  Warning: ColorValue(gblAppTheme.palette.Warning),
+                  GeneratorChangedData: ColorValue(gblAppTheme.palette.themePrimary),
+                  WarningBg: ColorValue($"{gblAppTheme.palette.Warning}20"),
+                  ButtonDisabledBg: ColorValue("#bdbdbd"),
+                  GallerySeparatorBg: ColorValue(gblAppTheme.palette.hoverButton),
+                  ApprovalClusterStates: {
+                      NotStarted: ColorValue($"{gblAppTheme.palette.Grayscale20}90"),
+                      InProgress: ColorValue($"{gblAppTheme.palette.Success}60"),
+                      Completed: ColorValue($"{gblAppTheme.palette.Success}"),
+                      Rejected: ColorValue($"{gblAppTheme.palette.Warning}20"),
+                      RequestCanceled: ColorValue($"{gblAppTheme.palette.Warning}10"),
+                      Inactive: ColorValue(gblAppTheme.palette.Warning)
+                  },
+                  Icon: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.themePrimary),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      PressedFill: Color.Transparent
+                  },
+                  Label: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.black),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.black),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: ColorValue(gblAppTheme.palette.black),
+                      PressedFill: Color.Transparent,
+                      Font: Font.'Open Sans'
+                  },
+                  Gallery: {
+                      Header: ColorValue(gblAppTheme.palette.Grayscale40),
+                      BorderColor: Color.Transparent,
+                      BorderStyle: BorderStyle.None,
+                      BorderThickness: 0,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),
+                      TemplateFill: Color.Transparent
+                  },
+                  ButtonTransparent: {
+                      BorderColor: Color.Transparent,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.Grayscale00),
+                      DisabledBorderColor: Color.Transparent,
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      DisabledFill: Color.Transparent,
+                      Fill: Color.Transparent,
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverBorderColor: Color.Transparent,
+                      HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      HoverFill: Color.Transparent,
+                      PressedBorderColor: Color.Transparent,
+                      PressedColor: Color.Transparent,
+                      PressedFill: Color.Transparent,
+                      RadiusBottomLeft: 2,
+                      RadiusBottomRight: 2,
+                      RadiusTopLeft: 2,
+                      RadiusTopRight: 2,
+                      Font: Font.'Open Sans'
+                  },
+                  Divider: {
+                      BorderColor: Color.Transparent,
+                      BorderStyle: BorderStyle.None,
+                      BorderThickness: 0,
+                      Color: ColorValue(gblAppTheme.palette.Grayscale20),
+                      DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),
+                      FocusedBorderColor: Color.Transparent,
+                      FocusedBorderThickness: 0,
+                      HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),
+                      PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)
+                  }
+              }
+          ),
+          ClearCollect(
+              colFilterOperators,
+              Table(
+                  {Name: gblAppConstants.FilterOperators.Equals},
+                  {Name: gblAppConstants.FilterOperators.GreaterThan},
+                  {Name: gblAppConstants.FilterOperators.GreaterThanOrEqualTo},
+                  {Name: gblAppConstants.FilterOperators.LessThan},
+                  {Name: gblAppConstants.FilterOperators.LessThanOrEqualsTo}
+              )
+          ),
+          Set(
+              gblTableApprovalStateColors,
+              Table(
+                  {
+                      State: "Draft",
+                      Color: gblAppTheme.palette.akzent2
+                  },
+                  {
+                      State: "Approving",
+                      Color: gblAppTheme.palette.akzent4
+                  },
+                  {
+                      State: "Approved",
+                      Color: gblAppTheme.palette.akzent3
+                  },
+                  {
+                      State: "Rejected",
+                      Color: gblAppTheme.palette.akzent5
+                  }
+              )
+          )
+      );
+      Concurrent(
+          1,
+          1,
+          ClearCollect(
+              colMilestonesAssumptions,
+              'Milestones Standard Assumptions'
+          ),
+          ClearCollect(
+              colPVModulesSuppliers,
+              Filter(
+                  PVModules,
+                  'Display Name' <> "Other Supplier"
+              )
+          );
+          Collect(
+              colPVModulesSuppliers,
+              LookUp(
+                  PVModules,
+                  'Display Name' = "Other Supplier"
+              )
+          ),
+          ClearCollect(
+              colInverterSuppliers,
+              Filter(
+                  Inverters,
+                  Supplier <> "Other Supplier"
+              )
+          );
+          Collect(
+              colInverterSuppliers,
+              Filter(
+                  Inverters,
+                  Supplier = "Other Supplier"
+              )
+          ),
+          ClearCollect(
+              colSubstructuresSuppliers,
+              Filter(
+                  Substructures,
+                  Supplier <> "Other Supplier"
+              )
+          );
+          Collect(
+              colSubstructuresSuppliers,
+              LookUp(
+                  Substructures,
+                  Supplier = "Other Supplier"
+              )
+          ),
+          ClearCollect(
+              colCapexAccounts,
+              AddColumns(
+                  Sort(
+                      Filter(
+                          'CAPEX Account Lists',
+                          Not(IsBlank('Parent Account'))
+                      ),
+                      Order,
+                      SortOrder.Ascending
+                  ),
+                  IsFolded,
+                  true
+              )
+          ),
+          ClearCollect(
+              colCapexProjectContracts,
+              'CAPEX Project Contracts'
+          ),
+          ClearCollect(
+              colCapexAccountCategories,
+              SortByColumns(
+                  Filter(
+                      'CAPEX Account Lists',
+                      And(
+                          Not(IsBlank('Parent Account')),
+                          'Parent Account'.Number = "00001"
+                      )
+                  ),
+                  "vsb_order",
+                  SortOrder.Ascending
+              )
+          ),
+          ClearCollect(
+              colFinancingCategories,
+              Sort(
+                  'Financing Categories',
+                  Order,
+                  SortOrder.Ascending
+              )
+          ),
+          ClearCollect(
+              colDevelopers,
+              Table(
+                  {Mail: "andriy.chevychalov@vsb.energy"},
+                  {Mail: "ravindra.mund@vsb.energy"},
+                  {Mail: "test-vsbcloud-01@vsb.energy"},
+                  {Mail: "test-vsbcloud-02@vsb.energy"}
+              )
+          ),
+          ClearCollect(
+              colMapLocation,
+              {
+                  ID: 1,
+                  Latitude: Location.Latitude,
+                  Longitude: Location.Longitude
+              }
+          )
+      );
+      Set(
+          gblSelectedRecordEditProject,
+          LookUp(
+              Projects,
+              Project = GUID(Param("projectid"))
+          )
+      );
+      Set(
+          gblRecordSelectedProject,
+          LookUp(
+              Projects,
+              Project = GUID(Param("projectid"))
+          )
+      );
+      Trace($"{gblSelectedRecordEditProject.Project} ,This is for now, {Param("projectid")}");
+      Set(
+          gblAppStarted,
+          true
+      );
+      Set(
+          gblAppResx,
+          {
+              NumericOneDecimals: "Numeric value with maximum of one decimals",
+              NumericTwoDecimals: "Numeric value with maximum of two decimals",
+              NumericThreeDecimals: "Numeric value with maximum of three decimals",
+              Numeric: "Numeric value without decimals",
+              InputBlank: "Input must not be blank"
+          }
+      );
+    StartScreen: ='App Loading Screen'
+    Theme: =PowerAppsTheme

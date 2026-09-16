@@ -1,0 +1,69 @@
+{
+  "uniquename": "vsb_CancelCheckListApproval",
+  "name": "vsb_CancelCheckListApproval",
+  "displayname": "Cancel checklist approval",
+  "description": "Cancels an in-flight checklist-item approval and resets the Project Checklist row, IN ONE TRANSACTION. WHY IT EXISTS: the flow it replaces performs three synchronous writes with no waits, and the app has no way to make three writes atomic — dataClient.batch() bounds concurrency over individual writes, it is not a transactional $batch changeset. So a mid-sequence failure can leave an approval cancelled with the checklist row un-reset: vsb_approvalcheckliststate still shows the approval running, vsb_flowrunid still points at a dead run, and the row action still offers 'Cancel Approval'. The flow already signals that risk in its own contract — it answers {success:false} when its scope fails — and the canvas read `.success` off the result AND DID NOTHING WITH A FALSE, which is how the inconsistent state became invisible. This API is the fix: the three writes are the platform transaction, so there is no partial outcome to report.",
+  "bindingtype": "Global",
+  "isfunction": false,
+  "enabledforworkflow": false,
+  "allowedcustomprocessingsteptype": "None",
+  "isprivate": false,
+  "executeprivilegename": null,
+  "replaces": {
+    "flow": "PerformRequestofCheckListApprovalCancellation",
+    "actions": 9,
+    "disposition": "customApi",
+    "register": "src/flows/flowClient.ts — FLOW_REGISTER, entry `vsb_CancelCheckListApproval`"
+  },
+  "notes": [
+    "The three writes ARE the only thing that changes the checklist state, which is why a reported failure must leave the row exactly as it was. That sentence is already in rules.ts above checklistCancelSucceeded(); this API is what makes it true rather than aspirational.",
+    "checklistCancelSucceeded() treats anything that is not an explicit false as success (UT-CHKLST-034 pins `{}` and `null` as true). That is safe against the typed wrapper's mock, and UNSAFE against this API's `Success` property, which the function does not currently read. Widen it when wiring up."
+  ],
+  "requestParameters": [
+    {
+      "uniquename": "ChecklistId",
+      "displayname": "Project checklist",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_projectchecklist row id. The only argument the app passes today: cancelCheckListApproval({checklistId}) in src/flows/flowClient.ts, called from useCancelChecklistApproval with args.checklistId. The plugin reads the project, cluster state, owning business unit, vsb_flowrunid and vsb_flowapprovalid from the row."
+    },
+    {
+      "uniquename": "Comment",
+      "displayname": "Cancellation comment",
+      "type": "String",
+      "isoptional": true,
+      "description": "Optional, unlike the gate cancellation. The checklist branch's audit row is written by checklistNoteWrite() into vsb_projectchecklisttrackingnote, and useCancelChecklistApproval makes NO local writes at all — it calls the API and invalidates. Where a comment is supplied the plugin writes the note inside the same transaction; where it is not, the reset happens alone, which is the behaviour the flow had."
+    }
+  ],
+  "responseProperties": [
+    {
+      "uniquename": "Success",
+      "displayname": "Success",
+      "type": "Boolean",
+      "description": "The flow's own {success:boolean} contract, preserved so the call site does not have to change shape. It is now nearly always true: a failure faults and rolls back instead of reporting."
+    },
+    {
+      "uniquename": "Message",
+      "displayname": "Message",
+      "type": "String",
+      "description": "Empty on success; otherwise CHECKLIST_CANCEL_FAILED verbatim — \"The approval could not be cancelled. Nothing was changed.\" (UT-CHKLST-034)."
+    },
+    {
+      "uniquename": "NoteId",
+      "displayname": "Audit note",
+      "type": "Guid",
+      "description": "The vsb_projectchecklisttrackingnote row, or empty when no Comment was supplied."
+    }
+  ],
+  "writes": [
+    "UPDATE vsb_projectchecklist(ChecklistId): vsb_approvalcheckliststate reset, vsb_approvalstepstatecode reset, vsb_flowrunid = null — CHECKLIST_COL in src/features/pm/checklist/rules.ts",
+    "CANCEL the msdyn_flow_approval identified by the row's vsb_flowapprovalid / vsb_flowrunid",
+    "CREATE vsb_projectchecklisttrackingnote when Comment is supplied: vsb_notetype = 952850001 (Checklist Item), vsb_ProjectChecklist = the row, owningbusinessunit = the project's — checklistNoteWrite()"
+  ],
+  "portFrom": {
+    "computation": "src/features/pm/checklist/rules.ts",
+    "functions": ["checklistCancelSucceeded", "checklistNoteWrite", "CHECKLIST_CANCEL_FAILED"],
+    "callSite": "src/features/pm/checklist/hooks.ts — useCancelChecklistApproval",
+    "tests": ["UT-CHKLST-034"]
+  }
+}

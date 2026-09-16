@@ -1,0 +1,2462 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Admin CAPEX Accounts:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+      LoadingSpinner: =LoadingSpinner.Data
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: |-
+        =UpdateContext(
+            {
+                locSelectedCapexAccountCategory: First(colCapexAccountCategories),
+                locIsVisibleRightPanelNewEditAccount: false,
+                locSpinnerInformationText: "",
+                locIsVisiblePopUpSpinner: false,
+                locIsVisiblePopUpChangeStatusOfAccount: false,
+                locIsVisiblePopUpChangeStatusOfSubaccount: false,
+                locIsVisibleRightPanelOrdering: false,
+                locIsVisibleRightPanelNewEditSubaccount: false,
+                locIsVisiblePopUpDeleteAccount: false,
+                locIsVisiblePopUpDeleteSubaccount: false,
+                locIfOrderingSubaccounts: false,
+                locIfAccountOrSubAccountNumberAlreadyExists: false,
+                locSelectedAccount: Blank(),
+                locSelectedCapexSubaccount: Blank()
+            }
+        );
+        UpdateIf(
+            colCapexAccounts,
+            Not(IsFolded),
+            {IsFolded: true}
+        )
+    Children:
+      - con_CAPEX_Accounts:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            Height: =Parent.Height
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutDirection: =LayoutDirection.Vertical
+            Width: =Parent.Width
+          Children:
+            - cmp_Admin_CAPEX_Accounts_Header:
+                Control: CanvasComponent
+                ComponentName: cmp_Header
+                Properties:
+                  ApprovalStatesColor: |-
+                    =Table(
+                        {
+                            State: "Draft",
+                            Color: "#41aab4"
+                        },
+                        {
+                            State: "Approving",
+                            Color: "#f5911e"
+                        },
+                        {
+                            State: "Approved",
+                            Color: "#82a51e"
+                        },
+                        {
+                            State: "Rejected",
+                            Color: "#d20532"
+                        }
+                    )
+                  Height: =70
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LogoWidth: =210
+                  MainScreen: =App.ActiveScreen
+                  OnLogoClick: =Navigate('Project Main Screen',ScreenTransition.Fade)
+                  Project: |-
+                    ={
+                        ID: GUID("00000000-0000-0000-0000-000000000000"),
+                        Name: "CAPEX Accounts",
+                        Technology: Blank(),
+                        Capacity: Blank(),
+                        Status: Blank(),
+                        Approval: Blank()
+                    }
+                  Width: =1024
+            - con_Admin_CAPEX_Accounts_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                Children:
+                  - con_Admin_CAPEX_Accounts_Body_LeftNavigation:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        FillPortions: =0
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        Width: =200
+                      Children:
+                        - cmp_Admin_CAPEX_Accounts_LeftNavigation:
+                            Control: CanvasComponent
+                            ComponentName: cmp_Left_Navigation
+                            Properties:
+                              FontSize: =gblAppSizes.Font.Medium
+                              Height: =Parent.Height
+                              IsExpanded: =gblLeftNavigationMenuIsExpanded
+                              Items: =LeftAdminNavigationMenu
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnExpand: |+
+                                =Set(
+                                    gblLeftNavigationMenuIsExpanded,
+                                    Not(gblLeftNavigationMenuIsExpanded)
+                                );
+                              OnSelect: |-
+                                =If(
+                                    Self.SelectedKey <> gblLeftNavigationSelected.ItemKey,
+                                    Set(
+                                        gblLeftNavigationSelected,
+                                        LookUp(
+                                            LeftAdminNavigationMenu,
+                                            ItemKey = Self.SelectedKey
+                                        )
+                                    );
+                                    Navigate(
+                                        gblLeftNavigationSelected.TargetScreen,
+                                        ScreenTransition.Fade
+                                    )
+                                )
+                              Selected: =gblLeftNavigationSelected
+                              Width: =200
+                  - con_Admin_CAPEX_Accounts_RightContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =RGBA(255, 255, 255, 1)
+                        Height: =Parent.Height
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =10
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - tab_Admin_CAPEX_Accounts_RightContent_Parents:
+                            Control: TabList@2.2.31
+                            Properties:
+                              Alignment: ='TabList.Alignment'.Horizontal
+                              Height: =50
+                              Items: =colCapexAccountCategories
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |
+                                =UpdateContext(
+                                    {
+                                        locSelectedAccount:Blank(),
+                                        locSelectedCapexAccountCategory:Self.Selected
+                                    }
+                                );
+                              Size: ='TabList.Size'.Medium
+                              Width: =Parent.Width
+                              Y: =2
+                            Children:
+                              - vsb_name3:
+                                  Control: TabListDataField@1.5.0
+                                  Variant: textualColumn
+                                  IsLocked: true
+                                  Properties:
+                                    FieldDisplayName: ="vsb_name"
+                                    FieldName: ="vsb_name"
+                                    FieldType: ="s"
+                                    Order: =1
+                        - pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              AlignInContainer: =AlignInContainer.Center
+                              Height: =32
+                              Items: |-
+                                =With(
+                                    {
+                                        varColParentAccounts: Filter(
+                                            'CAPEX Account Lists',
+                                            And(
+                                                Or(
+                                                    IsBlank('Parent Account'),
+                                                    'Parent Account'.Number = "10005"
+                                                ),
+                                                Not(Number = "10005")
+                                            )
+                                        )
+                                    },
+                                    Table(
+                                        {
+                                            ItemKey: "orderAccounts",
+                                            ItemDisplayName: "Reorder",
+                                            ItemIconName: "NumberedList",
+                                            ItemEnabled: And(
+                                                CountIf(
+                                                    varColParentAccounts,
+                                                    true
+                                                ) > 1,
+                                                DataSourceInfo(
+                                                    'CAPEX Account Lists',
+                                                    DataSourceInfo.EditPermission
+                                                )
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "newAccount",
+                                            ItemDisplayName: "New",
+                                            ItemIconName: "Add",
+                                            ItemEnabled: DataSourceInfo(
+                                                'CAPEX Account Lists',
+                                                DataSourceInfo.CreatePermission
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "editAccount",
+                                            ItemDisplayName: "Edit",
+                                            ItemIconName: "Edit",
+                                            ItemEnabled: And(
+                                                Not(IsBlank(locSelectedAccount)),
+                                                RecordInfo(
+                                                    locSelectedAccount,
+                                                    RecordInfo.EditPermission
+                                                )
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "activateAccount",
+                                            ItemDisplayName: "Activate",
+                                            ItemIconName: "ActivateOrders",
+                                            ItemVisible: And(
+                                                Not(IsBlank(locSelectedAccount)),
+                                                Not(locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active)
+                                            ),
+                                            ItemEnabled: RecordInfo(
+                                                locSelectedAccount,
+                                                RecordInfo.EditPermission
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "deactivateAccount",
+                                            ItemDisplayName: "Deactivate",
+                                            ItemIconName: "DeactivateOrders",
+                                            ItemVisible: And(
+                                                Not(IsBlank(locSelectedAccount)),
+                                                locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active
+                                            ),
+                                            ItemEnabled: RecordInfo(
+                                                locSelectedAccount,
+                                                RecordInfo.EditPermission
+                                            )
+                                        },
+                                        {
+                                            ItemKey: "deleteAccount",
+                                            ItemDisplayName: "Delete",
+                                            ItemIconName: "Delete",
+                                            ItemVisible: And(
+                                                Not(IsBlank(locSelectedAccount)),
+                                                And(
+                                                    IsBlank(
+                                                      LookUp(
+                                                            'CAPEX Project Contracts',
+                                                            Account.'CAPEX Account List' in  Filter('CAPEX Account Lists','Parent Account'.'CAPEX Account List'= locSelectedAccount.'CAPEX Account List').'CAPEX Account List'
+                                                        )
+                                                    ),
+                                                    IsEmpty(
+                                                        Filter(
+                                                            colCapexAccounts,
+                                                            'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List'
+                                                        ).'CAPEX Account List'
+                                                    )
+                                                )
+                                            ),
+                                            ItemEnabled: RecordInfo(
+                                                locSelectedAccount,
+                                                RecordInfo.DeletePermission
+                                            )
+                                        }
+                                    )
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |-
+                                =/*Switch(
+                                    Self.Selected.ItemKey,
+                                    "newAccount",
+                                    UpdateContext(
+                                        {
+                                            locSelectedAccount: Blank(),
+                                            locIsVisibleRightPanelNewEditAccount: true
+                                        }
+                                    ),
+                                    "editAccount",
+                                        // Toggle value to correctly reset modern controls 
+                                    With(
+                                        {varSelectedAccountCopy: locSelectedAccount},
+                                        UpdateContext({locSelectedAccount: Blank()});
+                                        UpdateContext({locSelectedAccount: varSelectedAccountCopy});
+                                    );
+                                    UpdateContext({locIsVisibleRightPanelNewEditAccount: true}),
+                                    "deactivateAccount",
+                                    UpdateContext({locIsVisiblePopUpChangeStatusOfAccount: true}),
+                                    "activateAccount",
+                                    UpdateContext({locIsVisiblePopUpChangeStatusOfAccount: true}),
+                                    "orderAccounts",
+                                    UpdateContext(
+                                        {
+                                            locIfOrderingSubaccounts: false,
+                                            locResetOrderingList: "Reset" & Rand(),
+                                            locIsVisibleRightPanelOrdering: true
+                                        }
+                                    ),
+                                    "deleteAccount",
+                                    UpdateContext({locIsVisiblePopUpDeleteAccount: true}),
+                                    ""
+                                )*/
+
+                                Switch(
+                                    Self.Selected.ItemKey,
+                                    "newAccount",
+                                    UpdateContext(
+                                        {
+                                            locSelectedAccount: Blank(),
+                                            locIsVisibleRightPanelNewEditAccount: true
+                                        }
+                                    ),
+                                    "editAccount",
+                                        // Toggle value to correctly reset modern controls 
+                                    With(
+                                        {varSelectedAccountCopy: locSelectedAccount},
+                                        UpdateContext({locSelectedAccount: Blank()});
+                                        UpdateContext({locSelectedAccount: varSelectedAccountCopy});
+                                    );
+                                    UpdateContext({locIsVisibleRightPanelNewEditAccount: true}),
+                                    "deactivateAccount",
+                                    UpdateContext({locIsVisiblePopUpChangeStatusOfAccount: true}),
+                                    "activateAccount",
+                                    UpdateContext({locIsVisiblePopUpChangeStatusOfAccount: true}),
+                                    "orderAccounts",
+                                    UpdateContext(
+                                        {
+                                            locIfOrderingSubaccounts: false,
+                                            locResetOrderingList: "Reset" & Rand(),
+                                            locIsVisibleRightPanelOrdering: true
+                                        }
+                                    ),
+                                    "deleteAccount",
+                                    UpdateContext({locIsVisiblePopUpDeleteAccount: true}),
+                                    ""
+                                )
+                              Theme: =gblAppThemeJson
+                              Width: =Parent.Width-gblAppSizes.Position.X*2
+                              X: =gblAppSizes.Position.X
+                              Y: =tab_Admin_CAPEX_Accounts_RightContent_Parents.Y+tab_Admin_CAPEX_Accounts_RightContent_Parents.Height +20
+                        - gal_Account_Accounts:
+                            Control: Gallery@2.15.0
+                            Variant: VariableHeight
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderColor: =gblAppColors.Gallery.BorderColor
+                              BorderStyle: =gblAppColors.Gallery.BorderStyle
+                              BorderThickness: =gblAppColors.Gallery.BorderThickness
+                              Fill: =gblAppColors.Gallery.Fill
+                              FillPortions: =0
+                              FocusedBorderColor: =gblAppColors.Gallery.BorderColor
+                              FocusedBorderThickness: =gblAppColors.Gallery.FocusedBorderThickness
+                              Height: |+
+                                =//Sum(RenameColumns(ForAll(gal_Account_Accounts.AllItems, Value(lbl_Account_AccountItemHeightValue_Hidden.Text)),"Value", "RowHeight"), RowHeight) + Self.TemplatePadding * Self.AllItemsCount + gblAppSizes.Padding.Page
+                                Parent.Height-Self.Y
+
+                              Items: |-
+                                =/*Sort(
+                                    Filter(colCapexAccounts, Category.'Capex Account Category' = locSelectedCapexAccountCategory.'Capex Account Category'),
+                                    Order,
+                                    SortOrder.Ascending
+                                )
+                                */
+                                Sort(
+                                    Filter(
+                                        colCapexAccounts,
+                                        'Parent Account'.'CAPEX Account List' = locSelectedCapexAccountCategory.'CAPEX Account List'
+                                    ),
+                                    Order,
+                                    SortOrder.Ascending
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LoadingSpinnerColor: =gblAppColors.Gallery.LoadingSpinnerColor
+                              TemplateFill: =gblAppColors.Gallery.TemplateFill
+                              TemplatePadding: =0
+                              TemplateSize: =500
+                              Visible: =Self.AllItemsCount>0
+                              Width: =Parent.Width-6
+                            Children:
+                              - lbl_Account_AccountItemHeightValue_Hidden:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =gblAppColors.Label.Color
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =35
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverColor: =gblAppColors.Label.HoverColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingLeft: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: =con_Account_AccountCard.Height
+                                    Width: =Len(Self.Text)*14
+                                    Wrap: =false
+                              - con_Account_AccountCard:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    BorderColor: =gblAppColors.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Fill: =ColorValue(gblAppTheme.palette.white)
+                                    Height: |+
+                                      =If(
+                                          ThisItem.IsFolded,
+                                          con_Account_AccountCardHeader.Height,
+                                          con_Account_AccountCardHeader.Height+con_Account_AccountCardBody.Height
+                                      )
+
+                                    Width: =Parent.Width-10
+                                  Children:
+                                    - con_Account_AccountCardBody:
+                                        Control: GroupContainer@1.5.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          BorderColor: =Color.Transparent
+                                          BorderThickness: =1
+                                          DropShadow: =DropShadow.None
+                                          Fill: =ColorValue(gblAppTheme.palette.white)
+                                          Height: =pcf_Account_AccountCardBody_SubAccounts.Y+pcf_Account_AccountCardBody_SubAccounts.Height+10
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutGap: =5
+                                          LayoutOverflowY: =LayoutOverflow.Scroll
+                                          PaddingLeft: =30
+                                          Width: =Parent.Width
+                                          Y: =con_Account_AccountCardHeader.Y+con_Account_AccountCardHeader.Height+10
+                                        Children:
+                                          - pcf_Account_AccountCardBody_SubAccountsCommandBar:
+                                              Control: CodeComponent
+                                              ComponentName: cat_PowerCAT.CommandBar
+                                              Properties:
+                                                Height: =40
+                                                Items: |-
+                                                  =Table(
+                                                      {
+                                                          ItemKey: "orderSubaccounts",
+                                                          ItemDisplayName: "Reorder subaccounts",
+                                                          ItemIconName: "NumberedList"
+                                                          //,
+                                                          //ItemEnabled: And(CountRows(Filter('CAPEX Account Lists','Parent Account'.'CAPEX Account List' = ThisItem.'CAPEX Account ////List'))>1,RecordInfo(locSelectedAccount,RecordInfo.EditPermission))
+                                                      },
+                                                      {
+                                                          ItemKey: "newSubaccount",
+                                                          ItemDisplayName: "Add subaccount",
+                                                          ItemIconName: "Add",
+                                                          ItemEnabled: DataSourceInfo('CAPEX Account Lists',DataSourceInfo.CreatePermission)
+                                                      }
+                                                  )
+                                                LayoutMaxHeight: =
+                                                LayoutMaxWidth: =
+                                                OnSelect: |-
+                                                  =Switch(
+                                                      Self.Selected.ItemKey,
+                                                      "newSubaccount",
+                                                      UpdateContext(
+                                                          {
+                                                              locSelectedAccount: gal_Account_Accounts.Selected,
+                                                              locSelectedCapexSubaccount: Blank(),
+                                                              locIsVisibleRightPanelNewEditSubaccount: true
+                                                          }
+                                                      ),
+                                                      "orderSubaccounts",
+                                                      UpdateContext(
+                                                          {
+                                                              locSelectedAccount: gal_Account_Accounts.Selected,
+                                                              locIfOrderingSubaccounts: true,
+                                                              locResetOrderingList: "Reset" & Rand(),
+                                                              locIsVisibleRightPanelOrdering: true
+                                                          }
+                                                      ),
+                                                      ""
+                                                  )
+                                                Theme: =gblAppThemeJson
+                                                Tooltip: =""
+                                                Width: =Parent.Width-Self.X*2-20
+                                                Y: =
+                                          - pcf_Account_AccountCardBody_SubAccounts:
+                                              Control: CodeComponent
+                                              ComponentName: cat_PowerCAT.FluentDetailsList
+                                              Properties:
+                                                HeaderVisible: =false
+                                                Height: |
+                                                  =Max(Self.Y+Self.TotalRecords*32,30)
+                                                Items: |-
+                                                  =AddColumns(
+                                                      Sort(
+                                                          Filter(
+                                                              colCapexAccounts,
+                                                              'Parent Account'.'CAPEX Account List' = ThisItem.'CAPEX Account List'
+                                                          ),
+                                                          Order,
+                                                          SortOrder.Ascending
+                                                      ),
+                                                      EditIcon,
+                                                      If(
+                                                          RecordInfo(
+                                                              ThisItem,
+                                                              RecordInfo.EditPermission
+                                                          ),
+                                                          "icon:Edit"
+                                                      ),
+                                                      ChangeStatusIcon,
+                                                      Switch(
+                                                          ThisRecord.Status,
+                                                          'Status (CAPEX Account Lists)'.Active,
+                                                          If(
+                                                              RecordInfo(
+                                                                  ThisItem,
+                                                                  RecordInfo.EditPermission
+                                                              ),
+                                                              "icon:DeactivateOrders"
+                                                          ),
+                                                          'Status (CAPEX Account Lists)'.Inactive,
+                                                          If(
+                                                              And(
+                                                                  ThisItem.Status = 'Status (CAPEX Account Lists)'.Active,
+                                                                  RecordInfo(
+                                                                      ThisItem,
+                                                                      RecordInfo.EditPermission
+                                                                  )
+                                                              ),
+                                                              "icon:ActivateOrders"
+                                                          )
+                                                      ),
+                                                      DeleteIcon,
+                                                      With(
+                                                          {varThisRecord: ThisRecord},
+                                                          If(
+                                                              And(
+                                                                  IsBlank(
+                                                                      LookUp(
+                                                                          colCapexProjectContracts,
+                                                                          Account.'CAPEX Account List' = varThisRecord.'CAPEX Account List'
+                                                                      )
+                                                                  ),
+                                                                  RecordInfo(
+                                                                      ThisItem,
+                                                                      RecordInfo.DeletePermission
+                                                                  )
+                                                              ),
+                                                              "icon:Delete"
+                                                          )
+                                                      ),
+                                                      RecordKey,
+                                                      ThisRecord.'CAPEX Account List'
+                                                  )
+                                                LayoutMaxHeight: =
+                                                LayoutMaxWidth: =
+                                                OnChange: |
+                                                  =If(
+                                                      Self.EventName = "CellAction" && Self.EventColumn = "EditIcon",
+                                                      UpdateContext({locSelectedCapexSubaccount: Blank()});
+                                                      UpdateContext(
+                                                          {
+                                                              locSelectedCapexSubaccount: LookUp(
+                                                                  colCapexAccounts,
+                                                                  'CAPEX Account List' = GUID(Self.EventRowKey)
+                                                              )
+                                                          }
+                                                      );
+                                                      UpdateContext({locSelectedAccount: gal_Account_Accounts.Selected});
+                                                      UpdateContext({locIsVisibleRightPanelNewEditSubaccount: true}),
+                                                      Self.EventName = "CellAction" && Self.EventColumn = "ChangeStatusIcon",
+                                                      UpdateContext(
+                                                          {
+                                                              locSelectedCapexSubaccount: LookUp(
+                                                                  colCapexAccounts,
+                                                                  'CAPEX Account List' = GUID(Self.EventRowKey)
+                                                              )
+                                                          }
+                                                      );
+                                                      UpdateContext({locSelectedAccount: gal_Account_Accounts.Selected});
+                                                      UpdateContext({locIsVisiblePopUpChangeStatusOfSubaccount: true}),
+                                                      Self.EventName = "CellAction" && Self.EventColumn = "DeleteIcon",
+                                                      UpdateContext(
+                                                          {
+                                                              locSelectedCapexSubaccount: LookUp(
+                                                                  colCapexAccounts,
+                                                                  'CAPEX Account List' = GUID(Self.EventRowKey)
+                                                              )
+                                                          }
+                                                      );
+                                                      UpdateContext({locSelectedAccount: gal_Account_Accounts.Selected});
+                                                      UpdateContext({locIsVisiblePopUpDeleteSubaccount: true})
+                                                  );
+                                                SelectionType: ="0"
+                                                Theme: =gblAppThemeJson
+                                                Tooltip: =""
+                                                Width: =Min(Parent.Width-Self.X*2, 900)
+                                                X: =30
+                                                Y: =40
+                                                columns_Items: |-
+                                                  =Table(  
+                                                      {
+                                                          ColName: "vsb_number",
+                                                          ColDisplayName:"Number",
+                                                          ColWidth: 80,
+                                                          ColRowHeader:true,
+                                                          ColSortable:true,
+                                                          ColResizble:true
+                                                      },
+                                                      {
+                                                          ColName: "vsb_name",
+                                                          ColDisplayName:"Subaccount",
+                                                          ColWidth: Max(Self.Width-400, 80),
+                                                          ColRowHeader:true,
+                                                          ColSortable:true,
+                                                          ColResizble:true
+                                                      },    
+                                                      {
+                                                          ColName: "statecode",
+                                                          ColDisplayName:"Status",
+                                                          ColWidth:80,
+                                                          ColRowHeader:true,
+                                                          ColSortable:true,
+                                                          ColResizble:true
+                                                      },
+                                                      {
+                                                          ColName: "EditIcon",
+                                                          ColCellType:"clickableimage",
+                                                          ColWidth: 18,
+                                                          ColImageWidth: 15,
+                                                          ColImagePadding: 1,
+                                                          ColVerticalAlign: "Top"
+                                                      },
+                                                      {
+                                                          ColName: "ChangeStatusIcon",
+                                                          ColCellType:"clickableimage",
+                                                          ColWidth: 18,
+                                                          ColImageWidth: 15,
+                                                          ColImagePadding: 1,
+                                                          ColVerticalAlign: "Top"
+                                                      },
+                                                      {
+                                                          ColName: "DeleteIcon",
+                                                          ColCellType:"clickableimage",
+                                                          ColWidth: 18,
+                                                          ColImageWidth: 15,
+                                                          ColImagePadding: 1,
+                                                          ColVerticalAlign: "Top"
+                                                      }
+                                                  )
+                                    - con_Account_AccountCardHeader:
+                                        Control: GroupContainer@1.5.0
+                                        Variant: ManualLayout
+                                        Properties:
+                                          BorderColor: =gblAppColors.BorderColor
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Fill: =ColorValue("#fdffff")
+                                          Height: =42
+                                          Width: =Parent.Width
+                                        Children:
+                                          - lbl_Account_AccountName:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                AutoHeight: =true
+                                                BorderColor: =gblAppColors.Label.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Label.BorderThickness
+                                                Color: =gblAppColors.Label.Color
+                                                DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Label.DisabledColor
+                                                DisabledFill: =gblAppColors.Label.DisabledFill
+                                                Fill: =gblAppColors.Label.Fill
+                                                FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                Font: =gblAppColors.Label.Font
+                                                FontWeight: |-
+                                                  =If(
+                                                      ThisItem.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',
+                                                      FontWeight.Semibold,    
+                                                      FontWeight.Normal
+                                                  )
+                                                Height: =35
+                                                HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                HoverColor: =gblAppColors.Label.HoverColor
+                                                HoverFill: =gblAppColors.Label.HoverFill
+                                                PaddingLeft: =0
+                                                PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                PressedColor: =gblAppColors.Label.PressedColor
+                                                PressedFill: =gblAppColors.Label.PressedFill
+                                                Size: =gblAppSizes.Font.Small
+                                                Text: =ThisItem.Number & " - " &ThisItem.Name
+                                                Width: =Parent.Width-Self.X-110
+                                                Wrap: =false
+                                                X: =36
+                                                Y: =(Parent.Height-Self.Height)/2
+                                          - shp_Account_AccountCardHeaderBottomLine:
+                                              Control: Rectangle@2.3.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Divider.BorderColor
+                                                BorderStyle: =gblAppColors.Divider.BorderStyle
+                                                BorderThickness: =gblAppColors.Divider.BorderThickness
+                                                DisabledFill: =gblAppColors.Divider.DisabledColor
+                                                DisplayMode: =DisplayMode.View
+                                                Fill: =gblAppColors.Divider.Color
+                                                FocusedBorderColor: =gblAppColors.Divider.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Divider.FocusedBorderThickness
+                                                Height: =1
+                                                HoverFill: =gblAppColors.Divider.HoverColor
+                                                PressedFill: =gblAppColors.Divider.PressedColor
+                                                Visible: =ThisItem.IsFolded
+                                                Width: =Parent.Width
+                                                Y: =Parent.Height-Self.Height
+                                          - con_Account_AccountStatusLabel:
+                                              Control: GroupContainer@1.5.0
+                                              Variant: ManualLayout
+                                              Properties:
+                                                BorderColor: |-
+                                                  =If(
+                                                      ThisItem.Status = 'Status (CAPEX Account Lists)'.Active,
+                                                      ColorValue(gblAppTheme.palette.Green),
+                                                      ColorValue(gblAppTheme.palette.Grayscale10)
+                                                  )
+                                                BorderThickness: =1
+                                                DropShadow: =DropShadow.None
+                                                Fill: |-
+                                                  =If(
+                                                     ThisItem.Status ='Status (CAPEX Account Lists)'.Active,
+                                                      ColorValue(gblAppTheme.palette.SuccessLight),
+                                                      ColorValue(gblAppTheme.palette.Grayscale40)
+                                                  )
+                                                Height: =24
+                                                RadiusBottomLeft: =34
+                                                RadiusBottomRight: =34
+                                                RadiusTopLeft: =34
+                                                RadiusTopRight: =34
+                                                Width: =Max(lbl_Account_AccountStatus.Width,50)
+                                                X: =Parent.Width-gblAppSizes.Padding.Page-Self.Width-40
+                                                Y: =(Parent.Height-Self.Height)/2
+                                              Children:
+                                                - lbl_Account_AccountStatus:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      Align: =Align.Center
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =ColorValue(gblAppTheme.palette.Grayscale00)
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: |
+                                                        =gblAppSizes.Font.ExtraSmall
+                                                      Text: =ThisItem.Status
+                                                      Width: |
+                                                        =Len(Self.Text)*9
+                                                      Wrap: =false
+                                                      X: =(Parent.Width-Self.Width)/2
+                                          - img_Account_AccountCardHeaderRadioSelection:
+                                              Control: Image@2.2.3
+                                              Properties:
+                                                Height: =Self.Width
+                                                Image: |-
+                                                  =With(
+                                                      {
+                                                          varSvgImageRecord: LookUp(
+                                                              SVGImages,
+                                                              ImageName = If(ThisItem.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List', "CircleDotBlue", "CircleEmpty")
+                                                          )
+                                                      },
+                                                      With(
+                                                          {
+                                                              varImageData: Concatenate(
+                                                                  "data:image/svg+xml;utf8, ",
+                                                                  EncodeUrl(varSvgImageRecord.SVGCode)
+                                                              )
+                                                          },
+                                                          varImageData    
+                                                      )
+                                                  )
+                                                Width: =18
+                                                X: =10
+                                                Y: =Parent.Height/2-Self.Height/2
+                                          - btn_Account_AccountCardHeader:
+                                              Control: Classic/Button@2.2.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.ButtonTransparent.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.ButtonTransparent.BorderThickness
+                                                Color: =gblAppColors.ButtonTransparent.Color
+                                                DisabledBorderColor: =gblAppColors.ButtonTransparent.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.ButtonTransparent.DisabledColor
+                                                DisabledFill: =gblAppColors.ButtonTransparent.DisabledFill
+                                                Fill: =gblAppColors.ButtonTransparent.Fill
+                                                FocusedBorderColor: =gblAppColors.ButtonTransparent.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.ButtonTransparent.FocusedBorderThickness
+                                                Font: =gblAppColors.ButtonTransparent.Font
+                                                Height: =Parent.Height
+                                                HoverBorderColor: =gblAppColors.ButtonTransparent.HoverBorderColor
+                                                HoverColor: =gblAppColors.ButtonTransparent.HoverColor
+                                                HoverFill: =gblAppColors.ButtonTransparent.HoverFill
+                                                OnSelect: |-
+                                                  =UpdateContext({ 
+                                                      locSelectedAccount: If( locSelectedAccount.'CAPEX Account List' = ThisItem.'CAPEX Account List', 
+                                                          Blank(),
+                                                          ThisItem
+                                                      )
+                                                  }
+                                                  );
+                                                PressedBorderColor: =gblAppColors.ButtonTransparent.PressedBorderColor
+                                                PressedColor: =gblAppColors.ButtonTransparent.PressedColor
+                                                PressedFill: =gblAppColors.ButtonTransparent.PressedFill
+                                                RadiusBottomLeft: =gblAppColors.ButtonTransparent.RadiusBottomLeft
+                                                RadiusBottomRight: =gblAppColors.ButtonTransparent.RadiusBottomRight
+                                                RadiusTopLeft: =gblAppColors.ButtonTransparent.RadiusTopLeft
+                                                RadiusTopRight: =gblAppColors.ButtonTransparent.RadiusTopRight
+                                                Size: =gblAppSizes.Font.Medium
+                                                Text: '= '
+                                                Width: =Parent.Width
+                                          - ico_Account_AccountCard_Down:
+                                              Control: Classic/Icon@2.5.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Icon.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Icon.BorderThickness
+                                                Color: =gblAppColors.Icon.Color
+                                                DisabledBorderColor: =gblAppColors.Icon.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Icon.DisabledColor
+                                                DisabledFill: =gblAppColors.Icon.DisabledFill
+                                                Fill: =gblAppColors.Icon.Fill
+                                                FocusedBorderColor: =gblAppColors.Icon.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Icon.FocusedBorderThickness
+                                                Height: =18
+                                                HoverBorderColor: =gblAppColors.Icon.HoverBorderColor
+                                                HoverColor: =gblAppColors.Icon.HoverColor
+                                                HoverFill: =gblAppColors.Icon.HoverFill
+                                                Icon: =Icon.ChevronDown
+                                                OnSelect: |
+                                                  =UpdateContext({ 
+                                                      locSelectedAccount: ThisItem
+                                                  });
+
+                                                  UpdateIf(
+                                                      colCapexAccounts,
+                                                      'CAPEX Account List' = gal_Account_Accounts.Selected.'CAPEX Account List',
+                                                      {  
+                                                          IsFolded: Not(gal_Account_Accounts.Selected.IsFolded)
+                                                      }
+                                                  );
+                                                PressedBorderColor: =gblAppColors.Icon.PressedBorderColor
+                                                PressedColor: =gblAppColors.Icon.PressedColor
+                                                PressedFill: =gblAppColors.Icon.PressedFill
+                                                Visible: |+
+                                                  =ThisItem.IsFolded
+                                                Width: =20
+                                                X: =Parent.Width-Self.Width-6
+                                                Y: =Parent.Height/2-Self.Height/2
+                                          - ico_Account_AccountCard_Up:
+                                              Control: Classic/Icon@2.5.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Icon.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Icon.BorderThickness
+                                                Color: =gblAppColors.Icon.Color
+                                                DisabledBorderColor: =gblAppColors.Icon.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Icon.DisabledColor
+                                                DisabledFill: =gblAppColors.Icon.DisabledFill
+                                                Fill: =gblAppColors.Icon.Fill
+                                                FocusedBorderColor: =gblAppColors.Icon.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Icon.FocusedBorderThickness
+                                                Height: =18
+                                                HoverBorderColor: =gblAppColors.Icon.HoverBorderColor
+                                                HoverColor: =gblAppColors.Icon.HoverColor
+                                                HoverFill: =gblAppColors.Icon.HoverFill
+                                                Icon: =Icon.ChevronUp
+                                                OnSelect: |
+                                                  =UpdateContext({ 
+                                                      locSelectedAccount: ThisItem
+                                                  });
+
+                                                  UpdateIf(
+                                                      colCapexAccounts,'CAPEX Account List' = gal_Account_Accounts.Selected.'CAPEX Account List',
+                                                      {  
+                                                          IsFolded: Not(gal_Account_Accounts.Selected.IsFolded)
+                                                      }
+                                                  );
+                                                PressedBorderColor: =gblAppColors.Icon.PressedBorderColor
+                                                PressedColor: =gblAppColors.Icon.PressedColor
+                                                PressedFill: =gblAppColors.Icon.PressedFill
+                                                Visible: |+
+                                                  =Not(ThisItem.IsFolded)
+                                                Width: =20
+                                                X: =Parent.Width-Self.Width-6
+                                                Y: =Parent.Height/2-Self.Height/2
+      - con_Account_RightPanel_NewEditAccount:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.7)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =locIsVisibleRightPanelNewEditAccount
+            Width: =Parent.Width
+          Children:
+            - con_Account_RightPanel_NewEditAccount_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  Fill: =Color.White
+                  Height: =Parent.Height
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Min(450, Parent.Width)
+                  X: =Parent.Width-Self.Width
+                Children:
+                  - con_Account_RightPanel_NewEditAccount_BodyHeader:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =46
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_Account_RightPanel_NewEditAccount_BodyHeader:
+                            Control: Label@2.5.1
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =2
+                              Color: =Color.White
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(161, 159, 157, 1)
+                              FocusedBorderThickness: =4
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =gblAppSizes.Font.Large
+                              Text: |-
+                                =If(
+                                    IsBlank(locSelectedAccount),
+                                    "New Account",
+                                    "Edit Account"
+                                )
+                              Width: =Parent.Width-Self.X-40
+                              Wrap: =false
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_Account_RightPanel_NewEditAccount_BodyHeaderCancel:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(gblAppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              DisabledColor: =RGBA(225, 223, 221, 1)
+                              DisabledFill: =RGBA(0, 0, 0, 0)
+                              FocusedBorderThickness: =4
+                              Height: =20
+                              HoverBorderColor: =RGBA(0, 0, 0, 0)
+                              HoverColor: =Self.Color
+                              HoverFill: =RGBA(0, 0, 0, 0)
+                              Icon: =Icon.Cancel
+                              OnSelect: |
+                                =UpdateContext({
+                                    locIsVisibleRightPanelNewEditAccount: false,
+                                    locIfAccountOrSubAccountNumberAlreadyExists: false
+                                });
+                                Concurrent(
+                                  Reset(drp_Account_RightPanel_NewEditAccount_BodyContent_Category),
+                                  Reset(txt_Account_RightPanel_NewEditAccount_BodyContent_Name),
+                                  Reset(txt_Account_RightPanel_NewEditAccount_BodyContent_Number)
+                                );
+                              PressedBorderColor: =RGBA(0, 0, 0, 0)
+                              PressedColor: =ColorValue(gblAppTheme.palette.themeLighter)
+                              PressedFill: =RGBA(0, 0, 0, 0)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_Account_RightPanel_NewEditAccount_BodyContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        PaddingTop: =20
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Account_RightPanel_NewEditAccount_BodyContent_Category:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =70
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - drp_Account_RightPanel_NewEditAccount_BodyContent_Category:
+                                  Control: DropDown@0.0.45
+                                  Properties:
+                                    DefaultSelectedItems: =LookUp(colCapexAccountCategories, 'CAPEX Account List' = locSelectedCapexAccountCategory.'CAPEX Account List')
+                                    DisplayMode: |
+                                      =DisplayMode.Disabled
+                                    Items: =colCapexAccountCategories
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Category.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Category.Height+5
+                                  Children:
+                                    - Name5_1:
+                                        Control: DropDownDataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="Name"
+                                          FieldName: ="vsb_name"
+                                          FieldType: ="s"
+                                          Order: =1
+                                    - Account Category1:
+                                        Control: DropDownDataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="Account Category"
+                                          FieldName: ="vsb_accountcategoryid"
+                                          FieldType: ="g"
+                                          Order: =2
+                                    - Created On3:
+                                        Control: DropDownDataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="Created On"
+                                          FieldName: ="createdon"
+                                          FieldType: ="d"
+                                          Order: =3
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Category:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Category"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Category_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Category.X-Self.Width
+                        - con_Account_RightPanel_NewEditAccount_BodyContent_Number:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: |-
+                                =If(
+                                    And(lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Visible, lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Visible),
+                                        lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Height+10,
+                                    lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Visible,
+                                        lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Height+10,
+                                    lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Visible,
+                                        lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Height+10,
+                                    70
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - txt_Account_RightPanel_NewEditAccount_BodyContent_Number:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    DisplayMode: |-
+                                      =If(
+                                          IsBlank(locSelectedAccount),
+                                          DisplayMode.Edit,
+                                          DisplayMode.Disabled
+                                      )
+                                    TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =locSelectedAccount.Number
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Number.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Number.Height+5
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingTop: =3
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Account number already in use. Please choose different number."
+                                    Tooltip: =Self.Text
+                                    Visible: =locIfAccountOrSubAccountNumberAlreadyExists
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: |-
+                                      =If(
+                                          lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Visible,
+                                          lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Height,
+                                          txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Y+txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Height
+                                      )
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Number:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Number"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingTop: =3
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: |
+                                      ="Account number must contain numbers only."
+                                    Tooltip: =Self.Text
+                                    Visible: |-
+                                      =And(
+                                          Not(IsBlank(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value)), 
+                                          Or(
+                                              Not(IsNumeric(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value)),
+                                              IsMatch(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value, ",", MatchOptions.Contains),
+                                              IsMatch(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value, "\.", MatchOptions.Contains) 
+                                          )
+                                      )
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Y+txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Height
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Number.X-Self.Width
+                        - con_Account_RightPanel_NewEditAccount_BodyContent_Name:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =70
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - txt_Account_RightPanel_NewEditAccount_BodyContent_Name:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    MaxLength: =55
+                                    TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =locSelectedAccount.Name
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Name.Y+lbl_Account_RightPanel_NewEditAccount_BodyContent_Name.Height+5
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Name:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Name"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditAccount_BodyContent_Name_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =lbl_Account_RightPanel_NewEditAccount_BodyContent_Name.X-Self.Width
+                  - con_Account_RightPanel_NewEditAccount_BodyButtons:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =Color.Transparent
+                        FillPortions: =0
+                        Height: =60
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_Account_RightPanel_NewEditAccount_BodyButtons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              DisplayMode: |
+                                =If(
+                                    Or(
+                                        IsBlank(drp_Account_RightPanel_NewEditAccount_BodyContent_Category.Selected),
+                                        IsBlank(txt_Account_RightPanel_NewEditAccount_BodyContent_Name.Value),
+                                        IsBlank(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value),
+                                        lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Visible
+                                    ),
+                                    DisplayMode.Disabled,
+                                    DisplayMode.Edit
+                                )
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              Height: =32
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: "=UpdateContext({\n    locIfAccountOrSubAccountNumberAlreadyExists: Not(IsBlank(LookUp('CAPEX Account Lists', Number = Trim(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value))))\n});\n\n// If new account is creating and account number already exists, show error message, otherwise save/update account\nIf(\n    And(IsBlank(locSelectedAccount), locIfAccountOrSubAccountNumberAlreadyExists),\n    \"\",\n\nUpdateContext({\n    locSpinnerInformationText: \"Saving Account...\",\n    locIsVisiblePopUpSpinner: true,\n    locIsVisibleRightPanelNewEditAccount: false\n});\n\nIf(\n    IsBlank(locSelectedAccount),\n\n    // New Account\n    With(\n        {\n            varNewAccount: Patch(\n                'CAPEX Account Lists',\n                Defaults('CAPEX Account Lists'),\n                {\n                    'Parent Account':drp_Account_RightPanel_NewEditAccount_BodyContent_Category.Selected,\n              \n                    Number: Trim(txt_Account_RightPanel_NewEditAccount_BodyContent_Number.Value),\n                    Name: txt_Account_RightPanel_NewEditAccount_BodyContent_Name.Value,\n                    Order: Max(Max(Filter(colCapexAccounts, 'Parent Account'.'CAPEX Account List' = drp_Account_RightPanel_NewEditAccount_BodyContent_Category.Selected.'CAPEX Account List'), Order),0)+1\n                }\n            )\n        },\n        Collect(colCapexAccounts, \n            AddColumns(\n                varNewAccount,\n            IsFolded,\n            true\n        ));\n        UpdateContext({locSelectedAccount: LookUp(colCapexAccounts,'CAPEX Account List' = varNewAccount.'CAPEX Account List')})\n    );\n\n\n    \n    UpdateIf('CAPEX Account Lists', 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List', {Status: 'Status (CAPEX Account Lists)'.Inactive});\n    UpdateIf(colCapexAccounts, 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List', {Status: 'Status (CAPEX Account Lists)'.Inactive});\n    UpdateContext({locSelectedAccount: LookUp(colCapexAccounts,'CAPEX Account List'=locSelectedAccount.'CAPEX Account List')}),\n\n    // Existing account updated\n    UpdateIf(\n        'CAPEX Account Lists',\n         'CAPEX Account List'=locSelectedAccount.'CAPEX Account List',\n        {\n            Name: txt_Account_RightPanel_NewEditAccount_BodyContent_Name.Value\n        }\n    );\n    UpdateIf(colCapexAccounts, 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List', {Name: txt_Account_RightPanel_NewEditAccount_BodyContent_Name.Value});\n    UpdateContext({locSelectedAccount: LookUp(colCapexAccounts, 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List')})\n);\n\nUpdateContext({\n    locIfAccountOrSubAccountNumberAlreadyExists: false,\n    locIsVisiblePopUpSpinner: false,\n    locSpinnerInformationText: \"\"\n});\n\n);"
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =pcf_Account_RightPanel_NewEditAccount_BodyButtons_Cancel.X-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - pcf_Account_RightPanel_NewEditAccount_BodyButtons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: |-
+                                =UpdateContext({
+                                    locIsVisibleRightPanelNewEditAccount: false,
+                                    locIfAccountOrSubAccountNumberAlreadyExists: false
+                                });
+                                Concurrent(
+                                  Reset(drp_Account_RightPanel_NewEditAccount_BodyContent_Category),
+                                  Reset(txt_Account_RightPanel_NewEditAccount_BodyContent_Name),
+                                  Reset(txt_Account_RightPanel_NewEditAccount_BodyContent_Number)
+                                );
+                                LookUp('CAPEX Project Contracts',Account.'CAPEX Account List' in
+                                Filter(
+                                                                colCapexAccounts,
+                                                                'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List'
+                                                            ).'CAPEX Account List')
+                              Text: ="Cancel"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =Parent.Width-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+      - con_Account_RightPanel_NewEditSubaccount:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.7)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: |+
+              =locIsVisibleRightPanelNewEditSubaccount
+            Width: =Parent.Width
+          Children:
+            - con_Account_RightPanel_NewEditSubaccount_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  Fill: =Color.White
+                  Height: =Parent.Height
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Min(450, Parent.Width)
+                  X: =Parent.Width-Self.Width
+                Children:
+                  - con_Account_RightPanel_NewEditSubaccount_BodyHeader:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =46
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_Account_RightPanel_NewEditSubaccount_BodyHeader:
+                            Control: Label@2.5.1
+                            Properties:
+                              Color: =Color.White
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =gblAppSizes.Font.Large
+                              Text: |-
+                                =If(
+                                    IsBlank(locSelectedCapexSubaccount),
+                                    "New Subaccount",
+                                    "Edit Subaccount"
+                                )
+                              Width: =Parent.Width-Self.X-40
+                              Wrap: =false
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_Account_RightPanel_NewEditSubaccount_BodyHeaderCancel:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(gblAppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              Height: =20
+                              HoverColor: =Self.Color
+                              Icon: =Icon.Cancel
+                              OnSelect: |-
+                                =UpdateContext({
+                                    locIsVisibleRightPanelNewEditSubaccount: false,
+                                    locSelectedCapexSubaccount: Blank(),
+                                    locIfAccountOrSubAccountNumberAlreadyExists: false
+                                });
+                                Concurrent(
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName),
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name),
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number)
+                                );
+                              PressedColor: =ColorValue(gblAppTheme.palette.themeLighter)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_Account_RightPanel_NewEditSubaccount_BodyContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        PaddingTop: =20
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =70
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - txt_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    DisplayMode: =DisplayMode.Disabled
+                                    TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =locSelectedAccount.Name
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountMain.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountMain.Height+5
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountMain:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Main Account"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountMain_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =10
+                        - con_Account_RightPanel_NewEditSubaccount_BodyContent_Number:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: |-
+                                =If(
+                                    And(lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Visible, lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Visible),
+                                        lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Height+10,
+                                    lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Visible,
+                                        lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Height+10,
+                                    lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Visible,
+                                        lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Height+10,
+                                    70
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =gblAppStyles.Label.Color
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingLeft: =1
+                                    PaddingRight: =1
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =10
+                                    Text: =locSelectedAccount.Number & "_"
+                                    Tooltip: =Self.Text
+                                    Visible: =IsBlank(locSelectedCapexSubaccount)
+                                    Width: =Len(Self.Text)*9
+                                    Wrap: =false
+                                    X: =lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number.X
+                                    Y: =txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Y+txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Height/2-Self.Height/2
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingTop: =3
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Subaccount number already in use. Please choose different number."
+                                    Tooltip: =Self.Text
+                                    Visible: =locIfAccountOrSubAccountNumberAlreadyExists
+                                    Width: =Parent.Width-Self.X-20
+                                    X: =20
+                                    Y: |-
+                                      =If(
+                                          lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Visible,
+                                          lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Height,
+                                          txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Y+txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Height
+                                      )
+                              - txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    DisplayMode: |-
+                                      =If(
+                                          IsBlank(locSelectedCapexSubaccount),
+                                          DisplayMode.Edit,
+                                          DisplayMode.Disabled
+                                      )
+                                    TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =locSelectedCapexSubaccount.Number
+                                    Width: |-
+                                      =If(
+                                          IsBlank(locSelectedCapexSubaccount),
+                                          Parent.Width-Self.X-20,
+                                          Parent.Width-Self.X*2
+                                      )
+                                    X: |-
+                                      =If(
+                                          IsBlank(locSelectedCapexSubaccount),
+                                          lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix.X+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix.Width,
+                                          20
+                                      )
+                                    Y: =lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Height+5
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Subaccount Number"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingTop: =3
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Subaccount number must contain numbers only."
+                                    Tooltip: =Self.Text
+                                    Visible: |-
+                                      =And(
+                                          txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.DisplayMode = DisplayMode.Edit,
+                                          Not(IsBlank(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value)), 
+                                          Or(
+                                              Not(IsNumeric(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value)),
+                                              IsMatch(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value, ",", MatchOptions.Contains),
+                                              IsMatch(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value, "\.", MatchOptions.Contains) 
+                                          )
+                                      )
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Y+txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Height
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: |
+                                      =10
+                        - con_Account_RightPanel_NewEditSubaccount_BodyContent_Name:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =76
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    MaxLength: =55
+                                    TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =locSelectedCapexSubaccount.Name
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Y+lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Height+5
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Name:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AutoHeight: =true
+                                    Height: =22
+                                    Text: ="Subaccount Name"
+                                    Weight: ='TextCanvas.Weight'.Semibold
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Name_Asterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppStyles.Label.BorderColor
+                                    BorderThickness: =gblAppStyles.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisabledFill: =gblAppStyles.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppStyles.Label.Fill
+                                    FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    Font: =gblAppStyles.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                                    HoverFill: =gblAppStyles.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                                    PressedColor: =gblAppStyles.Label.PressedColor
+                                    PressedFill: =gblAppStyles.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =10
+                  - con_Account_RightPanel_NewEditSubaccount_BodyButtons:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =Color.Transparent
+                        FillPortions: =0
+                        Height: =60
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =
+                              DisplayMode: |-
+                                =If(
+                                    Or(
+                                        IsBlank(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Value),
+                                        IsBlank(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value),
+                                        lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Visible
+                                    ),
+                                    DisplayMode.Disabled,
+                                    DisplayMode.Edit
+                                )
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              Height: =32
+                              HoverBorderColor: =
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: "=UpdateContext(\n    {\n        locIfAccountOrSubAccountNumberAlreadyExists: Not(\n            IsBlank(\n                LookUp(\n                    'CAPEX Account Lists',\n                    Number = locSelectedAccount.Number & \"_\" & Trim(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value)\n                )\n            )\n        )\n    }\n);\n// If new subaccount is creating and subaccount number already exists, show error message, otherwise save/update subaccount\nIf(\n    And(\n        IsBlank(locSelectedCapexSubaccount),\n        locIfAccountOrSubAccountNumberAlreadyExists\n    ),\n    \"\",\n    UpdateContext(\n        {\n            locSpinnerInformationText: \"Saving Subaccount...\",\n            locIsVisiblePopUpSpinner: true,\n            locIsVisibleRightPanelNewEditSubaccount: false\n        }\n    );\n    If(\n        IsBlank(locSelectedCapexSubaccount),\n    // New Subaccount\n        UpdateContext(\n            {\n                locSelectedCapexSubaccount: Patch(\n                    'CAPEX Account Lists',\n                    Defaults('CAPEX Account Lists'),\n                    {\n                        'Parent Account': locSelectedAccount,\n                        Number: locSelectedAccount.Number & \"_\" & Trim(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Value),\n                        Name: txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Value,\n                        Order: Max(\n                            Max(\n                                Filter(\n                                    'CAPEX Account Lists',\n                                    'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List'\n                                ),\n                                Order\n                            ),\n                            0\n                        ) + 1\n                    }\n                )\n            }\n        );\n        Collect(\n            colCapexAccounts,\n            locSelectedCapexSubaccount\n        );\n        UpdateIf(\n            'CAPEX Account Lists',\n            'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\n            {Status: 'Status (CAPEX Account Lists)'.Inactive}\n        );\n        UpdateIf(\n            colCapexAccounts,\n            'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\n            {Status: 'Status (CAPEX Account Lists)'.Inactive}\n        );\n        UpdateContext(\n            {\n                locSelectedCapexSubaccount: LookUp(\n                    colCapexSubaccounts,\n                    'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List'\n                )\n            }\n        ),\n    // Existing subaccount updated\n        UpdateIf(\n            'CAPEX Account Lists',\n            'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\n            {Name: txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Value}\n        );\n        UpdateIf(\n            colCapexAccounts,\n            'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\n            {Name: txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Value}\n        );\n    );\n    UpdateContext(\n        {\n            locIfAccountOrSubAccountNumberAlreadyExists: false,\n            locSelectedCapexSubaccount: Blank(),\n            locIsVisiblePopUpSpinner: false,\n            locSpinnerInformationText: \"\"\n        }\n    );\n    \n);\n\n"
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Cancel.X-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: |-
+                                =UpdateContext({
+                                    locIsVisibleRightPanelNewEditSubaccount: false,
+                                    locSelectedCapexSubaccount: Blank(),
+                                    locIfAccountOrSubAccountNumberAlreadyExists: false
+                                });
+                                Concurrent(
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_AccountName),
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name),
+                                  Reset(txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number)
+                                );
+                              Text: ="Cancel"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =Parent.Width-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+      - con_Account_RightPanel_Ordering:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.7)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =locIsVisibleRightPanelOrdering
+            Width: =Parent.Width
+          Children:
+            - con_Account_RightPanel_Ordering_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  Fill: =Color.White
+                  Height: =Parent.Height
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Min(450, Parent.Width)
+                  X: =Parent.Width-Self.Width
+                Children:
+                  - con_Account_RightPanel_Ordering_BodyHeader:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =46
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_Account_RightPanel_Ordering_BodyHeader:
+                            Control: Label@2.5.1
+                            Properties:
+                              Color: =Color.White
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =gblAppSizes.Font.Large
+                              Text: |-
+                                =If(
+                                    locIfOrderingSubaccounts,
+                                    "Subaccounts order",
+                                    "'Capex Accounts' order"
+                                )
+                              Width: =Parent.Width-Self.X-40
+                              Wrap: =false
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_Account_RightPanel_Ordering_BodyHeaderCancel:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(gblAppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              Height: =20
+                              HoverColor: =Self.Color
+                              Icon: =Icon.Cancel
+                              OnSelect: |-
+                                =UpdateContext({locResetOrderingList: "Reset"&Rand(), locIsVisibleRightPanelOrdering: false});
+                              PressedColor: =ColorValue(gblAppTheme.palette.themeLighter)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_Account_RightPanel_Ordering_BodyContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        PaddingLeft: =20
+                        PaddingTop: =10
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_Account_RightPanel_Ordering_BodyContent:
+                            Control: Label@2.5.1
+                            Properties:
+                              AutoHeight: =true
+                              BorderColor: =gblAppStyles.Label.BorderColor
+                              BorderThickness: =gblAppStyles.Label.BorderThickness
+                              Color: =ColorValue(gblAppTheme.palette.Grayscale10)
+                              DisabledBorderColor: =gblAppStyles.Label.DisabledBorderColor
+                              DisabledColor: =gblAppStyles.Label.DisabledColor
+                              DisabledFill: =gblAppStyles.Label.DisabledFill
+                              DisplayMode: =DisplayMode.View
+                              Fill: =gblAppStyles.Label.Fill
+                              FocusedBorderColor: =gblAppStyles.Label.FocusedBorderColor
+                              FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                              Font: =gblAppStyles.Label.Font
+                              FontWeight: =FontWeight.Lighter
+                              Height: =32*1
+                              HoverBorderColor: =gblAppStyles.Label.HoverBorderColor
+                              HoverFill: =gblAppStyles.Label.HoverFill
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =0
+                              PressedBorderColor: =gblAppStyles.Label.PressedBorderColor
+                              PressedColor: =gblAppStyles.Label.PressedColor
+                              PressedFill: =gblAppStyles.Label.PressedFill
+                              Size: =gblAppSizes.Font.Medium
+                              Text: ="To reorder drag and drop listed items"
+                              Tooltip: =Self.Text
+                              Width: =Parent.Width-Self.X*2-20
+                              Wrap: =false
+                              X: =20
+                        - pcf_Account_RightPanel_Ordering_BodyContent_Accounts:
+                            Control: CodeComponent
+                            ComponentName: pdd_CustomControl.PowerDragDrop
+                            Properties:
+                              BorderColor: ="rgba(0, 0, 0, 0.4)"
+                              BorderWidth: =0
+                              DropZoneID: ="All"
+                              Height: =con_Account_RightPanel_Ordering_BodyContent.Height-Self.Y
+                              IdColumn: |
+                                ="vsb_capexaccountlistid"
+                              InputEvent: =locResetOrderingList
+                              IsMasterZone: =true
+                              ItemBackgroundColor: =""
+                              ItemFont: ="'Open Sans'"
+                              ItemFontSize: =15
+                              ItemTemplate: ="<p><b>{{vsb_name}}</b></p>"
+                              Items: |-
+                                =AddColumns(
+                                    Sort(
+
+                                    Filter(
+                                        colCapexAccounts,
+                                        'Parent Account'.'CAPEX Account List' = locSelectedCapexAccountCategory.'CAPEX Account List'
+                                    )
+
+                                    ,
+                                   Order,
+                                   SortOrder.Ascending
+                                ),
+                                    ZoneColumn,
+                                    "All"
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RotateOnDrag: ='CustomControl.PowerDragDrop.RotateOnDrag'.ClockwiseSmall
+                              Visible: =Not(locIfOrderingSubaccounts)
+                              Width: =Parent.Width-Self.X
+                              X: =20
+                              ZoneColumn: ="ZoneColumn"
+                        - pcf_Account_RightPanel_Ordering_BodyContent_Subaccounts:
+                            Control: CodeComponent
+                            ComponentName: pdd_CustomControl.PowerDragDrop
+                            Properties:
+                              BorderColor: ="rgba(0, 0, 0, 0.4)"
+                              BorderWidth: =0
+                              DropZoneID: ="All"
+                              Height: =con_Account_RightPanel_Ordering_BodyContent.Height-Self.Y
+                              IdColumn: |
+                                ="vsb_capexaccountlistid"
+                              InputEvent: =locResetOrderingList
+                              IsMasterZone: =true
+                              ItemBackgroundColor: =""
+                              ItemFont: ="'Open Sans'"
+                              ItemFontSize: =15
+                              ItemTemplate: ="<p><b>{{vsb_name}}</b></p>"
+                              Items: |-
+                                =AddColumns(
+                                    Sort(
+                                        Filter(
+                                            colCapexAccounts,
+                                            'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List'
+                                        ),
+                                        Order,
+                                        SortOrder.Ascending
+                                    ),
+                                    ZoneColumn,
+                                    "All"
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RotateOnDrag: ='CustomControl.PowerDragDrop.RotateOnDrag'.ClockwiseSmall
+                              Visible: =locIfOrderingSubaccounts
+                              Width: =Parent.Width-Self.X
+                              X: =20
+                              ZoneColumn: ="ZoneColumn"
+                  - con_Account_RightPanel_Ordering_BodyButtons:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =Color.Transparent
+                        FillPortions: =0
+                        Height: =60
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_Account_RightPanel_Ordering_BodyButtons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              DisplayMode: |
+                                =DisplayMode.Edit
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              Height: =32
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: |-
+                                =UpdateContext({
+                                    locSpinnerInformationText: "Saving new order...",
+                                    locIsVisiblePopUpSpinner: true,
+                                    locIsVisibleRightPanelOrdering: false
+                                });
+
+
+
+                                If(
+                                    locIfOrderingSubaccounts,
+                                    // Subaccounts ordering
+                                    ForAll(
+                                        pcf_Account_RightPanel_Ordering_BodyContent_Subaccounts.CurrentItems As RecordItem,
+                                        UpdateIf('CAPEX Account Lists', Text('CAPEX Account List') = RecordItem.ItemId, {Order: RecordItem.Position});
+                                        UpdateIf(colCapexAccounts,Text('CAPEX Account List') = RecordItem.ItemId, {Order: RecordItem.Position});
+                                    ),
+
+                                    // 'Capex Accounts' ordering
+                                    ForAll(
+                                        pcf_Account_RightPanel_Ordering_BodyContent_Accounts.CurrentItems As RecordItem,
+                                        UpdateIf('CAPEX Account Lists', Text('CAPEX Account List') = RecordItem.ItemId, {Order: RecordItem.Position});
+                                        UpdateIf(colCapexAccounts, Text('CAPEX Account List') = RecordItem.ItemId, {Order: RecordItem.Position});
+                                    );
+                                    UpdateContext({locSelectedAccount: Blank()})
+                                );
+
+
+                                UpdateContext({
+                                    locResetOrderingList: "Reset"&Rand()&Now()
+                                });
+
+                                UpdateContext({
+                                    locIsVisiblePopUpSpinner: false,
+                                    locSpinnerInformationText: ""
+                                });
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =pcf_Account_RightPanel_Ordering_BodyButtons_Cancel.X-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - pcf_Account_RightPanel_Ordering_BodyButtons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: |-
+                                =UpdateContext({locResetOrderingList: "Reset"&Rand(), locIsVisibleRightPanelOrdering: false});
+                              Text: ="Cancel"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: =""
+                              Width: =96
+                              X: =Parent.Width-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+      - cmp_Account_PopUpConfirmation_DeleteSubAccount:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Confirm"
+            Description: ="Are you sure that you want to permanently delete """ & locSelectedCapexSubaccount.Name & """ subaccount?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpDeleteSubaccount: false})
+            OnConfirm: |-
+              =UpdateContext({
+                  locSpinnerInformationText: "Deleting Subaccount...",
+                  locIsVisiblePopUpSpinner: true,
+                  locIsVisiblePopUpDeleteSubaccount: false
+              });
+
+              With(
+                  {
+                      varSubaccountToDelete: LookUp(colCapexAccounts, 'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List')
+                  },
+                  Remove('CAPEX Account Lists', varSubaccountToDelete);
+                  Remove(colCapexAccounts, varSubaccountToDelete);
+              );
+
+              UpdateContext({
+                  locIsVisiblePopUpSpinner: false,
+                  locSpinnerInformationText: ""
+              });
+            Title: ="Delete Subaccount?"
+            Visible: =locIsVisiblePopUpDeleteSubaccount
+            Width: =Parent.Width
+      - cmp_Account_PopUpConfirmation_DeleteAccount:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Confirm"
+            Description: ="Are you sure that you want to permanently delete """ & locSelectedAccount.Name & """ account with its all related subaccounts?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpDeleteAccount: false})
+            OnConfirm: |-
+              =UpdateContext({
+                  locSpinnerInformationText: "Deleting Account...",
+                  locIsVisiblePopUpSpinner: true,
+                  locIsVisiblePopUpDeleteAccount: false
+              });
+
+              Remove('CAPEX Account Lists', LookUp('CAPEX Account Lists', 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List'));
+              Remove(colCapexAccounts, LookUp(colCapexAccounts, 'CAPEX Account List'=locSelectedAccount.'CAPEX Account List'));
+              ClearCollect(colCapexSubaccounts,'CAPEX Account Lists');
+
+              UpdateContext({
+                  locSelectedAccount: Blank()
+              });
+
+              UpdateContext({
+                  locIsVisiblePopUpSpinner: false,
+                  locSpinnerInformationText: ""
+              });
+            Title: ="Delete Account?"
+            Visible: =locIsVisiblePopUpDeleteAccount
+            Width: =Parent.Width
+      - cmp_Account_PopUpConfirmation_ChangeStatusOfAccount:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: |-
+              =If(
+                  locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Deactivate",
+                  "Activate"
+              )
+            Description: |-
+              =If(
+                  locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Are you sure that you want to deactivate """ & locSelectedAccount.Name & """ account? All related subaccounts will be automatically deactivated and associated forecasted costs will be deleted.",
+                  "Are you sure that you want to activate """ & locSelectedAccount.Name & """ account?"
+              )
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpChangeStatusOfAccount: false})
+            OnConfirm: "=UpdateContext(\r\n    {\r\n        locSpinnerInformationText: \"Updating Account...\",\r\n        locIsVisiblePopUpSpinner: true,\r\n        locIsVisiblePopUpChangeStatusOfAccount: false\r\n    }\r\n);\r\nIf(\r\n    locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active,\r\n    UpdateIf(\r\n        'CAPEX Account Lists',\r\n        'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Inactive}\r\n    );\r\n    UpdateIf(\r\n        colCapexAccounts,\r\n        'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Inactive}\r\n    );\r\n    UpdateIf(\r\n        'CAPEX Account Lists',\r\n        'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    UpdateIf(\r\n        colCapexAccounts,\r\n        'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    With(\r\n        {\r\n            locSubaccounts: Filter(\r\n                colCapexAccounts,\r\n                'Parent Account'.'CAPEX Account List' = locSelectedAccount.'CAPEX Account List'\r\n            )\r\n        },\r\n        With(\r\n            {\r\n                varCapexContractsForSubaccountInCurrentYearRecords: Filter(\r\n                    colCapexProjectContracts,\r\n                    Account.'CAPEX Account List' in locSubaccounts.'CAPEX Account List'\r\n                ).'CAPEX Project Contract'\r\n            },\r\n            With(\r\n                {\r\n                    varCapexCostsForSubaccountInCurrentYearRecords: Filter(\r\n                        'CAPEX Costs',\r\n                        And(\r\n                            Contract.'CAPEX Project Contract' in varCapexContractsForSubaccountInCurrentYearRecords,\r\n                            Year = Year(Today()),\r\n                            Month > Month(Today())\r\n                        )\r\n                    )\r\n                },\r\n                ForAll(\r\n                    varCapexCostsForSubaccountInCurrentYearRecords As varCapexCostRecord,\r\n                    Patch(\r\n                        'CAPEX Costs',\r\n                        varCapexCostRecord,\r\n                        {Cost: 0}\r\n                    )\r\n                );\r\n                RemoveIf(\r\n                    'CAPEX Costs',\r\n                    And(\r\n                        Contract.'CAPEX Project Contract' in varCapexContractsForSubaccountInCurrentYearRecords,\r\n                        Year > Year(Today())\r\n                    )\r\n                )\r\n            )\r\n        );\r\n    ),\r\n    UpdateIf(\r\n        'CAPEX Account Lists',\r\n        'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    UpdateIf(\r\n        colCapexAccounts,\r\n        'CAPEX Account List' = locSelectedAccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    \r\n);\r\nUpdateContext(\r\n    {\r\n        locIsVisiblePopUpSpinner: false,\r\n        locSpinnerInformationText: \"\"\r\n    }\r\n);\r\n"
+            Title: |-
+              =If(
+                  locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Deactivate Account?",
+                  "Activate Account?"
+              )
+            Visible: =locIsVisiblePopUpChangeStatusOfAccount
+            Width: =Parent.Width
+      - cmp_Account_PopUpConfirmation_ChangeStatusOfSubAccount:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: |-
+              =If(
+                  locSelectedCapexSubaccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Deactivate",
+                  "Activate"
+              )
+            Description: |-
+              =If(
+                  locSelectedCapexSubaccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Are you sure that you want to deactivate """ & locSelectedCapexSubaccount.Name & """ subaccount? All forecasted costs associated with this subaccount will be deleted.",
+                  "Are you sure that you want to activate """ & locSelectedCapexSubaccount.Name & """ subaccount?"
+              )
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpChangeStatusOfSubaccount: false})
+            OnConfirm: "=UpdateContext(\r\n    {\r\n        locSpinnerInformationText: \"Updating Subaccount...\",\r\n        locIsVisiblePopUpSpinner: true,\r\n        locIsVisiblePopUpChangeStatusOfSubaccount: false\r\n    }\r\n);\r\nIf(\r\n    locSelectedCapexSubaccount.Status = 'Status (CAPEX Account Lists)'.Active,\r\n    UpdateIf(\r\n        'CAPEX Account Lists',\r\n        'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Inactive}\r\n    );\r\n    UpdateIf(\r\n        colCapexAccounts,\r\n        'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Inactive}\r\n    );\r\n    // Delete all forecasted capex costs for this subaccount\r\nWith(\r\n        {\r\n            varCapexContractsForSubaccountInCurrentYearRecords: Filter(\r\n                colCapexProjectContracts,\r\n                Account.'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List'\r\n            ).'CAPEX Project Contract'\r\n        },\r\n        With(\r\n            {\r\n                varCapexCostsForSubaccountInCurrentYearRecords: Filter(\r\n                    'CAPEX Costs',\r\n                    And(\r\n                        Contract.'CAPEX Project Contract' in varCapexContractsForSubaccountInCurrentYearRecords,\r\n                        Year = Year(Today()),\r\n                        Month > Month(Today())\r\n                    )\r\n                )\r\n            },\r\n       \r\n                ForAll(\r\n                    varCapexCostsForSubaccountInCurrentYearRecords As varCapexCostRecord,\r\n                         Patch(\r\n                'CAPEX Costs',\r\n                    varCapexCostRecord,{\r\n                        Cost: 0\r\n                    }\r\n                )\r\n            );\r\n            RemoveIf(\r\n                'CAPEX Costs',\r\n                And(\r\n                    Contract.'CAPEX Project Contract' in varCapexContractsForSubaccountInCurrentYearRecords,\r\n                    Year > Year(Today())\r\n                )\r\n            )\r\n        )\r\n    ),\r\n    locSelectedCapexSubaccount.Status = 'Status (CAPEX Account Lists)'.Inactive,\r\n    UpdateIf(\r\n        'CAPEX Account Lists',\r\n        'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    UpdateIf(\r\n        colCapexAccounts,\r\n        'CAPEX Account List' = locSelectedCapexSubaccount.'CAPEX Account List',\r\n        {Status: 'Status (CAPEX Account Lists)'.Active}\r\n    );\r\n    \r\n);\r\nUpdateContext(\r\n    {\r\n        locIsVisiblePopUpSpinner: false,\r\n        locSpinnerInformationText: \"\"\r\n    }\r\n);\r\n"
+            Title: |-
+              =If(
+                  locSelectedAccount.Status = 'Status (CAPEX Account Lists)'.Active,
+                  "Deactivate Subaccount?",
+                  "Activate Subaccount?"
+              )
+            Visible: =locIsVisiblePopUpChangeStatusOfSubaccount
+            Width: =Parent.Width

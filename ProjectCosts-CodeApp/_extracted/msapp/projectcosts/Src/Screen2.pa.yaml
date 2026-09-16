@@ -1,0 +1,58 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Screen2:
+    Children:
+      - ButtonCanvas2:
+          Control: Button@0.0.45
+          Properties:
+            OnSelect: |-
+              =Filter(
+                  colCapexCostDataToPatch,
+                  And(
+                      Month >= LookUp(
+                          gblClusterDurations,
+                          Order = 5
+                      ).StartMonth,
+                      Month <= LookUp(
+                          gblClusterDurations,
+                          Order = 5
+                      ).EndMonth,
+                      Year >= LookUp(
+                          gblClusterDurations,
+                          Order = 5
+                      ).StartYear,
+                      Year <= LookUp(
+                          gblClusterDurations,
+                          Order = 5
+                      ).EndYear
+                  )
+              )
+            X: =40
+            Y: =40
+      - TextCanvas5:
+          Control: Text@0.0.51
+          Properties:
+            Text: =
+            X: =207
+            Y: =72
+      - TextCanvas3:
+          Control: Text@0.0.51
+          Properties:
+            Height: =636
+            Size: =22
+            Text: =JSON(colFinatCostDataOptimized,JSONFormat.FlattenValueTables)
+            Width: =618
+            X: =96
+            Y: =132
+      - TextCanvas4:
+          Control: Text@0.0.51
+          Properties:
+            X: =60
+            Y: =60

@@ -1,0 +1,183 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_Left_Navigation:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      FontSize:
+        PropertyKind: Input
+        DisplayName: FontSize
+        Description: A font size property
+        RaiseOnReset: true
+        DataType: Number
+        Default: =100
+      IsExpanded:
+        PropertyKind: Input
+        DisplayName: IsExpanded
+        Description: A IsExpanded property
+        RaiseOnReset: true
+        DataType: Boolean
+        Default: =true
+      Items:
+        PropertyKind: Input
+        DisplayName: Items
+        Description: A Items property
+        RaiseOnReset: true
+        DataType: Table
+        Default: |-
+          =Table(
+              {
+                  ItemKey: "Item1Key",
+                  ItemDisplayName: "Item1",
+                  ItemIconName: "Info",
+                  ItemEnabled: true,
+                  TargetScreen: App.ActiveScreen
+              },
+              {
+                  ItemKey: "Item2Key",
+                  ItemDisplayName: "Item2",
+                  ItemIconName: "Document",
+                  TargetScreen: App.ActiveScreen
+              },
+              {
+                  ItemKey: "Item3Key",
+                  ItemDisplayName: "Item3",
+                  ItemIconName: "Document",
+                  TargetScreen: App.ActiveScreen
+              }
+          )
+      OnExpand:
+        PropertyKind: Event
+        DisplayName: OnExpand
+        Description: A OnExpand property
+        ReturnType: Boolean
+        Default: =true
+      OnSelect:
+        PropertyKind: Event
+        DisplayName: OnSelect
+        Description: A OnSelect event
+        ReturnType: Boolean
+        Default: =true
+      Selected:
+        PropertyKind: Input
+        DisplayName: Selected
+        Description: A selected item property
+        RaiseOnReset: true
+        DataType: Record
+        Default: |-
+          ={
+              ItemKey: "Item1Key",
+              ItemDisplayName: "Item1",
+              ItemIconName: "Info",
+              ItemEnabled: true,
+              TargetScreen: App.ActiveScreen
+          }
+      SelectedKey:
+        PropertyKind: Output
+        DisplayName: SelectedKey
+        Description: A selected key as string
+        DataType: Text
+    Properties:
+      SelectedKey: =pcf_Left_Navigation_Menu.SelectedKey
+      Width: =200
+    Children:
+      - con_Left_Navigation:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =4
+            PaddingBottom: =4
+            PaddingTop: =4
+            Width: =Parent.Width
+          Children:
+            - con_Left_Navigation_Header:
+                Control: GroupContainer@1.5.0
+                Variant: ManualLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  DropShadow: =DropShadow.None
+                  FillPortions: =0
+                  Height: =45
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =Parent.Width
+                Children:
+                  - rec_Left_Navigation_Expanded_Delimiter:
+                      Control: Rectangle@2.3.0
+                      Properties:
+                        Height: =2
+                        Width: =Parent.Width
+                        Y: =Parent.Height-3
+                  - lbl_Left_Navigation_Expand:
+                      Control: Label@2.5.1
+                      Properties:
+                        Height: =Parent.Height -4
+                        Text: =cmp_Left_Navigation.Selected.ItemKey
+                        Visible: =false
+                        Width: =Parent.Width-icon_Left_Navigation_Expand.Width-10
+                        X: =icon_Left_Navigation_Expand.Width+2
+                        Y: =40
+                  - icon_Left_Navigation_Expand:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        Color: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FocusedBorderColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FocusedBorderThickness: =1
+                        Height: =28
+                        HoverBorderColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                        HoverColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                        HoverFill: =ColorValue(gblAppTheme.palette.hoverButton)
+                        Icon: =Icon.Hamburger
+                        OnSelect: =cmp_Left_Navigation.OnExpand()
+                        PaddingLeft: =6
+                        PaddingRight: =6
+                        Tooltip: =$"{If(cmp_Left_Navigation.IsExpanded, "Decrease", "Expand")} left naviagtion panel"
+                        Width: =28
+            - pcf_Left_Navigation_Menu:
+                Control: CodeComponent
+                ComponentName: cat_PowerCAT.Nav
+                Properties:
+                  AccessibilityLabel: ="Left navigation"
+                  Height: =Parent.Height-con_Left_Navigation_Header.Height-10
+                  Items: |-
+                    =With(
+                        {
+                            varItems: If(
+                                Not(cmp_Left_Navigation.IsExpanded),
+                                ForAll(
+                                    cmp_Left_Navigation.Items,
+                                    {
+                                        ItemKey: ThisRecord.ItemKey,
+                                        ItemDisplayName: "",
+                                        ItemIconName: ThisRecord.ItemIconName,
+                                        ItemEnabled: ThisRecord.ItemEnabled,
+                                        TargetScreen: ThisRecord.TargetScreen
+                                    }
+                                ),
+                                cmp_Left_Navigation.Items
+                            )
+                        },
+                        varItems
+                    )
+                  OnChange: =cmp_Left_Navigation.OnSelect();
+                  OnSelect: =
+                  SelectedKey: =cmp_Left_Navigation.Selected.ItemKey
+                  Theme: =gblAppThemeJson
+                  Tooltip: ="Left navigation"
+                  Width: =Parent.Width
+                  X: =2
+                  Y: =Min(45, con_Left_Navigation_Header.Height)

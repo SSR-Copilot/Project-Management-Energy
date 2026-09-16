@@ -1,0 +1,460 @@
+{
+  "TopParent": {
+    "Type": "ControlInfo",
+    "Name": "fn_Common",
+    "Template": {
+      "Id": "http://microsoft.com/appmagic/Component",
+      "Version": "1.0",
+      "LastModifiedTimestamp": "639244487784982859",
+      "Name": "7079554470d2408591f8e15381fde51e",
+      "FirstParty": true,
+      "IsPremiumPcfControl": false,
+      "IsCustomGroupControlTemplate": false,
+      "CustomGroupControlTemplateName": "",
+      "IsComponentDefinition": true,
+      "CustomProperties": [
+        {
+          "Name": "IsValidCurrency",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "67",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsValidCurrency_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsValidCurrency",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter of input text value as string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsValidCurrency_candidate",
+                "Tooltip": "A parameter of input text value as string"
+              }
+            ]
+          },
+          "DisplayName": "IsValidCurrency",
+          "Tooltip": "This method validate of localy currency value"
+        },
+        {
+          "Name": "DateAddYears",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "DateTime",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "67",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "DateAddYears_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "DateTime",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "DateAddYears",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "DateTime(2000, 1, 1, 0, 0, 0)",
+                  "Description": "A candidate as datetime parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 9,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddYears_candidate",
+                "Tooltip": "A candidate as datetime parameter"
+              },
+              {
+                "Name": "DateAddYears_addition",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "Number",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "addition",
+                  "ParentPropertyName": "DateAddYears",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "100",
+                  "Description": "A decimal number in years parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 5,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddYears_addition",
+                "Tooltip": "A decimal number in years parameter"
+              }
+            ]
+          },
+          "DisplayName": "DateAddYears",
+          "Tooltip": "A function adds a number of units to a date/time value. "
+        },
+        {
+          "Name": "ChecklisAsHTMLTable",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "String",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "67",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "ChecklisAsHTMLTable_source",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Table\",\"EnumString\":\"\",\"Type\":[{\"Name\":\"clusterstate\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"editdate\",\"Kind\":\"Date\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"editor\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"index\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"name\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"relevance\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]},{\"Name\":\"taskstate\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}]}}",
+                "PropertyDataTypeKey": "Table",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "source",
+                  "ParentPropertyName": "ChecklisAsHTMLTable",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "Table(\n    {\n        name: \"Name\",\n        relevance: \"Gate Relevance\",\n        taskstate: \"Task State\",\n        index: 0,\n        clusterstate: \"Cluster State\",\n        editor: \"Modified By\",\n        editdate: Today()\n    }\n)",
+                  "Description": "A source collections",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 3,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "ChecklisAsHTMLTable_source",
+                "Tooltip": "A source collections"
+              }
+            ]
+          },
+          "DisplayName": "ChecklisAsHTMLTable",
+          "Tooltip": "This method transform collection of checklist items to html table as string"
+        },
+        {
+          "Name": "DateAddYearsRevamped",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "DateTime",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "67",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "DateAddYearsRevamped_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "DateTime",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "DateAddYearsRevamped",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "DateTime(2000, 1, 1, 0, 0, 0)",
+                  "Description": "A candidate as datetime parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 9,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddYearsRevamped_candidate",
+                "Tooltip": "A candidate as datetime parameter"
+              },
+              {
+                "Name": "DateAddYearsRevamped_addition",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "Number",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "addition",
+                  "ParentPropertyName": "DateAddYearsRevamped",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "100",
+                  "Description": "A decimal number in years parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 5,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddYearsRevamped_addition",
+                "Tooltip": "A decimal number in years parameter"
+              }
+            ]
+          },
+          "DisplayName": "DateAddYearsRevamped",
+          "Tooltip": "A function adds a number of units to a date/time value. "
+        },
+        {
+          "Name": "DateAddMonths",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "DateTime",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "67",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "DateAddMonths_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"DateTime\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "DateTime",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "DateAddMonths",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "DateTime(2000; 1; 1; 0; 0; 0)",
+                  "Description": "Ein Parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 9,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddMonths_candidate",
+                "Tooltip": "Ein Parameter"
+              },
+              {
+                "Name": "DateAddMonths_addition",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "Number",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "addition",
+                  "ParentPropertyName": "DateAddMonths",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "100",
+                  "Description": "Ein Parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 5,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "DateAddMonths_addition",
+                "Tooltip": "Ein Parameter"
+              }
+            ]
+          },
+          "DisplayName": "Date Add Months",
+          "Tooltip": "Benutzerdefinierte Eigenschaft"
+        }
+      ],
+      "ComponentType": "CanvasComponent",
+      "OverridableProperties": {}
+    },
+    "Index": 33,
+    "PublishOrderIndex": 0,
+    "VariantName": "",
+    "LayoutName": "",
+    "MetaDataIDKey": "",
+    "PersistMetaDataIDKey": false,
+    "IsFromScreenLayout": false,
+    "StyleName": "",
+    "Parent": "",
+    "IsDataControl": false,
+    "AllowAccessToGlobals": true,
+    "OptimizeForDevices": "Off",
+    "IsGroupControl": false,
+    "IsAutoGenerated": false,
+    "Rules": [
+      {
+        "Property": "IsValidCurrency_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsValidCurrency",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        varLang: Lower(\n            First(\n                Split(\n                    Language(),\n                    \"-\"\n                )\n            ).Value\n        )\n    },\n    Switch(\n        varLang,\n        \"en\",\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\.\\d{0,2})?)\"\n        ),\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\,\\d{0,2})?)\"\n        )\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYears_candidate",
+        "Category": "Data",
+        "InvariantScript": "Now()",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYears_addition",
+        "Category": "Data",
+        "InvariantScript": "0.25",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYears",
+        "Category": "Data",
+        "InvariantScript": "DateAdd(\r\n    candidate,\r\n    Trunc(addition * 12 * 30),\r\n    TimeUnit.Days\r\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "ChecklisAsHTMLTable",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        tableStyle: \"style='border: 1px solid #dededf; height: 100%; width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 1px; text-align: left;'\",\n        tableHeader: \"<thead>\n                <tr>\n                    <th style='font-size: 12px; width: 10%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Gate Relevance</th>\n                    <th style='font-size: 12px; width: 40%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Description</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Cluster</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>State</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Modified By</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Modified On</th>\n                </tr>\n            </thead>\",\n        rowStyle: \"style='font-size: 11px; border: 1px solid #dededf; background-color: #ffffff; color: #000000; padding: 2px; text-wrap:nowrap;'\"\n    },\n    $\"<table {tableStyle}>{tableHeader}<tbody>{Concat(\n        source,\n        $\"<tr><td {rowStyle}>{relevance}</td><td {rowStyle}>{name}</td><td {rowStyle}>{clusterstate}</td><td {rowStyle}>{taskstate}</td><td {rowStyle}>{editor}</td><td {rowStyle}>{Text(\n            editdate,\n            gblAppConstants.DateTime.DefaultFormat\n        )}</td></tr>\"\n    )}</tbody></table>\"\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "ChecklisAsHTMLTable_source",
+        "Category": "Data",
+        "InvariantScript": "Table(\n    {\n        name: \"Name\",\n        relevance: \"Gate Relevance\",\n        taskstate: \"Task State\",\n        index: 0,\n        clusterstate: \"Cluster State\",\n        editor: \"Modified By\",\n        editdate: Today()\n    }\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYearsRevamped_candidate",
+        "Category": "Data",
+        "InvariantScript": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYearsRevamped_addition",
+        "Category": "Data",
+        "InvariantScript": "100",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddYearsRevamped",
+        "Category": "Data",
+        "InvariantScript": "With(\r\n    {\r\n        startDate: candidate,\r\n        yearsToAdd: Value(addition),\r\n        wholeYears: RoundDown(\r\n            Value(addition),\r\n            0\r\n        ),\r\n        fractionalYears: Value(addition) - RoundDown(\r\n            Value(addition),\r\n            0\r\n        )\r\n    },\r\n    With(\r\n        {\r\n            monthsToAdd: RoundDown(\r\n                fractionalYears * 12,\r\n                0\r\n            ),\r\n            remainingFraction: (fractionalYears * 12) - RoundDown(\r\n                fractionalYears * 12,\r\n                0\r\n            )\r\n        },\r\n        With(\r\n            {\r\n                dateAfterYearsAndMonths: DateAdd(\r\n                    DateAdd(\r\n                        candidate,\r\n                        wholeYears,\r\n                        TimeUnit.Years\r\n                    ),\r\n                    monthsToAdd,\r\n                    TimeUnit.Months\r\n                )\r\n            },\r\n            With(\r\n                {\r\n                    daysInMonth: Day(\r\n                        DateAdd(\r\n                            DateAdd(\r\n                                dateAfterYearsAndMonths,\r\n                                1,\r\n                                TimeUnit.Months\r\n                            ),\r\n                            -1,\r\n                            TimeUnit.Days\r\n                        )\r\n                    )\r\n                },\r\n                With(\r\n                    {\r\n                        daysToAdd: Round(\r\n                            remainingFraction * daysInMonth,\r\n                            0\r\n                        )\r\n                    },\r\n                    DateAdd(\r\n                        dateAfterYearsAndMonths,\r\n                        daysToAdd,\r\n                        TimeUnit.Days\r\n                    )\r\n                )\r\n            )\r\n        )\r\n    )\r\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddMonths_candidate",
+        "Category": "Data",
+        "InvariantScript": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddMonths_addition",
+        "Category": "Data",
+        "InvariantScript": "100",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "DateAddMonths",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        startDate: candidate,\n        monthsToAdd: Value(addition)\n    },\n    DateAdd(\n        candidate,\n        monthsToAdd,\n        TimeUnit.Months\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "Fill",
+        "Category": "Design",
+        "InvariantScript": "RGBA(0, 0, 0, 0)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "Height",
+        "Category": "Design",
+        "InvariantScript": "50",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Width",
+        "Category": "Design",
+        "InvariantScript": "640",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "X",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Y",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "ZIndex",
+        "Category": "Design",
+        "InvariantScript": "1",
+        "RuleProviderType": "Unknown"
+      }
+    ],
+    "ControlPropertyState": [
+      "Fill",
+      {
+        "InvariantPropertyName": "Height",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "Width",
+      "X",
+      "Y",
+      "ZIndex",
+      {
+        "InvariantPropertyName": "IsValidCurrency",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "Switch(\n    Language(),\n    \"en\",\n    IsMatch(\n        candidate,\n        \"^((\\+?)?\\d+(|\\.\\d{0,2})?)\"\n    ),\n    IsMatch(\n        candidate,\n        \"^((\\+?)?\\d+(|\\,\\d{0,2})?)\"\n    )\n)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "IsValidCurrency_candidate",
+      {
+        "InvariantPropertyName": "DateAddYears_candidate",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "DateAddYears_addition",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "100",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "DateAddYears",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "ChecklisAsHTMLTable",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": " With(\n    {\n        tableStyle: \"style='border: 1px solid #dededf; height: 100%; width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 1px; text-align: left;'\",\n        tableHeader: \"<thead>\n                <tr>\n                    <th style='font-size: 12px; width: 10%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Gate Relevance</th>\n                    <th style='font-size: 12px; width: 40%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Task Description</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Cluster</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>State</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Completed By</th>\n                    <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Completed On</th>\n                </tr>\n            </thead>\",\n        rowStyle: \"style='font-size: 11px; border: 1px solid #dededf; background-color: #ffffff; color: #000000; padding: 2px; text-wrap:nowrap;'\"\n    },\n    $\"<table {tableStyle}>{tableHeader}<tbody>{Concat(\n        source,\n        $\"<tr><td {rowStyle}>{relevance}</td><td {rowStyle}>{name}</td><td {rowStyle}>{clusterstate}</td><td {rowStyle}>{taskstate}</td><td {rowStyle}>{editor}</td><td {rowStyle}>{Text(\n            editdate,\n            \"ddd, mmm. dd, yyyy (hh:mm))\"\n        )}</td></tr>\"\n    )}</tbody></table>\"\n)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "ChecklisAsHTMLTable_source",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "Table(\n    {\n        name: \"Name\",\n        relevance: \"Gate Relevance\",\n        taskstate: \"Task State\",\n        index: 0,\n        clusterstate: \"Cluster State\",\n        editor: \"Modified By\",\n        editdate: Toda()\n    }\n)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "DateAddYearsRevamped_candidate",
+      "DateAddYearsRevamped_addition",
+      {
+        "InvariantPropertyName": "DateAddYearsRevamped",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "DateAddMonths_candidate",
+      "DateAddMonths_addition",
+      {
+        "InvariantPropertyName": "DateAddMonths",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "DateTime(2000, 1, 1, 0, 0, 0)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      }
+    ],
+    "IsLocked": false,
+    "ControlUniqueId": "67",
+    "Children": []
+  }
+}

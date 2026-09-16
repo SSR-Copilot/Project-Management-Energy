@@ -1,0 +1,207 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+App:
+  Properties:
+    ConfirmExit: =true
+    Formulas: |-
+      =AppTheme = {
+          palette: {
+              themePrimary: "#006eb9",
+              themeLighterAlt: "#f2f8fc",
+              themeLighter: "#cde4f4",
+              themeLight: "#a4ceea",
+              themeTertiary: "#55a2d6",
+              themeSecondary: "#177ec2",
+              themeDarkAlt: "#0065a8",
+              themeDark: "#00558d",
+              themeDarker: "#003f68",
+              neutralLighterAlt: "#faf9f8",
+              neutralLighter: "#f3f2f1",
+              neutralLight: "#edebe9",
+              neutralQuaternaryAlt: "#e1dfdd",
+              neutralQuaternary: "#d0d0d0",
+              neutralTertiaryAlt: "#c8c6c4",
+              neutralTertiary: "#595959",
+              neutralSecondary: "#373737",
+              neutralPrimaryAlt: "#2f2f2f",
+              neutralPrimary: "#000000",
+              neutralDark: "#151515",
+              black: "#0b0b0b",
+              white: "#ffffff",
+              akzent1: "#469bd7",
+              akzent2: "#41aab4",
+              akzent3: "#82a51e",
+              akzent4: "#f5911e",
+              akzent5: "#d20532",
+              akzent6: "#af2887",
+              hoverButton: "#CCE2F1",
+              Grayscale00: "#0D0D0D",
+              Grayscale10: "#6C6C6C",
+              Grayscale20: "#E3E3E3",
+              Grayscale30: "#F1F1F1",
+              Grayscale40: "#FAFAFA",
+              Grayscale50: "#FFFFFF",
+              Error: "#B22727",
+              Success: "#3C9856",
+              SuccessLight: "#E9F3EC",
+              Warning: "#EE940C",
+              Green: "#82a51e",
+              GreenDark: "#75941c",
+              GreenLight: "#a0cb24"
+          }
+      };
+      EmptyGUID = GUID("00000000-0000-0000-0000-000000000000");
+      varCurrentUserProfile = RenameColumns(
+          LookUp(
+              Users,
+              ThisRecord.'Azure AD Object ID' = User().EntraObjectId
+          ),
+          'Azure AD Object ID',
+          Id,
+          'Full Name',
+          DisplayName,
+          'Primary Email',
+          Mail,
+          'Job Title',
+          CompanyName
+      );
+      Developers = Table(
+          {Mail: "andriy.chevychalov@vsb.energy"},
+          {Mail: "ext-chhitiz.buchasia@vsb.energy"},
+          {Mail: "philip.wagner@vsb.energy"},
+          {Mail: "test-vsbcloud-02@vsb.energy"},
+          {Mail: "christoph.sperling@vsb.energy"},
+          {Mail: "benjamin.goepfert@vsb.energy"},
+          {Mail: "thomas.lorenz@vsb.energy"},
+          {Mail: "dominik.simon@vsb.energy"},
+          {Mail: "alexander.pilevski@vsb.energy"},
+          {Mail: "ext-matthias.vierkoetter@vsb.energy"}
+      );
+      LeftNavigationMenu = Table(
+          {
+              ItemKey: "DevexCapexCostsKey",
+              ItemDisplayName: " DEVEX/CAPEX",
+              ItemIconName: "ReadingModeSolid",
+              ItemEnabled: true,
+              TargetScreen: 'Capex Costs Screen'
+          },
+          {
+              ItemKey: "OpexCostsKey",
+              ItemDisplayName: "OPEX",
+              ItemIconName: "PageEdit",
+              ItemEnabled: true
+             // ,TargetScreen: 'Opex - Operation & Maintenance'
+
+          },
+          {
+              ItemKey: "O&MKey",
+              ItemDisplayName: "Operation & Maintenance",
+              ItemParentKey: "OpexCostsKey",
+              ItemIconName: "PageEdit",
+              ItemEnabled: true,
+              TargetScreen: 'Opex Costs Screen'
+          },
+          {
+              ItemKey: "LandLeaseKey",
+              ItemDisplayName: "Land Lease",
+              ItemIconName: "PageEdit",
+              ItemParentKey: "OpexCostsKey",
+              ItemEnabled: true,
+              ItemVisible: true,
+              TargetScreen: 'Land Lease Costs Screen'
+          },
+          {
+              ItemKey: "OtherOpexCostsKey",
+              ItemDisplayName: "Other OPEX Costs",
+              ItemParentKey: "OpexCostsKey",
+              ItemIconName: "PageEdit",
+              ItemEnabled: true,
+              TargetScreen: 'Opex Costs Screen'
+          },
+          {
+              ItemKey: "ContractsKey",
+              ItemDisplayName: "Contracts",
+              ItemIconName: "TextDocumentShared",
+              ItemEnabled: true,
+              TargetScreen: 'Contracts Screen',
+              ItemVisible: true
+          },
+          {
+              ItemKey: "TotalCostsSummary",
+              ItemDisplayName: "Total Summary",
+              ItemIconName: "AllCurrency",
+              ItemEnabled: false,
+              ItemVisible: false
+          }
+          /*,
+          {
+              ItemKey: "OpexCostsKey",
+              ItemDisplayName: "OPEX",
+              ItemIconName: "ReadingMode",
+              ItemEnabled: true,
+              TargetScreen: 'Opex Costs Screen'
+          },
+          {
+              ItemKey: "LandLeaseCostsgKey",
+              ItemDisplayName: "Land Lease",
+              ItemIconName: "PlanView",
+              ItemEnabled: true,
+              ItemVisible: gblCurrentUser.Mail in Developers,
+              TargetScreen: 'Land Lease Costs Screen'
+          },*/
+
+      );
+      DefaultProjectCostsMarginValue = 10;
+      colDistributionFrequency = Table(
+          {
+              ID: 1,
+              Value: 1,
+              Label: "1 month"
+          },
+          {
+              ID: 2,
+              Value: 2,
+              Label: "2 months"
+          },
+          {
+              ID: 3,
+              Value: 3,
+              Label: "3 months"
+          },
+          {
+              ID: 4,
+              Value: 6,
+              Label: "6 months"
+          },
+          {
+              ID: 5,
+              Value: 12,
+              Label: "12 months"
+          }
+      );
+    OnError: |-
+      =Set(
+          gblReportError,
+          {
+              User: User().Email,
+              ErrorScreen: App.ActiveScreen.Name,
+              ErrorSource: FirstError.Source,
+              ErrorMessage: FirstError.Message,
+              Timestamp: Now()
+          }
+      );
+      /*
+      Notify(
+              "An error has occurred! If you encounter the issue, please report them via Help --> Report problem. Technical details will be automatically included. Your input helps us improve. Thank you for your cooperation.",
+              NotificationType.Error
+      );
+      */
+    OnStart: "=Set(\n    gblAppStarted,\n    false\n);\nSet(\n    gblInfoCenterLaunchUrl,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_VSBCloudInfoCenterUrl\"\n    ).Value\n);\nSet(\n    gblProjectApprovalServiceGroupID,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_VSBcloudControllingApprovalGroup\"\n    ).Value\n);\nSet(\n    gblTenantID,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_TenantID\"\n    ).Value\n);\nSet(\n    gblEnvironmentID,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_EnvironmentID\"\n    ).Value\n);\nSet(\n    gblProjectManagementAppID,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_ProjectManagementAppID\"\n    ).Value\n);\nSet(\n    gblPMAppURL,\n    \"https://apps.powerapps.com/play/e/\" & gblEnvironmentID & \"/a/\" & gblProjectManagementAppID & \"?tenantId=\" & gblTenantID\n);\nSet(\n    gblLeftNavigationSelected,\n    First(LeftNavigationMenu)\n);\nSet(\n    gblAppTheme,\n    AppTheme\n);\nSet(\n    gblAppThemeJson,\n    JSON(\n        gblAppTheme,\n        JSONFormat.Compact\n    )\n);\nSet(\n    gblCurrentUser,\n    varCurrentUserProfile\n);\nCollect(\n    colProjectApprovals,\n    Blank()\n);\nCollect(\n    colProjectApprovalsExtended,\n    Blank()\n);\nCollect(\n    colProjectCountryApprovals,\n    Blank()\n);\nCollect(\n    colDistinctCurrentUserTeamsRoles,\n    Blank()\n);\nClearCollect(\n    colCurrentUserTeamsDirect,\n    LookUp(\n        Users,\n        ThisRecord.'Azure AD Object ID' = User().EntraObjectId\n    ).'Teams (teammembership_association)'\n);\nClearCollect(\n    colCurrentUserSystemsDirect,\n    LookUp(\n        Users,\n        ThisRecord.'Azure AD Object ID' = User().EntraObjectId\n    ).'Security Roles (systemuserroles_association)'\n);\nTrace(\n    $\"User teams {Concat(\n        colCurrentUserTeamsDirect,\n        'Team Name' & \" ; \"\n    )}\",\n    TraceSeverity.Information\n);\nClearCollect(\n    colAllCurrentUserTeamsRoles,\n    Blank()\n);\n// This block added for Functionality to get editable countries\nIfError(\n    Trace(\n        $\"Try get user individuelle roles\",\n        TraceSeverity.Information\n    );\n    ClearCollect(\n        colCurrentUserRoles,\n        ForAll(\n            colCurrentUserSystemsDirect As UR,\n            {\n                BussinessUnit: UR.'Business Unit'.Name,\n                Name: UR.Name,\n                Country: LookUp(\n                    Countries_1,\n                    'Business Unit'.'Business Unit' = UR.'Business Unit'.'Business Unit'\n                ),\n                UniqueID: UR.Role\n            }\n        )\n    );\n    ClearCollect(\n        colCurrentUserTeamsRoles,\n        Blank()\n    );\n    Trace(\n        $\"Try get user team security roles\",\n        TraceSeverity.Information\n    );\n    ClearCollect(\n        colCurrentUserTeamsDirectTemp,\n        colCurrentUserTeamsDirect\n    );\n    ForAll(\n        colCurrentUserTeamsDirect,\n        Collect(\n            colAllCurrentUserTeamsRoles,\n            LookUp(\n                colCurrentUserTeamsDirect,\n                'Team Name' = First(colCurrentUserTeamsDirectTemp).'Team Name'\n            ).'Security Roles'\n        );\n        Remove(\n            colCurrentUserTeamsDirectTemp,\n            First(colCurrentUserTeamsDirectTemp)\n        );\n    );\n    ClearCollect(\n        colCurrentUserTeamsRoles,\n        ForAll(\n            colAllCurrentUserTeamsRoles As TR,\n            {\n                BussinessUnit: TR.'Business Unit'.Name,\n                Name: TR.Name,\n                Country: LookUp(\n                    Countries_1,\n                    'Business Unit'.'Business Unit' = TR.'Business Unit'.'Business Unit'\n                ),\n                UniqueID: TR.Role\n            }\n        )\n    );\n    ClearCollect(\n        colAllCurrentUserRoles,\n        Filter(\n            colCurrentUserRoles,\n            StartsWith(\n                Name,\n                \"VSB\"\n            )\n        ),\n        Filter(\n            colCurrentUserTeamsRoles,\n            StartsWith(\n                Name,\n                \"VSB\"\n            )\n        )\n    );\n    ClearCollect(\n        colDistinctCurrentUserTeamsRoles,\n        ForAll(\n            Distinct(\n                colAllCurrentUserRoles,\n                ThisRecord\n            ),\n            Value\n        )\n    );\n    Trace(\n        $\"Success: User roles {JSON(\n            DropColumns(\n                colAllCurrentUserRoles,\n                Country\n            )\n        )}\",\n        TraceSeverity.Information\n    );\n    ,\n    Trace(\n        $\"Error: User cann't read 'Security Roles'. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}\",\n        TraceSeverity.Critical\n    )\n);\nIfError(\n    ClearCollect(\n        colUserCountries,\n        ForAll(\n            Filter(\n                colDistinctCurrentUserTeamsRoles,\n                And(\n                    Not(IsBlank(Country)),\n                    Name in [\n                        \"VSB - Project Manager Own Projects\",\n                        \"VSB - Project Data Own Country\"\n                    ]\n                )\n            ),\n            {\n                id: Country.Country,\n                name: Country.Name\n            }\n        )\n    ),\n    Trace(\n        $\"Error: User can't read available countries. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}\",\n        TraceSeverity.Critical\n    )\n);\nSet(\n    gblCurrentUser,\n    {\n        Id: varCurrentUserProfile.Id,\n        DisplayName: varCurrentUserProfile.DisplayName,\n        Mail: varCurrentUserProfile.Mail,\n        CompanyName: LookUp(\n            'Microsoft Entra IDs',\n            'A unique identifer for Microsoft Entra ID' = varCurrentUserProfile.Id\n        ).'Company Name',\n        Language: Language(),\n        Lang: Lower(\n            First(\n                Split(\n                    Language(),\n                    \"-\"\n                )\n            ).Value\n        ),\n        IsControlling: false,\n        IsControllerOwnData: Not(\n            IsBlankOrError(\n                First(\n                    Filter(\n                        colDistinctCurrentUserTeamsRoles,\n                        Name = \"VSB - Controller Own Data\"\n                    )\n                )\n            )\n        ),\n        IsProjectDataAllCountries: Not(\n            IsBlankOrError(\n                First(\n                    Filter(\n                        colDistinctCurrentUserTeamsRoles,\n                        Name = \"VSB - Project Data All Countries\"\n                    )\n                )\n            )\n        ),\n        CanEditSelectedProject: false,\n        EditableCounties: colUserCountries,\n        EditableCountiesAsString: Concat(\n            colUserCountries,\n            name & \" ; \"\n        )\n    }\n);\nTrace(\n    $\"User: is controller own data {gblCurrentUser.IsControllerOwnData}; is project data all countries {gblCurrentUser.IsProjectDataAllCountries}; editable countries {gblCurrentUser.EditableCountiesAsString}\",\n    TraceSeverity.Information\n);\nIfError(\n    ClearCollect(\n        colProjectApprovals,\n        Office365Groups.ListGroupMembers(\n            gblProjectApprovalServiceGroupID,\n            {'$top': 100}\n        ).value\n    ),\n    Trace(\n        $\"Error: User can't read 'ProjectApprovalServiceGroup'. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message & FirstError.Details.HttpResponse}\",\n        TraceSeverity.Critical\n    )\n);\n// Sizes for classic controls\nSet(\n    gblAppSizes,\n    {\n        Padding: {Page: 0},\n        Form: {\n            X: 20,\n            Space: 20,\n            Label200Width: 150,\n            LabelBeforeHeight: 52,\n            LabelBeforeHeightErr: 42\n        },\n        Font: {\n            ExtraExtraSmall: 8,\n            ExtraSmall: 9,\n            Small: 10,\n            Medium: 11,\n            Large: 12,\n            ExtraLarge: 14,\n            ExtraExtraLarge: 16\n        },\n        LeftNavigation: {\n            ExpandedWidth: 200,\n            DecreasedWidth: 32\n        },\n        Position: {\n            X: 20,\n            Y: 2\n        },\n        RightPanel: {\n            MinWidth: 450,\n            Top: 20,\n            Left: 20,\n            Right: 20\n        }\n    }\n);\nSet(\n    gblLeftNavigationMenuIsExpanded,\n    true\n);\nSet(\n    gblAppConstants,\n    {\n        NotifyTimeOut: 500,\n        Form: {\n            New: \"New\",\n            Edit: \"Edit\",\n            Display: \"Display\"\n        }\n    }\n);\n// Colors below for classic controls\nSet(\n    gblAppStyles,\n    {\n        Error: ColorValue(gblAppTheme.palette.akzent5),\n        Success: ColorValue(gblAppTheme.palette.akzent3),\n        Warning: ColorValue(\"#EE940C\"),\n        Screen: {\n            Fill: ColorValue(gblAppTheme.palette.Grayscale30),\n            LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)\n        },\n        Container: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Fill: Color.Transparent\n        },\n        Label: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.black),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.black),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: ColorValue(gblAppTheme.palette.black),\n            PressedFill: Color.Transparent,\n            Font: Font.'Open Sans'\n        },\n        ButtonTransparent: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.Grayscale00),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: Color.Transparent,\n            PressedFill: Color.Transparent,\n            RadiusBottomLeft: 2,\n            RadiusBottomRight: 2,\n            RadiusTopLeft: 2,\n            RadiusTopRight: 2,\n            Font: Font.'Open Sans'\n        },\n        Icon: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.themePrimary),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.themePrimary),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: ColorValue(gblAppTheme.palette.themePrimary),\n            PressedFill: Color.Transparent\n        },\n        Divider: {\n            BorderColor: Color.Transparent,\n            BorderStyle: BorderStyle.None,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.Grayscale20),\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),\n            PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)\n        },\n        Gallery: {\n            BorderColor: Color.Transparent,\n            BorderStyle: BorderStyle.None,\n            BorderThickness: 0,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),\n            TemplateFill: Color.Transparent\n        }\n    }\n);\nSet(\n    gblAppColors,\n    {\n        Screen: {\n            Fill: ColorValue(gblAppTheme.palette.Grayscale30),\n            LoadingSpinerColor: ColorValue(gblAppTheme.palette.themePrimary)\n        },\n        BorderColor: ColorValue(gblAppTheme.palette.Grayscale30),\n        Transparent: Color.Transparent,\n        Error: ColorValue(gblAppTheme.palette.akzent5),\n        ErrorBg: ColorValue($\"{gblAppTheme.palette.Error}20\"),\n        Success: ColorValue(gblAppTheme.palette.akzent3),\n        SuccessLight: ColorValue(gblAppTheme.palette.akzent3),\n        SuccessBg: ColorValue($\"{gblAppTheme.palette.Green}20\"),\n        Warning: ColorValue(gblAppTheme.palette.Warning),\n        GeneratorChangedData: ColorValue(gblAppTheme.palette.themePrimary),\n        WarningBg: ColorValue($\"{gblAppTheme.palette.Warning}20\"),\n        ButtonDisabledBg: ColorValue(\"#bdbdbd\"),\n        GallerySeparatorBg: ColorValue(gblAppTheme.palette.hoverButton),\n        ApprovalClusterStates: {\n            NotStarted: ColorValue($\"{gblAppTheme.palette.Grayscale20}90\"),\n            InProgress: ColorValue($\"{gblAppTheme.palette.Success}60\"),\n            Completed: ColorValue($\"{gblAppTheme.palette.Success}\"),\n            Abandoned: ColorValue($\"{gblAppTheme.palette.Warning}20\"),\n            Inactive: ColorValue($\"{gblAppTheme.palette.Warning}20\")\n        },\n        Icon: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.themePrimary),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.themePrimary),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: ColorValue(gblAppTheme.palette.themePrimary),\n            PressedFill: Color.Transparent\n        },\n        Label: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.black),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.black),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: ColorValue(gblAppTheme.palette.black),\n            PressedFill: Color.Transparent,\n            Font: Font.'Open Sans'\n        },\n        Gallery: {\n            Header: ColorValue(\"#fdffff\"),\n            BorderColor: Color.Transparent,\n            BorderStyle: BorderStyle.None,\n            BorderThickness: 0,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            LoadingSpinnerColor: ColorValue(gblAppTheme.palette.themePrimary),\n            TemplateFill: Color.Transparent\n        },\n        ButtonTransparent: {\n            BorderColor: Color.Transparent,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.Grayscale00),\n            DisabledBorderColor: Color.Transparent,\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            DisabledFill: Color.Transparent,\n            Fill: Color.Transparent,\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverBorderColor: Color.Transparent,\n            HoverColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            HoverFill: Color.Transparent,\n            PressedBorderColor: Color.Transparent,\n            PressedColor: Color.Transparent,\n            PressedFill: Color.Transparent,\n            RadiusBottomLeft: 2,\n            RadiusBottomRight: 2,\n            RadiusTopLeft: 2,\n            RadiusTopRight: 2,\n            Font: Font.'Open Sans'\n        },\n        Divider: {\n            BorderColor: Color.Transparent,\n            BorderStyle: BorderStyle.None,\n            BorderThickness: 0,\n            Color: ColorValue(gblAppTheme.palette.Grayscale20),\n            DisabledColor: ColorValue(gblAppTheme.palette.Grayscale10),\n            FocusedBorderColor: Color.Transparent,\n            FocusedBorderThickness: 0,\n            HoverColor: ColorValue(gblAppTheme.palette.Grayscale20),\n            PressedColor: ColorValue(gblAppTheme.palette.Grayscale20)\n        }\n    }\n);\n// Project data loading\nIf(\n    Not(IsBlank(Param(\"projectId\"))),\n    Set(\n        gblSelectedProject,\n        LookUp(\n            Projects,\n            Project = GUID(Param(\"projectId\"))\n        )\n    ),\n    //Set(gblSelectedProject, Blank())\n    Set(\n        gblSelectedProject,\n        LookUp(\n            Projects,\n            Project = GUID(\"33b9cc79-5b4f-f111-bec6-000d3a3855c2\")\n            //'Project ID' = \"9999940\"\n        )\n    )// for testing\n);\nSet(\n    gblProjectHeaderData,\n    {\n        ID: gblSelectedProject.Project,\n        Name: gblSelectedProject.'Project Name',\n        Technology: Text(gblSelectedProject.Technology),\n        Approval: Text(gblSelectedProject.'Approval States')\n    }\n);\nSet(\n    gblRecordSelectedProjectCountry,\n    LookUp(\n        Countries_1,\n        Country = gblSelectedProject.Country.Country\n    )\n);\n/*Set(\n    gblSelectedProjectYear,\n    Max(\n        Year(gblSelectedProject.'Project Start Date'),\n        Year(Now())\n    )\n);*/Set(\n    gblSelectedProjectYear,\n    Year(\n        If(\n            gblSelectedProject.'Start Cluster' <> 'Cluster States'.Greenfield,\n            If(\n                Year(gblSelectedProject.'Acquisition date') > Year(Today()),\n                gblSelectedProject.'Acquisition date',\n                Today()\n            ),\n            If(\n                Year(gblSelectedProject.'Project Start Date') > Year(Today()),\n                gblSelectedProject.'Project Start Date',\n                Today()\n            )\n        )\n    )\n);\n// this is changed for Capex Project Costs --\nSet(\n    gblSelectedProjectCODYear,\n    With(\n        {varProjectCODYear: Year(gblSelectedProject.'Operations start date (COD)')},\n        varProjectCODYear\n    )\n);\n// Get values for capex summary view\nClearCollect(\n    colOpexAccounts,\n    Sort(\n        'Opex Accounts',\n        Order,\n        SortOrder.Ascending\n    )\n);\nClearCollect(\n    colOpexSubaccounts,\n    AddColumns(\n        Sort(\n            'Opex Subaccounts',\n            Order,\n            SortOrder.Ascending\n        ),\n        IsFolded,\n        true\n    )\n);\nClearCollect(\n    colLandLeaseSubaccounts,\n    Sort(\n        'Land Lease Subaccounts',\n        Order,\n        SortOrder.Ascending\n    )\n);\nSet(\n    gblAppVersion,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_AppVersion\"\n    ).Value\n);\nSet(\n    gblEnvironmentName,\n    LookUp(\n        'Environment Variable Values',\n        'Environment Variable Definition'.'Schema Name' = \"vsb_EnvironmentName\"\n    ).Value\n);\n// This is Pasted for New Refactored View\nClearCollect(\n    colCapexAccountCategoriesNew,\n    {\n        'CAPEX Account List': Blank(),\n        Name: \"DEVEX/CAPEX Summary\",\n        Order: 0\n    }\n);\nCollect(\n    colCapexAccountCategoriesNew,\n    SortByColumns(\n        Filter(\n            'CAPEX Account Lists',\n            And(\n                Not(IsBlank('Parent Account')),\n                'Parent Account'.Number = \"00001\"\n            )\n        ),\n        \"vsb_order\",\n        SortOrder.Ascending\n    )\n);\nClearCollect(\n    colCapexAccountsNew,\n    Sort(\n        Filter(\n            'CAPEX Account Lists',\n            'Parent Account'.'CAPEX Account List' in Filter(\n                colCapexAccountCategoriesNew,\n                Not(IsBlank(ThisRecord.'CAPEX Account List'))\n            ).'CAPEX Account List',\n            Status = 'Status (CAPEX Account Lists)'.Active\n        ),\n        Order,\n        SortOrder.Ascending\n    )\n);\nClearCollect(\n    colCapexSubaccountsNew,\n    Sort(\n        Filter(\n            'CAPEX Account Lists',\n            'Parent Account'.'CAPEX Account List' in colCapexAccountsNew.'CAPEX Account List',\n            Status = 'Status (CAPEX Account Lists)'.Active\n        ),\n        Order,\n        SortOrder.Ascending\n    )\n);\nClearCollect(\n    colCapexProjectContracts,\n    Filter(\n        'CAPEX Project Contracts',\n        Project.Project = gblSelectedProject.Project\n    )\n);\nClearCollect(\n    colCapexCosts,\n    Defaults('CAPEX Costs')\n);\nCollect(\n    colCapexCosts,\n    Ungroup(\n        ShowColumns(\n            AddColumns(\n                colCapexProjectContracts As Item,\n                Value,\n                ShowColumns(\n                    Filter(\n                        'CAPEX Costs',\n                        Contract.'CAPEX Project Contract' = Item.'CAPEX Project Contract'\n                    ),\n                    Year,\n                    Name,\n                    Month,\n                    Cost,\n                    Contract,\n                    'CAPEX Cost',\n                    'Cost Paid'\n                )\n            ),\n            Value\n        ),\n        Value\n    )\n);\nClearCollect(\n    colContractDistributionTypes,\n    Choices('Distribution Type')\n);\nClearCollect(\n    colContractDistributionScheme,\n    Choices('Distribution Scheme')\n);\nClearCollect(\n    colCostPaidType,\n    LastN(\n        Choices('Cost paid type'),\n        2\n    )\n);\n// Optimized Version\nClearCollect(\n    colCapexSummaryCategories,\n    Filter(\n        colCapexAccountCategoriesNew,\n        Not(IsBlank('CAPEX Account List'))\n    )\n);\nClearCollect(\n    colDevexCapexSummaryView,\n    ForAll(\n        colCapexSummaryCategories As Item,\n        With(\n            {\n                lclSubAccounts: Filter(\n                    colCapexSubaccountsNew,\n                    'Parent Account'.'CAPEX Account List' in Filter(\n                        colCapexAccountsNew,\n                        'Parent Account'.'CAPEX Account List' = Item.'CAPEX Account List'\n                    ).'CAPEX Account List',\n                    Status = 'Status (CAPEX Account Lists)'.Active\n                )\n            },\n            With(\n                {\n                    lclContracts: Filter(\n                        colCapexProjectContracts,\n                        Account.'CAPEX Account List' in lclSubAccounts.'CAPEX Account List'\n                    )\n                },\n                {\n                    Id: Item.'CAPEX Account List',\n                    Name: Item.Name,\n                    Sum: Max(\n                        Sum(\n                            Filter(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' in lclContracts.'CAPEX Project Contract'\n                            ),\n                            Cost\n                        ),\n                        0\n                    ),\n                    //IsSubCategory: Not(IsBlank(AccountCategory.vsb_accountcategory)),\n                    ParentId: Item.'Parent Account'.'CAPEX Account List'\n                }\n            )\n        )\n    )\n);\n// Till here\nConcurrent(\n    Set(\n        gblTableApprovalStateColors,\n        Table(\n            {\n                State: \"Draft\",\n                Color: gblAppTheme.palette.akzent2\n            },\n            {\n                State: \"Approving\",\n                Color: gblAppTheme.palette.akzent4\n            },\n            {\n                State: \"Approved\",\n                Color: gblAppTheme.palette.akzent3\n            },\n            {\n                State: \"Rejected\",\n                Color: gblAppTheme.palette.akzent5\n            }\n        )\n    ),\n    Set(\n        gblAppResx,\n        {\n            NumericOneDecimals: \"Numeric value with maximum of one decimals\",\n            NumericTwoDecimals: \"Numeric value with maximum of two decimals\",\n            NumericThreeDecimals: \"Numeric value with maximum of three decimals\",\n            Numeric: \"Numeric value without decimals\",\n            InputBlank: \"Input must not be blank\"\n        }\n    ),\n    Set(\n        gblClusterDurations,\n        Table(\n            {\n                Order: 1,\n                Name: \"Cluster 1\",\n                StartMonth: Month(gblSelectedProject.'1-Feasibility studies'),\n                StartYear: Year(gblSelectedProject.'1-Feasibility studies'),\n                EndMonth: Month(gblSelectedProject.'2-Project development started'),\n                EndYear: Year(gblSelectedProject.'2-Project development started')\n            },\n            {\n                Order: 2,\n                Name: \"Cluster 2\",\n                StartMonth: Month(gblSelectedProject.'2-Project development started'),\n                StartYear: Year(gblSelectedProject.'2-Project development started'),\n                EndMonth: Month(gblSelectedProject.'3-Application submitted'),\n                EndYear: Year(gblSelectedProject.'3-Application submitted')\n            },\n            {\n                Order: 3,\n                Name: \"Cluster 3\",\n                StartMonth: Month(gblSelectedProject.'3-Application submitted'),\n                StartYear: Year(gblSelectedProject.'3-Application submitted'),\n                EndMonth: Month(gblSelectedProject.'4-Legally binding permits'),\n                EndYear: Year(gblSelectedProject.'4-Legally binding permits')\n            },\n            {\n                Order: 4,\n                Name: \"Cluster 4\",\n                StartMonth: Month(gblSelectedProject.'4-Legally binding permits'),\n                StartYear: Year(gblSelectedProject.'4-Legally binding permits'),\n                EndMonth: Month(gblSelectedProject.'5-Construction'),\n                EndYear: Year(gblSelectedProject.'5-Construction')\n            },\n            {\n                Order: 5,\n                Name: \"Cluster 5\",\n                StartMonth: Month(gblSelectedProject.'5-Construction'),\n                StartYear: Year(gblSelectedProject.'5-Construction'),\n                EndMonth: Month(gblSelectedProject.'Operations start date (COD)'),\n                EndYear: Year(gblSelectedProject.'Operations start date (COD)')\n            },\n            {\n                Order: 6,\n                Name: \"Cluster 6\",\n                StartMonth: Month(gblSelectedProject.'Operations start date (COD)'),\n                StartYear: Year(gblSelectedProject.'Operations start date (COD)'),\n                EndMonth: Month(gblSelectedProject.'End Date'),\n                EndYear: Year(gblSelectedProject.'End Date')\n            }\n        )\n    ),\n    If(\n        gblSelectedProject.Country.Name = \"Italy\",\n        Set(\n            gblAreaWithRegion,\n            With(\n                {\n                    _area: Trim(\n                        Coalesce(\n                            gblSelectedProject.'Area/State/Province'.Name,\n                            \"\"\n                        )\n                    )\n                },\n                Switch(\n                    _area,\n                    \"Lazio\",\n                    \"Italy_Centre - South\",\n                    \"Lombardia\",\n                    \"Italy_North\",\n                    \"Emilia Romagna\",\n                    \"Italy_North\",\n                    \"Sicilia\",\n                    \"Italy_Sicily\",\n                    \"Valle d’Aosta\",\n                    \"Italy_North\",\n                    \"Veneto\",\n                    \"Italy_North\",\n                    \"Friuli Venezia Giulia\",\n                    \"Italy_North\",\n                    \"Puglia\",\n                    \"Italy_South\",\n                    \"Marche\",\n                    \"Italy_Centre - North\",\n                    \"Molise\",\n                    \"Italy_South\",\n                    \"Calabria\",\n                    \"Italy_Calabria\",\n                    \"Abruzzo\",\n                    \"Italy_Centre - South\",\n                    \"Piemonte\",\n                    \"Italy_North\",\n                    \"Sardegna\",\n                    \"Italy_Sardinia\",\n                    \"Toscana\",\n                    \"Italy_Centre - North\",\n                    \"Trentino Alto Adige\",\n                    \"Italy_North\",\n                    \"Campania\",\n                    \"Italy_Centre - South\",\n                    \"Liguria\",\n                    \"Italy_North\",\n                    \"Basilicata\",\n                    \"Italy_South\",\n                    \"Umbria\",\n                    \"Italy_Centre - South\",\n                    Blank()\n                )\n            )\n        )\n    );\n    \n);\nSet(\n    gblAppStarted,\n    true\n);\n"
+    StartScreen: ='Capex Costs Screen'
+    Theme: =PowerAppsTheme

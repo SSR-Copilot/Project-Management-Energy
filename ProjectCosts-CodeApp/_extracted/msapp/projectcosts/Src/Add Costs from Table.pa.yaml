@@ -1,0 +1,395 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Add Costs from Table:
+    Properties:
+      OnVisible: |
+        =UpdateContext(
+            {
+                locToolTipVisbility: false,
+                locShowErrorsInPCF: false,
+                //lcldeleterow: !lcldeleterow,
+                locIsVisiblePopUpSpinner: false,
+                locSpinnerInformationText: ""
+            }
+        );
+    Children:
+      - tmr__CheckChanges_Add_Costs_To_Dataverse:
+          Control: Timer@2.1.0
+          Properties:
+            AutoStart: =locTimerStart
+            Color: =RGBA(255, 255, 255, 1)
+            Duration: =1000
+            HoverColor: =RGBA(255, 255, 255, 1)
+            OnTimerEnd: "=UpdateContext ({locSaveData: !locSaveData});\nUpdateContext({locPCFDataChanged: cmp__PCF_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable.jsonDataOut});\nIf(\n    locPCFJsonInput <> locPCFDataChanged,\n    UpdateContext({locTimerStart: false});\n    UpdateContext({locTimerEnd: false});\n    Set(\n        varJSONOUT,\n        locPCFDataChanged\n    );\n    UpdateContext({locPCFDataJSON: ParseJSON(cmp__PCF_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable.jsonDataOut)});\n    ClearCollect(\n        colPCFDataOut,\n        ForAll(\n            locPCFDataJSON As Data,\n            With(\n                {\n                    lclSubAccount: LookUp(\n                        colCapexSubaccountsNew,\n                        Name = Text(Data.Name) && Number = Text(Data.Number)\n                    ),\n                    lclDesc: Text(Data.Description)\n                },\n                {\n                    Number: Text(Data.Number),\n                    Name: Text(Data.Name),\n                    Description: Text(Data.Description),\n                    CurrentYear: Text(Data.Year),\n                    CostPaidBy: Text(Data.CostPaidBy),\n                    Depreciation: Text(Data.Depreciation),\n                    ApplyVAT: Text(Data.ApplyVAT),\n                    Jan: Value(Data.Jan),\n                    Feb: Value(Data.Feb),\n                    Mar: Value(Data.Mar),\n                    Apr: Value(Data.Apr),\n                    May: Value(Data.May),\n                    Jun: Value(Data.Jun),\n                    Jul: Value(Data.Jul),\n                    Aug: Value(Data.Aug),\n                    Sep: Value(Data.Sep),\n                    Oct: Value(Data.Oct),\n                    Nov: Value(Data.Nov),\n                    Dec: Value(Data.Dec),\n                    SubAccountID: lclSubAccount,\n                    lclParentRowCol: lclSubAccount,\n                    UniqueID: Data.Number & \" - \" & Data.Name,\n                    row_ID: Text(Data.Row_ID),\n                    CostUniqueID: Data.Name & \"-\" & Data.Number & Data.Description & Data.Year & Data.Row_ID,\n                    ProjectContract: LookUp(\n                        colCapexProjectContracts,\n                        Name = Text(Data.Description) && Account.'CAPEX Account List' = lclSubAccount.'CAPEX Account List'\n                    )\n                }\n            )\n        )\n    );\n    UpdateContext(\n        {\n            locPCFDataJSON: Blank(),\n            locPCFDataChanged: Blank()\n        }\n    );\n    Concurrent(\n        ClearCollect(\n            colUniqueContracts,\n            Distinct(\n                colPCFDataOut,\n                ProjectContract.'CAPEX Project Contract'\n            )\n        ),\n        ClearCollect(\n            colNewStandardDisallowed,\n            AddColumns(\n                Filter(\n                    colPCFDataOut As R,\n                    Not(\n                        IsBlank(\n                            Find(\n                                \"standard\",\n                                Lower(R.Description)\n                            )\n                        )\n                    )/*,\n                Or(\n                StartsWith(\n                    Lower(Trim(R.Description)),\n                    \"standard\"\n                ),\"standard\" in Split(Lower(R.Description),\" \").Value)*/\n                ),\n                IsNew,\n                IsBlank(ProjectContract.'CAPEX Project Contract')\n            )\n        ),\n        ClearCollect(\n            colValidationPCFOutRow,\n            AddColumns(\n                colPCFDataOut As Current,\n                CostCountRows,\n                CountIf(\n                    colPCFDataOut,\n                    Name = Current.Name,\n                    CurrentYear = Current.CurrentYear,\n                    row_ID = Current.row_ID,\n                    Number = Current.Number,\n                    Description = Current.Description\n                ),\n                SubaccountCountRows,\n                CountIf(\n                    colPCFDataOut,\n                    Name = Current.Name,\n                    CurrentYear = Current.CurrentYear,\n                    row_ID = Current.row_ID,\n                    Number = Current.Number,\n                    Description = Current.Description\n                )\n            )\n        ),\n        ClearCollect(\n            colNonExistingSubaccountsPCF,\n            Distinct(\n                Filter(\n                    colPCFDataOut,\n                    IsBlank(SubAccountID)\n                ),\n                UniqueID\n            ).Value\n        ),\n        ClearCollect(\n            colDuplicateSubaccounts,\n            GroupBy(\n                colPCFDataOut,\n                UniqueID,\n                ByUniqueID\n            )\n        )\n    );\n    With(\n        {\n            locDuplicateSubaccounts: ForAll(\n                colDuplicateSubaccounts As Current,\n                If(\n                    CountIf(\n                        Distinct(\n                            Filter(\n                                colPCFDataOut,\n                                UniqueID = Current.UniqueID\n                            ),\n                            row_ID\n                        ),\n                        true\n                    ) > 1,\n                    With(\n                        {\n                            locRow: LookUp(\n                                colPCFDataOut,\n                                UniqueID = Current.UniqueID\n                            )\n                        },\n                        {\n                            Name: locRow.Name,\n                            Number: locRow.Number,\n                            UniqueID: locRow.UniqueID,\n                            Comment: \" is duplicated. Please ensure it is unique.\"\n                        }\n                    )\n                )\n            ),\n            locNonExistingSubaccounts: ForAll(\n                colNonExistingSubaccountsPCF As Current,\n                With(\n                    {\n                        locRow: LookUp(\n                            colPCFDataOut,\n                            UniqueID = Current.Value\n                        )\n                    },\n                    {\n                        Name: locRow.Name,\n                        Number: locRow.Number,\n                        UniqueID: locRow.UniqueID,\n                        Comment: \": Cost entered below Account instead of Sub-Account.\"\n                    }\n                )\n            ),\n            locDuplication: ForAll(\n                Filter(\n                    colValidationPCFOutRow,\n                    CostCountRows > 1\n               // ,CurrentYear = locProjectStartingYear\n                ) As Current,\n                With(\n                    {\n                        locRow: LookUp(\n                            colValidationPCFOutRow,\n                            Description = Current.Description\n                        )\n                    },\n                    {\n                        Name: locRow.Name,\n                        Number: locRow.Number,\n                        UniqueID: locRow.UniqueID & \" : \" & locRow.Description,\n                        Comment: \" :- There cannot be two contracts with the same name under the same sub-account.\"\n                    }\n                )\n            ),\n            locMissingValues: ForAll(\n                Filter(\n                    colPCFDataOut As Item,\n                    IsBlank(Item.Depreciation) || IsBlank(Item.ApplyVAT) || IsBlank(Item.CostPaidBy)\n               // ,CurrentYear = locProjectStartingYear\n                ) As Current,\n                With(\n                    {\n                        locRow: LookUp(\n                            colPCFDataOut,\n                            Description = Current.Description && Name = Current.Name && Number = Current.Number\n                        )\n                    },\n                    {\n                        Name: locRow.Name,\n                        Number: locRow.Number,\n                        UniqueID: locRow.UniqueID & \" : \" & locRow.Description,\n                        Comment: \" : Please fill out the missing cost information.\"\n                    }\n                )\n            ),\n            locStandardDisallowed: ForAll(\n                Filter(\n                    colNewStandardDisallowed,\n                    IsNew\n                ) As ThisRow,\n                {\n                    Name: ThisRow.Name,\n                    Number: ThisRow.Number,\n                    UniqueID: ThisRow.UniqueID & \" : \" & ThisRow.Description,\n                    Comment: \" : The term \"\"Standard\"\" is applicable only for system-prefilled contracts.\"\n                }\n            ),\n            locNoCostAllocatedContracts: ForAll(\n                Filter(\n                    GroupBy(\n                        colPCFDataOut,\n                        Name,\n                        Number,\n                        Description,\n                        ByContract\n                    ) As G,\n                    CountIf(\n                        G.ByContract As R,\n                        Coalesce(\n                            R.Jan,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Feb,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Mar,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Apr,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.May,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Jun,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Jul,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Aug,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Sep,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Oct,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Nov,\n                            0\n                        ) <> 0 || Coalesce(\n                            R.Dec,\n                            0\n                        ) <> 0\n                    ) = 0\n                ) As Current,\n                With(\n                    {locRow: Current},\n                    {\n                        Name: locRow.Name,\n                        Number: locRow.Number,\n                        UniqueID: First(locRow.ByContract).UniqueID & \" : \" & Current.Description,\n                        Comment: \" : Each cost item must be assigned a cost.\"\n                    }\n                )\n            )\n        },\n        ClearCollect(\n            colValidationErrors,\n            locDuplicateSubaccounts,\n            locDuplication,\n            locMissingValues,\n            locNonExistingSubaccounts,\n            locStandardDisallowed,\n            locNoCostAllocatedContracts\n        );\n    );\n    ClearCollect(\n        colValidationErrors,\n        ForAll(\n            Distinct(\n                colValidationErrors,\n                ThisRecord\n            ),\n            Value\n        )\n    );\n    Concurrent(\n        Clear(colNewStandardDisallowed),\n        Clear(colValidationPCFOutRow),\n        Clear(colNonExistingSubaccountsPCF),\n        Clear(colDuplicateSubaccounts)\n    );\n    If(\n        CountIf(\n            colValidationErrors,\n            true\n        ) = 0,\n        Concurrent(\n            Clear(colValidationErrors),\n            UpdateContext({locSpinnerInformationText: \"Saving costs...\"}),\n            Clear(colFinatCostDataOptimized),\n            RemoveIf(\n                colPCFDataOut As Current,\n                With(\n                    {\n                        locCurrentRow: LookUp(\n                            colAddCostFromTable,\n                            v_Year = Value(Current.CurrentYear) && s_ID = Current.ProjectContract.'CAPEX Project Contract'\n                        ),\n                        locContractValues: LookUp(\n                            colCapexProjectContracts,\n                            'CAPEX Project Contract' = Current.ProjectContract.'CAPEX Project Contract'\n                        )\n                    },\n                    Concatenate(\n                        Text(Current.Jan),\n                        \"|\",\n                        Text(Current.Feb),\n                        \"|\",\n                        Text(Current.Mar),\n                        \"|\",\n                        Text(Current.Apr),\n                        \"|\",\n                        Text(Current.May),\n                        \"|\",\n                        Text(Current.Jun),\n                        \"|\",\n                        Text(Current.Jul),\n                        \"|\",\n                        Text(Current.Aug),\n                        \"|\",\n                        Text(Current.Sep),\n                        \"|\",\n                        Text(Current.Oct),\n                        \"|\",\n                        Text(Current.Nov),\n                        \"|\",\n                        Text(Current.Dec),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Current.Depreciation,\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Current.CostPaidBy,\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Current.ApplyVAT,\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Current.Description,\n                                    \"\"\n                                )\n                            )\n                        )\n                    ) = Concatenate(\n                        Text(locCurrentRow.g_Jan),\n                        \"|\",\n                        Text(locCurrentRow.h_Feb),\n                        \"|\",\n                        Text(locCurrentRow.i_Mar),\n                        \"|\",\n                        Text(locCurrentRow.j_Apr),\n                        \"|\",\n                        Text(locCurrentRow.k_May),\n                        \"|\",\n                        Text(locCurrentRow.l_Jun),\n                        \"|\",\n                        Text(locCurrentRow.m_Jul),\n                        \"|\",\n                        Text(locCurrentRow.n_Aug),\n                        \"|\",\n                        Text(locCurrentRow.o_Sep),\n                        \"|\",\n                        Text(locCurrentRow.p_Oct),\n                        \"|\",\n                        Text(locCurrentRow.q_Nov),\n                        \"|\",\n                        Text(locCurrentRow.r_Dec),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Text(locContractValues.'Depreciation?'),\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Text(locContractValues.'Cost Type'),\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Text(locContractValues.'Apply VAT?'),\n                                    \"\"\n                                )\n                            )\n                        ),\n                        \"|\",\n                        Lower(\n                            Trim(\n                                Coalesce(\n                                    Text(locContractValues.Description),\n                                    \"\"\n                                )\n                            )\n                        )\n                    )\n                    /*\n                    And(\n                        Current.Jan = locCurrentRow.g_Jan,\n                        Current.Feb = locCurrentRow.h_Feb,\n                        Current.Mar = locCurrentRow.i_Mar,\n                        Current.Apr = locCurrentRow.j_Apr,\n                        Current.May = locCurrentRow.k_May,\n                        Current.Jun = locCurrentRow.l_Jun,\n                        Current.Jul = locCurrentRow.m_Jul,\n                        Current.Aug = locCurrentRow.n_Aug,\n                        Current.Sep = locCurrentRow.o_Sep,\n                        Current.Oct = locCurrentRow.p_Oct,\n                        Current.Nov = locCurrentRow.q_Nov,\n                        Current.Dec = locCurrentRow.r_Dec,\n                        Lower(Trim(Current.Depreciation)) = Lower(Trim(locCurrentRow.e_depreciation)),\n                        Lower(Trim(Current.CostPaidBy)) = Lower(Trim(locCurrentRow.d_costpaidby)),\n                        Lower(Trim(Current.ApplyVAT)) = Lower(Trim(locCurrentRow.f_applyVAT)),\n                        Lower(Trim(Current.Description)) = Lower(Trim(locCurrentRow.c_Description))\n                    )*/\n                )\n            )\n        );\n        ClearCollect(\n            colGroupedContracts,\n            GroupBy(\n                colPCFDataOut,\n                Name,\n                Number,\n                Description,\n                ByProjectContracts\n            )\n        );\n        ClearCollect(\n            colContractsToPatch,\n            ForAll(\n                colGroupedContracts As Contract,\n                With(\n                    {Item: First(Contract.ByProjectContracts)},\n                    With(\n                        {\n                            locContract: LookUp(\n                                colCapexProjectContracts,\n                                'CAPEX Project Contract' = Item.ProjectContract.'CAPEX Project Contract'\n                            )\n                        },\n                        {\n                            Account: Item.SubAccountID,\n                            Name: Contract.Description,\n                            Project: gblSelectedProject,\n                            'Apply VAT?': If(\n                                Item.ApplyVAT = \"Yes\",\n                                'Apply VAT? (CAPEX Project Contracts)'.Yes,\n                                Item.ApplyVAT = \"No\",\n                                'Apply VAT? (CAPEX Project Contracts)'.No\n                            ),\n                            'Depreciation?': If(\n                                Item.Depreciation = \"Yes\",\n                                'Depreciation? (CAPEX Project Contracts)'.Yes,\n                                Item.Depreciation = \"No\",\n                                'Depreciation? (CAPEX Project Contracts)'.No\n                            ),\n                            'Cost Type': If(\n                                Item.CostPaidBy = \"DevCo\",\n                                'Cost paid type'.DevCo,\n                                Item.CostPaidBy = \"SPV\",\n                                'Cost paid type'.SPV,\n                                'Cost paid type'.DevCo\n                            ),\n                            'Distribution Scheme': 'Distribution Scheme'.'Absolute Values'\n                            /*Coalesce(\n                                locContract.'Distribution Scheme',\n                                'Distribution Scheme'.'Absolute Values'\n                            )*/,\n                            Distribution: 'Distribution Type'.'Individual Distribution'\n                            /*Coalesce(\n                                locContract.Distribution,\n                                'Distribution Type'.'Individual Distribution'\n                            )*/,\n                            'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)',\n                            'Is Edited from PCF?': If(\n                                And(\n                                    locContract.'Is Standard Contract?' = 'Is Standard Contract? (CAPEX Project Contracts)'.Ja,\n                                    locContract.'Initial Contract Source' = 'Initial Contract Source (CAPEX Project Contracts)'.Powerapps,\n                                    locContract.Distribution = 'Distribution Type'.'Individual Distribution',\n                                    locContract.'Distribution Scheme' = 'Distribution Scheme'.'Absolute Values',\n                                    Not(locContract.'Is Edited from PCF?' = 'Is Edited from PCF? (CAPEX Project Contracts)'.Yes) || IsBlank(locContract.'Is Edited from PCF?')\n                                ),\n                                'Is Edited from PCF? (CAPEX Project Contracts)'.No,\n                                'Is Edited from PCF? (CAPEX Project Contracts)'.Yes\n                            )\n                            /* If(\n                                 And(\n                                    locContract.Distribution = 'Distribution Type'.'Individual Distribution',\n                                    locContract.'Distribution Scheme' = 'Distribution Scheme'.'Absolut Values'\n                                ),\n                                'Is Edited from PCF? (CAPEX Project Contracts)'.Yes,\n                                'Is Edited from PCF? (CAPEX Project Contracts)'.No\n                            )*/,\n                            'Initial Contract Source': Coalesce(\n                                locContract.'Initial Contract Source',\n                                'Initial Contract Source (CAPEX Project Contracts)'.PCF\n                            ),\n                            ContractID: locContract.'CAPEX Project Contract'\n                        }\n                    )\n                )\n            )\n        );\n        Patch(\n            'CAPEX Project Contracts',\n            ForAll(\n                colContractsToPatch As Item,\n                {\n                    'CAPEX Project Contract': Item.ContractID,\n                    Account: Item.Account,\n                    Name: Item.Name,\n                    Project: gblSelectedProject,\n                    'Apply VAT?': Item.'Apply VAT?',\n                    'Depreciation?': Item.'Depreciation?',\n                    'Cost Type': Item.'Cost Type',\n                    'Distribution Scheme': Item.'Distribution Scheme',\n                    Distribution: Item.Distribution,\n                    'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)',\n                    'Is Edited from PCF?': Item.'Is Edited from PCF?',\n                    'Initial Contract Source': Item.'Initial Contract Source'\n                }\n            )\n        );\n        Concurrent(\n            ClearCollect(\n                colCapexProjectContracts,\n                Filter(\n                    'CAPEX Project Contracts',\n                    Project.Project = gblSelectedProject.Project\n                )\n            ),\n            Clear(colAddCostDataToPatch)\n        );\n        ForAll(\n            colPCFDataOut As Item,\n            With(\n                {\n                    locSelectedProjectContract: LookUp(\n                        colCapexProjectContracts,\n                        Name = Item.Description && Account.'CAPEX Account List' = Item.SubAccountID.'CAPEX Account List'\n                    )\n                },\n                If(\n                    CountIf(\n                        colCapexProjectContracts,\n                        'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract'\n                    ) = 0,\n                    Collect(\n                        colCapexProjectContracts,\n                        locSelectedProjectContract\n                    )\n                );\n                Collect(\n                    colAddCostDataToPatch,\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                And(\n                                    Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract',\n                                    Year = Value(Item.CurrentYear),\n                                    Month = [@Month].January\n                                ),\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Jan,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].January\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                And(\n                                    Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract',\n                                    Year = Value(Item.CurrentYear),\n                                    Month = [@Month].February\n                                ),\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Feb,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].February\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].March,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Mar,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].March\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].April,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Apr,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].April\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].May,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.May,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].May\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].June,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Jun,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].June\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].July,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Jul,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].July\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].August,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Aug,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].August\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].September,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Sep,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].September\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].October,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Oct,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].October\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].November,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Nov,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].November\n                    },\n                    {\n                        'CAPEX Cost': Coalesce(\n                            LookUp(\n                                colCapexCosts,\n                                Contract.'CAPEX Project Contract' = locSelectedProjectContract.'CAPEX Project Contract' && Year = Value(Item.CurrentYear) && Month = [@Month].December,\n                                'CAPEX Cost'\n                            ),\n                            Blank()\n                        ),\n                        Contract: locSelectedProjectContract,\n                        Cost: Item.Dec,\n                        Year: Item.CurrentYear,\n                        Month: [@Month].December\n                    }\n                )\n            )\n        );\n        ClearCollect(\n            colCapexToDeletePCF,\n            Filter(\n                colAddCostDataToPatch,\n                IsBlank(Cost) && !IsBlank('CAPEX Cost')// means an existing record was found\n            )\n        );\n        Concurrent(\n            RemoveIf(\n                'CAPEX Costs',\n                'CAPEX Cost' in colCapexToDeletePCF.'CAPEX Cost'\n            ),\n            RemoveIf(\n                colAddCostDataToPatch,\n                IsBlank(Cost)\n            ),\n            Set(\n                gblTimerAFterCollectionCalculation5,\n                Text(\n                    Now(),\n                    \"hh:mm:ss\"\n                )\n            )\n        );\n        ClearCollect(\n            colAddCostDataToPatchChecker,\n            colAddCostDataToPatch\n        );\n        IfError(\n            ClearCollect(\n                colGetPatchedData,\n                Patch(\n                    'CAPEX Costs',\n                    ForAll(\n                        colAddCostDataToPatch As Item,\n                        {\n                            'CAPEX Cost': Item.'CAPEX Cost',\n                            Contract: Item.Contract,\n                            Cost: Item.Cost,\n                            Month: Item.Month,\n                            Year: Value(Item.Year),\n                            'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'\n                        }\n                    )\n                )\n            ),\n            Trace(\n                \"Error While Trying to Patch Data to Capex Cost: \" & Concat(\n                    AllErrors,\n                    Message,\n                    \", \"\n                ),// <--- Concatenates all messages\n                TraceSeverity.Error\n            );\n            Notify(\n                \"Something went wrong saving the Capex data. Please refresh the page and verify your changes were saved correctly.\",\n                NotificationType.Error,\n                5000// Keeps it on screen for 10 seconds so they can read it\n            );\n        );\n        Patch(\n            'CAPEX Project Contracts',\n            ForAll(\n                Filter(\n                    colCapexProjectContracts,\n                    Account.'CAPEX Account List' in colCapexSubaccountsInSelectedCategoryNew.'CAPEX Account List'\n                ) As Item,\n                {\n                    'CAPEX Project Contract': Item.'CAPEX Project Contract',\n                    'Total Cost': Round(\n                        Sum(\n                            Filter(\n                                'CAPEX Costs',\n                                Contract.'CAPEX Project Contract' = Item.'CAPEX Project Contract'\n                            ),\n                            Cost\n                        ),\n                        0\n                    )\n                }\n            )\n        );\n        Set(\n            gblTimerAFterPatchingData6,\n            Text(\n                Now(),\n                \"hh:mm:ss\"\n            )\n        );\n        With(\n            {\n                locCurrentYear: Year(Today()),\n                locrows: Distinct(\n                    Filter(\n                        Filter(\n                            colAddCostFromTable,\n                            Not(IsBlank(c_Description)) && c_Description <> \"*Account*\"\n                        ) As DataRow,\n                        IsBlank(\n                            LookUp(\n                                colUniqueContracts,\n                                Value = DataRow.s_ID\n                            )\n                        )\n                    ),\n                    s_ID\n                )\n            },\n            With(\n                {\n                    locContractsWithPastCosts: Distinct(\n                        Filter(\n                            'CAPEX Costs',\n                            Year < locCurrentYear,\n                            Not(IsBlank(Cost)),\n                            Contract.'CAPEX Project Contract' in locrows\n                        ),\n                        Contract.'CAPEX Project Contract'\n                    )\n                },\n                ClearCollect(\n                    ColContractstoDelete,\n                    Filter(\n                        colCapexProjectContracts,\n                        'CAPEX Project Contract' in locrows\n                        /*,\n                        IsBlank(\n                            LookUp(\n                                locContractsWithPastCosts,\n                                Value = 'CAPEX Project Contract'\n                            )\n                        )*/\n                    )\n                )\n            );\n            RemoveIf(\n                'CAPEX Project Contracts',\n                'CAPEX Project Contract' in ColContractstoDelete.'CAPEX Project Contract'\n            )\n        );\n        ClearCollect(\n            colCapexAccountsInSelectedCategoryNew,\n            Filter(\n                colCapexAccountsNew,\n                'Parent Account'.'CAPEX Account List' = locSelectedTglTab.'CAPEX Account List',\n                Status = 'Status (CAPEX Account Lists)'.Active\n            )\n        );\n        ClearCollect(\n            colCapexSubaccountsInSelectedCategoryNew,\n            Filter(\n                colCapexSubaccountsNew,\n                'Parent Account'.'CAPEX Account List' in colCapexAccountsInSelectedCategoryNew.'CAPEX Account List'\n            )\n        );\n        ClearCollect(\n            colCapexCosts,\n            Defaults('CAPEX Costs')\n        );\n        Collect(\n            colCapexCosts,\n            Ungroup(\n                ShowColumns(\n                    AddColumns(\n                        colCapexProjectContracts As Item,\n                        Value,\n                        ShowColumns(\n                            Filter(\n                                'CAPEX Costs',\n                                Contract.'CAPEX Project Contract' = Item.'CAPEX Project Contract'\n                            ),\n                            Year,\n                            Name,\n                            Month,\n                            Cost,\n                            Contract,\n                            'CAPEX Cost',\n                            'Cost Paid'\n                        )\n                    ),\n                    Value\n                ),\n                Value\n            )\n        );\n        ClearCollect(\n            colCapexContractsInSelectedCategory,\n            Filter(\n                colCapexProjectContracts,\n                Account.'CAPEX Account List' in colCapexSubaccountsInSelectedCategoryNew.'CAPEX Account List'\n            )\n        );\n        ClearCollect(\n            colCapexCostsInSelectedContracts,\n            Filter(\n                colCapexCosts,\n                Contract.'CAPEX Project Contract' in colCapexContractsInSelectedCategory.'CAPEX Project Contract'\n            )\n        );\n        ClearCollect(\n            colReference,\n            Ungroup(\n                ForAll(\n                    colCapexProjectContracts,\n                    ForAll(\n                        Sequence(\n                            Max(\n                                Year(gblSelectedProject.'End Date') - Year(gblSelectedProject.'Project Start Date'),\n                                15\n                            ),\n                            Year(gblSelectedProject.'Project Start Date')\n                        ),// Replace 2020-2025 with your desired year range\n                        {\n                            ContractId: 'CAPEX Project Contract',\n                            vsb_year: Value\n                        }\n                    )\n                ),\n                Value\n            )\n        );\n        // Step 3: Process the complete collection to create colCapexContractCostGrouped\n        ClearCollect(\n            colCapexContractCostGrouped_V1,\n            ForAll(\n                colReference As Item,\n                With(\n                    {\n                        locContract: LookUp(\n                            colCapexProjectContracts,\n                            'CAPEX Project Contract' = Item.ContractId\n                        )\n                    },\n                    With(\n                        {\n                            locMainAccount: LookUp(\n                                colCapexAccountsNew,\n                                'CAPEX Account List' = locContract.Account.'Parent Account'.'CAPEX Account List'\n                            )\n                        },\n                        {\n                            vsb_costdescription: If(\n                                IsBlank(locContract),\n                                Blank(),\n                                locContract.Name\n                            ),\n                            vsb_parentaccountid: If(\n                                IsBlank(locContract),\n                                Blank(),\n                                locContract.Account.'CAPEX Account List'\n                            ),\n                            IsAccount: false,\n                            IsContract: true,\n                            vsb_capexaccountlistid: If(\n                                IsBlank(locContract),\n                                Blank(),\n                                locContract.'CAPEX Project Contract'\n                            ),\n                            vsb_year: Item.vsb_year,\n                            vsb_statusbool: If(\n                                locContract.Account.Status = 'Status (CAPEX Account Lists)'.Active,\n                                true,\n                                locContract.Account.Status = 'Status (CAPEX Account Lists)'.Inactive,\n                                false\n                            ),\n                            vsb_CreatedOn: locContract.'Created On',\n                            vsb_AccountCategory: locMainAccount.'Parent Account'.'CAPEX Account List',\n                            IsStandardContract: If(\n                                locContract.'Is Standard Contract?' = 'Is Standard Contract? (CAPEX Project Contracts)'.Ja,\n                                \"true\",\n                                \"false\"\n                            )\n                        }\n                    )\n                )\n            )\n        );\n        ClearCollect(\n            colFinatCostDataOptimized,\n            Ungroup(\n                ForAll(\n                    colAllGroupedAccounts As Item,\n                    Table(\n                        Item,\n                        SortByColumns(\n                            Filter(\n                                colCapexContractCostGrouped_V1,\n                                vsb_parentaccountid = Item.vsb_capexaccountlistid\n                            ),\n                            \"vsb_costdescription\",\n                            SortOrder.Ascending\n                        )\n                    )\n                ),\n                Value\n            )\n        );\n        Set(\n            gblTimerJustafterCostGallery7,\n            Text(\n                Now(),\n                \"hh:mm:ss\"\n            )\n        );\n        Navigate(\n            'Capex Costs Screen',\n            ScreenTransition.None,\n            {\n                locSelectedAccountCategory: locSelectedTglTab,\n                locIsVisibleLoadingCostSpinner: true,\n                locIsVisiblePopUpSpinner: false,\n                locSpinnerInformationText: \"\"\n            }\n        );\n        //Select(btn_Capex_Cost_Refresh_Capex_Cost_Code_1);\n        /*\n        Concurrent(\n            Clear(colPCFDataOut),\n            Clear(colAddCostDataToPatch),\n            Clear(colAddCostFromTable),\n            Clear(colUniqueContracts),\n            Clear(colGroupedContracts),\n            Clear(colContractsToPatch),\n            Clear(colCapexToDeletePCF),\n            Clear(ColContractstoDelete)\n        );*/Set(\n            gblTimerAfterNavigation8,\n            Text(\n                Now(),\n                \"hh:mm:ss\"\n            )\n        );\n        ,\n        UpdateContext(\n            {\n                locVisibleSubAccountsError: true,\n                locShowErrorsInList: false,\n                locPCFJsonInput: locPCFDataChanged,\n                locSpinnerInformationText: \"\",\n                locIsVisiblePopUpSpinner: false\n            }\n        );\n    );\n    \n);\n"
+            Repeat: =locTimerEnd
+            Visible: =false
+            X: =80
+            Y: =80
+      - con_PopUp_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.7)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Width: =Parent.Width
+          Children:
+            - con_Body_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  DropShadow: =DropShadow.None
+                  Fill: =Color.White
+                  Height: =Parent.Height*.9
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Parent.Width*.9
+                  X: =Parent.Width/2-Self.Width/2
+                  Y: =Parent.Height/2-Self.Height/2
+                Children:
+                  - con_Body_Header_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(AppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =42
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_PopUpConfirmation_BodyHeader_2:
+                            Control: Label@2.5.1
+                            Properties:
+                              AutoHeight: =true
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              Color: =Color.White
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(161, 159, 157, 1)
+                              DisplayMode: =DisplayMode.View
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =11
+                              Text: |-
+                                =//$"Add Cost from Table - {gblSelectedProject.'Project Name'} - {locSelectedTglTab.Name}" Changed to $"{gblSelectedProject.'Project Name'} - {locSelectedTglTab.Name}" in hotfix to Prod Changes
+
+
+                                $"{gblSelectedProject.'Project Name'} - {locSelectedTglTab.Name}"
+                              Width: =Parent.Width-Self.X-ico_PopUpConfirmation_BodyHeader_2.Width-20
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_PopUpConfirmation_BodyHeader_2:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(AppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              Height: =20
+                              HoverColor: =Self.Color
+                              Icon: =Icon.Cancel
+                              OnSelect: |+
+                                =
+                                Navigate('Capex Costs Screen',ScreenTransition.None,{ locSelectedAccountCategory:locSelectedTglTab
+                                });
+                              PressedColor: =ColorValue(AppTheme.palette.themeLighter)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        DropShadow: =DropShadow.None
+                        Fill: =Color.Transparent
+                        Height: =Parent.Height
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_btns_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height*.1
+                              Visible: =false
+                              Width: =Parent.Width*.98
+                              X: =Parent.Width/2-Self.Width/2
+                            Children:
+                              - btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    Appearance: ='ButtonCanvas.Appearance'.Transparent
+                                    Icon: ="Copy"
+                                    OnSelect: =UpdateContext({lclCopyTable:!lclCopyTable})
+                                    Text: ="Copy Table"
+                                    Width: =130
+                                    Y: =20
+                              - btn_SaveData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    Appearance: ='ButtonCanvas.Appearance'.Transparent
+                                    Icon: ="Document"
+                                    OnSelect: |
+                                      =
+                                      UpdateContext({locSaveData: !locSaveData});
+                                      UpdateContext(
+                                          {
+                                              locSpinnerInformationText: "Checking subaccounts validations...",
+                                              locIsVisiblePopUpSpinner: true,
+                                              locIsVisibleRightPanelSubaccountCostsEdit: false
+                                          }
+                                      );
+                                      UpdateContext({locTimerStart:true});
+                                      UpdateContext({locTimerEnd:true});
+                                    Text: ="Save Data"
+                                    Width: =130
+                                    X: =130
+                                    Y: =20
+                        - cmp__PCF_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                            Control: CodeComponent
+                            ComponentName: vsb_Dev.SpreadSheet
+                            Properties:
+                              AddRow: =lcladdrow
+                              CompletionYear: =locEndingYear
+                              CopyData: =lclCopyTable
+                              DeleteRow: =lcldeleterow
+                              FiscelYear: =lcltglShowCostEnabled
+                              Height: =Parent.Height-con_btns_Spreadsheet_Costs_ProjectCosts_BodyButtons.Height-con_btns_Spreadsheet_Costs_ProjectCosts_TableCommandBar.Y-con_btns_Spreadsheet_Costs_ProjectCosts_TableCommandBar.Height
+                              Items: =colSubaccountMappedCostPaid
+                              SaveData: =locSaveData
+                              StartingYear: =locProjectStartingYear
+                              Width: =Parent.Width*.98
+                              X: =(Parent.Width-Self.Width)/2
+                              Y: =con_btns_Spreadsheet_Costs_ProjectCosts_TableCommandBar.Height
+                              jsonDataIn: =locPCFJsonInput
+                            Children:
+                              - Account Number1:
+                                  Control: DataField@1.5.0
+                                  Variant: textualColumn
+                                  IsLocked: true
+                                  Properties:
+                                    FieldDisplayName: ="Account Number"
+                                    FieldName: ="vsb_accountnumber"
+                                    FieldType: ="s"
+                                    Order: =1
+                              - DevCo/SPV1:
+                                  Control: DataField@1.5.0
+                                  Variant: textualColumn
+                                  IsLocked: true
+                                  Properties:
+                                    FieldDisplayName: ="DevCo/SPV"
+                                    FieldName: ="vsb_devcospv"
+                                    FieldType: ="l"
+                                    Order: =2
+                        - con_btns_Spreadsheet_Costs_ProjectCosts_TableCommandBar:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =RGBA(255, 255, 255, 1)
+                              Height: =50
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutGap: =5
+                              PaddingLeft: =10
+                              PaddingRight: =10
+                              PaddingTop: =5
+                              Width: =Parent.Width
+                            Children:
+                              - btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    Align: =Align.Center
+                                    AlignInContainer: =AlignInContainer.Center
+                                    Appearance: ='ButtonCanvas.Appearance'.Transparent
+                                    Icon: ="Add"
+                                    IconStyle: ='ButtonCanvas.IconStyle'.Filled
+                                    Layout: ='ButtonCanvas.Layout'.IconBefore
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnSelect: =UpdateContext({lcladdrow:!lcladdrow});
+                                    Text: ="Add Row"
+                                    VerticalAlign: =VerticalAlign.Middle
+                                    Width: =110
+                                    Y: =20
+                              - btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    Appearance: ='ButtonCanvas.Appearance'.Transparent
+                                    Icon: ="Delete"
+                                    IconStyle: ='ButtonCanvas.IconStyle'.Outline
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnSelect: =UpdateContext({lcldeleterow:!lcldeleterow});
+                                    Text: ="Delete Row"
+                                    VerticalAlign: =VerticalAlign.Middle
+                                    Width: =125
+                                    Y: =20
+                              - btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    Appearance: ='ButtonCanvas.Appearance'.Transparent
+                                    Icon: ="Copy"
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnSelect: =UpdateContext({lclCopyTable:!lclCopyTable})
+                                    Text: |+
+                                      =//"Copy Whole Table"  Changed to Copy Table Hotfix to Prod Change
+
+                                      "Copy Table"
+                                    VerticalAlign: =VerticalAlign.Middle
+                                    Width: =125
+                                    Y: =20
+                              - tgl_ShowCostFromProjectStart_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable:
+                                  Control: Toggle@1.1.5
+                                  Properties:
+                                    Checked: =lcltglShowCostEnabled
+                                    Label: ="Show Cost from Project Start"
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnCheck: |-
+                                      =UpdateContext({
+                                          lcltglShowCostEnabled:true
+                                      })
+                                    OnUncheck: |-
+                                      =UpdateContext({
+                                          lcltglShowCostEnabled:false
+                                      })
+                                    Visible: |-
+                                      =//true : Changed to False , Hotfix to Prod Changes
+                                      false
+                                    Width: =300
+                        - con_btns_Spreadsheet_Costs_ProjectCosts_BodyButtons:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              Fill: =Color.Transparent
+                              Height: =50
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                              Y: =Parent.Height-Self.Height
+                            Children:
+                              - pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.Icon
+                                  Properties:
+                                    BorderColor: =gblAppTheme.palette.themePrimary
+                                    FillColor: =gblAppTheme.palette.white
+                                    FontColor: =gblAppTheme.palette.themePrimary
+                                    Height: =32
+                                    HoverBorderColor: =gblAppTheme.palette.hoverButton
+                                    HoverFillColor: =gblAppTheme.palette.hoverButton
+                                    HoverFontColor: =gblAppTheme.palette.themePrimary
+                                    HoverIconColor: =gblAppTheme.palette.themePrimary
+                                    IconColor: |-
+                                      =If(
+                                          Self.DisplayMode = DisplayMode.Disabled,
+                                          gblAppTheme.palette.black,
+                                          gblAppTheme.palette.themePrimary
+                                      )
+                                    IconName: ="Cancel"
+                                    IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                                    OnChange: |
+                                      =Navigate(
+                                          'Capex Costs Screen',
+                                          ScreenTransition.None,
+                                          {
+                                              locSelectedAccountCategory: locSelectedTglTab
+                                          }
+                                      );
+                                    Text: ="Cancel"
+                                    TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                    Theme: =gblAppThemeJson
+                                    Tooltip: =""
+                                    Width: =96
+                                    X: =Parent.Width-Self.Width-20
+                                    Y: =Parent.Height/2-Self.Height/2
+                              - pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.Icon
+                                  Properties:
+                                    FillColor: =gblAppTheme.palette.themePrimary
+                                    FontColor: =gblAppTheme.palette.white
+                                    Height: =32
+                                    HoverFillColor: =gblAppTheme.palette.hoverButton
+                                    HoverFontColor: =gblAppTheme.palette.themePrimary
+                                    HoverIconColor: =gblAppTheme.palette.themePrimary
+                                    IconColor: |-
+                                      =If(
+                                          Self.DisplayMode = DisplayMode.Disabled,
+                                          gblAppTheme.palette.black,
+                                          gblAppTheme.palette.white
+                                      )
+                                    IconName: ="CheckMark"
+                                    IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                                    OnChange: |
+                                      =
+                                      UpdateContext({locSaveData: !locSaveData});
+                                      UpdateContext(
+                                          {
+                                              locSpinnerInformationText: "Checking subaccounts validations...",
+                                              locIsVisiblePopUpSpinner: true,
+                                              locIsVisibleRightPanelSubaccountCostsEdit: false
+                                          }
+                                      );
+                                      UpdateContext({locTimerStart:true});
+                                      UpdateContext({locTimerEnd:true});
+                                    Text: ="Save"
+                                    TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                    Theme: =gblAppThemeJson
+                                    Tooltip: =""
+                                    Width: =96
+                                    X: =Parent.Width-Self.Width-Self.Width-40
+                                    Y: =Parent.Height/2-Self.Height/2
+            - cmp_Information_Button_PCF_1:
+                Control: CanvasComponent
+                ComponentName: cmp_Information_Button_PCF
+                Properties:
+                  Color: =RGBA(0, 0, 0, 1)
+                  ErrorTitle: =$"Click to view validation error"
+                  Height: =If(cmp_Information_Button_PCF_1.ToolTipVisibility,80+CountRows(colValidationErrors)*50,32)
+                  Items: =colValidationErrors
+                  MaxHeight: =100
+                  MaxWidth: =100
+                  OnSelect: =UpdateContext({locShowErrorsInList:!locShowErrorsInList});
+                  ToolTipVisibility: =locShowErrorsInList
+                  Visible: =locVisibleSubAccountsError
+                  Width: =500
+                  X: =con_Body_Costs_ProjectCosts_TableCommandBar_AddDataTable.Width-Self.Width+20
+                  Y: =104
+      - cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Loading_1
+          Properties:
+            Height: =Parent.Height
+            InformationText: =locSpinnerInformationText
+            Visible: =locIsVisiblePopUpSpinner
+            Width: =Parent.Width

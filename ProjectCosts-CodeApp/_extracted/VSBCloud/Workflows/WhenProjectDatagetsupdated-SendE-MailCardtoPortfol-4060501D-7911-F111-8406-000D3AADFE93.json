@@ -1,0 +1,903 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedcommondataserviceforapps_60bf9"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365users": {
+        "api": {
+          "name": "shared_office365users"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365users_7ec1c"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365": {
+        "api": {
+          "name": "shared_office365"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365_4d338"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "Wenn_eine_Zeile_hinzugefügt,_geändert_oder_gelöscht_wird": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "subscriptionRequest/message": 3,
+              "subscriptionRequest/entityname": "vsb_project",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "vsb_planthydrogencapacity,vsb_plantpvcapacitymwp,vsb_plantstoragecapacity,vsb_plantsubstationcapacity,vsb_plantwtgcapacity,vsb_feasibilitystudies,vsb_projectdevelopmentstarted,vsb_applicationsubmitted,vsb_legallybindingpermits,vsb_construction,vsb_finalinvestmentdecision,vsb_operationsstartdatecod,vsb_salescompleted,vsb_salesstartdate",
+              "subscriptionRequest/runas": 3
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "6b463578-bc3b-4ea2-bebe-d8123f71da0c"
+          }
+        }
+      },
+      "actions": {
+        "Bereich-copy": {
+          "type": "Scope",
+          "actions": {
+            "Old_New_Milestones_Mapping": {
+              "type": "Compose",
+              "inputs": [
+                {
+                  "Milestone Name": "Cluster 1",
+                  "New Value": "@{triggerOutputs()?['body/vsb_feasibilitystudies']}",
+                  "Old Value": "@{outputs('Cluster_1_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Cluster 2",
+                  "New Value": "@{triggerOutputs()?['body/vsb_projectdevelopmentstarted']}",
+                  "Old Value": "@{outputs('Cluster_2_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Cluster 3",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_applicationsubmitted']}",
+                  "Old Value": "@{outputs('Cluster_3_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Cluster 4",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_legallybindingpermits']}",
+                  "Old Value": "@{outputs('Cluster_4_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "FID",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_finalinvestmentdecision']}",
+                  "Old Value": "@{outputs('FID_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Cluster 5",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_construction']}",
+                  "Old Value": "@{outputs('Cluster_5_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Cluster 6",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_operationsstartdatecod']}",
+                  "Old Value": "@{outputs('Cluster_6_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Sales Start",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_salesstartdate']}",
+                  "Old Value": "@{outputs('Sales_Start_Old_Value')}"
+                },
+                {
+                  "Milestone Name": "Sales End",
+                  "New Value": "@{outputs('Get_project_with_country_name')?['body/vsb_salescompleted']}",
+                  "Old Value": "@{outputs('Sales_End_Old_Value')}"
+                }
+              ],
+              "runAfter": {
+                "Prepare_Audit_Values": [
+                  "Succeeded"
+                ],
+                "Get_project_with_country_name": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "30a3a489-9fef-415c-a251-d11dd190afea"
+              }
+            },
+            "Milestones_Column_Sets": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('All_Clusters_but_Sales_Start_and_End')",
+                "select": {
+                  "type": "ColumnSet",
+                  "columns": [
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{item()?['Milestone Name']}",
+                          "horizontalAlignment": "center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "horizontalAlignment": "Left",
+                      "separator": true
+                    },
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "horizontalAlignment": "Center",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{if(\r\n empty(item()?['Old Value']),\r\n '',\r\n formatDateTime(\r\n  item()?['Old Value'],\r\n  'dd/MM/yyyy'\r\n )\r\n)\r\n}",
+                          "horizontalAlignment": "Center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "separator": true
+                    },
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{if(\r\n equals(item()?['Old Value'], item()?['New Value']),\r\n '',\r\n if(\r\n  empty(item()?['New Value']),\r\n  '',\r\n  formatDateTime(\r\n   item()?['New Value'],\r\n   'dd/MM/yyyy'\r\n  )\r\n )\r\n)}",
+                          "horizontalAlignment": "Center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "separator": true
+                    }
+                  ],
+                  "separator": true
+                }
+              },
+              "runAfter": {
+                "All_Clusters_but_Sales_Start_and_End": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a1d10ba0-339f-4bcd-9690-c09367dbbb62"
+              }
+            },
+            "Get_project_with_country_name": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projects",
+                  "recordId": "@triggerOutputs()?['body/vsb_projectid']",
+                  "$expand": "vsb_Country($select=vsb_name)"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "3344901b-0d1e-440d-917a-c28d45a4285a"
+              }
+            },
+            "Get_country_Portfolio_Manager_2": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_countries",
+                  "recordId": "@outputs('Get_project_with_country_name')?['body/_vsb_country_value']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "runAfter": {
+                "Milestones_Column_Sets": [
+                  "Succeeded"
+                ],
+                "Total_Capacity_Column_Set": [
+                  "Succeeded"
+                ],
+                "Sales_Column_Sets": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8ea048ae-df2e-45f0-83ec-ab4a0fae29a1"
+              }
+            },
+            "If_Portfolio_Manager_not_Blank-copy": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@outputs('Get_country_Portfolio_Manager_2')?['body/_vsb_portfoliomanagerid_value']",
+                        "@null"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "actions": {
+                "Portfolio_Manager_1": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "id": "@outputs('Get_country_Portfolio_Manager_2')?['body/_vsb_portfoliomanagerid_value']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                      "operationId": "UserProfile_V2",
+                      "connectionName": "shared_office365users"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7a2f4a3b-cadb-4ba3-b623-aef381417c8b"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Get_country_Portfolio_Manager_2": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8d774593-f349-41b8-901e-18f468a07d84"
+              }
+            },
+            "Prepare_Audit_Values": {
+              "type": "Scope",
+              "actions": {
+                "List_Last_Project_Update_Audit": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "audits",
+                      "$filter": "operation eq 2 and\n_objectid_value eq '@{outputs('Get_project_with_country_name')?['body/vsb_projectid']}' and\nobjecttypecode eq 'vsb_project'",
+                      "$orderby": "createdon desc",
+                      "$top": 1
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "950db00a-77a2-4d7e-84aa-e516de3c5cf5"
+                  }
+                },
+                "Project_Update_Audit": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@json(\r\n first(body('List_Last_Project_Update_Audit')?['value'])?['changedata']\r\n)?['changedAttributes']",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "logicalName": {
+                            "type": "string"
+                          },
+                          "oldValue": {
+                            "type": "string"
+                          },
+                          "newValue": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "logicalName",
+                          "oldValue",
+                          "newValue"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "List_Last_Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "98b2ee9c-3801-4473-b7cf-43a0350d3a40"
+                  }
+                },
+                "Filter_for_Cluster_1": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_feasibilitystudies')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "4a47edf1-c85e-4e84-bd45-eff9a21cf347"
+                  }
+                },
+                "Filter_for_Cluster_2": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_projectdevelopmentstarted')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "f5b7b702-6901-4983-8ea5-c6b9bbe04b20"
+                  }
+                },
+                "Filter_for_Cluster_3": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_applicationsubmitted')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "25aa6bbf-fae3-4cab-a6d0-4d41725f7ba7"
+                  }
+                },
+                "Filter_for_Cluster_4": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_legallybindingpermits')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "b75ba6e2-393e-49c5-9d3e-df4d08b04459"
+                  }
+                },
+                "Filter_for_FID": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_finalinvestmentdecision')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "3922e05c-6b07-4e43-8f5f-58936e2edec9"
+                  }
+                },
+                "Filter_for_Cluster_5": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_construction')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "24db3b01-187c-4da8-900d-e984a7605174"
+                  }
+                },
+                "Filter_for_Cluster_6": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_operationsstartdatecod')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "27ba7396-a451-4ea9-8e48-a168db398ece"
+                  }
+                },
+                "Filter_for_Sales_Start": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_salesstartdate')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9cc8c6be-ca48-45c7-b212-a935b3f3dd98"
+                  }
+                },
+                "Filter_for_Sales_End": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Project_Update_Audit')",
+                    "where": "@equals(item()?['logicalName'],'vsb_salescompleted')"
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7da3640b-f451-4df9-83ea-f8c39a634338"
+                  }
+                },
+                "Cluster_1_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_1')),1),\r\n  first(body('Filter_for_Cluster_1'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_feasibilitystudies']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_1": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "968b93ea-63fd-41a1-bd00-9adb2cd158f6"
+                  }
+                },
+                "Cluster_2_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_2')),1),\r\n  first(body('Filter_for_Cluster_2'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_projectdevelopmentstarted']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_2": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9ab62ede-d59c-4688-a4de-d6fadff051e9"
+                  }
+                },
+                "Cluster_3_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_3')),1),\r\n  first(body('Filter_for_Cluster_3'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_applicationsubmitted']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_3": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "e4d26062-35cf-4309-87b8-3ef94bad447c"
+                  }
+                },
+                "Cluster_4_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_4')),1),\r\n  first(body('Filter_for_Cluster_4'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_legallybindingpermits']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_4": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d23e3a59-1cc3-4cb0-b56d-4d5af3536ece"
+                  }
+                },
+                "FID_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_FID')),1),\r\n  first(body('Filter_for_FID'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_finalinvestmentdecision']\r\n)",
+                  "runAfter": {
+                    "Filter_for_FID": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "ce64baad-efd9-411b-89c2-07ef9d4b6191"
+                  }
+                },
+                "Cluster_5_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_5')),1),\r\n  first(body('Filter_for_Cluster_5'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_construction']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_5": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "969f1b41-9ba1-4abb-bd87-bd097e67bf45"
+                  }
+                },
+                "Cluster_6_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Cluster_6')),1),\r\n  first(body('Filter_for_Cluster_6'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_operationsstartdatecod']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Cluster_6": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "8653d02f-12fb-4cbd-821d-6bee1d0cb0da"
+                  }
+                },
+                "Sales_Start_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Sales_Start')),1),\r\n  first(body('Filter_for_Sales_Start'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_salesstartdate']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Sales_Start": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5c673d73-df9f-4606-86e8-66cb8c909002"
+                  }
+                },
+                "Sales_End_Old_Value": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(body('Filter_for_Sales_End')),1),\r\n  first(body('Filter_for_Sales_End'))?['oldValue'],\r\n  outputs('Get_project_with_country_name')?['body/vsb_salescompleted']\r\n)",
+                  "runAfter": {
+                    "Filter_for_Sales_End": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "26d4c79d-6fb4-4c4c-8d18-ffadc4cad207"
+                  }
+                },
+                "Calculate_Old_Total_Capacity": {
+                  "type": "Scope",
+                  "actions": {
+                    "Filter_for_vsb_planthydrogencapacity": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Project_Update_Audit')",
+                        "where": "@equals(item()['logicalName'],'vsb_planthydrogencapacity')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "7ee7cbcf-db2a-433f-a9d2-43df0c0f339c"
+                      }
+                    },
+                    "Filter_for_vsb_plantpvcapacitymwp": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Project_Update_Audit')",
+                        "where": "@equals(item()?['logicalName'],'vsb_plantpvcapacitymwp')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "6abbdb4d-207a-4999-b51d-047166ea2759"
+                      }
+                    },
+                    "Filter_for_vsb_plantstoragecapacity": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Project_Update_Audit')",
+                        "where": "@equals(item()?['logicalName'],'vsb_plantstoragecapacity')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "8cb28525-802b-4f7e-9074-ff0d3a96af93"
+                      }
+                    },
+                    "Filter_for_vsb_plantsubstationcapacity": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Project_Update_Audit')",
+                        "where": "@equals(item()?['logicalName'],'vsb_plantsubstationcapacity')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "2d5691cf-8101-47f7-8e6c-e797f1c4ca38"
+                      }
+                    },
+                    "Filter_for_vsb_plantwtgcapacity": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Project_Update_Audit')",
+                        "where": "@equals(item()['logicalName'], 'vsb_plantwtgcapacity')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "46dea81a-b372-4b6f-9d8d-d618e628b354"
+                      }
+                    },
+                    "Total_Capacity_Old_Value": {
+                      "type": "Compose",
+                      "inputs": "@add(\r\n    add(\r\n        add(\r\n            add(\r\n                if(\r\n                    equals(\r\n                        length(body('Filter_for_vsb_plantstoragecapacity')),\r\n                        1\r\n                    ),\r\n                    float(first(body('Filter_for_vsb_plantstoragecapacity'))?['oldValue']),\r\n                    if(\r\n                        equals(\r\n                            outputs('Get_project_with_country_name')?['body/vsb_plantstoragecapacity'],\r\n                            null\r\n                        ),\r\n                        0,\r\n                        outputs('Get_project_with_country_name')?['body/vsb_plantstoragecapacity']\r\n                    )\r\n                ),\r\n                if(\r\n                    equals(\r\n                        length(body('Filter_for_vsb_plantpvcapacitymwp')),\r\n                        1\r\n                    ),\r\n                    float(first(body('Filter_for_vsb_plantpvcapacitymwp'))?['oldValue']),\r\n                    if(\r\n                        equals(\r\n                            outputs('Get_project_with_country_name')?['body/vsb_plantpvcapacitymwp'],\r\n                            null\r\n                        ),\r\n                        0,\r\n                        outputs('Get_project_with_country_name')?['body/vsb_plantpvcapacitymwp']\r\n                    )\r\n                )\r\n            ),\r\n            if(\r\n                equals(\r\n                    length(body('Filter_for_vsb_planthydrogencapacity')),\r\n                    1\r\n                ),\r\n                float(first(body('Filter_for_vsb_planthydrogencapacity'))?['oldValue']),\r\n                if(\r\n                    equals(\r\n                        outputs('Get_project_with_country_name')?['body/vsb_planthydrogencapacity'],\r\n                        null\r\n                    ),\r\n                    0,\r\n                    outputs('Get_project_with_country_name')?['body/vsb_planthydrogencapacity']\r\n                )\r\n            )\r\n        ),\r\n        if(\r\n            equals(\r\n                length(body('Filter_for_vsb_plantsubstationcapacity')),\r\n                1\r\n            ),\r\n            float(first(body('Filter_for_vsb_plantsubstationcapacity'))?['oldValue']),\r\n            if(\r\n                equals(\r\n                    outputs('Get_project_with_country_name')?['body/vsb_plantsubstationcapacity'],\r\n                    null\r\n                ),\r\n                0,\r\n                outputs('Get_project_with_country_name')?['body/vsb_plantsubstationcapacity']\r\n            )\r\n        )\r\n    ),\r\n    if(\r\n        equals(\r\n            length(body('Filter_for_vsb_plantwtgcapacity')),\r\n            1\r\n        ),\r\n        float(first(body('Filter_for_vsb_plantwtgcapacity'))?['oldValue']),\r\n        if(\r\n            equals(\r\n                outputs('Get_project_with_country_name')?['body/vsb_plantwtgcapacity'],\r\n                null\r\n            ),\r\n            0,\r\n            outputs('Get_project_with_country_name')?['body/vsb_plantwtgcapacity']\r\n        )\r\n    )\r\n)\r\n",
+                      "runAfter": {
+                        "Filter_for_vsb_plantstoragecapacity": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Filter_for_vsb_plantpvcapacitymwp": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Filter_for_vsb_planthydrogencapacity": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Filter_for_vsb_plantsubstationcapacity": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Filter_for_vsb_plantwtgcapacity": [
+                          "Succeeded",
+                          "Skipped"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "6655a103-4411-430c-be6e-4ab51bf1ec4b"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Project_Update_Audit": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "beccda09-f507-4fc3-9fd1-2d7198d2aba8"
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_project_with_country_name": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "cd11b8de-a0a3-4009-8984-78b6b75ba35d"
+              }
+            },
+            "E-Mail_senden_(V2)-copy": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "emailMessage/To": "@{if(\r\n  outputs('Get_country_Portfolio_Manager_2')?['body/vsb_sendprojectupdatecardstoportfoliomanager'],\r\n  outputs('Portfolio_Manager_1')?['body/mail'],\r\n  'flow.serviceuser.vsbcloud@vsb.energy'\r\n)};",
+                  "emailMessage/Subject": "Updated milestones and capacity values for Project @{outputs('Get_project_with_country_name')?['body/vsb_projectname']}",
+                  "emailMessage/Body": "<script type=\"application/adaptivecard+json\">\n{\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"type\": \"AdaptiveCard\",\n    \"version\": \"1.4\",\n    \"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"size\": \"medium\",\n            \"weight\": \"bolder\",\n            \"id\": \"Title\",\n            \"text\": \"Updated milestones and capacity values for Project @{outputs('Get_project_with_country_name')?['body/vsb_projectname']}\",\n            \"horizontalAlignment\": \"left\",\n            \"wrap\": true,\n            \"color\": \"good\",\n            \"fontType\": \"default\"\n        },\n        {\n            \"type\": \"Container\",\n            \"items\": [\n                {\n                    \"type\": \"TextBlock\",\n                    \"wrap\": true,\n                    \"height\": \"stretch\",\n                    \"text\": \"Milestone dates and capacity values for Project **@{outputs('Get_project_with_country_name')?['body/vsb_projectname']}** were updated by **@{first(outputs('List_Last_Project_Update_audit')?['body/value'])?['_userid_value@OData.Community.Display.V1.FormattedValue']}**.\\n\\nOverview of the processed field updates:\"\n                }\n            ],\n            \"separator\": true,\n            \"minHeight\": \"32px\"\n        },\n        {\n            \"type\": \"ColumnSet\",\n            \"columns\": [\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"100px\",\n                    \"items\": [\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"\",\n                            \"wrap\": true,\n                            \"weight\": \"bolder\",\n                            \"horizontalAlignment\": \"left\"\n                        }\n                    ],\n                    \"horizontalAlignment\": \"left\",\n                    \"minHeight\": \"24px\"\n                },\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"100px\",\n                    \"horizontalAlignment\": \"center\",\n                    \"items\": [\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"Old Value\",\n                            \"weight\": \"bolder\",\n                            \"wrap\": true,\n                            \"horizontalAlignment\": \"center\"\n                        }\n                    ],\n                    \"minHeight\": \"24px\"\n                },\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"100px\",\n                    \"items\": [\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"New Value\",\n                            \"weight\": \"bolder\",\n                            \"wrap\": true,\n                            \"horizontalAlignment\": \"center\"\n                        }\n                    ],\n                    \"minHeight\": \"24px\"\n                }\n            ],\n            \"minHeight\": \"24px\"\n        },\n        @{join(body('Milestones_Column_Sets'),',')},\n        {\n            \"type\": \"Container\",\n            \"separator\": true\n        },\n        @{join(body('Sales_Column_Sets'),',')}, \n        {\n            \"type\": \"Container\",\n            \"separator\": true\n        },\n        @{outputs('Total_Capacity_Column_Set')}\n    ]\n}\n</script>",
+                  "emailMessage/Cc": "@{outputs('Get_country_Portfolio_Manager_2')?['body/vsb_sendprojectupdatenotificationccrecipients']};"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "operationId": "SendEmailV2",
+                  "connectionName": "shared_office365"
+                }
+              },
+              "runAfter": {
+                "If_Portfolio_Manager_not_Blank-copy": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "bf26fdac-6670-4b94-a9be-78fd623c3ee9"
+              }
+            },
+            "Total_Capacity_Column_Set": {
+              "type": "Compose",
+              "inputs": {
+                "type": "ColumnSet",
+                "columns": [
+                  {
+                    "type": "Column",
+                    "width": "100px",
+                    "items": [
+                      {
+                        "type": "TextBlock",
+                        "text": "Total Capacity",
+                        "horizontalAlignment": "center",
+                        "weight": "@{if(\r\n  not(\r\n    equals(\r\n      outputs('Old_New_Total_Capacity_Mapping')?['Old Value'],\r\n      outputs('Old_New_Total_Capacity_Mapping')?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                      }
+                    ],
+                    "horizontalAlignment": "Left",
+                    "separator": true
+                  },
+                  {
+                    "type": "Column",
+                    "width": "100px",
+                    "horizontalAlignment": "Center",
+                    "items": [
+                      {
+                        "type": "TextBlock",
+                        "text": "@{concat(outputs('Old_New_Total_Capacity_Mapping')?['Old Value'], ' [MW]')}",
+                        "horizontalAlignment": "Center",
+                        "weight": "@{if(\r\n  not(\r\n    equals(\r\n      outputs('Old_New_Total_Capacity_Mapping')?['Old Value'],\r\n      outputs('Old_New_Total_Capacity_Mapping')?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                      }
+                    ],
+                    "separator": true
+                  },
+                  {
+                    "type": "Column",
+                    "width": "100px",
+                    "items": [
+                      {
+                        "type": "TextBlock",
+                        "text": "@{if(\r\n equals(outputs('Old_New_Total_Capacity_Mapping')?['Old Value'], outputs('Old_New_Total_Capacity_Mapping')?['New Value']),\r\n '',\r\n if(\r\n  empty(outputs('Old_New_Total_Capacity_Mapping')?['New Value']),\r\n  '',\r\n  concat(\r\n   outputs('Old_New_Total_Capacity_Mapping')?['New Value'],\r\n   ' [MW]'\r\n  )\r\n )\r\n)\r\n}",
+                        "horizontalAlignment": "Center",
+                        "weight": "@{if(\r\n  not(\r\n    equals(\r\n      outputs('Old_New_Total_Capacity_Mapping')?['Old Value'],\r\n      outputs('Old_New_Total_Capacity_Mapping')?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                      }
+                    ],
+                    "separator": true
+                  }
+                ],
+                "separator": true
+              },
+              "runAfter": {
+                "Old_New_Total_Capacity_Mapping": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "cbbddd47-cccd-4f93-aa0f-8b5ebc5f6815"
+              }
+            },
+            "Old_New_Total_Capacity_Mapping": {
+              "type": "Compose",
+              "inputs": {
+                "Milestone Name": "Total Capacity",
+                "New Value": "@{add(\r\n  add(\r\n    add(\r\n      add(\r\n        if(equals(outputs('Get_project_with_country_name')?['body/vsb_planthydrogencapacity'],null),0,outputs('Get_project_with_country_name')?['body/vsb_planthydrogencapacity']),\r\n        if(equals(outputs('Get_project_with_country_name')?['body/vsb_plantpvcapacitymwp'],null),0,outputs('Get_project_with_country_name')?['body/vsb_plantpvcapacitymwp'])\r\n\t\t\r\n      ),\r\n\t  if(equals(outputs('Get_project_with_country_name')?['body/vsb_plantstoragecapacity'],null),0,outputs('Get_project_with_country_name')?['body/vsb_plantstoragecapacity'])\r\n\t),\r\n\tif(equals(outputs('Get_project_with_country_name')?['body/vsb_plantsubstationcapacity'],null),0,outputs('Get_project_with_country_name')?['body/vsb_plantsubstationcapacity'])\r\n  ),\r\n  if(equals(outputs('Get_project_with_country_name')?['body/vsb_plantwtgcapacity'],null),0,outputs('Get_project_with_country_name')?['body/vsb_plantwtgcapacity'])\r\n)}",
+                "Old Value": "@{outputs('Total_Capacity_Old_Value')}"
+              },
+              "runAfter": {
+                "Old_New_Milestones_Mapping": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "dceac6ae-a9c0-46f0-9569-c1768b24f237"
+              }
+            },
+            "All_Clusters_but_Sales_Start_and_End": {
+              "type": "Query",
+              "inputs": {
+                "from": "@outputs('Old_New_Milestones_Mapping')",
+                "where": "@not(startsWith(item()?['Milestone Name'],'Sales'))"
+              },
+              "runAfter": {
+                "Old_New_Milestones_Mapping": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "87e2caf9-1004-4cae-acd7-a444ae22d8c1"
+              }
+            },
+            "Sales_Start_and_End": {
+              "type": "Query",
+              "inputs": {
+                "from": "@outputs('Old_New_Milestones_Mapping')",
+                "where": "@startsWith(item()?['Milestone Name'],'Sales')"
+              },
+              "runAfter": {
+                "Old_New_Milestones_Mapping": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "97e44584-f2f0-4670-a7e7-9d34c7c5a72a"
+              }
+            },
+            "Sales_Column_Sets": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Sales_Start_and_End')",
+                "select": {
+                  "type": "ColumnSet",
+                  "columns": [
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{item()?['Milestone Name']}",
+                          "horizontalAlignment": "center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "horizontalAlignment": "Left",
+                      "separator": true
+                    },
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "horizontalAlignment": "Center",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{if(\r\n empty(item()?['Old Value']),\r\n '',\r\n formatDateTime(\r\n  item()?['Old Value'],\r\n  'dd/MM/yyyy'\r\n )\r\n)\r\n}",
+                          "horizontalAlignment": "Center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "separator": true
+                    },
+                    {
+                      "type": "Column",
+                      "width": "100px",
+                      "items": [
+                        {
+                          "type": "TextBlock",
+                          "text": "@{if(\r\n equals(item()?['Old Value'], item()?['New Value']),\r\n '',\r\n if(\r\n  empty(item()?['New Value']),\r\n  '',\r\n  formatDateTime(\r\n   item()?['New Value'],\r\n   'dd/MM/yyyy'\r\n  )\r\n )\r\n)}",
+                          "horizontalAlignment": "Center",
+                          "weight": "@{if(\r\n  not(\r\n    equals(\r\n      item()?['Old Value'],\r\n      item()?['New Value']\r\n    )\r\n  ),\r\n  'bolder',\r\n  'default'\r\n)}"
+                        }
+                      ],
+                      "separator": true
+                    }
+                  ],
+                  "separator": true
+                }
+              },
+              "runAfter": {
+                "Sales_Start_and_End": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a1d10ba0-339f-4bcd-9690-c09367dbbb62"
+              }
+            }
+          },
+          "runAfter": {
+            "Verzögerung": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fef5ab31-4982-4f5c-97b5-5f27d2c9a2be"
+          }
+        },
+        "Verzögerung": {
+          "type": "Wait",
+          "inputs": {
+            "interval": {
+              "count": 5,
+              "unit": "Second"
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c2c3d8bd-28f3-465d-81d8-9bbcf9fcbd72"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

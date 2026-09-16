@@ -1,0 +1,223 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  fn_Common:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      ChecklisAsHTMLTable:
+        PropertyKind: OutputFunction
+        DisplayName: ChecklisAsHTMLTable
+        Description: This method transform collection of checklist items to html table as string
+        DataType: Text
+        Parameters:
+          - source:
+              Description: A source collections
+              DataType: Table
+              Default: |-
+                =Table(
+                    {
+                        name: "Name",
+                        relevance: "Gate Relevance",
+                        taskstate: "Task State",
+                        index: 0,
+                        clusterstate: "Cluster State",
+                        editor: "Modified By",
+                        editdate: Today()
+                    }
+                )
+      DateAddMonths:
+        PropertyKind: OutputFunction
+        DisplayName: Date Add Months
+        Description: Benutzerdefinierte Eigenschaft
+        DataType: DateAndTime
+        Parameters:
+          - candidate:
+              Description: Ein Parameter
+              DataType: DateAndTime
+              Default: =DateTime(2000, 1, 1, 0, 0, 0)
+          - addition:
+              Description: Ein Parameter
+              DataType: Number
+              Default: =100
+      DateAddYears:
+        PropertyKind: OutputFunction
+        DisplayName: DateAddYears
+        Description: 'A function adds a number of units to a date/time value. '
+        DataType: DateAndTime
+        Parameters:
+          - candidate:
+              Description: A candidate as datetime parameter
+              DataType: DateAndTime
+              Default: =Now()
+          - addition:
+              Description: A decimal number in years parameter
+              DataType: Number
+              Default: =0.25
+      DateAddYearsRevamped:
+        PropertyKind: OutputFunction
+        DisplayName: DateAddYearsRevamped
+        Description: 'A function adds a number of units to a date/time value. '
+        DataType: DateAndTime
+        Parameters:
+          - candidate:
+              Description: A candidate as datetime parameter
+              DataType: DateAndTime
+              Default: =DateTime(2000, 1, 1, 0, 0, 0)
+          - addition:
+              Description: A decimal number in years parameter
+              DataType: Number
+              Default: =100
+      IsValidCurrency:
+        PropertyKind: OutputFunction
+        DisplayName: IsValidCurrency
+        Description: This method validate of localy currency value
+        DataType: Boolean
+        Parameters:
+          - candidate:
+              Description: A parameter of input text value as string
+              DataType: Text
+              Default: ="Text"
+    Properties:
+      ChecklisAsHTMLTable: |-
+        =With(
+            {
+                tableStyle: "style='border: 1px solid #dededf; height: 100%; width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 1px; text-align: left;'",
+                tableHeader: "<thead>
+                        <tr>
+                            <th style='font-size: 12px; width: 10%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Gate Relevance</th>
+                            <th style='font-size: 12px; width: 40%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Description</th>
+                            <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Cluster</th>
+                            <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>State</th>
+                            <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Modified By</th>
+                            <th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 2px;'>Modified On</th>
+                        </tr>
+                    </thead>",
+                rowStyle: "style='font-size: 11px; border: 1px solid #dededf; background-color: #ffffff; color: #000000; padding: 2px; text-wrap:nowrap;'"
+            },
+            $"<table {tableStyle}>{tableHeader}<tbody>{Concat(
+                source,
+                $"<tr><td {rowStyle}>{relevance}</td><td {rowStyle}>{name}</td><td {rowStyle}>{clusterstate}</td><td {rowStyle}>{taskstate}</td><td {rowStyle}>{editor}</td><td {rowStyle}>{Text(
+                    editdate,
+                    gblAppConstants.DateTime.DefaultFormat
+                )}</td></tr>"
+            )}</tbody></table>"
+        )
+      DateAddMonths: |-
+        =With(
+            {
+                startDate: candidate,
+                monthsToAdd: Value(addition)
+            },
+            DateAdd(
+                candidate,
+                monthsToAdd,
+                TimeUnit.Months
+            )
+        )
+      DateAddYears: |-
+        =DateAdd(
+            candidate,
+            Trunc(addition * 12 * 30),
+            TimeUnit.Days
+        )
+      DateAddYearsRevamped: |-
+        =With(
+            {
+                startDate: candidate,
+                yearsToAdd: Value(addition),
+                wholeYears: RoundDown(
+                    Value(addition),
+                    0
+                ),
+                fractionalYears: Value(addition) - RoundDown(
+                    Value(addition),
+                    0
+                )
+            },
+            With(
+                {
+                    monthsToAdd: RoundDown(
+                        fractionalYears * 12,
+                        0
+                    ),
+                    remainingFraction: (fractionalYears * 12) - RoundDown(
+                        fractionalYears * 12,
+                        0
+                    )
+                },
+                With(
+                    {
+                        dateAfterYearsAndMonths: DateAdd(
+                            DateAdd(
+                                candidate,
+                                wholeYears,
+                                TimeUnit.Years
+                            ),
+                            monthsToAdd,
+                            TimeUnit.Months
+                        )
+                    },
+                    With(
+                        {
+                            daysInMonth: Day(
+                                DateAdd(
+                                    DateAdd(
+                                        dateAfterYearsAndMonths,
+                                        1,
+                                        TimeUnit.Months
+                                    ),
+                                    -1,
+                                    TimeUnit.Days
+                                )
+                            )
+                        },
+                        With(
+                            {
+                                daysToAdd: Round(
+                                    remainingFraction * daysInMonth,
+                                    0
+                                )
+                            },
+                            DateAdd(
+                                dateAfterYearsAndMonths,
+                                daysToAdd,
+                                TimeUnit.Days
+                            )
+                        )
+                    )
+                )
+            )
+        )
+      Height: =50
+      IsValidCurrency: |-
+        =With(
+            {
+                varLang: Lower(
+                    First(
+                        Split(
+                            Language(),
+                            "-"
+                        )
+                    ).Value
+                )
+            },
+            Switch(
+                varLang,
+                "en",
+                IsMatch(
+                    candidate,
+                    "^((\+?)?\d+(|\.\d{0,2})?)"
+                ),
+                IsMatch(
+                    candidate,
+                    "^((\+?)?\d+(|\,\d{0,2})?)"
+                )
+            )
+        )

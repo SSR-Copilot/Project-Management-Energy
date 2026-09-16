@@ -1,0 +1,93 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_a_row_is_added,_modified_or_deleted": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "subscriptionRequest/message": 3,
+              "subscriptionRequest/entityname": "vsb_project",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "vsb_planthydrogencapacity,vsb_plantpvcapacitymwp,vsb_plantstoragecapacity,vsb_plantwtgcapacity,vsb_plantsubstationcapacity"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "8a3c1536-e88f-45a1-b2ef-fb483d79d1de"
+          }
+        }
+      },
+      "actions": {
+        "Add_Fabric_Sync_Job_row": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_fabricsyncjobs",
+              "item/vsb_JobTypeId@odata.bind": "/vsb_fabricjobtypes(@{first(outputs('List_rows_for_Fabric_Job_Types')?['body/value'])?['vsb_fabricjobtypeid']})",
+              "item/vsb_name": "\"\"",
+              "item/vsb_Country@odata.bind": "/vsb_countries(@{triggerOutputs()?['body/_vsb_country_value']})",
+              "item/vsb_jobstatuscode": 952850000,
+              "item/vsb_Project@odata.bind": "/vsb_projects(@{triggerOutputs()?['body/vsb_projectid']})",
+              "item/vsb_technology": "@triggerOutputs()?['body/vsb_technology']"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "CreateRecord",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "runAfter": {
+            "List_rows_for_Fabric_Job_Types": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_rows_for_Fabric_Job_Types": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_fabricjobtypes",
+              "fetchXml": "\n<fetch xmlns:generator='MarkMpn.SQL4CDS'>\n  <entity name='vsb_fabricjobtype'>\n    <all-attributes />\n    <filter>\n      <condition attribute='vsb_name' operator='eq' value='Recalculate Capex Standard Cost' />\n    </filter>\n  </entity>\n</fetch>"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "ListRecords",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "runAfter": {}
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

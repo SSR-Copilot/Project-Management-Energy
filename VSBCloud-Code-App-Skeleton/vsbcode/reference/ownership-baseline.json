@@ -1,0 +1,209 @@
+{
+  "$schema": "ownership-baseline/1",
+  "generatedBy": "node scripts/check-ownership.mjs --update-baseline",
+  "note": "The known set for G-OWN: creates on a `requiresOwningBusinessUnit` table whose payload does not write the owning-BU column. It is a TO-DO LIST, NOT A PERMISSION — every entry is a row that a business-unit-scoped role may never see. The gate fails on anything not listed here, and on any entry that no longer matches, so a fixed create cannot leave a slot open for a different one. Never run --update-baseline to make a red build green.",
+  "owners": {
+    "security-owner": "A real omission: a BU-scoped role will lose the row. The reason must say what blocks the fix.",
+    "platform-default": "Deliberately relies on Dataverse deriving the owning BU from the caller. The reason must say why the caller's BU is always the right one FOR THIS TABLE.",
+    "refactor": "The column is written, but not where a static check can see it. The fix is structural — move the payload builder next to the create — not a security change."
+  },
+  "counts": {
+    "total": 16,
+    "platform-default": 1,
+    "security-owner": 15
+  },
+  "entries": [
+    {
+      "id": "2dc4e6cdcfd50146",
+      "check": "missing-owning-bu",
+      "file": "src/features/admin/admin-cost/rules.ts",
+      "entitySet": "vsb_applyandapplyalltrackings",
+      "table": "applyAndApplyAllTrackings",
+      "payload": "local `data` ← from object literal",
+      "fingerprint": "APPLY_TRACKING_COL.action|APPLY_TRACKING_COL.appliedByEmail|APPLY_TRACKING_COL.appliedByFullName|APPLY_TRACKING_COL.contractType|APPLY_TRACKING_COL.name|APPLY_TRACKING_COL.technology|`${APPLY_TRACKING_LOOKUP.bopStandardContract}@odata.bind`|`${APPLY_TRACKING_LOOKUP.country}@odata.bind`",
+      "occurrence": 1,
+      "owner": "platform-default",
+      "reason": "AUDIT TRAIL, and the caller IS the subject. The row records who applied a standard assumption and when — `vsb_appliedbyemail` / `vsb_appliedbyfullname` are the acting user — so the acting user's own business unit is the correct owning BU by construction; there is no project whose BU it could be bound to (the Apply scope is a country and a technology, not a project). Only `applicationAdministrator` and `controllerOwnData` hold Create here, both at `organization`, and both read it at `organization` too, so neither creator can lose its own row. The narrower readers are deliberate: `projectDataOwnCountry` reads it at `businessUnit` and `projectManagerOwnProjects` at `user`, i.e. a project manager is not meant to see another user's apply history. REVISIT IF this table is ever surfaced on a project screen, or if a role below controller is given Create."
+    },
+    {
+      "id": "7afa49da78575f5d",
+      "check": "missing-owning-bu",
+      "file": "src/features/cost/contracts/Screen.tsx",
+      "entitySet": "vsb_bopcontractsdevcocostses",
+      "table": "bopcontractsdevcocostses",
+      "payload": "object literal",
+      "fingerprint": "JOIN_COL.name|`${JOIN_COL.account}@odata.bind`|`${JOIN_COL.contract}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The BoP contract / CAPEX-account join rows created from the Contracts screen bind the contract and the account and nothing else. FIX WITH THE PARENT CONTRACT: a join row in another business unit than the contract it joins makes the contract look empty rather than missing, which reads as a data-entry mistake instead of a permissions one. `selectedContract` is in scope at the call site; the project's BU is not, so `BOP_ENTITY`'s consumer needs the project handed to it."
+    },
+    {
+      "id": "d5975e25e37c1174",
+      "check": "missing-owning-bu",
+      "file": "src/features/cost/land-lease/Screen.tsx",
+      "entitySet": "vsb_landleaseallocationwtgs",
+      "table": "landleaseallocationwtgs",
+      "payload": "object literal",
+      "fingerprint": "LEASE_ALLOC_COL.name|`${LEASE_ALLOC_COL.cost}@odata.bind`|`${LEASE_ALLOC_COL.generator}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The land-lease allocation-to-WTG rows created from the Land Lease screen bind the cost and the generator. This is ONE OF FOUR call sites that create this same table (the others are in `pm/generators/hooks.ts` twice and `pm/production/hooks.ts` once) — fix all four in one change, or the allocation set for a single project ends up split across business units depending on which screen created each row, which is the hardest variant of this defect to diagnose from the UI."
+    },
+    {
+      "id": "5fd696e93a53a810",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/finance/hooks.ts",
+      "entitySet": "vsb_financinginputs",
+      "table": "financingInputs",
+      "payload": "builder `seedFields`",
+      "fingerprint": "INPUT_COL.name|INPUT_COL.uniqueKeyString|`${INPUT_COL.category}@odata.bind`|`${INPUT_COL.project}@odata.bind`|col",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "The owning BU is COMPUTED, THREADED THROUGH TWO LAYERS, AND THEN DROPPED. `planSeeds` (rules.ts) puts `owningBusinessUnitId: bu` into every one of the five Rule-10 seed rows' `fields`; `SEED_FIELD_COL` maps that key to the sentinel `\"__ownerBusinessUnit\"`; and `seedFields` skips every column whose name starts with `__`. So all five seeds land in the business unit of whoever first opens the Finance screen. A `projectDataAllCountries` user seeding a French project from Germany leaves the French `projectDataOwnCountry` team looking at a visible project with no financing rows at all. FIX: replace the sentinel with the real bind — `` [`${INPUT_COL.owningBusinessUnit}@odata.bind`]: `/businessunits(${bu})` `` — which needs an `owningBusinessUnit: \"owningbusinessunit\"` member on the finance lookup map (finance has only the read form `_owningbusinessunit_value` today). Nothing blocks it: `FinanceProject` already carries `owningBusinessUnitId`."
+    },
+    {
+      "id": "47972880c030cec7",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/finance/hooks.ts",
+      "entitySet": "vsb_financinginputs",
+      "table": "financingInputs",
+      "payload": "local `fields` ← from object literal",
+      "fingerprint": "`${INPUT_COL.category}@odata.bind`|`${INPUT_COL.project}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "`useSaveSeniorDebtTranche` builds `fields` from `a.fields` plus the project and category binds and never the owning BU, so a hand-created tranche lands in the caller's BU exactly as the seeds above do. FIX IT IN THE SAME CHANGE as the seed entry: a seeded tranche in one business unit and a hand-created one in another is a worse state than both being wrong, because the Finance screen would then show a partially populated category and no error. `TrancheSaveArgs` already carries `projectId`; it needs the project's BU beside it."
+    },
+    {
+      "id": "52e28c63c65164ed",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/generators/hooks.ts",
+      "entitySet": "vsb_landleaseallocationwtgs",
+      "table": "landleaseallocationwtgs",
+      "payload": "object literal",
+      "fingerprint": "`${PLANT_LOOKUP.generatorInProject}@odata.bind`|`${PLANT_LOOKUP.projectCost}@odata.bind`|vsb_name",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. Allocation-to-WTG rows created by the Generators screen's turbine-count save. One of the four `vsb_landleaseallocationwtgs` call sites; see the Land Lease entry for the reason they must be fixed together."
+    },
+    {
+      "id": "4131ffbbe296a9a1",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/generators/hooks.ts",
+      "entitySet": "vsb_landleaseallocationwtgs",
+      "table": "landleaseallocationwtgs",
+      "payload": "object literal",
+      "fingerprint": "`${PLANT_LOOKUP.generatorInProject}@odata.bind`|`${PLANT_LOOKUP.projectCost}@odata.bind`|vsb_name",
+      "occurrence": 2,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. Allocation-to-WTG rows created by the Generators screen's single-turbine add. One of the four `vsb_landleaseallocationwtgs` call sites; see the Land Lease entry."
+    },
+    {
+      "id": "ce9976320a251eb7",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_landleaseallocationwtgs",
+      "table": "landleaseallocationwtgs",
+      "payload": "object literal",
+      "fingerprint": "`${PRODUCTION_LOOKUP.generatorInProject}@odata.bind`|`${PRODUCTION_LOOKUP.projectCost}@odata.bind`|vsb_name",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. Allocation-to-WTG rows created by the Production screen's land-lease standard-cost seed. One of the four `vsb_landleaseallocationwtgs` call sites, and the cheapest of them: this mutation already holds `p.project`, and `PRODUCTION_LOOKUP.owningBusinessUnit` already exists and already resolves to the write form."
+    },
+    {
+      "id": "15d680b4968ee096",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_landleaseperiods",
+      "table": "landleaseperiods",
+      "payload": "object literal",
+      "fingerprint": "`${PRODUCTION_LOOKUP.projectCost}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The land-lease PERIOD rows created in the same Production mutation as the land-lease costs already baselined above. Parent and periods must move together: a cost in one business unit with its periods in another breaks the screen for the creating user too, because the parent/child join is read back per business unit."
+    },
+    {
+      "id": "5ee0d8b3bd7fd8e1",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_landleaseprojectcosts",
+      "table": "landLeaseProjectCosts",
+      "payload": "object literal",
+      "fingerprint": "`${PRODUCTION_LOOKUP.project}@odata.bind`|`${PRODUCTION_LOOKUP.subaccount}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "The Production screen's land-lease standard-cost creates bind project and subaccount only. This is the cheapest of the seven to fix: `PRODUCTION_LOOKUP.owningBusinessUnit` ALREADY EXISTS and already resolves to the write form `\"owningbusinessunit\"` (rules.ts), and the mutation already holds `p.project`. It is a one-line bind per create; the reason it is baselined rather than fixed is that `p.project` is a `ProductionProject`, whose `$select` does not yet project `_owningbusinessunit_value` — widen the projection and the mapper first, or the bind will be `/businessunits(null)`."
+    },
+    {
+      "id": "7d5c0a58a4ad4f4b",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_opexprojectcosts",
+      "table": "opexProjectCosts",
+      "payload": "object literal",
+      "fingerprint": "`${PRODUCTION_LOOKUP.deviceTypeInProject}@odata.bind`|`${PRODUCTION_LOOKUP.project}@odata.bind`|`${PRODUCTION_LOOKUP.subaccount}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "The OPEX parent-cost creates on the Production screen — same shape, same one-line fix and same `$select` blocker as the land-lease entry above. Do all three Production creates together."
+    },
+    {
+      "id": "c82d017f33c18af5",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_opexprojectcosts",
+      "table": "opexProjectCosts",
+      "payload": "object literal",
+      "fingerprint": "`${PRODUCTION_LOOKUP.deviceTypeInProject}@odata.bind`|`${PRODUCTION_LOOKUP.parentCost}@odata.bind`|`${PRODUCTION_LOOKUP.project}@odata.bind`|`${PRODUCTION_LOOKUP.subaccount}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "The OPEX period CHILD rows created in the same mutation as the parents above, through `opexProjectCostFullRepo.saveMany(childOps)`. Must be fixed with the parents in one change: a parent cost in one business unit and its period rows in another is the one variant of this defect that also breaks the screen for the CREATING user, because the parent/child join is read back per business unit."
+    },
+    {
+      "id": "cf4a8ec5f132ea13",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_pvnegativepriceses",
+      "table": "pvnegativepriceses",
+      "payload": "object literal + spread builder `negativePriceFields` (rules.ts)",
+      "fingerprint": "NEGATIVE_PRICE_COL.isStandard|NEGATIVE_PRICE_COL.name|NEGATIVE_PRICE_COL.reduction|NEGATIVE_PRICE_COL.year|`${PRODUCTION_LOOKUP.energyYield}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The PV negative-price rows on the Production screen. `negativePriceFields` (rules.ts) builds the fields and the hook adds the energy-yield bind; neither adds the owning BU. The pure builder is the right place for it — it is already the seam the tests exercise — but it needs the project's BU passed in, which is the same widening the other Production entries need."
+    },
+    {
+      "id": "e91a42a0c586595e",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/production/hooks.ts",
+      "entitySet": "vsb_pvseasonalityvalueses",
+      "table": "pvseasonalityvalueses",
+      "payload": "local `seasonFields` ← from object literal + spread builder `seasonalityFields` (rules.ts)",
+      "fingerprint": "SEASONALITY_COL.name|SEASONALITY_COL.standardValuesJson|`${PRODUCTION_LOOKUP.energyYield}@odata.bind`|col|rows|yieldDescription",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The PV seasonality rows on the Production screen, built by `seasonalityFields` (rules.ts). Same shape, same builder-needs-the-BU fix, and the same `ProductionProject` projection blocker as the rest of this screen: widen the `$select` and the mapper first or the bind resolves to `/businessunits(null)`."
+    },
+    {
+      "id": "3b6571abf37224fc",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/revenues/hooks.ts",
+      "entitySet": "vsb_projectrevenues",
+      "table": "projectRevenues",
+      "payload": "local `fields` ← from builder `revenueFields`",
+      "fingerprint": "REVENUE_COL.biddingPrice|REVENUE_COL.considerNegativePrices|REVENUE_COL.contractDurationMonths|REVENUE_COL.contractDurationYears|REVENUE_COL.contractEndDate|REVENUE_COL.contractStartDate|REVENUE_COL.correctionFactor|REVENUE_COL.correctionFactorP90|REVENUE_COL.description|REVENUE_COL.fixedContractedMwhPa|REVENUE_COL.hedgeType|REVENUE_COL.hedgedVolume|REVENUE_COL.inflationProfile|REVENUE_COL.inflati",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "`revenueFields` binds project, currency and subaccount but not the owning BU, so a revenue contract created against another country's project vanishes for that country's team while the project stays visible. `RevenueProject` already carries `owningBusinessUnitId` (rules.ts) and the mapper already reads it, so the value is in hand at the call site; what is missing is a write-form lookup map — revenues has four separate `_owningbusinessunit_value` read constants and no `REVENUE_LOOKUP`. Add one in the shape of `PLANNING_LOOKUP` and bind it; the same map is what the hedge-volume child creates will need."
+    },
+    {
+      "id": "47e34384a00a1f7c",
+      "check": "missing-owning-bu",
+      "file": "src/features/pm/revenues/hooks.ts",
+      "entitySet": "vsb_revenueindividualhedgevolumes",
+      "table": "revenueindividualhedgevolumes",
+      "payload": "object literal",
+      "fingerprint": "HEDGE_VOLUME_COL.endDate|HEDGE_VOLUME_COL.name|HEDGE_VOLUME_COL.startDate|HEDGE_VOLUME_COL.value|HEDGE_VOLUME_COL.year|`${HEDGE_VOLUME_COL.contract}@odata.bind`",
+      "occurrence": 1,
+      "owner": "security-owner",
+      "reason": "SATELLITE ROW, and it arrived in scope with the 32 -> 86 matrix growth: this child table is newly modelled as `projectData`, so `requiresOwningBusinessUnit` now applies to it and the gate can see the omission for the first time. The individual hedge-volume rows written in the same `$batch` as the revenue contract already baselined above. `RevenueProject` carries `owningBusinessUnitId` and the mapper already reads it, so the value is in hand; what is missing is the write-form lookup map — revenues has only `_owningbusinessunit_value` read constants. Add a `REVENUE_LOOKUP` in the shape of `PLANNING_LOOKUP` and bind it here and on the contract in one change."
+    }
+  ]
+}

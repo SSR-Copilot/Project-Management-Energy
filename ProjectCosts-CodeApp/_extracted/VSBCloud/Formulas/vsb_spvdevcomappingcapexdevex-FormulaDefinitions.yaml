@@ -1,0 +1,2 @@
+vsb_accountnumber: =vsb_NameSubAccount.vsb_number
+vsb_relatedaccountname: =vsb_NameSubAccount.vsb_ParentAccount.vsb_name

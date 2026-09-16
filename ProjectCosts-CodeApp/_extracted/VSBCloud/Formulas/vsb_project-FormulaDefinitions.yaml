@@ -1,0 +1,1 @@
+vsb_totalcapacity: =vsb_plantwtgcapacity + vsb_plantpvcapacitymwp + vsb_plantstoragecapacity + vsb_plantsubstationcapacity + vsb_planthydrogencapacity

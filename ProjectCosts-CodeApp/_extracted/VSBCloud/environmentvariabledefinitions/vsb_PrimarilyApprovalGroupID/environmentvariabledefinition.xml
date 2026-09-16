@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="vsb_PrimarilyApprovalGroupID">
+  <description default="This group id used to get list of primarily approvals member.">
+    <label description="This group id used to get list of primarily approvals member." languagecode="1033" />
+  </description>
+  <displayname default="Primarily Approval Group ID">
+    <label description="Primarily Approval Group ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.7.14</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

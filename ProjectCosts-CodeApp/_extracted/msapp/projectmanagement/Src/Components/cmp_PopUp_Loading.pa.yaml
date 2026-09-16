@@ -1,0 +1,70 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_PopUp_Loading:
+    DefinitionType: CanvasComponent
+    CustomProperties:
+      InformationText:
+        PropertyKind: Input
+        DisplayName: Information Text
+        Description: Information Text
+        DataType: Text
+        Default: ="Text"
+    Children:
+      - con_PopUpLoading:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.1)
+            Height: =Parent.Height
+            Width: =Parent.Width
+          Children:
+            - con_PopUpLoading_InformationArea:
+                Control: GroupContainer@1.5.0
+                Variant: ManualLayout
+                Properties:
+                  DropShadow: =DropShadow.None
+                  Fill: =Color.White
+                  Height: =240
+                  RadiusBottomLeft: =5
+                  RadiusBottomRight: =5
+                  RadiusTopLeft: =5
+                  RadiusTopRight: =5
+                  X: '=(Parent.Width - Self.Width)/2  '
+                  Y: =(Parent.Height - Self.Height)/2
+                Children:
+                  - lbl_PopUpLoading_Description:
+                      Control: Label@2.5.1
+                      Properties:
+                        Align: =Align.Center
+                        AutoHeight: =true
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        Color: =RGBA(50, 49, 48, 1)
+                        DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                        DisabledColor: =RGBA(161, 159, 157, 1)
+                        DisplayMode: =DisplayMode.View
+                        Font: =Font.'Open Sans'
+                        FontWeight: =FontWeight.Semibold
+                        Size: =12
+                        Text: =cmp_PopUp_Loading.InformationText
+                        Width: =Parent.Width
+                        Y: =cmp_PopUpLoading_Spinner.Y+cmp_PopUpLoading_Spinner.Height+10
+                  - cmp_PopUpLoading_Spinner:
+                      Control: Spinner@1.4.6
+                      Properties:
+                        Height: |-
+                          =If(
+                              cmp_PopUp_Loading.InformationText = "",
+                              120,
+                              90
+                          )
+                        X: =(Parent.Width-Self.Width)/2
+                        Y: =40

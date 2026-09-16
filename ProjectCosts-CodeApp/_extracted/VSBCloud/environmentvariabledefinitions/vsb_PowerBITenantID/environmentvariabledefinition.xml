@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_PowerBITenantID">
+  <displayname default="Power BI Tenant ID">
+    <label description="Power BI Tenant ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.19.57</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

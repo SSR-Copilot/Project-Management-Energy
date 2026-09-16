@@ -1,0 +1,215 @@
+================================================================================
+COMMENTS -> PCF INTEGRATION SNIPPETS
+Target: btn_Capex_Cost_Refresh_Capex_Cost_Code.OnSelect  (CapexScreenCode)
+================================================================================
+
+Assumed 'CAPEX Comments' table columns (adjust names if IntelliSense differs):
+  - 'CAPEX Comment'        : primary key (GUID)
+  - Contract               : lookup to 'CAPEX Project Contracts' (general comments)
+  - Cost                   : lookup to 'CAPEX Costs' (payment-date comments)
+  - 'Parent Comment'       : self-lookup to 'CAPEX Comments' (replies)
+  - 'Comment Type'         : choice -> "General Comment" / "Comments to payment date"
+  - Comment                : multiline text (comment body)
+  - Resolved               : yes/no
+  - 'Created On'           : standard column
+
+NOTE: if Resolved is a Choice (not yes/no), replace  `Resolved = true`  with
+      `Resolved = 'Resolved (CAPEX Comments)'.Yes`  everywhere below.
+NOTE: if the choice labels differ (e.g. "Comment to payment date"), adjust the
+      two literal strings "General Comment" and "Comments to payment date".
+
+================================================================================
+SNIPPET 1 - INSERT after the ClearCollect of colCapexCostsInSelectedContracts
+            (end of step "1." in the OnSelect), BEFORE step "2."
+================================================================================
+
+// 1b. Load comments for selected contracts (general + payment-date).
+ClearCollect(
+    colCapexCommentsInSelectedContracts,
+    Filter(
+        'CAPEX Comments',
+        Contract.'CAPEX Project Contract' in colCapexContractsInSelectedCategory.'CAPEX Project Contract'
+            || Cost.'CAPEX Cost' in colCapexCostsInSelectedContracts.'CAPEX Cost'
+    )
+);
+// 1c. Flatten every comment thread to its latest message:
+// if the comment has replies, take the latest reply; otherwise the comment itself.
+ClearCollect(
+    colCapexCommentsLatest,
+    ForAll(
+        Filter(
+            colCapexCommentsInSelectedContracts,
+            IsBlank('Parent Comment'.'CAPEX Comment')
+        ) As ParentC,
+        With(
+            {
+                locCost: LookUp(
+                    colCapexCostsInSelectedContracts,
+                    'CAPEX Cost' = ParentC.Cost.'CAPEX Cost'
+                ),
+                locLatestReply: First(
+                    Sort(
+                        Filter(
+                            colCapexCommentsInSelectedContracts,
+                            'Parent Comment'.'CAPEX Comment' = ParentC.'CAPEX Comment'
+                        ),
+                        'Created On',
+                        SortOrder.Descending
+                    )
+                )
+            },
+            {
+                CommentId: ParentC.'CAPEX Comment',
+                ContractId: Coalesce(
+                    ParentC.Contract.'CAPEX Project Contract',
+                    locCost.Contract.'CAPEX Project Contract'
+                ),
+                CommentTypeText: Text(ParentC.'Comment Type'),
+                CostYear: IfError(
+                    Value(Text(locCost.Year)),
+                    -1
+                ),
+                CostMonthIndex: Switch(
+                    Lower(Text(locCost.Month)),
+                    Lower(Text([@Month].January)), 1,
+                    Lower(Text([@Month].February)), 2,
+                    Lower(Text([@Month].March)), 3,
+                    Lower(Text([@Month].April)), 4,
+                    Lower(Text([@Month].May)), 5,
+                    Lower(Text([@Month].June)), 6,
+                    Lower(Text([@Month].July)), 7,
+                    Lower(Text([@Month].August)), 8,
+                    Lower(Text([@Month].September)), 9,
+                    Lower(Text([@Month].October)), 10,
+                    Lower(Text([@Month].November)), 11,
+                    Lower(Text([@Month].December)), 12,
+                    "january", 1,
+                    "february", 2,
+                    "march", 3,
+                    "april", 4,
+                    "may", 5,
+                    "june", 6,
+                    "july", 7,
+                    "august", 8,
+                    "september", 9,
+                    "october", 10,
+                    "november", 11,
+                    "december", 12,
+                    "1", 1, "2", 2, "3", 3, "4", 4, "5", 5, "6", 6,
+                    "7", 7, "8", 8, "9", 9, "10", 10, "11", 11, "12", 12,
+                    Blank()
+                ),
+                IsResolved: ParentC.Resolved = true,
+                LastActivityOn: Coalesce(
+                    locLatestReply.'Created On',
+                    ParentC.'Created On'
+                ),
+                LatestText: Coalesce(
+                    locLatestReply.Comment,
+                    ParentC.Comment
+                )
+            }
+        )
+    )
+);
+
+================================================================================
+SNIPPET 2 - In step "6." (final colFinatCostDataOptimized build), REPLACE
+            the two lines:
+                HasComments,
+                false,
+            with everything below.
+================================================================================
+
+HasComments,
+R.IsContract && CountRows(
+    Filter(
+        colCapexCommentsLatest,
+        ContractId = R.vsb_capexaccountlistid && CommentTypeText = "General Comment" && !IsResolved
+    )
+) > 0,
+CommentTooltip,
+If(
+    R.IsContract,
+    Coalesce(
+        First(
+            Sort(
+                Filter(
+                    colCapexCommentsLatest,
+                    ContractId = R.vsb_capexaccountlistid && CommentTypeText = "General Comment" && !IsResolved
+                ),
+                LastActivityOn,
+                SortOrder.Descending
+            )
+        ).LatestText,
+        ""
+    ),
+    ""
+),
+M1HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 1 && !IsResolved)) > 0,
+M1CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 1 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M2HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 2 && !IsResolved)) > 0,
+M2CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 2 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M3HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 3 && !IsResolved)) > 0,
+M3CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 3 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M4HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 4 && !IsResolved)) > 0,
+M4CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 4 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M5HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 5 && !IsResolved)) > 0,
+M5CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 5 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M6HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 6 && !IsResolved)) > 0,
+M6CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 6 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M7HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 7 && !IsResolved)) > 0,
+M7CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 7 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M8HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 8 && !IsResolved)) > 0,
+M8CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 8 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M9HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 9 && !IsResolved)) > 0,
+M9CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 9 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M10HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 10 && !IsResolved)) > 0,
+M10CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 10 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M11HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 11 && !IsResolved)) > 0,
+M11CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 11 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+M12HasComments,
+R.IsContract && CountRows(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 12 && !IsResolved)) > 0,
+M12CommentTooltip,
+If(R.IsContract, Coalesce(First(Sort(Filter(colCapexCommentsLatest, ContractId = R.vsb_capexaccountlistid && CommentTypeText = "Comments to payment date" && CostYear = Value(gblSelectedProjectYear) && CostMonthIndex = 12 && !IsResolved), LastActivityOn, SortOrder.Descending)).LatestText, ""), ""),
+
+================================================================================
+NOTES
+================================================================================
+1. Red dots show only for UNRESOLVED comment threads. The tooltip shows the
+   text of the most recent activity in the most recent thread (latest reply
+   wins over its parent comment).
+2. Month dots only appear for the currently selected year
+   (CostYear = Value(gblSelectedProjectYear)) - this matches the PCF month
+   columns which always show the selected year.
+3. Delegation: the `in` filter in Snippet 1 is non-delegable on Dataverse.
+   If 'CAPEX Comments' can exceed the delegation limit (500/2000 rows), add a
+   Project lookup column to the comments table and filter by
+   Project.Project = gblSelectedProject.Project first.
+4. After a comment is added/edited/resolved in the comments panel, re-run
+   Select(btn_Capex_Cost_Refresh_Capex_Cost_Code) so the dots refresh.
+5. PCF parses these exact canonical names: HasComments, CommentTooltip,
+   M1HasComments..M12HasComments, M1CommentTooltip..M12CommentTooltip.
+   No PCF change is required for them.

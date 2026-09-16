@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Entities />
+  <Roles />
+  <Workflows />
+  <FieldSecurityProfiles />
+  <Templates />
+  <EntityMaps />
+  <EntityRelationships />
+  <OrganizationSettings />
+  <optionsets />
+  <CustomControls>
+    <CustomControl>
+      <Name>vsb_Dev.DevexCapexSummaryPCF</Name>
+      <FileName>/Controls/vsb_Dev.DevexCapexSummaryPCF/ControlManifest.xml</FileName>
+    </CustomControl>
+    <CustomControl>
+      <Name>vsb_Dev.SpreadSheet</Name>
+      <FileName>/Controls/vsb_Dev.SpreadSheet/ControlManifest.xml</FileName>
+    </CustomControl>
+  </CustomControls>
+  <SolutionPluginAssemblies />
+  <EntityDataProviders />
+  <Languages>
+    <Language>1033</Language>
+  </Languages>
+</ImportExportXml>

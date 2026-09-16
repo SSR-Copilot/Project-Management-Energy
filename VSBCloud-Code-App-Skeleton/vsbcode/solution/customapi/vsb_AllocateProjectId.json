@@ -1,0 +1,70 @@
+{
+  "uniquename": "vsb_AllocateProjectId",
+  "name": "vsb_AllocateProjectId",
+  "displayname": "Allocate internal project id",
+  "description": "Allocates the next internal project id for a country and stamps it on a project, under a single row lock. WHY IT EXISTS: PerformCommonRequestofGateApproval currently allocates the number with a Do-until loop over vsb_countries.vsb_lastprojectid — read the counter, add one, write it back, re-read to see whether it stuck. That is a read-modify-write with no lock, which is a LOST-UPDATE RACE: two projects moved through their first gate at the same moment get the same internal project id, and vsb_internalprojectid is the human-facing identifier every downstream document, SharePoint site and Teams channel is named after. The defect is recorded on the flow's own register entry in src/flows/flowClient.ts: \"Its Do-until over vsb_countries.vsb_lastprojectid is a lost-update race — extract that allocation into a custom API.\" A plugin can take the platform's row lock on the country and make the increment atomic; a flow cannot. Nothing else about that flow moves: it keeps its approval wait and its 112 actions, and calls this message where the loop used to be.",
+  "bindingtype": "Global",
+  "isfunction": false,
+  "enabledforworkflow": true,
+  "allowedcustomprocessingsteptype": "None",
+  "isprivate": false,
+  "executeprivilegename": null,
+  "notes": [
+    "enabledforworkflow is TRUE here and false on the other four. This is the one message whose CALLER IS A FLOW rather than the app — PerformCommonRequestofGateApproval invokes it in place of its Do-until — so it has to be visible to the flow designer.",
+    "This is the only one of the five APIs that the code app does not call today. It is included because the race is a live data-integrity defect named in the repository, and because it cannot be fixed anywhere else: not in the flow (no lock), not in the app (the app is not in that path at all).",
+    "The counter table vsb_countries is NOT in src/security/matrix.json. The plugin runs in the calling user's context by default, which for this message means a user who holds no write privilege on vsb_country cannot allocate — so this handler is the one of the five that may need to run in an elevated context, and that decision must be recorded against the plugin step rather than assumed here. See solution/plugins/README.md."
+  ],
+  "requestParameters": [
+    {
+      "uniquename": "CountryId",
+      "displayname": "Country",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_country row id holding the counter. The row's vsb_lastprojectid is the counter and vsb_code is the prefix — the country columns the app reads are vsb_countryid, vsb_name, vsb_code, vsb_isocurrencycode, vsb_optionvalue (src/features/pm/generators/hooks.ts). The project's own country is _vsb_country_value."
+    },
+    {
+      "uniquename": "ProjectId",
+      "displayname": "Project",
+      "type": "Guid",
+      "isoptional": true,
+      "description": "vsb_project row to stamp. Optional: omit it to allocate a number without assigning it, which is what a retry needs. When supplied, the increment and the stamp are the SAME transaction — that is the entire reason this message exists, so a caller that allocates and then writes the project itself has gained nothing."
+    },
+    {
+      "uniquename": "IfBlankOnly",
+      "displayname": "Only when blank",
+      "type": "Boolean",
+      "isoptional": true,
+      "description": "Default true. When true and the project already carries a vsb_internalprojectid, the message returns that value and allocates NOTHING. That makes the call idempotent, which matters because the flow that calls it can be resumed. Pass false only to deliberately re-number a project."
+    }
+  ],
+  "responseProperties": [
+    {
+      "uniquename": "InternalProjectId",
+      "displayname": "Internal project id",
+      "type": "String",
+      "description": "The allocated identifier as written to vsb_internalprojectid — the value the app surfaces as `projectNumber` and renders as a Badge in every project header, e.g. \"DE-1021\". The exact composition rule (prefix, separator, padding) lives in the flow's expression and must be transcribed from there, NOT reinvented: this repository does not contain it, and a plugin that guesses the format renumbers the estate."
+    },
+    {
+      "uniquename": "LastProjectId",
+      "displayname": "Counter value",
+      "type": "Integer",
+      "description": "The value vsb_lastprojectid holds after the increment, so the caller can log what it consumed."
+    },
+    {
+      "uniquename": "Allocated",
+      "displayname": "Allocated",
+      "type": "Boolean",
+      "description": "False when IfBlankOnly was true and the project already had an id, i.e. the idempotent no-op path. Distinguishing the two is what stops a resumed flow from burning a number on every retry."
+    }
+  ],
+  "writes": [
+    "UPDATE vsb_country(CountryId): vsb_lastprojectid = previous + 1, taken under the platform row lock (Retrieve with an update lock inside the plugin's transaction, not a Do-until)",
+    "UPDATE vsb_project(ProjectId) when supplied: vsb_internalprojectid = the composed identifier"
+  ],
+  "portFrom": {
+    "computation": "NOT IN THIS REPOSITORY. The composition rule lives in the flow definition PerformCommonRequestofGateApproval; transcribe it from the solution export.",
+    "functions": [],
+    "callSite": "src/flows/flowClient.ts — FLOW_REGISTER entry for PerformCommonRequestofGateApproval, which names the race",
+    "tests": []
+  }
+}

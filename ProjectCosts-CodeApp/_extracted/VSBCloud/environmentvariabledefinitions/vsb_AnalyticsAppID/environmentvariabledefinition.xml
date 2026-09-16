@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_AnalyticsAppID">
+  <displayname default="Analytics App ID">
+    <label description="Analytics App ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.21.630</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

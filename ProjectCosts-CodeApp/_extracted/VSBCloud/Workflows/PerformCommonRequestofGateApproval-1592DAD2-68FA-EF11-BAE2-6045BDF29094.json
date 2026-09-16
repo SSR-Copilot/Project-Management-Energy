@@ -1,0 +1,2784 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_approvals-1": {
+        "api": {
+          "name": "shared_approvals"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedapprovals_f346e"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_teams": {
+        "api": {
+          "name": "shared_teams"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedteams_92bc9"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_commondataserviceforapps_1": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_sendmail-1": {
+        "api": {
+          "name": "shared_sendmail"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedsendmail_ccf66"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365": {
+        "api": {
+          "name": "shared_office365"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365_4d338"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365users": {
+        "api": {
+          "name": "shared_office365users"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365users_7ec1c"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)": {
+          "defaultValue": "andriy.chevychalov@xebia.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "vsb_VSBCloudServiceaccountmail"
+          }
+        },
+        "Environment Name (vsb_EnvironmentName)": {
+          "defaultValue": "Dev",
+          "type": "String",
+          "metadata": {
+            "schemaName": "vsb_EnvironmentName"
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text_1": {
+                  "description": "Please enter your input",
+                  "title": "ProjectGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text_2": {
+                  "description": "Please enter your input",
+                  "title": "StateGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text_3": {
+                  "description": "Please enter your input",
+                  "title": "StateTrackingGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text_4": {
+                  "description": "Please enter your input",
+                  "title": "DefaultApprovalGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                }
+              },
+              "required": [
+                "text_1",
+                "text_2",
+                "text_3",
+                "text_4"
+              ]
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "3a4267d6-3629-4172-9ff8-fd7310e628fa"
+          }
+        }
+      },
+      "actions": {
+        "Condition_on_Portfolio_Manager_Approval_is_required": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "not": {
+                  "equals": [
+                    "@outputs('Project_Default_Approvals')?['body/_vsb_approvalparticipant1_value']",
+                    "@null"
+                  ]
+                }
+              }
+            ]
+          },
+          "actions": {
+            "Respond_to_App": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runid": {
+                      "title": "RunId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    },
+                    "approvalid": {
+                      "title": "ApprovalId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "runid": "@{variables('FlowRunId')}",
+                  "approvalid": "@{body('ChildFlow_Request_Portfolio_Managers_Approval')?['approvalid']}"
+                }
+              },
+              "runAfter": {
+                "ChildFlow_Request_Portfolio_Managers_Approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "d24e6340-4b7e-4b06-b232-112f6dc9b09f"
+              }
+            },
+            "ChildFlow_Request_Portfolio_Managers_Approval": {
+              "type": "Workflow",
+              "inputs": {
+                "host": {
+                  "workflowReferenceName": "d54038a4-c4fd-ef11-bae3-6045bdf29094"
+                },
+                "body": {
+                  "text": "@outputs('Current_Project_State')?['body/vsb_name']",
+                  "text_1": "@outputs('Project')?['body/vsb_projectname']",
+                  "text_2": "@outputs('Next_Project_State')?['vsb_name']",
+                  "text_3": "@outputs('Project_State_Tracking')?['body/vsb_approvalcomment']",
+                  "text_4": "@if(\r\n  not(equals(body('ChildFlow_Checklist_Items'),null)),\r\n  join(body('ChildFlow_Checklist_Items')?['arrChecklistItems'], '&&&'),\r\n  ' '\r\n)",
+                  "text_6": "@triggerBody()?['text_3']",
+                  "text_8": "@body('ChildFlow_Checklist_Items')?['strProjectManagerDisplayName']",
+                  "text_9": "@body('ChildFlow_Checklist_Items')?['strFormatedApprovalDueDate']",
+                  "text_11": "@outputs('Requester_Email')",
+                  "text_12": "@outputs('Project_Details')",
+                  "text_13": "@outputs('Portfolio_Manager')?['body/displayName']",
+                  "text_14": "@if(\r\n  not(equals(body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems'],null)),\r\n  body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems'],\r\n  ' '\r\n)",
+                  "text_15": "@join(variables('arrAdaptiveCardProjectDetails'),',')",
+                  "text_5": "@body('ChildFlow_Checklist_Items')?['strPortfolioManagerEmail']",
+                  "text_7": "@coalesce(outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications'],'')",
+                  "text_10": "@if(\r\n equals(\r\n  outputs('Project_Default_Approvals')?['body/vsb_defaultcontributors'],\r\n  null\r\n ),\r\n '[]',\r\n outputs('Project_Default_Approvals')?['body/vsb_defaultcontributors']\r\n)"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "d9cee03e-1ae5-424d-8679-66526ca8e88c"
+              }
+            },
+            "Wait_for_Portfolio_managers_approval": {
+              "type": "OpenApiConnectionWebhook",
+              "inputs": {
+                "parameters": {
+                  "approvalName": "@body('ChildFlow_Request_Portfolio_Managers_Approval')?['approvalid']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                  "operationId": "WaitForAnApproval",
+                  "connectionName": "shared_approvals-1"
+                }
+              },
+              "runAfter": {
+                "Respond_to_App": [
+                  "Succeeded",
+                  "Skipped",
+                  "TimedOut",
+                  "Failed"
+                ],
+                "ChildFlow_Request_Portfolio_Managers_Approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8c1ac17f-8fea-4ffe-863d-bafd1a5438fa"
+              }
+            },
+            "GateMeeting_Teams_Card_to_Portfolio_Manager": {
+              "type": "Scope",
+              "actions": {
+                "Post_adaptive_card_and_wait_for_a_gate_voting": {
+                  "type": "OpenApiConnectionWebhook",
+                  "inputs": {
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/body/messageBody": "{\n    \"$schema\": \"https://adaptivecards.io/schemas/adaptive-card.json\",\n    \"type\": \"AdaptiveCard\",\n    \"version\": \"1.5\",\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"size\": \"Large\",\n            \"weight\": \"Bolder\",\n            \"id\": \"Title\",\n            \"text\": \"Initiate @{outputs('Next_Project_State')?['vsb_name']} voting for project @{outputs('Project')?['body/vsb_projectname']}\",\n            \"horizontalAlignment\": \"Left\",\n            \"isSubtle\": false,\n            \"style\": \"heading\"\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"Please confirm when the @{outputs('Next_Project_State')?['vsb_name']} meeting for project @{outputs('Project')?['body/vsb_projectname']} took place in order to initiate voting.\\n\\nRequest Due Date: @{body('ChildFlow_Checklist_Items')?['strFormatedApprovalDueDate']}\\n\\nRequest comment: @{outputs('Project_State_Tracking')?['body/vsb_approvalcomment']}\\n\",\n            \"wrap\": true\n        },\n        {\n            \"id\": \"outGateMeetingDate\",\n            \"type\": \"Input.Date\",\n            \"errorMessage\": \"Please enter date, when gate meeting took place.\",\n            \"placeholder\": \"Gate Meeting Date\",\n            \"isRequired\": true\n        },\n      {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n     @{join(variables('arrAdaptiveCardProjectDetails'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"spacing\": \"Medium\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"State\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        },{\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Description\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        }\n        \n      ]\n    },\n    @{body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems']}\n    ],\n    \"actions\": [\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Submit\"\n        }\n    ],\n    \"verticalContentAlignment\": \"Center\",\n    \"lang\": \"en\",\n    \"speak\": \"Please confirm when the @{outputs('Next_Project_State')?['vsb_name']} meeting for project @{outputs('Project')?['body/vsb_projectname']} took place in order to initiate voting.\"\n}",
+                      "body/body/recipient/to": "@{body('ChildFlow_Checklist_Items')?['strPortfolioManagerEmail']};",
+                      "body/body/recipient/isAlert": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "operationId": "PostCardAndWaitForResponse",
+                      "connectionName": "shared_teams"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "4212db39-6df4-4278-95f4-5ed7e4851c95"
+                  }
+                },
+                "Compose_outGateMeetingDate": {
+                  "type": "Compose",
+                  "inputs": "@formatDateTime(body('Post_adaptive_card_and_wait_for_a_gate_voting')?['data/outGateMeetingDate'],'ddd, MMM. dd, yyyy')",
+                  "runAfter": {
+                    "Post_adaptive_card_and_wait_for_a_gate_voting": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "626455b7-0d64-431e-ac84-4d7df6705705"
+                  }
+                },
+                "Update_a_row_set_uncoming_gate_meeting_": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstatetrackings",
+                      "recordId": "@outputs('Project_State_Tracking')?['body/vsb_projectstatetrackingid']",
+                      "item/vsb_gatemeetingcompleted": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "UpdateOnlyRecord",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_outGateMeetingDate": [
+                      "Succeeded"
+                    ],
+                    "Post_adaptive_card_and_wait_for_a_gate_voting": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "2f9a1e22-e5cb-4ef1-80a7-a226ac7be877"
+                  }
+                },
+                "Add_a_uncoming_gate_meeting_note": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstatetrackingnotes",
+                      "item/vsb_comment": "Gate meeting of project @{outputs('Project')?['body/vsb_projectname']} took place on @{outputs('Compose_outGateMeetingDate')}.",
+                      "item/vsb_name": "Initiate gate voting",
+                      "item/vsb_notetype": 952850000,
+                      "item/vsb_ProjectStateTracking@odata.bind": "vsb_projectstatetrackings(@{outputs('Update_a_row_set_uncoming_gate_meeting_')?['body/vsb_projectstatetrackingid']})"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "CreateRecord",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "runAfter": {
+                    "Update_a_row_set_uncoming_gate_meeting_": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "6caff5e1-536b-44ac-8e86-bfab25e047ae"
+                  }
+                }
+              },
+              "runAfter": {
+                "Is_Approved": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "d1ee809c-7a89-45d8-b0ac-f054ad627144"
+              }
+            },
+            "Is_Approved": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@outputs('Wait_for_Portfolio_managers_approval')?['body/outcome']",
+                      "Approve"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Set_boolPortfolioManagerApproved_true": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "boolPortfolioManagerApproved",
+                    "value": true
+                  },
+                  "metadata": {
+                    "operationMetadataId": "730f632a-9346-46cc-9892-199c6181cf92"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Terminate": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Cancelled"
+                    },
+                    "metadata": {
+                      "operationMetadataId": "a88fa6ea-b78f-4eda-9f47-72f6fa158e5b"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Wait_for_Portfolio_managers_approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "880e4eb7-e8a0-4880-9ae2-f53f6671a470"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "ChildFlow_Checklist_Items": [
+              "Succeeded"
+            ],
+            "Retrieve_Dataverse_Records": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "3a7e3ae0-a44c-48f1-9cdd-daa8f200ae4d"
+          }
+        },
+        "Condition_on_Approvers_Approval_is_required": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "not": {
+                  "equals": [
+                    "@outputs('Project_Default_Approvals')?['body/vsb_defaultapprovals']",
+                    "@null"
+                  ]
+                }
+              }
+            ]
+          },
+          "actions": {
+            "Child_Flow_Request_Approvers_Approvals": {
+              "type": "Workflow",
+              "inputs": {
+                "host": {
+                  "workflowReferenceName": "8f94becb-3203-f011-bae3-000d3a2ebc34"
+                },
+                "body": {
+                  "text": "@outputs('Project_Default_Approvals')?['body/vsb_projectdefaultapprovalsid']",
+                  "text_1": "@outputs('Current_Project_State')?['body/vsb_name']",
+                  "text_2": "@outputs('Project')?['body/vsb_projectname']",
+                  "text_3": "@outputs('Next_Project_State')?['vsb_name']",
+                  "text_4": "@if(\r\n  not(equals(body('ChildFlow_Checklist_Items'),null)),\r\n  join(body('ChildFlow_Checklist_Items')?['arrChecklistItems'], '&&&'),\r\n  ' '\r\n)",
+                  "text_7": "@outputs('Project_State_Tracking')?['body/vsb_projectstatetrackingid']",
+                  "text_8": "@outputs('Requester_Email')",
+                  "text_9": "@outputs('Project_Details')",
+                  "text_10": "@if(\r\n equals( outputs('Portfolio_Manager')?['body/displayName'], null),\r\n '',\r\n outputs('Portfolio_Manager')?['body/displayName']\r\n)",
+                  "text_11": "@if(\r\n equals( outputs('Post_adaptive_card_and_wait_for_a_gate_voting')?['body/data/outGateMeetingDate'], null),\r\n '',\r\n outputs('Post_adaptive_card_and_wait_for_a_gate_voting')?['body/data/outGateMeetingDate']\r\n)",
+                  "text_12": "@if(\n  not(equals(body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems'],null)),\n  body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems'],\n  ' '\n)",
+                  "text_13": "@join(variables('arrAdaptiveCardProjectDetails'),',')",
+                  "text_16": "@join(variables('arrAdaptiveCardProjectDetailsFinalApproved'),',')",
+                  "text_5": "@if(\r\n equals(\r\n  outputs('Project_Default_Approvals')?['body/vsb_defaultcontributors'],\r\n  null\r\n ),\r\n '[]',\r\n outputs('Project_Default_Approvals')?['body/vsb_defaultcontributors']\r\n)",
+                  "text_6": "@if(\r\n equals(\r\n  outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications'],\r\n  null\r\n ),\r\n '',\r\n outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications']\r\n)",
+                  "text_14": "@if(equals(body('ChildFlow_Checklist_Items')?['strFormatedApprovalDueDate'],null),' ',body('ChildFlow_Checklist_Items')?['strFormatedApprovalDueDate'])",
+                  "text_15": "@if(equals(outputs('Project_State_Tracking')?['body/vsb_approvalcomment'],null),' ',outputs('Project_State_Tracking')?['body/vsb_approvalcomment'])"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "164bf73e-1492-4eec-b43e-4ff86c99e90d"
+              }
+            },
+            "Wait_for_approvers_approval": {
+              "type": "OpenApiConnectionWebhook",
+              "inputs": {
+                "parameters": {
+                  "approvalName": "@body('Child_Flow_Request_Approvers_Approvals')?['approvalid']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                  "operationId": "WaitForAnApproval",
+                  "connectionName": "shared_approvals-1"
+                }
+              },
+              "runAfter": {
+                "Respond_to_App_2": [
+                  "Succeeded",
+                  "Skipped",
+                  "TimedOut",
+                  "Failed"
+                ],
+                "Child_Flow_Request_Approvers_Approvals": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "b1440e66-c973-4b90-8256-456655ea32a6"
+              }
+            },
+            "Respond_to_App_2": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runid": {
+                      "title": "RunId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    },
+                    "approvalid": {
+                      "title": "ApprovalId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "runid": "@{variables('FlowRunId')}",
+                  "approvalid": "@{body('Child_Flow_Request_Approvers_Approvals')?['approvalid']}"
+                }
+              },
+              "runAfter": {
+                "Child_Flow_Request_Approvers_Approvals": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "d24e6340-4b7e-4b06-b232-112f6dc9b09f"
+              }
+            },
+            "Parse_JSON_of_project_default_approvals": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@outputs('Project_Default_Approvals')?['body/vsb_defaultapprovals']",
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "PersonaRole": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "PersonaRole"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Wait_for_approvers_approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "d0cb8175-1d4b-4803-b0a5-29cbf03c2537"
+              }
+            },
+            "Select_approver_responses": {
+              "type": "Select",
+              "inputs": {
+                "from": "@outputs('Wait_for_approvers_approval')?['body/responses']",
+                "select": {
+                  "ApproverResponse": "@item()?['approverResponse']"
+                }
+              },
+              "runAfter": {
+                "Wait_for_approvers_approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "b1e05531-5322-4504-aa66-b3d364e32d45"
+              }
+            },
+            "Compose_approved_responses_count": {
+              "type": "Compose",
+              "inputs": "@length(body('Filter_array_approved_responses'))",
+              "runAfter": {
+                "Filter_array_approved_responses": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "c567210c-f8fe-4bbf-b97d-1df47fb8d52d"
+              }
+            },
+            "Filter_array_approved_responses": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Select_approver_responses')",
+                "where": "@equals(item()['ApproverResponse'],'Approve')"
+              },
+              "runAfter": {
+                "Select_approver_responses": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a53a4383-443e-439f-afa2-c06574aa53b7"
+              }
+            },
+            "Is__Approved": {
+              "type": "If",
+              "expression": {
+                "or": [
+                  {
+                    "and": [
+                      {
+                        "greater": [
+                          "@float(outputs('Compose_approved_responses_count'))",
+                          "@div(float(length(outputs('Wait_for_approvers_approval')?['body/responses'])),2)"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Set_boolApproversApproved_true": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "boolApproversApproved",
+                    "value": true
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9093bc7c-a17e-46f6-bbf6-4e7153ff9c03"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Terminate_2": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Cancelled"
+                    },
+                    "metadata": {
+                      "operationMetadataId": "32ed28d8-0b7f-4d71-b592-1bc99bb6357d"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Parse_JSON_of_project_default_approvals": [
+                  "Succeeded"
+                ],
+                "Compose_approved_responses_count": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "ac167174-186e-4773-949c-2cfc5197c724"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Condition_on_Portfolio_Manager_Approval_is_required": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1a434394-6c3a-45e8-baae-3d1f62247fb9"
+          }
+        },
+        "Initialize_FlowRunId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "FlowRunId",
+                "type": "string",
+                "value": "@{split(workflow()?['run/id'],'runs/')?[1]}"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "cd221449-342c-43ff-a6dd-586eacaf280a"
+          }
+        },
+        "Initialize_strApprovalMode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strApprovalMode",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "6879cb76-2041-4980-bed4-04a56f869513"
+          }
+        },
+        "ChildFlow_Checklist_Items": {
+          "type": "Workflow",
+          "inputs": {
+            "host": {
+              "workflowReferenceName": "4ee6e9f9-69fb-ef11-bae2-000d3a2ebc34"
+            },
+            "body": {
+              "text": "@triggerBody()['text_1']",
+              "text_1": "@triggerBody()['text_2']",
+              "text_2": "@triggerBody()['text_3']",
+              "text_3": "@triggerBody()['text_4']"
+            }
+          },
+          "runAfter": {
+            "Requester_Email": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "90d6861f-5b7c-46b6-97d7-6e882e3c2bbe"
+          }
+        },
+        "Approve_Project_Internal_Id_for_Draft_State": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@outputs('Current_Project_State')?['body/vsb_name']",
+                  "Draft"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Process_Project_State_and_Internal_Id": {
+              "type": "Scope",
+              "actions": {
+                "Remove_this_condition_but_not_its_content": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@outputs('Project')?['body/vsb_internalprojectid']",
+                          "@outputs('Project')?['body/vsb_name']"
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Compose_PrimarilyResponse": {
+                      "type": "Compose",
+                      "inputs": "@if(\r\n not(equals(outputs('Wait_for_approvers_approval')?['body/responseSummary'],null)),\r\n\r\ntake(split(outputs('Wait_for_approvers_approval')?['body/responseSummary'], decodeUriComponent('%0D%0A')), 1),\r\n''\r\n)",
+                      "runAfter": {
+                        "Response_Summary": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "05db9260-5666-4aeb-a944-81f904c8f051"
+                      }
+                    },
+                    "Response_Summary": {
+                      "type": "Compose",
+                      "inputs": "@outputs('Wait_for_approvers_approval')?['body/responseSummary']",
+                      "metadata": {
+                        "operationMetadataId": "e3edee7f-868f-4e9f-a90f-7afddd15fcb2"
+                      }
+                    },
+                    "Primarily_Approval": {
+                      "type": "Compose",
+                      "inputs": "@first(outputs('Compose_PrimarilyResponse'))",
+                      "runAfter": {
+                        "Compose_PrimarilyResponse": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "4840ef38-c200-4446-a5a3-819b210cf903"
+                      }
+                    },
+                    "Get_Project_Country": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_countries",
+                          "recordId": "@outputs('Project')?['body/_vsb_country_value']",
+                          "$select": "vsb_lastprojectid, vsb_name"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "GetItem",
+                          "connectionName": "shared_commondataserviceforapps_1"
+                        }
+                      },
+                      "metadata": {
+                        "operationMetadataId": "79c504bb-86ce-473c-95a7-b51f0e7c2a99"
+                      }
+                    },
+                    "Set_intCandidateProjectId_to_Countries_LastProjectId": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "intCandidateProjectId",
+                        "value": "@outputs('Get_Project_Country')?['body/vsb_lastprojectid']"
+                      },
+                      "runAfter": {
+                        "Get_Project_Country": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "0352ae8c-a22a-4d88-8ffe-614af6fd56f0"
+                      }
+                    },
+                    "Send_Errormail_and_Set_Project_and_State_to_Canceled": {
+                      "type": "Scope",
+                      "actions": {
+                        "Send_an_email_wrong_candidate_project_id-copy": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "request/to": "@{parameters('VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)')};",
+                              "request/subject": "[@{parameters('Environment Name (vsb_EnvironmentName)')}] Flow Error: RC100- Generated internal id could not be used for project ",
+                              "request/text": "<p class=\"editor-paragraph\">Draft approval for Project **@{outputs('Project')?['body/vsb_projectname']}** could not be completed.<br>After incrementing from country @{outputs('Get_Project_Country')?['body/vsb_name']} last project id for 20 times none of the resulting ids was unique for projects internal id.</p>"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                              "operationId": "SendEmailV3",
+                              "connectionName": "shared_sendmail-1"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "abfb6da3-64fa-403f-b7a6-e241d0d251d0"
+                          }
+                        },
+                        "Update_project_as_canceled_state": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@outputs('Project')?['body/vsb_projectid']",
+                              "item/vsb_approvalstates": 952850004,
+                              "item/vsb_flowapprovalid": "@null",
+                              "item/vsb_flowrunid": "@null"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateOnlyRecord",
+                              "connectionName": "shared_commondataserviceforapps_1"
+                            }
+                          },
+                          "runAfter": {
+                            "Send_an_email_wrong_candidate_project_id-copy": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "28af63f0-f060-4aac-974d-a79a298a5bf4"
+                          }
+                        },
+                        "Update__Draft_Project_State_Tracking_to_Canceled-copy": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projectstatetrackings",
+                              "recordId": "@outputs('Project_State_Tracking')?['body/vsb_projectstatetrackingid']",
+                              "item/vsb_approvalclusterstate": 952850004,
+                              "item/vsb_flowapprovalid": "@outputs('Wait_for_approvers_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateOnlyRecord",
+                              "connectionName": "shared_commondataserviceforapps_1"
+                            }
+                          },
+                          "runAfter": {
+                            "Update_project_as_canceled_state": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "6b5e0c3d-da29-45d4-ae10-f765057381d7"
+                          }
+                        },
+                        "Terminate_1": {
+                          "type": "Terminate",
+                          "inputs": {
+                            "runStatus": "Failed",
+                            "runError": {
+                              "code": "RC101",
+                              "message": "Error to request controlling approval"
+                            }
+                          },
+                          "runAfter": {
+                            "Update__Draft_Project_State_Tracking_to_Canceled-copy": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "1c1f588c-0eba-47b5-87cd-cc9d2e6c421f"
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Do_until_Project_updated_successfully": [
+                          "TimedOut",
+                          "Failed"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "896d7d5b-c464-4be6-a359-f703054e746b"
+                      }
+                    },
+                    "Do_until_Project_updated_successfully": {
+                      "type": "Until",
+                      "expression": "@equals(variables('boolProjectUpdatedSuccessfully'),true)",
+                      "limit": {
+                        "count": 20,
+                        "timeout": "PT1H"
+                      },
+                      "actions": {
+                        "Update_Project_with_Internal_Id_and_Approved_State": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@outputs('Project')?['body/vsb_projectid']",
+                              "item/vsb_approvalstates": 952850002,
+                              "item/vsb_flowapprovalid": "@outputs('Wait_for_approvers_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')",
+                              "item/vsb_internalprojectid": "@variables('intCandidateProjectId')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateOnlyRecord",
+                              "connectionName": "shared_commondataserviceforapps_1"
+                            }
+                          },
+                          "runAfter": {
+                            "Increment_intCandidateProjectId_by_1": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "77c534f4-3d6e-4c0b-8d2c-b7f1ce2c3032"
+                          }
+                        },
+                        "Increment_intCandidateProjectId_by_1": {
+                          "type": "IncrementVariable",
+                          "inputs": {
+                            "name": "intCandidateProjectId",
+                            "value": 1
+                          },
+                          "metadata": {
+                            "operationMetadataId": "aaafda39-8072-4a69-88d7-ddabcc5e2d4a"
+                          }
+                        },
+                        "On_success_set_boolProjectUpdatedSuccessfully_to_true": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "boolProjectUpdatedSuccessfully",
+                            "value": true
+                          },
+                          "runAfter": {
+                            "Update_Project_with_Internal_Id_and_Approved_State": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "0817967e-2813-4530-a255-46e486c3adfb"
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Set_Internal_Project_Id_to_max_": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "464a199c-e4e2-4144-9c72-5e174ee94e77"
+                      }
+                    },
+                    "Update_Country_Last_Project_Id": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_countries",
+                          "recordId": "@outputs('Project')?['body/_vsb_country_value']",
+                          "item/vsb_lastprojectid": "@variables('intCandidateProjectId')"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "UpdateOnlyRecord",
+                          "connectionName": "shared_commondataserviceforapps_1"
+                        }
+                      },
+                      "runAfter": {
+                        "Do_until_Project_updated_successfully": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "af4f778e-271a-4365-85d6-9d4bf264f3e4"
+                      }
+                    },
+                    "Get_Max_Internal_Id_for_Country": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_projects",
+                          "fetchXml": "<fetch xmlns:generator='MarkMpn.SQL4CDS'>\n  <entity name='vsb_project'>\n    <attribute name='vsb_projectname' />\n    <attribute name='vsb_internalprojectid' />\n    <order attribute='vsb_internalprojectid' descending='true' />\n    <filter>\n      <condition attribute='vsb_internalprojectid' operator='like' value='@{outputs('Project')?['body/vsb_country/vsb_title']}1_____' />\n    </filter>\n  </entity>\n</fetch>",
+                          "$top": 1
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "ListRecords",
+                          "connectionName": "shared_commondataserviceforapps_1"
+                        }
+                      },
+                      "runAfter": {
+                        "Primarily_Approval": [
+                          "Succeeded"
+                        ],
+                        "Set_intCandidateProjectId_to_Countries_LastProjectId": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "cce86631-31bd-45ba-9c62-3ab9c54e9be5"
+                      }
+                    },
+                    "Set_Internal_Project_Id_to_max_": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "intCandidateProjectId",
+                        "value": "@int(First(outputs('Get_Max_Internal_Id_for_Country')?['body/value'])?['vsb_internalprojectid'])"
+                      },
+                      "runAfter": {
+                        "Get_Max_Internal_Id_for_Country": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "a47c66dd-5e42-4183-84b0-cb107533bd40"
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d70cfc72-c894-43bb-9494-bf2ed811ec18"
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "e748b91b-a142-42dd-a8fc-9cc4ff71c20f"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Terminate_on_required_approvers_did_not_approve": [
+              "Succeeded",
+              "Skipped",
+              "Failed"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "f26663f7-2ea6-4f6f-93d7-4bcf0c3ce3f0"
+          }
+        },
+        "Initialize_intCandidateProjectId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "intCandidateProjectId",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "3de2d4e2-c016-4462-af6d-53caed2a6334"
+          }
+        },
+        "Initialize_boolProjectUpdatedSuccessfully": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "boolProjectUpdatedSuccessfully",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "61116fc7-c5ef-4f47-bac5-1ca1fa8a6dfc"
+          }
+        },
+        "Upsert_Next_State_Tracking": {
+          "type": "Scope",
+          "actions": {
+            "Compose_BU_Id": {
+              "type": "Compose",
+              "inputs": "@outputs('Project_State_Tracking')?['body/_owningbusinessunit_value']",
+              "metadata": {
+                "operationMetadataId": "176041ae-bb14-42d9-a990-9cdf0ad8cdbf"
+              }
+            },
+            "List_rows_for_next_approval_state": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstatetrackings",
+                  "$select": "vsb_projectstatetrackingid",
+                  "$filter": "_vsb_project_value eq @{outputs('Project')?['body/vsb_projectid']} and _vsb_clusterstate_value eq @{outputs('Compose_Next_Cluster_GUID')}",
+                  "$top": 1
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "ListRecords",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "runAfter": {
+                "Compose_BU_Id": [
+                  "Succeeded"
+                ],
+                "Compose_Next_Cluster_GUID": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "827bbc7e-5895-4aec-a29b-36f08b5aa603"
+              }
+            },
+            "Condition_next_approval_state_does_not_exist": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@length(outputs('List_rows_for_next_approval_state')?['body/value'])",
+                      0
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Add_a_new_row_for_next_cluster_step": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstatetrackings",
+                      "item/vsb_approvalclusterstate": 952850001,
+                      "item/vsb_name": "@null",
+                      "item/vsb_Project@odata.bind": "/vsb_projects(@{outputs('Project')?['body/vsb_projectid']})",
+                      "item/vsb_ClusterState@odata.bind": "/vsb_projectstates(@{outputs('Compose_Next_Cluster_GUID')})",
+                      "item/vsb_clusterstepstate": 952850003,
+                      "item/owningbusinessunit@odata.bind": "/businessunits(@{outputs('Project')?['body/_owningbusinessunit_value']})"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "CreateRecord",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "798a2704-49cc-49f9-98c6-d24450206ea7"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Update_a_row_for_next_cluster_step": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "parameters": {
+                        "entityName": "vsb_projectstatetrackings",
+                        "recordId": "@outputs('Compose_project_state_trackings_id_for_next_state')",
+                        "item/vsb_approvalclusterstate": 952850001
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                        "operationId": "UpdateRecord",
+                        "connectionName": "shared_commondataserviceforapps"
+                      }
+                    },
+                    "runAfter": {
+                      "Compose_project_state_trackings_id_for_next_state": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "276a6673-4763-46a2-a377-f95dc65cc5bf"
+                    }
+                  },
+                  "Compose_project_state_trackings_id_for_next_state": {
+                    "type": "Compose",
+                    "inputs": "@first(outputs('List_rows_for_next_approval_state')?['body/value'])?['vsb_projectstatetrackingid']",
+                    "metadata": {
+                      "operationMetadataId": "fc4c682a-7c09-4ec7-a32a-1f54773a640e"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "List_rows_for_next_approval_state": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "258ad5f0-67b4-4ec5-a789-4bd80cc5e5a3"
+              }
+            },
+            "Compose_Next_Cluster_GUID": {
+              "type": "Compose",
+              "inputs": "@first(outputs('Get_Next_Project_State')?['body/value'])?['vsb_projectstateid']",
+              "metadata": {
+                "operationMetadataId": "176041ae-bb14-42d9-a990-9cdf0ad8cdbf"
+              }
+            }
+          },
+          "runAfter": {
+            "Update_current_State_Tracking_Completed": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1f95842e-28f8-45c3-8819-71156396f7b7"
+          }
+        },
+        "Initialize_arrDefaultNotifications": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrDefaultNotifications",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c5989394-b5d0-405c-941a-3c65181935e1"
+          }
+        },
+        "Is_ApprovalMode_Only_Notifications": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "contains": [
+                  "@outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications']",
+                  "PersonaRole"
+                ]
+              },
+              {
+                "equals": [
+                  "@variables('strApprovalMode')",
+                  "Only Notifications"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Apply_to_each_approvals_notifications_for_approved": {
+              "type": "Foreach",
+              "foreach": "@body('Default_Notifications_Arr')",
+              "actions": {
+                "Post_card_in_a_chat_or_channel": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/recipient": "@{items('Apply_to_each_approvals_notifications_for_approved')?['PersonaRole']};",
+                      "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Project @{outputs('Project')?['body/vsb_projectname']} transitioned to @{outputs('Next_Project_State')?['vsb_name']}\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetailsFinalApproved'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"spacing\": \"Medium\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"State\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Description\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        }\n      ]\n    },\n    @{body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems']}\n  ]\n}",
+                      "body/isAlert": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "operationId": "PostCardToConversation",
+                      "connectionName": "shared_teams"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9a9fdda4-8e94-4556-97fd-962c6f02510f"
+                  }
+                },
+                "Send_an_email_(V2)": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "emailMessage/To": "@{items('Apply_to_each_approvals_notifications_for_approved')?['PersonaRole']};",
+                      "emailMessage/Subject": "Project @{outputs('Project')?['body/vsb_projectname']} transitioned to @{outputs('Next_Project_State')?['vsb_name']}",
+                      "emailMessage/Body": "<script  type=\"application/adaptivecard+json\">\n{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.4\",\n   \"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Project @{outputs('Project')?['body/vsb_projectname']} transitioned to @{outputs('Next_Project_State')?['vsb_name']}\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetailsFinalApproved'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"spacing\": \"Medium\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"State\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Description\",\n              \"weight\": \"Bolder\",\n              \"wrap\": true\n            }\n          ]\n        }\n      ]\n    },\n    @{body('ChildFlow_Checklist_Items')?['strUnformattedCheckListItems']}\n  ]\n}\n</script>",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "operationId": "SendEmailV2",
+                      "connectionName": "shared_office365"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a236f577-9921-4d04-b95c-43213127bc3c"
+                  }
+                }
+              },
+              "runAfter": {
+                "Default_Notifications_Arr": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "78b34aa1-c08f-444f-b5ac-374ff9d500fa"
+              }
+            },
+            "Default_Notifications_Arr": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications']",
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "PersonaKey": {
+                        "type": "string"
+                      },
+                      "PersonaName": {
+                        "type": "string"
+                      },
+                      "PersonaRole": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "PersonaKey",
+                      "PersonaName",
+                      "PersonaRole"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Respond_to_App_2-copy": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "86ee3027-6e12-4b73-9435-32f823c750d8"
+              }
+            },
+            "Respond_to_App_2-copy": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runid": {
+                      "title": "RunId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    },
+                    "approvalid": {
+                      "title": "ApprovalId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "runid": "@{variables('FlowRunId')}",
+                  "approvalid": " "
+                }
+              },
+              "runAfter": {
+                "Update_a_row_1": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "d24e6340-4b7e-4b06-b232-112f6dc9b09f"
+              }
+            },
+            "Update_a_row_1": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstatetrackings",
+                  "recordId": "@triggerBody()?['text_3']",
+                  "item/vsb_clusterstepstate": 952850003,
+                  "item/vsb_flowapprovalid": "ONLY-NOTI-FICA-TION",
+                  "item/vsb_flowrunid": "@variables('FlowRunId')"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "bd960091-b39f-44ac-ad1a-f27a883b61b5"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Approve_Project_Internal_Id_for_Draft_State": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "7b42fef9-6cc6-432d-8c63-01d8fe004df8"
+          }
+        },
+        "Update_current_State_Tracking_Completed": {
+          "type": "Scope",
+          "actions": {
+            "Update_a_row": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstatetrackings",
+                  "recordId": "@outputs('Project_State_Tracking')?['body/vsb_projectstatetrackingid']",
+                  "item/vsb_approvalclusterstate": 952850002
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "17dab9b8-d6f8-4efe-90e8-5da53dc7436c"
+              }
+            },
+            "Update_Project_Cluster_State_to_Current_State": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projects",
+                  "recordId": "@outputs('Project')?['body/vsb_projectid']",
+                  "item/vsb_ClusterState@odata.bind": "/vsb_projectstates(@{outputs('Next_Project_State')?['vsb_projectstateid']})"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "runAfter": {
+                "Update_a_row": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "17dab9b8-d6f8-4efe-90e8-5da53dc7436c"
+              }
+            }
+          },
+          "runAfter": {
+            "Is_ApprovalMode_Only_Notifications": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "7539a376-6dc2-494f-98f6-7951dc7eaaa2"
+          }
+        },
+        "Initialize_arrShareholdingEntities": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrShareholdingEntities",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "5cd2b688-8b23-44c7-bb55-9e0385845fbc"
+          }
+        },
+        "Initialize_arrAdaptiveCardProjectDetails": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrAdaptiveCardProjectDetails",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c61c3d52-ba53-4779-a4a2-573bbc5509d3"
+          }
+        },
+        "Initialize_boolPortfolioManagerApproved": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "boolPortfolioManagerApproved",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "13106dea-2ce3-4cd9-a3df-d5f31e2e99b5"
+          }
+        },
+        "Initialize_boolApproversApproved": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "boolApproversApproved",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "87660fb3-b0ac-427a-9e2e-5afa4d941dba"
+          }
+        },
+        "Terminate_on_required_approvers_did_not_approve": {
+          "type": "If",
+          "expression": {
+            "or": [
+              {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@outputs('Project_Default_Approvals')?['body/_vsb_approvalparticipant1_value']",
+                        "@null"
+                      ]
+                    }
+                  },
+                  {
+                    "equals": [
+                      "@variables('boolPortfolioManagerApproved')",
+                      "@false"
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "contains": [
+                      "@outputs('Project_Default_Approvals')?['body/vsb_defaultapprovals']",
+                      "PersonaRole"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('boolApproversApproved')",
+                      "@false"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Terminate_3": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Cancelled"
+              },
+              "runAfter": {
+                "Condition": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "9f9678cc-472c-4a6f-bf4d-711b8523c164"
+              }
+            },
+            "Condition": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@outputs('Current_Project_State')?['body/vsb_name']",
+                      "Draft"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Update_a_project_as_rejected_state": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projects",
+                      "recordId": "@outputs('Project')?['body/vsb_projectid']",
+                      "item/vsb_approvalstates": 952850003,
+                      "item/vsb_flowapprovalid": "@null",
+                      "item/vsb_flowrunid": "@null"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "UpdateRecord",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "c4e7fd59-d146-466b-9a4a-888ba32dc8da"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "metadata": {
+                "operationMetadataId": "8e2c9dad-636b-4a18-9ac6-3403a6222a31"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Condition_on_Approvers_Approval_is_required": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "2d025fbc-1384-4601-9697-7537c7d72b71"
+          }
+        },
+        "Requester_Email": {
+          "type": "Compose",
+          "inputs": "@triggerOutputs()?['headers/x-ms-user-email']",
+          "runAfter": {
+            "Initialize_FlowRunId": [
+              "Succeeded"
+            ],
+            "Initialize_strApprovalMode": [
+              "Succeeded"
+            ],
+            "Initialize_intCandidateProjectId": [
+              "Succeeded"
+            ],
+            "Initialize_boolProjectUpdatedSuccessfully": [
+              "Succeeded"
+            ],
+            "Initialize_arrDefaultNotifications": [
+              "Succeeded"
+            ],
+            "Initialize_arrShareholdingEntities": [
+              "Succeeded"
+            ],
+            "Initialize_arrAdaptiveCardProjectDetails": [
+              "Succeeded"
+            ],
+            "Initialize_boolPortfolioManagerApproved": [
+              "Succeeded"
+            ],
+            "Initialize_boolApproversApproved": [
+              "Succeeded"
+            ],
+            "Initialize_NextProjectState": [
+              "Succeeded"
+            ],
+            "Initialize_arrAdaptiveCardProjectDetailsFinalApproved": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "48397e65-912c-426f-b095-449f77976c47"
+          }
+        },
+        "Retrieve_Dataverse_Records": {
+          "type": "Scope",
+          "actions": {
+            "Project": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projects",
+                  "recordId": "@triggerBody()?['text_1']",
+                  "$expand": "vsb_Country($select=vsb_name,vsb_title,vsb_isocode), vsb_CountryArea($select=vsb_name)"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "6a7dec3d-34f3-4a3e-81f6-a4ac59e1939a"
+              }
+            },
+            "Project_State_Tracking": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstatetrackings",
+                  "recordId": "@triggerBody()?['text_3']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "4225a9d2-d0b2-4f59-8e82-ff4f0a91dbf5"
+              }
+            },
+            "Project_Default_Approvals": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectdefaultapprovalses",
+                  "recordId": "@triggerBody()?['text_4']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "3a22ce09-58b1-4459-9eae-332ec3f0a1ae"
+              }
+            },
+            "Current_Project_State": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstates",
+                  "recordId": "@triggerBody()?['text_2']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "4499fad1-13ab-40c1-8227-b232d8ba8093"
+              }
+            },
+            "Get_Last_and_Next_Project_States": {
+              "type": "Scope",
+              "actions": {
+                "Get_Project_State_Before": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstates",
+                      "fetchXml": "<fetch version=\"1.0\" mapping=\"logical\" distinct=\"true\">\n\t<entity name=\"vsb_projectstate\">\n\t\t<attribute name=\"statecode\"/>\n\t\t<attribute name=\"vsb_projectstateid\"/>\n\t\t<attribute name=\"vsb_name\"/>\n\t\t<attribute name=\"vsb_isvisibleonchecklist\"/>\n\t\t<attribute name=\"vsb_order\"/>\n\t\t<order attribute=\"vsb_order\" descending=\"false\"/>\n\t\t<filter type=\"and\">\n\t\t\t<condition attribute=\"statecode\" operator=\"eq\" value=\"0\"/>\n   <condition attribute=\"vsb_isvisibleonchecklist\" operator=\"eq\" value=\"1\"/>\n   <condition attribute=\"vsb_order\" operator=\"eq\" value=\"@{sub(outputs('Current_Project_State')?['body/vsb_order'],1)}\"/>\n\t\t</filter>\n\t</entity>\n</fetch>",
+                      "$top": 1
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d014dd32-bb8b-49f0-818b-e59f113d14b0"
+                  }
+                },
+                "Get_Next_Project_State": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstates",
+                      "fetchXml": "<fetch version=\"1.0\" mapping=\"logical\" distinct=\"true\">\n\t<entity name=\"vsb_projectstate\">\n\t\t<attribute name=\"statecode\"/>\n\t\t<attribute name=\"vsb_projectstateid\"/>\n\t\t<attribute name=\"vsb_name\"/>\n\t\t<attribute name=\"vsb_isvisibleonchecklist\"/>\n\t\t<attribute name=\"vsb_order\"/>\n\t\t<order attribute=\"vsb_order\" descending=\"false\"/>\n\t\t<filter type=\"and\">\n\t\t\t<condition attribute=\"statecode\" operator=\"eq\" value=\"0\"/>\n   <condition attribute=\"vsb_isvisibleonchecklist\" operator=\"eq\" value=\"1\"/>\n   <condition attribute=\"vsb_order\" operator=\"eq\" value=\"@{add(outputs('Get_New_Project_State_Order_from_Default_Approvals')?['body/vsb_order'],1)}\"/>\n\t\t</filter>\n\t</entity>\n</fetch>",
+                      "$top": 1
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "runAfter": {
+                    "Get_New_Project_State_Order_from_Default_Approvals": [
+                      "SUCCEEDED"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "0432940a-28fb-4368-bad7-caab8b1e8553"
+                  }
+                },
+                "Project_State_Before": {
+                  "type": "Compose",
+                  "inputs": "@first(outputs('Get_Project_State_Before')?['body/value'])",
+                  "runAfter": {
+                    "Get_Project_State_Before": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "1b6ceec3-b665-4adb-aaac-55b4ec8965cd"
+                  }
+                },
+                "Next_Project_State": {
+                  "type": "Compose",
+                  "inputs": "@first(outputs('Get_Next_Project_State')?['body/value'])",
+                  "runAfter": {
+                    "Get_Next_Project_State": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "cbd42419-4a96-4eb8-9625-7363872f573e"
+                  }
+                },
+                "Default_Notifications": {
+                  "type": "Compose",
+                  "inputs": "@outputs('Project_Default_Approvals')?['body/vsb_defaultnotifications']",
+                  "metadata": {
+                    "operationMetadataId": "edfa3777-4b81-4c44-97b2-46899c69c937"
+                  }
+                },
+                "Append_to_string_variable": {
+                  "type": "AppendToStringVariable",
+                  "inputs": {
+                    "name": "Next Project State",
+                    "value": "@outputs('Next_Project_State')?['vsb_name']"
+                  },
+                  "runAfter": {
+                    "Next_Project_State": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "044438f2-ef76-4f0f-a8b4-f2991721d29a"
+                  }
+                },
+                "Get_New_Project_State_Order_from_Default_Approvals": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstates",
+                      "recordId": "@outputs('Project_Default_Approvals')?['body/_vsb_clusterstate_value']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "GetItem",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Portfolio_Manager": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "4708e4c2-0620-43f3-a972-ed23832d9809"
+              }
+            },
+            "Project_Manager": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "id": "@outputs('Project')?['body/_vsb_projectmanager_value']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                  "operationId": "UserProfile_V2",
+                  "connectionName": "shared_office365users"
+                }
+              },
+              "runAfter": {
+                "Project": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "286db1c8-d242-4ddd-bb6e-3927312ad0de"
+              }
+            },
+            "Set_strApprovalMode": {
+              "type": "Switch",
+              "expression": "@outputs('Project_Default_Approvals')?['body/vsb_approvalmodecode']",
+              "default": {
+                "actions": {}
+              },
+              "cases": {
+                "Formal_Approval_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Formal_Approval": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Formal Approval"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "07eb82e1-82bc-4387-b5c8-ed82b44a1355"
+                      }
+                    }
+                  },
+                  "case": 952850000
+                },
+                "Local_Approval_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Local_Approval": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Local Approval"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "9494d1b2-c401-4df8-a602-72ec889aca08"
+                      }
+                    }
+                  },
+                  "case": 952850001
+                },
+                "Only_Notifications_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Only_Notifications": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Only Notifications"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "2d5ab38b-d61b-4c3e-a287-537fdf9a1e19"
+                      }
+                    }
+                  },
+                  "case": 952850002
+                }
+              },
+              "runAfter": {
+                "Project_Default_Approvals": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "f00dbd8e-1559-43b8-93f3-a97afe9e8f39"
+              }
+            },
+            "Portfolio_Manager": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "id": "@outputs('Project_Default_Approvals')?['body/_vsb_approvalparticipant1_value']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                  "operationId": "UserProfile_V2",
+                  "connectionName": "shared_office365users"
+                }
+              },
+              "runAfter": {
+                "Current_Project_State": [
+                  "Succeeded"
+                ],
+                "Project_Default_Approvals": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8d6f533b-4300-48fd-aa2d-8946f23ba34b"
+              }
+            },
+            "Compose_Project_Details": {
+              "type": "Scope",
+              "actions": {
+                "List_Projects_Shareholding_Entities": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_shareholderentitiies",
+                      "$filter": "_vsb_project_value eq @{outputs('Project')?['body/vsb_projectid']}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "e6c63822-d5b1-47fc-b266-d2b44eb1c828"
+                  }
+                },
+                "Shareholding_Entities": {
+                  "type": "Compose",
+                  "inputs": "@join(\r\n  variables('arrShareholdingEntities'),\r\n  '; '\r\n)",
+                  "runAfter": {
+                    "For_each_1": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "594870f9-6d47-41e0-8405-d2bb3ddc57b8"
+                  }
+                },
+                "Select": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@outputs('List_Projects_Shareholding_Entities')?['body/value']",
+                    "select": {
+                      "Result": "@if(\r\n  greater(length(string(item()?['vsb_shareholderentitiytype'])), 0),\r\n  concat(\r\n    item()?['vsb_shareholderentitiytype@OData.Community.Display.V1.FormattedValue'],\r\n    ' - ',\r\n    formatNumber(item()?['vsb_ownership'], '##0.0# %')\r\n  ),\r\n  concat(\r\n    item()?['vsb_customname'],\r\n    ' - ',\r\n    formatNumber(item()?['vsb_ownership'], '##0.0# %')\r\n  )\r\n)"
+                    }
+                  },
+                  "runAfter": {
+                    "List_Projects_Shareholding_Entities": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5573ed9f-81df-436f-bd9d-8b1c1c247c47"
+                  }
+                },
+                "List_Project_Planning": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectplannings",
+                      "$filter": "_vsb_project_value eq @{outputs('Project')?['body/vsb_projectid']}",
+                      "$top": 1
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "bd306fe5-b9b1-4089-8018-e93697fae3e8"
+                  }
+                },
+                "Repowering": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(outputs('List_Project_Planning')?['body/value']),1),\r\n  string(first(outputs('List_Project_Planning')?['body/value'])?['vsb_repowering']),\r\n  'N/A'\r\n)",
+                  "runAfter": {
+                    "List_Project_Planning": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "fe494e9b-ac4c-4ab4-a427-c71e66051222"
+                  }
+                },
+                "Cooperation": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  equals(length(outputs('List_Project_Planning')?['body/value']),1),\r\n  string(first(outputs('List_Project_Planning')?['body/value'])?['vsb_cooperation']),\r\n  'N/A'\r\n)",
+                  "runAfter": {
+                    "List_Project_Planning": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "edd27d86-d3b7-4a87-8e88-cdec479c9494"
+                  }
+                },
+                "For_each_1": {
+                  "type": "Foreach",
+                  "foreach": "@outputs('Select')['body']",
+                  "actions": {
+                    "Append_to_array_variable": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrShareholdingEntities",
+                        "value": "@items('For_each_1')?['Result']"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "6394da59-6606-466f-8963-16ef611f6302"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Select": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d3ac9540-cc79-4464-b7f9-c5dd2c57192d"
+                  }
+                },
+                "Scope": {
+                  "type": "Scope",
+                  "actions": {
+                    "Project_Details": {
+                      "type": "Compose",
+                      "inputs": "| Project Name | @{outputs('Project')?['body/vsb_projectname']} |\n| Project Manager | @{outputs('Project_Manager')?['body/displayName']} |\n| Technology | @{outputs('Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']} |\n| Project Status | @{outputs('Current_Project_State')?['body/vsb_name']} |\n| Country\t | @{outputs('Project')?['body/vsb_country/vsb_name']} |\n| Area/State/Province  | @{outputs('Project')?['body/vsb_countryarea/vsb_name']} |\n| Shareholding Entities | @{outputs('Shareholding_Entities')} |\n| Repowering | @{outputs('Repowering')} |\n| Cooperation | @{outputs('Cooperation')} |",
+                      "metadata": {
+                        "operationMetadataId": "63a057c6-849a-4eaf-858a-132197eb8b43"
+                      }
+                    },
+                    "Adaptive_Card_Project_Details": {
+                      "type": "Compose",
+                      "inputs": [
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Name",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_projectname']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Manager",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project_Manager')?['body/displayName']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Technology",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Status",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Current_Project_State')?['body/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Country",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_country/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Area/State/Province",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_countryarea/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Shareholding Entities",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Shareholding_Entities')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Repowering",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Repowering')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Cooperation",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Cooperation')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        }
+                      ],
+                      "metadata": {
+                        "operationMetadataId": "fb148717-287a-4586-a34a-445c8a716d08"
+                      }
+                    },
+                    "Set_variable": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "arrAdaptiveCardProjectDetails",
+                        "value": "@outputs('Adaptive_Card_Project_Details')"
+                      },
+                      "runAfter": {
+                        "Adaptive_Card_Project_Details": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "37d65ab0-fc18-4690-b61f-d50da990d19d"
+                      }
+                    },
+                    "Adaptive_Card_Project_Details_Final_Approved": {
+                      "type": "Compose",
+                      "inputs": [
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Name",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_projectname']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Manager",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project_Manager')?['body/displayName']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Technology",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Status",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{variables('Next Project State')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Country",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_country/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Area/State/Province",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_countryarea/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Shareholding Entities",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Shareholding_Entities')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Repowering",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Repowering')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Cooperation",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Cooperation')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        }
+                      ],
+                      "runAfter": {
+                        "Set_variable": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "f2391cc7-e942-440d-afe9-a2d5202fd4f1"
+                      }
+                    },
+                    "Set_variable_Adaptive_Card_Final": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "arrAdaptiveCardProjectDetailsFinalApproved",
+                        "value": "@outputs('Adaptive_Card_Project_Details_Final_Approved')"
+                      },
+                      "runAfter": {
+                        "Adaptive_Card_Project_Details_Final_Approved": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "25263630-c8b2-4c3c-aaa6-d3d70a40ffcb"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Shareholding_Entities": [
+                      "Succeeded"
+                    ],
+                    "Repowering": [
+                      "Succeeded"
+                    ],
+                    "Cooperation": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a3467ea1-0c5e-4ff4-8a0c-bf5b39cac02e"
+                  }
+                }
+              },
+              "runAfter": {
+                "Project_Manager": [
+                  "Succeeded"
+                ],
+                "Current_Project_State": [
+                  "Succeeded"
+                ],
+                "Project": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "9269bde9-1c31-4b53-bfcc-944af89921a7"
+              }
+            }
+          },
+          "runAfter": {
+            "Requester_Email": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "a8038dd4-e574-4933-989a-3493b887cf34"
+          }
+        },
+        "Initialize_NextProjectState": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Next Project State",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "38dd3168-6544-4954-8bd8-816e0ab470e9"
+          }
+        },
+        "Initialize_arrAdaptiveCardProjectDetailsFinalApproved": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrAdaptiveCardProjectDetailsFinalApproved",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "0009a8f8-36e6-4528-b7c7-cb3ddb235ee5"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

@@ -1,0 +1,695 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_a_row_is_added,_modified_or_deleted": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "subscriptionRequest/message": 4,
+              "subscriptionRequest/entityname": "vsb_projectdefaultchecklists",
+              "subscriptionRequest/scope": 2
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "fe1b03e6-812f-466f-ae77-0a29c8010b77"
+          }
+        }
+      },
+      "actions": {
+        "Compose_Cluster_State": {
+          "type": "Compose",
+          "inputs": "@triggerOutputs()?['body/_vsb_clusterstate_value']",
+          "runAfter": {
+            "Initialize_guidUpdatedChecklistItemID": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "24f37507-5c00-4683-b2ce-9e30c51510d6"
+          }
+        },
+        "Get_a_row_country_and_technologie": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_checklistcountryandtechnologies",
+              "recordId": "@triggerOutputs()?['body/_vsb_associatedcountryandtechnology_value']"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "GetItem",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "runAfter": {
+            "Compose_Cluster_State": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "a2188e17-531c-428a-be5c-d0855789c4b4"
+          }
+        },
+        "Initialize_guidCountry": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "guidCountry",
+                "type": "string",
+                "value": "@outputs('Get_a_row_country_and_technologie')?['body/_vsb_country_value']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Get_a_row_country_and_technologie": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "237b51dd-55ac-4934-bdbe-820112c86efe"
+          }
+        },
+        "Initialize_intTechnologyVal": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "intTechnologyVal",
+                "type": "integer",
+                "value": "@outputs('Get_a_row_country_and_technologie')?['body/vsb_technology']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_guidCountry": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "c946bba8-07f7-44bb-abc7-9862d6c98633"
+          }
+        },
+        "Initialize_guidAddedChecklistItemID": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "guidAddedChecklistItemID",
+                "type": "string",
+                "value": "@triggerOutputs()?['body/vsb_projectdefaultchecklistsid']"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "53921ee4-20ca-4818-a334-588b41535221"
+          }
+        },
+        "Condition": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@triggerOutputs()?['body/SdkMessage']",
+                  "Create"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Try_sync_task_items_Create_Flow": {
+              "type": "Scope",
+              "actions": {
+                "List_rows_to_update": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectstatetrackings",
+                      "$filter": "_vsb_clusterstate_value eq @{outputs('Compose_Cluster_State')} and vsb_approvalclusterstate ne 952850002 and vsb_approvalclusterstate ne 952850001 and vsb_Project/vsb_technology eq @{variables('intTechnologyVal')}  and vsb_Project/_vsb_country_value eq @{variables('guidCountry')}",
+                      "$expand": "vsb_Project($select=vsb_technology,_vsb_country_value)"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5a05b808-8d7e-454d-8a03-09f366f131dd"
+                  }
+                },
+                "Select_state_tracking_items": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@outputs('List_rows_to_update')?['body/value']",
+                    "select": {
+                      "ID": "@item()?['vsb_projectstatetrackingid']",
+                      "ProjectID": "@item()?['_vsb_project_value']",
+                      "BusinessUnitID": "@item()?['_owningbusinessunit_value']"
+                    }
+                  },
+                  "runAfter": {
+                    "List_rows_to_update": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "75557215-1884-4ef9-8cba-c91d2b97a268"
+                  }
+                },
+                "Apply_to_each_items_to_update": {
+                  "type": "Foreach",
+                  "foreach": "@body('Select_state_tracking_items')",
+                  "actions": {
+                    "Compose_current_item_ID": {
+                      "type": "Compose",
+                      "inputs": "@items('Apply_to_each_items_to_update')?['ID']",
+                      "metadata": {
+                        "operationMetadataId": "b0964976-239b-4168-9fb1-bb6977191e66"
+                      }
+                    },
+                    "Add_a_new_row_in_project_Checklist": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_projectchecklists",
+                          "item/vsb_ClusterState@odata.bind": "vsb_projectstates(@{outputs('Compose_Cluster_State')})",
+                          "item/vsb_gaterelevance": "@triggerOutputs()?['body/vsb_gaterelevance']",
+                          "item/vsb_holdingtaskdescription": "@triggerOutputs()?['body/vsb_holdingtaskdescription']",
+                          "item/vsb_iscompletiondate": "@triggerOutputs()?['body/vsb_iscompletiondate']",
+                          "item/vsb_name": "@triggerOutputs()?['body/vsb_name']",
+                          "item/vsb_order": "@triggerOutputs()?['body/vsb_order']",
+                          "item/owningbusinessunit@odata.bind": "businessunits(@{outputs('Compose_current_item_BusinessUnitID')})",
+                          "item/vsb_Project@odata.bind": "vsb_projects(@{outputs('Compose_current_item_ProjectID')})",
+                          "item/vsb_projectdefaultchecklist": "@variables('guidAddedChecklistItemID')"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "CreateRecord",
+                          "connectionName": "shared_commondataserviceforapps"
+                        }
+                      },
+                      "runAfter": {
+                        "Compose_current_item_BusinessUnitID": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "5f0f9240-8403-463f-a8c1-59afef3dec1c"
+                      }
+                    },
+                    "Compose_current_item_ProjectID": {
+                      "type": "Compose",
+                      "inputs": "@items('Apply_to_each_items_to_update')?['ProjectID']",
+                      "runAfter": {
+                        "Compose_current_item_ID": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "3930baf5-0781-46a4-b4ce-77c54b40562b"
+                      }
+                    },
+                    "Compose_current_item_BusinessUnitID": {
+                      "type": "Compose",
+                      "inputs": "@items('Apply_to_each_items_to_update')?['BusinessUnitID']",
+                      "runAfter": {
+                        "Compose_current_item_ProjectID": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "491ae0a8-c409-4d36-b4d4-2239592001f6"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Select_state_tracking_items": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5bb54adb-86ab-4a85-a53f-51c076b18acc"
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "98791a50-2836-4c64-9e56-1d35c4b1858d"
+              }
+            },
+            "Catch_sync_Create_Flow": {
+              "type": "Scope",
+              "actions": {
+                "Filter_array_errors_": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@result('Try_sync_task_items_Create_Flow')",
+                    "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+                  },
+                  "metadata": {
+                    "operationMetadataId": "eaf48305-df57-4d2c-9965-fa00061aa2b0"
+                  }
+                },
+                "Terminate": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Failed"
+                  },
+                  "runAfter": {
+                    "Create_HTML_table": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "68b454b6-2eb4-4707-aec9-53fcb848a79f"
+                  }
+                },
+                "Create_HTML_table": {
+                  "type": "Table",
+                  "inputs": {
+                    "from": "@body('Filter_array_errors_')",
+                    "format": "HTML",
+                    "columns": [
+                      {
+                        "header": "Action",
+                        "value": "@item()?['name']"
+                      },
+                      {
+                        "header": "Status",
+                        "value": "@item()?['Status']"
+                      },
+                      {
+                        "header": "ErrorMessage",
+                        "value": "@item()?['error']?['message']"
+                      }
+                    ]
+                  },
+                  "runAfter": {
+                    "Filter_array_errors_": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "000a374d-edea-4f88-882a-b69c6e1f9952"
+                  }
+                }
+              },
+              "runAfter": {
+                "Try_sync_task_items_Create_Flow": [
+                  "TimedOut",
+                  "Failed"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "22efef79-3695-4ae3-ba25-10e936541a2d"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Try_sync_task_items_Update_Flow": {
+                "type": "Scope",
+                "actions": {
+                  "List_rows_to_delete": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "parameters": {
+                        "entityName": "vsb_projectstatetrackings",
+                        "$filter": "_vsb_clusterstate_value eq @{outputs('Compose_Cluster_State')} and vsb_approvalclusterstate ne 952850002 and vsb_approvalclusterstate ne 952850001 and vsb_Project/vsb_technology eq @{variables('intTechnologyVal')}  and vsb_Project/_vsb_country_value eq @{variables('guidCountry')}",
+                        "$expand": "vsb_Project($select=vsb_technology,_vsb_country_value)"
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                        "operationId": "ListRecords",
+                        "connectionName": "shared_commondataserviceforapps"
+                      }
+                    },
+                    "metadata": {
+                      "operationMetadataId": "d9aa0e12-36e8-4791-a098-f7ddfb6bdcbd"
+                    }
+                  },
+                  "Select_state_tracking_items_2": {
+                    "type": "Select",
+                    "inputs": {
+                      "from": "@outputs('List_rows_to_delete')?['body/value']",
+                      "select": {
+                        "ID": "@item()?['vsb_projectstatetrackingid']",
+                        "ProjectID": "@item()?['_vsb_project_value']",
+                        "BusinessUnitID": "@item()?['_owningbusinessunit_value']"
+                      }
+                    },
+                    "runAfter": {
+                      "List_rows_to_delete": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "9e8d443d-0bd6-411e-b111-b67e28aa2118"
+                    }
+                  },
+                  "Apply_to_each_items_to_delete": {
+                    "type": "Foreach",
+                    "foreach": "@body('Select_state_tracking_items_2')",
+                    "actions": {
+                      "Compose_current_item_project_id": {
+                        "type": "Compose",
+                        "inputs": "@items('Apply_to_each_items_to_delete')?['ProjectID']",
+                        "metadata": {
+                          "operationMetadataId": "99ec8a52-efe4-46b2-9c40-bf3ba06586d1"
+                        }
+                      },
+                      "List_rows_deleted_project_checklist": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectchecklists",
+                            "$select": "vsb_projectchecklistid,_vsb_project_value,vsb_projectdefaultchecklist,_vsb_clusterstate_value,statecode,statuscode",
+                            "$filter": "_vsb_project_value eq @{outputs('Compose_current_item_project_id')} and vsb_projectdefaultchecklist eq @{variables('guidUpdatedChecklistItemID')} and _vsb_clusterstate_value eq @{outputs('Compose_Cluster_State')}",
+                            "$top": 1
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "ListRecords",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "runAfter": {
+                          "Compose_current_item_project_id": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "ff38faca-cacf-4221-b30b-faba33c7c655"
+                        }
+                      },
+                      "Condition_check_if_destination_item_exists": {
+                        "type": "If",
+                        "expression": {
+                          "equals": [
+                            "@length(outputs('List_rows_deleted_project_checklist')?['body/value'])",
+                            1
+                          ]
+                        },
+                        "actions": {
+                          "Compose_deleted_project_checklist_item_id": {
+                            "type": "Compose",
+                            "inputs": "@first(outputs('List_rows_deleted_project_checklist')?['body/value'])?['vsb_projectchecklistid']",
+                            "metadata": {
+                              "operationMetadataId": "3b379a18-64f7-4666-a664-9b7dbfc1f2a9"
+                            }
+                          },
+                          "Condition_to_delete_destination_checklist_item": {
+                            "type": "If",
+                            "expression": {
+                              "equals": [
+                                "@variables('IsToDelete')",
+                                "@true"
+                              ]
+                            },
+                            "actions": {
+                              "Delete_a_row_project_cheklist_item": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "parameters": {
+                                    "entityName": "vsb_projectchecklists",
+                                    "recordId": "@outputs('Compose_deleted_project_checklist_item_id')"
+                                  },
+                                  "host": {
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                    "operationId": "DeleteRecord",
+                                    "connectionName": "shared_commondataserviceforapps"
+                                  }
+                                },
+                                "metadata": {
+                                  "operationMetadataId": "07e615a4-fec4-4847-a885-4d3a016ff62f"
+                                }
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Update_a_row_project_cheklist_item": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "parameters": {
+                                      "entityName": "vsb_projectchecklists",
+                                      "recordId": "@outputs('Compose_deleted_project_checklist_item_id')",
+                                      "item/vsb_gaterelevance": "@triggerOutputs()?['body/vsb_gaterelevance']",
+                                      "item/vsb_holdingtaskdescription": "@triggerOutputs()?['body/vsb_holdingtaskdescription']",
+                                      "item/vsb_iscompletiondate": "@triggerOutputs()?['body/vsb_iscompletiondate']",
+                                      "item/vsb_name": "@triggerOutputs()?['body/vsb_name']",
+                                      "item/vsb_order": "@triggerOutputs()?['body/vsb_order']",
+                                      "item/statecode": "@triggerOutputs()?['body/statecode']"
+                                    },
+                                    "host": {
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                      "operationId": "UpdateOnlyRecord",
+                                      "connectionName": "shared_commondataserviceforapps"
+                                    }
+                                  },
+                                  "metadata": {
+                                    "operationMetadataId": "3b26b00d-41e4-47d0-ad36-e0cc3b82f3ce"
+                                  }
+                                }
+                              }
+                            },
+                            "runAfter": {
+                              "Compose_deleted_project_checklist_item_id": [
+                                "Succeeded"
+                              ]
+                            },
+                            "metadata": {
+                              "operationMetadataId": "960d8358-289e-4f64-85f0-d7d411f7732c"
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {
+                          "List_rows_deleted_project_checklist": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "6dd8c514-4a57-4576-9f0f-653fa2e8b645"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Select_state_tracking_items_2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "7050234f-c2b1-4231-8549-4645eee2915b"
+                    }
+                  },
+                  "Condition_to_self_delition": {
+                    "type": "If",
+                    "expression": {
+                      "equals": [
+                        "@variables('IsToDelete')",
+                        "@true"
+                      ]
+                    },
+                    "actions": {
+                      "Delete_a_row_of_default_checklist_item": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectdefaultchecklistses",
+                            "recordId": "@variables('guidUpdatedChecklistItemID')"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "DeleteRecord",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "cffcb44e-35bd-439e-b6e6-d9fbafe96d97"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {
+                        "Terminate_if_no_delition": {
+                          "type": "Terminate",
+                          "inputs": {
+                            "runStatus": "Succeeded"
+                          },
+                          "metadata": {
+                            "operationMetadataId": "a44f6164-39f6-449d-a564-81fe84d2f451"
+                          }
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Apply_to_each_items_to_delete": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "77e46356-2201-48fd-82d6-f1e5979ddbb4"
+                    }
+                  }
+                },
+                "metadata": {
+                  "operationMetadataId": "600304c7-5cb1-467a-9cca-6193409f174e"
+                }
+              },
+              "Catch_sync_Update_Flow": {
+                "type": "Scope",
+                "actions": {
+                  "Filter_array_errors__2": {
+                    "type": "Query",
+                    "inputs": {
+                      "from": "@result('Try_sync_task_items_Update_Flow')",
+                      "where": "@or(equals(item()?['Status'], 'Failed'), equals(item()?['Status'], 'TimedOut'))"
+                    },
+                    "metadata": {
+                      "operationMetadataId": "84543ffe-6672-490d-bd75-3d1d0a5472e7"
+                    }
+                  },
+                  "Create_HTML_table_2": {
+                    "type": "Table",
+                    "inputs": {
+                      "from": "@body('Filter_array_errors__2')",
+                      "format": "HTML",
+                      "columns": [
+                        {
+                          "header": "Action",
+                          "value": "@item()?['name']"
+                        },
+                        {
+                          "header": "Status",
+                          "value": "@item()?['Status']"
+                        },
+                        {
+                          "header": "ErrorMessage",
+                          "value": "@item()?['error']?['message']"
+                        }
+                      ]
+                    },
+                    "runAfter": {
+                      "Filter_array_errors__2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "8a276d23-a9d9-4daa-99e1-d1d6c33f0f90"
+                    }
+                  },
+                  "Terminate_2": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Failed"
+                    },
+                    "runAfter": {
+                      "Create_HTML_table_2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "e1618448-6d16-40b3-ab19-0ea81bb738a8"
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Try_sync_task_items_Update_Flow": [
+                    "TimedOut",
+                    "Failed"
+                  ]
+                },
+                "metadata": {
+                  "operationMetadataId": "498dcb00-36d0-4d29-b28c-e6c996ccb5c9"
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_IsToDelete": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "0f261565-e9cb-4bcd-9bd7-3c62a274b5d3"
+          }
+        },
+        "Initialize_IsToDelete": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "IsToDelete",
+                "type": "boolean",
+                "value": "@triggerOutputs()?['body/vsb_todelete']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_intTechnologyVal": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "19ea5ec8-0ccf-4350-9fa0-9a4b9e1d1483"
+          }
+        },
+        "Initialize_guidUpdatedChecklistItemID": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "guidUpdatedChecklistItemID",
+                "type": "string",
+                "value": "@triggerOutputs()?['body/vsb_projectdefaultchecklistsid']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_guidAddedChecklistItemID": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1b769062-2004-4c6a-94bc-a9dfb32c5067"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

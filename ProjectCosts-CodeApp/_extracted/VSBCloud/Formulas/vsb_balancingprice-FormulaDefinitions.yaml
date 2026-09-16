@@ -1,0 +1,2 @@
+vsb_enddatebalancingcontract: =DateAdd(DateAdd(vsb_startdatebalancingcontract,Sum(vsb_contractdurationyear*12,vsb_contractdurationmonth),TimeUnit.Months),-1,TimeUnit.Days)
+vsb_referencecod: =vsb_Project.vsb_operationsstartdatecod

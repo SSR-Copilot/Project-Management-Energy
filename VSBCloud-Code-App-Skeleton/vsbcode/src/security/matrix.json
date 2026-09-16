@@ -1,0 +1,1289 @@
+{
+  "version": "1.0.0",
+  "note": "SINGLE SOURCE OF TRUTH for VSBCloud role security. The app reads it (src/platform/privileges.ts) to decide what the UI offers; solution/security/apply-roles.mjs reads the same file to write the privileges into Dataverse. Client and server therefore agree by construction. Absent = none: a grant that is not written here is denied.",
+  "depths": {
+    "none": 0,
+    "user": 1,
+    "businessUnit": 2,
+    "parentChildBusinessUnit": 4,
+    "organization": 8
+  },
+  "privileges": [
+    "create",
+    "read",
+    "write",
+    "delete",
+    "append",
+    "appendTo",
+    "assign",
+    "share"
+  ],
+  "roles": {
+    "applicationAdministrator": {
+      "name": "VSB - Application Administrator",
+      "flag": "isApplicationAdministrator",
+      "description": "Full master-data authority across all countries and technologies. The only role that may delete master data."
+    },
+    "controllerOwnData": {
+      "name": "VSB - Controller Own Data",
+      "flag": "isControllerOwnData",
+      "description": "Maintains master data but may not delete it. Scope is the controller's own business unit."
+    },
+    "projectDataAllCountries": {
+      "name": "VSB - Project Data All Countries",
+      "flag": "isProjectDataAllCountries",
+      "description": "Reads and writes project data in every country. Reads master data; never writes it."
+    },
+    "projectDataOwnCountry": {
+      "name": "VSB - Project Data Own Country",
+      "flag": null,
+      "description": "Reads and writes project data inside its own business unit, which is the country. Reads master data; never writes it."
+    },
+    "projectManagerOwnProjects": {
+      "name": "VSB - Project Manager Own Projects",
+      "flag": "isProjectManagerOwnProjects",
+      "description": "Reads and writes only the projects the user owns. Reads master data; never writes it."
+    }
+  },
+  "tables": {
+    "capexAccountLists": {
+      "entitySet": "vsb_capexaccountlists",
+      "logicalName": "vsb_capexaccountlist",
+      "displayName": "CAPEX Account Lists",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-capex-accounts",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "devexCapexStandardAssumptions": {
+      "entitySet": "vsb_devexcapexstandardassumptionses",
+      "logicalName": "vsb_devexcapexstandardassumptions",
+      "displayName": "Devex/Capex Standard Assumptions",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "opexLandLeaseStandardAssumptions": {
+      "entitySet": "vsb_opexlandleasestandardassumptionses",
+      "logicalName": "vsb_opexlandleasestandardassumptions",
+      "displayName": "OPEX & Land Lease Standard Assumptions",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_opexlandleasestandardassumptions"
+      ]
+    },
+    "bopContractsStandardAssumptions": {
+      "entitySet": "vsb_bopcontractsstandardassumptionses",
+      "logicalName": "vsb_bopcontractsstandardassumptions",
+      "displayName": "BoP Contracts Standard Assumptions",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-contract",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "bopDevCoCosts": {
+      "entitySet": "vsb_bopcontractsstandardassumptiondevcocostses",
+      "logicalName": "vsb_bopcontractsstandardassumptiondevcocosts",
+      "displayName": "BoP Contracts Standard Assumption DevCo Costs",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-contract",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "milestonesStandardAssumptions": {
+      "entitySet": "vsb_milestonesstandardassumptionses",
+      "logicalName": "vsb_milestonesstandardassumptions",
+      "displayName": "Milestones Standard Assumptions",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-milestones",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_milestonesstandardassumptions"
+      ]
+    },
+    "projectDefaultChecklists": {
+      "entitySet": "vsb_projectdefaultchecklistses",
+      "logicalName": "vsb_projectdefaultchecklists",
+      "displayName": "Project Default Checklists",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-default-checklists",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_projectdefaultchecklists"
+      ]
+    },
+    "projectDefaultApprovals": {
+      "entitySet": "vsb_projectdefaultapprovalses",
+      "logicalName": "vsb_projectdefaultapprovals",
+      "displayName": "Project Default Approvals",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-gates-approvals",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_projectdefaultapprovals"
+      ]
+    },
+    "checkListDefaultApprovals": {
+      "entitySet": "vsb_checklistdefaultapprovalses",
+      "logicalName": "vsb_checklistdefaultapprovals",
+      "displayName": "Check List Default Approvals",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-gates-approvals",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "checklistCountryAndTechnologies": {
+      "entitySet": "vsb_checklistcountryandtechnologies",
+      "logicalName": "vsb_checklistcountryandtechnology",
+      "displayName": "Checklist Country And Technologies",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-default-checklists",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "opexSubaccounts": {
+      "entitySet": "vsb_opexsubaccounts",
+      "logicalName": "vsb_opexsubaccount",
+      "displayName": "Opex Subaccounts",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "landLeaseSubaccounts": {
+      "entitySet": "vsb_landleasesubaccounts",
+      "logicalName": "vsb_landleasesubaccount",
+      "displayName": "Land Lease Subaccounts",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "countryInflationProfiles": {
+      "entitySet": "vsb_countryinflationprofiles",
+      "logicalName": "vsb_countryinflationprofile",
+      "displayName": "Country Inflation Profiles",
+      "ownership": "organization",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": true,
+      "kind": "masterData",
+      "verified": true
+    },
+    "applyAndApplyAllTrackings": {
+      "entitySet": "vsb_applyandapplyalltrackings",
+      "logicalName": "vsb_applyandapplyalltracking",
+      "displayName": "Apply and Apply All Trackings",
+      "ownership": "user",
+      "phase": 1,
+      "ownedByScreen": "admin-cost",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "isAuditTrail": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projects": {
+      "entitySet": "vsb_projects",
+      "logicalName": "vsb_project",
+      "displayName": "Projects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectStateTrackings": {
+      "entitySet": "vsb_projectstatetrackings",
+      "logicalName": "vsb_projectstatetracking",
+      "displayName": "Project State Trackings",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "checklist",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "columnSecured": [
+        "vsb_approvalclusterstate",
+        "vsb_approvalcomment",
+        "vsb_approvalduedate",
+        "vsb_flowrunid",
+        "vsb_flowapprovalid",
+        "vsb_lasttriggeredapprovalmode",
+        "vsb_lasttriggeredapprovalpersonas"
+      ],
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectChecklists": {
+      "entitySet": "vsb_projectchecklists",
+      "logicalName": "vsb_projectchecklist",
+      "displayName": "Project Checklists",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "checklist",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "columnSecured": [
+        "vsb_approvalcheckliststate",
+        "vsb_approvalstepstatecode",
+        "vsb_approvalcomment",
+        "vsb_approvalduedate",
+        "vsb_flowrunid",
+        "vsb_flowapprovalid"
+      ],
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectStateTrackingNotes": {
+      "entitySet": "vsb_projectstatetrackingnotes",
+      "logicalName": "vsb_projectstatetrackingnote",
+      "displayName": "Project State Tracking Notes",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "checklist",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectChecklistTrackingNotes": {
+      "entitySet": "vsb_projectchecklisttrackingnotes",
+      "logicalName": "vsb_projectchecklisttrackingnote",
+      "displayName": "Project Checklist Tracking Notes",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "checklist",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectMembers": {
+      "entitySet": "vsb_projectmembers",
+      "logicalName": "vsb_projectmember",
+      "displayName": "Project Members",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "team",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectPlannings": {
+      "entitySet": "vsb_projectplannings",
+      "logicalName": "vsb_projectplanning",
+      "displayName": "Project Plannings",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "planning",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "permits": {
+      "entitySet": "vsb_permits",
+      "logicalName": "vsb_permit",
+      "displayName": "Permits",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "planning",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "gridOperators": {
+      "entitySet": "vsb_gridoperators",
+      "logicalName": "vsb_gridoperator",
+      "displayName": "Grid Operators",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "grid-operator",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "generatorTypeInProjects": {
+      "entitySet": "vsb_generatortypeinprojects",
+      "logicalName": "vsb_generatortypeinproject",
+      "displayName": "Generator Type In Projects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "generators",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "energyYields": {
+      "entitySet": "vsb_energyyields",
+      "logicalName": "vsb_energyyield",
+      "displayName": "Energy Yields",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "production",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "projectRevenues": {
+      "entitySet": "vsb_projectrevenues",
+      "logicalName": "vsb_projectrevenue",
+      "displayName": "Project Revenues",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "revenues",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "financingInputs": {
+      "entitySet": "vsb_financinginputs",
+      "logicalName": "vsb_financinginput",
+      "displayName": "Financing Inputs",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "finance",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "capexProjectContracts": {
+      "entitySet": "vsb_capexprojectcontracts",
+      "logicalName": "vsb_capexprojectcontract",
+      "displayName": "CAPEX Project Contracts",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "capex-costs",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "capexCosts": {
+      "entitySet": "vsb_capexcosts",
+      "logicalName": "vsb_capexcost",
+      "displayName": "CAPEX Costs",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "capex-costs",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "opexProjectCosts": {
+      "entitySet": "vsb_opexprojectcosts",
+      "logicalName": "vsb_opexprojectcost",
+      "displayName": "Opex Project Costs",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "opex-costs",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "landLeaseProjectCosts": {
+      "entitySet": "vsb_landleaseprojectcosts",
+      "logicalName": "vsb_landleaseprojectcost",
+      "displayName": "Land Lease Project Costs",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "land-lease",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true
+    },
+    "bopProjectsContracts": {
+      "entitySet": "vsb_bopprojectscontractses",
+      "logicalName": "vsb_bopprojectscontracts",
+      "displayName": "BoP Projects Contracts",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "contracts",
+      "isMasterData": false,
+      "requiresOwningBusinessUnit": true,
+      "kind": "projectData",
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_bopprojectscontracts"
+      ]
+    },
+    "environmentvariabledefinitions": {
+      "entitySet": "environmentvariabledefinitions",
+      "logicalName": "environmentvariabledefinition",
+      "displayName": "Environmentvariabledefinitions",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "platform",
+      "readOnly": true,
+      "verified": true
+    },
+    "environmentvariablevalues": {
+      "entitySet": "environmentvariablevalues",
+      "logicalName": "environmentvariablevalue",
+      "displayName": "Environmentvariablevalues",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "platform",
+      "readOnly": true,
+      "verified": true
+    },
+    "roles": {
+      "entitySet": "roles",
+      "logicalName": "role",
+      "displayName": "Roles",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "platform",
+      "readOnly": true,
+      "verified": true
+    },
+    "systemusers": {
+      "entitySet": "systemusers",
+      "logicalName": "systemuser",
+      "displayName": "Systemusers",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "platform",
+      "readOnly": true,
+      "verified": true
+    },
+    "teams": {
+      "entitySet": "teams",
+      "logicalName": "team",
+      "displayName": "Teams",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "platform",
+      "readOnly": true,
+      "verified": true
+    },
+    "aquisitionstatuses": {
+      "entitySet": "vsb_aquisitionstatuses",
+      "logicalName": "vsb_aquisitionstatus",
+      "displayName": "Aquisitionstatuses",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "planning",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "aquisitiontypes": {
+      "entitySet": "vsb_aquisitiontypes",
+      "logicalName": "vsb_aquisitiontype",
+      "displayName": "Aquisitiontypes",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "planning",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionsbanks": {
+      "entitySet": "vsb_assumptionsbanks",
+      "logicalName": "vsb_assumptionsbank",
+      "displayName": "Assumptionsbanks",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionsbopcontracts": {
+      "entitySet": "vsb_assumptionsbopcontracts",
+      "logicalName": "vsb_assumptionsbopcontract",
+      "displayName": "Assumptionsbopcontracts",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionsdebts": {
+      "entitySet": "vsb_assumptionsdebts",
+      "logicalName": "vsb_assumptionsdebt",
+      "displayName": "Assumptionsdebts",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionskfwtranches": {
+      "entitySet": "vsb_assumptionskfwtranches",
+      "logicalName": "vsb_assumptionskfwtranche",
+      "displayName": "Assumptionskfwtranches",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionslocaltaxfrances": {
+      "entitySet": "vsb_assumptionslocaltaxfrances",
+      "logicalName": "vsb_assumptionslocaltaxfrance",
+      "displayName": "Assumptionslocaltaxfrances",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionslocaltaxgermanies": {
+      "entitySet": "vsb_assumptionslocaltaxgermanies",
+      "logicalName": "vsb_assumptionslocaltaxgermany",
+      "displayName": "Assumptionslocaltaxgermanies",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "assumptionsrevenues": {
+      "entitySet": "vsb_assumptionsrevenues",
+      "logicalName": "vsb_assumptionsrevenue",
+      "displayName": "Assumptionsrevenues",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "connected",
+      "readOnly": true,
+      "verified": false
+    },
+    "balancingprices": {
+      "entitySet": "vsb_balancingprices",
+      "logicalName": "vsb_balancingprice",
+      "displayName": "Balancingprices",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "bopcontractsdevcocostses": {
+      "entitySet": "vsb_bopcontractsdevcocostses",
+      "logicalName": "vsb_bopcontractsdevcocosts",
+      "displayName": "Bopcontractsdevcocostses",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "contracts",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true
+    },
+    "bopcontractspaymenttargetses": {
+      "entitySet": "vsb_bopcontractspaymenttargetses",
+      "logicalName": "vsb_bopcontractspaymenttargets",
+      "displayName": "Bopcontractspaymenttargetses",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "contracts",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true
+    },
+    "capexcommentses": {
+      "entitySet": "vsb_capexcommentses",
+      "logicalName": "vsb_capexcomments",
+      "displayName": "Capexcommentses",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "capex-costs",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true,
+      "entitySetAliases": [
+        "vsb_capexcomments"
+      ]
+    },
+    "clusterstates": {
+      "entitySet": "vsb_clusterstates",
+      "logicalName": "vsb_clusterstate",
+      "displayName": "Clusterstates",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "contracttypes": {
+      "entitySet": "vsb_contracttypes",
+      "logicalName": "vsb_contracttype",
+      "displayName": "Contracttypes",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "countries": {
+      "entitySet": "vsb_countries",
+      "logicalName": "vsb_country",
+      "displayName": "Countries",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": true
+    },
+    "countryareas": {
+      "entitySet": "vsb_countryareas",
+      "logicalName": "vsb_countryarea",
+      "displayName": "Countryareas",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "currencies": {
+      "entitySet": "vsb_currencies",
+      "logicalName": "vsb_currency",
+      "displayName": "Currencies",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "milestones",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": true
+    },
+    "customchoicevalues": {
+      "entitySet": "vsb_customchoicevalues",
+      "logicalName": "vsb_customchoicevalue",
+      "displayName": "Customchoicevalues",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "devicecosts": {
+      "entitySet": "vsb_devicecosts",
+      "logicalName": "vsb_devicecost",
+      "displayName": "Devicecosts",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "devicetypesinprojects": {
+      "entitySet": "vsb_devicetypesinprojects",
+      "logicalName": "vsb_devicetypesinproject",
+      "displayName": "Devicetypesinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "production",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "estimationpriceinflations": {
+      "entitySet": "vsb_estimationpriceinflations",
+      "logicalName": "vsb_estimationpriceinflation",
+      "displayName": "Estimationpriceinflations",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "fabricsyncjobs": {
+      "entitySet": "vsb_fabricsyncjobs",
+      "logicalName": "vsb_fabricsyncjob",
+      "displayName": "Fabricsyncjobs",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "financingcategories": {
+      "entitySet": "vsb_financingcategories",
+      "logicalName": "vsb_financingcategory",
+      "displayName": "Financingcategories",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "finance",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "financinginputsrepaymentamounts": {
+      "entitySet": "vsb_financinginputsrepaymentamounts",
+      "logicalName": "vsb_financinginputsrepaymentamount",
+      "displayName": "Financinginputsrepaymentamounts",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "financinginputstepupmarginses": {
+      "entitySet": "vsb_financinginputstepupmarginses",
+      "logicalName": "vsb_financinginputstepupmargins",
+      "displayName": "Financinginputstepupmarginses",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true
+    },
+    "generatorinprojects": {
+      "entitySet": "vsb_generatorinprojects",
+      "logicalName": "vsb_generatorinproject",
+      "displayName": "Generatorinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "generators",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "generators": {
+      "entitySet": "vsb_generators",
+      "logicalName": "vsb_generator",
+      "displayName": "Generators",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "generators",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "generatortypes": {
+      "entitySet": "vsb_generatortypes",
+      "logicalName": "vsb_generatortype",
+      "displayName": "Generatortypes",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "hydrogentypeinprojects": {
+      "entitySet": "vsb_hydrogentypeinprojects",
+      "logicalName": "vsb_hydrogentypeinproject",
+      "displayName": "Hydrogentypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "invertertypeinprojects": {
+      "entitySet": "vsb_invertertypeinprojects",
+      "logicalName": "vsb_invertertypeinproject",
+      "displayName": "Invertertypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "landleaseallocationwtgs": {
+      "entitySet": "vsb_landleaseallocationwtgs",
+      "logicalName": "vsb_landleaseallocationwtg",
+      "displayName": "Landleaseallocationwtgs",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "land-lease",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "landleaseperiods": {
+      "entitySet": "vsb_landleaseperiods",
+      "logicalName": "vsb_landleaseperiod",
+      "displayName": "Landleaseperiods",
+      "ownership": "user",
+      "phase": 3,
+      "ownedByScreen": "land-lease",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "microsoftentraids": {
+      "entitySet": "vsb_microsoftentraids",
+      "logicalName": "vsb_microsoftentraid",
+      "displayName": "Microsoftentraids",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "milestones": {
+      "entitySet": "vsb_milestones",
+      "logicalName": "vsb_milestone",
+      "displayName": "Milestones",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "opexaccounts": {
+      "entitySet": "vsb_opexaccounts",
+      "logicalName": "vsb_opexaccount",
+      "displayName": "Opexaccounts",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "projectmemberdescriptions": {
+      "entitySet": "vsb_projectmemberdescriptions",
+      "logicalName": "vsb_projectmemberdescription",
+      "displayName": "Projectmemberdescriptions",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "team",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "projectstates": {
+      "entitySet": "vsb_projectstates",
+      "logicalName": "vsb_projectstate",
+      "displayName": "Projectstates",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "checklist",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "pvmoduletypeinprojects": {
+      "entitySet": "vsb_pvmoduletypeinprojects",
+      "logicalName": "vsb_pvmoduletypeinproject",
+      "displayName": "Pvmoduletypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "pvnegativepriceses": {
+      "entitySet": "vsb_pvnegativepriceses",
+      "logicalName": "vsb_pvnegativeprices",
+      "displayName": "Pvnegativepriceses",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true
+    },
+    "pvseasonalityvalueses": {
+      "entitySet": "vsb_pvseasonalityvalueses",
+      "logicalName": "vsb_pvseasonalityvalues",
+      "displayName": "Pvseasonalityvalueses",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": true
+    },
+    "revenueindividualhedgevolumes": {
+      "entitySet": "vsb_revenueindividualhedgevolumes",
+      "logicalName": "vsb_revenueindividualhedgevolume",
+      "displayName": "Revenueindividualhedgevolumes",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "revenuesubaccounts": {
+      "entitySet": "vsb_revenuesubaccounts",
+      "logicalName": "vsb_revenuesubaccount",
+      "displayName": "Revenuesubaccounts",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "milestones",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "shareholderentityinprojects": {
+      "entitySet": "vsb_shareholderentityinprojects",
+      "logicalName": "vsb_shareholderentityinproject",
+      "displayName": "Shareholderentityinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "general-data",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "spvdevcomappingcapexdevexes": {
+      "entitySet": "vsb_spvdevcomappingcapexdevexes",
+      "logicalName": "vsb_spvdevcomappingcapexdevexe",
+      "displayName": "Spvdevcomappingcapexdevexes",
+      "ownership": "organization",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": true,
+      "kind": "reference",
+      "readOnly": true,
+      "verified": false
+    },
+    "storagetypeinprojects": {
+      "entitySet": "vsb_storagetypeinprojects",
+      "logicalName": "vsb_storagetypeinproject",
+      "displayName": "Storagetypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "substationtypeinprojects": {
+      "entitySet": "vsb_substationtypeinprojects",
+      "logicalName": "vsb_substationtypeinproject",
+      "displayName": "Substationtypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false
+    },
+    "substructuretypeinprojects": {
+      "entitySet": "vsb_substructuretypeinprojects",
+      "logicalName": "vsb_substructuretypeinproject",
+      "displayName": "Substructuretypeinprojects",
+      "ownership": "user",
+      "phase": 2,
+      "ownedByScreen": "-",
+      "isMasterData": false,
+      "kind": "projectData",
+      "requiresOwningBusinessUnit": true,
+      "verified": false,
+      "entitySetAliases": [
+        "vsb_substructuretypesinprojects"
+      ]
+    }
+  },
+  "grants": {
+    "applicationAdministrator": {
+      "_masterData": {
+        "create": "organization",
+        "read": "organization",
+        "write": "organization",
+        "delete": "organization",
+        "append": "organization",
+        "appendTo": "organization"
+      },
+      "_projectData": {
+        "create": "organization",
+        "read": "organization",
+        "write": "organization",
+        "delete": "organization",
+        "append": "organization",
+        "appendTo": "organization",
+        "assign": "organization",
+        "share": "organization"
+      },
+      "applyAndApplyAllTrackings": {
+        "create": "organization",
+        "read": "organization",
+        "write": "none",
+        "delete": "none",
+        "append": "organization",
+        "appendTo": "organization"
+      }
+    },
+    "controllerOwnData": {
+      "_masterData": {
+        "create": "organization",
+        "read": "organization",
+        "write": "organization",
+        "delete": "none",
+        "append": "organization",
+        "appendTo": "organization"
+      },
+      "_projectData": {
+        "create": "none",
+        "read": "organization",
+        "write": "none",
+        "delete": "none",
+        "append": "none",
+        "appendTo": "organization"
+      },
+      "applyAndApplyAllTrackings": {
+        "create": "organization",
+        "read": "organization",
+        "write": "none",
+        "delete": "none",
+        "append": "organization",
+        "appendTo": "organization"
+      }
+    },
+    "projectDataAllCountries": {
+      "_masterData": {
+        "read": "organization",
+        "appendTo": "organization"
+      },
+      "_projectData": {
+        "create": "organization",
+        "read": "organization",
+        "write": "organization",
+        "delete": "organization",
+        "append": "organization",
+        "appendTo": "organization",
+        "assign": "organization",
+        "share": "organization"
+      },
+      "applyAndApplyAllTrackings": {
+        "read": "organization"
+      }
+    },
+    "projectDataOwnCountry": {
+      "_masterData": {
+        "read": "organization",
+        "appendTo": "organization"
+      },
+      "_projectData": {
+        "create": "businessUnit",
+        "read": "businessUnit",
+        "write": "businessUnit",
+        "delete": "businessUnit",
+        "append": "businessUnit",
+        "appendTo": "businessUnit",
+        "assign": "businessUnit",
+        "share": "businessUnit"
+      },
+      "applyAndApplyAllTrackings": {
+        "read": "businessUnit"
+      }
+    },
+    "projectManagerOwnProjects": {
+      "_masterData": {
+        "read": "organization",
+        "appendTo": "organization"
+      },
+      "_projectData": {
+        "create": "user",
+        "read": "businessUnit",
+        "write": "user",
+        "delete": "user",
+        "append": "user",
+        "appendTo": "businessUnit",
+        "assign": "none",
+        "share": "user"
+      },
+      "applyAndApplyAllTrackings": {
+        "read": "user"
+      }
+    }
+  },
+  "columnSecurityProfiles": {
+    "approvalStateWriters": {
+      "name": "VSB - Approval State Writers",
+      "description": "Write access to the approval-state columns the 17 flows own. NO ORDINARY APP USER IS A MEMBER. The flow's own service principal is the only member, which is what makes the flow the only path to an approval-state transition. This is the mechanism named in the standing decision on flows: the transitions are enforced by removing Write from everyone else, not by moving the logic server-side.",
+      "members": [],
+      "columns": {
+        "vsb_projectstatetracking": [
+          "vsb_approvalclusterstate",
+          "vsb_approvalcomment",
+          "vsb_approvalduedate",
+          "vsb_flowrunid",
+          "vsb_flowapprovalid",
+          "vsb_lasttriggeredapprovalmode",
+          "vsb_lasttriggeredapprovalpersonas"
+        ],
+        "vsb_projectchecklist": [
+          "vsb_approvalcheckliststate",
+          "vsb_approvalstepstatecode",
+          "vsb_approvalcomment",
+          "vsb_approvalduedate",
+          "vsb_flowrunid",
+          "vsb_flowapprovalid"
+        ]
+      }
+    }
+  },
+  "tableKinds": {
+    "masterData": "Maintained through one of the six admin screens. Read by everyone, written by the administrator and the controller, deleted by the administrator alone.",
+    "projectData": "One project's own rows. Scoped by business unit or ownership; every create must write the owning business unit.",
+    "reference": "A lookup list this app only reads. READ-ONLY: `readOnly` forces create/write/delete to none whatever the grant defaults say. Maintained outside the app or by a maker.",
+    "platform": "A Dataverse system table - users, teams, roles, environment variables. READ-ONLY; read is what the session bootstrap needs.",
+    "connected": "A mirror of a Fabric/SQL source. READ-ONLY here; the write path is the pipeline, not this app."
+  },
+  "readOnlyNote": "`readOnly: true` is a hard mask applied in security/index.ts grantFor(): create, write and delete resolve to none for every role, whatever the grant defaults say. It is not a UI convenience - apply-roles.mjs writes no write privilege for these tables either.",
+  "verifiedNote": "`verified: false` means the logical name was DERIVED from the entity set by de-pluralising it and has never been checked against the metadata endpoint. Regenerate with `pac code add-data-source` and re-verify; scripts/check-matrix.mjs lists them.",
+  "spellingConflicts": [
+    {
+      "canonical": "vsb_opexlandleasestandardassumptionses",
+      "alias": "vsb_opexlandleasestandardassumptions",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_milestonesstandardassumptionses",
+      "alias": "vsb_milestonesstandardassumptions",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_projectdefaultchecklistses",
+      "alias": "vsb_projectdefaultchecklists",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_projectdefaultapprovalses",
+      "alias": "vsb_projectdefaultapprovals",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_bopprojectscontractses",
+      "alias": "vsb_bopprojectscontracts",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_capexcommentses",
+      "alias": "vsb_capexcomments",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Both spellings are declared in entities.ts, in different ES* groups, for the same table. One is wrong. Until `pac code add-data-source` settles it, forTable() resolves either, and the matrix models the table ONCE."
+    },
+    {
+      "canonical": "vsb_substructuretypeinprojects",
+      "alias": "vsb_substructuretypesinprojects",
+      "declaredIn": "src/data/entities.ts",
+      "note": "Not an open question, unlike the other six: entities.ts says outright that ES.substructureTypesInProjects is wrong and ES_PLANT is authoritative. Kept as an alias so a stale reference still resolves; delete ES.substructureTypesInProjects and this entry goes with it."
+    }
+  ],
+  "spellingConflictsNote": "Seven tables are declared twice in src/data/entities.ts with different plurals - the `...es` / `...ses` double-plural trap. Each is modelled once here, with the other spelling as an entitySetAlias so the app resolves privileges whichever spelling a repository happens to use. Six are open questions only the metadata endpoint can settle, so they are `pac code add-data-source` work. The seventh, vsb_substructuretypeinprojects, is already settled: entities.ts states outright that ES.substructureTypesInProjects is wrong and ES_PLANT is authoritative, so its alias exists only so a stale reference still resolves. scripts/check-matrix.mjs keeps all seven visible."
+}

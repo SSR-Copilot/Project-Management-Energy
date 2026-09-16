@@ -1,0 +1,34 @@
+/*
+ * The canvas app was authored at a fixed 1366 x 768 with DocumentLayoutScaleToFit: false
+ * (Properties.json), so nothing in it reflowed. This build is responsive, and these three
+ * rules are all the global CSS it needs — everything else is Fluent's `makeStyles`.
+ *
+ * `Font.'Open Sans'` was the canvas font throughout. A code app cannot rely on Power Apps'
+ * font CDN, so the stack in theme/tokens.ts falls back to Segoe UI. Drop the real Open Sans
+ * files into public/fonts and add an @font-face here if exact type fidelity is wanted.
+ */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Fluent paints its own background inside FluentProvider; this stops a white flash. */
+  background-color: #faf9f8;
+
+  /*
+   * FluentProvider sets `font-family` on its own root <div>, not on <body>, so anything
+   * rendered OUTSIDE the React tree inherited the UA default (Times New Roman). The PCF
+   * grid does exactly that: ActionDropdown, the Add menu, the month paid/unpaid menu and
+   * the comment tooltip are all appended to document.body on purpose, to escape the grid's
+   * `overflow:auto` scroll container. Mirroring the Fluent stack here keeps them in the
+   * app's typeface. Keep in sync with `fontFamily` in theme/tokens.ts.
+   */
+  font-family: 'Open Sans', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Every screen has a wide table somewhere. Let those scroll in their own box rather than
+   pushing the page sideways. */
+* {
+  box-sizing: border-box;
+}

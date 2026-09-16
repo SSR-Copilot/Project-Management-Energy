@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<manifest>
+  <control namespace="Dev" constructor="DevexCapexSummaryPCF" version="1.1.1" display-name-key="DevexCapexSummaryPCF" description-key="DevexCapexSummaryPCF description" control-type="standard" api-version="1.3.18">
+    <external-service-usage enabled="false"/>
+    <data-set name="DevexCapexCostSummary" display-name-key="Devex_Capex_Cost_Summary"/>
+    <data-set name="StandardContractOptions" display-name-key="Standard_Contract_Options"/>
+    <property name="ShowPlannedCost" display-name-key="Show Planned Cost" description-key="Show planned and actual cost columns" of-type="TwoOptions" usage="input" required="true"/>
+    <property name="StartYear" display-name-key="Start Year" description-key="The year to display in the monthly header columns (e.g. 2026)" of-type="Whole.None" usage="input" required="true"/>
+    <property name="ShowEmptyAccounts" display-name-key="Show Empty Accounts" description-key="Show accounts and subaccounts without any visible cost" of-type="TwoOptions" usage="input" required="false"/>
+    <property name="CostPaidByFilter" display-name-key="Cost Paid By Filter" description-key="Show All Cost, DevCo, or SPV" of-type="SingleLine.Text" usage="input" required="false"/>
+    <property name="CollapseResetKey" display-name-key="Collapse Reset Key" description-key="Bug 13472: change this value (on tab switch / screen OnVisible) to collapse all accounts and subaccounts" of-type="SingleLine.Text" usage="input" required="false"/>
+    <property name="Cluster1Date" display-name-key="Cluster 1 Date" description-key="Start date for Cluster 1" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="Cluster2Date" display-name-key="Cluster 2 Date" description-key="Start date for Cluster 2" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="Cluster3Date" display-name-key="Cluster 3 Date" description-key="Start date for Cluster 3" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="Cluster4Date" display-name-key="Cluster 4 Date" description-key="Start date for Cluster 4" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="Cluster5Date" display-name-key="Cluster 5 Date" description-key="Start date for Cluster 5" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="Cluster6Date" display-name-key="Cluster 6 Date" description-key="Start date for Cluster 6" of-type="DateAndTime.DateOnly" usage="input" required="false"/>
+    <property name="EditTriggered" display-name-key="Edit Triggered" description-key="True if Edit action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="CommentTriggered" display-name-key="Comment Triggered" description-key="True if Comment action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="DeleteTriggered" display-name-key="Delete Triggered" description-key="True if Delete action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="AddTriggered" display-name-key="Add Triggered" description-key="True if Add action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="AddStandardContractTriggered" display-name-key="Add Standard Contract Triggered" description-key="True if Add Standard Contract action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="SetCostPaidUnpaidTriggered" display-name-key="Set Cost Paid Unpaid Triggered" description-key="True if Set as paid/unpaid action is triggered" of-type="TwoOptions" usage="output" required="false"/>
+    <property name="SelectedRecordId" display-name-key="Selected Record ID" description-key="The GUID/ID of the selected record" of-type="SingleLine.Text" usage="output" required="false"/>
+    <property name="SelectedStandardContractId" display-name-key="Selected Standard Contract ID" description-key="The GUID/ID of the selected standard contract" of-type="SingleLine.Text" usage="output" required="false"/>
+    <property name="SelectedCostContractId" display-name-key="Selected Cost Contract ID" description-key="The GUID/ID of the contract for the selected monthly cost" of-type="SingleLine.Text" usage="output" required="false"/>
+    <property name="SelectedCostYear" display-name-key="Selected Cost Year" description-key="The selected monthly cost year" of-type="Whole.None" usage="output" required="false"/>
+    <property name="SelectedCostMonth" display-name-key="Selected Cost Month" description-key="The selected monthly cost month number" of-type="Whole.None" usage="output" required="false"/>
+    <property name="SelectedCostPaid" display-name-key="Selected Cost Paid" description-key="True when the selected monthly cost should be paid, false when unpaid" of-type="TwoOptions" usage="output" required="false"/>
+    <resources>
+      <code path="bundle.js" order="1"/>
+      <css path="css/TableConnectedToDataversePCF.css" order="1"/>
+    </resources>
+    <feature-usage/>
+    <built-by name="pac" version="1.51.1"/>
+  </control>
+</manifest>

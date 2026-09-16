@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_PowerBIGroupID">
+  <displayname default="Power BI Group ID">
+    <label description="Power BI Group ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.9.2</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

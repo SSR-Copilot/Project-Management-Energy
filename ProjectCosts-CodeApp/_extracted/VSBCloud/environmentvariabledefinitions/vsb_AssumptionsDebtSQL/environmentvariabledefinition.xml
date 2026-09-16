@@ -1,0 +1,15 @@
+<environmentvariabledefinition schemaname="vsb_AssumptionsDebtSQL">
+  <apiid>/providers/microsoft.powerapps/apis/shared_sql</apiid>
+  <displayname default="Assumptions Debt SQL">
+    <label description="Assumptions Debt SQL" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.21.155</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <parameterkey>table</parameterkey>
+  <parentdefinitionid>
+    <schemaname>vsb_FabricSQLDatabase</schemaname>
+  </parentdefinitionid>
+  <secretstore>0</secretstore>
+  <type>100000004</type>
+</environmentvariabledefinition>

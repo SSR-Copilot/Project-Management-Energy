@@ -1,0 +1,178 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_User_Badge:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      ToolTipVisibility:
+        PropertyKind: Input
+        DisplayName: ToolTipVisibility
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Boolean
+        Default: =true
+    Properties:
+      Height: =70
+      Width: =420
+    Children:
+      - con_cmpHeader_UserName:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Fill: =If(IsBlank(gblAppTheme), RGBA(0, 0, 0, 0), ColorValue(gblAppTheme.palette.themePrimary))
+            Height: =32
+            RadiusBottomLeft: =90
+            RadiusBottomRight: =90
+            RadiusTopLeft: =90
+            RadiusTopRight: =90
+            Width: =200
+            X: =con_cmpHeader_UserImage.X-Self.Width+20
+            Y: =Parent.Height/2-Self.Height/2
+          Children:
+            - lbl_cmpHeader_UserName:
+                Control: Label@2.5.1
+                Properties:
+                  AutoHeight: =true
+                  BorderColor: =
+                  Color: =ColorValue(gblAppTheme.palette.white)
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  DisabledColor: =gblAppColors.Label.DisabledColor
+                  DisplayMode: =DisplayMode.View
+                  FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                  Font: =Font.'Segoe UI'
+                  FontWeight: =FontWeight.Semibold
+                  Height: =30
+                  HoverColor: =gblAppColors.Label.HoverColor
+                  PaddingLeft: =2
+                  Size: =gblAppSizes.Font.Medium
+                  Text: ="Hi " & User().FullName
+                  Tooltip: =$"{gblCurrentUser.Language}, [{gblCurrentUser.Lang}]"
+                  Width: =con_cmpHeader_UserImage.X - con_cmpHeader_UserName.X-15
+                  Wrap: =false
+                  X: =15
+            - pcf_cmpHeader_User_ContextMenu_Info:
+                Control: CodeComponent
+                ComponentName: cat_PowerCAT.ContextMenu
+                Properties:
+                  AccessibilityLabel: ="User information"
+                  BorderColor: ="#FFFFFF00"
+                  FillColor: ="#FFFFFF00"
+                  FontColor: ="#FFFFFF00"
+                  FontSize: =gblAppSizes.Font.Small
+                  Height: =32
+                  HoverBorderColor: ="#FFFFFF00"
+                  Items: |-
+                    =Table(
+                        {
+                            ItemKey: "lang",
+                            ItemDisplayName: $"Hi {User().FullName}"
+                        },
+                        {
+                            ItemKey: "appSettingsKey",
+                            ItemDisplayName: $"Application Settings",
+                            ItemIconName: "Settings",
+                            ItemVisible: Or(
+                                gblCurrentUser.IsApplicationAdministrator,
+                                gblCurrentUser.IsControllerOwnData
+                            )
+                        },
+                        {
+                            ItemKey: "lang",
+                            ItemDisplayName: $"{gblCurrentUser.Mail}",
+                            ItemIconName: "Mail",
+                            ItemVisible: Not(IsBlank(gblCurrentUser.Mail))
+                        },
+                        {
+                            ItemKey: "lang",
+                            ItemDisplayName: $"{gblCurrentUser.Language}, [{gblCurrentUser.Lang}]",
+                            ItemIconName: "LocaleLanguage"
+                        },
+                        {
+                            ItemKey: "countries",
+                            ItemDisplayName: $"{gblCurrentUser.CompanyName}",
+                            ItemIconName: "Home"
+                        },
+                        {
+                            ItemKey: "company",
+                            ItemDisplayName: If(
+                                Not(IsBlankOrError(gblCurrentUser.EditableCounties)),
+                                $"{Concat(
+                                    gblCurrentUser.EditableCounties,
+                                    $"{name}; "
+                                )}",
+                                Blank()
+                            ),
+                            ItemIconName: "AddHome"
+                        },
+                        {
+                            ItemKey: "version",
+                            ItemDisplayName: $"version {gblAppVersion} ({gblEnvironmentName})",
+                            ItemIconName: "Info"
+                        }
+                    )
+                  OnSelect: |-
+                    =Switch(
+                        Text(Self.Selected.ItemKey),
+                        "appSettingsKey",
+                        Navigate(
+                            'Admin Project Default Checklists Screen',
+                            ScreenTransition.Fade
+                        )
+                    )
+                  TextAlignment: ='PowerCAT.ContextMenu.TextAlignment'.Left
+                  Theme: =gblAppThemeJson
+                  Tooltip: ="User"
+                  Width: =con_cmpHeader_UserImage.X - con_cmpHeader_UserName.X
+                  X: =15
+                  Y: =6
+      - con_cmpHeader_UserImage:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Height: =50
+            Width: =50
+            X: =Parent.Width-Self.Width-gblAppSizes.Padding.Page
+            Y: =Parent.Height/2-Self.Height/2
+          Children:
+            - shp_cmpImage_UserBorder:
+                Control: Circle@2.3.0
+                Properties:
+                  BorderColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                  BorderThickness: =2
+                  Fill: =ColorValue(gblAppTheme.palette.white)
+                  Height: =img_cmpHeader_UserImage.Height+1
+                  Width: =img_cmpHeader_UserImage.Width+1
+                  X: =img_cmpHeader_UserImage.X-1
+                  Y: =img_cmpHeader_UserImage.Y-1
+            - img_cmpHeader_UserImage:
+                Control: Image@2.2.3
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  BorderStyle: =BorderStyle.None
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  FocusedBorderThickness: =4
+                  Height: =Parent.Width-Self.X*2
+                  HoverBorderColor: =RGBA(0, 0, 0, 0)
+                  Image: |
+                    =User().Image
+                  PressedBorderColor: =RGBA(0, 0, 0, 0)
+                  RadiusBottomLeft: =90
+                  RadiusBottomRight: =90
+                  RadiusTopLeft: =90
+                  RadiusTopRight: =90
+                  Tooltip: =User().FullName
+                  Width: =Parent.Width-Self.X*2
+                  X: =2
+                  Y: =2

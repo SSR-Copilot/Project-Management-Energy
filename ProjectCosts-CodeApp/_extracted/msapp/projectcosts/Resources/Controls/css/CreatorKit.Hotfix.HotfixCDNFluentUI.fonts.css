@@ -1,0 +1,98 @@
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-0-467ee27f.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-1-4d521695.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-2-63c99abf.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-3-089e217a.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-4-a656cc0a.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-5-f95ba260.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-6-ef6fd590.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-7-2b97bb99.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-8-6fdf1528.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-9-c6162b42.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-10-c4ded8e4.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-11-2a8393d6.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-12-7e945a1e.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-13-c3989a02.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-14-5cf58db8.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-15-3807251b.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-16-9cf93f3b.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-17-0c4ed701.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'CustomFabricMDL2Icons';
+    src: url('https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/icons/fabric-icons-a13498cf.woff') format('woff');
+}
+
+.ms-Icon, i[data-icon-name] {
+	font-family: 'CustomFabricMDL2Icons' !important;
+}

@@ -1,0 +1,530 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.26082.157" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26082.157" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26082.00157">
+  <SolutionManifest>
+    <UniqueName>VSBCloud</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="VSB Cloud" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions />
+    <Version>1.21.709</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>VSBGeneralPublisher</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="VSB General Publisher" languagecode="1033" />
+      </LocalizedNames>
+      <Descriptions />
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>vsb</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>95285</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode>1</ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+        <Address>
+          <AddressNumber>2</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode>1</ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="1" schemaName="aaduser" behavior="1" />
+      <RootComponent type="1" schemaName="adx_inviteredemption" behavior="2" />
+      <RootComponent type="1" schemaName="adx_portalcomment" behavior="2" />
+      <RootComponent type="1" schemaName="businessunit" behavior="1" />
+      <RootComponent type="1" schemaName="chat" behavior="2" />
+      <RootComponent type="1" schemaName="msdyn_flow_approvalresponse" behavior="2" />
+      <RootComponent type="1" schemaName="systemuser" behavior="1" />
+      <RootComponent type="1" schemaName="transactioncurrency" behavior="2" />
+      <RootComponent type="1" schemaName="vsb_applyandapplyalltracking" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_aquisitionstatus" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_aquisitiontype" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_assumptionslocaltaxfrance" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_assumptionslocaltaxgermany" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_balancingprice" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_bopcontractsdevcocosts" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_bopcontractspaymenttargets" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_bopcontractsstandardassumptiondevcocosts" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_bopcontractsstandardassumptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_bopprojectscontracts" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_capexaccountlist" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_capexcomments" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_capexcost" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_capexprojectcontract" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_capexprojectcostsmargin" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_checklistcountryandtechnology" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_checklistdefaultapprovals" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_country" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_countryarea" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_countryinflationprofile" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_customchoicevalue" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_devexcapexstandardassumptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_devicecost" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_devicetypesinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_energyyield" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_energyyieldgenerator" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_estimationpriceinflation" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_fabricjobtype" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_fabricsyncjob" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_financingcategory" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_financinginput" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_financinginputsrepaymentamount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_financinginputstepupmargins" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_generator" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_generatorinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_generatortypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_gridoperator" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_hydrogen" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_hydrogentypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_inverter" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_invertertypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_landleaseaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_landleaseallocationwtg" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_landleaseperiod" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_landleaseprojectcost" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_landleasesubaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_milestonesstandardassumptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_negativepricestandardassumptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_opexaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_opexlandleasestandardassumptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_opexprojectcost" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_opexsubaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_permit" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_project" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectchecklist" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectchecklisttrackingnote" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectdefaultapprovals" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectdefaultchecklists" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectmemberdescriptions" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectmembers" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectplanning" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectrevenue" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectstate" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectstatetracking" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_projectstatetrackingnote" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_pvmodule" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_pvmoduletypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_pvnegativeprices" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_pvseasonalityvalues" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_revenueaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_revenueindividualhedgevolume" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_revenuesubaccount" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_shareholderentitiy" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_spvdevcomappingcapexdevex" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_storage" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_storagetypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_substation" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_substationtypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_substructure" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_substructuretypeinproject" behavior="0" />
+      <RootComponent type="1" schemaName="vsb_tarrifpricestandardassumption" behavior="0" />
+      <RootComponent type="1" schemaName="workflow" behavior="1" />
+      <RootComponent type="20" id="{40fbaf26-6be0-ee11-904c-6045bda09578}" behavior="0" />
+      <RootComponent type="20" id="{4e9df00a-80c9-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{7186a688-e1cb-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{b169d03f-e5cb-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{b552e4fd-7fc9-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{de0ac090-efcf-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{e9ac6886-decb-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="20" id="{eb1d5b65-f286-ef11-ac20-7c1e5228a238}" behavior="0" />
+      <RootComponent type="20" id="{f17967cb-7fc9-ee11-9079-000d3ab6f27e}" behavior="0" />
+      <RootComponent type="29" id="{012da197-8af6-ee11-a1fd-000d3aad43e7}" behavior="0" />
+      <RootComponent type="29" id="{1592dad2-68fa-ef11-bae2-6045bdf29094}" behavior="0" />
+      <RootComponent type="29" id="{2bbc78f9-aa10-f111-8406-000d3a49d480}" behavior="0" />
+      <RootComponent type="29" id="{3d26efe9-a687-ef11-ac20-000d3a4c04ca}" behavior="0" />
+      <RootComponent type="29" id="{4060501d-7911-f111-8406-000d3aadfe93}" behavior="0" />
+      <RootComponent type="29" id="{4ee6e9f9-69fb-ef11-bae2-000d3a2ebc34}" behavior="0" />
+      <RootComponent type="29" id="{4f88914d-7911-f111-8406-6045bd91efe9}" behavior="0" />
+      <RootComponent type="29" id="{6ebf62a7-1072-f011-b4cb-000d3a48f1ec}" behavior="0" />
+      <RootComponent type="29" id="{8f94becb-3203-f011-bae3-000d3a2ebc34}" behavior="0" />
+      <RootComponent type="29" id="{9bf89932-f4ea-ee11-a203-000d3aad43e7}" behavior="0" />
+      <RootComponent type="29" id="{9f1cf358-7a11-f111-8406-000d3aadfe93}" behavior="0" />
+      <RootComponent type="29" id="{c476af9a-2383-f011-b4cc-000d3a48f1ec}" behavior="0" />
+      <RootComponent type="29" id="{d54038a4-c4fd-ef11-bae3-6045bdf29094}" behavior="0" />
+      <RootComponent type="29" id="{e43cd9df-ac1e-f111-8341-000d3aadfe93}" behavior="0" />
+      <RootComponent type="29" id="{e5f80137-2cab-f011-bbd2-7c1e525250c9}" behavior="0" />
+      <RootComponent type="29" id="{f0320d0f-2692-f011-b4cb-000d3a48f1ec}" behavior="0" />
+      <RootComponent type="29" id="{fa09d93d-2ce2-ee11-904c-000d3aad43e7}" behavior="0" />
+      <RootComponent type="300" schemaName="vsb_projectcosts_ba045" behavior="0" />
+      <RootComponent type="300" schemaName="vsb_projectmanagement_88aff" behavior="0" />
+      <RootComponent type="300" schemaName="vsbdev_gateconceptmigrationscripts_6f8b3" behavior="0" />
+      <RootComponent type="61" schemaName="cat_generic_icon" behavior="0" />
+      <RootComponent type="61" schemaName="GearGeneral.svg" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_accountcategory" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_approvalclusterstates" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_approvalclusterstepstate" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_approvalmode" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_approvalstates" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_aquisitionstatustypes" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_baserateoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_capexcommenttype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_closingdatereference" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_closingdatetype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_clusterstates" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_commitmentfeeoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_contractmargintype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_contracttypes" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_cooperation" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_costpaidtype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_costsofdecommissioning" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_costtype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_costunit" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_countries" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_developmenttype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_distributionscheme" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_distributiontype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_drawdownoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_energyyielddebtsizing" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_financingoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_fixedamountoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_freeequityoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_gearingoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_generatortype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_gridexpansionrequired" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_hedgingtype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_hubheight" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_invertertype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_jobstatecodes" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_landleaseaggregation" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_landleaseperiod" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_landleasesecured" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_margintype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_notetype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_opexaggregation" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_opexlandleaseperiod" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_ownershiptype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_periods" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_permitdatetype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_planningbasiscategory" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_positions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_projectstatus" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_projecttype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_repaymentprofile" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_repowering" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_requestpermissionstate" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_revenuelabels" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_seniordebttranchestatus" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_shareholderentitiytypes" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_spotcurveoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_substationconstructionrequired" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_substructuretype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_subtechnology" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_taskstate" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_technology" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_thresholds" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_totalcoststype" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_typedsradrsf" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_typeofcontract" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_upfrontfee" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_vatfacilityamountoptions" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_yieldallocation" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_yieldassessment" behavior="0" />
+      <RootComponent type="9" schemaName="vsb_yieldtype" behavior="0" />
+      <RootComponent type="91" id="{91223512-1191-4b81-a8b8-be91ff838061}" schemaName="VSB.BoPContractAssumptionDeletion, Version=1.0.0.0, Culture=neutral, PublicKeyToken=e3031e95869ac4ca" behavior="0" />
+      <RootComponent type="91" id="{08478324-d89c-4f83-8905-b92431a20343}" schemaName="VSB.DecommissioningProjectDatesSyncPlugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=37b363250449d1af" behavior="0" />
+      <RootComponent type="91" id="{44b8e4c3-89b0-4ac0-a1b7-a6f721555b79}" schemaName="Vsb.Plugins.BoPDevCoCosts, Version=1.0.0.0, Culture=neutral, PublicKeyToken=102f8754dc0cfbaf" behavior="0" />
+      <RootComponent type="91" id="{fe465ef9-2319-4f32-b128-00b652fce2d4}" schemaName="VSB_BalancingPricePeriodDateSync, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7baff6a6aaa0d059" behavior="0" />
+      <RootComponent type="91" id="{49f2cedb-cd13-4b49-bdbd-5c75b3acf19b}" schemaName="VSB_CapexAssumptionDeletion, Version=1.0.0.0, Culture=neutral, PublicKeyToken=a0746d4a5613fd18" behavior="0" />
+      <RootComponent type="91" id="{97878d1b-c438-46f7-b20b-8c7cd348ec0f}" schemaName="VSB_CODShiftSeniorDebtRepaymentRebalancing, Version=1.0.0.0, Culture=neutral, PublicKeyToken=920fc7d3b6072f05" behavior="0" />
+      <RootComponent type="91" id="{ca2d4a21-0c8c-4cc4-b15b-c5869bee17c6}" schemaName="vsb_InitialCapexContractCreation, Version=1.0.0.0, Culture=neutral, PublicKeyToken=582a4526d59e8871" behavior="0" />
+      <RootComponent type="91" id="{2c64d264-9d6e-4ea6-85c5-7131952e3b46}" schemaName="vsb_InitialCapexCostsCreation, Version=1.0.0.0, Culture=neutral, PublicKeyToken=b0bc2a1dae388cad" behavior="0" />
+      <RootComponent type="91" id="{2f117633-8537-4bc3-b9f0-ab68cbe11de8}" schemaName="vsb_InitialP50StandardBoPContractsCreation, Version=1.0.0.0, Culture=neutral, PublicKeyToken=c240d1b839eac98d" behavior="0" />
+      <RootComponent type="91" id="{6925233c-87e3-4a25-8def-695fb7ce7247}" schemaName="VSB_SeniorDebtFinancialCloseDateShift, Version=1.0.0.0, Culture=neutral, PublicKeyToken=853046f291d4c463" behavior="0" />
+      <RootComponent type="91" id="{d8ad1c04-7639-4e5f-997e-1c0d3012d517}" schemaName="vsb_SyncNegativePriceWithCOD, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7953479fb351ffb0" behavior="0" />
+      <RootComponent type="92" id="{08dda076-620e-f111-8406-000d3aadfe93}" behavior="0" />
+      <RootComponent type="92" id="{17940b4f-7bf5-f011-8406-7c1e5272edfe}" behavior="0" />
+      <RootComponent type="92" id="{236e2a90-56db-f011-8544-7c1e525250c9}" behavior="0" />
+      <RootComponent type="92" id="{2a2c99a1-33f5-f011-8406-00224886b795}" behavior="0" />
+      <RootComponent type="92" id="{4e9a3458-8eda-f011-8543-7ced8d5c7de4}" behavior="0" />
+      <RootComponent type="92" id="{53556a6c-56db-f011-8544-7ced8d153323}" behavior="0" />
+      <RootComponent type="92" id="{75cc1a26-67fb-f011-8406-7c1e5272edfe}" behavior="0" />
+      <RootComponent type="92" id="{79569157-7339-f111-88b4-7c1e524f5d94}" behavior="0" />
+      <RootComponent type="92" id="{9bb3357e-bdd8-f011-8544-7c1e525250c9}" behavior="0" />
+      <RootComponent type="92" id="{9f489541-56db-f011-8543-000d3abbdcce}" behavior="0" />
+      <RootComponent type="92" id="{b23500ce-29fc-f011-8406-00224886b795}" behavior="0" />
+      <RootComponent type="92" id="{cf4419e3-7210-f111-8406-000d3a49d480}" behavior="0" />
+      <RootComponent type="92" id="{d5cc91bb-8e18-f111-8341-000d3a49d480}" behavior="0" />
+      <RootComponent type="92" id="{d7e8c327-bdd8-f011-8544-7c1e525250c9}" behavior="0" />
+    </RootComponents>
+    <MissingDependencies>
+      <MissingDependency>
+        <Required type="1" schemaName="aaduser" displayName="Microsoft Entra ID" solution="MetadataExtension (1.0.2.117)">
+          <package appName="Data Modeling Extensions Package" version="1.0.0.34">msft_AsyncAttributeMetadataApp (1.0.0.34)</package>
+        </Required>
+        <Dependent type="1" schemaName="aaduser" displayName="Microsoft Entra ID" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="aaduser" displayName="Microsoft Entra ID" solution="MetadataExtension (1.0.2.117)">
+          <package appName="Data Modeling Extensions Package" version="1.0.0.34">msft_AsyncAttributeMetadataApp (1.0.0.34)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="aaduser" displayName="Microsoft Entra ID" solution="MetadataExtension (1.0.2.117)">
+          <package appName="Data Modeling Extensions Package" version="1.0.0.34">msft_AsyncAttributeMetadataApp (1.0.0.34)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="adx_inviteredemption" displayName="Invite Redemption" solution="PowerPages_RuntimeCore (1.0.2509.1)">
+          <package appName="Power Pages Core Package" version="1.1.2602.237">PowerPages_Core (1.1.2602.237)</package>
+        </Required>
+        <Dependent type="1" schemaName="adx_inviteredemption" displayName="Invite Redemption" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="adx_portalcomment" displayName="Portal Comment" solution="PowerPages_RuntimeCore (1.0.2509.1)">
+          <package appName="Power Pages Core Package" version="1.1.2602.237">PowerPages_Core (1.1.2602.237)</package>
+        </Required>
+        <Dependent type="1" schemaName="adx_portalcomment" displayName="Portal Comment" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="adx_portalcomment" displayName="Portal Comment" solution="PowerPages_RuntimeCore (1.0.2509.1)">
+          <package appName="Power Pages Core Package" version="1.1.2602.237">PowerPages_Core (1.1.2602.237)</package>
+        </Required>
+        <Dependent type="2" schemaName="transactioncurrencyid" displayName="Currency" parentSchemaName="adx_portalcomment" parentDisplayName="Portal Comment" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="chat" displayName="Teams chat" solution="msdynce_ActivitiesPatch (9.0.26064.260619001)">
+          <package appName="msdynce_Activities" version="9.0.26064.260619001">msdynce_EnableUCIByDefault (9.0.26064.260619001)</package>
+        </Required>
+        <Dependent type="1" schemaName="chat" displayName="Teams chat" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="environmentvariabledefinition" displayName="Environment Variable Definition" solution="EnvironmentVariables (1.0.2406.4)">
+          <package appName="EnvironmentVariables" version="1.0.2406.4">EnvironmentVariablesSolutionAnchor (1.0.2406.4)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="environmentvariabledefinition" displayName="Environment Variable Definition" solution="EnvironmentVariables (1.0.2406.4)">
+          <package appName="EnvironmentVariables" version="1.0.2406.4">EnvironmentVariablesSolutionAnchor (1.0.2406.4)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="environmentvariablevalue" displayName="Environment Variable Value" solution="EnvironmentVariables (1.0.2406.4)">
+          <package appName="EnvironmentVariables" version="1.0.2406.4">EnvironmentVariablesSolutionAnchor (1.0.2406.4)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="environmentvariablevalue" displayName="Environment Variable Value" solution="EnvironmentVariables (1.0.2406.4)">
+          <package appName="EnvironmentVariables" version="1.0.2406.4">EnvironmentVariablesSolutionAnchor (1.0.2406.4)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approval" displayName="Approval" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="29" displayName="Request Module Permission" id="{012da197-8af6-ee11-a1fd-000d3aad43e7}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approval" displayName="Approval" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="29" displayName="Perform Request of Gate Approval Cancellation" id="{3d26efe9-a687-ef11-ac20-000d3a4c04ca}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approval" displayName="Approval" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="29" displayName="Request permission cancellation" id="{9bf89932-f4ea-ee11-a203-000d3aad43e7}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approval" displayName="Approval" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="29" displayName="Perform Request of Check List Approval Cancellation" id="{c476af9a-2383-f011-b4cc-000d3a48f1ec}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approvalresponse" displayName="Approval Response" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="1" schemaName="msdyn_flow_approvalresponse" displayName="Approval Response" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approvalresponse" displayName="Approval Response" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="29" displayName="Request Module Permission" id="{012da197-8af6-ee11-a1fd-000d3aad43e7}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="msdyn_flow_approvalresponse" displayName="Approval Response" solution="msdyn_FlowApprovalsCore (2.2.8.0)">
+          <package appName="msdyn_FlowApprovals" version="2.2.8.0">msdyn_FlowApprovals (2.2.8.0)</package>
+        </Required>
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="vsb_basecase" displayName="Base case" solution="Active" />
+        <Dependent type="1" schemaName="vsb_project" displayName="Project" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="vsb_computejobs" displayName="Compute Jobs" solution="Active" />
+        <Dependent type="1" schemaName="vsb_project" displayName="Project" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="vsb_scenariocapexinputs" displayName="Scenario capex inputs" solution="Active" />
+        <Dependent type="1" schemaName="vsb_capexaccountlist" displayName="CAPEX Account List" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="vsb_session" displayName="Session" solution="Active" />
+        <Dependent type="1" schemaName="vsb_project" displayName="Project" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="1" schemaName="vsb_sessionbasecase" displayName="Session base case" solution="Active" />
+        <Dependent type="1" schemaName="vsb_project" displayName="Project" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="2" schemaName="transactioncurrencyid" displayName="Currency" parentSchemaName="chat" parentDisplayName="Teams chat" solution="msdynce_ActivitiesPatch (9.0.26064.260619001)">
+          <package appName="msdynce_Activities" version="9.0.26064.260619001">msdynce_EnableUCIByDefault (9.0.26064.260619001)</package>
+        </Required>
+        <Dependent type="2" schemaName="transactioncurrencyid" displayName="Currency" parentSchemaName="chat" parentDisplayName="Teams chat" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="61" schemaName="adx_icon_invitation_medium" displayName="adx_icon_invitation_medium" solution="PowerPages_RuntimeCore (1.0.2509.1)">
+          <package appName="Power Pages Core Package" version="1.1.2602.237">PowerPages_Core (1.1.2602.237)</package>
+        </Required>
+        <Dependent type="1" schemaName="adx_inviteredemption" displayName="Invite Redemption" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="61" schemaName="adx_icon_invitation_small" displayName="adx_icon_invitation_small" solution="PowerPages_RuntimeCore (1.0.2509.1)">
+          <package appName="Power Pages Core Package" version="1.1.2602.237">PowerPages_Core (1.1.2602.237)</package>
+        </Required>
+        <Dependent type="1" schemaName="adx_inviteredemption" displayName="Invite Redemption" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="61" schemaName="cat_generic_icon" displayName="cat_generic_icon" solution="CreatorKitReferencesMDA (1.0.20230727.2)" />
+        <Dependent type="1" schemaName="vsb_fabricsyncjob" displayName="Fabric Sync Job" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="61" schemaName="cat_generic_icon" displayName="cat_generic_icon" solution="CreatorKitReferencesMDA (1.0.20230727.2)" />
+        <Dependent type="61" schemaName="cat_generic_icon" displayName="cat_generic_icon" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="61" schemaName="GearGeneral.svg" displayName="GearGeneral.svg" solution="PowerPlatformEnvironmentSettings (2.2.3475.1)">
+          <package appName="PowerPlatformEnvironmentSettingsApp" version="2.2.3475.1">PowerPlatformEnvironmentSettingsApp_Anchor (2.2.3475.1)</package>
+        </Required>
+        <Dependent type="61" schemaName="GearGeneral.svg" displayName="GearGeneral.svg" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.CommandBar" displayName="cat_PowerCAT.CommandBar" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.CommandBar" displayName="cat_PowerCAT.CommandBar" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.ContextMenu" displayName="cat_PowerCAT.ContextMenu" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.ContextMenu" displayName="cat_PowerCAT.ContextMenu" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.FluentDetailsList" displayName="cat_PowerCAT.FluentDetailsList" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.Icon" displayName="cat_PowerCAT.Icon" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.Icon" displayName="cat_PowerCAT.Icon" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.Nav" displayName="cat_PowerCAT.Nav" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.Nav" displayName="cat_PowerCAT.Nav" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="cat_PowerCAT.PeoplePicker" displayName="cat_PowerCAT.PeoplePicker" solution="CreatorKitCore (1.0.20230727.2)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="ckfix_CreatorKit.Hotfix.HotfixCDNFluentUI" displayName="ckfix_CreatorKit.Hotfix.HotfixCDNFluentUI" solution="CreatorKitHotfix (1.0)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="ckfix_CreatorKit.Hotfix.HotfixCDNFluentUI" displayName="ckfix_CreatorKit.Hotfix.HotfixCDNFluentUI" solution="CreatorKitHotfix (1.0)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="pdd_CustomControl.PowerDragDrop" displayName="pdd_CustomControl.PowerDragDrop" solution="PowerDragDrop (1.1.0.0)" />
+        <Dependent type="300" schemaName="vsb_projectmanagement_88aff" displayName="Project Management" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="66" schemaName="vsb_Dev.DevexCapexSummaryPCF" displayName="vsb_Dev.DevexCapexSummaryPCF" solution="VSBCustomComponents (1.0.0.115)" />
+        <Dependent type="300" schemaName="vsb_projectcosts_ba045" displayName="Project Costs" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="9" schemaName="yearlymonth_options" displayName="Month" solution="msdynce_ActivitiesPatch (9.0.26064.260619001)">
+          <package appName="msdynce_Activities" version="9.0.26064.260619001">msdynce_EnableUCIByDefault (9.0.26064.260619001)</package>
+        </Required>
+        <Dependent type="2" schemaName="vsb_month" displayName="Month" parentSchemaName="vsb_capexcost" parentDisplayName="CAPEX Cost" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="9" schemaName="yearlymonth_options" displayName="Month" solution="msdynce_ActivitiesPatch (9.0.26064.260619001)">
+          <package appName="msdynce_Activities" version="9.0.26064.260619001">msdynce_EnableUCIByDefault (9.0.26064.260619001)</package>
+        </Required>
+        <Dependent type="2" schemaName="vsb_month" displayName="Month" parentSchemaName="vsb_pvnegativeprices" parentDisplayName="PV Negative Prices" />
+      </MissingDependency>
+    </MissingDependencies>
+  </SolutionManifest>
+</ImportExportXml>

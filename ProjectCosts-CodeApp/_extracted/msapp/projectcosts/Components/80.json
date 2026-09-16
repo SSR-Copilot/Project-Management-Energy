@@ -1,0 +1,467 @@
+{
+  "TopParent": {
+    "Type": "ControlInfo",
+    "Name": "fn_Numeric",
+    "Template": {
+      "Id": "http://microsoft.com/appmagic/Component",
+      "Version": "1.0",
+      "LastModifiedTimestamp": "639215911031872522",
+      "Name": "8f907fc7d18b41bc8eca827920c2ed1c",
+      "FirstParty": true,
+      "IsPremiumPcfControl": false,
+      "IsCustomGroupControlTemplate": false,
+      "CustomGroupControlTemplateName": "",
+      "IsComponentDefinition": true,
+      "CustomProperties": [
+        {
+          "Name": "IsInteger",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsInteger_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsInteger",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A candidate parameter as string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsInteger_candidate",
+                "Tooltip": "A candidate parameter as string"
+              }
+            ]
+          },
+          "DisplayName": "IsInteger",
+          "Tooltip": "A custom property check if candidate string is integer."
+        },
+        {
+          "Name": "InRange",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "InRange_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "InRange",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A candidate parameter as input number in string format",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "InRange_candidate",
+                "Tooltip": "A candidate parameter as input number in string format"
+              },
+              {
+                "Name": "InRange_min",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "Number",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "min",
+                  "ParentPropertyName": "InRange",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "100",
+                  "Description": "A min parameter range value",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 5,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "InRange_min",
+                "Tooltip": "A min parameter range value"
+              },
+              {
+                "Name": "InRange_max",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "Number",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "max",
+                  "ParentPropertyName": "InRange",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "100",
+                  "Description": "A min parameter range value",
+                  "ParameterIndex": 3,
+                  "ScopePropertyDataType": 5,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "InRange_max",
+                "Tooltip": "A min parameter range value"
+              }
+            ]
+          },
+          "DisplayName": "InRange",
+          "Tooltip": "A custom property"
+        },
+        {
+          "Name": "IsOneDecimal",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsOneDecimal_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsOneDecimal",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter as candiadte string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsOneDecimal_candidate",
+                "Tooltip": "A parameter as candiadte string"
+              }
+            ]
+          },
+          "DisplayName": "IsOneDecimal",
+          "Tooltip": "This current method checks whether the entered \"candidate string\" can be converted to deciml with  one decimal place."
+        },
+        {
+          "Name": "IsTwoDecimal",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsTwoDecimal_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsTwoDecimal",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter as candiadte string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsTwoDecimal_candidate",
+                "Tooltip": "A parameter as candiadte string"
+              }
+            ]
+          },
+          "DisplayName": "IsTwoDecimal",
+          "Tooltip": "This current method checks whether the entered \"candidate string\" can be converted to deciml with  one decimal place."
+        },
+        {
+          "Name": "IsThreeDecimal",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Boolean\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Boolean",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsThreeDecimal_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsThreeDecimal",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter as candidate string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsThreeDecimal_candidate",
+                "Tooltip": "A parameter as candidate string"
+              }
+            ]
+          },
+          "DisplayName": "IsThreeDecimal",
+          "Tooltip": "This current method checks whether the entered \"candidate string\" can be converted to decimal with tree points"
+        },
+        {
+          "Name": "IsNumberOrBlank",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"Number\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "Number",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "80",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "IsNumberOrBlank_candidate",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "candidate",
+                  "ParentPropertyName": "IsNumberOrBlank",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A candidate number as string",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "IsNumberOrBlank_candidate",
+                "Tooltip": "A candidate number as string"
+              }
+            ]
+          },
+          "DisplayName": "IsNumberOrBlank",
+          "Tooltip": "A custom property"
+        }
+      ],
+      "ComponentType": "CanvasComponent",
+      "OverridableProperties": {}
+    },
+    "Index": 12,
+    "PublishOrderIndex": 0,
+    "VariantName": "",
+    "LayoutName": "",
+    "MetaDataIDKey": "",
+    "PersistMetaDataIDKey": false,
+    "IsFromScreenLayout": false,
+    "StyleName": "",
+    "Parent": "",
+    "IsDataControl": false,
+    "AllowAccessToGlobals": true,
+    "OptimizeForDevices": "Off",
+    "IsGroupControl": false,
+    "IsAutoGenerated": false,
+    "Rules": [
+      {
+        "Property": "IsInteger_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsInteger",
+        "Category": "Data",
+        "InvariantScript": "And(\n    IsNumeric(candidate),\n    Not(\n        IsMatch(\n            candidate,\n            \"[.,]\",\n            MatchOptions.Contains\n        )\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "InRange_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "InRange_min",
+        "Category": "Data",
+        "InvariantScript": "100",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "InRange_max",
+        "Category": "Data",
+        "InvariantScript": "100",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "InRange",
+        "Category": "Data",
+        "InvariantScript": "And(\n    IsNumeric(candidate),\n    And(\n        Value(candidate) >= min,\n        Value(candidate) <= max\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsOneDecimal",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        varLang: Lower(\n            First(\n                Split(\n                    Language(),\n                    \"-\"\n                )\n            ).Value\n        )\n    },\n    Switch(\n        varLang,\n        \"en\",\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\.\\d{0,1})?)\"\n        ),\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\,\\d{0,1})?)\"\n        )\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsOneDecimal_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsTwoDecimal_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsTwoDecimal",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        varLang: Lower(\n            First(\n                Split(\n                    Language(),\n                    \"-\"\n                )\n            ).Value\n        )\n    },\n    Switch(\n        varLang,\n        \"en\",\n        IsMatch(\n            candidate,\n            \"^((\\+|-?)?\\d+(|\\.\\d{0,2})?)\"\n        ),\n        IsMatch(\n            candidate,\n            \"^((\\+|-?)?\\d+(|\\,\\d{0,2})?)\"\n        )\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsThreeDecimal_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsThreeDecimal",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {\n        varLang: Lower(\n            First(\n                Split(\n                    Language(),\n                    \"-\"\n                )\n            ).Value\n        )\n    },\n    Switch(\n        varLang,\n        \"en\",\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\.\\d{0,3})?)\"\n        ),\n        IsMatch(\n            candidate,\n            \"^((\\+?)?\\d+(|\\,\\d{0,3})?)\"\n        )\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsNumberOrBlank",
+        "Category": "Data",
+        "InvariantScript": "With(\n    {varInput: Trim(candidate)},\n    If(\n        IsNumeric(varInput),\n        Round(\n            Value(varInput),\n            2\n        ),\n        Blank()\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "IsNumberOrBlank_candidate",
+        "Category": "Data",
+        "InvariantScript": "\"Text\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "ZIndex",
+        "Category": "Design",
+        "InvariantScript": "1",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Y",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "X",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Width",
+        "Category": "Design",
+        "InvariantScript": "640",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Height",
+        "Category": "Design",
+        "InvariantScript": "50",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Fill",
+        "Category": "Design",
+        "InvariantScript": "RGBA(0, 0, 0, 0)",
+        "RuleProviderType": "System"
+      }
+    ],
+    "ControlPropertyState": [
+      "Fill",
+      {
+        "InvariantPropertyName": "Height",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "Width",
+      "X",
+      "Y",
+      "ZIndex",
+      "IsInteger_candidate",
+      {
+        "InvariantPropertyName": "IsInteger",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "true",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "InRange_candidate",
+      "InRange_min",
+      "InRange_max",
+      {
+        "InvariantPropertyName": "InRange",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "And(\r\n    IsNumeric(candidate),\r\n    Not(\r\n        And(\r\n            Value(candidate) > min,\r\n            Value(candidate) <= max\r\n        )\r\n    )\r\n)",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "IsOneDecimal",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "true",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "IsOneDecimal_candidate",
+      "IsTwoDecimal_candidate",
+      {
+        "InvariantPropertyName": "IsTwoDecimal",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "true",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "IsThreeDecimal_candidate",
+      {
+        "InvariantPropertyName": "IsThreeDecimal",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "true",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "IsNumberOrBlank",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "100",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      "IsNumberOrBlank_candidate"
+    ],
+    "IsLocked": false,
+    "ControlUniqueId": "80",
+    "Children": []
+  }
+}

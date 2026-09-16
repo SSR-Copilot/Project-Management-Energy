@@ -1,0 +1,9 @@
+{
+    "extends": "./node_modules/pcf-scripts/tsconfig_base.json",
+    "compilerOptions": {
+        "moduleResolution": "bundler",
+        "typeRoots": ["./node_modules/@types"],
+        "types": ["powerapps-component-framework"],
+        "ignoreDeprecations": "5.0"
+    }
+}

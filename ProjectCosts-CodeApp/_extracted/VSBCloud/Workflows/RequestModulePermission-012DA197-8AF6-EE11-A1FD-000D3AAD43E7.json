@@ -1,0 +1,2309 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_office365groups": {
+        "api": {
+          "name": "shared_office365groups"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365groups_94f4e"
+        },
+        "runtimeSource": "invoker"
+      },
+      "shared_sendmail": {
+        "api": {
+          "name": "shared_sendmail"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedsendmail_ccf66"
+        },
+        "runtimeSource": "invoker"
+      },
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_approvals": {
+        "api": {
+          "name": "shared_approvals"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedapprovals_f346e"
+        },
+        "runtimeSource": "invoker"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)": {
+          "defaultValue": "andriy.chevychalov@xebia.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "vsb_VSBCloudServiceaccountmail"
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "title": "RequesterEmail",
+                  "type": "string",
+                  "format": "email",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter an e-mail address",
+                  "x-ms-content-hint": "EMAIL"
+                },
+                "text_1": {
+                  "title": "PrimarilyApprovalGroupID",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your primarily  approval group id",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_4": {
+                  "title": "AppId",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text": {
+                  "title": "Project",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "email",
+                "text_1",
+                "text_4",
+                "text"
+              ]
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "ee004b58-b18f-4243-862f-cc7191560587"
+          }
+        }
+      },
+      "actions": {
+        "Parse_Project": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@triggerBody()['text']",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ProjectGuid": {
+                  "type": "string"
+                },
+                "ProjectId": {
+                  "type": "string"
+                },
+                "ProjectName": {
+                  "type": "string"
+                },
+                "ShortName": {
+                  "type": "string"
+                },
+                "ProjectManagerEmail": {},
+                "ModuleType": {
+                  "type": "integer"
+                },
+                "GeneratorTypeInProject": {},
+                "Generator": {},
+                "PVModuleTypeInProject": {},
+                "PVModule": {},
+                "InverterTypeInProject": {},
+                "Inverter": {},
+                "SubstructureTypeInProject": {},
+                "Substructure": {}
+              }
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "9429362f-14b7-43fc-9e53-7359db58afb9"
+          }
+        },
+        "Initialize_ProjectId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ProjectId",
+                "type": "string",
+                "value": "@body('Parse_Project')?['ProjectGuid']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ModuleType": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "3ab46e6a-550f-407d-b500-0126a91ee768"
+          }
+        },
+        "Try_get_primarily_members": {
+          "type": "Scope",
+          "actions": {
+            "Set_strPrimarilyMembers": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "strPrimarilyMembers",
+                "value": "@{outputs('Compose_join_mails_to_string')}"
+              },
+              "runAfter": {
+                "Compose_join_mails_to_string": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "95de4755-6dbd-4898-a3d8-ecc74d5d6505"
+              }
+            },
+            "Select_emails_for_approvals": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Filter_enabled_accounts')",
+                "select": "@item()?['mail']"
+              },
+              "runAfter": {
+                "Filter_enabled_accounts": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a510970e-3fe7-4534-a260-2a4f8089b632"
+              }
+            },
+            "Compose_join_mails_to_string": {
+              "type": "Compose",
+              "inputs": "@join(body('Select_emails_for_approvals'),';')",
+              "runAfter": {
+                "Select_emails_for_approvals": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "0e7bc21f-cfab-4daa-8ae0-6463f4c12271"
+              }
+            },
+            "Send_an_HTTP_List_approvals_member": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "Uri": "https://graph.microsoft.com/v1.0/groups/@{variables('PrimarilyGroupId')}/members?$count=true&$select=displayName,id,mail,accountEnabled",
+                  "Method": "GET",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365groups",
+                  "operationId": "HttpRequestV2",
+                  "connectionName": "shared_office365groups"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "b339f96d-df6c-4616-82f9-5b6ea383b4d0"
+              }
+            },
+            "Filter_enabled_accounts": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Parse_JSON_users')?['value']",
+                "where": "@equals(item()?['accountEnabled'], true)"
+              },
+              "runAfter": {
+                "Parse_JSON_users": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "050af5b4-76da-47bf-82b8-72398ab68bca"
+              }
+            },
+            "Parse_JSON_users": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@body('Send_an_HTTP_List_approvals_member')",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "mail": {
+                            "type": "string"
+                          },
+                          "accountEnabled": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Send_an_HTTP_List_approvals_member": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a4d04d3e-e311-48d7-9465-060f76e434e9"
+              }
+            }
+          },
+          "runAfter": {
+            "Switch_ModuleType_to_prepare_Module_Info": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "688827d7-4125-416f-8d03-06b1b595c635"
+          }
+        },
+        "PrimarilyMembers": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrPrimarilyMembers",
+                "type": "array"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_PrimarilyGroupId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "c971b783-9657-4bc8-9406-08f90a535856"
+          }
+        },
+        "Catch_primarily_members": {
+          "type": "Scope",
+          "actions": {
+            "Filter_get_primarily_members_errors": {
+              "type": "Query",
+              "inputs": {
+                "from": "@result('Try_get_primarily_members')",
+                "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+              },
+              "metadata": {
+                "operationMetadataId": "11f8e885-fb2f-47d5-beee-4c5645f681d4"
+              }
+            },
+            "Send_an_email_error_to_get_primarily_members": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "request/to": "@{parameters('VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)')};",
+                  "request/subject": "Error: to define primarily approvals for project [@{body('Parse_Project')?['ProjectName']}]",
+                  "request/text": "<p>your request was interrupted, cannot define primarily approvals<br>\n<br>\nAction: @{item()?['name']}<br>\nStatus: @{item()?['Status']}<br>\nErrorMessage: @{item()?['error']?['message']}<br>\n<br>\nYour Support Team</p>"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                  "operationId": "SendEmailV3",
+                  "connectionName": "shared_sendmail"
+                }
+              },
+              "runAfter": {
+                "Filter_get_primarily_members_errors": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "56f4be29-d214-42cb-b0c7-11b6bc2c80f4"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_get_primarily_members": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "bfd6dbaa-0595-4eca-a788-7c41a4f76387"
+          }
+        },
+        "Try_primarily_approvals": {
+          "type": "Scope",
+          "actions": {
+            "Condition_primarily_approval_state": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@variables('ResultApprovalOutcome')",
+                  "Approve"
+                ]
+              },
+              "actions": {
+                "Switch_update_approval_state": {
+                  "type": "Switch",
+                  "expression": "@variables('ModuleType')",
+                  "default": {
+                    "actions": {}
+                  },
+                  "cases": {
+                    "Case_update_generator_state": {
+                      "actions": {
+                        "Update_a_generator_state": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_generatortypeinprojects",
+                              "recordId": "@body('Parse_Project')?['GeneratorTypeInProject']",
+                              "item/vsb_requestpermissionstate": 952850000
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "b91a3cfb-ac59-4700-b8f4-2566fa854e89"
+                          }
+                        },
+                        "List_generators_type_in_Project": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_generatortypeinprojects",
+                              "$select": "vsb_generatorscost, vsb_generatorscapacity",
+                              "$filter": "_vsb_project_value eq @{variables('ProjectId')} and (vsb_requestpermissionstate eq null or vsb_requestpermissionstate eq 952850000) and (statecode eq null or statecode eq 0)",
+                              "$top": 500
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "ListRecords",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Update_a_generator_state": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "eb16db09-30df-4c69-9cb5-cbce48b47285"
+                          }
+                        },
+                        "Select_generators_costs": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('Parse_JSON_generators')",
+                            "select": "@item()['vsb_generatorscost']"
+                          },
+                          "runAfter": {
+                            "Parse_JSON_generators": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "29cb9dd2-1a5b-45a3-8f24-1e95fe1d75a0"
+                          }
+                        },
+                        "JSON_generators_costs": {
+                          "type": "Compose",
+                          "inputs": {
+                            "root": {
+                              "costs": "@body('Select_generators_costs')"
+                            }
+                          },
+                          "runAfter": {
+                            "Select_generators_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "4f37f4ba-ea02-4e83-bb39-c1953b446bcc"
+                          }
+                        },
+                        "SUM_generators_costs": {
+                          "type": "Compose",
+                          "inputs": "@xpath(xml(outputs('JSON_generators_costs')), 'sum(/root/costs)')",
+                          "runAfter": {
+                            "JSON_generators_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "cae7cb5a-d92e-42cc-90f0-0accba2f01b8"
+                          }
+                        },
+                        "JSON_generators_capacity": {
+                          "type": "Compose",
+                          "inputs": {
+                            "root": {
+                              "capacity": "@body('Select_generators_capacity')"
+                            }
+                          },
+                          "runAfter": {
+                            "Select_generators_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "eea47d2e-ba22-4bb9-b2cb-f30fcf49db54"
+                          }
+                        },
+                        "SUM_generators_capacity": {
+                          "type": "Compose",
+                          "inputs": "@xpath(xml(outputs('JSON_generators_capacity')), 'sum(/root/capacity)')",
+                          "runAfter": {
+                            "JSON_generators_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "cae7cb5a-d92e-42cc-90f0-0accba2f01b8"
+                          }
+                        },
+                        "Format_generators_costs": {
+                          "type": "Expression",
+                          "kind": "FormatNumber",
+                          "inputs": {
+                            "number": "@outputs('SUM_generators_costs')",
+                            "format": "#.00"
+                          },
+                          "runAfter": {
+                            "SUM_generators_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "572014e2-6e5f-4134-8732-ac7d169531cf"
+                          }
+                        },
+                        "Format_generatos_capacity": {
+                          "type": "Expression",
+                          "kind": "FormatNumber",
+                          "inputs": {
+                            "number": "@outputs('SUM_generators_capacity')",
+                            "format": "#.00"
+                          },
+                          "runAfter": {
+                            "SUM_generators_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "13466049-0327-4ade-9bdb-5180760a4efb"
+                          }
+                        },
+                        "Update_a_project_plant_costs_and_capacity": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "item/vsb_plantwtgcapacity": "@body('Format_generatos_capacity')",
+                              "item/vsb_plantwtgcost": "@body('Format_generators_costs')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Format_generatos_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "fc341136-a03c-422c-84e9-089eb4d0728d"
+                          }
+                        },
+                        "Parse_JSON_generators": {
+                          "type": "ParseJson",
+                          "inputs": {
+                            "content": "@outputs('List_generators_type_in_Project')?['body/value']",
+                            "schema": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "vsb_generatorscost": {
+                                    "type": "number"
+                                  },
+                                  "vsb_generatorscapacity": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "vsb_generatorscost",
+                                  "vsb_generatorscapacity"
+                                ]
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "List_generators_type_in_Project": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "08cbcc65-9429-4299-b5ff-e958c4564b66"
+                          }
+                        },
+                        "Select_generators_capacity": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('Parse_JSON_generators')",
+                            "select": "@item()['vsb_generatorscapacity']"
+                          },
+                          "runAfter": {
+                            "Format_generators_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "8fc79ec8-9f1d-482a-93b1-6ab6c7e45018"
+                          }
+                        }
+                      },
+                      "case": 952850000
+                    },
+                    "Case_update_pvmodule_state": {
+                      "actions": {
+                        "Update_a_pvmodule_state": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_pvmoduletypeinprojects",
+                              "recordId": "@body('Parse_Project')?['PVModuleTypeInProject']",
+                              "item/vsb_requestpermissionstate": 952850000
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "bb8605ad-417f-4f2a-9eda-0dbdfffb3207"
+                          }
+                        },
+                        "Get_project_pv_capacity": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Get_a_project_pv_costs_capacity')?['body/vsb_plantpvcapacitymwp'], null), 0, outputs('Get_a_project_pv_costs_capacity')?['body/vsb_plantpvcapacitymwp'])",
+                          "runAfter": {
+                            "Get_project_pv_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "9554f546-fc14-4837-84c7-77341ea3b3bd"
+                          }
+                        },
+                        "Get_a_project_pv_costs_capacity": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "$select": "vsb_plantpvcapacitymwp, vsb_plantpvcost"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "GetItem",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Get_pv_module_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "00fe837c-4d60-492b-a7f3-e1966c43d69f"
+                          }
+                        },
+                        "Get_project_pv_costs": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Get_a_project_pv_costs_capacity')?['body/vsb_plantpvcost'], null), 0, outputs('Get_a_project_pv_costs_capacity')?['body/vsb_plantpvcost'])",
+                          "runAfter": {
+                            "Get_a_project_pv_costs_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "c94ae4b9-a95d-4bc3-b65a-04d281730c33"
+                          }
+                        },
+                        "Get_pv_module_cost": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Update_a_pvmodule_state')?['body/vsb_cost'], null), 0, outputs('Update_a_pvmodule_state')?['body/vsb_cost'])",
+                          "runAfter": {
+                            "Update_a_pvmodule_state": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "6479d314-d22f-4b91-aab4-0e42cb711f7a"
+                          }
+                        },
+                        "Update_a_project_pv_costs_and_capacity_for_pv_module": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "item/vsb_plantpvcapacitymwp": "@outputs('Add_pv_module_capacity')",
+                              "item/vsb_plantpvcost": "@outputs('Add_pv_module_costs')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Add_pv_module_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "f1f5374b-a78e-42d1-a6d8-304ced72cf0a"
+                          }
+                        },
+                        "Add_pv_module_costs": {
+                          "type": "Compose",
+                          "inputs": "@add(outputs('Get_project_pv_costs'), outputs('Get_pv_module_cost'))",
+                          "runAfter": {
+                            "Get_project_pv_capacity": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "4f0a3d6a-78e5-478d-830c-8e40ab8c45a0"
+                          }
+                        },
+                        "Add_pv_module_capacity": {
+                          "type": "Compose",
+                          "inputs": "@add(outputs('Get_project_pv_capacity'),outputs('Get_pv_module_capacity'))",
+                          "runAfter": {
+                            "Add_pv_module_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "85440783-1eb9-4bc1-a28d-ef5c5fdbac77"
+                          }
+                        },
+                        "Get_pv_module_capacity": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Update_a_pvmodule_state')?['body/vsb_capacity'], null), 0, outputs('Update_a_pvmodule_state')?['body/vsb_capacity'])",
+                          "runAfter": {
+                            "Get_pv_module_cost": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "16e09648-b9ce-4c21-9dd4-aeefaf7b49a7"
+                          }
+                        }
+                      },
+                      "case": 952850001
+                    },
+                    "Case_update_inverter_state": {
+                      "actions": {
+                        "Update_a_inverter_state": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_invertertypeinprojects",
+                              "recordId": "@body('Parse_Project')?['InverterTypeInProject']",
+                              "item/vsb_requestpermissionstate": 952850000
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "63b3e8ad-c41c-4bec-9eaf-a43fe3461304"
+                          }
+                        },
+                        "Get_inverter_cost": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Update_a_inverter_state')?['body/vsb_invertertypecost'], null), 0, outputs('Update_a_inverter_state')?['body/vsb_invertertypecost'])",
+                          "runAfter": {
+                            "Update_a_inverter_state": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "1bf77a16-9353-41f2-9b18-065a1371aea5"
+                          }
+                        },
+                        "Get_project_costs_for_inverter": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Get_a_project_inveter_costs')?['body/vsb_plantpvcost'], null), 0, outputs('Get_a_project_inveter_costs')?['body/vsb_plantpvcost'])",
+                          "runAfter": {
+                            "Get_a_project_inveter_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "5ceea432-5167-4969-b684-e2fc92c9894a"
+                          }
+                        },
+                        "Get_a_project_inveter_costs": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "$select": " vsb_plantpvcost"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "GetItem",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Get_inverter_cost": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "9ec0f1d5-952a-4c9c-a206-6a2f3fa802aa"
+                          }
+                        },
+                        "Add_inverter_costs": {
+                          "type": "Compose",
+                          "inputs": "@add(outputs('Get_project_costs_for_inverter'), outputs('Get_inverter_cost'))",
+                          "runAfter": {
+                            "Get_project_costs_for_inverter": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "0138e0ed-48b8-46cb-a00f-fdecc7bfdb16"
+                          }
+                        },
+                        "Update_a_project_pv_costs_for_inverter": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "item/vsb_plantpvcost": "@outputs('Add_inverter_costs')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Add_inverter_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "21d90c7e-d6c9-4c52-ba62-77a7dda44491"
+                          }
+                        }
+                      },
+                      "case": 952850002
+                    },
+                    "Case_update_substructure_state": {
+                      "actions": {
+                        "Update_a_substructure_state": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_substructuretypeinprojects",
+                              "recordId": "@body('Parse_Project')?['SubstructureTypeInProject']",
+                              "item/vsb_requestpermissionstate": 952850000
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "a3d2bf12-b264-4638-90e2-9d55806cc10a"
+                          }
+                        },
+                        "Get_substructure_cost": {
+                          "type": "Compose",
+                          "inputs": "@if(equals(outputs('Update_a_substructure_state')?['body/vsb_substructurecost'], null), 0, outputs('Update_a_substructure_state')?['body/vsb_substructurecost'])",
+                          "runAfter": {
+                            "Update_a_substructure_state": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "b186ebd4-a3e4-4a95-b9b0-9dfd43a147ae"
+                          }
+                        },
+                        "Get_a_project_substructure_costs": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "$select": " vsb_plantpvcost"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "GetItem",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Get_substructure_cost": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "f365f60a-4bc1-465e-ae63-e59901efd3f6"
+                          }
+                        },
+                        "Get_project_costs_for_substructure": {
+                          "type": "Compose",
+                          "inputs": "@outputs('Get_a_project_substructure_costs')?['body/vsb_plantpvcost']",
+                          "runAfter": {
+                            "Get_a_project_substructure_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "2dd0388d-71ca-4ac9-b8ee-55a7fdb2135f"
+                          }
+                        },
+                        "Add_substructure_costs": {
+                          "type": "Compose",
+                          "inputs": "@add(outputs('Get_project_costs_for_substructure'), outputs('Get_substructure_cost'))",
+                          "runAfter": {
+                            "Get_project_costs_for_substructure": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "f93fac25-7eff-4922-93a7-e28626a8e459"
+                          }
+                        },
+                        "Update_a_project_pv_costs_for_substructure": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projects",
+                              "recordId": "@variables('ProjectId')",
+                              "item/vsb_plantpvcost": "@outputs('Add_substructure_costs')"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "runAfter": {
+                            "Add_substructure_costs": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "39c657b7-9053-4c65-b32a-c09faa46e097"
+                          }
+                        }
+                      },
+                      "case": 952850003
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "c18190ac-eb7b-4ff2-951c-b68b598049bc"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Switch_delete_rejected_module": {
+                    "type": "Switch",
+                    "expression": "@variables('ModuleType')",
+                    "default": {
+                      "actions": {}
+                    },
+                    "cases": {
+                      "Case_generator_delete": {
+                        "actions": {
+                          "Delete_a_Generator_Type_of_Project": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "entityName": "vsb_generatortypeinprojects",
+                                "recordId": "@variables('GeneratorTypeInProjectsId')"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                "operationId": "DeleteRecord",
+                                "connectionName": "shared_commondataserviceforapps"
+                              }
+                            },
+                            "metadata": {
+                              "operationMetadataId": "7a1e09f7-4702-44fd-9a65-a60b93611c9c"
+                            }
+                          }
+                        },
+                        "case": 952850000
+                      },
+                      "Case_pvmodule_delete": {
+                        "actions": {
+                          "Delete_a_PVModuleType_in_Project": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "entityName": "vsb_pvmoduletypeinprojects",
+                                "recordId": "@body('Parse_Project')?['PVModuleTypeInProject']"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                "operationId": "DeleteRecord",
+                                "connectionName": "shared_commondataserviceforapps"
+                              }
+                            },
+                            "metadata": {
+                              "operationMetadataId": "56a9a575-0dcd-4b57-baa5-8674df1340ab"
+                            }
+                          }
+                        },
+                        "case": 952850001
+                      },
+                      "Case_inverter_delete": {
+                        "actions": {
+                          "Delete_a_inverter_in_Project": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "entityName": "vsb_invertertypeinprojects",
+                                "recordId": "@body('Parse_Project')?['InverterTypeInProject']"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                "operationId": "DeleteRecord",
+                                "connectionName": "shared_commondataserviceforapps"
+                              }
+                            },
+                            "metadata": {
+                              "operationMetadataId": "519df128-2e44-44a3-b0ba-627cdf6ad086"
+                            }
+                          }
+                        },
+                        "case": 952850002
+                      },
+                      "Case_substructure_delete": {
+                        "actions": {
+                          "Delete_a_Substructure_in_Project": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "entityName": "vsb_substructuretypeinprojects",
+                                "recordId": "@body('Parse_Project')?['SubstructureTypeInProject']"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                "operationId": "DeleteRecord",
+                                "connectionName": "shared_commondataserviceforapps"
+                              }
+                            },
+                            "metadata": {
+                              "operationMetadataId": "e8f7895d-6286-4c15-808b-a52047d38a4d"
+                            }
+                          }
+                        },
+                        "case": 952850003
+                      }
+                    },
+                    "metadata": {
+                      "operationMetadataId": "221faddb-6486-42c9-a2f7-8097ab472da5"
+                    }
+                  },
+                  "Terminate_flow": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Succeeded"
+                    },
+                    "runAfter": {
+                      "Catch_update_PlantCost": [
+                        "Succeeded",
+                        "Failed"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "e6aee2c4-c3fc-49cc-93db-317a89e3d0b8"
+                    }
+                  },
+                  "Try_calculate_and_update_PlantCost": {
+                    "type": "Scope",
+                    "actions": {
+                      "List_rows_PVModules": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_pvmoduletypeinprojects",
+                            "$filter": "_vsb_project_value eq @{variables('ProjectId')}"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "ListRecords",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "140e6717-88c6-445c-9f69-9f76f3b7d35a"
+                        }
+                      },
+                      "Apply_to_each_PVModulesTypeCost": {
+                        "type": "Foreach",
+                        "foreach": "@outputs('List_rows_PVModules')?['body/value']",
+                        "actions": {
+                          "Increment_PVModulesTypeCost": {
+                            "type": "IncrementVariable",
+                            "inputs": {
+                              "name": "PVModuleTypeCost",
+                              "value": "@items('Apply_to_each_PVModulesTypeCost')?['vsb_cost']"
+                            },
+                            "metadata": {
+                              "operationMetadataId": "66d2abad-c688-41ea-bc10-0f97b19118e0"
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "List_rows_PVModules": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "84ad60ec-6db4-4247-a9f1-554ef139115d"
+                        }
+                      },
+                      "List_rows_InverterTypes": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_invertertypeinprojects",
+                            "$filter": "_vsb_project_value eq @{variables('ProjectId')}"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "ListRecords",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "runAfter": {
+                          "Apply_to_each_PVModulesTypeCost": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "dd28d0c5-a6b5-4b96-b51e-0f10c438c940"
+                        }
+                      },
+                      "Apply_to_each_InverterTypeCost": {
+                        "type": "Foreach",
+                        "foreach": "@outputs('List_rows_InverterTypes')?['body/value']",
+                        "actions": {
+                          "Increment_InverterTypeCost": {
+                            "type": "IncrementVariable",
+                            "inputs": {
+                              "name": "InverterTypeCost",
+                              "value": "@items('Apply_to_each_InverterTypeCost')?['vsb_invertertypecost']"
+                            },
+                            "metadata": {
+                              "operationMetadataId": "c9759b2c-cb80-4f7d-baab-9facf2958ac8"
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "List_rows_InverterTypes": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "be073955-878c-4d48-9e07-ed56a7410d1e"
+                        }
+                      },
+                      "List_rows_SubstructureTypes": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_substructuretypeinprojects",
+                            "$filter": "_vsb_project_value eq @{variables('ProjectId')}"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "ListRecords",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "runAfter": {
+                          "Apply_to_each_InverterTypeCost": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "4af95d46-fef0-4b5b-9b30-54dd379fa668"
+                        }
+                      },
+                      "Apply_to_each_SubstructureCost": {
+                        "type": "Foreach",
+                        "foreach": "@outputs('List_rows_SubstructureTypes')?['body/value']",
+                        "actions": {
+                          "Increment_SubstructureCost": {
+                            "type": "IncrementVariable",
+                            "inputs": {
+                              "name": "SubstructureCost",
+                              "value": "@items('Apply_to_each_SubstructureCost')?['vsb_substructurecost']"
+                            },
+                            "metadata": {
+                              "operationMetadataId": "66bff1c0-f0e9-4b28-bfd2-bfa533006143"
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "List_rows_SubstructureTypes": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "596737a0-ea6f-4ec8-8abe-a548cff59381"
+                        }
+                      },
+                      "Set_PlantCost": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "PlantCost",
+                          "value": "@add(variables('PVModuleTypeCost'),add(variables('InverterTypeCost'),variables('SubstructureCost')))"
+                        },
+                        "runAfter": {
+                          "Apply_to_each_SubstructureCost": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "d360d118-7dd0-4c95-84da-4566eb0f6cc0"
+                        }
+                      },
+                      "Update_a_row_PlantCost": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projects",
+                            "recordId": "@variables('ProjectId')",
+                            "item/vsb_plantpvcost": "@variables('PlantCost')"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "UpdateRecord",
+                            "connectionName": "shared_commondataserviceforapps"
+                          }
+                        },
+                        "runAfter": {
+                          "Set_PlantCost": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "1fed62fc-86c0-44d2-9e30-62a3f53ae49d"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Switch_delete_rejected_module": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "6feaa040-ddb6-48d8-9deb-36344347e4b4"
+                    }
+                  },
+                  "Catch_update_PlantCost": {
+                    "type": "Scope",
+                    "actions": {
+                      "Send_an_email_notification_PlantCost_calculation": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "request/to": "@{triggerBody()['email']};",
+                            "request/subject": "Error: to calculate Plant Cost",
+                            "request/text": "<p>lease, check you Plant Cost for Project<strong> </strong><strong>@{variables('ProjectNumber')}</strong><strong>.</strong><br>\nYour Support Team</p>"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                            "operationId": "SendEmailV3",
+                            "connectionName": "shared_sendmail"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "3b99c6a8-678d-4d5b-add9-dc047ea7de4a"
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Try_calculate_and_update_PlantCost": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "b07561e8-b8c7-4afc-81a0-f30d5932c4d8"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Condition": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "2b855ed5-5adf-4839-ae4b-3a38609e68a8"
+              }
+            },
+            "Create_an_primarily_approval": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "approvalType": "Basic",
+                  "ApprovalCreationInput/title": "Request Permitions for Project [@{body('Parse_Project')?['ShortName']}-@{variables('ModuleData')}] ",
+                  "ApprovalCreationInput/assignedTo": "@{variables('strPrimarilyMembers')};",
+                  "ApprovalCreationInput/details": "Request Permitions for Project **@{body('Parse_Project')?['ProjectName']}** and Generator **@{variables('ModuleData')}**\n| Project | Project Name | Generator |\n|-----------|-----------|-----------|\n| @{variables('ProjectNumber')} | @{body('Parse_Project')?['ProjectName']} | @{variables('ModuleData')}|\n",
+                  "ApprovalCreationInput/itemLink": "@variables('ItemLink')",
+                  "ApprovalCreationInput/itemLinkDescription": "Navigate to related project",
+                  "ApprovalCreationInput/requestor": "@{triggerBody()['email']};",
+                  "ApprovalCreationInput/enableNotifications": true,
+                  "ApprovalCreationInput/enableReassignment": true
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                  "operationId": "CreateAnApproval",
+                  "connectionName": "shared_approvals"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "dbaa199f-9523-4372-9a79-bda5ac4333ed"
+              }
+            },
+            "Respond_to_a_PowerApp_or_flow": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runid": {
+                      "title": "RunId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    },
+                    "approvalid": {
+                      "title": "ApprovalId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "runid": "@variables('FlowRunId')",
+                  "approvalid": "@outputs('Create_an_primarily_approval')?['body/name']"
+                }
+              },
+              "runAfter": {
+                "Create_an_primarily_approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "b0ae526b-335a-482d-98b2-16369b70e9ad"
+              }
+            },
+            "Update_a_row_in_approval_Instance": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "msdyn_flow_approvals",
+                  "recordId": "@outputs('Create_an_primarily_approval')?['body/name']",
+                  "item/msdyn_flow_approval_source": "@variables('CountryName')"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "runAfter": {
+                "Respond_to_a_PowerApp_or_flow": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8e4a164e-a5e0-4179-8224-18921d2839e3"
+              }
+            },
+            "Scope_update_RunId_and_Approval_Id_info": {
+              "type": "Scope",
+              "actions": {
+                "Switch_for_update_flow_info": {
+                  "type": "Switch",
+                  "expression": "@variables('ModuleType')",
+                  "default": {
+                    "actions": {}
+                  },
+                  "cases": {
+                    "Case_flow_info_for_generators": {
+                      "actions": {
+                        "Update_a_row_for_generator_type": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_generatortypeinprojects",
+                              "recordId": "@variables('GeneratorTypeInProjectsId')",
+                              "item/vsb_flowapprovalid": "@outputs('Create_an_primarily_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')",
+                              "item/vsb_requestpermissionstate": 952850002
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "31f26fc8-84bf-4d9e-9e5b-4cea7af56c49"
+                          }
+                        }
+                      },
+                      "case": 952850000
+                    },
+                    "Case_flow_info_for_pv": {
+                      "actions": {
+                        "Update_a_row_for_pv_type": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_pvmoduletypeinprojects",
+                              "recordId": "@body('Parse_Project')?['PVModuleTypeInProject']",
+                              "item/vsb_flowapprovalid": "@outputs('Create_an_primarily_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')",
+                              "item/vsb_requestpermissionstate": 952850002
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "dd4e9d27-934f-4b57-a0a9-dc86c31f5cc6"
+                          }
+                        }
+                      },
+                      "case": 952850001
+                    },
+                    "Case_flow_info_for_inverter": {
+                      "actions": {
+                        "Update_a_row_for_inverter_type": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_invertertypeinprojects",
+                              "recordId": "@body('Parse_Project')?['InverterTypeInProject']",
+                              "item/vsb_flowapprovalid": "@outputs('Create_an_primarily_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')",
+                              "item/vsb_requestpermissionstate": 952850002
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "bde4a3bc-77d6-4a66-a1d5-5c3f2d6dac11"
+                          }
+                        }
+                      },
+                      "case": 952850002
+                    },
+                    "Case_flow_info_for_substructure": {
+                      "actions": {
+                        "Update_a_row_for_substructure_type": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_substructuretypeinprojects",
+                              "recordId": "@body('Parse_Project')?['SubstructureTypeInProject']",
+                              "item/vsb_flowapprovalid": "@outputs('Create_an_primarily_approval')?['body/name']",
+                              "item/vsb_flowrunid": "@variables('FlowRunId')",
+                              "item/vsb_requestpermissionstate": 952850002
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "UpdateRecord",
+                              "connectionName": "shared_commondataserviceforapps"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "06a84632-75f7-4617-85c5-0b8817b18e0b"
+                          }
+                        }
+                      },
+                      "case": 952850003
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "463df066-b4b9-416d-9051-364ec43590d1"
+                  }
+                }
+              },
+              "runAfter": {
+                "Update_a_row_in_approval_Instance": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "26c3df45-a885-43ad-b5a3-e05da3154d8e"
+              }
+            },
+            "Condition": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@empty(outputs('Get_Approval_Responses')?['body/value'])",
+                      "@true"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Wait_for_an_primarily_approval": {
+                  "type": "OpenApiConnectionWebhook",
+                  "inputs": {
+                    "parameters": {
+                      "approvalName": "@outputs('Create_an_primarily_approval')?['body/name']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                      "operationId": "WaitForAnApproval",
+                      "connectionName": "shared_approvals"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5c5f8aca-a2ca-44c9-835b-a5b2c08ceff7"
+                  }
+                },
+                "Set_PrimarilyApprovalState": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "PrimarilyApprovalState",
+                    "value": "@{outputs('Wait_for_an_primarily_approval')?['body/responseSummary']} "
+                  },
+                  "runAfter": {
+                    "Wait_for_an_primarily_approval": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7ffc57bb-ba49-40e2-aad7-552778f0abbb"
+                  }
+                },
+                "Set_variable_ResultApprovalOutcome": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "ResultApprovalOutcome",
+                    "value": "@outputs('Wait_for_an_primarily_approval')?['body/outcome']"
+                  },
+                  "runAfter": {
+                    "Set_PrimarilyApprovalState": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "8a632b93-407c-408f-92e4-6aff21d3290d"
+                  }
+                },
+                "Compose_PrimarilyResponse": {
+                  "type": "Compose",
+                  "inputs": "@take(split(outputs('Wait_for_an_primarily_approval')?['body/responseSummary'], decodeUriComponent('%0D%0A')), 1)",
+                  "runAfter": {
+                    "Set_variable_ResultApprovalOutcome": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "05db9260-5666-4aeb-a944-81f904c8f051"
+                  }
+                },
+                "Set_PrimarilyApproval": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "PrimarilyApproval",
+                    "value": "@{first(outputs('Compose_PrimarilyResponse'))}"
+                  },
+                  "runAfter": {
+                    "Compose_PrimarilyResponse": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7af7c67d-94ee-48b0-b89d-607ab0e8a877"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Set_variable_ResultApprovalOutcome_2": {
+                    "type": "SetVariable",
+                    "inputs": {
+                      "name": "ResultApprovalOutcome",
+                      "value": "@{first(outputs('Get_Approval_Responses')?['body/value'])?['msdyn_flow_approvalresponse_response']}"
+                    },
+                    "metadata": {
+                      "operationMetadataId": "8a632b93-407c-408f-92e4-6aff21d3290d"
+                    }
+                  },
+                  "Compose_PrimarilyResponse_2": {
+                    "type": "Compose",
+                    "inputs": [
+                      "Approver: @{outputs('Get_Approver')?['body/fullname']} , @{outputs('Get_Approver')?['body/internalemailaddress']}"
+                    ],
+                    "runAfter": {
+                      "Get_Approver": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "05db9260-5666-4aeb-a944-81f904c8f051"
+                    }
+                  },
+                  "Set_PrimarilyApproval_2": {
+                    "type": "SetVariable",
+                    "inputs": {
+                      "name": "PrimarilyApproval",
+                      "value": "@{first(outputs('Compose_PrimarilyResponse_2'))}"
+                    },
+                    "runAfter": {
+                      "Compose_PrimarilyResponse_2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "7af7c67d-94ee-48b0-b89d-607ab0e8a877"
+                    }
+                  },
+                  "Get_Approver": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "parameters": {
+                        "entityName": "systemusers",
+                        "recordId": "@first(outputs('Get_Approval_Responses')?['body/value'])?['_ownerid_value']"
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                        "operationId": "GetItem",
+                        "connectionName": "shared_commondataserviceforapps"
+                      }
+                    },
+                    "runAfter": {
+                      "Set_variable_ResultApprovalOutcome_2": [
+                        "Succeeded"
+                      ]
+                    },
+                    "metadata": {
+                      "operationMetadataId": "b782253e-f6c1-4e02-a458-bd72015093fd"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_Approval_Responses": [
+                  "SUCCEEDED"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "ce145883-651f-4532-b44d-e375b15e7906"
+              }
+            },
+            "Get_Approval_Responses": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "msdyn_flow_approvalresponses",
+                  "$filter": "msdyn_flow_approvalresponseidx_approvalid eq @{outputs('Update_a_row_in_approval_Instance')?['body/msdyn_flow_approval_modelid']}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "ListRecords",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "runAfter": {
+                "Scope_update_RunId_and_Approval_Id_info": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "c0e6bf47-44bf-4ca9-874a-0cfb2e83a353"
+              }
+            }
+          },
+          "runAfter": {
+            "Catch_primarily_members": [
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "756e5ad4-878a-4ec1-858d-87abe4a98824"
+          }
+        },
+        "Initialize_ItemLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ItemLink",
+                "type": "string",
+                "value": "https://apps.powerapps.com/play/@{triggerBody()['text_4']}?projectId=@{body('Parse_Project')?['ProjectId']}&screen=generators"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_CountryName": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "e0893d71-4ad0-4a67-afc1-a37dccea0ee8"
+          }
+        },
+        "PrimarilyApproval": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PrimarilyApproval",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "PrimarilyMembersAsString": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "edb4e414-efe2-465f-a81b-88ac1e0779db"
+          }
+        },
+        "Initialize_GeneratorTypeInProjectsId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "GeneratorTypeInProjectsId",
+                "type": "string",
+                "value": "@body('Parse_Project')?['GeneratorTypeInProject']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ModuleData": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "d743fa3b-f3c1-4ebd-9bf5-9f56319cd5b2"
+          }
+        },
+        "PrimarilyMembersAsString": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strPrimarilyMembers",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "PrimarilyMembers": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "4fccef64-d646-4dc5-a6fb-bdef69ffeafd"
+          }
+        },
+        "PrimarilyApprovalState": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PrimarilyApprovalState",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "PrimarilyApproval": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "5155a114-fbc7-403b-bd81-37ec1d04decd"
+          }
+        },
+        "Initialize_PrimarilyGroupId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PrimarilyGroupId",
+                "type": "string",
+                "value": "@triggerBody()['text_1']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_GeneratorTypeInProjectsId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "052dab2a-c1db-4798-8d08-0745acc3e414"
+          }
+        },
+        "Catch_primarily_approvals": {
+          "type": "Scope",
+          "actions": {
+            "Filter_primarily_approvals_errors": {
+              "type": "Query",
+              "inputs": {
+                "from": "@result('Try_Primarily_Approvals')",
+                "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+              },
+              "metadata": {
+                "operationMetadataId": "58f41d41-29a8-4448-9aea-6b2d4572115d"
+              }
+            },
+            "Send_an_email_error_for_approval_errors": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "request/to": "@{parameters('VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)')};",
+                  "request/subject": "Error: to approve request permissions for project [@{body('Parse_Project')?['ProjectName']}]",
+                  "request/text": "<p>your request was interrupted, error to approve request permitions<br>\n<br>\nModuleType: @{variables('ModuleData')}<br>\nAction: @{item()?['name']}<br>\nStatus: @{item()?['Status']}<br>\nErrorMessage: @{item()?['error']?['message']}<br>\n<br>\nYour Support Team</p>"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                  "operationId": "SendEmailV3",
+                  "connectionName": "shared_sendmail"
+                }
+              },
+              "runAfter": {
+                "Filter_primarily_approvals_errors": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "5af0c8a5-e5bd-4daf-91cd-c16790e6a1ec"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_primarily_approvals": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fb11c64e-7732-45b2-a01c-d71c4e8aa2ad"
+          }
+        },
+        "Initialize_ModuleData": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ModuleData",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ItemLink": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "a10cb6fb-5089-4c94-94b4-a0eea7426835"
+          }
+        },
+        "Initialize_ProjectNumber": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ProjectNumber",
+                "type": "string",
+                "value": "@body('Parse_Project')?['ProjectId']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ProjectId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "2c93f1d2-5603-4bf7-a8a7-e5e73d6ec080"
+          }
+        },
+        "Switch_ModuleType_to_prepare_Module_Info": {
+          "type": "Switch",
+          "expression": "@variables('ModuleType')",
+          "default": {
+            "actions": {}
+          },
+          "cases": {
+            "Case_for_Generators": {
+              "actions": {
+                "Get_a_Generator_by_ID": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_generators",
+                      "recordId": "@body('Parse_Project')?['Generator']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "GetItem",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "72126c8f-9ee1-45a5-b27e-1f62cc7e164e"
+                  }
+                },
+                "Compose_generator_displayname": {
+                  "type": "Compose",
+                  "inputs": "@concat(replace(outputs('Get_a_Generator_by_ID')?['body/vsb_displayname'], decodeUriComponent('%20%7C'), ','), formatDateTime(outputs('Get_a_Generator_by_ID')?['body/vsb_earliestphaseout'], 'dd.mm.yyyy'), '- Latest possible order')",
+                  "runAfter": {
+                    "Get_a_Generator_by_ID": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "56720432-dd40-4347-8324-aeee249a0030"
+                  }
+                },
+                "Set_GeneratorData": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "ModuleData",
+                    "value": "@{outputs('Compose_generator_displayname')}"
+                  },
+                  "runAfter": {
+                    "Compose_generator_displayname": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "78956bb3-d852-4aaa-9523-3ae661ab6f0f"
+                  }
+                }
+              },
+              "case": 952850000
+            },
+            "Case_for_PVModule": {
+              "actions": {
+                "Get_a_PVModule_by_ID": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_pvmoduletypeinprojects",
+                      "recordId": "@body('Parse_Project')?['PVModuleTypeInProject']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "GetItem",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "bedcd17e-aecd-4291-9449-116dadad9c1a"
+                  }
+                },
+                "Set_PVModuleData": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "ModuleData",
+                    "value": "@{outputs('Compose_pvmodule_display_name')}"
+                  },
+                  "runAfter": {
+                    "Compose_pvmodule_display_name": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "b4dc46f2-8c96-4480-9d32-836cd0e319da"
+                  }
+                },
+                "Compose_pvmodule_display_name": {
+                  "type": "Compose",
+                  "inputs": "@concat(outputs('Get_a_PVModule_by_ID')?['body/vsb_label'],'; ',outputs('Get_a_PVModule_by_ID')?['body/vsb_othersupplier'])",
+                  "runAfter": {
+                    "Get_a_PVModule_by_ID": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "3bbbae92-051e-49ee-ace1-3306317699e3"
+                  }
+                }
+              },
+              "case": 952850001
+            },
+            "Case_for_Inverter": {
+              "actions": {
+                "Get_a_Inverter_by_ID": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_invertertypeinprojects",
+                      "recordId": "@body('Parse_Project')?['InverterTypeInProject']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "GetItem",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "77c99876-82ed-42d2-a1bd-e06949d1c3ef"
+                  }
+                },
+                "Set_InverterData": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "ModuleData",
+                    "value": "@{outputs('Compose_inverter_display_name')}"
+                  },
+                  "runAfter": {
+                    "Compose_inverter_display_name": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d1061e59-904a-41f0-a15c-a2e9303b21df"
+                  }
+                },
+                "Compose_inverter_display_name": {
+                  "type": "Compose",
+                  "inputs": "@concat(outputs('Get_a_Inverter_by_ID')?['body/vsb_inverterlabel'],'; ',outputs('Get_a_Inverter_by_ID')?['body/vsb_invothersupplier'])",
+                  "runAfter": {
+                    "Get_a_Inverter_by_ID": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "db980190-3f28-4e06-a5c5-fa11878d3bd6"
+                  }
+                }
+              },
+              "case": 952850002
+            },
+            "Case_for_Substructure_": {
+              "actions": {
+                "Get_a_Substructure_by_ID": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_substructuretypeinprojects",
+                      "recordId": "@body('Parse_Project')?['SubstructureTypeInProject']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "GetItem",
+                      "connectionName": "shared_commondataserviceforapps"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "53e27100-505e-4963-a6b6-8a7c6690ecd8"
+                  }
+                },
+                "Set_SubstructureData": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "ModuleData",
+                    "value": "@{outputs('Compose_substructure_display_name')}"
+                  },
+                  "runAfter": {
+                    "Compose_substructure_display_name": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "f360a256-b93a-44b8-a2c8-d26d2077c69d"
+                  }
+                },
+                "Compose_substructure_display_name": {
+                  "type": "Compose",
+                  "inputs": "@concat(outputs('Get_a_Substructure_by_ID')?['body/vsb_name'],'; ',outputs('Get_a_Substructure_by_ID')?['body/vsb_substrothersupplier'])",
+                  "runAfter": {
+                    "Get_a_Substructure_by_ID": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "8bd8c823-d1db-410c-8212-df92f7b1a86d"
+                  }
+                }
+              },
+              "case": 952850003
+            }
+          },
+          "runAfter": {
+            "Initialize_PlantCost": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "7fcc42cf-b015-40db-8360-b1a750d810fc"
+          }
+        },
+        "Initialize_ModuleType": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ModuleType",
+                "type": "integer",
+                "value": "@body('Parse_Project')?['ModuleType']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_FlowRunId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "5c618181-76c4-44ed-b1fd-0fd0a961b480"
+          }
+        },
+        "Initialize_FlowRunId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "FlowRunId",
+                "type": "string",
+                "value": "@{split(workflow()?['run/id'],'runs/')?[1]}"
+              }
+            ]
+          },
+          "runAfter": {
+            "Parse_Project": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "d3285384-95c2-4ba8-8f32-f28ec2537307"
+          }
+        },
+        "Initialize_CountryName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "CountryName",
+                "type": "string",
+                "value": "@outputs('Get_a_row_by_ID')?['body/vsb_country/vsb_name']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Get_a_row_by_ID": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "e085b6c8-537f-46fa-a08c-7c32e600e284"
+          }
+        },
+        "Initialize_InverterTypeCost": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "InverterTypeCost",
+                "type": "float"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_PVModuleTypeCost": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "c24857c0-b05c-48bb-b809-cc1e4710bdc2"
+          }
+        },
+        "Initialize_PVModuleTypeCost": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PVModuleTypeCost",
+                "type": "float",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ResultApprovalState": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fd2839a7-ec78-486e-8787-533f120f69b2"
+          }
+        },
+        "Initialize_SubstructureCost": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SubstructureCost",
+                "type": "float",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_InverterTypeCost": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "eed61822-4f3b-4055-90bd-5a02fa2c3e95"
+          }
+        },
+        "Initialize_PlantCost": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "PlantCost",
+                "type": "float",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SubstructureCost": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "df9bec5e-98c7-45e6-b9f8-9fdb59e7ba4e"
+          }
+        },
+        "Initialize_ResultApprovalState": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ResultApprovalOutcome",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "PrimarilyApprovalState": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "75f23c2b-b9f2-4cfa-a097-521e6bfa2a0c"
+          }
+        },
+        "Get_a_row_by_ID": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "entityName": "vsb_projects",
+              "recordId": "@body('Parse_Project')?['ProjectGuid']",
+              "$expand": "vsb_Country($select=vsb_name,vsb_title,vsb_isocode)"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "GetItem",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "runAfter": {
+            "Initialize_ProjectNumber": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "65ac798c-c11e-4988-a29c-ebe11b88c440"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

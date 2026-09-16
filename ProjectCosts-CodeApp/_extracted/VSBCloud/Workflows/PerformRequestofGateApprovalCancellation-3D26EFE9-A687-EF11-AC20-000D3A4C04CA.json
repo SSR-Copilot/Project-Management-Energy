@@ -1,0 +1,349 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps_1": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_sendmail": {
+        "api": {
+          "name": "shared_sendmail"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedsendmail_ccf66"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "title": "AppId",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your app id",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_1": {
+                  "title": "Project",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your project data",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "text",
+                "text_1"
+              ]
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "601b73c4-d85a-444c-9019-bf8c8714c2a0"
+          }
+        }
+      },
+      "actions": {
+        "Parse_Gate_data": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@triggerBody()['text_1']",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "FlowApprovalId": {
+                  "type": "string"
+                },
+                "FlowRunId": {},
+                "GateSettingsGuid": {},
+                "HasGate": {
+                  "type": "boolean"
+                },
+                "NextClusterGuid": {
+                  "type": "string"
+                },
+                "PortfolioManager": {
+                  "type": "string"
+                },
+                "PreviousClusterGuid": {
+                  "type": "string"
+                },
+                "ProjectGuid": {
+                  "type": "string"
+                },
+                "ProjectId": {
+                  "type": "string"
+                },
+                "ProjectName": {
+                  "type": "string"
+                },
+                "StateGuid": {
+                  "type": "string"
+                },
+                "StateName": {
+                  "type": "string"
+                },
+                "StateTrackingGuid": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "7aef98a7-47ae-4c32-84c9-7ba362841cbd"
+          }
+        },
+        "Try_cancell_gate_cluster_instance": {
+          "type": "Scope",
+          "actions": {
+            "Update_a_row_aprovals_for_request_permission": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "msdyn_flow_approvals",
+                  "recordId": "@variables('ApprovalId')",
+                  "item/msdyn_flow_approval_stage": 192351000,
+                  "item/statuscode": 192350004,
+                  "item/msdyn_flow_approval_title": "@variables('CancelationTitle')",
+                  "item/msdyn_flow_approval_completedon": "@utcNow()",
+                  "item/msdyn_flow_approval_result": "Canceled",
+                  "item/statecode": 1
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "7f6c8103-f308-4b17-b044-c6eb0034e923"
+              }
+            },
+            "Update_a_row_project_state_tracking": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstatetrackings",
+                  "recordId": "@variables('StateTrackingGuid')",
+                  "item/vsb_approvalclusterstate": 952850001,
+                  "item/vsb_clusterstepstate": 952850003,
+                  "item/vsb_flowapprovalid": "@null",
+                  "item/vsb_flowrunid": "@null"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "runAfter": {
+                "Update_a_row_aprovals_for_request_permission": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "7119e1e6-359a-42f2-9626-ce8a3e4dfcf0"
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_CancelationTitle": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "cff3ebbb-976a-4051-ba65-3aac9be91699"
+          }
+        },
+        "Catch_cancellation": {
+          "type": "Scope",
+          "actions": {
+            "Filter_cancel_approval_request": {
+              "type": "Query",
+              "inputs": {
+                "from": "@result('Try_cancell_gate_cluster_instance')",
+                "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+              },
+              "metadata": {
+                "operationMetadataId": "711b1cc0-2e1e-44bf-ba50-5ff53e0e92dd"
+              }
+            },
+            "Create_HTML_table_errors_from_cancel_gate_approval_request": {
+              "type": "Table",
+              "inputs": {
+                "from": "@body('Filter_cancel_approval_request')",
+                "format": "HTML",
+                "columns": [
+                  {
+                    "header": "Action",
+                    "value": "@item()?['name']"
+                  },
+                  {
+                    "header": "Status",
+                    "value": "@item()?['Status']"
+                  },
+                  {
+                    "header": "ErrorMessage",
+                    "value": "@item()?['error']?['messagee']"
+                  },
+                  {
+                    "header": "ApprovalID",
+                    "value": "@variables('ApprovalId')"
+                  }
+                ]
+              },
+              "runAfter": {
+                "Filter_cancel_approval_request": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "4dc02cf7-8a54-4bcc-ae19-d6d06dab93f2"
+              }
+            },
+            "Send_an_email_notification_(V3)": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "request/to": "@{variables('RequesterMail')};",
+                  "request/subject": "Send an email notification for gate cluster cancellation prozess",
+                  "request/text": "<p>request cluster approval was interrupted:<br>\n@{body('Create_HTML_table_errors_from_cancel_gate_approval_request')}<br>\n<br>\nYour Support Team<br>\n</p>"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                  "operationId": "SendEmailV3",
+                  "connectionName": "shared_sendmail"
+                }
+              },
+              "runAfter": {
+                "Create_HTML_table_errors_from_cancel_gate_approval_request": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "b537c9bc-4aaf-4eb0-b350-9f42f999902c"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_cancell_gate_cluster_instance": [
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "aa5871e1-5712-4a50-8844-f12e74beb7a9"
+          }
+        },
+        "Initialize_ApprovalId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ApprovalId",
+                "type": "string",
+                "value": "@body('Parse_Gate_data')?['FlowApprovalId']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Parse_Gate_data": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1538e4be-96ae-4669-8078-451feb042e14"
+          }
+        },
+        "Initialize_CancelationTitle": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "CancelationTitle",
+                "type": "string",
+                "value": "Request canceled for @{body('Parse_Gate_data')?['ProjectName']}"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_StateTrackingGuid": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "4e39842c-cc0a-4e42-b62b-a506bb83ea60"
+          }
+        },
+        "Initialize_StateTrackingGuid": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "StateTrackingGuid",
+                "type": "string",
+                "value": "@body('Parse_Gate_data')?['StateTrackingGuid']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RequesterMail": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "ff0a9402-79a4-4e82-a586-bc0ce20c4b0e"
+          }
+        },
+        "Initialize_RequesterMail": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "RequesterMail",
+                "type": "string",
+                "value": "@body('Parse_Gate_data')?['PortfolioManager']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ApprovalId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "89fdc69f-2d1e-40cc-acae-cdc1aa4a4819"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

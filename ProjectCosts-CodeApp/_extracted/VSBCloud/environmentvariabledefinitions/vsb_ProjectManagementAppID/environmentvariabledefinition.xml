@@ -1,0 +1,10 @@
+<environmentvariabledefinition schemaname="vsb_ProjectManagementAppID">
+  <displayname default="Project Management App ID">
+    <label description="Project Management App ID" languagecode="1033" />
+  </displayname>
+  <introducedversion>0.0.0.3</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

@@ -1,0 +1,706 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_Header:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      ApprovalStatesColor:
+        PropertyKind: Input
+        DisplayName: Approval States / Color
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Table
+        Default: |-
+          =Table(
+              {
+                  State: "Draft",
+                  Color: "#41aab4"
+              },
+              {
+                  State: "Approving",
+                  Color: "#f5911e"
+              },
+              {
+                  State: "Approved",
+                  Color: "#82a51e"
+              },
+              {
+                  State: "Rejected",
+                  Color: "#d20532"
+              }
+          )
+      LogoWidth:
+        PropertyKind: Input
+        DisplayName: LogoWidth
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Number
+        Default: =210
+      MainScreen:
+        PropertyKind: Input
+        DisplayName: MainScreen
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Screen
+        Default: =App.ActiveScreen
+      OnLogoClick:
+        PropertyKind: Event
+        DisplayName: OnLogoClick
+        Description: A event on logo click
+        ReturnType: Boolean
+        Default: =true
+      Project:
+        PropertyKind: Input
+        DisplayName: Project
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Record
+        Default: |-
+          ={
+              ID: "0000000-0000-0000-0000-000000000000",
+              Name: "Project name",
+              Technology: "Wind",
+              Approval: "None"
+          }
+    Properties:
+      Height: =74
+      Width: =1366
+    Children:
+      - con_cmp_Header:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Fill: |-
+              =Switch(
+                  gblEnvironmentName,
+                  "Hotfix",
+                  ColorValue("#9831A850"),
+                  "Nightly",
+                  ColorValue("#AAAAAA60"),
+                  "Budgeting",
+                  ColorValue("#85AD3760"),
+                  "QA",
+                  ColorValue("#E66C3780"),
+                  RGBA(
+                      255,
+                      255,
+                      255,
+                      1
+                  )
+              )
+            Height: =74
+            LayoutDirection: =LayoutDirection.Horizontal
+            Width: =Parent.Width
+          Children:
+            - con_cmp_Header_Logo:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  FillPortions: =0
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LayoutMinHeight: =50
+                  LayoutMinWidth: =50
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =If(IsBlank(cmp_Header.LogoWidth), 250, cmp_Header.LogoWidth)
+                Children:
+                  - con_cmp_Header_Logo_Img:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =Parent.Height-8
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =60
+                      Children:
+                        - img_cmp_Header_Logo:
+                            Control: Image@2.2.3
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              Height: =60
+                              Image: ='vsb-logo'
+                              Tooltip: ="VSB Cloud"
+                              Width: =56
+                              X: =4
+                              Y: =4
+                        - img_cmp_Header_Logo_Button:
+                            Control: Classic/Button@2.2.0
+                            Properties:
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =0
+                              Color: =RGBA(255, 255, 255, 1)
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(0, 0, 0, 0)
+                              Fill: =Color.Transparent
+                              Height: =Parent.Height
+                              HoverBorderColor: =Color.Transparent
+                              HoverColor: =RGBA(0, 0, 0, 0)
+                              HoverFill: =Color.Transparent
+                              OnSelect: =cmp_Header.OnLogoClick();
+                              PressedBorderColor: =Color.Transparent
+                              PressedColor: =Color.Transparent
+                              PressedFill: =Color.Transparent
+                              Text: =
+                              Width: =Parent.Width
+                  - con_cmp_Header_Logo_Title:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Height: =Parent.Height
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinWidth: =Parent.Width
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Visible: |-
+                          =/*If(
+                              gblEnvironmentName = "Prod",
+                              false,
+                              true
+                          )*/
+                          true
+                      Children:
+                        - con_cmp_Header_Version:
+                            Control: Label@2.5.1
+                            Properties:
+                              FontWeight: =FontWeight.Lighter
+                              Height: =12
+                              Size: =gblAppSizes.Font.ExtraExtraSmall
+                              Text: ="Version " & gblAppVersion & If(gblEnvironmentName="Dev"," (" & gblEnvironmentName & ")","")
+                              Visible: |
+                                =/*If(
+                                    gblEnvironmentName = "Prod",
+                                    false,
+                                    true
+                                )*/
+                                gblEnvironmentName = "Prod" || gblEnvironmentName = "Dev"
+                              Width: =Parent.Width-ico_cmp_Header_Info.Width
+                              X: =ico_cmp_Header_Info.X
+                              Y: =ico_cmp_Header_Info.Y
+                        - ico_cmp_Header_Info:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              Color: =Switch(gblEnvironmentName, "Dev", gblAppStyles.Error, "Nightly", gblAppStyles.Warning, "QA", gblAppStyles.Success, Color.Transparent)
+                              Height: =14
+                              Icon: =Icon.Information
+                              Visible: =//true
+                              Width: =14
+                              X: =5
+                              Y: =Parent.Height-Self.Height-6
+                        - con_cmp_Header_Title:
+                            Control: Label@2.5.1
+                            Properties:
+                              Color: =ColorValue(gblAppTheme.palette.themePrimary)
+                              FontWeight: =FontWeight.Semibold
+                              Height: =Parent.Height/2
+                              PaddingLeft: =10
+                              Size: =18
+                              Text: ="Cloud"
+                              Width: =Parent.Width-60
+                              Y: =Parent.Height/2-Self.Height/2
+            - con_cmp_Header_SuitBar:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  DropShadow: =DropShadow.None
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutGap: =6
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LayoutMinHeight: =50
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =Max(150, Parent .Width-con_cmp_Header_Logo.Width-con_cmp_Header_Service.Width-20)
+                Children:
+                  - rec_cmp_Header_Project_State:
+                      Control: Rectangle@2.3.0
+                      Properties:
+                        DisabledFill: |-
+                          =If(
+                              IsBlank(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  )
+                              ),
+                              ColorValue("#ffffff"),
+                              ColorValue(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  ).Color
+                              )
+                          )
+                        Fill: |-
+                          =If(
+                              IsBlank(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  )
+                              ),
+                              ColorValue("#ffffff"),
+                              ColorValue(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  ).Color
+                              )
+                          )
+                        Height: =Parent.Height-4
+                        HoverFill: |-
+                          =If(
+                              IsBlank(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  )
+                              ),
+                              ColorValue("#ffffff"),
+                              ColorValue(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  ).Color
+                              )
+                          )
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =Parent.Height
+                        PressedFill: |-
+                          =If(
+                              IsBlank(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  )
+                              ),
+                              ColorValue("#ffffff"),
+                              ColorValue(
+                                  LookUp(
+                                      cmp_Header.ApprovalStatesColor,
+                                      ThisRecord.State = cmp_Header.Project.Approval
+                                  ).Color
+                              )
+                          )
+                        Tooltip: =cmp_Header.Project.Approval
+                        Width: =4
+                  - con_cmp_Header_HeaderText:
+                      Control: Text@0.0.51
+                      Properties:
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        Size: =20
+                        Text: =cmp_Header.Project.Name
+                        Weight: ='TextCanvas.Weight'.Semibold
+                        Width: =Parent.Width - 18
+            - con_cmp_Header_Service:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  DropShadow: =DropShadow.None
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.Center
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutJustifyContent: =LayoutJustifyContent.End
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LayoutMinHeight: =50
+                  LayoutMinWidth: =560
+                  PaddingRight: =10
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =360
+                Children:
+                  - con_cmp_Header_Service_ReportError:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =Parent.Height
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =74
+                        LayoutMinWidth: =150
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =300
+                      Children:
+                        - con_cmp_Header_Logo_Title_4:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinWidth: =120
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =200
+                            Children:
+                              - but_Main_Project_Overview_Header_Redirect_4:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    AccessibleLabel: ="Redirect"
+                                    Appearance: ='ButtonCanvas.Appearance'.Secondary
+                                    Height: =12
+                                    OnSelect: =
+                                    Text: =""
+                                    Visible: =false
+                                    Width: =12
+                              - ico_cmp_Header_Info_4:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning, "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =16
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(16, 110, 190, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Information
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Visible: |-
+                                      =/*If(
+                                          gblEnvironmentName = "Prod",
+                                          false,
+                                          true
+                                      )*/
+                                      false
+                                    Width: =16
+                                    X: =5
+                                    Y: =Parent.Height-Self.Height-6
+                              - con_cmp_Header_Title_4:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =Color.Black
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =Parent.Height/2
+                                    PaddingLeft: =10
+                                    Size: =12
+                                    Text: |-
+                                      =Switch(
+                                          gblEnvironmentName,
+                                          "Hotfix",
+                                          "Hotfix",
+                                          "Nightly",
+                                          "Nightly",
+                                          "Budgeting",
+                                          "Budgeting",
+                                          "QA",
+                                          "Quality Assurance"
+                                      )
+                                    Width: =Parent.Width
+                                    Y: =Parent.Height/2-Self.Height/2
+                              - con_cmp_Header_Version_4:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =RGBA(50, 49, 48, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Lighter
+                                    Height: =12
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="Version " & gblAppVersion /*& " (" & gblEnvironmentName & ")"*/
+                                    Visible: |
+                                      =If(
+                                          gblEnvironmentName = "Prod" || gblEnvironmentName = "Dev",
+                                          false,
+                                          true
+                                      )
+
+                                      //gblEnvironmentName = "Prod"
+                                    Width: =Parent.Width-Self.X
+                                    X: |-
+                                      =//ico_cmp_Header_Info_1.X+ico_cmp_Header_Info_1.Width
+                                      7
+                                    Y: =ico_cmp_Header_Info_4.Y
+                        - pcf_HeaderContainerReportError_WarningIcon:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              Height: =40
+                              IconColor: ="Red"
+                              IconName: ="Warning"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Tooltip: |-
+                                ="An error has occurred!
+
+                                If you encounter any issues, please report them via Help --> Report problem. 
+                                Technical details will be automatically included.
+                                Your input helps us improve. Thank you for your cooperation."
+                              Visible: =!IsBlank(gblReportError)
+                              Width: =40
+                        - pcf_HeaderContainerReportError_CommandBar:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              Height: =40
+                              Items: |-
+                                =Table(
+                                    {
+                                        ItemKey: "help",
+                                        ItemDisplayName: "Help"
+                                        //ItemIconName: "help"
+                                    },
+                                    {
+                                        ItemKey: "raiseBug",
+                                        ItemDisplayName: "Report Problem",
+                                        ItemIconName: "bug",
+                                        ItemParentKey: "help"
+                                    },
+                                    {
+                                        ItemKey: "goToInfoCenter",
+                                        ItemDisplayName: "VSB Cloud InfoCenter",
+                                        ItemIconName: "Info",
+                                        ItemParentKey: "help"
+                                    }
+                                )
+                              OnSelect: |-
+                                =Switch(
+                                    Self.Selected.ItemKey,
+                                    "raiseBug",
+                                    Set(
+                                        gblShowReportProblemPanel,
+                                        true
+                                    ),
+                                    "goToInfoCenter",
+                                    Launch(
+                                        gblInfoCenterLaunchUrl,
+                                        Blank(),
+                                        LaunchTarget.Replace
+                                    ),
+                                    /* Default action */
+                                    false
+                                )
+                              Width: =100
+                  - con_cmp_Header_UserImage:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =Parent.Height
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =250
+                      Children:
+                        - con_cmp_In_Header_UserName:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                              Height: =32
+                              PaddingLeft: =200
+                              PaddingRight: =32
+                              RadiusBottomLeft: =90
+                              RadiusBottomRight: =90
+                              RadiusTopLeft: =90
+                              RadiusTopRight: =90
+                              Width: =200
+                              X: =con_cmp_In_Header_UserImage.X-Self.Width+20
+                              Y: =Parent.Height/2-Self.Height/2
+                            Children:
+                              - lbl_cmp_In_Header_UserName:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =
+                                    Color: =ColorValue(gblAppTheme.palette.white)
+                                    DisabledColor: =gblAppStyles.Label.DisabledColor
+                                    DisplayMode: =DisplayMode.View
+                                    FocusedBorderThickness: =gblAppStyles.Label.FocusedBorderThickness
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =30
+                                    HoverColor: =gblAppStyles.Label.HoverColor
+                                    PaddingLeft: =2
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="Hi " & User().FullName
+                                    Tooltip: =
+                                    Width: =con_cmp_In_Header_UserImage.X - con_cmp_In_Header_UserName.X-15
+                                    Wrap: =false
+                                    X: =15
+                              - pcf_cmpHeader_User_ContextMenu_Info:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.ContextMenu
+                                  Properties:
+                                    AccessibilityLabel: ="User information"
+                                    BorderColor: ="#FFFFFF00"
+                                    FillColor: ="#FFFFFF00"
+                                    FontColor: ="#FFFFFF00"
+                                    FontSize: =gblAppSizes.Font.Small
+                                    Height: =32
+                                    HoverBorderColor: ="#FFFFFF00"
+                                    Items: |-
+                                      =Table(
+                                          {
+                                              ItemKey: "lang",
+                                              ItemDisplayName: $"Hi {User().FullName}"
+                                          },
+                                          {
+                                              ItemKey: "lang",
+                                              ItemDisplayName: $"{gblCurrentUser.Mail}",
+                                              ItemIconName: "Mail",
+                                              ItemVisible: Not(IsBlank(gblCurrentUser.Mail))
+                                          },
+                                          {
+                                              ItemKey: "lang",
+                                              ItemDisplayName: $"{gblCurrentUser.Language}, [{gblCurrentUser.Lang}]",
+                                              ItemIconName: "LocaleLanguage"
+                                          },
+                                          {
+                                              ItemKey: "countries",
+                                              ItemDisplayName: $"{gblCurrentUser.CompanyName}",
+                                              ItemIconName: "Home"
+                                          },
+                                          {
+                                              ItemKey: "company",
+                                              ItemDisplayName: If(
+                                                  Not(IsBlankOrError(gblCurrentUser.EditableCounties)),
+                                                  $"{Concat(
+                                                      gblCurrentUser.EditableCounties,
+                                                      $"{name}; "
+                                                  )}",
+                                                  Blank()
+                                              ),
+                                              ItemIconName: "AddHome"
+                                          },
+                                          {
+                                              ItemKey: "lang",
+                                              ItemDisplayName: "Project Data All Countries",
+                                              ItemIconName: "World",
+                                              ItemVisible: gblCurrentUser.IsProjectDataAllCountries
+                                          },
+                                          {
+                                              ItemKey: "version",
+                                              ItemDisplayName: $"version {gblAppVersion} ({gblEnvironmentName})",
+                                              ItemIconName: "Info"
+                                          }
+                                      )
+                                    TextAlignment: ='PowerCAT.ContextMenu.TextAlignment'.Left
+                                    Theme: =gblAppThemeJson
+                                    Tooltip: ="User"
+                                    Width: =con_cmp_In_Header_UserImage.X - con_cmp_In_Header_UserName.X
+                                    X: =15
+                                    Y: =6
+                        - con_cmp_In_Header_UserImage:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =50
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =50
+                              X: =Parent.Width-Self.Width-gblAppSizes.Padding.Page
+                              Y: =Parent.Height/2-Self.Height/2
+                            Children:
+                              - shp_cmp_In_Image_UserBorder:
+                                  Control: Circle@2.3.0
+                                  Properties:
+                                    BorderColor: =ColorValue(gblAppTheme.palette.black)
+                                    BorderThickness: =2
+                                    Fill: =ColorValue(gblAppTheme.palette.white)
+                                    Height: =img_cmp_In_Header_UserImage.Height+1
+                                    Width: =img_cmp_In_Header_UserImage.Width+1
+                                    X: =img_cmp_In_Header_UserImage.X-1
+                                    Y: =img_cmp_In_Header_UserImage.Y-1
+                              - img_cmp_In_Header_UserImage:
+                                  Control: Image@2.2.3
+                                  Properties:
+                                    Height: =Parent.Width-Self.X*2
+                                    Image: |
+                                      =User().Image
+                                    RadiusBottomLeft: =90
+                                    RadiusBottomRight: =90
+                                    RadiusTopLeft: =90
+                                    RadiusTopRight: =90
+                                    Tooltip: =User().FullName
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =2
+                                    Y: =2

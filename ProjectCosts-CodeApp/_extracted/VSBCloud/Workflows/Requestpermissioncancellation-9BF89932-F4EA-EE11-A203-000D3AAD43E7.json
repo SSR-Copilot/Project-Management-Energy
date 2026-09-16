@@ -1,0 +1,454 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps_1": {
+        "impersonation": {},
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      },
+      "shared_sendmail": {
+        "runtimeSource": "invoker",
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedsendmail_ccf66"
+        },
+        "api": {
+          "name": "shared_sendmail"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "metadata": {
+            "operationMetadataId": "dd0f6a0e-205d-4627-91e8-7133d1fd5df1"
+          },
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "title": "RequesterEmail",
+                  "type": "string",
+                  "format": "email",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter an e-mail address",
+                  "x-ms-content-hint": "EMAIL"
+                },
+                "text_2": {
+                  "title": "AppId",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_3": {
+                  "title": "Project",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "email",
+                "text_2",
+                "text_3"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Parse_ModuleType": {
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c5b1b2ab-264b-4cd3-8438-e40c394d8978"
+          },
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@triggerBody()['text_3']",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ModuleTypeGuid": {
+                  "type": "string"
+                },
+                "ModuleType": {
+                  "type": "integer"
+                },
+                "Name": {
+                  "type": "string"
+                },
+                "FlowRunId": {
+                  "type": "string"
+                },
+                "FlowApprovalId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "Initialize_ApprovalId": {
+          "runAfter": {
+            "Initialize_ModuleType": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "ad26b425-311a-48bb-afcc-595c870dbacb"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ApprovalId",
+                "type": "string",
+                "value": "@body('Parse_ModuleType')?['FlowApprovalId']"
+              }
+            ]
+          }
+        },
+        "Try_cancel_approval_request": {
+          "actions": {
+            "Update_a_row_aprovals_for_request_permission": {
+              "runAfter": {},
+              "metadata": {
+                "operationMetadataId": "351b277e-ffc7-42d1-ada8-98101f238e32"
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_commondataserviceforapps_1",
+                  "operationId": "UpdateRecord",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                },
+                "parameters": {
+                  "entityName": "msdyn_flow_approvals",
+                  "recordId": "@variables('ApprovalId')",
+                  "item/msdyn_flow_approval_approvalstagekey": "@{variables('ApprovalId')}_COMPLETE",
+                  "item/msdyn_flow_approval_stage": 192351000,
+                  "item/statuscode": 192350004,
+                  "item/msdyn_flow_approval_title": "@variables('CancelationTitle')",
+                  "item/msdyn_flow_approval_completedon": "@utcNow()",
+                  "item/msdyn_flow_approval_result": "Canceled",
+                  "item/statecode": 1
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_update_device_row": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "5ebf9aa2-0eac-4d4e-9f6b-86f89e751ef6"
+          },
+          "type": "Scope"
+        },
+        "Catch_cancellation": {
+          "actions": {
+            "Filter_cancel_approval_request": {
+              "runAfter": {},
+              "metadata": {
+                "operationMetadataId": "d9ef5572-20d9-4712-a16b-f820a658f115"
+              },
+              "type": "Query",
+              "inputs": {
+                "from": "@result('Try_cancel_approval_request')",
+                "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+              }
+            },
+            "Create_HTML_table_errors_from_cancel_approval_request": {
+              "runAfter": {
+                "Filter_cancel_approval_request": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "a3b458fa-9350-4dc8-af32-7c7c1e8701b6"
+              },
+              "type": "Table",
+              "inputs": {
+                "from": "@body('Filter_cancel_approval_request')",
+                "format": "HTML",
+                "columns": [
+                  {
+                    "header": "Action",
+                    "value": "@item()?['name']"
+                  },
+                  {
+                    "header": "Status",
+                    "value": "@item()?['Status']"
+                  },
+                  {
+                    "header": "ErrorMessage",
+                    "value": "@item()?['error']?['messagee']"
+                  },
+                  {
+                    "header": "ApprovalID",
+                    "value": "@variables('ApprovalId')"
+                  }
+                ]
+              }
+            },
+            "Send_an_email_notification_for_cancellation_prozess": {
+              "runAfter": {
+                "Create_HTML_table_errors_from_cancel_approval_request": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "b04bcb64-a764-4c82-bf92-7ccdd71c3810"
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sendmail",
+                  "operationId": "SendEmailV3",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail"
+                },
+                "parameters": {
+                  "request/to": "@{triggerBody()['email']};",
+                  "request/subject": "Error: request permission cancelation",
+                  "request/text": "<p>request permission flow was interrupted with error<br>\n@{body('Create_HTML_table_errors_from_cancel_approval_request')}<br>\nYour Support Team</p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_cancel_approval_request": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fee16502-693f-4424-8f3f-f0f26761ee4e"
+          },
+          "type": "Scope"
+        },
+        "Initialize_ModuleTypeGuid": {
+          "runAfter": {
+            "Parse_ModuleType": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "05a366cf-6f71-41e1-bb27-08606efa8037"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ModuleTypeGuid",
+                "type": "string",
+                "value": "@body('Parse_ModuleType')?['ModuleTypeGuid']"
+              }
+            ]
+          }
+        },
+        "Initialize_ModuleType": {
+          "runAfter": {
+            "Initialize_ModuleTypeGuid": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1a5034b7-58d6-4186-a466-b36376421172"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "ModuleType",
+                "type": "integer",
+                "value": "@body('Parse_ModuleType')?['ModuleType']"
+              }
+            ]
+          }
+        },
+        "Initialize_CancelationTitle": {
+          "runAfter": {
+            "Initialize_ApprovalId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "e4a2bc4e-485d-4c93-aac4-f89acb6d78d0"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "CancelationTitle",
+                "type": "string",
+                "value": "Request canceled for @{body('Parse_ModuleType')?['Name']}"
+              }
+            ]
+          }
+        },
+        "Try_update_device_row": {
+          "actions": {
+            "Switch": {
+              "runAfter": {},
+              "cases": {
+                "Case_for_generator": {
+                  "case": 952850000,
+                  "actions": {
+                    "Update_a_row_for_generator": {
+                      "runAfter": {},
+                      "metadata": {
+                        "operationMetadataId": "d7dc7f87-608a-4cf0-8794-52aec08e9f8c"
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_commondataserviceforapps_1",
+                          "operationId": "UpdateRecord",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                        },
+                        "parameters": {
+                          "entityName": "vsb_generatortypeinprojects",
+                          "recordId": "@variables('ModuleTypeGuid')",
+                          "item/vsb_flowapprovalid": "@null",
+                          "item/vsb_flowrunid": "@null",
+                          "item/vsb_requestpermissionstate": 952850003
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    }
+                  }
+                },
+                "Case_for_PV": {
+                  "case": 952850001,
+                  "actions": {
+                    "Update_a_row_for_pv_module_type": {
+                      "runAfter": {},
+                      "metadata": {
+                        "operationMetadataId": "1e5de48b-ace3-4ca7-8bc0-0e56a5c93e0d"
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_commondataserviceforapps_1",
+                          "operationId": "UpdateRecord",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                        },
+                        "parameters": {
+                          "entityName": "vsb_pvmoduletypeinprojects",
+                          "recordId": "@variables('ModuleTypeGuid')",
+                          "item/vsb_flowapprovalid": "@null",
+                          "item/vsb_flowrunid": "@null",
+                          "item/vsb_requestpermissionstate": 952850003
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    }
+                  }
+                },
+                "Case_for_inverter": {
+                  "case": 952850002,
+                  "actions": {
+                    "Update_a_row_for_inverter_": {
+                      "runAfter": {},
+                      "metadata": {
+                        "operationMetadataId": "c2d6bae3-8736-400e-a2da-23bdc11d6aeb"
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_commondataserviceforapps_1",
+                          "operationId": "UpdateRecord",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                        },
+                        "parameters": {
+                          "entityName": "vsb_invertertypeinprojects",
+                          "recordId": "@variables('ModuleTypeGuid')",
+                          "item/vsb_flowapprovalid": "@null",
+                          "item/vsb_flowrunid": "@null",
+                          "item/vsb_requestpermissionstate": 952850003
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    }
+                  }
+                },
+                "Case_for_substructure": {
+                  "case": 952850003,
+                  "actions": {
+                    "Update_a_row_for_substructure": {
+                      "runAfter": {},
+                      "metadata": {
+                        "operationMetadataId": "01435d72-5337-4926-8e14-4c9ed1ec48e5"
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_commondataserviceforapps_1",
+                          "operationId": "UpdateRecord",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                        },
+                        "parameters": {
+                          "entityName": "vsb_substructuretypeinprojects",
+                          "recordId": "@variables('ModuleTypeGuid')",
+                          "item/vsb_flowapprovalid": "@null",
+                          "item/vsb_flowrunid": "@null",
+                          "item/vsb_requestpermissionstate": 952850003
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    }
+                  }
+                }
+              },
+              "default": {
+                "actions": {}
+              },
+              "expression": "@variables('ModuleType')",
+              "metadata": {
+                "operationMetadataId": "345b8e9b-849e-4775-a761-0734341dddda"
+              },
+              "type": "Switch"
+            }
+          },
+          "runAfter": {
+            "Initialize_CancelationTitle": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "e4c5f4ae-0522-4897-9478-a85d714c4be3"
+          },
+          "type": "Scope"
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

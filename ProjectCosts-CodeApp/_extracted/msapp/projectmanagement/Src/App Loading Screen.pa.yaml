@@ -1,0 +1,625 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  App Loading Screen:
+    Properties:
+      Fill: =gblAppColors.Screen.Fill
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: |+
+        =UpdateContext({locLoading: false});
+        // Get Fabric Table Data
+        // keep <= your app data row limit
+        Clear(colAssumptionsGermanyTaxSQL);
+        Clear(colAssumptionsFranceSQL);
+        // 1. Calculate the max rows outside the loop and store them
+        UpdateContext(
+            {
+                locLastRowGermany: First(
+                    SortByColumns(
+                        'Assumptions Local Tax Germanies',
+                        "vsb_row_num",
+                        SortOrder.Descending
+                    )
+                ).vsb_row_num,
+                // Ensure you use the exact logical name here
+                locLastRowFrance: First(
+                    SortByColumns(
+                        'Assumptions Local Tax Frances',
+                        "vsb_row_num",// Assuming France has the exact same schema
+                        SortOrder.Descending
+                    )
+                ).vsb_row_num,
+                locBatchSize: 2000
+            }
+        );
+        UpdateContext(
+            {
+                locAbsoluteMax: Max(
+                    locLastRowGermany,
+                    locLastRowFrance
+                )
+            }
+        );
+        // 2. Run the batched collection
+        ForAll(
+            Sequence(
+                RoundUp(
+                    locAbsoluteMax / locBatchSize,
+                    0
+                )
+            ) As Batch,
+            With(
+                {
+                    // Pre-calculate the exact math boundaries here to avoid breaking delegation in the Filter
+                    locStartPoint: (Batch.Value - 1) * locBatchSize,
+                    locEndPoint: Batch.Value * locBatchSize
+                },
+                Concurrent(
+                // Germany Collection
+                    If(
+                        locLastRowGermany >= locStartPoint,
+                        Collect(
+                            colAssumptionsGermanyTaxSQL,
+                            Filter(
+                                'Assumptions Local Tax Germanies',
+                                vsb_row_num > locStartPoint And vsb_row_num <= locEndPoint
+                            )
+                        )
+                    ),
+                // France Collection
+                    If(
+                        locLastRowFrance >= locStartPoint,
+                        Collect(
+                            colAssumptionsFranceSQL,
+                            Filter(
+                                'Assumptions Local Tax Frances',
+                                vsb_row_num > locStartPoint And vsb_row_num <= locEndPoint
+                            )
+                        )
+                    )
+                )
+            )
+        );
+        UpdateContext({locLoading: true});
+    Children:
+      - btn_Navigate_to_EditProjectScreen_Deeplinking:
+          Control: Button@0.0.45
+          Properties:
+            OnSelect: |
+              =If(
+                  IsBlank(Param("projectid")),
+                  Navigate(
+                      'Project Main Screen',
+                      ScreenTransition.Fade
+                  ),
+                  Set(
+                      gblRecordSelectedProject,
+                      LookUp(
+                          Projects,
+                          Project = GUID(Param("projectid"))
+                      )
+                  );
+                  Set(
+                      gblRecordSelectedProjectCountry,
+                      LookUp(
+                          Countries,
+                          Country = gblRecordSelectedProject.Country.Country
+                      )
+                  );
+                  Set(
+                      gblCurrentUser,
+                      Patch(
+                          gblCurrentUser,
+                          {
+                              CanEditSelectedProject: And(
+                                  DataSourceInfo(
+                                      Projects,
+                                      DataSourceInfo.CreatePermission
+                                  ),
+                                  Coalesce(
+                                      RecordInfo(
+                                          gblRecordSelectedProject,
+                                          RecordInfo.EditPermission
+                                      ),
+                                      false
+                                  )
+                              )
+                          }
+                      )
+                  );
+                  Set(
+                      gblLeftNavigationSelected,
+                      LookUp(
+                          LeftNavigationMenu,
+                          ThisRecord.ItemKey = "GeneralDataCommonKey"
+                      )
+                  );
+                  Set(
+                      gblProjectHeaderData,
+                      {
+                          ID: gblRecordSelectedProject.Project,
+                          Name: gblRecordSelectedProject.'Project Name',
+                          Technology: Text(gblRecordSelectedProject.Technology),
+                          Capacity: gblRecordSelectedProject.'Plant WTG Capacity [MW]',
+                          Status: LookUp(
+                              'Project States',
+                              ThisRecord.'Project State' = gblRecordSelectedProject.'Cluster State'.'Project State'
+                          ).Name,
+                          Approval: Text(gblRecordSelectedProject.'Approval States')
+                      }
+                  );
+                  Navigate(
+                      'Project General Data Screen',
+                      ScreenTransition.Fade,
+                      {locGeneralDataTabSelected: "generalDataTab"}
+                  )
+              );
+            Visible: =false
+            X: =40
+            Y: =40
+      - btn_To_Load_Edit_Project:
+          Control: Button@0.0.45
+          Properties:
+            OnSelect: |-
+              =If(
+                  Not(IsBlank(Param("projectid"))),
+                  Trace($"OnSelect MainCommandBar: {gblSelectedRecordEditProject.Project}");
+                  Set(
+                      gblRecordSelectedProject,
+                      LookUp(
+                          Projects,
+                          ThisRecord.Project = GUID(Param("projectid"))
+                      )
+                  );
+                  Set(
+                      gblRecordSelectedProjectCountry,
+                      LookUp(
+                          Countries,
+                          Country = gblRecordSelectedProject.Country.Country
+                      )
+                  );
+                  Set(
+                      gblCurrentUser,
+                      Patch(
+                          gblCurrentUser,
+                          {
+                              CanEditSelectedProject: And(
+                                  DataSourceInfo(
+                                      Projects,
+                                      DataSourceInfo.CreatePermission
+                                  ),
+                                  Coalesce(
+                                      RecordInfo(
+                                          gblRecordSelectedProject,
+                                          RecordInfo.EditPermission
+                                      ),
+                                      false
+                                  )
+                              )
+                          }
+                      )
+                  );
+                  Set(
+                      gblProjectHeaderData,
+                      {
+                          ID: gblRecordSelectedProject.Project,
+                          Name: gblRecordSelectedProject.'Project Name',
+                          Technology: Text(gblRecordSelectedProject.Technology),
+                          Capacity: gblRecordSelectedProject.'Plant WTG Capacity [MW]',
+                          Status: LookUp(
+                              'Project States',
+                              ThisRecord.'Project State' = gblRecordSelectedProject.'Cluster State'.'Project State'
+                          ).Name,
+                          Approval: Text(gblRecordSelectedProject.'Approval States')
+                      }
+                  );
+                  Set(
+                      gblLeftNavigationSelected,
+                      LookUp(
+                          LeftNavigationMenu,
+                          ThisRecord.ItemKey = "GeneralDataCommonKey"
+                      )
+                  );
+                  Navigate(
+                      'Project General Data Screen',
+                      ScreenTransition.Fade,
+                      {locGeneralDataTabSelected: "generalDataTab"}
+                  ),
+                  Set(
+                      gblProjectHeaderData,
+                      Blank()
+                  );
+                  Set(
+                      gblRecordSelectedProject,
+                      Blank()
+                  );
+                  Navigate(
+                      'Project Main Screen',
+                      ScreenTransition.Fade
+                  )
+              )
+            Visible: =false
+            X: =10
+            Y: =205
+      - con_App_Loading_Screen_Dummy_Loader:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Fill: =Color.Transparent
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =4
+            PaddingBottom: =4
+            PaddingLeft: =4
+            PaddingRight: =4
+            PaddingTop: =4
+            Width: =Parent.Width
+          Children:
+            - con_Main_Project_Overview_Header_1:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  DropShadow: =DropShadow.None
+                  Fill: =RGBA(255, 255, 255, 1)
+                  FillPortions: =0
+                  Height: =70
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Visible: =false
+                Children:
+                  - con_Main_Project_Overview_Header_logo_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =70
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        LayoutMinWidth: =50
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =200
+                      Children:
+                        - GeneralData_Header_Logo_Container_1:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =Parent.Height-4
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =60
+                            Children:
+                              - img_cmpHeader_Logo_1:
+                                  Control: Image@2.2.3
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =60
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Image: ='vsb-logo'
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Tooltip: ="VSB Cloud"
+                                    Width: =56
+                                    X: =4
+                                    Y: =4
+                              - img_cmpHeader_Button_1:
+                                  Control: Classic/Button@2.2.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    Color: =RGBA(255, 255, 255, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    DisabledFill: =RGBA(242, 242, 241, 0)
+                                    Fill: =RGBA(0, 0, 0, 0)
+                                    Font: =Font.'Segoe UI'
+                                    Height: =Parent.Height
+                                    HoverBorderColor: =ColorValue(gblAppTheme.palette.hoverButton)
+                                    HoverColor: =ColorValue(gblAppTheme.palette.hoverButton)
+                                    HoverFill: =
+                                    PaddingBottom: =2
+                                    PaddingTop: =2
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(255, 255, 255, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Text: =
+                                    Width: =Parent.Width
+                        - con_cmp_Header_Logo_Title_2:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinWidth: =Parent.Width
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - but_Main_Project_Overview_Header_Redirect_2:
+                                  Control: Button@0.0.45
+                                  Properties:
+                                    AccessibleLabel: ="Redirect"
+                                    Appearance: ='ButtonCanvas.Appearance'.Secondary
+                                    Height: =12
+                                    OnSelect: "=Switch(\n    Text(Param(\"screen\")),\n    \"general\",\n    Trace($\"Navigate to Project Main Screen: with ProjectId=>{Param(\"projectId\")}\");\n    Navigate(\n        'Project General Data Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    ),\n    \"generators\",\n    Trace($\"Navigate to Project General Data Screen: with ProjectId=>{Param(\"projectId\")}\");\n    \n    Navigate(\n        'Project Generators Screen',\n        ScreenTransition.Fade,\n        {locGeneralDataTabSelected: \"generalDataTab\"}\n    )\n);\n"
+                                    Text: =""
+                                    Visible: =false
+                                    Width: =12
+                              - con_cmp_Header_Version_2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =RGBA(50, 49, 48, 1)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Lighter
+                                    Height: =12
+                                    Size: =gblAppSizes.Font.ExtraExtraSmall
+                                    Text: ="version " & gblAppVersion & " (" & gblEnvironmentName & ")"
+                                    Visible: |-
+                                      =If(
+                                          gblEnvironmentName = "Prod",
+                                          false,
+                                          true
+                                      )
+                                    Width: =Parent.Width-ico_cmp_Header_Info_2.Width
+                                    X: =ico_cmp_Header_Info_2.X+ico_cmp_Header_Info_2.Width
+                                    Y: =ico_cmp_Header_Info_2.Y+2
+                              - ico_cmp_Header_Info_2:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =Switch(gblEnvironmentName, "Dev", gblAppColors.Error, "Nightly", gblAppColors.Warning, "QA", gblAppColors.Success, "Hotfix", gblAppColors.Error, gblAppColors.Transparent)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =16
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(16, 110, 190, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Information
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Visible: |-
+                                      =If(
+                                          gblEnvironmentName = "Prod",
+                                          false,
+                                          true
+                                      )
+                                    Width: =16
+                                    X: =5
+                                    Y: =Parent.Height-Self.Height-6
+                              - con_cmp_Header_Title_2:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =2
+                                    Color: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                    DisabledColor: =RGBA(161, 159, 157, 1)
+                                    FocusedBorderThickness: =4
+                                    Font: =Font.'Segoe UI'
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =Parent.Height/2
+                                    PaddingLeft: =10
+                                    Size: =18
+                                    Text: ="Cloud"
+                                    Width: =Parent.Width-60
+                                    Y: =Parent.Height/2-Self.Height/2
+                  - con_Main_Project_Overview_Header_SuitBar_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Height: =Parent.Height
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =6
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                  - con_Main_Project_Overview_Header_Service_1:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        FillPortions: =0
+                        Height: =Parent.Height
+                        LayoutAlignItems: =LayoutAlignItems.Center
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =6
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =50
+                        LayoutMinWidth: =200
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =(Parent.Width/3)
+                      Children:
+                        - con_Main_Project_Overview_Header_Service_ReportError_1:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutJustifyContent: =LayoutJustifyContent.End
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinHeight: =74
+                              LayoutMinWidth: =150
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =150
+                            Children:
+                              - pcf_HeaderContainerReportError_WarningIcon_2:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.Icon
+                                  Properties:
+                                    Height: =40
+                                    IconColor: ="Red"
+                                    IconName: ="Warning"
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                                    Tooltip: |-
+                                      ="An error has occurred!
+
+                                      If you encounter any issues, please report them via Help --> Report problem. 
+                                      Technical details will be automatically included.
+                                      Your input helps us improve. Thank you for your cooperation."
+                                    Visible: =!IsBlank(gblReportError)
+                                    Width: =40
+                              - pcf_HeaderContainerReportError_CommandBar_2:
+                                  Control: CodeComponent
+                                  ComponentName: cat_PowerCAT.CommandBar
+                                  Properties:
+                                    Height: =40
+                                    Items: |-
+                                      =Table(
+                                          {
+                                              ItemKey: "help",
+                                              ItemDisplayName: "Help"
+                                              //ItemIconName: "help"
+                                          },
+                                          {
+                                              ItemKey: "raiseBug",
+                                              ItemDisplayName: "Report Problem",
+                                              ItemIconName: "bug",
+                                              ItemParentKey: "help"
+                                          },
+                                          {
+                                              ItemKey: "goToInfoCenter",
+                                              ItemDisplayName: "VSB Cloud InfoCenter",
+                                              ItemIconName: "Info",
+                                              ItemParentKey: "help"
+                                          }
+                                      )
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    OnSelect: |-
+                                      =Switch(
+                                          Self.Selected.ItemKey,
+                                          "raiseBug",
+                                          Set(
+                                              gblShowReportProblemPanel,
+                                              true
+                                          ),
+                                          "goToInfoCenter",
+                                          Launch(
+                                              gblInfoCenterLaunchUrl,
+                                              Blank(),
+                                              LaunchTarget.Replace
+                                          ),
+                                          /* Default action */
+                                          false
+                                      )
+                                    Width: =100
+                        - cml_Main_User_Badge_1:
+                            Control: CanvasComponent
+                            ComponentName: cmp_User_Badge
+                            Properties:
+                              Height: =Parent.Height
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              ToolTipVisibility: =true
+                              Width: =Max(260, Parent.Width/3 - con_Main_Project_Overview_Header_Service_ReportError_1.Width)
+      - Timer1:
+          Control: Timer@2.1.0
+          Properties:
+            AutoStart: =true
+            BorderColor: =RGBA(0, 120, 212, 1)
+            BorderStyle: =BorderStyle.None
+            Color: =RGBA(255, 255, 255, 1)
+            DisabledBorderColor: =RGBA(242, 242, 241, 0)
+            DisabledColor: =RGBA(161, 159, 157, 1)
+            DisabledFill: =RGBA(242, 242, 241, 0)
+            Duration: =500
+            Fill: =RGBA(0, 120, 212, 1)
+            Font: =Font.'Segoe UI'
+            HoverBorderColor: =RGBA(16, 110, 190, 1)
+            HoverColor: =RGBA(255, 255, 255, 1)
+            HoverFill: =RGBA(16, 110, 190, 1)
+            OnTimerEnd: |-
+              =If(
+                  gblAppStarted && locLoading, // Wait for OnStart to finish
+                  Set(varStopTimer, true); // Stop looping
+                  Select(btn_To_Load_Edit_Project) // Proceed
+              )
+            PressedBorderColor: =RGBA(16, 110, 190, 1)
+            PressedColor: =RGBA(255, 255, 255, 1)
+            PressedFill: =RGBA(16, 110, 190, 1)
+            Repeat: =!varStopTimer
+            Visible: =false
+            X: =136
+            Y: =147
+      - cmp_PopUp_Loading_1:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Loading
+          Properties:
+            Height: =Parent.Height
+            InformationText: ="Please wait..."
+            Visible: =!varStopTimer
+            Width: =Parent.Width

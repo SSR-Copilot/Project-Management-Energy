@@ -1,0 +1,146 @@
+# Build the VSBCloud Custom Component project utilizing npm and MSBuild
+name: $(BuildVersionMajor).0.$(BuildVersionPatch).$(BuildVersionRevision)
+
+trigger: none
+  # branches:
+  #   include:
+  #   - master
+  # paths:
+  #   exclude:
+  #   - *.md
+  #   - *.yml
+
+pr: none
+
+variables:
+  PACEXEPATH: ""
+  PackageDirectory: "VSBCustomComponents"
+  #BUILD VERSION INFORMATION
+  BuildVersionMajor: 1
+  BuildVersionMinor: 1
+  BuildVersionPatch: 0
+  #sets a counter for the version number changing the Major or Minor version will reset this counter
+  #back to it's seed value  
+  BuildVersionRevision: $[counter(format('{0}.{1}.{2}', variables['BuildVersionMajor'], variables['BuildVersionMinor'],variables['BuildVersionPatch']), 1)]  
+  BuildVersionRevisionStr:  "$(BuildVersionMajor)_$(BuildVersionPatch)_$(BuildVersionRevision)"
+
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    displayName: Build PCF Component
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+
+    steps:
+    # Installs PowerPlatform Tools (including PAC CLI)
+    - task: PowerPlatformToolInstaller@2
+      displayName: 'Install Power Platform Build Tools'
+      inputs:
+        DefaultVersion: true
+
+    #Run npm install to get all required resources for the projectl
+    - task: Npm@1
+      inputs:
+        command: 'install'
+        workingDir: './'
+
+    # Add code first projects(csproj,pcfproj) to cdsproj
+    - powershell: |
+        $pacExePath = $env:POWERPLATFORMTOOLS_PACCLIPATH + "\pac\tools\pac.exe"  
+
+        echo "##vso[task.setvariable variable=PACEXEPATH]$pacExePath"
+      displayName: 'Find pac folder'
+
+    # Add the outputted path of the previous step to the path environment variable
+    - powershell: |
+        Write-Host "Pac path - $(PACEXEPATH)"
+        $env:PATH = $env:PATH + ";" + "$(PACEXEPATH)"
+
+        Write-Host "Path: $env:PATH"
+      displayName: 'Update path environment variable'
+
+    # Set publisher
+    - powershell: |
+        New-Item -Path $(Build.SourcesDirectory)/$(PackageDirectory) -ItemType directory -Force
+        cd $(PackageDirectory)
+
+        $pacCommand = "solution init --publisher-name VSBCloud --publisher-prefix vsb"
+        Write-Host "Pac command - $(PACEXEPATH) $pacCommand"
+        
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand"
+        
+        dir $(Build.SourcesDirectory)/$(PackageDirectory)
+      displayName: 'Set publisher'
+
+    # Set publisher
+    - powershell: |
+        cd $(Build.SourcesDirectory)/$(PackageDirectory)
+        dir $(System.DefaultWorkingDirectory)
+
+        $pacCommand = "solution add-reference --path $(Build.SourcesDirectory)"
+        Write-Host "Pac command - $(PACEXEPATH) $pacCommand"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand"    
+      displayName: 'Add reference'
+
+    # Set solution version
+    - powershell: |
+        $pacCommand = "pcf version --patchversion $(BuildVersionMajor).$(BuildVersionPatch).$(BuildVersionRevision) --path $(Build.SourcesDirectory)\$(PackageDirectory) --allmanifests"
+        Write-Host "Pac command set - $(PACEXEPATH) $pacCommand"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand"    
+
+        $pacCommand1 = "solution version --revisionversion $(BuildVersionRevision) --solutionPath $(Build.SourcesDirectory)\$(PackageDirectory)"
+        Write-Host "Pac command set - $(PACEXEPATH) $pacCommand1"
+
+        Invoke-Expression -Command "$(PACEXEPATH) $pacCommand1"    
+
+      displayName: 'Set Solution version'
+
+    #The build unmanaged solution.
+    - task: MSBuild@1
+      inputs:
+        solution: './$(PackageDirectory)/*.cdsproj'
+        msbuildArguments: '/t:build /restore'
+
+    #The build managed solution.
+    - task: MSBuild@1
+      inputs:
+        solution: './$(PackageDirectory)/*.cdsproj'
+        msbuildArguments: '/t:build /p:Configuration=Release /restore'
+
+    #Copy the managed solution files to the build artifacts directory.
+    - task: CopyFiles@2
+      displayName: Copy managed solution
+      inputs:
+        SourceFolder: './$(PackageDirectory)/bin/Release'
+        Contents: '*.zip'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - powershell: |
+        Rename-Item -Path "$(Build.ArtifactStagingDirectory)/$(PackageDirectory).zip" -NewName "$(PackageDirectory)_$(BuildVersionRevisionStr)_managed.zip"      
+      displayName: 'Rename managed solution to $(PackageDirectory)_$(BuildVersionRevisionStr)_managed'
+
+    #Copy the unmanaged solution files to the build artifacts directory.
+    - task: CopyFiles@2
+      displayName: Copy unmanaged solution
+      inputs:
+        SourceFolder: './$(PackageDirectory)/bin/Debug'
+        Contents: '*.zip'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - powershell: |
+        Rename-Item -Path "$(Build.ArtifactStagingDirectory)/$(PackageDirectory).zip" -NewName "$(PackageDirectory)_$(BuildVersionRevisionStr).zip"      
+      displayName: 'Rename unmanaged solution to $(PackageDirectory)_$(BuildVersionRevisionStr)'
+
+    #Publish the build artifacts.
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)'
+        artifact: 'VSBCustomComponents'
+        publishLocation: 'pipeline'

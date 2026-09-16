@@ -1,0 +1,431 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_ReportErrorRightPanel:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    Properties:
+      Height: =768
+      Width: =1366
+    Children:
+      - con_ReportErrorRightPanel_Background:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.7)
+            Height: =Parent.Height
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =gblShowReportProblemPanel
+            Width: =Parent.Width
+          Children:
+            - ReportErrorRightPanel:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  Fill: =Color.White
+                  Height: =Parent.Height
+                  LayoutDirection: =LayoutDirection.Vertical
+                  Width: =Min(560, Parent.Width)
+                  X: =Parent.Width-Self.Width
+                Children:
+                  - con_ReportErrorRightPanel_BodyHeader:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                        FillPortions: =0
+                        Height: =46
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_ReportErrorRightPanel_BodyHeader_BodyHeader:
+                            Control: Label@2.5.1
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =2
+                              Color: =Color.White
+                              DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                              DisabledColor: =RGBA(161, 159, 157, 1)
+                              FocusedBorderThickness: =4
+                              Font: =Font.'Open Sans'
+                              FontWeight: =FontWeight.Semibold
+                              PaddingLeft: =0
+                              Size: =gblAppSizes.Font.Large
+                              Text: ="Report Error"
+                              Width: =Parent.Width-Self.X-40
+                              Wrap: =false
+                              X: =20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - ico_ReportErrorRightPanel_BodyHeader_BodyHeaderCancel:
+                            Control: Classic/Icon@2.5.0
+                            Properties:
+                              AccessibleLabel: ="Close"
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Color: =ColorValue(gblAppTheme.palette.white)
+                              DisabledBorderColor: =Color.Transparent
+                              Height: =20
+                              HoverColor: =Self.Color
+                              Icon: =Icon.Cancel
+                              OnSelect: |-
+                                =Set(gblShowReportProblemPanel, false);
+                                /*
+                                Reset(txt_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_Account_1);
+                                Reset(txt_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_Subaccount_1);
+                                Reset(drp_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_StartYear_1);
+                                Reset(drp_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_StartMonth_1);
+                                Reset(drp_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_EndYear_1);
+                                Reset(drp_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_EndMonth_1);
+                                Reset(txt_Costs_RightPanel_DistributeCostsInSubaccountBodyContent_TotalAmount_1);
+                                */
+                              PressedColor: =ColorValue(gblAppTheme.palette.themeLighter)
+                              Tooltip: ="Cancel"
+                              Width: =20
+                              X: =Parent.Width-Self.Width-15
+                              Y: =Parent.Height/2-Self.Height/2
+                  - con_ReportErrorRightPanel_BodyContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        DropShadow: =DropShadow.None
+                        Fill: =Color.Transparent
+                        Height: =Parent.Height-100
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        PaddingTop: =5
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                        X: =Parent.Width-Self.Width
+                      Children:
+                        - con_ReportErrorRightPanel_BodyContent_Title:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =76
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - txt_ReportErrorRightPanel_BodyContent_Title:
+                                  Control: TextInput@0.0.54
+                                  Properties:
+                                    BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                    Type: ='TextInputCanvas.Type'.Text
+                                    Value: =If(!IsBlank(gblReportError),"Handled Error from the '"& gblReportError.ErrorScreen & "' screen and the '"& gblReportError.ErrorSource &"' control.","")
+                                    Width: =Parent.Width-Self.X*2
+                                    X: =20
+                                    Y: =lbl_ReportErrorRightPanel_BodyContent_Title.Y+lbl_ReportErrorRightPanel_BodyContent_Title.Height
+                              - lbl_ReportErrorRightPanel_BodyContent_Title:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =gblAppColors.Label.Color
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingLeft: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="Title"
+                                    Tooltip: =Self.Text
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - lbl_ReportErrorRightPanel_BodyContent_TitleAsterisk:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    FontWeight: =FontWeight.Bold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =lbl_ReportErrorRightPanel_BodyContent_Title.X-Self.Width
+                        - con_ReportErrorRightPanel_BodyContent_Description:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =500
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              Width: |-
+                                =If(
+                                    Parent.Width >= 800,
+                                    Parent.Width/2,
+                                    Parent.Width
+                                )
+                              X: =40
+                            Children:
+                              - lbl_ReportErrorRightPanel_BodyContent_Description:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =gblAppColors.Label.Color
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingLeft: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="Description"
+                                    Tooltip: =Self.Text
+                                    Width: =Parent.Width-Self.X*2
+                                    Wrap: =false
+                                    X: =20
+                              - rte_ReportErrorRightPanel_BodyContent_Description:
+                                  Control: RichTextEditor@2.7.0
+                                  Properties:
+                                    BorderColor: =RGBA(214, 221, 224, 1)
+                                    Default: |-
+                                      =If(
+                                          !IsBlank(gblReportError),
+                                          "<p>An error has been handled for the '" & gblReportError.User & "' user, at '" & gblReportError.Timestamp & "' with the following details:</p>
+                                          <p>Screen:
+                                          <br>" & gblReportError.ErrorScreen & "</br>
+                                          </p>
+                                          <p>Source Control:
+                                          <br>" & gblReportError.ErrorSource & "
+                                          </p>
+                                          <p>Message:
+                                          <br>" & gblReportError.ErrorMessage & "
+                                          </p>",
+                                          ""
+                                      )
+                                    Height: =350
+                                    Width: =520
+                                    X: =20
+                                    Y: =lbl_ReportErrorRightPanel_BodyContent_Description.Y+lbl_ReportErrorRightPanel_BodyContent_Description.Height
+                              - lbl_ReportErrorRightPanel_BodyContent_DescriptionAsterix:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =ColorValue(gblAppTheme.palette.Error)
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    FontWeight: =FontWeight.Bold
+                                    Height: =32*1
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingBottom: =0
+                                    PaddingLeft: =0
+                                    PaddingRight: =0
+                                    PaddingTop: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: ="*"
+                                    Tooltip: =Self.Text
+                                    Width: =10
+                                    Wrap: =false
+                                    X: =lbl_ReportErrorRightPanel_BodyContent_Description.X-Self.Width
+                  - con_ReportErrorRightPanel_BodyButtons:
+                      Control: GroupContainer@1.5.0
+                      Variant: ManualLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =Color.Transparent
+                        FillPortions: =0
+                        Height: =60
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_ReportErrorRightPanel_BodyButtons_Clear:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Warning"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: =Set(gblReportError, Blank())
+                              Text: ="Clear Warning"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Visible: =!IsBlank(gblReportError)
+                              Width: =140
+                              X: =pcf_ReportErrorRightPanel_BodyButtons_Save.X-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - pcf_ReportErrorRightPanel_BodyButtons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: |-
+                                =/*
+                                If(
+                                    IsError(
+                                        ReportDevOpsBug.Run(
+                                            txt_ReportErrorRightPanel_BodyContent_Title.Value,
+                                            rte_ReportErrorRightPanel_BodyContent_Description.HtmlText,
+                                            "1632")
+                                        ),
+                                    Notify(
+                                        "Error: the 'Error Report' could not be created",
+                                        NotificationType.Error
+                                    ),
+                                    Notify(
+                                        "'Error Report' has been successfully reported",
+                                        NotificationType.Success
+                                    )
+
+                                );*/
+
+                                Set(gblReportError,Blank());
+                                Set(gblShowReportProblemPanel, false);
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Width: =96
+                              X: =pcf_ReportErrorRightPanel_BodyButtons_Cancel.X-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2
+                        - pcf_ReportErrorRightPanel_BodyButtons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              OnChange: =Set(gblShowReportProblemPanel, false)
+                              Text: ="Cancel"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Width: =96
+                              X: =Parent.Width-Self.Width-20
+                              Y: =Parent.Height/2-Self.Height/2

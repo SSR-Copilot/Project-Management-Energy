@@ -1,0 +1,2158 @@
+{
+  "QualifiedValues": [
+    {
+      "Namespace": "Aquisition Statuses (Forms)",
+      "Kind": "default.cds_vsb_aquisitionstatus_forms",
+      "Values": {
+        "Information": "18b8b32d-46a0-41c9-8847-ca12ccf4f081"
+      }
+    },
+    {
+      "Namespace": "Aquisition Types (Forms)",
+      "Kind": "default.cds_vsb_aquisitiontype_forms",
+      "Values": {
+        "Information": "83ed7801-50d7-45e7-967c-eb47c259a953"
+      }
+    },
+    {
+      "Namespace": "Countries (Forms)",
+      "Kind": "default.cds_vsb_country_forms",
+      "Values": {
+        "Informationen": "ff73e5bd-6b64-4cbd-b41c-928b3e9f6a6e"
+      }
+    },
+    {
+      "Namespace": "Country Inflation Profiles (Forms)",
+      "Kind": "default.cds_vsb_countryinflationprofile_forms",
+      "Values": {
+        "Information": "419299ae-55a6-4e1f-925d-b4a1b339dda2"
+      }
+    },
+    {
+      "Namespace": "CountryAreas (Forms)",
+      "Kind": "default.cds_vsb_countryarea_forms",
+      "Values": {
+        "Informationen": "c37034e1-3dc6-4a09-b59d-7a2b96c7c57e"
+      }
+    },
+    {
+      "Namespace": "Currencies (Forms)",
+      "Kind": "default.cds_transactioncurrency_forms",
+      "Values": {
+        "Information": "b56b6d35-1e69-436b-ba86-78127d36e8aa"
+      }
+    },
+    {
+      "Namespace": "Device Costs (Forms)",
+      "Kind": "default.cds_vsb_devicecost_forms",
+      "Values": {
+        "Information": "c2b3dba4-5814-40c8-8b19-ef543b99f522"
+      }
+    },
+    {
+      "Namespace": "DeviceTypesInProjects (Forms)",
+      "Kind": "default.cds_vsb_devicetypesinproject_forms",
+      "Values": {
+        "Information": "76a79aad-c221-4006-82c5-f483da16f8f0"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Definitions (Forms)",
+      "Kind": "default.cds_environmentvariabledefinition_forms",
+      "Values": {
+        "Information": "3853733b-a351-455d-b686-d2d05027ba4d"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Values (Forms)",
+      "Kind": "default.cds_environmentvariablevalue_forms",
+      "Values": {
+        "Information": "f574a3ab-1060-43ee-a95f-9aa922b497db"
+      }
+    },
+    {
+      "Namespace": "Estimation Price Inflations (Forms)",
+      "Kind": "default.cds_vsb_estimationpriceinflation_forms",
+      "Values": {
+        "Information": "ac84e7a1-789b-4175-931f-c062963a2689"
+      }
+    },
+    {
+      "Namespace": "GeneratorInProjects (Forms)",
+      "Kind": "default.cds_vsb_generatorinproject_forms",
+      "Values": {
+        "Information": "0aeb92cb-84fc-48aa-b223-cca1522b0479"
+      }
+    },
+    {
+      "Namespace": "Generators (Forms)",
+      "Kind": "default.cds_vsb_generator_forms",
+      "Values": {
+        "Information": "1534028a-ff0d-47a3-bab5-df1f0fd0b3ca"
+      }
+    },
+    {
+      "Namespace": "GeneratorTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_generatortypeinproject_forms",
+      "Values": {
+        "Information": "44432ac1-ac24-4448-acbe-91ff5d434481"
+      }
+    },
+    {
+      "Namespace": "Grid Operators (Forms)",
+      "Kind": "default.cds_vsb_gridoperator_forms",
+      "Values": {
+        "Information": "f5cadc39-8472-4873-8dac-d9195f936f82"
+      }
+    },
+    {
+      "Namespace": "Inverters (Forms)",
+      "Kind": "default.cds_vsb_inverter_forms",
+      "Values": {
+        "Information": "1021d447-1682-4dce-a26f-fd707adb819c"
+      }
+    },
+    {
+      "Namespace": "InverterTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_invertertypeinproject_forms",
+      "Values": {
+        "Information": "0c0170fc-bd80-4881-bbec-e50a41735b2f"
+      }
+    },
+    {
+      "Namespace": "Land Lease Allocation WTGS (Forms)",
+      "Kind": "default.cds_vsb_landleaseallocationwtg_forms",
+      "Values": {
+        "Information": "b7bed394-d373-4e9d-86fd-fdcb4902cf84"
+      }
+    },
+    {
+      "Namespace": "Microsoft Entra IDs (Forms)",
+      "Kind": "default.cds_aaduser_forms",
+      "Values": {
+        "Information": "dd5ded01-9aad-4e25-8d0e-e9acdaecbe4e"
+      }
+    },
+    {
+      "Namespace": "Opex Project Costs (Forms)",
+      "Kind": "default.cds_vsb_opexprojectcost_forms",
+      "Values": {
+        "Information": "d303aa5a-7bfc-4bf2-aff7-f2903ef583b8"
+      }
+    },
+    {
+      "Namespace": "Permits (Forms)",
+      "Kind": "default.cds_vsb_permit_forms",
+      "Values": {
+        "Information": "6e930920-172f-462d-af98-4be170ea1f76"
+      }
+    },
+    {
+      "Namespace": "Project Plannings (Forms)",
+      "Kind": "default.cds_vsb_projectplanning_forms",
+      "Values": {
+        "Information": "bf6db0a0-8bdc-4d09-a6d5-beed8bd23700"
+      }
+    },
+    {
+      "Namespace": "Project Revenues (Forms)",
+      "Kind": "default.cds_vsb_projectrevenue_forms",
+      "Values": {
+        "Information": "699944f1-3efc-4c4d-ac86-fb13b4b4b85e"
+      }
+    },
+    {
+      "Namespace": "Projects (Forms)",
+      "Kind": "default.cds_vsb_project_forms",
+      "Values": {
+        "Informationen": "332aa44b-d129-435a-a04d-b6202c7387ac"
+      }
+    },
+    {
+      "Namespace": "PVModules (Forms)",
+      "Kind": "default.cds_vsb_pvmodule_forms",
+      "Values": {
+        "Information": "c589479c-62cb-4832-8918-a8324c2f8503"
+      }
+    },
+    {
+      "Namespace": "PVModuleTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_pvmoduletypeinproject_forms",
+      "Values": {
+        "Information": "546da93f-473c-4b7b-b3b5-d6e92a181547"
+      }
+    },
+    {
+      "Namespace": "Revenue Subaccounts (Forms)",
+      "Kind": "default.cds_vsb_revenuesubaccount_forms",
+      "Values": {
+        "Information": "564e7905-1f86-47f4-8a23-da1a4b287e5f"
+      }
+    },
+    {
+      "Namespace": "Security Roles (Forms)",
+      "Kind": "default.cds_role_forms",
+      "Values": {
+        "Information": "d830b05c-0c90-4dcf-be8b-5d22a856f510"
+      }
+    },
+    {
+      "Namespace": "ShareholderEntityInProjects (Forms)",
+      "Kind": "default.cds_vsb_shareholderentitiy_forms",
+      "Values": {
+        "Information": "ed7caa98-9e23-4912-a3f5-df9f18d4886b"
+      }
+    },
+    {
+      "Namespace": "Substructures (Forms)",
+      "Kind": "default.cds_vsb_substructure_forms",
+      "Values": {
+        "Information": "128704fa-ffe1-4f87-97c0-ede4a39df1c2"
+      }
+    },
+    {
+      "Namespace": "SubstructureTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_substructuretypeinproject_forms",
+      "Values": {
+        "Information": "13398f8e-67b3-43d0-bbe5-e378607b329e"
+      }
+    },
+    {
+      "Namespace": "Users (Forms)",
+      "Kind": "default.cds_systemuser_forms",
+      "Values": {
+        "User": "c2cd9e55-d4b4-4b55-9951-16ead79643e5",
+        "Information": "094fb08a-77bb-49e0-b7ea-8dbddfd01294",
+        "User Hierarchy Tile Form": "c68d6c09-d7a7-4959-8d0f-44b8cff9b452",
+        "User form – Business": "c2413504-7eb2-4c59-a087-95d819866114",
+        "Application User": "d26924ef-4d80-46f7-ab1d-e6ae80a54ce8"
+      }
+    },
+    {
+      "Namespace": "Business Units (Forms)",
+      "Kind": "default.cds_businessunit_forms",
+      "Values": {
+        "Business Unit Hierarchy Form": "405b16b6-126a-4117-a4e0-33f0caf0c7a2",
+        "Information": "ca8dfced-338c-43b2-b212-83745e257c28"
+      }
+    },
+    {
+      "Namespace": "Land Lease Project Costs (Forms)",
+      "Kind": "default.cds_vsb_landleaseprojectcost_forms",
+      "Values": {
+        "Information": "461f8ab9-0924-4468-8eab-fc4fcf54266c"
+      }
+    },
+    {
+      "Namespace": "Custom Choice Values (Forms)",
+      "Kind": "default.cds_vsb_customchoicevalue_forms",
+      "Values": {
+        "Information": "ff58107a-9f35-4de3-bf37-ba0009a23f41"
+      }
+    },
+    {
+      "Namespace": "Milestones Standard Assumptions (Forms)",
+      "Kind": "default.cds_vsb_milestonesstandardassumptions_forms",
+      "Values": {
+        "Information": "d79456c8-a688-42a9-95b5-bb2f615c118e"
+      }
+    },
+    {
+      "Namespace": "Teams (Forms)",
+      "Kind": "default.cds_team_forms",
+      "Values": {
+        "Information": "f5cfab6a-d4c2-4519-b68f-6e7485432e29",
+        "Team form – Business": "4aabf594-b30a-490d-bf97-89c67c6777fe",
+        "Team": "7ba7fac1-1418-4335-935f-f7f8dfd73fcc"
+      }
+    },
+    {
+      "Namespace": "Project State Trackings (Forms)",
+      "Kind": "default.cds_vsb_projectstatetracking_forms",
+      "Values": {
+        "Information": "392227ba-d0b0-409c-928d-b8181f47845a"
+      }
+    },
+    {
+      "Namespace": "Project Default Approvals (Forms)",
+      "Kind": "default.cds_vsb_projectdefaultapprovals_forms",
+      "Values": {
+        "Information": "172c9a30-3e93-4b15-89c2-8e918e0cebe2"
+      }
+    },
+    {
+      "Namespace": "Project Default Checklists (Forms)",
+      "Kind": "default.cds_vsb_projectdefaultchecklists_forms",
+      "Values": {
+        "Information": "42455d24-a818-4f13-b47d-6d097d370a91"
+      }
+    },
+    {
+      "Namespace": "Energy Yields (Forms)",
+      "Kind": "default.cds_vsb_energyyield_forms",
+      "Values": {
+        "Information": "8b33d4ed-3ec8-413e-9a67-f942bc6313b8"
+      }
+    },
+    {
+      "Namespace": "HydrogenTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_hydrogentypeinproject_forms",
+      "Values": {
+        "Information": "10fbeb75-0653-430f-a58b-de4db7cbf9ce"
+      }
+    },
+    {
+      "Namespace": "SubstationTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_substationtypeinproject_forms",
+      "Values": {
+        "Information": "ca1b6449-bd48-40f2-be30-bd487df9f181"
+      }
+    },
+    {
+      "Namespace": "StorageTypeInProjects (Forms)",
+      "Kind": "default.cds_vsb_storagetypeinproject_forms",
+      "Values": {
+        "Information": "164b8271-c8ea-4bf2-89b7-80e998fd9440"
+      }
+    },
+    {
+      "Namespace": "Tarrif Price Standard Assumptions (Forms)",
+      "Kind": "default.cds_vsb_tarrifpricestandardassumption_forms",
+      "Values": {
+        "Information": "117100b8-ed3b-4c31-b21d-dcf4ac60c2ee"
+      }
+    },
+    {
+      "Namespace": "Project States (Forms)",
+      "Kind": "default.cds_vsb_projectstate_forms",
+      "Values": {
+        "Information": "475b3b84-2b78-4fba-baac-fda48697810b"
+      }
+    },
+    {
+      "Namespace": "Project Checklists (Forms)",
+      "Kind": "default.cds_vsb_projectchecklist_forms",
+      "Values": {
+        "Information": "4a896ed6-9992-4d83-9a9b-da0b986a128c"
+      }
+    },
+    {
+      "Namespace": "Checklist Country And Technologies (Forms)",
+      "Kind": "default.cds_vsb_checklistcountryandtechnology_forms",
+      "Values": {
+        "Information": "ae3153e5-1d36-4974-b6dc-f3c525b54185"
+      }
+    },
+    {
+      "Namespace": "Project State Tracking Notes (Forms)",
+      "Kind": "default.cds_vsb_projectstatetrackingnote_forms",
+      "Values": {
+        "Information": "8d83f7fa-50f9-4eec-8570-07bd3593dc59"
+      }
+    },
+    {
+      "Namespace": "CAPEX Account Lists (Forms)",
+      "Kind": "default.cds_vsb_capexaccountlist_forms",
+      "Values": {
+        "Information": "6b32b3b2-1a01-426d-927b-bd6b05b6d658"
+      }
+    },
+    {
+      "Namespace": "CAPEX Costs (Forms)",
+      "Kind": "default.cds_vsb_capexcost_forms",
+      "Values": {
+        "Information": "9061141c-cd28-4572-8244-e860913fb537"
+      }
+    },
+    {
+      "Namespace": "CAPEX Project Contracts (Forms)",
+      "Kind": "default.cds_vsb_capexprojectcontract_forms",
+      "Values": {
+        "Information": "0d92bc75-386a-4645-be6a-ca19eec15ae2"
+      }
+    },
+    {
+      "Namespace": "Project Members (Forms)",
+      "Kind": "default.cds_vsb_projectmembers_forms",
+      "Values": {
+        "Information": "17a81bce-ea36-4577-aeb4-6ff1b8e9dbb0"
+      }
+    },
+    {
+      "Namespace": "Financing Categories (Forms)",
+      "Kind": "default.cds_vsb_financingcategory_forms",
+      "Values": {
+        "Information": "16f8e5ae-7961-409e-bdc0-e4a91a452d0d"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs (Forms)",
+      "Kind": "default.cds_vsb_financinginput_forms",
+      "Values": {
+        "Information": "2d22c3ae-15eb-4526-88d6-81caf19c2e9b"
+      }
+    },
+    {
+      "Namespace": "Fabric Sync Jobs (Forms)",
+      "Kind": "default.cds_vsb_fabricsyncjob_forms",
+      "Values": {
+        "Information": "6582015b-f876-4ade-a41e-db02764bc610"
+      }
+    },
+    {
+      "Namespace": "Fabric Job Types (Forms)",
+      "Kind": "default.cds_vsb_fabricjobtype_forms",
+      "Values": {
+        "Information": "5ac3fa65-5e77-4002-b824-6decd38ae372"
+      }
+    },
+    {
+      "Namespace": "Financing Input Step Up margins (Forms)",
+      "Kind": "default.cds_vsb_financinginputstepupmargins_forms",
+      "Values": {
+        "Information": "950cfa12-be0d-433f-9d02-d184f15f1d47"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs Repayment Amounts (Forms)",
+      "Kind": "default.cds_vsb_financinginputsrepaymentamount_forms",
+      "Values": {
+        "Information": "84b4aab6-19af-417f-b5e7-e672e4fb4a25"
+      }
+    },
+    {
+      "Namespace": "Check List Default Approvals (Forms)",
+      "Kind": "default.cds_vsb_checklistdefaultapprovals_forms",
+      "Values": {
+        "Information": "9af84f4a-ccb0-41f7-a32c-c3909a89dfde"
+      }
+    },
+    {
+      "Namespace": "OPEX & Land Lease Standard Assumptions (Forms)",
+      "Kind": "default.cds_vsb_opexlandleasestandardassumptions_forms",
+      "Values": {
+        "Information": "d39d0461-e1e1-422c-bcea-b2016376ae8d"
+      }
+    },
+    {
+      "Namespace": "Opex Subaccounts (Forms)",
+      "Kind": "default.cds_vsb_opexsubaccount_forms",
+      "Values": {
+        "Information": "e3a952cb-6bd1-4672-91fc-c82645dd63c3"
+      }
+    },
+    {
+      "Namespace": "Land Lease Subaccounts (Forms)",
+      "Kind": "default.cds_vsb_landleasesubaccount_forms",
+      "Values": {
+        "Information": "d2a7123e-69cb-4c38-afd2-ba5e903d3f2b"
+      }
+    },
+    {
+      "Namespace": "Land Lease Periods (Forms)",
+      "Kind": "default.cds_vsb_landleaseperiod_forms",
+      "Values": {
+        "Information": "1eb06982-c1d9-44d0-a443-e5002902fa7f"
+      }
+    },
+    {
+      "Namespace": "Apply and Apply All Trackings (Forms)",
+      "Kind": "default.cds_vsb_applyandapplyalltracking_forms",
+      "Values": {
+        "Information": "3a8e3985-d497-473d-9338-f3a687772bdd"
+      }
+    },
+    {
+      "Namespace": "Devex/Capex Standard Assumptions (Forms)",
+      "Kind": "default.cds_vsb_devexcapexstandardassumptions_forms",
+      "Values": {
+        "Information": "8c7579a2-196f-4455-8279-5be701130a80"
+      }
+    },
+    {
+      "Namespace": "Project Checklist Tracking Note (Forms)",
+      "Kind": "default.cds_vsb_projectchecklisttrackingnote_forms",
+      "Values": {
+        "Information": "538bfc8c-3b08-42d6-bcc5-d2c7fb3ce50e"
+      }
+    },
+    {
+      "Namespace": "Opex Accounts (Forms)",
+      "Kind": "default.cds_vsb_opexaccount_forms",
+      "Values": {
+        "Information": "1b677af1-c2d2-42b5-a5af-eea160f77241"
+      }
+    },
+    {
+      "Namespace": "Approval Responses (Forms)",
+      "Kind": "default.cds_msdyn_flow_approvalresponse_forms",
+      "Values": {
+        "Information": "83e0293d-6061-45d0-a523-ba032e7638b4"
+      }
+    },
+    {
+      "Namespace": "Project Member Descriptions (Forms)",
+      "Kind": "default.cds_vsb_projectmemberdescriptions_forms",
+      "Values": {
+        "Information": "59cd91c1-38ce-45cf-9252-b86ad9909dfe"
+      }
+    },
+    {
+      "Namespace": "Duplicate Records (Forms)",
+      "Kind": "default.cds_duplicaterecord_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "BoP Contracts Standard Assumption DevCo Costs (Forms)",
+      "Kind": "default.cds_vsb_bopcontractsstandardassumptiondevcocosts_forms",
+      "Values": {
+        "Information": "1a9ae593-aa75-470b-9e4e-f1801de951a4"
+      }
+    },
+    {
+      "Namespace": "BoP Contracts Standard Assumptions (Forms)",
+      "Kind": "default.cds_vsb_bopcontractsstandardassumptions_forms",
+      "Values": {
+        "Information": "4adab8ee-de77-4a36-a1cf-bcd7b8672d65"
+      }
+    },
+    {
+      "Namespace": "BoP Projects Contracts (Forms)",
+      "Kind": "default.cds_vsb_bopprojectscontracts_forms",
+      "Values": {
+        "Information": "6877b869-2aa4-40bd-a3bc-a303b16d68b0"
+      }
+    },
+    {
+      "Namespace": "Balancing Prices (Forms)",
+      "Kind": "default.cds_vsb_balancingprice_forms",
+      "Values": {
+        "Information": "138ff196-234d-493a-9c44-1580f2a033de",
+        "TestForm": "aceabb4f-38d0-f011-bbd3-7c1e525250c9"
+      }
+    },
+    {
+      "Namespace": "Bulk Delete Failures (Forms)",
+      "Kind": "default.cds_bulkdeletefailure_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "SPVDevCo Mapping Capex Devexes (Forms)",
+      "Kind": "default.cds_vsb_spvdevcomappingcapexdevex_forms",
+      "Values": {
+        "Information": "6602aef6-38cf-4fc8-bc18-a51ff5845441"
+      }
+    },
+    {
+      "Namespace": "PV Seasonality Values (Forms)",
+      "Kind": "default.cds_vsb_pvseasonalityvalues_forms",
+      "Values": {
+        "Information": "22ea7062-7c7b-4038-895f-f46f8c12ae7b"
+      }
+    },
+    {
+      "Namespace": "PV Negative Prices (Forms)",
+      "Kind": "default.cds_vsb_pvnegativeprices_forms",
+      "Values": {
+        "Information": "8590b4b6-4509-4db9-b0a0-c68a707575b0"
+      }
+    },
+    {
+      "Namespace": "RevenueIndividualHedgeVolumes (Forms)",
+      "Kind": "default.cds_vsb_revenueindividualhedgevolume_forms",
+      "Values": {
+        "Information": "400ee297-ebb7-4e3c-9ed0-d2e770d36f52"
+      }
+    },
+    {
+      "Namespace": "Assumptions Local Tax Frances (Forms)",
+      "Kind": "default.cds_vsb_assumptionslocaltaxfrance_forms",
+      "Values": {
+        "Information": "d9bae349-a833-44bf-ba66-eb77eed42ddb"
+      }
+    },
+    {
+      "Namespace": "Assumptions Local Tax Germanies (Forms)",
+      "Kind": "default.cds_vsb_assumptionslocaltaxgermany_forms",
+      "Values": {
+        "Information": "3a6e1f79-2045-4626-86ff-903c3af00b8b"
+      }
+    },
+    {
+      "Namespace": "Aquisition Statuses (Formularze)",
+      "Kind": "default.cds_vsb_aquisitionstatus_forms",
+      "Values": {
+        "Information": "18b8b32d-46a0-41c9-8847-ca12ccf4f081"
+      }
+    },
+    {
+      "Namespace": "Aquisition Types (Formularze)",
+      "Kind": "default.cds_vsb_aquisitiontype_forms",
+      "Values": {
+        "Information": "83ed7801-50d7-45e7-967c-eb47c259a953"
+      }
+    },
+    {
+      "Namespace": "Countries (Formularze)",
+      "Kind": "default.cds_vsb_country_forms",
+      "Values": {
+        "Informationen": "ff73e5bd-6b64-4cbd-b41c-928b3e9f6a6e"
+      }
+    },
+    {
+      "Namespace": "Country Inflation Profiles (Formularze)",
+      "Kind": "default.cds_vsb_countryinflationprofile_forms",
+      "Values": {
+        "Information": "419299ae-55a6-4e1f-925d-b4a1b339dda2"
+      }
+    },
+    {
+      "Namespace": "CountryAreas (Formularze)",
+      "Kind": "default.cds_vsb_countryarea_forms",
+      "Values": {
+        "Informationen": "c37034e1-3dc6-4a09-b59d-7a2b96c7c57e"
+      }
+    },
+    {
+      "Namespace": "Currencies (Formularze)",
+      "Kind": "default.cds_transactioncurrency_forms",
+      "Values": {
+        "Information": "b56b6d35-1e69-436b-ba86-78127d36e8aa"
+      }
+    },
+    {
+      "Namespace": "Device Costs (Formularze)",
+      "Kind": "default.cds_vsb_devicecost_forms",
+      "Values": {
+        "Information": "c2b3dba4-5814-40c8-8b19-ef543b99f522"
+      }
+    },
+    {
+      "Namespace": "DeviceTypesInProjects (Formularze)",
+      "Kind": "default.cds_vsb_devicetypesinproject_forms",
+      "Values": {
+        "Information": "76a79aad-c221-4006-82c5-f483da16f8f0"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Definitions (Formularze)",
+      "Kind": "default.cds_environmentvariabledefinition_forms",
+      "Values": {
+        "Information": "3853733b-a351-455d-b686-d2d05027ba4d"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Values (Formularze)",
+      "Kind": "default.cds_environmentvariablevalue_forms",
+      "Values": {
+        "Information": "f574a3ab-1060-43ee-a95f-9aa922b497db"
+      }
+    },
+    {
+      "Namespace": "Estimation Price Inflations (Formularze)",
+      "Kind": "default.cds_vsb_estimationpriceinflation_forms",
+      "Values": {
+        "Information": "ac84e7a1-789b-4175-931f-c062963a2689"
+      }
+    },
+    {
+      "Namespace": "GeneratorInProjects (Formularze)",
+      "Kind": "default.cds_vsb_generatorinproject_forms",
+      "Values": {
+        "Information": "0aeb92cb-84fc-48aa-b223-cca1522b0479"
+      }
+    },
+    {
+      "Namespace": "Generators (Formularze)",
+      "Kind": "default.cds_vsb_generator_forms",
+      "Values": {
+        "Information": "1534028a-ff0d-47a3-bab5-df1f0fd0b3ca"
+      }
+    },
+    {
+      "Namespace": "GeneratorTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_generatortypeinproject_forms",
+      "Values": {
+        "Information": "44432ac1-ac24-4448-acbe-91ff5d434481"
+      }
+    },
+    {
+      "Namespace": "Grid Operators (Formularze)",
+      "Kind": "default.cds_vsb_gridoperator_forms",
+      "Values": {
+        "Information": "f5cadc39-8472-4873-8dac-d9195f936f82"
+      }
+    },
+    {
+      "Namespace": "Inverters (Formularze)",
+      "Kind": "default.cds_vsb_inverter_forms",
+      "Values": {
+        "Information": "1021d447-1682-4dce-a26f-fd707adb819c"
+      }
+    },
+    {
+      "Namespace": "InverterTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_invertertypeinproject_forms",
+      "Values": {
+        "Information": "0c0170fc-bd80-4881-bbec-e50a41735b2f"
+      }
+    },
+    {
+      "Namespace": "Land Lease Allocation WTGS (Formularze)",
+      "Kind": "default.cds_vsb_landleaseallocationwtg_forms",
+      "Values": {
+        "Information": "b7bed394-d373-4e9d-86fd-fdcb4902cf84"
+      }
+    },
+    {
+      "Namespace": "Microsoft Entra IDs (Formularze)",
+      "Kind": "default.cds_aaduser_forms",
+      "Values": {
+        "Information": "dd5ded01-9aad-4e25-8d0e-e9acdaecbe4e"
+      }
+    },
+    {
+      "Namespace": "Opex Project Costs (Formularze)",
+      "Kind": "default.cds_vsb_opexprojectcost_forms",
+      "Values": {
+        "Information": "d303aa5a-7bfc-4bf2-aff7-f2903ef583b8"
+      }
+    },
+    {
+      "Namespace": "Permits (Formularze)",
+      "Kind": "default.cds_vsb_permit_forms",
+      "Values": {
+        "Information": "6e930920-172f-462d-af98-4be170ea1f76"
+      }
+    },
+    {
+      "Namespace": "Project Plannings (Formularze)",
+      "Kind": "default.cds_vsb_projectplanning_forms",
+      "Values": {
+        "Information": "bf6db0a0-8bdc-4d09-a6d5-beed8bd23700"
+      }
+    },
+    {
+      "Namespace": "Project Revenues (Formularze)",
+      "Kind": "default.cds_vsb_projectrevenue_forms",
+      "Values": {
+        "Information": "699944f1-3efc-4c4d-ac86-fb13b4b4b85e"
+      }
+    },
+    {
+      "Namespace": "Projects (Formularze)",
+      "Kind": "default.cds_vsb_project_forms",
+      "Values": {
+        "Informationen": "332aa44b-d129-435a-a04d-b6202c7387ac"
+      }
+    },
+    {
+      "Namespace": "PVModules (Formularze)",
+      "Kind": "default.cds_vsb_pvmodule_forms",
+      "Values": {
+        "Information": "c589479c-62cb-4832-8918-a8324c2f8503"
+      }
+    },
+    {
+      "Namespace": "PVModuleTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_pvmoduletypeinproject_forms",
+      "Values": {
+        "Information": "546da93f-473c-4b7b-b3b5-d6e92a181547"
+      }
+    },
+    {
+      "Namespace": "Revenue Subaccounts (Formularze)",
+      "Kind": "default.cds_vsb_revenuesubaccount_forms",
+      "Values": {
+        "Information": "564e7905-1f86-47f4-8a23-da1a4b287e5f"
+      }
+    },
+    {
+      "Namespace": "Security Roles (Formularze)",
+      "Kind": "default.cds_role_forms",
+      "Values": {
+        "Information": "d830b05c-0c90-4dcf-be8b-5d22a856f510"
+      }
+    },
+    {
+      "Namespace": "ShareholderEntityInProjects (Formularze)",
+      "Kind": "default.cds_vsb_shareholderentitiy_forms",
+      "Values": {
+        "Information": "ed7caa98-9e23-4912-a3f5-df9f18d4886b"
+      }
+    },
+    {
+      "Namespace": "Substructures (Formularze)",
+      "Kind": "default.cds_vsb_substructure_forms",
+      "Values": {
+        "Information": "128704fa-ffe1-4f87-97c0-ede4a39df1c2"
+      }
+    },
+    {
+      "Namespace": "SubstructureTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_substructuretypeinproject_forms",
+      "Values": {
+        "Information": "13398f8e-67b3-43d0-bbe5-e378607b329e"
+      }
+    },
+    {
+      "Namespace": "Users (Formularze)",
+      "Kind": "default.cds_systemuser_forms",
+      "Values": {
+        "User": "c2cd9e55-d4b4-4b55-9951-16ead79643e5",
+        "Information": "094fb08a-77bb-49e0-b7ea-8dbddfd01294",
+        "User Hierarchy Tile Form": "c68d6c09-d7a7-4959-8d0f-44b8cff9b452",
+        "User form – Business": "c2413504-7eb2-4c59-a087-95d819866114",
+        "Application User": "d26924ef-4d80-46f7-ab1d-e6ae80a54ce8"
+      }
+    },
+    {
+      "Namespace": "Business Units (Formularze)",
+      "Kind": "default.cds_businessunit_forms",
+      "Values": {
+        "Business Unit Hierarchy Form": "405b16b6-126a-4117-a4e0-33f0caf0c7a2",
+        "Information": "ca8dfced-338c-43b2-b212-83745e257c28"
+      }
+    },
+    {
+      "Namespace": "Land Lease Project Costs (Formularze)",
+      "Kind": "default.cds_vsb_landleaseprojectcost_forms",
+      "Values": {
+        "Information": "461f8ab9-0924-4468-8eab-fc4fcf54266c"
+      }
+    },
+    {
+      "Namespace": "Custom Choice Values (Formularze)",
+      "Kind": "default.cds_vsb_customchoicevalue_forms",
+      "Values": {
+        "Information": "ff58107a-9f35-4de3-bf37-ba0009a23f41"
+      }
+    },
+    {
+      "Namespace": "Milestones Standard Assumptions (Formularze)",
+      "Kind": "default.cds_vsb_milestonesstandardassumptions_forms",
+      "Values": {
+        "Information": "d79456c8-a688-42a9-95b5-bb2f615c118e"
+      }
+    },
+    {
+      "Namespace": "Teams (Formularze)",
+      "Kind": "default.cds_team_forms",
+      "Values": {
+        "Information": "f5cfab6a-d4c2-4519-b68f-6e7485432e29",
+        "Team form – Business": "4aabf594-b30a-490d-bf97-89c67c6777fe",
+        "Team": "7ba7fac1-1418-4335-935f-f7f8dfd73fcc"
+      }
+    },
+    {
+      "Namespace": "Project State Trackings (Formularze)",
+      "Kind": "default.cds_vsb_projectstatetracking_forms",
+      "Values": {
+        "Information": "392227ba-d0b0-409c-928d-b8181f47845a"
+      }
+    },
+    {
+      "Namespace": "Project Default Approvals (Formularze)",
+      "Kind": "default.cds_vsb_projectdefaultapprovals_forms",
+      "Values": {
+        "Information": "172c9a30-3e93-4b15-89c2-8e918e0cebe2"
+      }
+    },
+    {
+      "Namespace": "Project Default Checklists (Formularze)",
+      "Kind": "default.cds_vsb_projectdefaultchecklists_forms",
+      "Values": {
+        "Information": "42455d24-a818-4f13-b47d-6d097d370a91"
+      }
+    },
+    {
+      "Namespace": "Energy Yields (Formularze)",
+      "Kind": "default.cds_vsb_energyyield_forms",
+      "Values": {
+        "Information": "8b33d4ed-3ec8-413e-9a67-f942bc6313b8"
+      }
+    },
+    {
+      "Namespace": "HydrogenTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_hydrogentypeinproject_forms",
+      "Values": {
+        "Information": "10fbeb75-0653-430f-a58b-de4db7cbf9ce"
+      }
+    },
+    {
+      "Namespace": "SubstationTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_substationtypeinproject_forms",
+      "Values": {
+        "Information": "ca1b6449-bd48-40f2-be30-bd487df9f181"
+      }
+    },
+    {
+      "Namespace": "StorageTypeInProjects (Formularze)",
+      "Kind": "default.cds_vsb_storagetypeinproject_forms",
+      "Values": {
+        "Information": "164b8271-c8ea-4bf2-89b7-80e998fd9440"
+      }
+    },
+    {
+      "Namespace": "Tarrif Price Standard Assumptions (Formularze)",
+      "Kind": "default.cds_vsb_tarrifpricestandardassumption_forms",
+      "Values": {
+        "Information": "117100b8-ed3b-4c31-b21d-dcf4ac60c2ee"
+      }
+    },
+    {
+      "Namespace": "Project States (Formularze)",
+      "Kind": "default.cds_vsb_projectstate_forms",
+      "Values": {
+        "Information": "475b3b84-2b78-4fba-baac-fda48697810b"
+      }
+    },
+    {
+      "Namespace": "Project Checklists (Formularze)",
+      "Kind": "default.cds_vsb_projectchecklist_forms",
+      "Values": {
+        "Information": "4a896ed6-9992-4d83-9a9b-da0b986a128c"
+      }
+    },
+    {
+      "Namespace": "Checklist Country And Technologies (Formularze)",
+      "Kind": "default.cds_vsb_checklistcountryandtechnology_forms",
+      "Values": {
+        "Information": "ae3153e5-1d36-4974-b6dc-f3c525b54185"
+      }
+    },
+    {
+      "Namespace": "Project State Tracking Notes (Formularze)",
+      "Kind": "default.cds_vsb_projectstatetrackingnote_forms",
+      "Values": {
+        "Information": "8d83f7fa-50f9-4eec-8570-07bd3593dc59"
+      }
+    },
+    {
+      "Namespace": "CAPEX Account Lists (Formularze)",
+      "Kind": "default.cds_vsb_capexaccountlist_forms",
+      "Values": {
+        "Information": "6b32b3b2-1a01-426d-927b-bd6b05b6d658"
+      }
+    },
+    {
+      "Namespace": "CAPEX Costs (Formularze)",
+      "Kind": "default.cds_vsb_capexcost_forms",
+      "Values": {
+        "Information": "9061141c-cd28-4572-8244-e860913fb537"
+      }
+    },
+    {
+      "Namespace": "CAPEX Project Contracts (Formularze)",
+      "Kind": "default.cds_vsb_capexprojectcontract_forms",
+      "Values": {
+        "Information": "0d92bc75-386a-4645-be6a-ca19eec15ae2"
+      }
+    },
+    {
+      "Namespace": "Project Members (Formularze)",
+      "Kind": "default.cds_vsb_projectmembers_forms",
+      "Values": {
+        "Information": "17a81bce-ea36-4577-aeb4-6ff1b8e9dbb0"
+      }
+    },
+    {
+      "Namespace": "Financing Categories (Formularze)",
+      "Kind": "default.cds_vsb_financingcategory_forms",
+      "Values": {
+        "Information": "16f8e5ae-7961-409e-bdc0-e4a91a452d0d"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs (Formularze)",
+      "Kind": "default.cds_vsb_financinginput_forms",
+      "Values": {
+        "Information": "2d22c3ae-15eb-4526-88d6-81caf19c2e9b"
+      }
+    },
+    {
+      "Namespace": "Fabric Sync Jobs (Formularze)",
+      "Kind": "default.cds_vsb_fabricsyncjob_forms",
+      "Values": {
+        "Information": "6582015b-f876-4ade-a41e-db02764bc610"
+      }
+    },
+    {
+      "Namespace": "Fabric Job Types (Formularze)",
+      "Kind": "default.cds_vsb_fabricjobtype_forms",
+      "Values": {
+        "Information": "5ac3fa65-5e77-4002-b824-6decd38ae372"
+      }
+    },
+    {
+      "Namespace": "Financing Input Step Up margins (Formularze)",
+      "Kind": "default.cds_vsb_financinginputstepupmargins_forms",
+      "Values": {
+        "Information": "950cfa12-be0d-433f-9d02-d184f15f1d47"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs Repayment Amounts (Formularze)",
+      "Kind": "default.cds_vsb_financinginputsrepaymentamount_forms",
+      "Values": {
+        "Information": "84b4aab6-19af-417f-b5e7-e672e4fb4a25"
+      }
+    },
+    {
+      "Namespace": "Check List Default Approvals (Formularze)",
+      "Kind": "default.cds_vsb_checklistdefaultapprovals_forms",
+      "Values": {
+        "Information": "9af84f4a-ccb0-41f7-a32c-c3909a89dfde"
+      }
+    },
+    {
+      "Namespace": "OPEX & Land Lease Standard Assumptions (Formularze)",
+      "Kind": "default.cds_vsb_opexlandleasestandardassumptions_forms",
+      "Values": {
+        "Information": "d39d0461-e1e1-422c-bcea-b2016376ae8d"
+      }
+    },
+    {
+      "Namespace": "Opex Subaccounts (Formularze)",
+      "Kind": "default.cds_vsb_opexsubaccount_forms",
+      "Values": {
+        "Information": "e3a952cb-6bd1-4672-91fc-c82645dd63c3"
+      }
+    },
+    {
+      "Namespace": "Land Lease Subaccounts (Formularze)",
+      "Kind": "default.cds_vsb_landleasesubaccount_forms",
+      "Values": {
+        "Information": "d2a7123e-69cb-4c38-afd2-ba5e903d3f2b"
+      }
+    },
+    {
+      "Namespace": "Land Lease Periods (Formularze)",
+      "Kind": "default.cds_vsb_landleaseperiod_forms",
+      "Values": {
+        "Information": "1eb06982-c1d9-44d0-a443-e5002902fa7f"
+      }
+    },
+    {
+      "Namespace": "Apply and Apply All Trackings (Formularze)",
+      "Kind": "default.cds_vsb_applyandapplyalltracking_forms",
+      "Values": {
+        "Information": "3a8e3985-d497-473d-9338-f3a687772bdd"
+      }
+    },
+    {
+      "Namespace": "Devex/Capex Standard Assumptions (Formularze)",
+      "Kind": "default.cds_vsb_devexcapexstandardassumptions_forms",
+      "Values": {
+        "Information": "8c7579a2-196f-4455-8279-5be701130a80"
+      }
+    },
+    {
+      "Namespace": "Project Checklist Tracking Note (Formularze)",
+      "Kind": "default.cds_vsb_projectchecklisttrackingnote_forms",
+      "Values": {
+        "Information": "538bfc8c-3b08-42d6-bcc5-d2c7fb3ce50e"
+      }
+    },
+    {
+      "Namespace": "Opex Accounts (Formularze)",
+      "Kind": "default.cds_vsb_opexaccount_forms",
+      "Values": {
+        "Information": "1b677af1-c2d2-42b5-a5af-eea160f77241"
+      }
+    },
+    {
+      "Namespace": "Approval Responses (Formularze)",
+      "Kind": "default.cds_msdyn_flow_approvalresponse_forms",
+      "Values": {
+        "Information": "83e0293d-6061-45d0-a523-ba032e7638b4"
+      }
+    },
+    {
+      "Namespace": "Project Member Descriptions (Formularze)",
+      "Kind": "default.cds_vsb_projectmemberdescriptions_forms",
+      "Values": {
+        "Information": "59cd91c1-38ce-45cf-9252-b86ad9909dfe"
+      }
+    },
+    {
+      "Namespace": "Duplicate Records (Formularze)",
+      "Kind": "default.cds_duplicaterecord_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "BoP Contracts Standard Assumption DevCo Costs (Formularze)",
+      "Kind": "default.cds_vsb_bopcontractsstandardassumptiondevcocosts_forms",
+      "Values": {
+        "Information": "1a9ae593-aa75-470b-9e4e-f1801de951a4"
+      }
+    },
+    {
+      "Namespace": "BoP Contracts Standard Assumptions (Formularze)",
+      "Kind": "default.cds_vsb_bopcontractsstandardassumptions_forms",
+      "Values": {
+        "Information": "4adab8ee-de77-4a36-a1cf-bcd7b8672d65"
+      }
+    },
+    {
+      "Namespace": "BoP Projects Contracts (Formularze)",
+      "Kind": "default.cds_vsb_bopprojectscontracts_forms",
+      "Values": {
+        "Information": "6877b869-2aa4-40bd-a3bc-a303b16d68b0"
+      }
+    },
+    {
+      "Namespace": "Balancing Prices (Formularze)",
+      "Kind": "default.cds_vsb_balancingprice_forms",
+      "Values": {
+        "Information": "138ff196-234d-493a-9c44-1580f2a033de",
+        "TestForm": "aceabb4f-38d0-f011-bbd3-7c1e525250c9"
+      }
+    },
+    {
+      "Namespace": "Bulk Delete Failures (Formularze)",
+      "Kind": "default.cds_bulkdeletefailure_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "SPVDevCo Mapping Capex Devexes (Formularze)",
+      "Kind": "default.cds_vsb_spvdevcomappingcapexdevex_forms",
+      "Values": {
+        "Information": "6602aef6-38cf-4fc8-bc18-a51ff5845441"
+      }
+    },
+    {
+      "Namespace": "PV Seasonality Values (Formularze)",
+      "Kind": "default.cds_vsb_pvseasonalityvalues_forms",
+      "Values": {
+        "Information": "22ea7062-7c7b-4038-895f-f46f8c12ae7b"
+      }
+    },
+    {
+      "Namespace": "PV Negative Prices (Formularze)",
+      "Kind": "default.cds_vsb_pvnegativeprices_forms",
+      "Values": {
+        "Information": "8590b4b6-4509-4db9-b0a0-c68a707575b0"
+      }
+    },
+    {
+      "Namespace": "Aquisition Statuses (Formulare)",
+      "Kind": "default.cds_vsb_aquisitionstatus_forms",
+      "Values": {
+        "Information": "18b8b32d-46a0-41c9-8847-ca12ccf4f081"
+      }
+    },
+    {
+      "Namespace": "Aquisition Types (Formulare)",
+      "Kind": "default.cds_vsb_aquisitiontype_forms",
+      "Values": {
+        "Information": "83ed7801-50d7-45e7-967c-eb47c259a953"
+      }
+    },
+    {
+      "Namespace": "Countries (Formulare)",
+      "Kind": "default.cds_vsb_country_forms",
+      "Values": {
+        "Informationen": "ff73e5bd-6b64-4cbd-b41c-928b3e9f6a6e"
+      }
+    },
+    {
+      "Namespace": "Country Inflation Profiles (Formulare)",
+      "Kind": "default.cds_vsb_countryinflationprofile_forms",
+      "Values": {
+        "Information": "419299ae-55a6-4e1f-925d-b4a1b339dda2"
+      }
+    },
+    {
+      "Namespace": "CountryAreas (Formulare)",
+      "Kind": "default.cds_vsb_countryarea_forms",
+      "Values": {
+        "Informationen": "c37034e1-3dc6-4a09-b59d-7a2b96c7c57e"
+      }
+    },
+    {
+      "Namespace": "Currencies (Formulare)",
+      "Kind": "default.cds_transactioncurrency_forms",
+      "Values": {
+        "Information": "b56b6d35-1e69-436b-ba86-78127d36e8aa"
+      }
+    },
+    {
+      "Namespace": "Device Costs (Formulare)",
+      "Kind": "default.cds_vsb_devicecost_forms",
+      "Values": {
+        "Information": "c2b3dba4-5814-40c8-8b19-ef543b99f522"
+      }
+    },
+    {
+      "Namespace": "DeviceTypesInProjects (Formulare)",
+      "Kind": "default.cds_vsb_devicetypesinproject_forms",
+      "Values": {
+        "Information": "76a79aad-c221-4006-82c5-f483da16f8f0"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Definitions (Formulare)",
+      "Kind": "default.cds_environmentvariabledefinition_forms",
+      "Values": {
+        "Information": "3853733b-a351-455d-b686-d2d05027ba4d"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Values (Formulare)",
+      "Kind": "default.cds_environmentvariablevalue_forms",
+      "Values": {
+        "Information": "f574a3ab-1060-43ee-a95f-9aa922b497db"
+      }
+    },
+    {
+      "Namespace": "Estimation Price Inflations (Formulare)",
+      "Kind": "default.cds_vsb_estimationpriceinflation_forms",
+      "Values": {
+        "Information": "ac84e7a1-789b-4175-931f-c062963a2689"
+      }
+    },
+    {
+      "Namespace": "GeneratorInProjects (Formulare)",
+      "Kind": "default.cds_vsb_generatorinproject_forms",
+      "Values": {
+        "Information": "0aeb92cb-84fc-48aa-b223-cca1522b0479"
+      }
+    },
+    {
+      "Namespace": "Generators (Formulare)",
+      "Kind": "default.cds_vsb_generator_forms",
+      "Values": {
+        "Information": "1534028a-ff0d-47a3-bab5-df1f0fd0b3ca"
+      }
+    },
+    {
+      "Namespace": "GeneratorTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_generatortypeinproject_forms",
+      "Values": {
+        "Information": "44432ac1-ac24-4448-acbe-91ff5d434481"
+      }
+    },
+    {
+      "Namespace": "Grid Operators (Formulare)",
+      "Kind": "default.cds_vsb_gridoperator_forms",
+      "Values": {
+        "Information": "f5cadc39-8472-4873-8dac-d9195f936f82"
+      }
+    },
+    {
+      "Namespace": "Inverters (Formulare)",
+      "Kind": "default.cds_vsb_inverter_forms",
+      "Values": {
+        "Information": "1021d447-1682-4dce-a26f-fd707adb819c"
+      }
+    },
+    {
+      "Namespace": "InverterTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_invertertypeinproject_forms",
+      "Values": {
+        "Information": "0c0170fc-bd80-4881-bbec-e50a41735b2f"
+      }
+    },
+    {
+      "Namespace": "Land Lease Allocation WTGS (Formulare)",
+      "Kind": "default.cds_vsb_landleaseallocationwtg_forms",
+      "Values": {
+        "Information": "b7bed394-d373-4e9d-86fd-fdcb4902cf84"
+      }
+    },
+    {
+      "Namespace": "Microsoft Entra IDs (Formulare)",
+      "Kind": "default.cds_aaduser_forms",
+      "Values": {
+        "Information": "dd5ded01-9aad-4e25-8d0e-e9acdaecbe4e"
+      }
+    },
+    {
+      "Namespace": "Opex Project Costs (Formulare)",
+      "Kind": "default.cds_vsb_opexprojectcost_forms",
+      "Values": {
+        "Information": "d303aa5a-7bfc-4bf2-aff7-f2903ef583b8"
+      }
+    },
+    {
+      "Namespace": "Permits (Formulare)",
+      "Kind": "default.cds_vsb_permit_forms",
+      "Values": {
+        "Information": "6e930920-172f-462d-af98-4be170ea1f76"
+      }
+    },
+    {
+      "Namespace": "Project Plannings (Formulare)",
+      "Kind": "default.cds_vsb_projectplanning_forms",
+      "Values": {
+        "Information": "bf6db0a0-8bdc-4d09-a6d5-beed8bd23700"
+      }
+    },
+    {
+      "Namespace": "Project Revenues (Formulare)",
+      "Kind": "default.cds_vsb_projectrevenue_forms",
+      "Values": {
+        "Information": "699944f1-3efc-4c4d-ac86-fb13b4b4b85e"
+      }
+    },
+    {
+      "Namespace": "Projects (Formulare)",
+      "Kind": "default.cds_vsb_project_forms",
+      "Values": {
+        "Informationen": "332aa44b-d129-435a-a04d-b6202c7387ac"
+      }
+    },
+    {
+      "Namespace": "PVModules (Formulare)",
+      "Kind": "default.cds_vsb_pvmodule_forms",
+      "Values": {
+        "Information": "c589479c-62cb-4832-8918-a8324c2f8503"
+      }
+    },
+    {
+      "Namespace": "PVModuleTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_pvmoduletypeinproject_forms",
+      "Values": {
+        "Information": "546da93f-473c-4b7b-b3b5-d6e92a181547"
+      }
+    },
+    {
+      "Namespace": "Revenue Subaccounts (Formulare)",
+      "Kind": "default.cds_vsb_revenuesubaccount_forms",
+      "Values": {
+        "Information": "564e7905-1f86-47f4-8a23-da1a4b287e5f"
+      }
+    },
+    {
+      "Namespace": "Security Roles (Formulare)",
+      "Kind": "default.cds_role_forms",
+      "Values": {
+        "Information": "d830b05c-0c90-4dcf-be8b-5d22a856f510"
+      }
+    },
+    {
+      "Namespace": "ShareholderEntityInProjects (Formulare)",
+      "Kind": "default.cds_vsb_shareholderentitiy_forms",
+      "Values": {
+        "Information": "ed7caa98-9e23-4912-a3f5-df9f18d4886b"
+      }
+    },
+    {
+      "Namespace": "Substructures (Formulare)",
+      "Kind": "default.cds_vsb_substructure_forms",
+      "Values": {
+        "Information": "128704fa-ffe1-4f87-97c0-ede4a39df1c2"
+      }
+    },
+    {
+      "Namespace": "SubstructureTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_substructuretypeinproject_forms",
+      "Values": {
+        "Information": "13398f8e-67b3-43d0-bbe5-e378607b329e"
+      }
+    },
+    {
+      "Namespace": "Users (Formulare)",
+      "Kind": "default.cds_systemuser_forms",
+      "Values": {
+        "User": "c2cd9e55-d4b4-4b55-9951-16ead79643e5",
+        "Information": "094fb08a-77bb-49e0-b7ea-8dbddfd01294",
+        "User Hierarchy Tile Form": "c68d6c09-d7a7-4959-8d0f-44b8cff9b452",
+        "User form – Business": "c2413504-7eb2-4c59-a087-95d819866114",
+        "Application User": "d26924ef-4d80-46f7-ab1d-e6ae80a54ce8"
+      }
+    },
+    {
+      "Namespace": "Business Units (Formulare)",
+      "Kind": "default.cds_businessunit_forms",
+      "Values": {
+        "Business Unit Hierarchy Form": "405b16b6-126a-4117-a4e0-33f0caf0c7a2",
+        "Information": "ca8dfced-338c-43b2-b212-83745e257c28"
+      }
+    },
+    {
+      "Namespace": "Land Lease Project Costs (Formulare)",
+      "Kind": "default.cds_vsb_landleaseprojectcost_forms",
+      "Values": {
+        "Information": "461f8ab9-0924-4468-8eab-fc4fcf54266c"
+      }
+    },
+    {
+      "Namespace": "Custom Choice Values (Formulare)",
+      "Kind": "default.cds_vsb_customchoicevalue_forms",
+      "Values": {
+        "Information": "ff58107a-9f35-4de3-bf37-ba0009a23f41"
+      }
+    },
+    {
+      "Namespace": "Milestones Standard Assumptions (Formulare)",
+      "Kind": "default.cds_vsb_milestonesstandardassumptions_forms",
+      "Values": {
+        "Information": "d79456c8-a688-42a9-95b5-bb2f615c118e"
+      }
+    },
+    {
+      "Namespace": "Teams (Formulare)",
+      "Kind": "default.cds_team_forms",
+      "Values": {
+        "Information": "f5cfab6a-d4c2-4519-b68f-6e7485432e29",
+        "Team form – Business": "4aabf594-b30a-490d-bf97-89c67c6777fe",
+        "Team": "7ba7fac1-1418-4335-935f-f7f8dfd73fcc"
+      }
+    },
+    {
+      "Namespace": "Project State Trackings (Formulare)",
+      "Kind": "default.cds_vsb_projectstatetracking_forms",
+      "Values": {
+        "Information": "392227ba-d0b0-409c-928d-b8181f47845a"
+      }
+    },
+    {
+      "Namespace": "Project Default Approvals (Formulare)",
+      "Kind": "default.cds_vsb_projectdefaultapprovals_forms",
+      "Values": {
+        "Information": "172c9a30-3e93-4b15-89c2-8e918e0cebe2"
+      }
+    },
+    {
+      "Namespace": "Project Default Checklists (Formulare)",
+      "Kind": "default.cds_vsb_projectdefaultchecklists_forms",
+      "Values": {
+        "Information": "42455d24-a818-4f13-b47d-6d097d370a91"
+      }
+    },
+    {
+      "Namespace": "Energy Yields (Formulare)",
+      "Kind": "default.cds_vsb_energyyield_forms",
+      "Values": {
+        "Information": "8b33d4ed-3ec8-413e-9a67-f942bc6313b8"
+      }
+    },
+    {
+      "Namespace": "HydrogenTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_hydrogentypeinproject_forms",
+      "Values": {
+        "Information": "10fbeb75-0653-430f-a58b-de4db7cbf9ce"
+      }
+    },
+    {
+      "Namespace": "SubstationTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_substationtypeinproject_forms",
+      "Values": {
+        "Information": "ca1b6449-bd48-40f2-be30-bd487df9f181"
+      }
+    },
+    {
+      "Namespace": "StorageTypeInProjects (Formulare)",
+      "Kind": "default.cds_vsb_storagetypeinproject_forms",
+      "Values": {
+        "Information": "164b8271-c8ea-4bf2-89b7-80e998fd9440"
+      }
+    },
+    {
+      "Namespace": "Tarrif Price Standard Assumptions (Formulare)",
+      "Kind": "default.cds_vsb_tarrifpricestandardassumption_forms",
+      "Values": {
+        "Information": "117100b8-ed3b-4c31-b21d-dcf4ac60c2ee"
+      }
+    },
+    {
+      "Namespace": "Project States (Formulare)",
+      "Kind": "default.cds_vsb_projectstate_forms",
+      "Values": {
+        "Information": "475b3b84-2b78-4fba-baac-fda48697810b"
+      }
+    },
+    {
+      "Namespace": "Project Checklists (Formulare)",
+      "Kind": "default.cds_vsb_projectchecklist_forms",
+      "Values": {
+        "Information": "4a896ed6-9992-4d83-9a9b-da0b986a128c"
+      }
+    },
+    {
+      "Namespace": "Checklist Country And Technologies (Formulare)",
+      "Kind": "default.cds_vsb_checklistcountryandtechnology_forms",
+      "Values": {
+        "Information": "ae3153e5-1d36-4974-b6dc-f3c525b54185"
+      }
+    },
+    {
+      "Namespace": "Project State Tracking Notes (Formulare)",
+      "Kind": "default.cds_vsb_projectstatetrackingnote_forms",
+      "Values": {
+        "Information": "8d83f7fa-50f9-4eec-8570-07bd3593dc59"
+      }
+    },
+    {
+      "Namespace": "CAPEX Account Lists (Formulare)",
+      "Kind": "default.cds_vsb_capexaccountlist_forms",
+      "Values": {
+        "Information": "6b32b3b2-1a01-426d-927b-bd6b05b6d658"
+      }
+    },
+    {
+      "Namespace": "CAPEX Costs (Formulare)",
+      "Kind": "default.cds_vsb_capexcost_forms",
+      "Values": {
+        "Information": "9061141c-cd28-4572-8244-e860913fb537"
+      }
+    },
+    {
+      "Namespace": "CAPEX Project Contracts (Formulare)",
+      "Kind": "default.cds_vsb_capexprojectcontract_forms",
+      "Values": {
+        "Information": "0d92bc75-386a-4645-be6a-ca19eec15ae2"
+      }
+    },
+    {
+      "Namespace": "Project Members (Formulare)",
+      "Kind": "default.cds_vsb_projectmembers_forms",
+      "Values": {
+        "Information": "17a81bce-ea36-4577-aeb4-6ff1b8e9dbb0"
+      }
+    },
+    {
+      "Namespace": "Financing Categories (Formulare)",
+      "Kind": "default.cds_vsb_financingcategory_forms",
+      "Values": {
+        "Information": "16f8e5ae-7961-409e-bdc0-e4a91a452d0d"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs (Formulare)",
+      "Kind": "default.cds_vsb_financinginput_forms",
+      "Values": {
+        "Information": "2d22c3ae-15eb-4526-88d6-81caf19c2e9b"
+      }
+    },
+    {
+      "Namespace": "Fabric Sync Jobs (Formulare)",
+      "Kind": "default.cds_vsb_fabricsyncjob_forms",
+      "Values": {
+        "Information": "6582015b-f876-4ade-a41e-db02764bc610"
+      }
+    },
+    {
+      "Namespace": "Fabric Job Types (Formulare)",
+      "Kind": "default.cds_vsb_fabricjobtype_forms",
+      "Values": {
+        "Information": "5ac3fa65-5e77-4002-b824-6decd38ae372"
+      }
+    },
+    {
+      "Namespace": "Financing Input Step Up margins (Formulare)",
+      "Kind": "default.cds_vsb_financinginputstepupmargins_forms",
+      "Values": {
+        "Information": "950cfa12-be0d-433f-9d02-d184f15f1d47"
+      }
+    },
+    {
+      "Namespace": "Financing Inputs Repayment Amounts (Formulare)",
+      "Kind": "default.cds_vsb_financinginputsrepaymentamount_forms",
+      "Values": {
+        "Information": "84b4aab6-19af-417f-b5e7-e672e4fb4a25"
+      }
+    },
+    {
+      "Namespace": "Check List Default Approvals (Formulare)",
+      "Kind": "default.cds_vsb_checklistdefaultapprovals_forms",
+      "Values": {
+        "Information": "9af84f4a-ccb0-41f7-a32c-c3909a89dfde"
+      }
+    },
+    {
+      "Namespace": "OPEX & Land Lease Standard Assumptions (Formulare)",
+      "Kind": "default.cds_vsb_opexlandleasestandardassumptions_forms",
+      "Values": {
+        "Information": "d39d0461-e1e1-422c-bcea-b2016376ae8d"
+      }
+    },
+    {
+      "Namespace": "Opex Subaccounts (Formulare)",
+      "Kind": "default.cds_vsb_opexsubaccount_forms",
+      "Values": {
+        "Information": "e3a952cb-6bd1-4672-91fc-c82645dd63c3"
+      }
+    },
+    {
+      "Namespace": "Land Lease Subaccounts (Formulare)",
+      "Kind": "default.cds_vsb_landleasesubaccount_forms",
+      "Values": {
+        "Information": "d2a7123e-69cb-4c38-afd2-ba5e903d3f2b"
+      }
+    },
+    {
+      "Namespace": "Land Lease Periods (Formulare)",
+      "Kind": "default.cds_vsb_landleaseperiod_forms",
+      "Values": {
+        "Information": "1eb06982-c1d9-44d0-a443-e5002902fa7f"
+      }
+    },
+    {
+      "Namespace": "Apply and Apply All Trackings (Formulare)",
+      "Kind": "default.cds_vsb_applyandapplyalltracking_forms",
+      "Values": {
+        "Information": "3a8e3985-d497-473d-9338-f3a687772bdd"
+      }
+    },
+    {
+      "Namespace": "Devex/Capex Standard Assumptions (Formulare)",
+      "Kind": "default.cds_vsb_devexcapexstandardassumptions_forms",
+      "Values": {
+        "Information": "8c7579a2-196f-4455-8279-5be701130a80"
+      }
+    },
+    {
+      "Namespace": "Project Checklist Tracking Note (Formulare)",
+      "Kind": "default.cds_vsb_projectchecklisttrackingnote_forms",
+      "Values": {
+        "Information": "538bfc8c-3b08-42d6-bcc5-d2c7fb3ce50e"
+      }
+    },
+    {
+      "Namespace": "Opex Accounts (Formulare)",
+      "Kind": "default.cds_vsb_opexaccount_forms",
+      "Values": {
+        "Information": "1b677af1-c2d2-42b5-a5af-eea160f77241"
+      }
+    },
+    {
+      "Namespace": "Approval Responses (Formulare)",
+      "Kind": "default.cds_msdyn_flow_approvalresponse_forms",
+      "Values": {
+        "Information": "83e0293d-6061-45d0-a523-ba032e7638b4"
+      }
+    },
+    {
+      "Namespace": "Project Member Descriptions (Formulare)",
+      "Kind": "default.cds_vsb_projectmemberdescriptions_forms",
+      "Values": {
+        "Information": "59cd91c1-38ce-45cf-9252-b86ad9909dfe"
+      }
+    },
+    {
+      "Namespace": "Assumptions Banks (Forms)",
+      "Kind": "default.cds_vsb_assumptionsbanks_forms",
+      "Values": {
+        "Information": "6cd6ab19-1f90-4f24-ac33-a388f20c5f44"
+      }
+    },
+    {
+      "Namespace": "Assumptions Debts (Forms)",
+      "Kind": "default.cds_vsb_assumptionsdebt_forms",
+      "Values": {
+        "Information": "cd7c8551-7ec6-495b-bfc5-e41d4027b126"
+      }
+    },
+    {
+      "Namespace": "AssumptionsKfWTranches (Forms)",
+      "Kind": "default.cds_vsb_assumptionskfwtranche_forms",
+      "Values": {
+        "Information": "a91b412c-d71b-42fb-9e5f-e3a970e52c27"
+      }
+    },
+    {
+      "Namespace": "Assumptions Revenues (Forms)",
+      "Kind": "default.cds_vsb_assumptionsrevenue_forms",
+      "Values": {
+        "Information": "767a06dd-e99f-4828-b4b6-b1fff8e0f1a6"
+      }
+    },
+    {
+      "Namespace": "Assumptions Local Tax Germanies (Formulare)",
+      "Kind": "default.cds_vsb_assumptionslocaltaxgermany_forms",
+      "Values": {
+        "Information": "7adb62a3-3305-4f1d-820f-7bc79bd408d1"
+      }
+    },
+    {
+      "Namespace": "Assumptions Local Tax Frances (Formulare)",
+      "Kind": "default.cds_vsb_assumptionslocaltaxfrance_forms",
+      "Values": {
+        "Information": "040823cc-6a48-448f-9834-9b435b79ef74"
+      }
+    },
+    {
+      "Namespace": "Assumptions Revenues (Formulare)",
+      "Kind": "default.cds_vsb_assumptionsrevenue_forms",
+      "Values": {
+        "Information": "767a06dd-e99f-4828-b4b6-b1fff8e0f1a6"
+      }
+    },
+    {
+      "Namespace": "Assumptions Banks (Formulare)",
+      "Kind": "default.cds_vsb_assumptionsbanks_forms",
+      "Values": {
+        "Information": "6cd6ab19-1f90-4f24-ac33-a388f20c5f44"
+      }
+    },
+    {
+      "Namespace": "Assumptions Debts (Formulare)",
+      "Kind": "default.cds_vsb_assumptionsdebt_forms",
+      "Values": {
+        "Information": "cd7c8551-7ec6-495b-bfc5-e41d4027b126"
+      }
+    },
+    {
+      "Namespace": "AssumptionsKfWTranches (Formulare)",
+      "Kind": "default.cds_vsb_assumptionskfwtranche_forms",
+      "Values": {
+        "Information": "a91b412c-d71b-42fb-9e5f-e3a970e52c27"
+      }
+    },
+    {
+      "Namespace": "Mailbox Auto Tracking Folders (Forms)",
+      "Kind": "default.cds_mailboxtrackingfolder_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Bulk Delete Failures (Formulare)",
+      "Kind": "default.cds_bulkdeletefailure_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Mailbox Auto Tracking Folders (Formulare)",
+      "Kind": "default.cds_mailboxtrackingfolder_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Azure Synapse Link for Dataverse Configurations (Forms)",
+      "Kind": "default.cds_msdyn_exporttodatalakeconfig_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Controlling Members (Forms)",
+      "Kind": "default.cds_vsb_controllingmembers_forms",
+      "Values": {
+        "Information": "2ec85212-3dfc-4bf4-af29-cf704992209f"
+      }
+    },
+    {
+      "Namespace": "Controlling Members (Formulare)",
+      "Kind": "default.cds_vsb_controllingmembers_forms",
+      "Values": {
+        "Information": "2ec85212-3dfc-4bf4-af29-cf704992209f"
+      }
+    },
+    {
+      "Namespace": "CompaniesInCountries (Forms)",
+      "Kind": "default.cds_vsb_companyincountry_forms",
+      "Values": {
+        "Information": "27e91bc5-2ddc-4f23-ac5d-922ce72bb8a5"
+      }
+    },
+    {
+      "Namespace": "Field Sharing (Forms)",
+      "Kind": "default.cds_principalobjectattributeaccess_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Aquisition Statuses (Formulaires)",
+      "Kind": "default.cds_vsb_aquisitionstatus_forms",
+      "Values": {
+        "Information": "18b8b32d-46a0-41c9-8847-ca12ccf4f081"
+      }
+    },
+    {
+      "Namespace": "Aquisition Types (Formulaires)",
+      "Kind": "default.cds_vsb_aquisitiontype_forms",
+      "Values": {
+        "Information": "83ed7801-50d7-45e7-967c-eb47c259a953"
+      }
+    },
+    {
+      "Namespace": "Bulk Delete Failures (Formulaires)",
+      "Kind": "default.cds_bulkdeletefailure_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Countries (Formulaires)",
+      "Kind": "default.cds_vsb_country_forms",
+      "Values": {
+        "Informationen": "ff73e5bd-6b64-4cbd-b41c-928b3e9f6a6e"
+      }
+    },
+    {
+      "Namespace": "Country Inflation Profiles (Formulaires)",
+      "Kind": "default.cds_vsb_countryinflationprofile_forms",
+      "Values": {
+        "Information": "419299ae-55a6-4e1f-925d-b4a1b339dda2"
+      }
+    },
+    {
+      "Namespace": "CountryAreas (Formulaires)",
+      "Kind": "default.cds_vsb_countryarea_forms",
+      "Values": {
+        "Informationen": "c37034e1-3dc6-4a09-b59d-7a2b96c7c57e"
+      }
+    },
+    {
+      "Namespace": "Currencies (Formulaires)",
+      "Kind": "default.cds_transactioncurrency_forms",
+      "Values": {
+        "Information": "b56b6d35-1e69-436b-ba86-78127d36e8aa"
+      }
+    },
+    {
+      "Namespace": "Device Costs (Formulaires)",
+      "Kind": "default.cds_vsb_devicecost_forms",
+      "Values": {
+        "Information": "c2b3dba4-5814-40c8-8b19-ef543b99f522"
+      }
+    },
+    {
+      "Namespace": "DeviceTypesInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_devicetypesinproject_forms",
+      "Values": {
+        "Information": "76a79aad-c221-4006-82c5-f483da16f8f0"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Definitions (Formulaires)",
+      "Kind": "default.cds_environmentvariabledefinition_forms",
+      "Values": {
+        "Information": "3853733b-a351-455d-b686-d2d05027ba4d"
+      }
+    },
+    {
+      "Namespace": "Environment Variable Values (Formulaires)",
+      "Kind": "default.cds_environmentvariablevalue_forms",
+      "Values": {
+        "Information": "f574a3ab-1060-43ee-a95f-9aa922b497db"
+      }
+    },
+    {
+      "Namespace": "Estimation Price Inflations (Formulaires)",
+      "Kind": "default.cds_vsb_estimationpriceinflation_forms",
+      "Values": {
+        "Information": "ac84e7a1-789b-4175-931f-c062963a2689"
+      }
+    },
+    {
+      "Namespace": "GeneratorInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_generatorinproject_forms",
+      "Values": {
+        "Information": "0aeb92cb-84fc-48aa-b223-cca1522b0479"
+      }
+    },
+    {
+      "Namespace": "Generators (Formulaires)",
+      "Kind": "default.cds_vsb_generator_forms",
+      "Values": {
+        "Information": "1534028a-ff0d-47a3-bab5-df1f0fd0b3ca"
+      }
+    },
+    {
+      "Namespace": "GeneratorTypeInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_generatortypeinproject_forms",
+      "Values": {
+        "Information": "44432ac1-ac24-4448-acbe-91ff5d434481"
+      }
+    },
+    {
+      "Namespace": "Grid Operators (Formulaires)",
+      "Kind": "default.cds_vsb_gridoperator_forms",
+      "Values": {
+        "Information": "f5cadc39-8472-4873-8dac-d9195f936f82"
+      }
+    },
+    {
+      "Namespace": "Inverters (Formulaires)",
+      "Kind": "default.cds_vsb_inverter_forms",
+      "Values": {
+        "Information": "1021d447-1682-4dce-a26f-fd707adb819c"
+      }
+    },
+    {
+      "Namespace": "InverterTypeInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_invertertypeinproject_forms",
+      "Values": {
+        "Information": "0c0170fc-bd80-4881-bbec-e50a41735b2f"
+      }
+    },
+    {
+      "Namespace": "Land Lease Allocation WTGS (Formulaires)",
+      "Kind": "default.cds_vsb_landleaseallocationwtg_forms",
+      "Values": {
+        "Information": "b7bed394-d373-4e9d-86fd-fdcb4902cf84"
+      }
+    },
+    {
+      "Namespace": "Mailbox Auto Tracking Folders (Formulaires)",
+      "Kind": "default.cds_mailboxtrackingfolder_forms",
+      "Values": {}
+    },
+    {
+      "Namespace": "Microsoft Entra IDs (Formulaires)",
+      "Kind": "default.cds_aaduser_forms",
+      "Values": {
+        "Information": "dd5ded01-9aad-4e25-8d0e-e9acdaecbe4e"
+      }
+    },
+    {
+      "Namespace": "Opex Project Costs (Formulaires)",
+      "Kind": "default.cds_vsb_opexprojectcost_forms",
+      "Values": {
+        "Information": "d303aa5a-7bfc-4bf2-aff7-f2903ef583b8"
+      }
+    },
+    {
+      "Namespace": "Permits (Formulaires)",
+      "Kind": "default.cds_vsb_permit_forms",
+      "Values": {
+        "Information": "6e930920-172f-462d-af98-4be170ea1f76"
+      }
+    },
+    {
+      "Namespace": "Project Plannings (Formulaires)",
+      "Kind": "default.cds_vsb_projectplanning_forms",
+      "Values": {
+        "Information": "bf6db0a0-8bdc-4d09-a6d5-beed8bd23700"
+      }
+    },
+    {
+      "Namespace": "Project Revenues (Formulaires)",
+      "Kind": "default.cds_vsb_projectrevenue_forms",
+      "Values": {
+        "Information": "699944f1-3efc-4c4d-ac86-fb13b4b4b85e"
+      }
+    },
+    {
+      "Namespace": "Projects (Formulaires)",
+      "Kind": "default.cds_vsb_project_forms",
+      "Values": {
+        "Informationen": "332aa44b-d129-435a-a04d-b6202c7387ac"
+      }
+    },
+    {
+      "Namespace": "PVModules (Formulaires)",
+      "Kind": "default.cds_vsb_pvmodule_forms",
+      "Values": {
+        "Information": "c589479c-62cb-4832-8918-a8324c2f8503"
+      }
+    },
+    {
+      "Namespace": "PVModuleTypeInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_pvmoduletypeinproject_forms",
+      "Values": {
+        "Information": "546da93f-473c-4b7b-b3b5-d6e92a181547"
+      }
+    },
+    {
+      "Namespace": "Revenue Subaccounts (Formulaires)",
+      "Kind": "default.cds_vsb_revenuesubaccount_forms",
+      "Values": {
+        "Information": "564e7905-1f86-47f4-8a23-da1a4b287e5f"
+      }
+    },
+    {
+      "Namespace": "Security Roles (Formulaires)",
+      "Kind": "default.cds_role_forms",
+      "Values": {
+        "Information": "d830b05c-0c90-4dcf-be8b-5d22a856f510"
+      }
+    },
+    {
+      "Namespace": "ShareholderEntityInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_shareholderentitiy_forms",
+      "Values": {
+        "Information": "ed7caa98-9e23-4912-a3f5-df9f18d4886b"
+      }
+    },
+    {
+      "Namespace": "Substructures (Formulaires)",
+      "Kind": "default.cds_vsb_substructure_forms",
+      "Values": {
+        "Information": "128704fa-ffe1-4f87-97c0-ede4a39df1c2"
+      }
+    },
+    {
+      "Namespace": "SubstructureTypeInProjects (Formulaires)",
+      "Kind": "default.cds_vsb_substructuretypeinproject_forms",
+      "Values": {
+        "Information": "13398f8e-67b3-43d0-bbe5-e378607b329e"
+      }
+    },
+    {
+      "Namespace": "Users (Formulaires)",
+      "Kind": "default.cds_systemuser_forms",
+      "Values": {
+        "User": "c2cd9e55-d4b4-4b55-9951-16ead79643e5",
+        "Information": "094fb08a-77bb-49e0-b7ea-8dbddfd01294",
+        "User Hierarchy Tile Form": "c68d6c09-d7a7-4959-8d0f-44b8cff9b452",
+        "User form – Business": "c2413504-7eb2-4c59-a087-95d819866114",
+        "Application User": "d26924ef-4d80-46f7-ab1d-e6ae80a54ce8"
+      }
+    },
+    {
+      "Namespace": "Business Units (Formulaires)",
+      "Kind": "default.cds_businessunit_forms",
+      "Values": {
+        "Business Unit Hierarchy Form": "405b16b6-126a-4117-a4e0-33f0caf0c7a2",
+        "Information": "ca8dfced-338c-43b2-b212-83745e257c28"
+      }
+    },
+    {
+      "Namespace": "Land Lease Project Costs (Formulaires)",
+      "Kind": "default.cds_vsb_landleaseprojectcost_forms",
+      "Values": {
+        "Information": "461f8ab9-0924-4468-8eab-fc4fcf54266c"
+      }
+    },
+    {
+      "Namespace": "CompaniesInCountries (Formulaires)",
+      "Kind": "default.cds_vsb_companyincountry_forms",
+      "Values": {
+        "Information": "27e91bc5-2ddc-4f23-ac5d-922ce72bb8a5"
+      }
+    },
+    {
+      "Namespace": "Custom Choice Values (Formulaires)",
+      "Kind": "default.cds_vsb_customchoicevalue_forms",
+      "Values": {
+        "Information": "ff58107a-9f35-4de3-bf37-ba0009a23f41"
+      }
+    },
+    {
+      "Namespace": "Milestones Standard Assumptions (Formulaires)",
+      "Kind": "default.cds_vsb_milestonesstandardassumptions_forms",
+      "Values": {
+        "Information": "d79456c8-a688-42a9-95b5-bb2f615c118e"
+      }
+    },
+    {
+      "Namespace": "Teams (Formulaires)",
+      "Kind": "default.cds_team_forms",
+      "Values": {
+        "Information": "f5cfab6a-d4c2-4519-b68f-6e7485432e29",
+        "Team form – Business": "4aabf594-b30a-490d-bf97-89c67c6777fe",
+        "Team": "7ba7fac1-1418-4335-935f-f7f8dfd73fcc"
+      }
+    },
+    {
+      "Namespace": "GeneratorsInProjects (Forms)",
+      "Kind": "default.cds_vsb_generatorsinproject_forms",
+      "Values": {
+        "Information": "fe36097a-276d-4896-9e9d-d447b94743e6"
+      }
+    },
+    {
+      "Namespace": "GenertatorInProjects (Forms)",
+      "Kind": "default.cds_vsb_genertatorinproject_forms",
+      "Values": {
+        "Informationen": "ae1e276b-02b4-4be8-9fb1-f6cc0115dd26"
+      }
+    },
+    {
+      "Namespace": "GenertatorInProjects (Formulare)",
+      "Kind": "default.cds_vsb_genertatorinproject_forms",
+      "Values": {
+        "Informationen": "ae1e276b-02b4-4be8-9fb1-f6cc0115dd26"
+      }
+    },
+    {
+      "Namespace": "ShareholderEntitiyInProjects (Forms)",
+      "Kind": "default.cds_vsb_shareholderentitiy_forms",
+      "Values": {
+        "Information": "ed7caa98-9e23-4912-a3f5-df9f18d4886b"
+      }
+    },
+    {
+      "Namespace": "WeightedMW (Forms)",
+      "Kind": "default.cds_crc36_weightedmw_forms",
+      "Values": {
+        "Information": "2f986dab-0bee-449f-934c-c7050f147d0f"
+      }
+    },
+    {
+      "Namespace": "Benutzer (Forms)",
+      "Kind": "default.cds_systemuser_forms",
+      "Values": {
+        "Anwendungsbenutzer": "d26924ef-4d80-46f7-ab1d-e6ae80a54ce8",
+        "Benutzer": "c2cd9e55-d4b4-4b55-9951-16ead79643e5",
+        "Benutzerformular – geschäftlich": "c2413504-7eb2-4c59-a087-95d819866114",
+        "Informationen": "094fb08a-77bb-49e0-b7ea-8dbddfd01294",
+        "Kachelformular für Benutzerhierarchie": "c68d6c09-d7a7-4959-8d0f-44b8cff9b452"
+      }
+    },
+    {
+      "Namespace": "ProjectGroups (Forms)",
+      "Kind": "default.cds_vsb_projectgroups_forms",
+      "Values": {
+        "Informationen": "7ebe8be4-b490-4256-89f1-f6b92b3568d6"
+      }
+    },
+    {
+      "Namespace": "FactoryInCountries (Forms)",
+      "Kind": "default.cds_vsb_factoryincountry_forms",
+      "Values": {
+        "Informationen": "c7f927a0-a951-4496-b05d-f18e83f0b896"
+      }
+    },
+    {
+      "Namespace": "VProjects (Forms)",
+      "Kind": "default.cds_vsb_projects_forms",
+      "Values": {
+        "Information": "6c01025f-4100-4b9d-a898-e15317d7f00c"
+      }
+    },
+    {
+      "Namespace": "Groups (Forms)",
+      "Kind": "default.cds_vsb_group_forms",
+      "Values": {
+        "Informationen": "9c6c25d8-a5f3-4059-86b3-b49c0a1cb21a"
+      }
+    },
+    {
+      "Namespace": "Groups_1 (Forms)",
+      "Kind": "default.cds_vsb_group_forms",
+      "Values": {
+        "Informationen": "9c6c25d8-a5f3-4059-86b3-b49c0a1cb21a"
+      }
+    },
+    {
+      "Namespace": "Project Groups (Forms)",
+      "Kind": "default.cds_vsb_projectgroups_forms",
+      "Values": {
+        "Informationen": "7ebe8be4-b490-4256-89f1-f6b92b3568d6"
+      }
+    },
+    {
+      "Namespace": "Aquisition Status Types (Forms)",
+      "Kind": "default.cds_vsb_aquisitionstatustype_forms",
+      "Values": {
+        "Information": "25b973e9-5156-49bd-9edb-787578d9876d"
+      }
+    },
+    {
+      "Namespace": "Aquisition Status Types_1 (Forms)",
+      "Kind": "default.cds_vsb_aquisitionstatustype_forms",
+      "Values": {
+        "Information": "25b973e9-5156-49bd-9edb-787578d9876d"
+      }
+    },
+    {
+      "Namespace": "Approvals (Forms)",
+      "Kind": "default.cds_msdyn_flow_approval_forms",
+      "Values": {
+        "Information": "2c2d5b0c-df01-41ce-aa37-3e40b27ba5bf"
+      }
+    },
+    {
+      "Namespace": "Approval Processes (Forms)",
+      "Kind": "default.cds_approvalprocess_forms",
+      "Values": {
+        "Information": "c362a863-63be-43b6-9100-b8c0c119ec36"
+      }
+    },
+    {
+      "Namespace": "Approval Requests (Forms)",
+      "Kind": "default.cds_msdyn_flow_approvalrequest_forms",
+      "Values": {
+        "Information": "e1dc80f0-fc17-4a50-94a9-3fcecf37d1d2"
+      }
+    }
+  ]
+}

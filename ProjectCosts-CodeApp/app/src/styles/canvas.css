@@ -1,0 +1,171 @@
+/* Visual baseline: Existing Solution/UI Screenshots, 1919 x ~1018.
+   Shared chrome and form styling is owned here; the PCF owns its own grid CSS. */
+.canvas-shell { background: #f1f1f1; padding: 0 5px 4px; gap: 4px; color: #000; }
+.canvas-shell > header { height: 70px; min-height: 70px; padding: 0 8px 0 3px; gap: 0; border: 0; flex-shrink: 0; }
+.canvas-brand { width: 202px; height: 68px; gap: 14px; }
+.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 30px; }
+.canvas-brand-version { color: #111; font-size: 10px; line-height: 14px; }
+.canvas-project-title { border-left: 4px solid #82a51e; padding: 22px 8px; height: 68px; max-width: none; font-size: 20px; }
+.canvas-user-pill { height: 32px; position: relative; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; font-size: 14px; font-weight: 600; }
+.canvas-user-avatar { position: absolute; right: -1px; top: -9px; height: 48px; width: 48px; border: 1px solid #006eb9; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
+.canvas-user-avatar svg { width: 40px; height: 40px; color: white; }
+.canvas-shell > div { gap: 4px; }
+.canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }
+.canvas-overview-shell main { border: 0; border-radius: 0; }
+.canvas-shell footer { min-height: 28px; height: 28px; background: #fff; border: 0; padding: 0 4px; }
+.canvas-rail { border: 1px solid #ddd; border-radius: 4px; padding: 0; background: #fff; }
+/* Rail blue is the VSB brand #006eb9 (palette.themePrimary), not Fluent's #0078d4 —
+   sampled off the hamburger, the selected-item left border and the rail icons in
+   `UI Screenshots/Cost App Landing Screen - Devex Capex Screen.png`. */
+.canvas-rail > button:first-child { height: 48px; min-height: 48px; margin: 0 0 5px; border-radius: 0; width: 100%; justify-content: flex-start; border-bottom: 2px solid #006eb9; color: #006eb9; }
+.canvas-rail a { border-left-width: 2px; padding: 12px 6px; min-height: 43px; color: #111; font-size: 14px; }
+.canvas-rail a svg { color: #006eb9; flex-shrink: 0; }
+.canvas-rail a[aria-current="page"] { border-left-color: #006eb9; background: #edebe9; color: #111; font-weight: 600; }
+.canvas-rail a span { white-space: normal; line-height: 18px; }
+.canvas-rail > div a { padding-left: 20px; }
+.canvas-rail > div > button { height: 43px; padding-left: 8px; color: #111; font-size: 14px; font-weight: 400; }
+.canvas-project-overview { flex: 1; height: 100%; gap: 8px; }
+.canvas-project-overview > div:first-of-type { border-bottom: 1px solid #ddd; }
+.canvas-project-overview .fui-Field label { font-size: 13px; font-weight: 400; }
+.canvas-project-overview .fui-Input, .canvas-project-overview .fui-Dropdown { background: #f4f4f4; border: 0; border-radius: 3px; min-height: 32px; }
+.canvas-project-overview .fui-Table { table-layout: fixed; width: max(1720px, 90%); }
+.canvas-project-overview .fui-TableHeaderCell { font-size: 13px; font-weight: 600; height: 40px; border-bottom: 1px solid #eee; }
+.canvas-project-overview .fui-TableCell { font-size: 12px; height: 38px; border: 0; }
+.canvas-project-overview .fui-TableBody .fui-TableRow:nth-child(odd) { background: #cde4f4; }
+.canvas-project-overview .fui-TableBody .fui-TableRow[aria-selected="true"] { background: #e1dfdd; }
+.canvas-project-overview .fui-TableCell:nth-child(1) { width: 44px; }
+.canvas-project-overview .fui-TableCell:nth-child(2) { width: 20px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(1) { width: 44px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(2) { width: 20px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(3) { width: 365px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(6) { width: 220px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(8) { width: 240px; }
+.canvas-project-overview .fui-TableHeaderCell:nth-child(10) { width: 160px; }
+.canvas-project-overview input[type="radio"] { accent-color: #006eb9; width: 17px; height: 17px; }
+.canvas-panel .canvas-panel-header { padding: 10px 20px; height: 48px; background: #006eb9; color: white; flex-shrink: 0; }
+.canvas-panel-header h2 { font-size: 18px; line-height: 26px; color: white; }
+.canvas-panel-header button { color: white; }
+.canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; }
+/* `con_GeneratorData_RightPanel_Form_PvModuleType_Buttons_2` (`CapexScreenCode.txt:17323-17345`):
+   Height 50, LayoutGap 10, PaddingRight 20, LayoutJustifyContent.End. Measured on
+   `Cost App - Edit Panel - Popup Design…png`: the footer runs y 966-1016 (50 px) with its
+   32 px buttons 10 px apart and 20 px clear of the panel's right edge. */
+.canvas-panel-footer { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; height: 50px; padding: 9px 20px; border-top: 1px solid #f0f0f0; }
+.canvas-panel-footer button { min-width: 96px; border-radius: 2px; }
+.canvas-panel :is(.fui-Input,.fui-Dropdown,.fui-Textarea) { background: #f4f4f4; border: 0; border-radius: 3px; }
+.canvas-panel .fui-Field label { font-weight: 400; }
+.canvas-panel .fui-Field { min-width: 0; }
+.canvas-panel .fui-RadioGroup { flex-direction: column; }
+.canvas-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; min-width: 0; }
+/* Every panel field label is a `Text@0.0.51` with `Weight: ='TextCanvas.Weight'.Semibold` and
+   no `Size` override, i.e. the modern Text control's 14 px default
+   (`lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_12`, CapexScreenCode.txt:10345).
+   Measured on the Edit-panel screenshot: labels, radio options and input text are all 14 px
+   #242424; the red `*` sits to the LEFT of the label. */
+.canvas-field > span:first-child,
+.canvas-radio-group legend > span { font-weight: 600; color: #242424; }
+/* The red `*` marker — `Color: =gblAppColors.Error`, and `gblAppColors.Error` is
+   `palette.akzent5` = #d20532 (OnStart.txt:455), NOT `palette.Error`. Sampled off the
+   screenshot at #d20532. `legend > span` is the radio-group form (Distribution Scheme, Equal
+   Distribution, Cost Paid By); `.canvas-field > span` is every boxed field. */
+.canvas-field > span[data-required="true"]::before,
+.canvas-radio-group legend > span[data-required="true"]::before { content: '* '; color: #d20532; }
+.canvas-field input, .canvas-field select, .canvas-field textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
+.canvas-field textarea { height: 64px; resize: vertical; }
+.canvas-field input:focus, .canvas-field select:focus { outline: 1px solid #0078d4; }
+.canvas-inline-fields { display: flex; gap: 20px; }
+.canvas-inline-fields > * { flex: 1; min-width: 0; }
+.canvas-radio-group { border: 0; margin: 0; padding: 0; font-size: 14px; }
+.canvas-radio-group legend { margin-bottom: 4px; }
+.canvas-radio-group label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; color: #242424; font-weight: 400; }
+.canvas-radio-group input { accent-color: #006eb9; width: 16px; height: 16px; }
+.canvas-cost-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.canvas-capex-tabs { display: flex; flex-shrink: 0; height: 50px; border-bottom: 1px solid #f1f1f1; overflow-x: auto; padding: 0 14px; gap: 26px; }
+/* Tab labels: 14px, #424242 idle / #242424 + semibold when selected — without an explicit
+   colour they inherited FluentProvider's `colorNeutralForeground1`, which vsbTheme pins to
+   the canvas palette's `neutralPrimary` (#000000), i.e. noticeably darker than the canvas.
+   The 3px indicator is Fluent's own brand stroke #0f6cbd in the canvas screenshots (the
+   canvas app used a stock Fluent TabList there), not the VSB #006eb9 used for chrome. */
+.canvas-capex-tabs button { position: relative; border: 0; background: white; font: inherit; font-size: 14px; color: #424242; white-space: nowrap; padding: 0 2px; cursor: pointer; }
+.canvas-capex-tabs button[aria-selected="true"] { font-weight: 600; color: #242424; }
+.canvas-capex-tabs button[aria-selected="true"]::after { content: ''; height: 3px; background: #0f6cbd; position: absolute; bottom: 1px; left: 0; right: 0; border-radius: 2px; }
+.canvas-cost-toolbar { display: flex; align-items: center; gap: 20px; flex-shrink: 0; min-height: 50px; padding: 0 18px; overflow-x: auto; white-space: nowrap; }
+/* "Add Cost from Table" is semibold VSB blue in the canvas, not regular Fluent blue. */
+.canvas-cost-toolbar button { color: #006eb9; font-size: 14px; font-weight: 600; }
+/* Switch labels and the two selects are 14px/#242424 in the canvas, not 13px. */
+.canvas-cost-toolbar .fui-Switch label { font-size: 14px; color: #242424; }
+.canvas-cost-toolbar select { height: 30px; background: white; border: 1px solid #ccc; border-radius: 2px; font-size: 14px; color: #242424; padding: 0 12px; }
+.canvas-capex-summary { margin: 20px 10px; width: 360px; max-width: calc(100% - 20px); border-collapse: collapse; font-size: 13px; }
+.canvas-capex-summary td { padding: 9px 12px; border-bottom: 1px solid #eee; background: #fcfefe; }
+.canvas-capex-summary td:last-child { text-align: right; white-space: nowrap; border-right: 1px solid #eee; }
+.canvas-capex-summary tr:last-child { border: 1px solid #ddd; }
+.canvas-pcf-host { flex: 1; min-height: 300px; min-width: 0; margin: 0 5px; overflow: hidden; }
+
+/* ---------------------------------------------------------------------------
+   PCF host-cascade compensation.
+
+   `pcf/css/TableConnectedToDataversePCF.css` is a verbatim copy of the control's
+   stylesheet and must stay byte-identical to
+   `Existing Solution/PCF Git Repo Clones/DevexCapexSummaryPCF/.../TableConnectedToDataversePCF.css`
+   — so anything the control assumed its Power Apps host provided, but this app does not,
+   is corrected HERE rather than by editing that file.
+
+   Two such assumptions:
+
+   1. line-height. `.pcf-budget-grid` re-declares font-family, font-size and color but NOT
+      line-height, because in Power Apps it inherited `normal`. Under FluentProvider it
+      inherits `typographyStyles.body1` → `--lineHeightBase300` = 20px. That breaks the
+      contract rows: `.pcf-name-block` stacks the name (12px) over the sub-label (10px)
+      with a 1px gap, which is 30px at `normal` and sits centred inside the 40px
+      `.pcf-row-contract td`, but 41px at 20px line-height — so every contract row grew
+      past 40px, the two lines drifted ~4px apart, and the tree-connector elbows (tuned
+      against 38/40/30px rows, see the FRAGILE section of the control CSS) landed wrong.
+      Measured off `UI Screenshots/Cost App - DevexCapex Screen Tab Selected - Showcasing
+      dropdown for three dots clicked on contract.png`: 40px row pitch, name cap-top +9px
+      and sub-label cap-top +25px from the row top — i.e. `normal`.
+
+   2. font-family on the body-level menus. The control mounts its popups on document.body
+      to escape the scroll container. `.pcf-add-dropdown` and every `.pcf-month-dropdown-*`
+      rule names 'Segoe UI' explicitly, but `.pcf-dropdown` (the contract ••• menu) does
+      not and `.pcf-dropdown-item` says `font-family: inherit` — which resolved to Power
+      Apps' body font there and to the UA serif default here. That is the Edit / Comments /
+      Delete menu the screenshot shows in Segoe UI. `body` now carries the app stack (see
+      styles/global.css); this pins the menu to the same 'Segoe UI' its siblings use, so
+      the whole grid stays on one typeface.
+   --------------------------------------------------------------------------- */
+.canvas-pcf-host, .pcf-dropdown, .pcf-add-dropdown, .pcf-month-dropdown, .pcf-comment-tooltip-floating { line-height: normal; }
+.pcf-dropdown { font-family: 'Segoe UI', sans-serif; }
+.canvas-periods { overflow: auto; flex: 1; padding: 10px 8px 0 0; }
+.canvas-accordion { border: 1px solid #ddd; border-radius: 3px; box-shadow: 0 1px 1px #ddd; }
+.canvas-accordion > summary { list-style: none; display: flex; justify-content: space-between; padding: 12px 20px; min-height: 42px; cursor: pointer; background: #fcfefe; font-size: 16px; }
+.canvas-accordion > summary::after { content: '⌄'; color: #0078d4; }
+.canvas-accordion[open] > summary::after { content: '⌃'; }
+.canvas-period-body { min-height: 110px; }
+.canvas-period-table-wrap { overflow: auto; padding: 0 10px; }
+.canvas-period-table { border-collapse: collapse; min-width: 1800px; width: 100%; font-size: 12px; }
+.canvas-period-table th { font-weight: 600; text-align: left; height: 42px; white-space: nowrap; font-size: 13px; padding: 0 10px; }
+.canvas-period-table td { height: 30px; padding: 0 10px; white-space: nowrap; }
+.canvas-period-table td:nth-child(n+7) { text-align: right; }
+.canvas-period-table tr[aria-selected="true"] { background: #e1dfdd; }
+.canvas-period-table .standard { color: #006eb9; font-style: italic; }
+.canvas-sheet-dialog { width: 90vw !important; max-width: 90vw !important; height: 90vh; max-height: 90vh; padding: 0 !important; display: flex; flex-direction: column; border-radius: 3px; }
+.canvas-sheet-title { display: flex; align-items: center; justify-content: space-between; min-height: 42px; background: #006eb9; color: white; padding: 0 20px; font-size: 16px; font-weight: 600; }
+.canvas-sheet-title button { color: white; }
+.canvas-sheet-scroll { flex: 1; overflow: auto; margin: 24px 18px 12px; }
+.canvas-sheet { border-collapse: collapse; font-size: 13px; }
+.canvas-sheet th, .canvas-sheet td { border: 1px solid #e6e6e6; height: 28px; min-width: 84px; padding: 0 5px; white-space: nowrap; }
+.canvas-sheet thead tr:first-child th, .canvas-sheet .row-number { background: #f4f4f4; color: #8b949e; font-weight: 400; text-align: center; }
+.canvas-sheet th:nth-child(4) { min-width: 300px; }
+.canvas-sheet .account-row { background: #d3d3d3; }
+.canvas-sheet input, .canvas-sheet select { width: 100%; min-width: 74px; height: 26px; font: inherit; border: 0; background: transparent; }
+.canvas-sheet input:focus { outline: 2px solid #0078d4; background: white; }
+.canvas-sheet tr[aria-selected="true"] { outline: 1px solid #0078d4; }
+.canvas-sheet-footer { height: 68px; padding: 12px 20px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; }
+.canvas-sheet-footer span { margin-right: auto; font-size: 13px; }
+.canvas-error { color: #a4262c; padding: 8px 20px; font-size: 13px; }
+@media (max-width: 900px) { .canvas-panel-wide { min-width: min(660px, 100vw); } .canvas-user-pill { margin-left: 10px; } }
+
+/* Conditional validation message under a panel field (Add/Edit Period, Add/Edit Costs). */
+/* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
+.canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
+.canvas-field[data-invalid] input, .canvas-field[data-invalid] select { outline: 1px solid #d20532; }

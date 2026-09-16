@@ -1,0 +1,70 @@
+{
+  "uniquename": "vsb_CancelGateApproval",
+  "name": "vsb_CancelGateApproval",
+  "displayname": "Cancel gate approval",
+  "description": "Cancels an in-flight gate (cluster transition) approval and puts the Project State Tracking row back where it was, IN ONE TRANSACTION. WHY IT EXISTS: today a cancellation is two writes rather than one. The app calls the flow (or this API) to cancel the msdyn_flow_approval, and then separately runs planGateCancel() to reset the tracking row and write the audit note — see useCancelGateApproval in src/features/pm/checklist/hooks.ts, which awaits cancelGateApproval() and only then calls runPlan(). A failure between the two leaves the approval CANCELLED and the entity UN-RESET: vsb_approvalclusterstate still reads the pre-cancel state, vsb_flowrunid still points at a run that no longer exists, and the checklist screen offers 'Cancel Approval' again against nothing. There is no client-side fix for that, because dataClient.batch() bounds concurrency over individual writes and is not a transactional $batch changeset. Moving BOTH halves inside this message makes the cancellation atomic: the plugin does all three writes in the platform transaction and a fault rolls every one of them back.",
+  "bindingtype": "Global",
+  "isfunction": false,
+  "enabledforworkflow": false,
+  "allowedcustomprocessingsteptype": "None",
+  "isprivate": false,
+  "executeprivilegename": null,
+  "replaces": {
+    "flow": "PerformRequestofGateApprovalCancellation",
+    "actions": 12,
+    "disposition": "customApi",
+    "register": "src/flows/flowClient.ts — FLOW_REGISTER, entry `vsb_CancelGateApproval`"
+  },
+  "notes": [
+    "The flow declared a 13-field JSON blob plus an AppId. AMBIGUITY 3: no action in the flow's definition references AppId, and the blob existed only because a PowerAppV2 trigger cannot take a typed record. Neither is carried forward.",
+    "THIS SUPERSEDES A TEST. UT-CHKLST-033 asserts `Object.keys(gateCancelArgs('t-3')).toHaveLength(1)` — the state-tracking id alone. That was right while the app still owned the note write. Once the note moves inside this message the API needs the Comment as well, so gateCancelArgs() grows a second field and UT-CHKLST-033 must be updated in the same change. It is named here so the change is not a surprise.",
+    "vsb_flowapprovalid is deliberately NOT cleared. planGateCancel() nulls vsb_clusterstepstate and vsb_flowrunid and leaves vsb_flowapprovalid alone, so the cancelled approval remains traceable from the row. The plugin keeps that behaviour; if it should change, change it in rules.ts first."
+  ],
+  "requestParameters": [
+    {
+      "uniquename": "StateTrackingId",
+      "displayname": "Project state tracking",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "vsb_projectstatetracking row id. The only argument the flow actually needed: gateCancelArgs(stateTrackingId) in src/features/pm/checklist/rules.ts. Everything else the plugin reads from this row — its project, its cluster state, its owning business unit, its vsb_flowrunid and vsb_flowapprovalid."
+    },
+    {
+      "uniquename": "Comment",
+      "displayname": "Cancellation comment",
+      "type": "String",
+      "isoptional": false,
+      "description": "The user's reason, required by canCancelApproval() (`!commentMissing(panel.comment)`, UT-CHKLST-024) and written into the audit note as `Request canceled - {Comment}`. Required here because the note is now part of the transaction; the plugin truncates to COMMENT_MAX_LENGTH (gblAppConstants.DefaultLongMaxLength) exactly as trackingNoteWrite() does."
+    }
+  ],
+  "responseProperties": [
+    {
+      "uniquename": "Success",
+      "displayname": "Success",
+      "type": "Boolean",
+      "description": "False only where the platform allows a partial outcome to be reported rather than faulted. NOTE FOR THE APP: checklistCancelSucceeded() in rules.ts reads lower-case `success` / `ok`; a custom API returns the property under its declared unique name, `Success`. Widen that function when this API is wired up — it currently treats an unrecognised shape as success (UT-CHKLST-034 pins that), so a `Success:false` would be READ AS A PASS."
+    },
+    {
+      "uniquename": "Message",
+      "displayname": "Message",
+      "type": "String",
+      "description": "Empty on success. On a reported failure, CHECKLIST_CANCEL_FAILED verbatim: \"The approval could not be cancelled. Nothing was changed.\" G-LABEL applies — and in this message that sentence is a factual claim about the transaction, so it must only be returned when the rollback did happen."
+    },
+    {
+      "uniquename": "NoteId",
+      "displayname": "Audit note",
+      "type": "Guid",
+      "description": "The vsb_projectstatetrackingnote row the transaction created, named `Request canceled - {project name}`."
+    }
+  ],
+  "writes": [
+    "UPDATE vsb_projectstatetracking(StateTrackingId): vsb_approvalclusterstate = 952850001 (In Progress), vsb_clusterstepstate = null, vsb_flowrunid = null — planGateCancel(), plan.writes[0]",
+    "CANCEL the msdyn_flow_approval identified by the row's vsb_flowapprovalid / vsb_flowrunid — the half the flow owned",
+    "CREATE vsb_projectstatetrackingnote: vsb_name = `Request canceled - {projectName}`, vsb_comment = `Request canceled - {Comment}`, vsb_note = null, vsb_notetype = 952850000 (None), vsb_ProjectStateTracking = the tracking row, owningbusinessunit = the project's — trackingNoteWrite()"
+  ],
+  "portFrom": {
+    "computation": "src/features/pm/checklist/rules.ts",
+    "functions": ["gateCancelArgs", "planGateCancel", "trackingNoteWrite", "checklistCancelSucceeded"],
+    "callSite": "src/features/pm/checklist/hooks.ts — useCancelGateApproval",
+    "tests": ["UT-CHKLST-033", "UT-CHKLST-034", "UT-CHKLST-024"]
+  }
+}

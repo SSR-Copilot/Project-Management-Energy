@@ -1,0 +1,2 @@
+vsb_displayname: |-
+    =Concatenate(vsb_supplier, " | ", vsb_turbinetype," MW | ", Text(vsb_hubheight, "####"),"m Hub Height | ", Text(vsb_totalheight, "####"),"m Total Height | ")

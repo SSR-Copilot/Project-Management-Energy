@@ -1,0 +1,217 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_commondataserviceforapps": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "When_a_row_is_added,_modified_or_deleted": {
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "parameters": {
+              "subscriptionRequest/message": 4,
+              "subscriptionRequest/entityname": "vsb_projectstatetracking",
+              "subscriptionRequest/scope": 4,
+              "subscriptionRequest/filteringattributes": "vsb_approvalclusterstate",
+              "subscriptionRequest/name": "8b1bb80c-e79c-ef11-8a69-6045bd9289f5"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+              "operationId": "SubscribeWebhookTrigger",
+              "connectionName": "shared_commondataserviceforapps"
+            }
+          },
+          "conditions": [
+            {
+              "expression": "@equals(triggerOutputs()?['body/vsb_approvalclusterstate'],952850001)"
+            }
+          ],
+          "metadata": {
+            "operationMetadataId": "f3119d23-f85a-46d8-80d1-27718dc72bad"
+          }
+        }
+      },
+      "actions": {
+        "Try_sync_project_state": {
+          "type": "Scope",
+          "actions": {
+            "Set_guidProjectState": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "guidProjectState",
+                "value": "@triggerOutputs()?['body/_vsb_clusterstate_value']"
+              },
+              "metadata": {
+                "operationMetadataId": "772a9297-856c-4059-a871-01de42b6395e"
+              }
+            },
+            "Set_intApprovalClusterState": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "intApprovalClusterState",
+                "value": "@triggerOutputs()?['body/vsb_approvalclusterstate']"
+              },
+              "runAfter": {
+                "Set_guidProjectState": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "3051f513-7584-4878-8392-61aabff1dabe"
+              }
+            },
+            "Update_a_sync_project_active_state": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projects",
+                  "recordId": "@variables('guidProjectId')",
+                  "item/vsb_ClusterState@odata.bind": "/vsb_projectstates(@{variables('guidProjectState')})"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateRecord",
+                  "connectionName": "shared_commondataserviceforapps"
+                }
+              },
+              "runAfter": {
+                "Set_intApprovalClusterState": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8b2a67b3-4964-4f74-bf2b-c848eb07dece"
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_arrClusterStateIds": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "bfc47729-2adc-49db-af0e-a3947995bbc5"
+          }
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Terminate": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed"
+              },
+              "metadata": {
+                "operationMetadataId": "218c63de-59af-4de1-a6fa-de8d90547ee9"
+              }
+            }
+          },
+          "runAfter": {
+            "Try_sync_project_state": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "852bcec5-015e-4464-b511-77b14b194bcb"
+          }
+        },
+        "Initialize_guidProjectState": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "guidProjectState",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_guidProjectId": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "98e29bc8-f692-4cc1-8772-74234f91b1c0"
+          }
+        },
+        "Initialize_intApprovalClusterState": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "intApprovalClusterState",
+                "type": "integer"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_guidProjectState": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "69a40a3d-50d0-4a19-8549-2106ae33c42b"
+          }
+        },
+        "Initialize_guidProjectId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "guidProjectId",
+                "type": "string",
+                "value": "@triggerOutputs()?['body/_vsb_project_value']"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "92d56eb1-9ff2-4797-a24a-45340dceafb0"
+          }
+        },
+        "Initialize_arrClusterStateIds": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrClusterStateIds",
+                "type": "array"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_intApprovalClusterState": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "2cccac04-4fab-4cd6-9294-8d6b1fdae1fe"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

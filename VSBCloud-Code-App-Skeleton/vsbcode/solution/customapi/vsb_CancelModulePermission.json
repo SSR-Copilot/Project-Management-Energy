@@ -1,0 +1,84 @@
+{
+  "uniquename": "vsb_CancelModulePermission",
+  "name": "vsb_CancelModulePermission",
+  "displayname": "Cancel module permission request",
+  "description": "Cancels an open out-of-country module-permission approval and clears the request state from the …TypeInProject row, IN ONE TRANSACTION. WHY IT EXISTS: the same two-writes-not-one-transaction defect, with a worse consequence, and it is already recorded in the code as a source defect. SOURCE DEFECT (ambiguity 10), src/features/pm/generators/hooks.ts — the canvas fires Requestpermissioncancellation.Run(...) and then Remove(...) with NO ERROR HANDLING BETWEEN THEM, so a failed cancellation still deletes the generator type and orphans a live approval: an approver is left holding a request against a row that no longer exists. The code app already diverges deliberately — it awaits the cancellation and aborts the delete on failure — but that only narrows the window, it does not close it, because the cancellation is itself several writes. This API makes the cancellation atomic so the awaited result is trustworthy.",
+  "bindingtype": "Global",
+  "isfunction": false,
+  "enabledforworkflow": false,
+  "allowedcustomprocessingsteptype": "None",
+  "isprivate": false,
+  "executeprivilegename": null,
+  "replaces": {
+    "flow": "Requestpermissioncancellation",
+    "actions": 17,
+    "disposition": "customApi",
+    "register": "src/flows/flowClient.ts — FLOW_REGISTER, entry `vsb_CancelModulePermission`"
+  },
+  "notes": [
+    "Three synchronous row updates, no waits — but it touches msdyn_flow_approvals, which is why this is a plugin and not app code.",
+    "ModuleType is an Integer, not a Picklist: a Picklist parameter would need an option-set binding that adds nothing here, and the four values are already frozen in CHOICE_PLANT.moduleType. It selects WHICH type-in-project table the plugin writes.",
+    "buildCancellationPayload() also carried Name, FlowRunId and FlowApprovalId. Name was for the flow's mail body and is not needed. FlowRunId and FlowApprovalId are OPTIONAL here because the plugin can read both off the row; they are accepted so the caller can assert it is cancelling the run it thinks it is."
+  ],
+  "requestParameters": [
+    {
+      "uniquename": "TypeInProjectId",
+      "displayname": "Type in project row",
+      "type": "Guid",
+      "isoptional": false,
+      "description": "The …TypeInProject row id whose request is being cancelled. buildCancellationPayload()'s ModuleTypeGuid, and the id the app passes today as cancelModulePermission({permissionRequestId: p.type.id})."
+    },
+    {
+      "uniquename": "ModuleType",
+      "displayname": "Module type",
+      "type": "Integer",
+      "isoptional": false,
+      "description": "CHOICE_PLANT.moduleType — 952850000 generator (vsb_generatortypeinproject), 952850001 PV module (vsb_pvmoduletypeinproject), 952850002 inverter (vsb_invertertypeinproject), 952850003 substructure (vsb_substructuretypeinproject). Tells the plugin which table TypeInProjectId belongs to. Note that pvRequestsPermission() returns false — the PV call site is commented out on the screen with \"Disabled the Request Perfimission for Other Suppliers PV Module\" — so 952850001 should not arrive from the shipped app; it is accepted because the flow accepted it."
+    },
+    {
+      "uniquename": "FlowRunId",
+      "displayname": "Flow run id",
+      "type": "String",
+      "isoptional": true,
+      "description": "vsb_flowrunid as the app read it. Optional; the plugin reads the row. Supply it and the plugin faults rather than cancelling a different run — needsPermissionCancellation() only issues a cancellation when this is non-blank (UT-GEN-040/041)."
+    },
+    {
+      "uniquename": "FlowApprovalId",
+      "displayname": "Flow approval id",
+      "type": "String",
+      "isoptional": true,
+      "description": "vsb_flowapprovalid as the app read it. Same optional-assertion role as FlowRunId."
+    }
+  ],
+  "responseProperties": [
+    {
+      "uniquename": "Success",
+      "displayname": "Success",
+      "type": "Boolean",
+      "description": "True when the approval was cancelled and the row cleared. The caller MUST branch on this before deleting anything — that is the whole point of the divergence recorded at useDeleteGeneratorType."
+    },
+    {
+      "uniquename": "Message",
+      "displayname": "Message",
+      "type": "String",
+      "description": "Empty on success; otherwise a message the delete path can surface. There is no frozen canvas string for this case — the canvas had no error handling here at all — so any wording added must be declared in MSG with a `NEW — no canvas equivalent` provenance comment, per G-LABEL."
+    },
+    {
+      "uniquename": "AlreadyClosed",
+      "displayname": "Already closed",
+      "type": "Boolean",
+      "description": "True when there was nothing to cancel: the approval had already completed, been declined or been cancelled. Not an error — needsPermissionCancellation() is a client-side pre-check over a value that can be stale by the time the request lands, and re-cancelling must be a no-op for the API to be idempotent."
+    }
+  ],
+  "writes": [
+    "UPDATE the …TypeInProject row selected by ModuleType: vsb_requestpermissionstate = 952850003 (Canceled), vsb_flowrunid = null, vsb_flowapprovalid = null — GEN_TYPE_COL in src/features/pm/generators/rules.ts",
+    "CANCEL the msdyn_flow_approval for that run",
+    "The third write the flow made was its notification. Out of scope for a plugin: if a cancellation must notify, that stays in a flow triggered by the row change."
+  ],
+  "portFrom": {
+    "computation": "src/features/pm/generators/rules.ts",
+    "functions": ["buildCancellationPayload", "needsPermissionCancellation", "pendingPermissionFields", "pvRequestsPermission"],
+    "callSite": "src/features/pm/generators/hooks.ts — useDeleteGeneratorType and the single-turbine delete path",
+    "tests": ["UT-GEN-040/041", "UT-GEN-054"]
+  }
+}

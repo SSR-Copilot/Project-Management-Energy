@@ -1,0 +1,253 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_Left_Navigation:
+    DefinitionType: CanvasComponent
+    AccessAppScope: true
+    CustomProperties:
+      FontSize:
+        PropertyKind: Input
+        DisplayName: FontSize
+        Description: A font size property
+        RaiseOnReset: true
+        DataType: Number
+        Default: =10
+      IsExpanded:
+        PropertyKind: Input
+        DisplayName: IsExpanded
+        Description: A IsExpanded property
+        RaiseOnReset: true
+        DataType: Boolean
+        Default: =true
+      Items:
+        PropertyKind: Input
+        DisplayName: Items
+        Description: A Items property
+        RaiseOnReset: true
+        DataType: Table
+        Default: |-
+          =Table(
+              {
+                  ItemKey: "Item1Key",
+                  ItemDisplayName: "Item1",
+                  ItemIconName: "Info",
+                  ItemEnabled: true,
+                  TargetScreen: App.ActiveScreen
+              },
+              {
+                  ItemKey: "Item2Key",
+                  ItemDisplayName: "Item2",
+                  ItemIconName: "Document",
+                  TargetScreen: App.ActiveScreen
+              },
+              {
+                  ItemKey: "Item3Key",
+                  ItemDisplayName: "Item3",
+                  ItemIconName: "Document",
+                  TargetScreen: App.ActiveScreen
+              }
+          )
+      OnExpand:
+        PropertyKind: Event
+        DisplayName: OnExpand
+        Description: A OnExpand property
+        ReturnType: Boolean
+        Default: =true
+      OnSelect:
+        PropertyKind: Event
+        DisplayName: OnSelect
+        Description: A OnSelect event
+        ReturnType: Boolean
+        Default: =true
+      Selected:
+        PropertyKind: Input
+        DisplayName: Selected
+        Description: A selected item property
+        DataType: Record
+        Default: =
+      SelectedKey:
+        PropertyKind: Output
+        DisplayName: SelectedKey
+        Description: A selected key as string
+        DataType: Text
+    Properties:
+      SelectedKey: =pcf_Left_Navigation_Menu.SelectedKey
+      Width: =200
+    Children:
+      - con_Left_Navigation:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Vertical
+            LayoutGap: =4
+            PaddingBottom: =4
+            PaddingTop: =4
+            Width: =Parent.Width
+          Children:
+            - pcf_Left_Navigation_Menu:
+                Control: CodeComponent
+                ComponentName: cat_PowerCAT.Nav
+                Properties:
+                  AccessibilityLabel: ="Left navigation"
+                  Height: =Parent.Height-con_Left_Navigation_Header.Height-10
+                  Items: |-
+                    =With(
+                        {
+                            varItems: If(
+                                Not(cmp_Left_Navigation.IsExpanded),
+                                ForAll(
+                                    cmp_Left_Navigation.Items,
+                                    {
+                                        ItemKey: ThisRecord.ItemKey,
+                                        ItemDisplayName: "",
+                                        ItemIconName: ThisRecord.ItemIconName,
+                                        ItemEnabled: ThisRecord.ItemEnabled,
+                                        TargetScreen: ThisRecord.TargetScreen
+                                    }
+                                ),
+                                cmp_Left_Navigation.Items
+                            )
+                        },
+                        varItems
+                    )
+                    /*
+                    With(
+                        {
+                            _items: ForAll(
+                                cmp_Left_Navigation.Items,
+                                {
+                                    ItemKey: ThisRecord.ItemKey,
+                                    ItemDisplayName: If(
+                                        cmp_Left_Navigation.IsExpanded,
+                                        ThisRecord.ItemDisplayName,
+                                        ""
+                                    ),
+                                    ItemIconName: ThisRecord.ItemIconName,
+                                    ItemEnabled: ThisRecord.ItemEnabled,
+                                    TargetScreen: ThisRecord.TargetScreen
+                                }
+                            )
+                        },
+                        _items
+                    )*/
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  OnChange: |
+                    =//Notify($"{cmp_Left_Navigation.Selected.ItemKey}-{Self.Selected.ItemKey}");
+                    cmp_Left_Navigation.OnSelect();
+                  SelectedKey: =LookUp(cmp_Left_Navigation.Items,TargetScreen=App.ActiveScreen).ItemKey
+                  Theme: =gblAppThemeJson
+                  Tooltip: ="Left navigation"
+                  Width: =Parent.Width
+                  X: =2
+                  Y: =con_Left_Navigation_Header.Height
+            - con_Left_Navigation_Header:
+                Control: GroupContainer@1.5.0
+                Variant: ManualLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  DropShadow: =DropShadow.None
+                  FillPortions: =0
+                  Height: =45
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =Parent.Width
+                Children:
+                  - lbl_Left_Navigation_Expand:
+                      Control: Label@2.5.1
+                      Properties:
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        BorderThickness: =2
+                        Color: =RGBA(44, 44, 44, 1)
+                        DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                        DisabledColor: =RGBA(161, 159, 157, 1)
+                        FocusedBorderThickness: =4
+                        Font: =Font.'Segoe UI'
+                        Height: =Parent.Height
+                        PaddingLeft: =12
+                        Size: =11
+                        Text: ="Collapse Menu"
+                        Width: =Parent.Width-icon_Left_Navigation_Expand.Width-10
+                        X: =icon_Left_Navigation_Expand.Width+6
+                  - rec_Left_Navigation_Expanded_Delimiter:
+                      Control: Rectangle@2.3.0
+                      Properties:
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        DisabledFill: =RGBA(161, 159, 157, 1)
+                        Fill: =RGBA(243, 242, 241, 1)
+                        FocusedBorderThickness: =4
+                        Height: =3
+                        HoverFill: =RGBA(243, 242, 241, 1)
+                        PressedFill: =RGBA(243, 242, 241, 1)
+                        Width: =Parent.Width
+                  - Image2:
+                      Control: Image@2.2.3
+                      Properties:
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        BorderStyle: =BorderStyle.None
+                        BorderThickness: =2
+                        DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                        DisabledFill: =RGBA(0, 0, 0, 0)
+                        FocusedBorderThickness: =4
+                        Height: =28
+                        HoverBorderColor: =RGBA(0, 0, 0, 0)
+                        HoverFill: =RGBA(0, 0, 0, 0)
+                        Image: |-
+                          =
+                          If(gblLeftNavigationMenuIsExpanded,
+                          "data:image/svg+xml;utf8, "&EncodeUrl("
+                          <svg width='17' height='9' viewBox='0 0 19 9' fill='none' xmlns='http://www.w3.org/2000/svg'>
+                          <path d='M17 9H0V0H17V9ZM1 8H4V1H1V8ZM5 8H16V1H5V8ZM9.85352 2.35352L8.20703 4H12V5H8.20703L9.85352 6.64648L9.14648 7.35352L6.29297 4.5L9.14648 1.64648L9.85352 2.35352Z' fill='#595959'/>
+                          </svg>
+                          "),
+                          "data:image/svg+xml;utf8, "&EncodeUrl("
+                          <svg width='17' height='9' viewBox='0 0 19 9' fill='none' xmlns='http://www.w3.org/2000/svg'>
+                            <path d='M0 9H17V0H0V9ZM16 8H13V1H16V8ZM12 8H1V1H12V8ZM7.14648 2.35352L8.79297 4H5V5H8.79297L7.14648 6.64648L7.85352 7.35352L10.707 4.5L7.85352 1.64648L7.14648 2.35352Z' fill='#595959'/>
+                          </svg>
+                          "))
+                        OnSelect: =cmp_Left_Navigation.OnExpand();
+                        PressedBorderColor: =RGBA(0, 0, 0, 0)
+                        PressedFill: =RGBA(0, 0, 0, 0)
+                        Tooltip: =$"{If(cmp_Left_Navigation.IsExpanded, "Decrease", "Expand")} left naviagtion panel"
+                        Width: =28
+                        X: =5
+                        Y: =(Parent.Height-Self.Height)/2
+                  - icon_Left_Navigation_Expand:
+                      Control: Classic/Icon@2.5.0
+                      Properties:
+                        BorderColor: =RGBA(0, 0, 0, 0)
+                        Color: =
+                        DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                        DisabledColor: =RGBA(225, 223, 221, 1)
+                        DisabledFill: =RGBA(0, 0, 0, 0)
+                        FocusedBorderColor: =
+                        FocusedBorderThickness: =1
+                        Height: =28
+                        HoverBorderColor: =
+                        HoverColor: =
+                        HoverFill: =
+                        Icon: =
+                        OnSelect: =cmp_Left_Navigation.OnExpand();
+                        PaddingLeft: =6
+                        PaddingRight: =6
+                        PressedBorderColor: =RGBA(0, 0, 0, 0)
+                        PressedColor: =RGBA(16, 110, 190, 1)
+                        PressedFill: =RGBA(0, 0, 0, 0)
+                        Tooltip: =$"{If(cmp_Left_Navigation.IsExpanded, "Decrease", "Expand")} left naviagtion panel"
+                        Width: =28
+                        X: =2
+                        Y: =(Parent.Height-Self.Height)/2

@@ -1,0 +1,50 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+EditorState:
+  ScreensOrder:
+    - App Loading Screen
+    - Project Main Screen
+    - Project General Data Screen
+    - Project General Milestones Screen
+    - Project General Team Screen
+    - Project General CheckList Screen
+    - Project Planning Screen
+    - Grid Operator Screen
+    - Project Generators Screen
+    - Project Production Screen
+    - Project Revenues Screen
+    - Admin Project Default Checklists Screen
+    - Admin Project Gates Approvals Screen
+    - Admin CAPEX Accounts
+    - Admin Milestones Screen
+    - Project Finance Screen
+    - Admin Cost Screen
+    - Admin Contract Screen
+    - Screen1
+  ComponentDefinitionsOrder:
+    - Header
+    - Panel
+    - Dialog
+    - ExpandMenu
+    - cmp_Header
+    - cmp_User_Badge
+    - cmp_Project_States
+    - cmp_PopUp_Confirmation
+    - cmp_PopUp_Information
+    - cmp_PopUp_Loading
+    - cmp_Spinner
+    - cmp_ReportErrorRightPanel
+    - cmp_Information_Button
+    - cmp_Left_Navigation
+    - fn_Common
+    - fn_Numeric
+    - fn_Numeric_With_Separtors
+    - fn_Calculate_P75_P90
+    - cmp_PopUp_Confirmation_2
+    - cmp_NestedCountryPickerColumn

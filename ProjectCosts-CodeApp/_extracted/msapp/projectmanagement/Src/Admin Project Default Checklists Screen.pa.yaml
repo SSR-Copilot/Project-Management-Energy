@@ -1,0 +1,1791 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Admin Project Default Checklists Screen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+      LoadingSpinner: =LoadingSpinner.Data
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: |-
+        =UpdateContext(
+            {
+                locIsVisibleChecklistRightPanel: false,
+                locSelectedChecklistEntity: Blank(),
+                locAdminLoadingDialog: false,
+                //locAdminLoadingTitle: "",
+                locAdminLoadingDialogText: Blank(),
+                locSelectedCountryAndTechnology: First(
+                    SortByColumns(
+                        'Checklist Country And Technologies',
+                        "vsb_name"
+                    )
+                ),
+                locSelectedCluster: Blank()
+            }
+        );
+        ClearCollect(
+            colChecklistClusters,
+            AddColumns(
+                SortByColumns(
+                    Filter(
+                        'Project States',
+                        'Is Visible On Checklist'
+                    ),
+                    "vsb_order",
+                    SortOrder.Ascending
+                ),
+                IsFolded,
+                true
+            )
+        )
+    Children:
+      - con_Admin_Project_Checklist:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            Height: =Parent.Height
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutDirection: =LayoutDirection.Vertical
+            Width: =Parent.Width
+          Children:
+            - cmp_Admin_Project_Checklist_Header:
+                Control: CanvasComponent
+                ComponentName: cmp_Header
+                Properties:
+                  ApprovalStatesColor: |-
+                    =Table(
+                        {
+                            State: "Draft",
+                            Color: "#41aab4"
+                        },
+                        {
+                            State: "Approving",
+                            Color: "#f5911e"
+                        },
+                        {
+                            State: "Approved",
+                            Color: "#82a51e"
+                        },
+                        {
+                            State: "Rejected",
+                            Color: "#d20532"
+                        }
+                    )
+                  Height: =70
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LogoWidth: =210
+                  MainScreen: =App.ActiveScreen
+                  OnLogoClick: =Navigate('Project Main Screen',ScreenTransition.Fade)
+                  Project: |-
+                    ={
+                        ID: GUID("00000000-0000-0000-0000-000000000000"),
+                        Name: "Checklist settings",
+                        Technology: Blank(),
+                        Capacity: Blank(),
+                        Status: Blank(),
+                        Approval: Blank()
+                    }
+                  Width: =1024
+            - con_Admin_Project_Checklist_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  Fill: =ColorValue(gblAppTheme.palette.neutralLighter)
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutGap: =5
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  PaddingBottom: =5
+                  PaddingLeft: =5
+                  PaddingRight: =5
+                  PaddingTop: =5
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                Children:
+                  - con_Admin_Project_Checklist_LeftNavigation:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =RGBA(255, 255, 255, 1)
+                        FillPortions: =0
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =If(gblLeftNavigationMenuIsExpanded, gblAppSizes.LeftNavigation.ExpandedWidth,gblAppSizes.LeftNavigation.DecreasedWidth)
+                      Children:
+                        - cmp_Costs_DisplayProjectBody_LeftNavigation_1:
+                            Control: CanvasComponent
+                            ComponentName: cmp_Left_Navigation
+                            Properties:
+                              FontSize: =gblAppSizes.Font.Medium
+                              Height: =Parent.Height
+                              IsExpanded: =gblLeftNavigationMenuIsExpanded
+                              Items: =LeftAdminNavigationMenu
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnExpand: |+
+                                =Set(
+                                    gblLeftNavigationMenuIsExpanded,
+                                    Not(gblLeftNavigationMenuIsExpanded)
+                                );
+                              OnSelect: |-
+                                =If(
+                                    Self.SelectedKey <> gblLeftNavigationSelected.ItemKey,
+                                    Set(
+                                        gblLeftNavigationSelected,
+                                        LookUp(
+                                            LeftAdminNavigationMenu,
+                                            ItemKey = Self.SelectedKey
+                                        )
+                                    );
+                                    Navigate(
+                                        gblLeftNavigationSelected.TargetScreen,
+                                        ScreenTransition.Fade
+                                    )
+                                )
+                                /*
+                                With(
+                                    {
+                                        _clickedKey: Self.SelectedKey,
+                                        _currentKey: gblLeftNavigationSelected.ItemKey
+                                    },
+                                    If(
+                                        !IsBlank(_clickedKey) && _clickedKey <> _currentKey,
+                                        With(
+                                            {
+                                                _targetRecord: LookUp(
+                                                    LeftAdminNavigationMenu,
+                                                    ItemKey = _clickedKey
+                                                )
+                                            },
+                                            Set(
+                                                gblLeftNavigationSelected,
+                                                _targetRecord
+                                            );
+                                            Navigate(
+                                                _targetRecord.TargetScreen,
+                                                ScreenTransition.Fade
+                                            )
+                                        )
+                                    )
+                                )*/
+                              Selected: =gblLeftNavigationSelected
+                              Width: =200
+                  - con_Admin_Project_Checklist_RightContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =RGBA(255, 255, 255, 1)
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        PaddingLeft: =10
+                        PaddingRight: =10
+                        PaddingTop: =15
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - con_Admin_Project_Checklist_Header:
+                            Control: GroupContainer@1.5.0
+                            Variant: ManualLayout
+                            Properties:
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =tab_Admin_Project_Checklist_Association.Height+20
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutMinHeight: =32
+                              LayoutMinWidth: =Parent.Width-Self.X*2
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                            Children:
+                              - tab_Admin_Project_Checklist_Association:
+                                  Control: TabList@2.2.31
+                                  Properties:
+                                    DefaultSelectedItems: =locSelectedCountryAndTechnology
+                                    Height: =32
+                                    Items: |-
+                                      =Sort(
+                                          'Checklist Country And Technologies',
+                                          Order,
+                                          SortOrder.Ascending
+                                      )
+                                    OnChange: |-
+                                      =UpdateContext({locSelectedCountryAndTechnology: Self.Selected})
+                                    Size: ='TabList.Size'.Small
+                                    Width: =Parent.Width - Self.X*2
+                                  Children:
+                                    - Name10:
+                                        Control: TabListDataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="Name"
+                                          FieldName: ="vsb_name"
+                                          FieldType: ="s"
+                                          Order: =1
+                                    - Order1:
+                                        Control: TabListDataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="Order"
+                                          FieldName: ="vsb_order"
+                                          FieldType: ="s"
+                                          Order: =2
+                        - gal_DefaultChecklist_AdminScreen:
+                            Control: Gallery@2.15.0
+                            Variant: VariableHeight
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderColor: =Color.Transparent
+                              BorderStyle: =BorderStyle.None
+                              Fill: =Color.Transparent
+                              FillPortions: =0
+                              FocusedBorderColor: =Color.Transparent
+                              FocusedBorderThickness: =0
+                              Height: |-
+                                =//Sum(RenameColumns(ForAll(gal_Account_Accounts.AllItems, Value(lbl_Account_AccountItemHeightValue_Hidden.Text)),"Value", "RowHeight"), RowHeight) + Self.TemplatePadding * Self.AllItemsCount + gblAppSizes.Padding.Page
+                                Parent.Height-Self.Y
+                              Items: =colChecklistClusters
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LoadingSpinnerColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                              ShowScrollbar: =false
+                              TemplateFill: =gblAppColors.Gallery.TemplateFill
+                              TemplatePadding: =0
+                              TemplateSize: =400
+                              Width: =Parent.Width-Self.X
+                            Children:
+                              - con_Main_DefaultChecklist_AdminScreen:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    BorderColor: =Color.Transparent
+                                    BorderStyle: =BorderStyle.None
+                                    Fill: =ColorValue(gblAppTheme.palette.white)
+                                    Height: |+
+                                      =If(
+                                          ThisItem.IsFolded,
+                                          con_Header_DefaultChecklist_AdminScreen.Height,
+                                          con_Header_DefaultChecklist_AdminScreen.Height+con_DefaultChecklistDetails_DefaultChecklist_AdminScreen.Height
+                                      )
+
+                                    Width: =Parent.Width-10
+                                  Children:
+                                    - con_DefaultChecklistDetails_DefaultChecklist_AdminScreen:
+                                        Control: GroupContainer@1.5.0
+                                        Variant: AutoLayout
+                                        Properties:
+                                          BorderColor: =Color.Transparent
+                                          BorderThickness: =1
+                                          DropShadow: =DropShadow.None
+                                          Fill: =ColorValue(gblAppTheme.palette.white)
+                                          Height: =pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Height +con_Header_TasksInClusterDefaultChecklist_AdminScreen.Height + gal_TasksInClusterDefaultChecklist_AdminScreen.Height
+                                          LayoutDirection: =LayoutDirection.Vertical
+                                          LayoutOverflowX: =LayoutOverflow.Scroll
+                                          PaddingLeft: =20
+                                          PaddingTop: =10
+                                          RadiusBottomLeft: =0
+                                          RadiusBottomRight: =0
+                                          Width: |+
+                                            =Parent.Width
+                                          Y: =42
+                                        Children:
+                                          - pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen:
+                                              Control: CodeComponent
+                                              ComponentName: cat_PowerCAT.CommandBar
+                                              Properties:
+                                                Height: =32
+                                                Items: |-
+                                                  =Table(
+                                                      {
+                                                          ItemKey: "addNewChecklistEntity",
+                                                          ItemDisplayName: "Add Task",
+                                                          ItemIconName: "Add",
+                                                          ItemEnabled: true
+                                                      },
+                                                      {
+                                                          ItemKey: "reorderChecklist",
+                                                          ItemDisplayName: "Reorder",
+                                                          ItemIconName: "NumberedList",
+                                                          ItemEnabled: true
+                                                      }
+                                                  )
+                                                LayoutMaxHeight: =
+                                                LayoutMaxWidth: =
+                                                OnSelect: |
+                                                  =Switch(
+                                                      Self.Selected.ItemKey,
+                                                      "addNewChecklistEntity",
+                                                      UpdateContext(
+                                                          {
+                                                              locIsVisibleChecklistRightPanel: true,
+                                                              locSelectedChecklistEntity: Blank(),
+                                                              locSelectedCluster: ThisItem,
+                                                              locTotalRows: CountRows(
+                                                                  Filter(
+                                                                      'Project Default Checklists',
+                                                                      'Associated Country And Technology'.'Checklist Country And Technology' = locSelectedCountryAndTechnology.'Checklist Country And Technology',
+                                                                      'Cluster State'.'Project State' = ThisItem.'Project State'
+                                                                  )
+                                                              )
+                                                          }
+                                                      );
+                                                      "reorderChecklist",
+                                                      UpdateContext(
+                                                          {
+                                                              locShowReorderForm: true,
+                                                              locResetOrderingList: "Reset" & Rand()
+                                                          }
+                                                      );
+                                                      ClearCollect(
+                                                          colTasksToReorder,
+                                                          Filter(
+                                                              'Project Default Checklists',
+                                                              'Associated Country And Technology'.'Checklist Country And Technology' = locSelectedCountryAndTechnology.'Checklist Country And Technology',
+                                                              'Cluster State'.'Project State' = ThisItem.'Project State'
+                                                          )
+                                                      )
+                                                  );
+                                                Width: =1210
+                                                X: =20
+                                          - con_Header_TasksInClusterDefaultChecklist_AdminScreen:
+                                              Control: GroupContainer@1.5.0
+                                              Variant: ManualLayout
+                                              Properties:
+                                                AlignInContainer: =AlignInContainer.SetByContainer
+                                                DropShadow: =DropShadow.None
+                                                Fill: =ColorValue("#FAFAFA")
+                                                FillPortions: =0
+                                                Height: =32
+                                                LayoutMaxHeight: =
+                                                LayoutMaxWidth: =
+                                                RadiusBottomLeft: =2
+                                                RadiusBottomRight: =2
+                                                RadiusTopLeft: =2
+                                                RadiusTopRight: =2
+                                                Width: =1210
+                                                X: =20
+                                                Y: =pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Y + pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Height
+                                              Children:
+                                                - lbl_IsActive_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: Text@0.0.51
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      Height: =22
+                                                      Text: ="Active"
+                                                      Weight: ='TextCanvas.Weight'.Semibold
+                                                      Width: =180
+                                                      X: =lbl_CompletionDate_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_CompletionDate_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                                - lbl_CompletionDate_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: Text@0.0.51
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      Height: =22
+                                                      Text: ="Completion Date"
+                                                      Weight: ='TextCanvas.Weight'.Semibold
+                                                      Width: =180
+                                                      X: =lbl_GateRelevance_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_GateRelevance_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                                - lbl_GateRelevance_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: Text@0.0.51
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      Height: =22
+                                                      Text: ="Gate Relevance"
+                                                      Weight: ='TextCanvas.Weight'.Semibold
+                                                      Width: =180
+                                                      X: =lbl_HoldingDescription_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_HoldingDescription_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                                - lbl_HoldingDescription_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: Text@0.0.51
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      Height: =22
+                                                      Text: ="Holding Description"
+                                                      Weight: ='TextCanvas.Weight'.Semibold
+                                                      Width: =350
+                                                      X: =lbl_Description_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_Description_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                                - lbl_Description_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: Text@0.0.51
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      Height: =22
+                                                      Text: ="Description"
+                                                      Weight: ='TextCanvas.Weight'.Semibold
+                                                      Width: =300
+                                                      X: =gblAppSizes.Position.X
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                          - gal_TasksInClusterDefaultChecklist_AdminScreen:
+                                              Control: Gallery@2.15.0
+                                              Variant: VariableHeight
+                                              Properties:
+                                                AlignInContainer: =AlignInContainer.SetByContainer
+                                                BorderColor: =RGBA(245, 245, 245, 1)
+                                                FillPortions: =0
+                                                Height: =Self.AllItemsCount*34 + 26
+                                                Items: |-
+                                                  =SortByColumns(
+                                                      Filter(
+                                                          'Project Default Checklists',
+                                                          And(
+                                                              'Associated Country And Technology'.'Checklist Country And Technology' = tab_Admin_Project_Checklist_Association.Selected.'Checklist Country And Technology',
+                                                              'Cluster State'.'Project State' = ThisItem.'Project State',
+                                                              Not('To Delete' = true)
+                                                          )
+                                                      ),
+                                                      "vsb_order",
+                                                      SortOrder.Ascending
+                                                  )
+                                                LayoutMaxHeight: =
+                                                LayoutMaxWidth: =
+                                                LoadingSpinnerColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                                TemplatePadding: =0
+                                                TemplateSize: =34
+                                                Width: =1210
+                                              Children:
+                                                - con_Details_TasksInClusterDefaultChecklist_AdminScreen:
+                                                    Control: GroupContainer@1.5.0
+                                                    Variant: ManualLayout
+                                                    Properties:
+                                                      BorderColor: =RGBA(0, 0, 0, 0)
+                                                      BorderStyle: =BorderStyle.None
+                                                      DropShadow: =DropShadow.None
+                                                      Height: =Parent.TemplateHeight
+                                                      RadiusBottomLeft: =0
+                                                      RadiusBottomRight: =0
+                                                      RadiusTopLeft: =0
+                                                      RadiusTopRight: =0
+                                                      Width: =Parent.Width
+                                                    Children:
+                                                      - ico_Delete_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: CodeComponent
+                                                          ComponentName: cat_PowerCAT.Icon
+                                                          Properties:
+                                                            BorderColor: ="#fff0"
+                                                            DisplayMode: |+
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  DisplayMode.View,
+                                                                  DisplayMode.Edit
+                                                              )
+                                                            FillColor: ="#fff0"
+                                                            Height: =34
+                                                            HoverBorderColor: ="#fff0"
+                                                            HoverFillColor: ="#fff0"
+                                                            IconColor: =If(Self.DisplayMode = DisplayMode.Edit, gblAppTheme.palette.akzent3, "#bbb" )
+                                                            IconName: ="Delete"
+                                                            OnChange: |-
+                                                              =If(
+                                                                  Self.DisplayMode = DisplayMode.Edit,
+                                                                  UpdateContext(
+                                                                      {
+                                                                          locSelectedChecklistEntity: ThisItem,
+                                                                          locIsVisiblePopUpDeleteDefaultChecklist: true
+                                                                      }
+                                                                  )
+                                                              )
+                                                            Tooltip: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  "This Check List item is in use by a Project Gate. Delete the Project Gate to edit the Check List item."
+                                                              )
+                                                            Width: =34
+                                                            X: |+
+                                                              =ico_Edit_TasksInClusterDefaultChecklist_AdminScreen.X+ico_Edit_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      - ico_Edit_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: CodeComponent
+                                                          ComponentName: cat_PowerCAT.Icon
+                                                          Properties:
+                                                            BorderColor: ="#fff0"
+                                                            DisplayMode: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  DisplayMode.View,
+                                                                  DisplayMode.Edit
+                                                              )
+                                                            FillColor: ="#fff0"
+                                                            Height: =34
+                                                            HoverFillColor: ="#fff0"
+                                                            IconColor: =If(Self.DisplayMode = DisplayMode.Edit, gblAppTheme.palette.akzent3, "#bbb" )
+                                                            IconName: ="Edit"
+                                                            OnChange: |-
+                                                              =If(
+                                                                  Self.DisplayMode = DisplayMode.Edit,
+                                                                  UpdateContext(
+                                                                      {
+                                                                          locIsVisibleChecklistRightPanel: true,
+                                                                          locSelectedChecklistEntity: ThisItem    
+                                                                      }
+                                                                  )
+                                                              )
+                                                            Tooltip: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  "This Check List item is in use by a Project Gate. Delete the Project Gate to edit the Check List item."
+                                                              )
+                                                            Width: =34
+                                                            X: |+
+                                                              =ico_ActivateDeactivate_TasksInClusterDefaultChecklist_AdminScreen.X+ico_ActivateDeactivate_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      - ico_ActivateDeactivate_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: CodeComponent
+                                                          ComponentName: cat_PowerCAT.Icon
+                                                          Properties:
+                                                            DisplayMode: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  DisplayMode.Disabled,
+                                                                  DisplayMode.Edit
+                                                              )
+                                                            FontColor: =If(ThisItem.Status = 'Status (Project Default Checklists)'.Active,gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary)
+                                                            Height: =34
+                                                            IconColor: =If(Self.DisplayMode = DisplayMode.Edit, If(ThisItem.Status = 'Status (Project Default Checklists)'.Active,gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary), "#bbb" )
+                                                            IconName: =If(ThisItem.Status = 'Status (Project Default Checklists)'.Active,"DeactivateOrders","ActivateOrders")
+                                                            IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                                                            OnChange: |-
+                                                              =UpdateContext({locIsVisiblePopUpActivationDefaultChecklist: true, locSelectedChecklistEntity: ThisItem})
+                                                            Text: =ThisItem.Status
+                                                            Tooltip: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') &&  'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  "This Check List item is in use by a Project Gate. Delete the Project Gate to edit the Check List item."
+                                                              )
+                                                            Width: =90
+                                                            X: =lbl_IsActive_TasksInClusterDefaultChecklist_AdminScreen.X
+                                                      - ico_EnablelCompletionDate_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: CodeComponent
+                                                          ComponentName: cat_PowerCAT.Icon
+                                                          Properties:
+                                                            BorderColor: ="#fff0"
+                                                            DisplayMode: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist')  && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  DisplayMode.Disabled,
+                                                                  DisplayMode.Edit
+                                                              )
+                                                            FontColor: =If(ThisItem.'Is Completion Date',gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary)
+                                                            Height: =34
+                                                            HoverFontColor: =If(ThisItem.'Is Completion Date',gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary)
+                                                            HoverIconColor: =If(ThisItem.'Is Completion Date',gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary)
+                                                            IconColor: =If(Self.DisplayMode = DisplayMode.Edit, If(ThisItem.'Is Completion Date',gblAppTheme.palette.akzent3,gblAppTheme.palette.themePrimary), "#bbb" )
+                                                            IconName: =If(ThisItem.'Is Completion Date',"CalendarReply","Calendar")
+                                                            IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                                                            OnChange: |+
+                                                              =UpdateContext(
+                                                                  {
+                                                                      locAdminLoadingDialog: true,
+                                                                      locAdminLoadingDialogText: $"Completion Date for '{ThisItem.Name}' will be changed, please wait..."
+                                                                  }
+                                                              );
+                                                              IfError(
+                                                                  UpdateContext(
+                                                                      {
+                                                                          locSelectedChecklistEntity: Patch(
+                                                                              'Project Default Checklists',
+                                                                              LookUp(
+                                                                                  'Project Default Checklists',
+                                                                                  'Project Default Checklist' = ThisItem.'Project Default Checklist'
+                                                                              ),
+                                                                              {'Is Completion Date': Not(ThisItem.'Is Completion Date')}
+                                                                          )
+                                                                      }
+                                                                  );
+                                                                  UpdateContext({locAdminLoadingDialogText: $"Completion Date was successfully changed."});
+                                                                  Refresh('Project Default Approvals'),
+                                                                  UpdateContext({locAdminLoadingDialogText: $"Error: Completion Date could not be changed. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message} {FirstError.Details.HttpResponse}"})
+                                                              );
+                                                              UpdateContext(
+                                                                  {
+                                                                      locAdminLoadingDialog: false,
+                                                                      locAdminLoadingDialogText: Blank()
+                                                                  }
+                                                              );
+                                                            Text: =If(ThisItem.'Is Completion Date', "Yes", "No")
+                                                            TextAlignment: ='PowerCAT.Icon.TextAlignment'.Left
+                                                            Tooltip: |-
+                                                              =If(
+                                                                  !IsBlank(LookUp('Check List Default Approvals', 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.'Project Default Checklist') && 'Approval Mode' <> [@'Approval Mode'].'Only Notifications')),
+                                                                  "This Check List item is in use by a Project Gate. Delete the Project Gate to edit the Check List item."
+                                                              )
+                                                            Width: =60
+                                                            X: =lbl_GateRelevanceValue_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_GateRelevanceValue_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                      - lbl_GateRelevanceValue_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: Text@0.0.51
+                                                          Properties:
+                                                            Height: =Parent.Height
+                                                            PaddingLeft: =4
+                                                            PaddingRight: =4
+                                                            Size: =gblAppSizes.Font.Large
+                                                            Text: =ThisItem.'Gate Relevance'
+                                                            VerticalAlign: =VerticalAlign.Middle
+                                                            Weight: ='TextCanvas.Weight'.Regular
+                                                            Width: =180
+                                                            X: =lbl_HoldingDescriptionValue_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_HoldingDescriptionValue_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                            Y: =Parent.Height/2-Self.Height/2
+                                                      - lbl_HoldingDescriptionValue_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: Text@0.0.51
+                                                          Properties:
+                                                            Height: =Parent.Height
+                                                            PaddingLeft: =4
+                                                            PaddingRight: =4
+                                                            Size: =gblAppSizes.Font.Large
+                                                            Text: =If(Len(ThisItem.'Holding Task Description')>110, $"{Left(ThisItem.'Holding Task Description', 110)} ...", ThisItem.'Holding Task Description')
+                                                            VerticalAlign: =VerticalAlign.Middle
+                                                            Weight: ='TextCanvas.Weight'.Regular
+                                                            Width: =lbl_HoldingDescription_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                            X: =lbl_DescriptionValue_TasksInClusterDefaultChecklist_AdminScreen.X+lbl_DescriptionValue_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                            Y: =Parent.Height/2-Self.Height/2
+                                                      - lbl_DescriptionValue_TasksInClusterDefaultChecklist_AdminScreen:
+                                                          Control: Text@0.0.51
+                                                          Properties:
+                                                            Height: =Parent.Height
+                                                            PaddingLeft: =4
+                                                            PaddingRight: =4
+                                                            Size: =gblAppSizes.Font.Large
+                                                            Text: =ThisItem.Name
+                                                            VerticalAlign: =VerticalAlign.Middle
+                                                            Weight: ='TextCanvas.Weight'.Regular
+                                                            Width: =lbl_Description_TasksInClusterDefaultChecklist_AdminScreen.Width
+                                                            X: =lbl_Description_TasksInClusterDefaultChecklist_AdminScreen.X
+                                                            Y: =Parent.Height/2-Self.Height/2
+                                    - con_Header_DefaultChecklist_AdminScreen:
+                                        Control: GroupContainer@1.5.0
+                                        Variant: ManualLayout
+                                        Properties:
+                                          BorderColor: =Color.Transparent
+                                          BorderStyle: =BorderStyle.None
+                                          Fill: =ColorValue("#fdffff")
+                                          Height: =42
+                                          Width: =Parent.Width
+                                        Children:
+                                          - lbl_ClusterName_DefaultChecklist_AdminScreen:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                AutoHeight: =true
+                                                BorderColor: =gblAppColors.Label.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Label.BorderThickness
+                                                Color: =gblAppColors.Label.Color
+                                                DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Label.DisabledColor
+                                                DisabledFill: =gblAppColors.Label.DisabledFill
+                                                Fill: =gblAppColors.Label.Fill
+                                                FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                Font: =gblAppColors.Label.Font
+                                                FontWeight: |-
+                                                  =If(
+                                                      ThisItem.'Project State' = locSelectedCluster.'Project State',
+                                                      FontWeight.Semibold,
+                                                      FontWeight.Normal
+                                                  )
+                                                Height: =35
+                                                HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                HoverColor: =gblAppColors.Label.HoverColor
+                                                HoverFill: =gblAppColors.Label.HoverFill
+                                                PaddingLeft: =0
+                                                PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                PressedColor: =gblAppColors.Label.PressedColor
+                                                PressedFill: =gblAppColors.Label.PressedFill
+                                                Size: =gblAppSizes.Font.Medium
+                                                Text: |-
+                                                  =Switch(
+                                                      ThisItem.Name,
+                                                      "Draft",
+                                                      "Draft to Cluster 1",
+                                                      "Cluster 1",
+                                                      "Cluster 1 to Cluster 2",
+                                                      "Cluster 2",
+                                                      "Cluster 2 to Cluster 3",
+                                                      "Cluster 3",
+                                                      "Cluster 3 to Cluster 4",
+                                                      "Cluster 4",
+                                                      "Cluster 4 to Cluster 5",
+                                                      "Cluster 5",
+                                                      "Cluster 5 to Cluster 6",
+                                                      "Cluster 6",
+                                                      "Criteria After Cluster 6 Entry",
+                                                      ThisItem.Name
+                                                  )
+                                                Width: =Parent.Width-Self.X-40
+                                                Wrap: =false
+                                                X: =6
+                                                Y: =(Parent.Height-Self.Height)/2
+                                          - shp_BottomLine_DefaultChecklist_AdminScreen:
+                                              Control: Rectangle@2.3.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Divider.BorderColor
+                                                BorderStyle: =gblAppColors.Divider.BorderStyle
+                                                BorderThickness: =gblAppColors.Divider.BorderThickness
+                                                DisabledFill: =gblAppColors.Divider.DisabledColor
+                                                DisplayMode: =DisplayMode.View
+                                                Fill: =gblAppColors.Divider.Color
+                                                FocusedBorderColor: =gblAppColors.Divider.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Divider.FocusedBorderThickness
+                                                Height: =1
+                                                HoverFill: =gblAppColors.Divider.HoverColor
+                                                PressedFill: =gblAppColors.Divider.PressedColor
+                                                Visible: =ThisItem.IsFolded
+                                                Width: =Parent.Width
+                                                Y: =Parent.Height-Self.Height
+                                          - btn_Select_DefaultChecklist_AdminScreen:
+                                              Control: Classic/Button@2.2.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.ButtonTransparent.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.ButtonTransparent.BorderThickness
+                                                Color: =gblAppColors.ButtonTransparent.Color
+                                                DisabledBorderColor: =gblAppColors.ButtonTransparent.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.ButtonTransparent.DisabledColor
+                                                DisabledFill: =gblAppColors.ButtonTransparent.DisabledFill
+                                                DisplayMode: |
+                                                  =DisplayMode.Edit
+                                                Fill: =gblAppColors.ButtonTransparent.Fill
+                                                FocusedBorderColor: =gblAppColors.ButtonTransparent.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.ButtonTransparent.FocusedBorderThickness
+                                                Font: =gblAppColors.ButtonTransparent.Font
+                                                Height: =Parent.Height
+                                                HoverBorderColor: =gblAppColors.ButtonTransparent.HoverBorderColor
+                                                HoverColor: =gblAppColors.ButtonTransparent.HoverColor
+                                                HoverFill: =ColorValue("#E3E3E322")
+                                                OnSelect: |-
+                                                  =UpdateContext({locSelectedCluster: ThisItem})
+                                                PressedBorderColor: =gblAppColors.ButtonTransparent.PressedBorderColor
+                                                PressedColor: =gblAppColors.ButtonTransparent.PressedColor
+                                                PressedFill: =gblAppColors.ButtonTransparent.PressedFill
+                                                RadiusBottomLeft: =gblAppColors.ButtonTransparent.RadiusBottomLeft
+                                                RadiusBottomRight: =gblAppColors.ButtonTransparent.RadiusBottomRight
+                                                RadiusTopLeft: =gblAppColors.ButtonTransparent.RadiusTopLeft
+                                                RadiusTopRight: =gblAppColors.ButtonTransparent.RadiusTopRight
+                                                Size: =gblAppSizes.Font.Medium
+                                                Text: '= '
+                                                Width: =Parent.Width
+                                          - ico_Down_DefaultChecklist_AdminScreen:
+                                              Control: Classic/Icon@2.5.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Icon.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Icon.BorderThickness
+                                                Color: =gblAppColors.Icon.Color
+                                                DisabledBorderColor: =gblAppColors.Icon.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Icon.DisabledColor
+                                                DisabledFill: =gblAppColors.Icon.DisabledFill
+                                                Fill: =gblAppColors.Icon.Fill
+                                                FocusedBorderColor: =gblAppColors.Icon.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Icon.FocusedBorderThickness
+                                                Height: =30
+                                                HoverBorderColor: =gblAppColors.Icon.HoverBorderColor
+                                                HoverColor: =gblAppColors.Icon.HoverColor
+                                                HoverFill: =gblAppColors.Icon.HoverFill
+                                                Icon: =Icon.ChevronDown
+                                                OnSelect: |-
+                                                  =Patch(colChecklistClusters, ThisItem, {IsFolded: !ThisItem.IsFolded});
+                                                  UpdateContext({locSelectedCluster: ThisItem})
+                                                PaddingBottom: =5
+                                                PaddingLeft: =5
+                                                PaddingRight: =10
+                                                PaddingTop: =5
+                                                PressedBorderColor: =gblAppColors.Icon.PressedBorderColor
+                                                PressedColor: =gblAppColors.Icon.PressedColor
+                                                PressedFill: =gblAppColors.Icon.PressedFill
+                                                Visible: =ThisItem.IsFolded
+                                                Width: =40
+                                                X: =Parent.Width-Self.Width
+                                                Y: =Parent.Height/2-Self.Height/2
+                                          - ico_Up_DefaultChecklist_AdminScreen:
+                                              Control: Classic/Icon@2.5.0
+                                              Properties:
+                                                BorderColor: =gblAppColors.Icon.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Icon.BorderThickness
+                                                Color: =gblAppColors.Icon.Color
+                                                DisabledBorderColor: =gblAppColors.Icon.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Icon.DisabledColor
+                                                DisabledFill: =gblAppColors.Icon.DisabledFill
+                                                Fill: =gblAppColors.Icon.Fill
+                                                FocusedBorderColor: =gblAppColors.Icon.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Icon.FocusedBorderThickness
+                                                Height: =30
+                                                HoverBorderColor: =gblAppColors.Icon.HoverBorderColor
+                                                HoverColor: =gblAppColors.Icon.HoverColor
+                                                HoverFill: =gblAppColors.Icon.HoverFill
+                                                Icon: =Icon.ChevronUp
+                                                OnSelect: |-
+                                                  =Patch(colChecklistClusters, ThisItem, {IsFolded: !ThisItem.IsFolded});
+                                                  UpdateContext({locSelectedCluster: ThisItem})
+                                                PaddingBottom: =5
+                                                PaddingLeft: =5
+                                                PaddingRight: =10
+                                                PaddingTop: =5
+                                                PressedBorderColor: =gblAppColors.Icon.PressedBorderColor
+                                                PressedColor: =gblAppColors.Icon.PressedColor
+                                                PressedFill: =gblAppColors.Icon.PressedFill
+                                                Visible: =Not(ThisItem.IsFolded)
+                                                Width: =40
+                                                X: =Parent.Width-Self.Width
+                                                Y: =Parent.Height/2-Self.Height/2
+                              - lbl_ClusterName_Checklist_AdminScreen:
+                                  Control: Label@2.5.1
+                                  Properties:
+                                    Align: =Align.Right
+                                    AutoHeight: =true
+                                    BorderColor: =gblAppColors.Label.BorderColor
+                                    BorderStyle: =BorderStyle.None
+                                    BorderThickness: =gblAppColors.Label.BorderThickness
+                                    Color: =gblAppColors.Label.Color
+                                    DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                    DisabledColor: =gblAppColors.Label.DisabledColor
+                                    DisabledFill: =gblAppColors.Label.DisabledFill
+                                    DisplayMode: =DisplayMode.View
+                                    Fill: =gblAppColors.Label.Fill
+                                    FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                    FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                    Font: =gblAppColors.Label.Font
+                                    FontWeight: =FontWeight.Semibold
+                                    Height: =35
+                                    HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                    HoverColor: =gblAppColors.Label.HoverColor
+                                    HoverFill: =gblAppColors.Label.HoverFill
+                                    PaddingLeft: =0
+                                    PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                    PressedColor: =gblAppColors.Label.PressedColor
+                                    PressedFill: =gblAppColors.Label.PressedFill
+                                    Size: =gblAppSizes.Font.Medium
+                                    Text: =con_Main_DefaultChecklist_AdminScreen.Height
+                                    Visible: =false
+                                    Width: =Len(Self.Text)*14
+                                    Wrap: =false
+      - con_Admin_Checklist_Form:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.3)
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Horizontal
+            LayoutJustifyContent: =LayoutJustifyContent.End
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =locIsVisibleChecklistRightPanel
+            Width: =Parent.Width
+          Children:
+            - con_Admin_Checklist_Form_Contents:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                  FillPortions: =0
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.End
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  Width: =Min(gblAppSizes.RightPanel.MinWidth, Parent.Width)
+                Children:
+                  - con_Admin_Admin_Checklist_Form_Header:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        FillPortions: =0
+                        Height: =48
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =48
+                        Width: =Parent.Width
+                      Children:
+                        - lblAdmin_ProjectGates_Approvals_Form_Title_1:
+                            Control: Label@2.5.1
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =2
+                              Color: =RGBA(255, 255, 255, 1)
+                              DisabledBorderColor: =RGBA(255, 255, 255, 1)
+                              DisabledColor: =RGBA(255, 255, 255, 1)
+                              FocusedBorderThickness: =4
+                              Font: =Font.'Segoe UI'
+                              FontWeight: =FontWeight.Semibold
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =20
+                              Text: |-
+                                =If(
+                                    IsBlank(locSelectedChecklistEntity),
+                                    "Add Task",
+                                    "Edit Task"
+                                )
+                              Width: =Parent.Width - pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1.Width
+                        - pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              Height: =Parent.Height
+                              Items: |-
+                                =Table(
+                                    {
+                                        ItemKey: "closeKey",
+                                        ItemDisplayName: "Home",
+                                        ItemIconName: "ChromeClose",
+                                        ItemIconOnly: true,
+                                        ItemFarItem: true,
+                                        ItemIconColor: gblAppTheme.palette.themeTertiary
+                                    }
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |
+                                =If(
+                                    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = "closeKey",
+                                    Select(but_Admin_Checklist_Form_Buttons_Reset);
+                                    UpdateContext(
+                                        {
+                                            locIsVisibleChecklistRightPanel: false,
+                                            locSelectedChecklistEntity: Blank()
+                                        }
+                                    )
+                                );
+                              Width: =Parent.Width/3
+                  - con_Admin_Checklist_Form_Body:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        Height: =Parent.Height/2
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =20
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Admin_Checklist_Form_Fields:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutOverflowY: =LayoutOverflow.Scroll
+                              PaddingBottom: =20
+                              PaddingTop: =gblAppSizes.RightPanel.Top
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                              Y: =130
+                            Children:
+                              - con_Admin_Checklist_Form_Fields_Title:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =74
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width-Self.X*2
+                                  Children:
+                                    - lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Size: =9
+                                          Text: |-
+                                            =If(
+                                                IsBlank(Trim(txt_Admin_Checklist_Form_Fields_Name.Value)),
+                                                "Value cannot be blank."
+                                            )
+                                          Visible: =IsBlank(Trim(txt_Admin_Checklist_Form_Fields_Name.Value))
+                                          Width: =Parent.Width-Self.X*2
+                                          Wrap: =false
+                                          X: =lbl_GeneralData_DisplayProject_Body_General_Content_ProjectName.X
+                                          Y: =54
+                                    - txt_Admin_Checklist_Form_Fields_Name:
+                                        Control: TextInput@0.0.54
+                                        Properties:
+                                          Align: =Align.Left
+                                          BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                          MaxLength: =gblAppConstants.DefaultDefMaxLength
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colPanelInverterFormValidation,
+                                                Name = "InverterLabel",
+                                                {
+                                                    Valid: Not(IsBlank(Trim(Self.Value))),
+                                                    Dirty: true
+                                                }
+                                            );
+                                          TriggerOutput: ='TextInputCanvas.TriggerOutput'.Keypress
+                                          Value: =locSelectedChecklistEntity.Name
+                                          Width: =Parent.Width - Self.X*2
+                                          X: =lbl_Admin_Checklist_Form_Fields_Name.X
+                                          Y: =lbl_Admin_Checklist_Form_Fields_Name.Y+lbl_Admin_Checklist_Form_Fields_Name.Height+5
+                                    - lbl_Admin_Checklist_Form_Fields_Name:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          AutoHeight: =true
+                                          Height: =20
+                                          Text: ="Description"
+                                          Weight: ='TextCanvas.Weight'.Semibold
+                                          Width: =Parent.Width - Self.X * 2
+                                          X: =gblAppSizes.Position.X
+                                    - lbl_Admin_Checklist_Form_Fields_Name_Required:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Text: ="*"
+                                          Tooltip: ="ToolTip"
+                                          Width: =16
+                                          X: =5
+                                          Y: =5
+                                    - lbl_Admin_Checklist_Form_Fields_Name_Details:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Align: =Align.Right
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =gblAppSizes.Font.ExtraSmall
+                                          Text: =$"{Len(txt_Admin_Checklist_Form_Fields_Name.Value)}/{gblAppConstants.DefaultDefMaxLength}"
+                                          X: =Parent.Width-Self.Width-gblAppSizes.Position.X
+                              - con_Admin_Checklist_Form_Fields_HoldingDescription:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =74
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width-Self.X*2
+                                  Children:
+                                    - txt_Admin_Checklist_Form_Fields_HoldingDescription:
+                                        Control: TextInput@0.0.54
+                                        Properties:
+                                          Align: =Align.Left
+                                          BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                          MaxLength: =gblAppConstants.DefaultDefMaxLength
+                                          Mode: ='TextInputCanvas.Mode'.SingleLine
+                                          OnChange: |
+                                            =UpdateIf(
+                                                colPanelInverterFormValidation,
+                                                Name = "InverterLabel",
+                                                {
+                                                    Valid: Not(IsBlank(Trim(Self.Value))),
+                                                    Dirty: true
+                                                }
+                                            );
+                                          TriggerOutput: ='TextInputCanvas.TriggerOutput'.Delayed
+                                          Value: =locSelectedChecklistEntity.'Holding Task Description'
+                                          Width: =Parent.Width - Self.X*2
+                                          X: =lbl_Admin_Checklist_Form_Fields_HoldingDescription.X
+                                          Y: =lbl_Admin_Checklist_Form_Fields_HoldingDescription.Y+lbl_Admin_Checklist_Form_Fields_HoldingDescription.Height+5
+                                    - lbl_Admin_Checklist_Form_Fields_HoldingDescription_Details:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          Align: =Align.Right
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =RGBA(50, 49, 48, 1)
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =24
+                                          Size: =gblAppSizes.Font.ExtraSmall
+                                          Text: =$"{Len(txt_Admin_Checklist_Form_Fields_HoldingDescription.Value)}/{gblAppConstants.DefaultDefMaxLength}"
+                                          X: =Parent.Width-Self.Width-gblAppSizes.Position.X
+                                    - lbl_Admin_Checklist_Form_Fields_HoldingDescription:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          AutoHeight: =true
+                                          Height: =20
+                                          Text: ="Holding Description"
+                                          Weight: ='TextCanvas.Weight'.Semibold
+                                          Width: =Parent.Width/2 - Self.X
+                                          X: =gblAppSizes.Position.X
+                              - tgl_GateRelevance_ChecklistForm:
+                                  Control: Toggle@1.1.5
+                                  Properties:
+                                    Checked: =locSelectedChecklistEntity.'Gate Relevance'
+                                    Label: ="Gate relevance"
+                                    LabelPosition: ='Toggle.LabelPosition'.Before
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    Width: =220
+                                    X: =gblAppSizes.Position.X
+                              - tgl_CompletionDate_ChecklistForm:
+                                  Control: Toggle@1.1.5
+                                  Properties:
+                                    Checked: =locSelectedChecklistEntity.'Is Completion Date'
+                                    Label: ="Completion Date"
+                                    LabelPosition: ='Toggle.LabelPosition'.Before
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    Width: =220
+                                    X: =gblAppSizes.Position.X
+                              - tgl_Active_ChecklistForm:
+                                  Control: Toggle@1.1.5
+                                  Properties:
+                                    Checked: =If(locSelectedChecklistEntity.Status = 'Status (Project Default Checklists)'.Active, true, false)
+                                    Label: ="Active"
+                                    LabelPosition: ='Toggle.LabelPosition'.Before
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    Width: =220
+                                    X: =gblAppSizes.Position.X
+                  - con_Admin_Checklist_Form_Buttons:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        FillPortions: =0
+                        Height: =45
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =10
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        PaddingRight: =20
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - but_Admin_Checklist_Form_Buttons_Reset:
+                            Control: Button@0.0.45
+                            Properties:
+                              AccessibleLabel: ="Reset"
+                              Appearance: ='ButtonCanvas.Appearance'.Outline
+                              Icon: ="ArrowReset"
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |
+                                =Concurrent(
+                                    Reset(txt_Admin_Checklist_Form_Fields_Name),
+                                    Reset(txt_Admin_Checklist_Form_Fields_HoldingDescription),
+                                    Reset(tgl_GateRelevance_ChecklistForm);
+                                    Reset(tgl_CompletionDate_ChecklistForm);
+                                    Reset(tgl_Active_ChecklistForm)
+                                );
+                              Text: =
+                              Visible: =false
+                              Width: =24
+                        - pcf_but_Admin_Checklist_Form_Buttons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              DisplayMode: |-
+                                =If(
+                                    lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage.Visible,
+                                    DisplayMode.Disabled,
+                                    DisplayMode.Edit
+                                )
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              FontSize: =16
+                              Height: =32
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |
+                                =UpdateContext(
+                                    {
+                                        locAdminLoadingDialog: true,
+                                        locAdminLoadingDialogText: $"Checklist item '{txt_Admin_Checklist_Form_Fields_Name.Value}' will be saved, please wait..."
+                                    }
+                                );
+                                IfError(
+                                    With(
+                                        {
+                                            varSelectedChecklistEntity: If(
+                                                IsBlank(locSelectedChecklistEntity),
+                                                Patch(
+                                                    'Project Default Checklists',
+                                                    Defaults('Project Default Checklists'),
+                                                    {
+                                                        Name: Trim(txt_Admin_Checklist_Form_Fields_Name.Value),
+                                                        Order: locTotalRows + 1,
+                                                        'Associated Country And Technology': locSelectedCountryAndTechnology,
+                                                        'Holding Task Description': Trim(txt_Admin_Checklist_Form_Fields_HoldingDescription.Value),
+                                                        'Cluster State': If(
+                                                            IsBlank(locSelectedChecklistEntity),
+                                                            LookUp(
+                                                                'Project States',
+                                                                'Project State' = locSelectedCluster.'Project State'
+                                                            ),
+                                                            locSelectedChecklistEntity.'Cluster State'
+                                                        ),
+                                                        'Gate Relevance': tgl_GateRelevance_ChecklistForm.Checked,
+                                                        'Is Completion Date': tgl_CompletionDate_ChecklistForm.Checked,
+                                                        'Owning Business Unit': locSelectedCountryAndTechnology.'Owning Business Unit'
+                                                    }
+                                                ),
+                                                locSelectedChecklistEntity
+                                            )
+                                        },
+                                        With(
+                                            {varSelectedChecklistEntityId: varSelectedChecklistEntity.'Project Default Checklist'},
+                                            UpdateContext(
+                                                {
+                                                    locSelectedChecklistEntity: Patch(
+                                                        'Project Default Checklists',
+                                                        LookUp(
+                                                            'Project Default Checklists',
+                                                            'Project Default Checklist' = varSelectedChecklistEntityId
+                                                        ),
+                                                        {
+                                                            Name: Trim(txt_Admin_Checklist_Form_Fields_Name.Value),
+                                                            'Holding Task Description': Trim(txt_Admin_Checklist_Form_Fields_HoldingDescription.Value),
+                                                            'Gate Relevance': tgl_GateRelevance_ChecklistForm.Checked,
+                                                            'Is Completion Date': tgl_CompletionDate_ChecklistForm.Checked,
+                                                            Status: If(
+                                                                tgl_Active_ChecklistForm.Checked = true,
+                                                                'Status (Project Default Checklists)'.Active,
+                                                                'Status (Project Default Checklists)'.Inactive
+                                                            ),
+                                                            'Status Reason': If(
+                                                                tgl_Active_ChecklistForm.Checked,
+                                                                'Status Reason (Project Default Checklists)'.Active,
+                                                                'Status Reason (Project Default Checklists)'.Inactive
+                                                            ),
+                                                            'Owning Business Unit': locSelectedCountryAndTechnology.'Owning Business Unit'
+                                                        }
+                                                    )
+                                                }
+                                            )
+                                        )
+                                    );
+                                    UpdateContext({locAdminLoadingDialogText: $"Checklist item was successfully saved."}),
+                                    UpdateContext({locAdminLoadingDialogText: $"Error: Checklist item could not be saved. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message} {FirstError.Details.HttpResponse}"})
+                                );
+                                Select(but_Admin_Checklist_Form_Buttons_Reset);
+                                UpdateContext(
+                                    {
+                                        locIsVisibleChecklistRightPanel: false,
+                                        locAdminLoadingDialog: false,
+                                        locAdminLoadingDialogText: Blank()
+                                    }
+                                );
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: ="Filter projects details list view."
+                              Width: =96
+                              X: =Parent.Width - 35
+                              Y: =24
+                        - pcf_but_Admin_Admin_Checklist_Form_Buttons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |-
+                                =Select(but_Admin_Checklist_Form_Buttons_Reset);
+
+                                UpdateContext(
+                                    {
+                                        locIsVisibleChecklistRightPanel: false
+                                    }
+                                );
+                                Select(but_Admin_Checklist_Form_Buttons_Reset);
+                              Text: ="Cancel"
+                              Theme: =gblAppThemeJson
+                              Tooltip: =
+                              Width: =96
+      - con_Admin_Checklist_Reorder:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.3)
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Horizontal
+            LayoutJustifyContent: =LayoutJustifyContent.End
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =locShowReorderForm
+            Width: =Parent.Width
+          Children:
+            - con_Admin_Checklist_Reorder_Contents:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                  FillPortions: =0
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.End
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  Width: =Min(gblAppSizes.RightPanel.MinWidth, Parent.Width)
+                Children:
+                  - con_Admin_Admin_Checklist_Reorder_Header:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        FillPortions: =0
+                        Height: =48
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =48
+                        Width: =Parent.Width
+                      Children:
+                        - lblAdmin_Reorder_Title:
+                            Control: Label@2.5.1
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =2
+                              Color: =RGBA(255, 255, 255, 1)
+                              DisabledBorderColor: =RGBA(255, 255, 255, 1)
+                              DisabledColor: =RGBA(255, 255, 255, 1)
+                              FocusedBorderThickness: =4
+                              Font: =Font.'Segoe UI'
+                              FontWeight: =FontWeight.Semibold
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =20
+                              Text: ="Reoder checklist"
+                              Width: =Parent.Width - pcf_Cancel_Reorder_CommandBar.Width
+                        - pcf_Cancel_Reorder_CommandBar:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              Height: =Parent.Height
+                              Items: |-
+                                =Table(
+                                    {
+                                        ItemKey: "closeKey",
+                                        ItemDisplayName: "Home",
+                                        ItemIconName: "ChromeClose",
+                                        ItemIconOnly: true,
+                                        ItemFarItem: true,
+                                        ItemIconColor: gblAppTheme.palette.themeTertiary
+                                    }
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |
+                                =If(
+                                    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = "closeKey",
+                                    UpdateContext(
+                                        {
+                                            locShowReorderForm: false,
+                                            locSelectedChecklistEntity: Blank()
+                                        }
+                                    )
+                                );
+                              Width: =Parent.Width/3
+                  - con_Admin_Checklist_ReorderBody:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        Height: =Parent.Height/2
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =20
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Admin_Checklist_ReorderBodyList:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              LayoutOverflowY: =LayoutOverflow.Scroll
+                              PaddingBottom: =20
+                              PaddingLeft: =10
+                              PaddingTop: =gblAppSizes.RightPanel.Top
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                              Y: =130
+                            Children:
+                              - TextCanvas1:
+                                  Control: Text@0.0.51
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.Stretch
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    Text: ="To reorder drag and drop listed items"
+                              - pcf_ReorderTaskList_AdminScreen:
+                                  Control: CodeComponent
+                                  ComponentName: pdd_CustomControl.PowerDragDrop
+                                  Properties:
+                                    BorderColor: ="rgba(0, 0, 0, 0.4)"
+                                    BorderWidth: =0
+                                    DropZoneID: ="All"
+                                    Height: =Parent.Height-Self.Y
+                                    IdColumn: |-
+                                      =//"vsb_projectdefaultchecklistsid"
+                                      "RenderID"
+                                    InputEvent: =locResetOrderingList
+                                    IsMasterZone: =true
+                                    ItemBackgroundColor: =""
+                                    ItemFont: ="'Open Sans'"
+                                    ItemFontSize: =15
+                                    ItemTemplate: ="<p><b>{{RenderName}}</b></p>"
+                                    Items: |-
+                                      =/*AddColumns(
+                                          Sort(
+                                              colTasksToReorder,
+                                              Order,
+                                              SortOrder.Ascending
+                                          ),
+                                          ZoneColumn,
+                                          "All"
+                                      )*/
+                                      AddColumns(
+                                          Sort(
+                                              colTasksToReorder,
+                                              Order,
+                                              SortOrder.Ascending
+                                          ),
+                                          RenderZone,
+                                          "All",// Explicit Zone Column
+                                          RenderID,
+                                          Text('Project Default Checklist'),// Explicit String ID
+                                          RenderName,
+                                          Name// Explicit Name (mapping the internal 'Name' to 'RenderName')
+                                      )
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RotateOnDrag: ='CustomControl.PowerDragDrop.RotateOnDrag'.ClockwiseSmall
+                                    Width: =Parent.Width-Self.X
+                                    X: =20
+                                    ZoneColumn: |-
+                                      =//"ZoneColumn"
+                                      "RenderZone"
+                                  Children:
+                                    - RenderName1:
+                                        Control: DataField@1.5.0
+                                        Variant: textualColumn
+                                        IsLocked: true
+                                        Properties:
+                                          FieldDisplayName: ="RenderName"
+                                          FieldName: ="RenderName"
+                                          FieldType: ="s"
+                                          Order: =1
+                  - con_Admin_Checklist_Reorder_Footer:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        FillPortions: =0
+                        Height: =45
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =10
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        PaddingRight: =20
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_but_Admin_Checklist_Reorder_Buttons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              FontSize: =16
+                              Height: =32
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |-
+                                =UpdateContext(
+                                    {
+                                        locShowReorderForm: false,
+                                        locAdminLoadingDialog: true,
+                                        locAdminLoadingDialogText: $"New order will be saved, please wait..."
+                                    }
+                                );
+                                ForAll(
+                                    pcf_ReorderTaskList_AdminScreen.CurrentItems As RecordItem,
+                                    UpdateIf(
+                                        'Project Default Checklists',
+                                        Text('Project Default Checklist') = RecordItem.ItemId,
+                                        {Order: RecordItem.Position}
+                                    );
+                                );
+                                Clear(colTasksToReorder);
+                                UpdateContext({locAdminLoadingDialog: false})
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: ="Filter projects details list view."
+                              Width: =96
+                              X: =Parent.Width - 35
+                              Y: =24
+                        - pcf_but_Admin_Admin_Checklist_Reorder_Buttons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |
+                                =UpdateContext(
+                                    {
+                                        locShowReorderForm: false
+                                    }
+                                );
+                              Text: ="Cancel"
+                              Theme: =gblAppThemeJson
+                              Width: =96
+      - cmp_DeleteChecklistItem_AdminScreen:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Delete"
+            Description: ="Are you sure that you want to permanently delete task """ & locSelectedChecklistEntity.Name & """?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="Trash"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpDeleteDefaultChecklist: false})
+            OnConfirm: |-
+              =UpdateContext(
+                  {
+                      locIsVisiblePopUpDeleteDefaultChecklist: false,
+                      locAdminLoadingDialog: true,
+                      locAdminLoadingDialogText: $"Deleteing item '{txt_Admin_Checklist_Form_Fields_Name.Value}', please wait..."
+                  }
+              );
+              UpdateContext(
+                  {
+                      locSelectedChecklistEntity: Patch(
+                          'Project Default Checklists',
+                          LookUp(
+                              'Project Default Checklists',
+                              'Project Default Checklist' = locSelectedChecklistEntity.'Project Default Checklist'
+                          ),
+                          {'To Delete': true}
+                      )
+                  }
+              );
+              /*Remove(
+                  'Project Default Checklists',
+                  locSelectedChecklistEntity
+              );*/
+              ClearCollect(
+                  colTasksToReorder,
+                  Filter(
+                      'Project Default Checklists',
+                      'Associated Country And Technology'.'Checklist Country And Technology' = locSelectedChecklistEntity.'Associated Country And Technology'.'Checklist Country And Technology',
+                      'Cluster State'.'Project State' = locSelectedChecklistEntity.'Cluster State'.'Project State',
+                      Order > locSelectedChecklistEntity.Order
+                  )
+              );
+              ForAll(
+                  colTasksToReorder,
+                  Patch(
+                      'Project Default Checklists',
+                      ThisRecord,
+                      {Order: ThisRecord.Order - 1}
+                  )
+              );
+              UpdateContext({locAdminLoadingDialog: false})
+            Title: ="Delete checklist item?"
+            Visible: =locIsVisiblePopUpDeleteDefaultChecklist
+            Width: =Parent.Width
+      - cmp_ActivateDeactiveChecklistItem_AdminScreen:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: =If(locSelectedChecklistEntity.Status = 'Status (Project Default Checklists)'.Active,"Decativate", "Activate")
+            Description: ="Are you sure that you want to change status of task """ & locSelectedChecklistEntity.Name & """?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="Trash"
+            OnCancel: |-
+              =UpdateContext({locIsVisiblePopUpActivationDefaultChecklist: false})
+            OnConfirm: |-
+              =UpdateContext(
+                  {
+                      locAdminLoadingDialog: true,
+                      locAdminLoadingDialogText: $"Checklist item '{txt_Admin_Checklist_Form_Fields_Name.Value}' will be saved, please wait...",
+                      locIsVisiblePopUpActivationDefaultChecklist: false
+                  }
+              );
+              Patch(
+                  'Project Default Checklists',
+                  locSelectedChecklistEntity,
+                  {
+                      Status: If(
+                          locSelectedChecklistEntity.Status = 'Status (Project Default Checklists)'.Active,
+                          'Status (Project Default Checklists)'.Inactive,
+                          'Status (Project Default Checklists)'.Active
+                      )
+                  }
+              );
+              UpdateContext({locAdminLoadingDialog: false})
+            Title: =$"{If(locSelectedChecklistEntity.Status = 'Status (Project Default Checklists)'.Active,"Decativate", "Activate")} checklist item?"
+            Visible: =locIsVisiblePopUpActivationDefaultChecklist
+            Width: =Parent.Width

@@ -1,0 +1,29 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+EditorState:
+  ScreensOrder:
+    - Capex Costs Screen
+    - Opex Costs Screen
+    - Contracts Screen
+    - Land Lease Costs Screen
+    - Screen1
+    - Add Costs from Table
+    - Screen2
+  ComponentDefinitionsOrder:
+    - cmp_Header
+    - cmp_PopUp_Loading
+    - cmp_PopUp_Confirmation
+    - cmp_PopUp_Confirmation_2
+    - cmp_ReportErrorRightPanel
+    - fn_Numeric
+    - cmp_Left_Navigation
+    - fn_Percentage
+    - cmp_PopUp_Loading_1
+    - cmp_Information_Button_PCF
+    - cmp_PopUp_Confirmation_New

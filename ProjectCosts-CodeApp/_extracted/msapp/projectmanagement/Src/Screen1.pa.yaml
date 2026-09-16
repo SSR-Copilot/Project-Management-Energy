@@ -1,0 +1,211 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Screen1:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+    Children:
+      - Text1:
+          Control: ModernText@1.0.0
+          Properties:
+            Text: =
+            X: =40
+            Y: =40
+      - Table2:
+          Control: Table@1.0.278
+          Properties:
+            Height: =307
+            Items: ='Assumptions Revenues SQL'
+            Width: =Parent.Width
+          Children:
+            - category1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="category"
+                  FieldName: ="category"
+                  FieldType: ="s"
+                  Order: =1
+            - country1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="country"
+                  FieldName: ="country"
+                  FieldType: ="s"
+                  Order: =2
+            - id1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="id"
+                  FieldName: ="id"
+                  FieldType: ="s"
+                  Order: =3
+            - pv1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="pv"
+                  FieldName: ="pv"
+                  FieldType: ="s"
+                  Order: =4
+            - uid1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="uid"
+                  FieldName: ="uid"
+                  FieldType: ="s"
+                  Order: =5
+            - valuetype1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="valuetype"
+                  FieldName: ="valuetype"
+                  FieldType: ="s"
+                  Order: =6
+            - wind1:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="wind"
+                  FieldName: ="wind"
+                  FieldType: ="s"
+                  Order: =7
+      - Table3:
+          Control: Table@1.0.278
+          Properties:
+            Height: =461
+            Items: ='Tarrif Price Standard Assumptions'
+            Width: =1366
+            Y: =307
+          Children:
+            - Name23:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Name"
+                  FieldName: ="vsb_name"
+                  FieldType: ="s"
+                  Order: =1
+            - Price Area2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Price Area"
+                  FieldName: ="vsb_pricearea"
+                  FieldType: ="s"
+                  Order: =3
+            - Technology2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Technology"
+                  FieldName: ="vsb_technology"
+                  FieldType: ="s"
+                  Order: =4
+            - Contract Start Year2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Contract Start Year"
+                  FieldName: ="vsb_contractstartyear"
+                  FieldType: ="s"
+                  Order: =5
+            - Duration2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Duration"
+                  FieldName: ="vsb_duration"
+                  FieldType: ="n"
+                  Order: =6
+            - Duration Min Value2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Duration Min Value"
+                  FieldName: ="vsb_durationminvalue"
+                  FieldType: ="n"
+                  Order: =7
+            - Duration Max Value2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Duration Max Value"
+                  FieldName: ="vsb_durationmaxvalue"
+                  FieldType: ="n"
+                  Order: =8
+            - Price2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Price"
+                  FieldName: ="vsb_price"
+                  FieldType: ="n"
+                  Order: =9
+            - Associated Technology2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Associated Technology"
+                  FieldName: ="vsb_associatedtechnology"
+                  FieldType: ="l"
+                  Order: =10
+            - Revenue Label2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Revenue Label"
+                  FieldName: ="vsb_revenuelabel"
+                  FieldType: ="l"
+                  Order: =11
+            - Owning Business Unit2:
+                Control: TableDataField@1.5.0
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Owning Business Unit"
+                  FieldName: ="owningbusinessunit"
+                  FieldType: ="E"
+                  Order: =12
+            - Created On2:
+                Control: TableDataField@1.5.0
+                Variant: textualColumn
+                IsLocked: true
+                Properties:
+                  FieldDisplayName: ="Created On"
+                  FieldName: ="createdon"
+                  FieldType: ="d"
+                  Order: =13
+      - Text2:
+          Control: ModernText@1.0.0
+          Properties:
+            Text: =gblRecordSelectedProject.Project
+            X: =60
+            Y: =60

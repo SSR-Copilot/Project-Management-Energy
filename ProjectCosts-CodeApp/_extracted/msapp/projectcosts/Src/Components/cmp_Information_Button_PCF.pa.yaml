@@ -1,0 +1,164 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+ComponentDefinitions:
+  cmp_Information_Button_PCF:
+    DefinitionType: CanvasComponent
+    CustomProperties:
+      Color:
+        PropertyKind: Input
+        DisplayName: Color
+        Description: A custom property
+        DataType: Color
+        Default: =RGBA(0, 0, 0, 1)
+      ErrorTitle:
+        PropertyKind: Input
+        DisplayName: Error Title
+        Description: A custom property
+        DataType: Text
+        Default: |-
+          =$"Error: Duplicate or Non-existing Accounts"
+      Items:
+        PropertyKind: Input
+        DisplayName: Items
+        Description: A custom property
+        RaiseOnReset: true
+        DataType: Table
+        Default: |-
+          =Table(
+              {
+                  UniqueID: "Data",
+                  Comment: "Info 1"
+              },
+               {
+                  UniqueID: "Data",
+                  Comment: "Info 1"
+              }, {
+                  UniqueID: "Data",
+                  Comment: "Info 1"
+              }
+          )
+      MaxHeight:
+        PropertyKind: Input
+        DisplayName: MaxHeight
+        Description: A custom property
+        DataType: Number
+        Default: =100
+      MaxWidth:
+        PropertyKind: Input
+        DisplayName: MaxWidth
+        Description: A custom property
+        DataType: Number
+        Default: =100
+      OnSelect:
+        PropertyKind: Event
+        DisplayName: OnSelect
+        Description: A custom property
+        ReturnType: Boolean
+        Default: =true
+      ToolTipVisibility:
+        PropertyKind: Input
+        DisplayName: ToolTipVisibility
+        Description: A custom property
+        DataType: Boolean
+        Default: =true
+    Properties:
+      Height: =If(cmp_Information_Button_PCF.ToolTipVisibility,432,32)
+      Width: =400
+    Children:
+      - con_Information_Button_Container:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Height: =32
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Width: =Parent.Width
+          Children:
+            - pcf_ico_Information_Button:
+                Control: CodeComponent
+                ComponentName: cat_PowerCAT.Icon
+                Properties:
+                  AccessibilityLabel: ="Data Invalid"
+                  FontColor: ="#d20532"
+                  Height: =32
+                  IconColor: ="#d20532"
+                  IconName: ="Info"
+                  IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                  OnChange: =cmp_Information_Button_PCF.OnSelect();
+                  Text: =cmp_Information_Button_PCF.ErrorTitle
+                  TextAlignment: ='PowerCAT.Icon.TextAlignment'.Right
+                  Tooltip: =""
+                  Width: =Parent.Width
+                  X: =Parent.Width-Self.Width
+      - con_Information_ToolTip:
+          Control: GroupContainer@1.5.0
+          Variant: ManualLayout
+          Properties:
+            BorderColor: =RGBA(255, 0, 0, 0.5)
+            BorderThickness: =2
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =If(cmp_Information_Button_PCF.ToolTipVisibility, Parent.Height - con_Information_Button_Container.Height, 0)
+            Visible: =cmp_Information_Button_PCF.ToolTipVisibility
+            Width: =Parent.Width
+            Y: =con_Information_Button_Container.Height
+          Children:
+            - con_Information_ToolTip_Scroll:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  BorderStyle: =BorderStyle.None
+                  DropShadow: =DropShadow.None
+                  Height: =Parent.Height-con_Information_Button_Container.Height
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutGap: =5
+                  LayoutOverflowY: =LayoutOverflow.Scroll
+                  PaddingBottom: =5
+                  PaddingLeft: =5
+                  PaddingRight: =5
+                  PaddingTop: =5
+                  Width: =Parent.Width
+                  Y: =20
+                Children:
+                  - con_Information_ToolTip_Text:
+                      Control: HtmlViewer@2.1.0
+                      Properties:
+                        AutoHeight: =true
+                        DisabledBorderColor: =RGBA(56, 56, 56, 1)
+                        DisplayMode: =DisplayMode.View
+                        Fill: =RGBA(255, 255, 255, 1)
+                        Height: =CountRows(cmp_Information_Button_PCF.Items) * 16
+                        HtmlText: |
+                          =$"<ul>{Concat(
+                              cmp_Information_Button_PCF.Items,
+                              $"<li><b>{UniqueID}</b> {Comment}</li>"
+                          )}<ul>"
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =CountRows(cmp_Information_Button_PCF.Items) * 24 + 30
+                        PaddingBottom: =0
+                        PaddingLeft: =0
+                        PaddingRight: =0
+                        PaddingTop: =0
+                        Size: =9
+                        Width: =Parent.Width-10
+            - con_Information_ToolTip_Dismiss:
+                Control: Classic/Icon@2.5.0
+                Properties:
+                  AccessibleLabel: ="Required fields"
+                  Color: =RGBA(255, 0, 0, 0.5)
+                  Height: =16
+                  Icon: =Icon.Cancel
+                  OnSelect: =cmp_Information_Button_PCF.OnSelect();
+                  Width: =16
+                  X: =Parent.Width - Self.Width - 8
+                  Y: =4

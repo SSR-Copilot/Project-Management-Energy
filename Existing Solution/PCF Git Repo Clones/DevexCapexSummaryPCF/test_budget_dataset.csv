@@ -1,0 +1,72 @@
+RowId,ParentId,Type,Number,Name,SubLabel,PlannedCost,ActualCost,HasComments,IsStandardContract,StandardContractOptions,M1,M2,M3,M4,M5,M6,M7,M8,M9,M10,M11,M12,DistributionType,M1Paid,M2Paid,M3Paid,M4Paid,M5Paid,M6Paid,M7Paid,M8Paid,M9Paid,M10Paid,M11Paid,M12Paid,CommentTooltip,M7HasComments,M7CommentTooltip
+acc_90000,,Account,90000,External planning cost (TEST 0),,500000,450000,0,false,,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000
+sub_90000_0,acc_90000,Subaccount,90000_0,Design Work (TEST 0),,150000,140000,0,false,std_design_a|Standard Design A;std_design_b|Standard Design B,400,800,1200,1600,2000,2400,2800,3200,3600,4000,4400,4800
+con_90000_0_0,sub_90000_0,Contract,,Design A-Cost,[SPV] Link to Milestone Cluster 1,25000,23000,1,true,,100,200,300,400,500,600,700,800,900,1000,1100,1200,Equal Distribution,true,true,true,true,true,true,true,true,true,true,true,true,Wrong name,true,Wrong Cost too much
+con_90000_0_1,sub_90000_0,Contract,,Design B-Cost,[DEVCO],20000,18500,0,false,,80,160,240,320,400,480,560,640,720,800,880,960,Individual Distribution,false,false,false,false,false,false,false,false,false,false,false,false
+con_90000_0_2,sub_90000_0,Contract,,Design C-Cost,[SPV],18000,17000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720,Individual Distribution,true,false,true,false,true,false,true,false,true,false,true,false
+sub_90000_1,acc_90000,Subaccount,90000_1,Other external planning cost (TEST 0),,120000,110000,0,false,std_rm_license|Standard RM Licence,500,1000,1500,2000,2500,3000,3500,4000,4500,5000,5500,6000
+con_90000_1_0,sub_90000_1,Contract,,RM Licences for Design,[SPV],30000,28000,0,true,,150,300,450,600,750,900,1050,1200,1350,1500,1650,1800,Equal Distribution,false,false,false,false,false,false,false,false,false,false,false,false
+con_90000_1_1,sub_90000_1,Contract,,RM Support,[DEVCO],20000,19000,0,false,,100,200,300,400,500,600,700,800,900,1000,1100,1200
+con_90000_1_2,sub_90000_1,Contract,,RM Training,[SPV],15000,14000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+sub_90000_2,acc_90000,Subaccount,90000_2,Logistics (TEST 0),,80000,75000,0,false,,300,600,900,1200,1500,1800,2100,2400,2700,3000,3300,3600
+con_90000_2_0,sub_90000_2,Contract,,Transport Services,[DEVCO],25000,23000,0,false,,120,240,360,480,600,720,840,960,1080,1200,1320,1440
+con_90000_2_1,sub_90000_2,Contract,,Storage,[SPV],20000,19000,0,false,,100,200,300,400,500,600,700,800,900,1000,1100,1200
+con_90000_2_2,sub_90000_2,Contract,,Handling,[DEVCO],15000,14000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+
+acc_90001,,Account,90001,External planning cost (TEST 1),,420000,400000,0,false,,900,1800,2700,3600,4500,5400,6300,7200,8100,9000,9900,10800
+sub_90001_0,acc_90001,Subaccount,90001_0,Design Work (TEST 1),,130000,125000,0,false,std_contract_alpha|Standard Contract Alpha;std_contract_beta|Standard Contract Beta,420,840,1260,1680,2100,2520,2940,3360,3780,4200,4620,5040
+con_90001_0_0,sub_90001_0,Contract,,Contract Alpha,[SPV] Link to Cluster 2,22000,21000,1,true,,110,220,330,440,550,660,770,880,990,1100,1210,1320
+con_90001_0_1,sub_90001_0,Contract,,Contract Beta,[DEVCO],19000,18000,0,false,,95,190,285,380,475,570,665,760,855,950,1045,1140
+con_90001_0_2,sub_90001_0,Contract,,Contract Gamma,[SPV],16000,15000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+sub_90001_1,acc_90001,Subaccount,90001_1,Other services (TEST 1),,110000,105000,0,false,std_research|Standard Research,450,900,1350,1800,2250,2700,3150,3600,4050,4500,4950,5400
+con_90001_1_0,sub_90001_1,Contract,,Consulting,[SPV],40000,38000,0,false,,200,400,600,800,1000,1200,1400,1600,1800,2000,2200,2400
+con_90001_1_1,sub_90001_1,Contract,,Advisory,[DEVCO],35000,33000,0,false,,175,350,525,700,875,1050,1225,1400,1575,1750,1925,2100
+con_90001_1_2,sub_90001_1,Contract,,Research,[SPV],15000,14000,0,true,,75,150,225,300,375,450,525,600,675,750,825,900
+sub_90001_2,acc_90001,Subaccount,90001_2,Operations (TEST 1),,80000,76000,0,false,,300,600,900,1200,1500,1800,2100,2400,2700,3000,3300,3600
+con_90001_2_0,sub_90001_2,Contract,,Ops Contract 1,[DEVCO],20000,19000,0,false,,100,200,300,400,500,600,700,800,900,1000,1100,1200
+con_90001_2_1,sub_90001_2,Contract,,Ops Contract 2,[SPV],18000,17000,0,false,,90,180,270,360,450,540,630,720,810,900,990,1080
+con_90001_2_2,sub_90001_2,Contract,,Ops Contract 3,[DEVCO],15000,14000,0,false,,75,150,225,300,375,450,525,600,675,750,825,900
+
+acc_90002,,Account,90002,External planning cost (TEST 2),,300000,280000,0,false,,800,1600,2400,3200,4000,4800,5600,6400,7200,8000,8800,9600
+sub_90002_0,acc_90002,Subaccount,90002_0,Engineering (TEST 2),,100000,95000,0,false,std_eng_a|Standard Engineering A;std_eng_b|Standard Engineering B;std_eng_c|Standard Engineering C,350,700,1050,1400,1750,2100,2450,2800,3150,3500,3850,4200
+con_90002_0_0,sub_90002_0,Contract,,Eng Contract A,[SPV],30000,29000,1,true,,150,300,450,600,750,900,1050,1200,1350,1500,1650,1800
+con_90002_0_1,sub_90002_0,Contract,,Eng Contract B,[DEVCO],25000,24000,0,false,,125,250,375,500,625,750,875,1000,1125,1250,1375,1500
+con_90002_0_2,sub_90002_0,Contract,,Eng Contract C,[SPV],20000,19000,0,false,,100,200,300,400,500,600,700,800,900,1000,1100,1200
+sub_90002_1,acc_90002,Subaccount,90002_1,Procurement (TEST 2),,90000,85000,0,false,,300,600,900,1200,1500,1800,2100,2400,2700,3000,3300,3600
+con_90002_1_0,sub_90002_1,Contract,,Supplier A,[DEVCO],30000,29000,0,true,,150,300,450,600,750,900,1050,1200,1350,1500,1650,1800
+con_90002_1_1,sub_90002_1,Contract,,Supplier B,[SPV],25000,24000,0,false,,125,250,375,500,625,750,875,1000,1125,1250,1375,1500
+con_90002_1_2,sub_90002_1,Contract,,Supplier C,[DEVCO],15000,14000,0,false,,75,150,225,300,375,450,525,600,675,750,825,900
+sub_90002_2,acc_90002,Subaccount,90002_2,Maintenance (TEST 2),,10000,9000,0,false,,50,100,150,200,250,300,350,400,450,500,550,600
+con_90002_2_0,sub_90002_2,Contract,,Maint Contract 1,[SPV],5000,4800,0,false,,25,50,75,100,125,150,175,200,225,250,275,300
+con_90002_2_1,sub_90002_2,Contract,,Maint Contract 2,[DEVCO],3000,2800,0,false,,15,30,45,60,75,90,105,120,135,150,165,180
+con_90002_2_2,sub_90002_2,Contract,,Maint Contract 3,[SPV],2000,1800,0,false,,10,20,30,40,50,60,70,80,90,100,110,120
+
+acc_90003,,Account,90003,External planning cost (TEST 3),,250000,230000,0,false,,700,1400,2100,2800,3500,4200,4900,5600,6300,7000,7700,8400
+sub_90003_0,acc_90003,Subaccount,90003_0,Research (TEST 3),,90000,85000,0,false,,300,600,900,1200,1500,1800,2100,2400,2700,3000,3300,3600
+con_90003_0_0,sub_90003_0,Contract,,Research A,[SPV],30000,29000,1,true,,150,300,450,600,750,900,1050,1200,1350,1500,1650,1800
+con_90003_0_1,sub_90003_0,Contract,,Research B,[DEVCO],25000,24000,0,false,,125,250,375,500,625,750,875,1000,1125,1250,1375,1500
+con_90003_0_2,sub_90003_0,Contract,,Research C,[SPV],15000,14000,0,false,,75,150,225,300,375,450,525,600,675,750,825,900
+sub_90003_1,acc_90003,Subaccount,90003_1,Development (TEST 3),,80000,76000,0,false,,280,560,840,1120,1400,1680,1960,2240,2520,2800,3080,3360
+con_90003_1_0,sub_90003_1,Contract,,Dev Contract 1,[DEVCO],30000,29000,0,false,,120,240,360,480,600,720,840,960,1080,1200,1320,1440
+con_90003_1_1,sub_90003_1,Contract,,Dev Contract 2,[SPV],20000,19000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+con_90003_1_2,sub_90003_1,Contract,,Dev Contract 3,[DEVCO],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+sub_90003_2,acc_90003,Subaccount,90003_2,Testing (TEST 3),,20000,19000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+con_90003_2_0,sub_90003_2,Contract,,Test Contract 1,[SPV],8000,7600,0,false,,30,60,90,120,150,180,210,240,270,300,330,360
+con_90003_2_1,sub_90003_2,Contract,,Test Contract 2,[DEVCO],7000,6600,0,false,,25,50,75,100,125,150,175,200,225,250,275,300
+con_90003_2_2,sub_90003_2,Contract,,Test Contract 3,[SPV],5000,4800,0,false,,20,40,60,80,100,120,140,160,180,200,220,240
+
+acc_90004,,Account,90004,External planning cost (TEST 4),,150000,140000,0,false,,600,1200,1800,2400,3000,3600,4200,4800,5400,6000,6600,7200
+sub_90004_0,acc_90004,Subaccount,90004_0,Facilities (TEST 4),,60000,57000,0,false,,240,480,720,960,1200,1440,1680,1920,2160,2400,2640,2880
+con_90004_0_0,sub_90004_0,Contract,,Facilities Contract A,[DEVCO],25000,24000,0,false,,100,200,300,400,500,600,700,800,900,1000,1100,1200
+con_90004_0_1,sub_90004_0,Contract,,Facilities Contract B,[SPV],20000,19000,0,false,,80,160,240,320,400,480,560,640,720,800,880,960
+con_90004_0_2,sub_90004_0,Contract,,Facilities Contract C,[DEVCO],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+sub_90004_1,acc_90004,Subaccount,90004_1,Utilities (TEST 4),,50000,47000,0,false,,200,400,600,800,1000,1200,1400,1600,1800,2000,2200,2400
+con_90004_1_0,sub_90004_1,Contract,,Electricity,[SPV],20000,19000,0,true,,80,160,240,320,400,480,560,640,720,800,880,960
+con_90004_1_1,sub_90004_1,Contract,,Water,[DEVCO],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+con_90004_1_2,sub_90004_1,Contract,,Gas,[SPV],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+sub_90004_2,acc_90004,Subaccount,90004_2,Security (TEST 4),,40000,38000,0,false,,160,320,480,640,800,960,1120,1280,1440,1600,1760,1920
+con_90004_2_0,sub_90004_2,Contract,,CCTV,[DEVCO],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+con_90004_2_1,sub_90004_2,Contract,,Access Control,[SPV],15000,14000,0,false,,60,120,180,240,300,360,420,480,540,600,660,720
+con_90004_2_2,sub_90004_2,Contract,,Guards,[DEVCO],10000,9500,0,false,,40,80,120,160,200,240,280,320,360,400,440,480
+
+

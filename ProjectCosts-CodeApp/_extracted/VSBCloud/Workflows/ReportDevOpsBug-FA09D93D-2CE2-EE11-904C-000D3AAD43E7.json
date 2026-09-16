@@ -1,0 +1,132 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_visualstudioteamservices": {
+        "runtimeSource": "invoker",
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedvisualstudioteamservices_be30c"
+        },
+        "api": {
+          "name": "shared_visualstudioteamservices"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "metadata": {
+            "operationMetadataId": "ad4193e3-d6c3-4236-95ef-4618430da1e5"
+          },
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "title": "Title",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_1": {
+                  "title": "Description",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                },
+                "text_2": {
+                  "title": "RelatedItemID",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "Please enter your input",
+                  "x-ms-content-hint": "TEXT"
+                }
+              },
+              "required": [
+                "text",
+                "text_1",
+                "text_2"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Respond_to_a_PowerApp_or_flow": {
+          "runAfter": {
+            "Report_Bug_in_DevOps": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "6d6f957d-e2b8-4f1c-bb48-68c78ce95fbd"
+          },
+          "type": "Response",
+          "kind": "PowerApp",
+          "inputs": {
+            "statusCode": 200,
+            "body": {
+              "itemid": "@{outputs('Report_Bug_in_DevOps')?['body/id']}"
+            },
+            "schema": {
+              "type": "object",
+              "properties": {
+                "itemid": {
+                  "title": "ItemID",
+                  "x-ms-dynamically-added": true,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "Report_Bug_in_DevOps": {
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "8cde0418-d382-46f3-9ad9-47b2b5c8955b"
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_visualstudioteamservices",
+              "connectionName": "shared_visualstudioteamservices",
+              "operationId": "CreateWorkItem"
+            },
+            "parameters": {
+              "account": "vsbazure",
+              "project": "vsbcloud",
+              "type": "Bug",
+              "workItem/title": "@triggerBody()['text']",
+              "workItem/description": "<p></p>",
+              "shouldReturnAllFields": false,
+              "workItem/linkUrl": "https://dev.azure.com/vsbazure/vsbcloud/_workitems/edit/@{triggerBody()['text_2']}",
+              "workItem/linkType": "Related",
+              "workItem/dynamicFields/Microsoft.VSTS.TCM.ReproSteps": "@triggerBody()['text_1']"
+            },
+            "authentication": {
+              "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+              "type": "Raw"
+            }
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}

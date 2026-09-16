@@ -1,0 +1,1780 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+# 
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+# 
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  Project General Team Screen:
+    Properties:
+      Fill: |-
+        =RGBA(
+            255,
+            255,
+            255,
+            1
+        )
+      LoadingSpinner: '=LoadingSpinner.Data '
+      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnHidden: |
+        =Clear(colDataCardDeputyPMPreSelected);
+        Clear(colDataCardPMPreSelected);
+      OnVisible: |
+        =Set(
+            gblRecordSelectedProject,
+            LookUp(
+                Projects,
+                ThisRecord.Project = gblRecordSelectedProject.Project
+            )
+        );
+        Set(
+                        gblCurrentUser,
+                        Patch(
+                            gblCurrentUser,
+                            {
+                                CanEditSelectedProject: And(
+                                    DataSourceInfo(
+                                        Projects,
+                                        DataSourceInfo.CreatePermission
+                                    ),
+                                    Coalesce(
+                                        RecordInfo(
+                                            gblRecordSelectedProject,
+                                            RecordInfo.EditPermission
+                                        ),
+                                        false
+                                    )
+                                )
+                            }
+                        )
+                    );
+        Set(
+            gblSelectedCluster,
+            gblRecordSelectedProject.'Cluster State'
+        );
+        UpdateContext(
+            {
+                locTeamDataIsSavingDialogVisible: false,
+                locTeamlDataSavingDialogText: Blank(),
+                locIsVisiblePopUpDeleteMember: false,
+                locDeleteMemberlDialogText: Blank(),
+                locIsVisibleRightPanelEditTeam: false,
+                locSelectedMember: First(
+                    FirstN(
+                        'Project Members',
+                        0
+                    )
+                ),
+                locFoundedMemberExists: false
+            }
+        );
+        ClearCollect(
+            colProjectMembers,
+            {
+                id: Blank(),
+                position: Positions.'Project Manager',
+                member: gblRecordSelectedProject.'Project Manager',
+                order: 1
+            }
+        );
+        If(
+            Not(IsBlank(gblRecordSelectedProject.'Deputy Project Manager')),
+            Collect(
+                colProjectMembers,
+                {
+                    id: Blank(),
+                    position: Positions.'Deputy Project Manager',
+                    member: gblRecordSelectedProject.'Deputy Project Manager',
+                    order: 2
+                }
+            )
+        );
+        ClearCollect(
+            colProjectsPrincipals,
+            RenameColumns(
+                FirstN(
+                    Users,
+                    0
+                ),
+                'Azure AD Object ID',
+                Id,
+                'Full Name',
+                DisplayName,
+                'Primary Email',
+                Mail
+            )
+        );
+        ClearCollect(
+            colProjectsPrincipalsPreSelected,
+            colProjectsPrincipals
+        );
+    Children:
+      - fn_Common_Team:
+          Control: CanvasComponent
+          ComponentName: fn_Common
+          Properties:
+            Height: =10
+            Width: =10
+            Y: =Parent.Height-Self.Height
+      - con_Team_DisplayProject:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            Height: =App.Height
+            LayoutAlignItems: =LayoutAlignItems.Stretch
+            LayoutDirection: =LayoutDirection.Vertical
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Width: =App.Width
+          Children:
+            - cmp_Team_ProjectHeader:
+                Control: CanvasComponent
+                ComponentName: cmp_Header
+                Properties:
+                  ApprovalStatesColor: =gblTableApprovalStateColors
+                  Height: =70
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LogoWidth: =210
+                  MainScreen: ='Project Main Screen'
+                  OnLogoClick: |-
+                    =Navigate(
+                        'Project Main Screen',
+                        ScreenTransition.Fade
+                    )
+                  Project: =gblProjectHeaderData
+                  Width: =1024
+            - con_Team_DisplayProject_Body:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  Fill: =ColorValue(gblAppTheme.palette.neutralLighter)
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.Stretch
+                  LayoutDirection: =LayoutDirection.Horizontal
+                  LayoutGap: =5
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  LayoutWrap: =true
+                  PaddingBottom: =5
+                  PaddingLeft: =5
+                  PaddingRight: =5
+                  PaddingTop: =5
+                  RadiusBottomLeft: =0
+                  RadiusBottomRight: =0
+                  RadiusTopLeft: =0
+                  RadiusTopRight: =0
+                  Width: =Parent.Width
+                Children:
+                  - con_Team_DisplayProject_LeftNavigation:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =RGBA(255, 255, 255, 1)
+                        FillPortions: =0
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =If(gblLeftNavigationMenuIsExpanded, gblAppSizes.LeftNavigation.ExpandedWidth,gblAppSizes.LeftNavigation.DecreasedWidth)
+                      Children:
+                        - cmp_CheckList_Left_Navigation_1:
+                            Control: CanvasComponent
+                            ComponentName: cmp_Left_Navigation
+                            Properties:
+                              FontSize: =gblAppSizes.Font.Medium
+                              Height: =Parent.Height
+                              IsExpanded: =gblLeftNavigationMenuIsExpanded
+                              Items: =LeftNavigationMenu
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnExpand: |
+                                =Set(
+                                    gblLeftNavigationMenuIsExpanded,
+                                    Not(gblLeftNavigationMenuIsExpanded)
+                                );
+                              OnSelect: |
+                                =If(
+                                    Self.SelectedKey <> gblLeftNavigationSelected.ItemKey,
+                                    Set(
+                                        gblLeftNavigationSelected,
+                                        LookUp(
+                                            LeftNavigationMenu,
+                                            ItemKey = Self.SelectedKey
+                                        )
+                                    );
+                                    Navigate(
+                                        gblLeftNavigationSelected.TargetScreen,
+                                        ScreenTransition.Fade
+                                    )
+                                );
+                              Selected: =gblLeftNavigationSelected
+                              Width: =200
+                  - con_Team_DisplayProject_BodyRightContent:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        Fill: =RGBA(255, 255, 255, 1)
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutOverflowY: =LayoutOverflow.Scroll
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                      Children:
+                        - con_Milestones_Page_LockMessage_4:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              Fill: =RGBA(89, 89, 89, 1)
+                              FillPortions: =0
+                              Height: |-
+                                =If(
+                                    And(
+                                        IsBlank(gblRecordSelectedProject.'Project ID'),
+                                        IsBlank(gblRecordSelectedProject.'Project Start Date'),
+                                        Or(
+                                            gblRecordSelectedProject.'Total Capacity' = 0,
+                                            IsBlank(gblRecordSelectedProject.'Total Capacity')
+                                        ),
+                                        Or(
+                                            gblRecordSelectedProject.'Net Yield p50' = 0,
+                                            IsBlank(gblRecordSelectedProject.'Net Yield p50')
+                                        ),
+                                        Or(
+                                            IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                                            gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                                        )
+                                    ),
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height * 7,
+                                    IsBlank(gblRecordSelectedProject.'Project Start Date'),
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height * 6,
+                                    Or(
+                                        gblRecordSelectedProject.'Total Capacity' = 0,
+                                        IsBlank(gblRecordSelectedProject.'Total Capacity')
+                                    ),
+                                    // else / default height when none of the above conditions are true
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height * 5,
+                                    Or(
+                                        gblRecordSelectedProject.'Net Yield p50' = 0,
+                                        IsBlank(gblRecordSelectedProject.'Net Yield p50')
+                                    ),
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height * 4,
+                                    Or(
+                                        IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                                        gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                                    ),
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height * 3,
+                                    lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.Height
+                                )
+                              LayoutAlignItems: =LayoutAlignItems.Center
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutGap: =10
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =Parent.Width
+                              LayoutMinHeight: =
+                              PaddingLeft: =20
+                              Visible: |-
+                                =Or(
+                                    IsBlank(gblRecordSelectedProject.'Project ID'),// General not completed
+                                    IsBlank(gblRecordSelectedProject.'End Date'),// Milestones not completed
+                                    Or(
+                                        gblRecordSelectedProject.'Total Capacity' = 0,
+                                        IsBlank(gblRecordSelectedProject.'Total Capacity')
+                                    ),
+                                    Or(
+                                        gblRecordSelectedProject.'Net Yield p50' = 0,
+                                        IsBlank(gblRecordSelectedProject.'Net Yield p50')
+                                    ),
+                                    Or(
+                                        IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                                        gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                                    )
+                                )
+                              X: =40
+                              Y: =40
+                            Children:
+                              - icon_milestones_lock_4:
+                                  Control: Classic/Icon@2.5.0
+                                  Properties:
+                                    AccessibleLabel: ="icon_milestones_lock_4"
+                                    BorderColor: =RGBA(0, 0, 0, 0)
+                                    Color: =RGBA(255, 255, 255, 1)
+                                    DisabledBorderColor: =RGBA(245, 245, 245, 1)
+                                    DisabledColor: =RGBA(225, 223, 221, 1)
+                                    DisabledFill: =RGBA(0, 0, 0, 0)
+                                    FocusedBorderThickness: =4
+                                    Height: =20
+                                    HoverBorderColor: =RGBA(0, 0, 0, 0)
+                                    HoverColor: =RGBA(255, 255, 255, 1)
+                                    HoverFill: =RGBA(0, 0, 0, 0)
+                                    Icon: =Icon.Lock
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    PressedBorderColor: =RGBA(0, 0, 0, 0)
+                                    PressedColor: =RGBA(16, 110, 190, 1)
+                                    PressedFill: =RGBA(0, 0, 0, 0)
+                                    Width: =20
+                                    X: =40
+                                    Y: =Parent.Height-Self.Height
+                              - con_Milestones_pagelock_section_4:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    DropShadow: =DropShadow.None
+                                    LayoutAlignItems: =LayoutAlignItems.Center
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutMaxHeight: =
+                                    LayoutMinHeight: =
+                                    LayoutMinWidth: =16
+                                    PaddingBottom: =8
+                                    PaddingLeft: =8
+                                    PaddingRight: =8
+                                    PaddingTop: =8
+                                  Children:
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =20
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          Text: ="This page is locked. To unlock it, please complete the following sections:"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          X: =icon_milestones_lock_4.Width+icon_milestones_lock_4.X+10
+                                          Y: =Parent.Height-Self.Height
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_16:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.X
+                                          PaddingTop: =0
+                                          Text: ="• General"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: =IsBlank(gblRecordSelectedProject.'Project ID')
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_17:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.X
+                                          PaddingTop: =0
+                                          Text: ="• Milestones"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: =IsBlank(gblRecordSelectedProject.'End Date')
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_18:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.X
+                                          PaddingTop: =0
+                                          Text: ="• Generator"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: =Or(gblRecordSelectedProject.'Total Capacity' = 0,IsBlank(gblRecordSelectedProject.'Total Capacity'))
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_19:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.X
+                                          PaddingTop: =0
+                                          Text: ="• Production"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: =Or(gblRecordSelectedProject.'Net Yield p50' = 0,IsBlank(gblRecordSelectedProject.'Net Yield p50'))
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                                    - lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_20:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.Start
+                                          AutoHeight: =true
+                                          Font: =gblAppColors.Label.Font
+                                          FontColor: =RGBA(255, 255, 255, 1)
+                                          Height: =Self.AutoHeight
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          PaddingLeft: =lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_15.X
+                                          PaddingTop: =0
+                                          Text: ="• Change the project status from Draft"
+                                          VerticalAlign: =VerticalAlign.Middle
+                                          Visible: |-
+                                            =Or(
+                                                IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                                                gblRecordSelectedProject.'Cluster State'.Name = "Draft"
+                                            )
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =Parent.Width-Self.X
+                                          Y: =(Parent.Height-Self.Height)/2
+                        - con_Team_DisplayProject_Body_CommandBar:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =50
+                              LayoutDirection: =LayoutDirection.Horizontal
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =10
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                            Children:
+                              - con_Team_DisplayProject_Body_CommandBar_Menu:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =pcf_Team_DisplayProject_Body_CommandBar_Menu.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - pcf_Team_DisplayProject_Body_CommandBar_Menu:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.CommandBar
+                                        Properties:
+                                          AccessibilityLabel: ="pcf_Team_DisplayProject_Body_CommandBar_Menu"
+                                          DisplayMode: |-
+                                            =If(
+                                                Or(
+                                                    IsBlank(gblRecordSelectedProject.'Cluster State'.Name),
+                                                    gblRecordSelectedProject.'Cluster State'.Name = "Draft",
+                                                    con_Milestones_Page_LockMessage_4.Visible
+                                                ),
+                                                DisplayMode.Disabled,
+                                                DisplayMode.Edit
+                                            )
+                                          Height: =40
+                                          Items: |-
+                                            =Table(
+                                                {
+                                                    ItemKey: "newMember",
+                                                    ItemDisplayName: "Add Member",
+                                                    ItemIconName: "Add",
+                                                    ItemEnabled: And(
+                                                        Not(IsBlank(gblRecordSelectedProject)),
+                                                        DataSourceInfo(
+                                                            Projects,
+                                                            DataSourceInfo.CreatePermission
+                                                        ),
+                                                        RecordInfo(
+                                                            gblRecordSelectedProject,
+                                                            RecordInfo.EditPermission
+                                                        ),
+                                                        gblRecordSelectedProject.'Cluster State'.Name <> "Draft"
+                                                    )
+                                                },
+                                                {
+                                                    ItemKey: "editMember",
+                                                    ItemDisplayName: "Edit",
+                                                    ItemIconName: "Edit",
+                                                    ItemEnabled: And(
+                                                        Not(IsBlank(locSelectedMember)),
+                                                        RecordInfo(
+                                                            locSelectedMember,
+                                                            RecordInfo.EditPermission
+                                                        )
+                                                    )
+                                                },
+                                                {
+                                                    ItemKey: "deleteMember",
+                                                    ItemDisplayName: "Delete",
+                                                    ItemIconName: "Delete",
+                                                    ItemEnabled: And(
+                                                        Not(IsBlank(locSelectedMember)),
+                                                        RecordInfo(
+                                                            locSelectedMember,
+                                                            RecordInfo.EditPermission
+                                                        )
+                                                    )
+                                                }
+                                            )
+                                          OnSelect: |
+                                            =Switch(
+                                                Self.Selected.ItemKey,
+                                                "newMember",
+                                                /*
+                                                ClearCollect(
+                                                    colProjectsPrincipalsPreSelected,
+                                                    AddColumns(
+                                                        Office365Users.UserProfile(gblCurrentUser.Id),
+                                                        PersonaKey,
+                                                        Id,
+                                                        PersonaName,
+                                                        DisplayName,
+                                                        PersonaRole,
+                                                        Mail
+                                                    )
+                                                );*/
+                                                ClearCollect(
+                                                    colProjectsPrincipalsPreSelected,
+                                                    Table(
+                                                        {
+                                                            Id: Blank(),
+                                                            DisplayName: Blank(),
+                                                            Mail: Blank()
+                                                        }
+                                                    )
+                                                );
+                                                Clear(colProjectsPrincipals);
+                                                ClearCollect(
+                                                    colProjectsPrincipals,
+                                                    RenameColumns(
+                                                        FirstN(
+                                                            Users,
+                                                            0
+                                                        ),
+                                                        'Azure AD Object ID',
+                                                        Id,
+                                                        'Full Name',
+                                                        DisplayName,
+                                                        'Primary Email',
+                                                        Mail
+                                                    )
+                                                );
+                                                ClearCollect(
+                                                    colProjectsPrincipalsPreSelected,
+                                                    colProjectsPrincipals
+                                                );
+                                                Clear(colDataCardDeputyPMPreSelected);
+                                                Clear(colDataCardPMPreSelected);
+                                                UpdateContext(
+                                                    {
+                                                        locIsVisibleRightPanelEditTeam: true,
+                                                        locSelectedMember: Blank()
+                                                    }
+                                                ),
+                                                "editMember",
+                                                ClearCollect(
+                                                    colProjectsPrincipalsPreSelected,
+                                                    AddColumns(
+                                                        Office365Users.UserProfile(locSelectedMember.Member.Id),
+                                                        PersonaKey,
+                                                        Id,
+                                                        PersonaName,
+                                                        DisplayName,
+                                                        PersonaRole,
+                                                        Mail
+                                                    )
+                                                );
+                                                UpdateContext(
+                                                    {
+                                                        locIsVisibleRightPanelEditTeam: true,
+                                                        locFoundedMemberExists: false
+                                                    }
+                                                ),
+                                                "deleteMember",
+                                                UpdateContext({locIsVisiblePopUpDeleteMember: true}),
+                                                "navigateBackKey",
+                                                Navigate(
+                                                    'Project Main Screen',
+                                                    ScreenTransition.Fade
+                                                )
+                                            );
+                                            Select(pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset);
+                                          Theme: =gblAppThemeJson
+                                          Width: =Parent.Width
+                                          X: =10
+                        - con_Team_DisplayProject_Body_Content:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutGap: =20
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =20
+                              PaddingRight: =10
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width-8
+                            Children:
+                              - con_Team_DisplayProject_Body_Content_Memebers:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: AutoLayout
+                                  Properties:
+                                    BorderStyle: =BorderStyle.None
+                                    DropShadow: =DropShadow.None
+                                    LayoutDirection: =LayoutDirection.Vertical
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    PaddingTop: =20
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                  Children:
+                                    - con_Team_DisplayProject_Body_Content_Memebers_Header:
+                                        Control: GroupContainer@1.5.0
+                                        Variant: ManualLayout
+                                        Properties:
+                                          AlignInContainer: =AlignInContainer.SetByContainer
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          DropShadow: =DropShadow.None
+                                          Fill: =gblAppColors.Gallery.Header
+                                          FillPortions: =0
+                                          Height: =32
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          RadiusBottomLeft: =0
+                                          RadiusBottomRight: =0
+                                          RadiusTopLeft: =0
+                                          RadiusTopRight: =0
+                                          Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.X+lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.Width+lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.Width+lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail.Width+10
+                                        Children:
+                                          - lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                AutoHeight: =true
+                                                BorderColor: =gblAppColors.Label.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Label.BorderThickness
+                                                Color: =gblAppColors.Label.Color
+                                                DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Label.DisabledColor
+                                                DisabledFill: =gblAppColors.Label.DisabledFill
+                                                DisplayMode: =DisplayMode.View
+                                                Fill: =gblAppColors.Label.Fill
+                                                FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                Font: =gblAppColors.Label.Font
+                                                FontWeight: =FontWeight.Semibold
+                                                Height: =Parent.Height
+                                                HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                HoverColor: =gblAppColors.Label.HoverColor
+                                                HoverFill: =gblAppColors.Label.HoverFill
+                                                PaddingBottom: =0
+                                                PaddingTop: =0
+                                                PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                PressedColor: =gblAppColors.Label.PressedColor
+                                                PressedFill: =gblAppColors.Label.PressedFill
+                                                Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                Text: ="Comment"
+                                                Width: =250
+                                                Wrap: =false
+                                                X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.X+lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.Width
+                                                Y: =(Parent.Height-Self.Height)/2
+                                          - lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                AutoHeight: =true
+                                                BorderColor: =gblAppColors.Label.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Label.BorderThickness
+                                                Color: =gblAppColors.Label.Color
+                                                DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Label.DisabledColor
+                                                DisabledFill: =gblAppColors.Label.DisabledFill
+                                                DisplayMode: =DisplayMode.View
+                                                Fill: =gblAppColors.Label.Fill
+                                                FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                Font: =gblAppColors.Label.Font
+                                                FontWeight: =FontWeight.Semibold
+                                                Height: =Parent.Height
+                                                HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                HoverColor: =gblAppColors.Label.HoverColor
+                                                HoverFill: =gblAppColors.Label.HoverFill
+                                                PaddingBottom: =0
+                                                PaddingTop: =0
+                                                PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                PressedColor: =gblAppColors.Label.PressedColor
+                                                PressedFill: =gblAppColors.Label.PressedFill
+                                                Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                Text: ="Display Name"
+                                                Width: =250
+                                                Wrap: =false
+                                                X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.X+lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.Width
+                                                Y: =(Parent.Height-Self.Height)/2
+                                          - lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position:
+                                              Control: Label@2.5.1
+                                              Properties:
+                                                AutoHeight: =true
+                                                BorderColor: =gblAppColors.Label.BorderColor
+                                                BorderStyle: =BorderStyle.None
+                                                BorderThickness: =gblAppColors.Label.BorderThickness
+                                                Color: =gblAppColors.Label.Color
+                                                DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                DisabledColor: =gblAppColors.Label.DisabledColor
+                                                DisabledFill: =gblAppColors.Label.DisabledFill
+                                                DisplayMode: =DisplayMode.View
+                                                Fill: =gblAppColors.Label.Fill
+                                                FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                Font: =gblAppColors.Label.Font
+                                                FontWeight: =FontWeight.Semibold
+                                                Height: =Parent.Height
+                                                HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                HoverColor: =gblAppColors.Label.HoverColor
+                                                HoverFill: =gblAppColors.Label.HoverFill
+                                                PaddingBottom: =0
+                                                PaddingTop: =0
+                                                PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                PressedColor: =gblAppColors.Label.PressedColor
+                                                PressedFill: =gblAppColors.Label.PressedFill
+                                                Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                Text: ="Description"
+                                                Width: =250
+                                                Wrap: =false
+                                                X: =40
+                                                Y: =(Parent.Height-Self.Height)/2
+                                    - gal_Team_DisplayProject_Body_Content_Managers:
+                                        Control: Gallery@2.15.0
+                                        Variant: BrowseLayout_Flexible_SocialFeed_ver5.0
+                                        Properties:
+                                          AlignInContainer: =AlignInContainer.SetByContainer
+                                          BorderColor: =RGBA(245, 245, 245, 1)
+                                          FillPortions: =0
+                                          Height: =Self.AllItemsCount * 34
+                                          Items: =Sort(colProjectMembers,order,SortOrder.Ascending)
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          LayoutMinHeight: =Self.AllItemsCount*34
+                                          ShowScrollbar: =false
+                                          TemplateSize: =34
+                                          Width: =con_Team_DisplayProject_Body_Content_Memebers_Header.Width
+                                        Children:
+                                          - gal_Team_DisplayProject_Body_Content_Memebers_Row:
+                                              Control: GroupContainer@1.5.0
+                                              Variant: ManualLayout
+                                              Properties:
+                                                BorderStyle: =BorderStyle.None
+                                                DropShadow: =DropShadow.None
+                                                Height: =Parent.TemplateHeight
+                                                RadiusBottomLeft: =0
+                                                RadiusBottomRight: =0
+                                                RadiusTopLeft: =0
+                                                RadiusTopRight: =0
+                                                Width: =Parent.Width
+                                              Children:
+                                                - lbl_Admin_Controlling_Members_Row_Comment:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: =""
+                                                      Tooltip: =Self.Text
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                                - lbl_Admin_Controlling_Members_Row_Name:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: =ThisItem.member.'Display Name'
+                                                      Tooltip: =ThisItem.member.Mail
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                                - lbl_Admin_Controlling_Members_Row_Position:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: =ThisItem.position
+                                                      Tooltip: =Self.Text
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                    - gal_Team_DisplayProject_Body_Content_Memebers:
+                                        Control: Gallery@2.15.0
+                                        Variant: BrowseLayout_Flexible_SocialFeed_ver5.0
+                                        Properties:
+                                          AlignInContainer: =AlignInContainer.SetByContainer
+                                          BorderColor: =RGBA(245, 245, 245, 1)
+                                          Height: =32
+                                          Items: |-
+                                            =Sort(
+                                                AddColumns(
+                                                    Filter(
+                                                        'Project Members',
+                                                        ThisRecord.Project.Project = gblRecordSelectedProject.Project
+                                                    ),
+                                                    DisplayName,
+                                                    Member.'Display Name'
+                                                ),
+                                                DisplayName,
+                                                SortOrder.Ascending
+                                            )
+                                          LayoutMaxHeight: =
+                                          LayoutMaxWidth: =
+                                          LayoutMinHeight: =Self.AllItemsCount*34
+                                          ShowScrollbar: =Self.AllItemsCount>10
+                                          TemplateSize: =34
+                                          Width: =con_Team_DisplayProject_Body_Content_Memebers_Header.Width
+                                        Children:
+                                          - gal_Team_DisplayProject_Body_Content_Memebers_Row_1:
+                                              Control: GroupContainer@1.5.0
+                                              Variant: ManualLayout
+                                              Properties:
+                                                BorderStyle: =BorderStyle.None
+                                                DropShadow: =DropShadow.None
+                                                Height: =Parent.TemplateHeight
+                                                RadiusBottomLeft: =0
+                                                RadiusBottomRight: =0
+                                                RadiusTopLeft: =0
+                                                RadiusTopRight: =0
+                                                Width: =792
+                                              Children:
+                                                - lbl_Admin_Controlling_Members_Row_Comment_1:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: =ThisItem.Comment
+                                                      Tooltip: =Self.Text
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Mail.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                                - lbl_Admin_Controlling_Members_Row_Name_1:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: =ThisItem.Member.'Display Name'
+                                                      Tooltip: =ThisItem.Member.Mail
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Name.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                                - lbl_Admin_Controlling_Members_Row_Position_1:
+                                                    Control: Label@2.5.1
+                                                    Properties:
+                                                      AutoHeight: =true
+                                                      BorderColor: =gblAppColors.Label.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppColors.Label.BorderThickness
+                                                      Color: =gblAppColors.Label.Color
+                                                      DisabledBorderColor: =gblAppColors.Label.DisabledBorderColor
+                                                      DisabledColor: =gblAppColors.Label.DisabledColor
+                                                      DisabledFill: =gblAppColors.Label.DisabledFill
+                                                      DisplayMode: =DisplayMode.View
+                                                      Fill: =gblAppColors.Label.Fill
+                                                      FocusedBorderColor: =gblAppColors.Label.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppColors.Label.FocusedBorderThickness
+                                                      Font: =gblAppColors.Label.Font
+                                                      FontWeight: |
+                                                        =FontWeight.Normal
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppColors.Label.HoverBorderColor
+                                                      HoverColor: =gblAppColors.Label.HoverColor
+                                                      HoverFill: =gblAppColors.Label.HoverFill
+                                                      PaddingBottom: =0
+                                                      PaddingTop: =0
+                                                      PressedBorderColor: =gblAppColors.Label.PressedBorderColor
+                                                      PressedColor: =gblAppColors.Label.PressedColor
+                                                      PressedFill: =gblAppColors.Label.PressedFill
+                                                      Size: =gblAppSizes.Font.ExtraExtraSmall
+                                                      Text: |-
+                                                        =Coalesce(
+                                                            ThisItem.'Project Member Description'.Description,
+                                                            LookUp(
+                                                                Choices(Positions),
+                                                                Value = ThisItem.Position,Value
+                                                            )
+                                                        )
+                                                      Tooltip: =Self.Text
+                                                      Width: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.Width
+                                                      Wrap: =false
+                                                      X: =lbl_Team_DisplayProject_Body_Content_Memebers_Header_Position.X
+                                                      Y: =(Parent.Height-Self.Height)/2
+                                                - img_Contracts_List_Card_Body_PaymentTargetsRow_RadioSelection_1:
+                                                    Control: Image@2.2.3
+                                                    Properties:
+                                                      AccessibleLabel: ="img_Contracts_List_Card_Body_PaymentTargetsRow_RadioSelection_1"
+                                                      Height: =Self.Width
+                                                      Image: |-
+                                                        =With(
+                                                            {
+                                                                varSvgImageRecord: LookUp(
+                                                                    SVGImages,
+                                                                    ImageName = If(
+                                                                        ThisItem.'Project Members' = locSelectedMember.'Project Members',
+                                                                        "CircleDotBlue",
+                                                                        "CircleEmpty"
+                                                                    )
+                                                                )
+                                                            },
+                                                            With(
+                                                                {
+                                                                    varImageData: Concatenate(
+                                                                        "data:image/svg+xml;utf8, ",
+                                                                        EncodeUrl(varSvgImageRecord.SVGCode)
+                                                                    )
+                                                                },
+                                                                varImageData
+                                                            )
+                                                        )
+                                                      Width: =16
+                                                      X: =10
+                                                      Y: =Parent.Height/2-Self.Height/2
+                                                - btn_Contracts_List_Card_Body_PaymentTargetsRow_TransparentButton_1:
+                                                    Control: Classic/Button@2.2.0
+                                                    Properties:
+                                                      BorderColor: =gblAppStyles.ButtonTransparent.BorderColor
+                                                      BorderStyle: =BorderStyle.None
+                                                      BorderThickness: =gblAppStyles.ButtonTransparent.BorderThickness
+                                                      Color: =gblAppStyles.ButtonTransparent.Color
+                                                      DisabledBorderColor: =gblAppStyles.ButtonTransparent.DisabledBorderColor
+                                                      DisabledColor: =gblAppStyles.ButtonTransparent.DisabledColor
+                                                      DisabledFill: =gblAppStyles.ButtonTransparent.DisabledFill
+                                                      Fill: =gblAppStyles.ButtonTransparent.Fill
+                                                      FocusedBorderColor: =gblAppStyles.ButtonTransparent.FocusedBorderColor
+                                                      FocusedBorderThickness: =gblAppStyles.ButtonTransparent.FocusedBorderThickness
+                                                      Font: =gblAppStyles.ButtonTransparent.Font
+                                                      Height: =Parent.Height
+                                                      HoverBorderColor: =gblAppStyles.ButtonTransparent.HoverBorderColor
+                                                      HoverColor: =gblAppStyles.ButtonTransparent.HoverColor
+                                                      HoverFill: =ColorValue("#E3E3E322")
+                                                      OnSelect: |
+                                                        =If(
+                                                            ThisItem.'Project Members' = locSelectedMember.'Project Members',
+                                                            UpdateContext({locSelectedMember: Blank()}),
+                                                            UpdateContext(
+                                                                {
+                                                                    locSelectedMember: LookUp(
+                                                                        'Project Members',
+                                                                        ThisRecord.'Project Members' = ThisItem.'Project Members'
+                                                                    )
+                                                                }
+                                                            )
+                                                        );
+                                                      PressedBorderColor: =gblAppStyles.ButtonTransparent.PressedBorderColor
+                                                      PressedColor: =gblAppStyles.ButtonTransparent.PressedColor
+                                                      PressedFill: =gblAppStyles.ButtonTransparent.PressedFill
+                                                      RadiusBottomLeft: =gblAppStyles.ButtonTransparent.RadiusBottomLeft
+                                                      RadiusBottomRight: =gblAppStyles.ButtonTransparent.RadiusBottomRight
+                                                      RadiusTopLeft: =gblAppStyles.ButtonTransparent.RadiusTopLeft
+                                                      RadiusTopRight: =gblAppStyles.ButtonTransparent.RadiusTopRight
+                                                      Size: =gblAppSizes.Font.Medium
+                                                      Text: '= '
+                                                      Width: =Parent.Width-Self.X
+      - con_Team_RightPanel_Member_Form:
+          Control: GroupContainer@1.5.0
+          Variant: AutoLayout
+          Properties:
+            BorderStyle: =BorderStyle.None
+            DropShadow: =DropShadow.None
+            Fill: =RGBA(0, 0, 0, 0.3)
+            Height: =Parent.Height
+            LayoutDirection: =LayoutDirection.Horizontal
+            LayoutJustifyContent: =LayoutJustifyContent.End
+            RadiusBottomLeft: =0
+            RadiusBottomRight: =0
+            RadiusTopLeft: =0
+            RadiusTopRight: =0
+            Visible: =locIsVisibleRightPanelEditTeam
+            Width: =Parent.Width
+          Children:
+            - con_Team_RightPanel_Member_FormContext:
+                Control: GroupContainer@1.5.0
+                Variant: AutoLayout
+                Properties:
+                  AlignInContainer: =AlignInContainer.SetByContainer
+                  BorderStyle: =BorderStyle.None
+                  Fill: =ColorValue(gblAppTheme.palette.themePrimary)
+                  FillPortions: =0
+                  Height: =Parent.Height
+                  LayoutAlignItems: =LayoutAlignItems.End
+                  LayoutDirection: =LayoutDirection.Vertical
+                  LayoutMaxHeight: =
+                  LayoutMaxWidth: =
+                  Width: =Min(gblAppSizes.RightPanel.MinWidth, Parent.Width)
+                  X: =Parent.Width/2
+                Children:
+                  - con_Team_RightPanel_Member_FormHeader:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        FillPortions: =0
+                        Height: =48
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        LayoutMinHeight: =48
+                        Width: =Parent.Width
+                      Children:
+                        - lbl_Team_RightPanel_Member_Form_Header:
+                            Control: Label@2.5.1
+                            Properties:
+                              BorderColor: =RGBA(0, 0, 0, 0)
+                              BorderStyle: =BorderStyle.None
+                              BorderThickness: =2
+                              Color: =RGBA(255, 255, 255, 1)
+                              DisabledBorderColor: =RGBA(255, 255, 255, 1)
+                              DisabledColor: =RGBA(255, 255, 255, 1)
+                              FocusedBorderThickness: =4
+                              Font: =Font.'Segoe UI'
+                              FontWeight: =FontWeight.Semibold
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingLeft: =20
+                              Text: ="Add Project Member"
+                              Width: =Parent.Width-Self.X-psf_Team_RightPanel_Member_Form_CommandBar.Width
+                        - psf_Team_RightPanel_Member_Form_CommandBar:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.CommandBar
+                            Properties:
+                              AccessibilityLabel: ="psf_Team_RightPanel_Member_Form_CommandBar"
+                              Height: =Parent.Height
+                              Items: |-
+                                =Table(
+                                    {
+                                        ItemKey: "closeKey",
+                                        ItemDisplayName: "Home",
+                                        ItemIconName: "ChromeClose",
+                                        ItemIconOnly: true,
+                                        ItemFarItem: true,
+                                        ItemIconColor: gblAppTheme.palette.themeTertiary
+                                    }
+                                )
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |
+                                =If(
+                                    !IsBlank(Self.Selected.ItemKey) && Self.Selected.ItemKey = "closeKey",
+                                    Select(pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset);
+                                    UpdateContext(
+                                        {
+                                            locIsVisibleRightPanelEditTeam: false,
+                                            locSelectedMember: Blank()
+                                        }
+                                    )
+                                );
+                              Width: =40
+                  - con_Team_RightPanel_Member_Form_InpForm:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        Height: =Parent.Height/2
+                        LayoutDirection: =LayoutDirection.Vertical
+                        LayoutGap: =20
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - con_Team_RightPanel_Member_Form_BodyForm:
+                            Control: GroupContainer@1.5.0
+                            Variant: AutoLayout
+                            Properties:
+                              AlignInContainer: =AlignInContainer.SetByContainer
+                              BorderStyle: =BorderStyle.None
+                              DropShadow: =DropShadow.None
+                              FillPortions: =0
+                              Height: =Parent.Height
+                              LayoutDirection: =LayoutDirection.Vertical
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              PaddingBottom: =20
+                              PaddingTop: =gblAppSizes.RightPanel.Top
+                              RadiusBottomLeft: =0
+                              RadiusBottomRight: =0
+                              RadiusTopLeft: =0
+                              RadiusTopRight: =0
+                              Width: =Parent.Width
+                              Y: =130
+                            Children:
+                              - con_Team_RightPanel_Member_Form_Position:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =80
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - lbl_Team_RightPanel_Member_Form_Position_ErrMessage:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Size: =gblAppSizes.Font.ExtraExtraSmall
+                                          Text: =gblAppResx.InputBlank
+                                          Visible: |-
+                                            =And(
+                                                Not(IsBlank(locSelectedMember)),
+                                                IsBlank(drp_Team_RightPanel_Member_Form_Position_TableBackedChoices.Selected)
+                                            )
+                                          Width: =Parent.Width-Self.X*2
+                                          Wrap: =false
+                                          X: =lbl_GeneralData_DisplayProject_Body_General_Content_Manager.X
+                                          Y: =64
+                                    - drp_Team_RightPanel_Member_Form_Position_TableBackedChoices:
+                                        Control: DropDown@0.0.45
+                                        Properties:
+                                          AccessibleLabel: ="drp_Team_RightPanel_Member_Form_Position_TableBackedChoices"
+                                          BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                          DefaultSelectedItems: |-
+                                            =LookUp(
+                                                'Project Member Descriptions',
+                                                ThisRecord.'Project Member Descriptions' = locSelectedMember.'Project Member Description'.'Project Member Descriptions'
+                                            )
+                                          Items: ='Project Member Descriptions'
+                                          OnChange: =
+                                          Width: =Parent.Width-Self.X*2
+                                          X: =gblAppSizes.Position.X
+                                          Y: =lbl_Team_RightPanel_Member_Form_Position.Y+lbl_Team_RightPanel_Member_Form_Position.Height+5
+                                        Children:
+                                          - Name21:
+                                              Control: DropDownDataField@1.5.0
+                                              Variant: textualColumn
+                                              IsLocked: true
+                                              Properties:
+                                                FieldDisplayName: ="Name"
+                                                FieldName: ="vsb_name"
+                                                FieldType: ="s"
+                                                Order: =1
+                                    - lbl_Team_RightPanel_Member_Form_Position:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Height: =22
+                                          Text: ="Description"
+                                          Weight: ='TextCanvas.Weight'.Semibold
+                                          Width: =Parent.Width-Self.X*2
+                                          Wrap: =false
+                                          X: =gblAppSizes.Position.X
+                                    - lbl_Team_RightPanel_Member_Form_Position_Requered:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Text: ="*"
+                                          Width: =16
+                                          X: =3
+                                          Y: =3
+                              - con_Team_RightPanel_Member_Form_Member:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =104
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width-Self.X*2
+                                  Children:
+                                    - lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Size: =9
+                                          Text: |+
+                                            =If(And(Not(IsBlank(locSelectedMember)),IsEmpty(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople)), gblAppResx.InputBlank)
+
+                                          Visible: =And(Not(IsBlank(locSelectedMember)),IsEmpty(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople))
+                                          Width: =Parent.Width-Self.X*2
+                                          Wrap: =false
+                                          X: =lbl_GeneralData_DisplayProject_Body_General_Content_ProjectName.X
+                                          Y: =pcf_Team_RightPanel_Member_Form_Principal.X+pcf_Team_RightPanel_Member_Form_Principal.Height+10
+                                    - pcf_Team_RightPanel_Member_Form_Principal:
+                                        Control: CodeComponent
+                                        ComponentName: cat_PowerCAT.PeoplePicker
+                                        Properties:
+                                          AccessibilityLabel: ="pcf_Team_RightPanel_Member_Form_Principal"
+                                          Height: =40
+                                          HintText: ="Select member"
+                                          InputEvent: =
+                                          Items: =colProjectsPrincipalsPreSelected
+                                          MaxPeople: =1
+                                          OnBlur: |
+                                            =false
+                                          OnSearch: |-
+                                            =ClearCollect(
+                                                colProjectsPrincipals,
+                                                If(
+                                                    IsBlankOrError(Trim(Self.SearchText)),
+                                                    Blank(),
+                                                    AddColumns(
+                                                        RenameColumns(
+                                                            Search(
+                                                                Filter(
+                                                                    'Microsoft Entra IDs',
+                                                                    'Microsoft Entra ID Account Enabled' = 'Microsoft Entra ID Account Enabled (Microsoft Entra IDs)'.Yes
+                                                                ),
+                                                                Trim(Self.SearchText),
+                                                                'Display Name',
+                                                                'Given Name',
+                                                                Surname,
+                                                                Mail
+                                                            ),
+                                                            'Display Name',
+                                                            DisplayName,
+                                                            Mail,
+                                                            EMail
+                                                        ),
+                                                        UniqueKey,
+                                                        'A unique identifer for Microsoft Entra ID'
+                                                    )
+                                                )
+                                            )
+                                          OnSelect: |
+                                            =ClearCollect(
+                                                colProjectsPrincipalsPreSelected,
+                                                Table({ Id: Blank(), DisplayName: Blank(), Mail: Blank() })
+                                            );
+                                            Clear(colProjectsPrincipals);
+                                          PersonaKey: ="Id"
+                                          PersonaName: ="DisplayName"
+                                          PersonaRole: ="Mail"
+                                          SuggestionKey: ="UniqueKey"
+                                          SuggestionName: ="DisplayName"
+                                          SuggestionRole: ="EMail"
+                                          Suggestions_Items: =colProjectsPrincipals
+                                          Theme: =gblAppThemeJson
+                                          Tooltip: ="Search member"
+                                          Width: =Parent.Width-Self.X*2
+                                          X: =gblAppSizes.Position.X
+                                          Y: =34
+                                    - lbl_Team_RightPanel_Member_Form_Principal:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          AutoHeight: =true
+                                          Height: =20
+                                          Text: ="Name"
+                                          Weight: ='TextCanvas.Weight'.Semibold
+                                          Width: =Parent.Width - Self.X * 2
+                                          X: =gblAppSizes.Position.X
+                                    - lbl_Team_RightPanel_Member_Form_Principal_Requared:
+                                        Control: Label@2.5.1
+                                        Properties:
+                                          BorderColor: =RGBA(0, 0, 0, 0)
+                                          BorderStyle: =BorderStyle.None
+                                          BorderThickness: =2
+                                          Color: =gblAppColors.Error
+                                          DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                                          DisabledColor: =RGBA(161, 159, 157, 1)
+                                          FocusedBorderThickness: =4
+                                          Font: =Font.'Segoe UI'
+                                          Height: =16
+                                          Text: ="*"
+                                          Tooltip: ="ToolTip"
+                                          Width: =16
+                                          X: =5
+                                          Y: =5
+                              - con_Team_RightPanel_Member_Form_Comments:
+                                  Control: GroupContainer@1.5.0
+                                  Variant: ManualLayout
+                                  Properties:
+                                    AlignInContainer: =AlignInContainer.SetByContainer
+                                    DropShadow: =DropShadow.None
+                                    FillPortions: =0
+                                    Height: =Parent.Height
+                                    LayoutMaxHeight: =
+                                    LayoutMaxWidth: =
+                                    RadiusBottomLeft: =0
+                                    RadiusBottomRight: =0
+                                    RadiusTopLeft: =0
+                                    RadiusTopRight: =0
+                                    Width: =Parent.Width
+                                  Children:
+                                    - txt_Team_RightPanel_Member_Form_Comments_Comments:
+                                        Control: TextInput@0.0.54
+                                        Properties:
+                                          AccessibleLabel: ="txt_Team_RightPanel_Member_Form_Comments_Comments"
+                                          BasePaletteColor: =ColorValue(gblAppTheme.palette.themePrimary)
+                                          Height: =80
+                                          MaxLength: =gblAppConstants.DefaultMiddleMaxLength
+                                          Mode: ='TextInputCanvas.Mode'.Multiline
+                                          TriggerOutput: ='TextInputCanvas.TriggerOutput'.Delayed
+                                          Value: =locSelectedMember.Comment
+                                          Width: =Parent.Width-Self.X*2
+                                          X: =lbl_Team_RightPanel_Member_Form_Comments.X
+                                          Y: =lbl_Team_RightPanel_Member_Form_Comments.Y+lbl_Team_RightPanel_Member_Form_Comments.Height+5
+                                    - lbl_Team_RightPanel_Member_Form_Comments_Details:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          Align: ='TextCanvas.Align'.End
+                                          AutoHeight: =true
+                                          Height: =22
+                                          Size: =12
+                                          Text: =$"{Len(txt_Team_RightPanel_Member_Form_Comments_Comments.Value)}/{gblAppConstants.DefaultDefMaxLength}"
+                                          Weight: ='TextCanvas.Weight'.Regular
+                                          Width: =lbl_ProjectPlanning_DisplayProjectBodyRightContent_PlanningBasisDetails.Width
+                                          X: = Parent .Width-Self.Width-gblAppSizes.Position.X
+                                    - lbl_Team_RightPanel_Member_Form_Comments:
+                                        Control: Text@0.0.51
+                                        Properties:
+                                          AutoHeight: =true
+                                          Height: =22
+                                          Text: ="Comment"
+                                          Weight: ='TextCanvas.Weight'.Semibold
+                                          Width: =Parent.Width/2
+                                          X: =gblAppSizes.Position.X
+                  - con_Team_RightPanel_Member_Form_Buttons:
+                      Control: GroupContainer@1.5.0
+                      Variant: AutoLayout
+                      Properties:
+                        AlignInContainer: =AlignInContainer.SetByContainer
+                        BorderStyle: =BorderStyle.None
+                        DropShadow: =DropShadow.None
+                        Fill: =RGBA(255, 255, 255, 1)
+                        FillPortions: =0
+                        Height: =45
+                        LayoutDirection: =LayoutDirection.Horizontal
+                        LayoutGap: =10
+                        LayoutJustifyContent: =LayoutJustifyContent.End
+                        LayoutMaxHeight: =
+                        LayoutMaxWidth: =
+                        PaddingRight: =20
+                        RadiusBottomLeft: =0
+                        RadiusBottomRight: =0
+                        RadiusTopLeft: =0
+                        RadiusTopRight: =0
+                        Width: =Parent.Width
+                      Children:
+                        - pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset:
+                            Control: Button@0.0.45
+                            Properties:
+                              AccessibleLabel: ="pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset"
+                              Appearance: ='ButtonCanvas.Appearance'.Secondary
+                              Icon: ="ArrowClockwise"
+                              Layout: ='ButtonCanvas.Layout'.IconOnly
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnSelect: |-
+                                =
+                                Reset(drp_Team_RightPanel_Member_Form_Position_TableBackedChoices);
+                                Reset(txt_Team_RightPanel_Member_Form_Comments_Comments);
+                                Set(varPrincipalPickerEvent, "Reset|" & Text(Rand()));
+                              Visible: =false
+                              Width: =32
+                        - pcf_btn_Team_RightPanel_Member_Form_Buttons_Save:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              AccessibilityLabel: ="pcf_btn_Team_RightPanel_Member_Form_Buttons_Save"
+                              DisplayMode: |-
+                                =If(
+                                    And(
+                                        //Not(IsBlank(drp_Team_RightPanel_Member_Form_Position.Selected)),
+                                        Not(IsBlank(drp_Team_RightPanel_Member_Form_Position_TableBackedChoices.Selected)),
+                                        Not(IsEmpty(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople)),
+                                        Not(lbl_Team_RightPanel_Member_Form_Position_ErrMessage.Visible),
+                                        Not(lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage.Visible)
+                                    ),
+                                    DisplayMode.Edit,
+                                    DisplayMode.Disabled
+                                )
+                              FillColor: =gblAppTheme.palette.themePrimary
+                              FontColor: =gblAppTheme.palette.white
+                              FontSize: =16
+                              Height: =32
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.white
+                                )
+                              IconName: ="CheckMark"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |
+                                =UpdateContext(
+                                    {
+                                        locTeamDataIsSavingDialogVisible: true,
+                                        locTeamlDataSavingDialogText: If(
+                                            IsBlank(locSelectedMember),
+                                            $"The member '{First(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople).PersonaName}' will be added, please wait...",
+                                            $"Project member information will be updated, please wait..."
+                                        )
+                                    }
+                                );
+                                IfError(
+                                    With(
+                                        {
+                                            varCandidateMember: LookUp(
+                                                'Microsoft Entra IDs',
+                                                Or(
+                                                    IsBlank(First(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople)),
+                                                    ThisRecord.'A unique identifer for Microsoft Entra ID' = GUID(First(pcf_Team_RightPanel_Member_Form_Principal.SelectedPeople).PersonaKey)
+                                                )
+                                            )
+                                        },
+                                        With(
+                                            {
+                                                varUpdatedMember: Patch(
+                                                    'Project Members',
+                                                    If(
+                                                        IsBlank(locSelectedMember),
+                                                        Defaults('Project Members'),
+                                                        locSelectedMember
+                                                    ),
+                                                    {
+                                                        Name: $"MBR-{varCandidateMember.Mail}",
+                                                        Project: gblRecordSelectedProject,
+                                                        // Position: drp_Team_RightPanel_Member_Form_Position.Selected.Value,
+                                                        'Project Member Description': drp_Team_RightPanel_Member_Form_Position_TableBackedChoices.Selected,
+                                                        Member: varCandidateMember,
+                                                        Comment: Trim(txt_Team_RightPanel_Member_Form_Comments_Comments.Value),
+                                                        'Owning Business Unit': gblRecordSelectedProject.'Besitzer (Unternehmenseinheit)'
+                                                    }
+                                                )
+                                            },
+                                            Refresh('Project Members');
+                                            UpdateContext({locTeamlDataSavingDialogText: $"Project member '{varCandidateMember.'Display Name'}' was saved/updated successfully."})
+                                        )
+                                    ),
+                                    UpdateContext({locTeamlDataSavingDialogText: $"Error: Project member could not be changed. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message} {FirstError.Details.HttpResponse}"})
+                                );
+                                ClearCollect(
+                                    colProjectsPrincipalsPreSelected,
+                                    Table(
+                                        {
+                                            Id: Blank(),
+                                            DisplayName: Blank(),
+                                            Mail: Blank()
+                                        }
+                                    )
+                                );
+                                Clear(colProjectsPrincipals);
+                                UpdateContext(
+                                    {
+                                        locTeamDataIsSavingDialogVisible: false,
+                                        locTeamlDataSavingDialogText: Blank(),
+                                        locIsVisibleRightPanelEditTeam: false,
+                                        locSelectedMember: Blank()
+                                    }
+                                );
+                              Text: ="Save"
+                              TextAlignment: ='PowerCAT.Icon.TextAlignment'.Center
+                              Theme: =gblAppThemeJson
+                              Tooltip: ="Add Project Member"
+                              Width: =96
+                              X: =Parent.Width - 35
+                              Y: =24
+                        - pcf_btn_Team_RightPanel_Member_Form_Buttons_Cancel:
+                            Control: CodeComponent
+                            ComponentName: cat_PowerCAT.Icon
+                            Properties:
+                              AccessibilityLabel: ="pcf_btn_Team_RightPanel_Member_Form_Buttons_Cancel"
+                              BorderColor: =gblAppTheme.palette.themePrimary
+                              FillColor: =gblAppTheme.palette.white
+                              FontColor: =gblAppTheme.palette.themePrimary
+                              Height: =32
+                              HoverBorderColor: =gblAppTheme.palette.hoverButton
+                              HoverFillColor: =gblAppTheme.palette.hoverButton
+                              HoverFontColor: =gblAppTheme.palette.themePrimary
+                              HoverIconColor: =gblAppTheme.palette.themePrimary
+                              IconColor: |-
+                                =If(
+                                    Self.DisplayMode = DisplayMode.Disabled,
+                                    gblAppTheme.palette.black,
+                                    gblAppTheme.palette.themePrimary
+                                )
+                              IconName: ="Cancel"
+                              IconType: ='PowerCAT.Icon.IconType'.ActionButton
+                              LayoutMaxHeight: =
+                              LayoutMaxWidth: =
+                              OnChange: |
+                                =Select(pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset);
+                                UpdateContext(
+                                    {
+                                        locIsVisibleRightPanelEditTeam: false,
+                                        locSelectedMember: Blank()
+                                    }
+                                );
+                              Text: ="Cancel"
+                              Theme: =gblAppThemeJson
+                              Tooltip: =
+                              Width: =96
+      - cmp_PopUp_Team_Leave_Confirmation:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Yes"
+            Description: ="You have unsaved data. Do you really want to leave current form without saving?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |-
+              =UpdateContext({locLeaveGeneralDataConfirmationDialog: false});
+            OnConfirm: |-
+              =UpdateContext({locLeaveGeneralDataConfirmationDialog: false});
+              If(
+                  cmp_CheckList_Left_Navigation_1.SelectedKey <> gblLeftNavigationSelected.ItemKey,
+                  Set(
+                      gblLeftNavigationSelected,
+                      LookUp(
+                          LeftNavigationMenu,
+                          ItemKey = cmp_CheckList_Left_Navigation_1.SelectedKey
+                      )
+                  );
+                  Navigate(gblLeftNavigationSelected.TargetScreen),
+                  Navigate(
+                      'Project Main Screen',
+                      ScreenTransition.Fade
+                  )
+              )
+            Title: ="Unsaved data"
+            Visible: =locLeaveGeneralDataConfirmationDialog
+            Width: =Parent.Width
+      - cmp_PopUp_Team_Saving_Dialog:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Loading
+          Properties:
+            Height: =Parent.Height
+            InformationText: =locTeamlDataSavingDialogText
+            Visible: =locTeamDataIsSavingDialogVisible
+            Width: =Parent.Width
+      - cmp_PopUp_Member_Delete_Confirmation:
+          Control: CanvasComponent
+          ComponentName: cmp_PopUp_Confirmation
+          Properties:
+            CancelButtonText: ="Cancel"
+            ConfirmButtonText: ="Yes"
+            Description: =$"Are you sure you want to delete the project member ""{locSelectedMember.Member.'Display Name'}""?"
+            Height: =Parent.Height
+            IconLeftButton: ="Cancel"
+            IconRightButton: ="CheckMark"
+            OnCancel: |
+              =UpdateContext({locIsVisiblePopUpDeleteMember: false});
+            OnConfirm: |
+              =IfError(
+                  Remove(
+                      'Project Members',
+                      locSelectedMember
+                  );
+                  Refresh('Project Members'),
+                  UpdateContext({locDeleteMemberlDialogText: $"Error: Project member could not be deleted. Internal error: originated on {FirstError.Source}. Message: {FirstError.Message} {FirstError.Details.HttpResponse}"})
+              );
+              UpdateContext(
+                  {
+                      locSelectedMember: Blank(),
+                      locIsVisiblePopUpDeleteMember: false
+                  }
+              );
+            Title: =$"Deletion of Project Member"
+            Visible: =locIsVisiblePopUpDeleteMember
+            Width: =Parent.Width

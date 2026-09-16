@@ -1,0 +1,17 @@
+/* Ported verbatim from the PCF's MySpreadsheet.css (row-color classes only). */
+.header {
+  background-color: #ffffff;
+  font-weight: bold;
+  color: black;
+}
+
+.filled-row {
+  background-color: #d2d2d2;
+  font-weight: 400;
+  color: black;
+}
+
+.empty-row {
+  background-color: #ffffff;
+  font-weight: 500;
+}

@@ -1,0 +1,4469 @@
+{
+  "source": "VSBCloud (3).zip -> customizations.xml <attribute><LogicalName>/<displayname description>",
+  "note": "Maps the canvas app's quoted display names (e.g. 'Project ID') to Dataverse logical names (vsb_name). Use this when porting Power Fx that refers to columns by display name.",
+  "entities": {
+    "vsb_BoPContractsDevCoCosts": {
+      "entitySetName": "vsb_bopcontractsdevcocostses",
+      "logicalName": "vsb_bopcontractsdevcocosts",
+      "attributeCount": 21,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_bopcontractsdevcocosts_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopcontractsdevcocosts_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_account": {
+          "displayName": "CAPEX Account",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_bopcontract": {
+          "displayName": "BoP Contract",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_bopcontractsdevcocostsid": {
+          "displayName": "BoP Contracts DevCo Costs",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_bopcontractstandardassumption": {
+          "displayName": "BoP Contract Standard Assumption",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_BoPContractsPaymentTargets": {
+      "entitySetName": "vsb_bopcontractspaymenttargetses",
+      "logicalName": "vsb_bopcontractspaymenttargets",
+      "attributeCount": 23,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_bopcontractspaymenttargets_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopcontractspaymenttargets_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bopcontractspaymenttargetsid": {
+          "displayName": "BoP Contracts Payment Targets",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_bopprojectcontract": {
+          "displayName": "BoP Project Contract",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_note": {
+          "displayName": "Note",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_paymentdate": {
+          "displayName": "Payment Date",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcostscontract": {
+          "displayName": "Total Costs Contract",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_BoPContractsStandardAssumptions": {
+      "entitySetName": "vsb_bopcontractsstandardassumptionses",
+      "logicalName": "vsb_bopcontractsstandardassumptions",
+      "attributeCount": 30,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "0",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_bopcontractsstandardassumptions_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopcontractsstandardassumptions_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bopcontractsstandardassumptionsid": {
+          "displayName": "BoP Contracts Standard Assumptions",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_capexaggregationjson": {
+          "displayName": "CapexAggregationJson",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_closingdatereference": {
+          "displayName": "Closing Date Reference",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_comment": {
+          "displayName": "Comment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_contracttypes": {
+          "displayName": "Contract Types",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_country": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_margin": {
+          "displayName": "Margin",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopcontractsstandardassumptions_vsb_margin"
+        },
+        "vsb_marginfixedvalue": {
+          "displayName": "Margin Fixed Value",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_marginpercentage": {
+          "displayName": "Margin Percentage",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_margintype": {
+          "displayName": "Margin Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_monthdifference": {
+          "displayName": "Month Difference",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_technology": {
+          "displayName": "Technology",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_BoPProjectsContracts": {
+      "entitySetName": "vsb_bopprojectscontractses",
+      "logicalName": "vsb_bopprojectscontracts",
+      "attributeCount": 40,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_bopprojectscontracts_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopprojectscontracts_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bopprojectscontractsid": {
+          "displayName": "BoP Projects Contracts",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_bopstandardassumptioncontract": {
+          "displayName": "BoP Standard Assumption Contract",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_closingdate": {
+          "displayName": "Closing Date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_comment": {
+          "displayName": "Comment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_contracttypes": {
+          "displayName": "Contract Types",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsafterclosingdate": {
+          "displayName": "Costs After Closing Date [EUR]",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsafterclosingdateactual": {
+          "displayName": "Costs After Closing Date Actual",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsafterclosingdateplan": {
+          "displayName": "Costs After Closing Date Plan",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsuntilclosingdate": {
+          "displayName": "Costs Until Closing Date [EUR]",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsuntilclosingdateactual": {
+          "displayName": "Costs Until Closing Date Actual",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costsuntilclosingdateplan": {
+          "displayName": "Costs Until Closing Date Plan",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_ismarginstandardassumption": {
+          "displayName": "Is Margin Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopprojectscontracts_vsb_ismarginstandardassumption"
+        },
+        "vsb_isstandardcontract": {
+          "displayName": "Is Standard Contract",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopprojectscontracts_vsb_isstandardcontract"
+        },
+        "vsb_margin": {
+          "displayName": "Margin",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_bopprojectscontracts_vsb_margin"
+        },
+        "vsb_marginfixedvalue": {
+          "displayName": "Margin Fixed Value",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_marginpercentage": {
+          "displayName": "Margin Percentage",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_margintype": {
+          "displayName": "Margin Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_project": {
+          "displayName": "Project",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcostofcontract": {
+          "displayName": "Total cost of contract [EUR]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcostscalculated": {
+          "displayName": "Total Costs Calculated",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcostsoverwrite": {
+          "displayName": "Total Costs Overwrite",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcoststype": {
+          "displayName": "Total Costs Type [EUR]",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CAPEXAccountList": {
+      "entitySetName": "vsb_capexaccountlists",
+      "logicalName": "vsb_capexaccountlist",
+      "attributeCount": 22,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_capexaccountlist_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexaccountlist_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_accountcategory": {
+          "displayName": "Account Category",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexaccountlistid": {
+          "displayName": "CAPEX Account List",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_number": {
+          "displayName": "Number",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_parentaccount": {
+          "displayName": "Parent Account",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CapexComments": {
+      "entitySetName": "vsb_capexcommentses",
+      "logicalName": "vsb_capexcomments",
+      "attributeCount": 26,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "0",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_capexcomments_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexcomments_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexcommentsid": {
+          "displayName": "Capex Comments",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_capexcontract": {
+          "displayName": "Capex Contract",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexcost": {
+          "displayName": "Capex Cost",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_comment": {
+          "displayName": "Comment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_commenttype": {
+          "displayName": "Comment Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_parentcomment": {
+          "displayName": "Parent Comment",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_resolved": {
+          "displayName": "Resolved",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexcomments_vsb_resolved"
+        },
+        "vsb_resolvedby": {
+          "displayName": "Resolved By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_rootcomment": {
+          "displayName": "Root Comment",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CAPEXCost": {
+      "entitySetName": "vsb_capexcosts",
+      "logicalName": "vsb_capexcost",
+      "attributeCount": 24,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_capexcost_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexcost_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexcontractstandardassumption": {
+          "displayName": "Capex Contract Standard Assumption",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexcostid": {
+          "displayName": "CAPEX Cost",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_contract": {
+          "displayName": "Contract",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cost": {
+          "displayName": "Cost",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costpaid": {
+          "displayName": "Cost Paid",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexcost_vsb_costpaid"
+        },
+        "vsb_month": {
+          "displayName": "Month",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_year": {
+          "displayName": "Year",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CAPEXProjectContract": {
+      "entitySetName": "vsb_capexprojectcontracts",
+      "logicalName": "vsb_capexprojectcontract",
+      "attributeCount": 37,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_capexprojectcontract_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_account": {
+          "displayName": "Account",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_applyvat": {
+          "displayName": "Apply VAT?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_vsb_applyvat"
+        },
+        "vsb_autoid": {
+          "displayName": "AutoID",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_averagepayment": {
+          "displayName": "Average Payment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_byclusterjson": {
+          "displayName": "By Cluster JSON",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bystartenddatejson": {
+          "displayName": "By Start &amp; End Date JSON",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_capexprojectcontractid": {
+          "displayName": "CAPEX Project Contract",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_capexstandardassumptioncontract": {
+          "displayName": "Capex Standard Assumption Contract",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costtype": {
+          "displayName": "Cost Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_depreciation": {
+          "displayName": "Depreciation?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_vsb_depreciation"
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_distribution": {
+          "displayName": "Distribution",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_distributionfrequency": {
+          "displayName": "Distribution Frequency",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_distributionscheme": {
+          "displayName": "Distribution Scheme",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_initialcontractsource": {
+          "displayName": "Initial Contract Source",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_vsb_initialcontractsource"
+        },
+        "vsb_iseditedfrompcf": {
+          "displayName": "Is Edited from PCF?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_vsb_iseditedfrompcf"
+        },
+        "vsb_isstandardcontract": {
+          "displayName": "Is Standard Contract?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_capexprojectcontract_vsb_isstandardcontract"
+        },
+        "vsb_linkedcluster": {
+          "displayName": "Linked Cluster",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_project": {
+          "displayName": "Project",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcost": {
+          "displayName": "Total Cost",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_Country": {
+      "entitySetName": "vsb_countries",
+      "logicalName": "vsb_country",
+      "attributeCount": 29,
+      "attributes": {
+        "createdby": {
+          "displayName": "Erstellt von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Erstellt von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Importsequenznummer",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Geändert von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Geändert am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Geändert von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Datensatz erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Besitzer",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Besitzer (Unternehmenseinheit)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Besitzer (Team)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Besitzer (Benutzer)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_country_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_country_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Versionsnummer der Zeitzonenregel",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "Zeitzonencode für UTC-Konvertierung",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_businessunit": {
+          "displayName": "Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_countryid": {
+          "displayName": "Country",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_currencyname": {
+          "displayName": "Currency Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_isocode": {
+          "displayName": "ISO Code",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_isocurrencycode": {
+          "displayName": "ISO Currency Code",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_lastprojectid": {
+          "displayName": "Last Project Id",
+          "type": "int",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_portfoliomanagerid": {
+          "displayName": "Portfolio Manager",
+          "type": "lookup",
+          "requiredLevel": "recommended",
+          "optionSet": null
+        },
+        "vsb_sendfabricfailurenotificationcardstomanagers": {
+          "displayName": "Send Fabric Failure Notification Cards to Managers",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_country_vsb_sendfabricfailurenotificationcardstomanagers"
+        },
+        "vsb_sendfabricfailurenotificationccrecipients": {
+          "displayName": "Send Fabric Failure Notification CC Recipients",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_sendprojectupdatecardstoportfoliomanager": {
+          "displayName": "Send Project Update Cards to Portfolio Manager",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_country_vsb_sendprojectupdatecardstoportfoliomanager"
+        },
+        "vsb_sendprojectupdatenotificationccrecipients": {
+          "displayName": "Send Project Update Notification CC Recipients",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_title": {
+          "displayName": "Key",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CountryArea": {
+      "entitySetName": "vsb_countryareas",
+      "logicalName": "vsb_countryarea",
+      "attributeCount": 19,
+      "attributes": {
+        "createdby": {
+          "displayName": "Erstellt von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Erstellt von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Importsequenznummer",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Geändert von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Geändert am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Geändert von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Datensatz erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Besitzer",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Besitzer (Unternehmenseinheit)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Besitzer (Team)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Besitzer (Benutzer)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_countryarea_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_countryarea_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Versionsnummer der Zeitzonenregel",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "Zeitzonencode für UTC-Konvertierung",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_areascountry": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_countryareaid": {
+          "displayName": "CountryArea",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_CountryInflationProfile": {
+      "entitySetName": "vsb_countryinflationprofiles",
+      "logicalName": "vsb_countryinflationprofile",
+      "attributeCount": 24,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_countryinflationprofile_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_countryinflationprofile_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_area": {
+          "displayName": "Area",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_country": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_countryinflationprofileid": {
+          "displayName": "Country Inflation Profile",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_inflation": {
+          "displayName": "Inflation",
+          "type": "decimal",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "recommended",
+          "optionSet": null
+        },
+        "vsb_price": {
+          "displayName": "Price",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_revenuelabel": {
+          "displayName": "Revenue Label",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_year": {
+          "displayName": "Year",
+          "type": "int",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_DevexCapexStandardAssumptions": {
+      "entitySetName": "vsb_devexcapexstandardassumptionses",
+      "logicalName": "vsb_devexcapexstandardassumptions",
+      "attributeCount": 37,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "0",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_devexcapexstandardassumptions_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_applyvat": {
+          "displayName": "Apply VAT",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_applyvat"
+        },
+        "vsb_autoid": {
+          "displayName": "Auto ID",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_category": {
+          "displayName": "Category",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster1": {
+          "displayName": "Cluster 1",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_cluster1"
+        },
+        "vsb_cluster2": {
+          "displayName": "Cluster 2",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_cluster2"
+        },
+        "vsb_cluster3": {
+          "displayName": "Cluster 3",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_cluster3"
+        },
+        "vsb_cluster4": {
+          "displayName": "Cluster 4",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_cluster4"
+        },
+        "vsb_cluster5": {
+          "displayName": "Cluster 5",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_cluster5"
+        },
+        "vsb_comment": {
+          "displayName": "Comment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costamount": {
+          "displayName": "Cost Amount",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_costpaidby": {
+          "displayName": "Cost Paid By",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_country": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_depreciation": {
+          "displayName": "Depreciation",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_devexcapexstandardassumptions_vsb_depreciation"
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_descriptioninput": {
+          "displayName": "Description Input",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_devexcapexstandardassumptionsid": {
+          "displayName": "Devex/Capex Standard Assumptions",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_distributionfrequency": {
+          "displayName": "Distribution Frequency",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_subaccount": {
+          "displayName": "Subaccount",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_technology": {
+          "displayName": "Technology",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_unit": {
+          "displayName": "Unit",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_LandLeaseAllocationWTG": {
+      "entitySetName": "vsb_landleaseallocationwtgs",
+      "logicalName": "vsb_landleaseallocationwtg",
+      "attributeCount": 20,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_landleaseallocationwtg_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseallocationwtg_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_generatorinproject": {
+          "displayName": "Generator In Project",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_landleaseallocationwtgid": {
+          "displayName": "Land Lease Allocation WTG",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_projectcost": {
+          "displayName": "Project Cost",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_LandLeasePeriod": {
+      "entitySetName": "vsb_landleaseperiods",
+      "logicalName": "vsb_landleaseperiod",
+      "attributeCount": 31,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_landleaseperiod_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseperiod_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_aggregation": {
+          "displayName": "Aggregation",
+          "type": "picklist",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_distributionfrequency": {
+          "displayName": "Distribution Frequency",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_duration": {
+          "displayName": "Duration",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurmw": {
+          "displayName": "EUR/MW",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurmwh": {
+          "displayName": "EUR/MWh",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurwtg": {
+          "displayName": "EUR/WTG",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_fixedcosts": {
+          "displayName": "Fixed Costs",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_landleasedurationmonths": {
+          "displayName": "Land Lease duration months",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_landleasedurationyears": {
+          "displayName": "Land Lease duration years",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_landleaseperiodid": {
+          "displayName": "Land Lease Period",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_ofrevenues": {
+          "displayName": "% of Revenues",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_period": {
+          "displayName": "Period",
+          "type": "picklist",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_projectcost": {
+          "displayName": "Project Cost",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_startdate": {
+          "displayName": "Start Date",
+          "type": "datetime",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_LandLeaseProjectCost": {
+      "entitySetName": "vsb_landleaseprojectcosts",
+      "logicalName": "vsb_landleaseprojectcost",
+      "attributeCount": 38,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_landleaseprojectcost_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_allwtgallocated": {
+          "displayName": "AllWTGAllocated",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_vsb_allwtgallocated"
+        },
+        "vsb_amountonetimepayment": {
+          "displayName": "Amount One-Time Payment",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_amountonetimepayment2": {
+          "displayName": "Amount One-Time Payment 2",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_amountonetimepayment3": {
+          "displayName": "Amount One-Time Payment 3",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_currency": {
+          "displayName": "Currency",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_duedateonetimepayment": {
+          "displayName": "Due Date One-Time Payment",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_duedateonetimepayment2": {
+          "displayName": "Due Date One-Time Payment 2",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_duedateonetimepayment3": {
+          "displayName": "Due Date One-Time Payment 3",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationcountryarea": {
+          "displayName": "Inflation Country Area",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationprofile": {
+          "displayName": "Inflation Profile",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationstartyear": {
+          "displayName": "Inflation Start Year",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_isstandardcontract": {
+          "displayName": "Is Standard Contract?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_vsb_isstandardcontract"
+        },
+        "vsb_isstartdatestandardassumption": {
+          "displayName": "IsStartDateStandardAssumption",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_vsb_isstartdatestandardassumption"
+        },
+        "vsb_landleaseprojectcostid": {
+          "displayName": "Land Lease Project Cost",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_landowner": {
+          "displayName": "Land Owner",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_project": {
+          "displayName": "Project",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_secured": {
+          "displayName": "Secured",
+          "type": "picklist",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_subaccount": {
+          "displayName": "Subaccount",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_usecountryinflationprofile": {
+          "displayName": "Use Country Inflation Profile",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_vsb_usecountryinflationprofile"
+        },
+        "vsb_useinflationprofile": {
+          "displayName": "Use Inflation Profile",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleaseprojectcost_vsb_useinflationprofile"
+        }
+      }
+    },
+    "vsb_LandLeaseSubaccount": {
+      "entitySetName": "vsb_landleasesubaccounts",
+      "logicalName": "vsb_landleasesubaccount",
+      "attributeCount": 23,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_landleasesubaccount_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_landleasesubaccount_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_account": {
+          "displayName": "Account",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_costtype": {
+          "displayName": "Cost Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_landleasesubaccountid": {
+          "displayName": "Land Lease Subaccount",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_numbercapex": {
+          "displayName": "Number CAPEX",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_numberopex": {
+          "displayName": "Number OPEX",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "int",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_MilestonesStandardAssumptions": {
+      "entitySetName": "vsb_milestonesstandardassumptionses",
+      "logicalName": "vsb_milestonesstandardassumptions",
+      "attributeCount": 29,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_milestonesstandardassumptions_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_milestonesstandardassumptions_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster1": {
+          "displayName": "Cluster 1",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster2": {
+          "displayName": "Cluster 2",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster3": {
+          "displayName": "Cluster 3",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster4": {
+          "displayName": "Cluster 4",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_cluster5": {
+          "displayName": "Cluster 5",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_country": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_finalinvestmentdecision": {
+          "displayName": "Final Investment Decision",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_milestonesstandardassumptionsid": {
+          "displayName": "Milestones Standard Assumptions",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_operationallifetime": {
+          "displayName": "Operational Lifetime",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_salesduration": {
+          "displayName": "Sales End",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_salesstart": {
+          "displayName": "Sales Start",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_technology": {
+          "displayName": "Technology",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_OpexAccount": {
+      "entitySetName": "vsb_opexaccounts",
+      "logicalName": "vsb_opexaccount",
+      "attributeCount": 20,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_opexaccount_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexaccount_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_number": {
+          "displayName": "Number",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_opexaccountid": {
+          "displayName": "Opex Account",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "int",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_OpexProjectCost": {
+      "entitySetName": "vsb_opexprojectcosts",
+      "logicalName": "vsb_opexprojectcost",
+      "attributeCount": 47,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_opexprojectcost_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_aggregation": {
+          "displayName": "Aggregation",
+          "type": "picklist",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_alignwithprojectduration": {
+          "displayName": "Align With Project Duration",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_alignwithprojectduration"
+        },
+        "vsb_currency": {
+          "displayName": "Currency",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_description": {
+          "displayName": "Description",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_devicetypeinproject": {
+          "displayName": "DeviceTypeInProject",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_distributionfrequency": {
+          "displayName": "Distribution Frequency",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_duration": {
+          "displayName": "Duration",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurmw": {
+          "displayName": "EUR/MW",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurmwh": {
+          "displayName": "EUR/MWh",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_eurwtg": {
+          "displayName": "EUR/WTG",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_externalcontract": {
+          "displayName": "External Contract?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_externalcontract"
+        },
+        "vsb_fixcosts": {
+          "displayName": "Fix Costs",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationcountryarea": {
+          "displayName": "Inflation Country Area",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationprofile": {
+          "displayName": "Inflation Profile",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationstartyear": {
+          "displayName": "Inflation Start Year",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_isstandardcontract": {
+          "displayName": "Is Standard Contract?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_isstandardcontract"
+        },
+        "vsb_isstartdatestandardassumption": {
+          "displayName": "IsStartDateStandardAssumption",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_isstartdatestandardassumption"
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_ofrevenues": {
+          "displayName": "% of Revenues",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_opexprojectcostid": {
+          "displayName": "Opex Project Cost",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_opexprojectdurationmonths": {
+          "displayName": "Opex Project duration months",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_opexprojectdurationyears": {
+          "displayName": "Opex Project duration years",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_parentcost": {
+          "displayName": "Parent Cost",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_project": {
+          "displayName": "Project",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_startdate": {
+          "displayName": "Start Date",
+          "type": "datetime",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_subaccount": {
+          "displayName": "Subaccount",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_threshold": {
+          "displayName": "Threshold",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_threshold"
+        },
+        "vsb_thresholdindividual": {
+          "displayName": "Threshold individual",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_thresholdtype": {
+          "displayName": "Threshold Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_usecountryinflationprofile": {
+          "displayName": "Use Country Inflation Profile",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_usecountryinflationprofile"
+        },
+        "vsb_useinflationprofile": {
+          "displayName": "Use Inflation Profile",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexprojectcost_vsb_useinflationprofile"
+        }
+      }
+    },
+    "vsb_OpexSubaccount": {
+      "entitySetName": "vsb_opexsubaccounts",
+      "logicalName": "vsb_opexsubaccount",
+      "attributeCount": 22,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_opexsubaccount_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_opexsubaccount_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_account": {
+          "displayName": "Account",
+          "type": "lookup",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_costtype": {
+          "displayName": "Cost Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_number": {
+          "displayName": "Number",
+          "type": "nvarchar",
+          "requiredLevel": "required",
+          "optionSet": null
+        },
+        "vsb_opexsubaccountid": {
+          "displayName": "Opex Subaccount",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "int",
+          "requiredLevel": "required",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_Project": {
+      "entitySetName": "vsb_projects",
+      "logicalName": "vsb_project",
+      "attributeCount": 112,
+      "attributes": {
+        "createdby": {
+          "displayName": "Erstellt von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Erstellt von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Importsequenznummer",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Geändert von",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Geändert am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Geändert von (Stellvertreter)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Datensatz erstellt am",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Besitzer",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Besitzer (Unternehmenseinheit)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Besitzer (Team)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Besitzer (Benutzer)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_project_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Versionsnummer der Zeitzonenregel",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "Zeitzonencode für UTC-Konvertierung",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_acquisitiondate": {
+          "displayName": "Acquisition date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_acquisitionprice": {
+          "displayName": "Acquisition Price",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_annualdegradation": {
+          "displayName": "Annual Degradation",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_applicationsubmitted": {
+          "displayName": "3-Application submitted",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_approvalstates": {
+          "displayName": "Approval States",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_availabilitylosses": {
+          "displayName": "Availability Losses [%] ",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bidprice": {
+          "displayName": "Bid price",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_bopstandardcontractscreated": {
+          "displayName": "BoPStandardContractsCreated",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_bopstandardcontractscreated"
+        },
+        "vsb_capexstandardcontractscreated": {
+          "displayName": "CapexStandardContractsCreated",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_capexstandardcontractscreated"
+        },
+        "vsb_capexstandardcostscreated": {
+          "displayName": "CapexStandardCostsCreated",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_capexstandardcostscreated"
+        },
+        "vsb_clusterstate": {
+          "displayName": "Cluster State",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_clustersynchronized": {
+          "displayName": "Cluster Synchronized",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_clustersynchronized"
+        },
+        "vsb_construction": {
+          "displayName": "5-Construction",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_correctionfactor": {
+          "displayName": "Correction factor",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_country": {
+          "displayName": "Country",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_countryarea": {
+          "displayName": "Area/State/Province",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_deputyprojectmanagerentra": {
+          "displayName": "Deputy Project Manager",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_developmenttype": {
+          "displayName": "Development Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_district": {
+          "displayName": "District",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_enddate": {
+          "displayName": "End Date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_feasibilitystudies": {
+          "displayName": "1-Feasibility studies",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_feasibilitystudiesstandardassumption": {
+          "displayName": "1-Feasibility studies Standard Assumption ?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_feasibilitystudiesstandardassumption"
+        },
+        "vsb_finalinvestmentdecision": {
+          "displayName": "Final Investment Decision",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_financingoptions": {
+          "displayName": "Financing Options",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_flowapprovalid": {
+          "displayName": "FlowApprovalId",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_flowrunid": {
+          "displayName": "FlowRunId",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_grossyieldmwh": {
+          "displayName": "Gross Yield [MWh]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_inflationasymptote": {
+          "displayName": "Inflation asymptote",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_initialp50trigger": {
+          "displayName": "InitialP50Trigger",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_initialp50trigger"
+        },
+        "vsb_internalprojectid": {
+          "displayName": "Internal Project ID",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_irradiationkwhkwp": {
+          "displayName": "Irradiation [kWh/kWp]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_is3applicationsubmittedstandardassumption": {
+          "displayName": "Is 3-Application submitted Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_is3applicationsubmittedstandardassumption"
+        },
+        "vsb_is4legallybindingpermitsstandardassumption": {
+          "displayName": "Is 4-Legally binding permits Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_is4legallybindingpermitsstandardassumption"
+        },
+        "vsb_is5constructionstandardassumption": {
+          "displayName": "Is 5-Construction Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_is5constructionstandardassumption"
+        },
+        "vsb_isenddatestandardassumption": {
+          "displayName": "Is End Date Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_isenddatestandardassumption"
+        },
+        "vsb_isfinalinvestmentdecisionstandardassumption": {
+          "displayName": "Is Final Investment Decision Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_isfinalinvestmentdecisionstandardassumption"
+        },
+        "vsb_isoperationsstartdatecodstandardassumption": {
+          "displayName": "Is Operations startdate (COD) Standard Assumption",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_isoperationsstartdatecodstandardassumption"
+        },
+        "vsb_issalescompletiondatestandardassumption": {
+          "displayName": "Is Sales CompletionDate Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_issalescompletiondatestandardassumption"
+        },
+        "vsb_issalesstartdatestandardassumption": {
+          "displayName": "Is Sales StartDate Standard Assumption?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_issalesstartdatestandardassumption"
+        },
+        "vsb_isstandardshareoffarmdown": {
+          "displayName": "Is Standard Share of Farmdown?",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_isstandardshareoffarmdown"
+        },
+        "vsb_latitude": {
+          "displayName": "Latitude",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_legallybindingpermits": {
+          "displayName": "4-Legally binding permits",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_longitude": {
+          "displayName": "Longitude",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_municipality": {
+          "displayName": "Municipality",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_name": {
+          "displayName": "Project ID",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_netyieldp50": {
+          "displayName": "Net Yield p50",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_netyieldp75": {
+          "displayName": "Net Yield p75",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_netyieldp90": {
+          "displayName": "Net Yield p90",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_operationallifetime": {
+          "displayName": "Operational Lifetime",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_operationsstartdatecod": {
+          "displayName": "Operations start date (COD)",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_originalprojectname": {
+          "displayName": "Original Project Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_otherlosses": {
+          "displayName": "Other Losses [%]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_ownerpercentage": {
+          "displayName": "Owner Percentage",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_ownershiptype": {
+          "displayName": "Ownership Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_parkefficiency": {
+          "displayName": "Park Efficiency",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_parkenergyyieldmwh": {
+          "displayName": "Park Energy Yield [MWh]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_planthydrogencapacity": {
+          "displayName": "Plant Hydrogen Capacity [MW]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantpvcapacitymwp": {
+          "displayName": "Plant PV Capacity [MWp]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantpvcost": {
+          "displayName": "Plant PV Cost [EUR]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantstoragecapacity": {
+          "displayName": "Plant Storage Capacity [MW]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantsubstationcapacity": {
+          "displayName": "Plant Substation Capacity [MW]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantwtgcapacity": {
+          "displayName": "Plant WTG Capacity [MW]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_plantwtgcost": {
+          "displayName": "Plant WTG Cost [EUR]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_pmremindedtoinitiateupcomingclusterapprov": {
+          "displayName": "PM reminded to initiate upcoming Cluster approval",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_pmremindedtoinitiateupcomingclusterapprov"
+        },
+        "vsb_productiondesc": {
+          "displayName": "Production Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectdevelopmentstarted": {
+          "displayName": "2-Project development started",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectid": {
+          "displayName": "Project",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "vsb_projectinformations": {
+          "displayName": "Project Informations",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectmanager": {
+          "displayName": "Project Manager",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectname": {
+          "displayName": "Project Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectstartdate": {
+          "displayName": "Project Start Date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectstatus": {
+          "displayName": "Project Status",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projecttype": {
+          "displayName": "Project Type",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_salescompleted": {
+          "displayName": "Sales completed",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_salesstartdate": {
+          "displayName": "Sales Start Date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_shareoffarmdown": {
+          "displayName": "Share of Farmdown",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_shortname": {
+          "displayName": "Short Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_sposharepointurl": {
+          "displayName": "SPO Sharepoint URL",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_spoteamsurl": {
+          "displayName": "SPO Teams URL",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_spvcompanycode": {
+          "displayName": "SPV Company Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_spvlegalstructure": {
+          "displayName": "SPV Legal Structure",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_spvlegalstructure"
+        },
+        "vsb_spvname": {
+          "displayName": "SPV Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_standardcostcreated": {
+          "displayName": "Standard Cost Created",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_project_vsb_standardcostcreated"
+        },
+        "vsb_startcluster": {
+          "displayName": "Start Cluster",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_startdate": {
+          "displayName": "Start Date",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_startsales": {
+          "displayName": "Start sales",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_subtechnology1": {
+          "displayName": "Sub-Technology 1",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_subtechnology2": {
+          "displayName": "Sub-Technology 2",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_subtechnology3": {
+          "displayName": "Sub-Technology 3",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_taxfactor": {
+          "displayName": "Tax Factor [%]",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_technology": {
+          "displayName": "Technology",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_terrainsize": {
+          "displayName": "Terrain Size",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_terrainutilizationlookup": {
+          "displayName": "Utilization",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_totalcapacity": {
+          "displayName": "Total Capacity",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_weightedmw": {
+          "displayName": "WeightedMW",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_windspeedathubheight": {
+          "displayName": "Wind Speed at Hub Height [m/s]",
+          "type": "decimal",
+          "requiredLevel": "none",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_ProjectState": {
+      "entitySetName": "vsb_projectstates",
+      "logicalName": "vsb_projectstate",
+      "attributeCount": 21,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_projectstate_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_projectstate_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_clusterdescription": {
+          "displayName": "Cluster Description",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_isvisibleonchecklist": {
+          "displayName": "Is Visible On Checklist",
+          "type": "bit",
+          "requiredLevel": "none",
+          "optionSet": "vsb_projectstate_vsb_isvisibleonchecklist"
+        },
+        "vsb_name": {
+          "displayName": "Name",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_projectstateid": {
+          "displayName": "Project State",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        }
+      }
+    },
+    "vsb_SPVDevCoMappingCapexDevex": {
+      "entitySetName": "vsb_spvdevcomappingcapexdevexes",
+      "logicalName": "vsb_spvdevcomappingcapexdevex",
+      "attributeCount": 22,
+      "attributes": {
+        "createdby": {
+          "displayName": "Created By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdon": {
+          "displayName": "Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "createdonbehalfby": {
+          "displayName": "Created By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "importsequencenumber": {
+          "displayName": "Import Sequence Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedby": {
+          "displayName": "Modified By",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedon": {
+          "displayName": "Modified On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "modifiedonbehalfby": {
+          "displayName": "Modified By (Delegate)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "overriddencreatedon": {
+          "displayName": "Record Created On",
+          "type": "datetime",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "ownerid": {
+          "displayName": "Owner",
+          "type": "owner",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        },
+        "owningbusinessunit": {
+          "displayName": "Owning Business Unit",
+          "type": "lookup",
+          "requiredLevel": "0",
+          "optionSet": null
+        },
+        "owningteam": {
+          "displayName": "Owning Team",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "owninguser": {
+          "displayName": "Owning User",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "statecode": {
+          "displayName": "Status",
+          "type": "state",
+          "requiredLevel": "systemrequired",
+          "optionSet": "vsb_spvdevcomappingcapexdevex_statecode"
+        },
+        "statuscode": {
+          "displayName": "Status Reason",
+          "type": "status",
+          "requiredLevel": "none",
+          "optionSet": "vsb_spvdevcomappingcapexdevex_statuscode"
+        },
+        "timezoneruleversionnumber": {
+          "displayName": "Time Zone Rule Version Number",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "utcconversiontimezonecode": {
+          "displayName": "UTC Conversion Time Zone Code",
+          "type": "int",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_accountnumber": {
+          "displayName": "Account Number",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_devcospv": {
+          "displayName": "DevCo/SPV",
+          "type": "picklist",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_namesubaccount": {
+          "displayName": "Name (Sub-Account)",
+          "type": "lookup",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_order": {
+          "displayName": "Order",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_relatedaccountname": {
+          "displayName": "Related Account (Name)",
+          "type": "nvarchar",
+          "requiredLevel": "none",
+          "optionSet": null
+        },
+        "vsb_spvdevcomappingcapexdevexid": {
+          "displayName": "SPVDevCo Mapping Capex Devex",
+          "type": "primarykey",
+          "requiredLevel": "systemrequired",
+          "optionSet": null
+        }
+      }
+    }
+  }
+}

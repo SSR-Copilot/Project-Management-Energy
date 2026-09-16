@@ -1,0 +1,12 @@
+<environmentvariabledefinition schemaname="vsb_FabricSQLServer">
+  <apiid>/providers/microsoft.powerapps/apis/shared_sql</apiid>
+  <displayname default="Fabric SQL Server">
+    <label description="Fabric SQL Server" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.21.155</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>0</isrequired>
+  <parameterkey>server</parameterkey>
+  <secretstore>0</secretstore>
+  <type>100000004</type>
+</environmentvariabledefinition>

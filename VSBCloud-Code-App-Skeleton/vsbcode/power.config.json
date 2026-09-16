@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/power-apps-code-apps/main/schemas/power.config.schema.json",
+  "environmentId": "REPLACE_WITH_ENVIRONMENT_ID",
+  "appId": "",
+  "name": "vsbcloud",
+  "displayName": "VSBCloud",
+  "description": "VSBCloud Project Management and Project Costs, rebuilt as a Power Apps code app",
+  "webRoot": "dist",
+  "devServerPort": 3000,
+  "dataSources": []
+}

@@ -1,0 +1,2780 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_teams": {
+        "api": {
+          "name": "shared_teams"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedteams_92bc9"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365": {
+        "api": {
+          "name": "shared_office365"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365_4d338"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_commondataserviceforapps_1": {
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "new_sharedcommondataserviceforapps_60ba1"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_approvals-1": {
+        "api": {
+          "name": "shared_approvals"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedapprovals_f346e"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_sendmail-1": {
+        "api": {
+          "name": "shared_sendmail"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedsendmail_ccf66"
+        },
+        "runtimeSource": "embedded"
+      },
+      "shared_office365users": {
+        "api": {
+          "name": "shared_office365users"
+        },
+        "connection": {
+          "connectionReferenceLogicalName": "vsb_sharedoffice365users_7ec1c"
+        },
+        "runtimeSource": "embedded"
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)": {
+          "defaultValue": "andriy.chevychalov@xebia.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "vsb_VSBCloudServiceaccountmail"
+          }
+        },
+        "Environment Name (vsb_EnvironmentName)": {
+          "defaultValue": "Dev",
+          "type": "String",
+          "metadata": {
+            "schemaName": "vsb_EnvironmentName"
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "PowerAppV2",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "text_1": {
+                  "description": "Please enter your input",
+                  "title": "ProjectGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text_2": {
+                  "description": "Please enter your input",
+                  "title": "ProjectChecklistGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text_4": {
+                  "description": "Please enter your input",
+                  "title": "DefaultApprovalGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                },
+                "text": {
+                  "description": "Please enter your input",
+                  "title": "CurrentProjectStateGUID",
+                  "type": "string",
+                  "x-ms-content-hint": "TEXT",
+                  "x-ms-dynamically-added": true
+                }
+              },
+              "required": [
+                "text_1",
+                "text_2",
+                "text_4",
+                "text"
+              ]
+            }
+          },
+          "metadata": {
+            "operationMetadataId": "3a4267d6-3629-4172-9ff8-fd7310e628fa"
+          }
+        }
+      },
+      "actions": {
+        "Condition_on_Portfolio_Manager_Approval_is_required": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "not": {
+                  "equals": [
+                    "@coalesce(outputs('Checklist_Default_Approval')?['body/_vsb_portfoliomanagerid_value'],'empty')",
+                    "empty"
+                  ]
+                }
+              }
+            ]
+          },
+          "actions": {
+            "Try_portfolio_manager_approval": {
+              "type": "Scope",
+              "actions": {
+                "Switch": {
+                  "type": "Switch",
+                  "expression": "@outputs('Wait_for_portfolio_manager_approval')?['body/outcome']",
+                  "default": {
+                    "actions": {
+                      "Add_a_portfolio_manager_cancel_note": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectchecklisttrackingnotes",
+                            "item/vsb_name": "Gate meeting rejected - Project: @{outputs('Project')?['body/vsb_projectname']} - Check List: @{outputs('Project_Checklist')?['body/vsb_name']}",
+                            "item/vsb_comment": "Gate meeting rejected - Project: @{outputs('Project')?['body/vsb_projectname']} - Check List: @{outputs('Project_Checklist')?['body/vsb_name']} Portfolio Manager Comment - @{join(variables('arrApprovalResponsesComments'), ';')}",
+                            "item/vsb_notetype": 952850001,
+                            "item/vsb_ProjectChecklist@odata.bind": "@outputs('Project_Checklist')?['body/@odata.id']"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "CreateRecord",
+                            "connectionName": "shared_commondataserviceforapps_1"
+                          }
+                        },
+                        "runAfter": {
+                          "Update_a_row_state_tracking_to_in_progress": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "a6b19b86-7fa5-4323-8e91-ec598d4ece01"
+                        }
+                      },
+                      "Apply_to_each_project_default_notifications_and_contributor-copy": {
+                        "type": "Foreach",
+                        "foreach": "@variables('arrGateMeetingNotificationRecipients')",
+                        "actions": {
+                          "Compose_notification_recipient_email_1": {
+                            "type": "Compose",
+                            "inputs": "@items('Apply_to_each_project_default_notifications_and_contributor-copy')?['PersonaRole']",
+                            "metadata": {
+                              "operationMetadataId": "466973be-d3f5-4593-9444-0cf37ebc6111"
+                            }
+                          },
+                          "Post_card_in_a_chat_or_channel-copy": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "poster": "Flow bot",
+                                "location": "Chat with Flow bot",
+                                "body/recipient": "@{outputs('Compose_notification_recipient_email_1')};",
+                                "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting rejected for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"style\": \"heading\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting rejected for Project **@{outputs('Project')?['body/vsb_projectname']}** by Project Manager/ Developer @{outputs('Project_Manager')?['body/displayName']}, was rejected by Portfolio Manager @{outputs('Portfolio_Manager')?['body/displayName']}.\\n\\nRequest Due Date: @{outputs('Project_Checklist')?['body/vsb_approvalduedate']}\\n\\nRequest comment: @{outputs('Project_Checklist')?['body/vsb_approvalcomment']}\\n\",\n      \"wrap\": true,\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n     @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}",
+                                "body/isAlert": true
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                "operationId": "PostCardToConversation",
+                                "connectionName": "shared_teams"
+                              }
+                            },
+                            "runAfter": {
+                              "Compose_notification_recipient_email_1": [
+                                "Succeeded"
+                              ]
+                            },
+                            "metadata": {
+                              "operationMetadataId": "43e633b2-a56f-4fe4-8346-2536911af061"
+                            }
+                          },
+                          "Send_an_email_(V2)_2": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "emailMessage/To": "@outputs('Compose_notification_recipient_email_1')",
+                                "emailMessage/Subject": "Check List @{triggerBody()?['text_2']} meeting rejected for Project @{outputs('Project')?['body/vsb_projectname']}  ",
+                                "emailMessage/Body": "<script type=\"application/adaptivecard+json\" >\n{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n  \"version\": \"1.4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting rejected for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"style\": \"heading\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting rejected for Project **@{outputs('Project')?['body/vsb_projectname']}** by Project Manager/ Developer @{outputs('Project_Manager')?['body/displayName']}, was rejected by Portfolio Manager @{outputs('Portfolio_Manager')?['body/displayName']}.\\n\\nRequest Due Date: @{outputs('Project_Checklist')?['body/vsb_approvalduedate']}\\n\\nRequest comment: @{outputs('Project_Checklist')?['body/vsb_approvalcomment']}\\n\",\n      \"wrap\": true,\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n     @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}\n</script>",
+                                "emailMessage/Importance": "Normal"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                "operationId": "SendEmailV2",
+                                "connectionName": "shared_office365"
+                              }
+                            },
+                            "runAfter": {
+                              "Compose_notification_recipient_email_1": [
+                                "Succeeded"
+                              ]
+                            },
+                            "metadata": {
+                              "operationMetadataId": "222e9f52-6c36-4d6a-abaf-c6e9f859698b"
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "Add_a_portfolio_manager_cancel_note": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "1f4196c3-a8c6-4ca0-aab7-96171b62c032"
+                        }
+                      },
+                      "Update_a_row_state_tracking_to_in_progress": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectchecklists",
+                            "recordId": "@outputs('Project_Checklist')?['body/vsb_projectchecklistid']",
+                            "item/vsb_approvalcheckliststate": 952850000,
+                            "item/vsb_approvalcomment": "@null",
+                            "item/vsb_approvalduedate": "@null",
+                            "item/vsb_approvalstepstatecode": 952850003,
+                            "item/vsb_flowapprovalid": "@null",
+                            "item/vsb_flowrunid": "@null"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "UpdateRecord",
+                            "connectionName": "shared_commondataserviceforapps_1"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "2b66ecd7-5333-4de2-bf34-de8ab673183d"
+                        }
+                      }
+                    }
+                  },
+                  "cases": {
+                    "Case": {
+                      "actions": {
+                        "Apply_to_each_project_default_notifications_and_contributor": {
+                          "type": "Foreach",
+                          "foreach": "@variables('arrGateMeetingNotificationRecipients')",
+                          "actions": {
+                            "Compose_notification_recipient_email": {
+                              "type": "Compose",
+                              "inputs": "@items('Apply_to_each_project_default_notifications_and_contributor')?['PersonaRole']",
+                              "metadata": {
+                                "operationMetadataId": "466973be-d3f5-4593-9444-0cf37ebc6111"
+                              }
+                            },
+                            "Post_card_in_a_chat_or_channel_1": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "parameters": {
+                                  "poster": "Flow bot",
+                                  "location": "Chat with Flow bot",
+                                  "body/recipient": "@{outputs('Compose_notification_recipient_email')};",
+                                  "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting initiated for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"style\": \"heading\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting initiated for Project **@{outputs('Project')?['body/vsb_projectname']} by Project Manager/ Developer @{outputs('Project_Manager')?['body/displayName']}, was approved by Portfolio Manager @{outputs('Portfolio_Manager')?['body/displayName']}.\\n\\nRequest Due Date: @{outputs('Project_Checklist')?['body/vsb_approvalduedate@OData.Community.Display.V1.FormattedValue']}\\n\\nRequest comment: @{outputs('Project_Checklist')?['body/vsb_approvalcomment']}\\n\",\n      \"wrap\": true,\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}",
+                                  "body/isAlert": true
+                                },
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                  "operationId": "PostCardToConversation",
+                                  "connectionName": "shared_teams"
+                                }
+                              },
+                              "runAfter": {
+                                "Compose_notification_recipient_email": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "metadata": {
+                                "operationMetadataId": "d37309f6-06b4-49ef-837a-a9eb7719aaf0"
+                              }
+                            },
+                            "Send_an_email_(V2)_1": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "parameters": {
+                                  "emailMessage/To": "@outputs('Compose_notification_recipient_email')",
+                                  "emailMessage/Subject": "Check List @{triggerBody()?['text_2']} meeting initiated for Project @{outputs('Project')?['body/vsb_projectname']}  ",
+                                  "emailMessage/Body": "<script type=\"application/adaptivecard+json\" >\n{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n  \"version\": \"1.4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting initiated for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"style\": \"heading\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** meeting initiated for Project **@{outputs('Project')?['body/vsb_projectname']} by Project Manager/ Developer @{outputs('Project_Manager')?['body/displayName']}, was approved by Portfolio Manager @{outputs('Portfolio_Manager')?['body/displayName']}.\\n\\nRequest Due Date: @{outputs('Project_Checklist')?['body/vsb_approvalduedate@OData.Community.Display.V1.FormattedValue']}\\n\\nRequest comment: @{outputs('Project_Checklist')?['body/vsb_approvalcomment']}\\n\",\n      \"wrap\": true,\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}\n</script>",
+                                  "emailMessage/Importance": "Normal"
+                                },
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "connectionName": "shared_office365"
+                                }
+                              },
+                              "runAfter": {
+                                "Compose_notification_recipient_email": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "metadata": {
+                                "operationMetadataId": "5fa872da-dfde-4d7b-8a81-d7e15302b85a"
+                              }
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "1f4196c3-a8c6-4ca0-aab7-96171b62c032"
+                          }
+                        },
+                        "Set_boolPortfolioManagerApproved_true": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "boolPortfolioManagerApproved",
+                            "value": true
+                          },
+                          "metadata": {
+                            "operationMetadataId": "730f632a-9346-46cc-9892-199c6181cf92"
+                          }
+                        },
+                        "GateMeeting_Teams_Card_to_Portfolio_Manager": {
+                          "type": "Scope",
+                          "actions": {
+                            "Post_adaptive_card_and_wait_for_a_gate_voting": {
+                              "type": "OpenApiConnectionWebhook",
+                              "inputs": {
+                                "parameters": {
+                                  "poster": "Flow bot",
+                                  "location": "Chat with Flow bot",
+                                  "body/body/messageBody": "{\n    \"$schema\": \"https://adaptivecards.io/schemas/adaptive-card.json\",\n    \"type\": \"AdaptiveCard\",\n    \"version\": \"1.5\",\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"size\": \"Large\",\n            \"weight\": \"Bolder\",\n            \"id\": \"Title\",\n            \"text\": \"Initiate  voting for Project **@{outputs('Project')?['body/vsb_projectname']}** Check List **@{outputs('Project_Checklist')?['body/vsb_name']}**\",\n            \"horizontalAlignment\": \"Left\",\n            \"isSubtle\": false,\n            \"style\": \"heading\"\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"Please confirm when the  meeting for Project @{outputs('Project')?['body/vsb_projectname']} Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** took place in order to initiate voting.\\n\\nRequest Due Date: **@{formatDateTime(outputs('Project_Checklist')?['body/vsb_approvalduedate'],'ddd, MMM. dd, yyyy')}**\\n\\nRequest comment: @{outputs('Project_Checklist')?['body/vsb_approvalcomment']}\\n\",\n            \"wrap\": true\n        },\n        {\n            \"id\": \"outGateMeetingDate\",\n            \"type\": \"Input.Date\",\n            \"errorMessage\": \"Please enter date, when gate meeting took place.\",\n            \"placeholder\": \"Gate Meeting Date\",\n            \"isRequired\": true\n        },\n      {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n     @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n    ],\n    \"actions\": [\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Submit\"\n        }\n    ],\n    \"verticalContentAlignment\": \"Center\",\n    \"lang\": \"en\"\n}",
+                                  "body/body/recipient/to": "@{variables('strPortfolioManagerEmail')};",
+                                  "body/body/recipient/isAlert": true
+                                },
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                  "operationId": "PostCardAndWaitForResponse",
+                                  "connectionName": "shared_teams"
+                                }
+                              },
+                              "metadata": {
+                                "operationMetadataId": "4212db39-6df4-4278-95f4-5ed7e4851c95"
+                              }
+                            },
+                            "Compose_outGateMeetingDate": {
+                              "type": "Compose",
+                              "inputs": "@formatDateTime(body('Post_adaptive_card_and_wait_for_a_gate_voting')?['data/outGateMeetingDate'],'ddd, MMM. dd, yyyy')",
+                              "runAfter": {
+                                "Post_adaptive_card_and_wait_for_a_gate_voting": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "metadata": {
+                                "operationMetadataId": "626455b7-0d64-431e-ac84-4d7df6705705"
+                              }
+                            },
+                            "Update_a_row_set_uncoming_gate_meeting_": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "parameters": {
+                                  "entityName": "vsb_projectchecklists",
+                                  "recordId": "@triggerBody()?['text_2']",
+                                  "item/vsb_gatemeetingcompleted": true
+                                },
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                  "operationId": "UpdateOnlyRecord",
+                                  "connectionName": "shared_commondataserviceforapps_1"
+                                }
+                              },
+                              "runAfter": {
+                                "Compose_outGateMeetingDate": [
+                                  "Succeeded"
+                                ],
+                                "Post_adaptive_card_and_wait_for_a_gate_voting": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "metadata": {
+                                "operationMetadataId": "2f9a1e22-e5cb-4ef1-80a7-a226ac7be877"
+                              }
+                            },
+                            "Add_a_uncoming_gate_meeting_note": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "parameters": {
+                                  "entityName": "vsb_projectchecklisttrackingnotes",
+                                  "item/vsb_name": "Gate meeting finished",
+                                  "item/vsb_comment": "Gate meeting of project @{outputs('Project')?['body/vsb_projectname']} -> checklist @{outputs('Project_Checklist')?['body/vsb_name']} took place on @{outputs('Compose_outGateMeetingDate')}.",
+                                  "item/vsb_notetype": 952850000,
+                                  "item/vsb_ProjectChecklist@odata.bind": "@outputs('Project_Checklist')?['body/@odata.id']"
+                                },
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                                  "operationId": "CreateRecord",
+                                  "connectionName": "shared_commondataserviceforapps_1"
+                                }
+                              },
+                              "runAfter": {
+                                "Update_a_row_set_uncoming_gate_meeting_": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "metadata": {
+                                "operationMetadataId": "6caff5e1-536b-44ac-8e86-bfab25e047ae"
+                              }
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "d1ee809c-7a89-45d8-b0ac-f054ad627144"
+                          }
+                        },
+                        "Add_a_portfolio_manager_init_note": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "entityName": "vsb_projectchecklisttrackingnotes",
+                              "item/vsb_name": "Gate meeting initiated - Project: @{outputs('Project')?['body/vsb_projectname']} - Checklist: @{outputs('Project_Checklist')?['body/vsb_name']} ",
+                              "item/vsb_comment": "Portfolio Manager Comment - @{join(variables('arrApprovalResponsesComments'), ';')}",
+                              "item/vsb_note": "@outputs('Compose_HTML_table_portfolio_manager')",
+                              "item/vsb_notetype": 952850002,
+                              "item/vsb_ProjectChecklist@odata.bind": "vsb_projectchecklists(@{triggerBody()?['text_2']})"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                              "operationId": "CreateRecord",
+                              "connectionName": "shared_commondataserviceforapps_1"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "2b5ee5fe-36aa-44ae-bdb8-bb833aecb2a0"
+                          }
+                        }
+                      },
+                      "case": "Approve"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_HTML_table_portfolio_manager": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "39bc6c90-5d76-47a2-aa43-1fd373b69ae5"
+                  }
+                },
+                "Apply_to_each_portfolio_manager_approval": {
+                  "type": "Foreach",
+                  "foreach": "@outputs('Wait_for_portfolio_manager_approval')?['body/responses']",
+                  "actions": {
+                    "Append_to_array_portfolio_manager_responses": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrAprovalResponses",
+                        "value": "@outputs('Compose_approval_row')"
+                      },
+                      "runAfter": {
+                        "Compose_approval_row": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "c9e0140e-f1f6-4fd1-b73c-5d0734c54681"
+                      }
+                    },
+                    "Compose_response_date": {
+                      "type": "Compose",
+                      "inputs": "@item()?['responseDate']",
+                      "metadata": {
+                        "operationMetadataId": "72b7ec53-2cb3-4fa9-95fe-0a25e34d0037"
+                      }
+                    },
+                    "Compose_approval_row": {
+                      "type": "Compose",
+                      "inputs": "<tr>\n\t<td  @{variables('strStyleTableRow')}>@{formatDateTime(outputs('Compose_response_date'), 'ddd, MMM. dd, yyyy hh:mm', 'de-DE')}</td>\n\t<td @{variables('strStyleTableRow')}> @{items('Apply_to_each_portfolio_manager_approval')?['approverResponse']}</td>\n\t<td @{variables('strStyleTableRow')}>@{items('Apply_to_each_portfolio_manager_approval')?['comments']}</td>\n\t<td @{variables('strStyleTableRow')}>@{items('Apply_to_each_portfolio_manager_approval')?['responder/displayName']}</td>\n</tr>",
+                      "runAfter": {
+                        "Compose_response_date": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "e73ca16b-2e81-41f0-a8f4-66816c8507ab"
+                      }
+                    },
+                    "Condition_check_if_comments_not_null": {
+                      "type": "If",
+                      "expression": {
+                        "and": [
+                          {
+                            "not": {
+                              "equals": [
+                                "@items('Apply_to_each_portfolio_manager_approval')?['comments']",
+                                "@null"
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Append_to_array_portfolio_manager_responses_comments": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "arrApprovalResponsesComments",
+                            "value": "@item()?['comments']"
+                          },
+                          "metadata": {
+                            "operationMetadataId": "88900c88-4fba-4351-b8ab-392bc2014099"
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Append_to_array_portfolio_manager_responses": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "c3d5a703-fe8d-40b3-b9dc-6e644549cb90"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Wait_for_portfolio_manager_approval": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "e6b676f6-13b3-4c14-94d5-ac3d6256cbe5"
+                  }
+                },
+                "Compose_HTML_table_portfolio_manager": {
+                  "type": "Compose",
+                  "inputs": "<table style='border: 1px solid #dededf; height: 100%; width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 1px; text-align: left;'>\n<thead>\n\t<tr>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px; text-wrap:nowrap;'>Completed On</th>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Response</th>\n\t\t<th style='font-size: 12px; width: 40%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Comments</th>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Completed By</th>\n\t</tr>\n</thead>\n<tbody>\n@{join(variables('arrAprovalResponses'), decodeUriComponent('%0A'))}\n</tbody></table>",
+                  "runAfter": {
+                    "Apply_to_each_portfolio_manager_approval": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9c5a7f81-9005-48f3-a28b-8a1d681e0c9f"
+                  }
+                },
+                "Wait_for_portfolio_manager_approval": {
+                  "type": "OpenApiConnectionWebhook",
+                  "inputs": {
+                    "parameters": {
+                      "approvalName": "@outputs('Create_portfolio_manager_approval')?['body/name']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                      "operationId": "WaitForAnApproval",
+                      "connectionName": "shared_approvals-1"
+                    }
+                  },
+                  "runAfter": {
+                    "Respond_to_a_Power_App_or_flow_1": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "7ada35b9-f932-42c8-b813-2c4abd43a456"
+                  }
+                },
+                "Create_portfolio_manager_approval": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "approvalType": "Basic",
+                      "ApprovalCreationInput/title": "Check List \"@{outputs('Project_Checklist')?['body/vsb_name']}\" meeting requested for Project \"@{outputs('Project')?['body/vsb_projectname']}\"",
+                      "ApprovalCreationInput/assignedTo": "@{outputs('Portfolio_Manager')?['body/mail']};",
+                      "ApprovalCreationInput/details": "Project Manager/Developer **@{outputs('Project_Manager')?['body/displayName']}** requests Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** approval for Project **@{outputs('Project')?['body/vsb_projectname']}**.\nPlease confirm to initiate the gate process. \n\nRequest Due Date: **@{formatDateTime(outputs('Project_Checklist')?['body/vsb_approvalduedate'],'ddd, MMM. dd, yyyy')}**\n\nRequest comment: **@{outputs('Project_Checklist')?['body/vsb_approvalcomment']}**\n\n\n**Project details:**\n| Name | Value |\n|-----------|----------|\n@{outputs('Project_Details')}\n\n",
+                      "ApprovalCreationInput/requestor": "@outputs('Requester_Email')",
+                      "ApprovalCreationInput/enableNotifications": true,
+                      "ApprovalCreationInput/enableReassignment": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                      "operationId": "CreateAnApproval",
+                      "connectionName": "shared_approvals-1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "89ed0dc8-93df-4aaa-af09-85c49e229207"
+                  }
+                },
+                "Respond_to_a_Power_App_or_flow_1": {
+                  "type": "Response",
+                  "kind": "PowerApp",
+                  "inputs": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "runid": {
+                          "title": "RunId",
+                          "x-ms-dynamically-added": true,
+                          "type": "string"
+                        },
+                        "approvalid": {
+                          "title": "ApprovalId",
+                          "x-ms-dynamically-added": true,
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": {}
+                    },
+                    "statusCode": 200,
+                    "body": {
+                      "runid": "@{variables('FlowRunId')}",
+                      "approvalid": "@{outputs('Create_portfolio_manager_approval')?['body/name']}"
+                    }
+                  },
+                  "runAfter": {
+                    "Update_a_row_portfolio_manager_approval_flow_data": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "4b5fbeea-9ec3-4fe4-9b8e-d0392da710bf"
+                  }
+                },
+                "Update_a_row_portfolio_manager_approval_flow_data": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectchecklists",
+                      "recordId": "@triggerBody()?['text_2']",
+                      "item/vsb_approvalstepstatecode": 952850000,
+                      "item/vsb_flowapprovalid": "@outputs('Create_portfolio_manager_approval')?['body/name']",
+                      "item/vsb_flowrunid": "@variables('FlowRunId')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "UpdateRecord",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_portfolio_manager_approval": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "3fbe7fa0-eb2a-4e99-8d9c-affee6fc66f6"
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "5b9eae61-d690-4b2b-b19c-cdb2d968d23c"
+              }
+            },
+            "Catch_portfolio_manager_approval": {
+              "type": "Scope",
+              "actions": {
+                "Filter_result_from_approval_Cluster_State": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@result('Try_portfolio_manager_approval')",
+                    "where": "@or(equals(item()?['Status'], 'Failed'),equals(item()?['Status'], 'TimedOut'))"
+                  },
+                  "metadata": {
+                    "operationMetadataId": "46c65a39-3fc7-4d50-b1c8-173b9f236c1c"
+                  }
+                },
+                "Create_HTML_table_of_controlling_approvals": {
+                  "type": "Table",
+                  "inputs": {
+                    "from": "@body('Filter_result_from_approval_Cluster_State')",
+                    "format": "HTML",
+                    "columns": [
+                      {
+                        "header": "Action",
+                        "value": "@item()?['name']"
+                      },
+                      {
+                        "header": "Status",
+                        "value": "@item()?['Status']"
+                      },
+                      {
+                        "header": "ErrorMessage",
+                        "value": "@item()?['error']?['message']"
+                      }
+                    ]
+                  },
+                  "runAfter": {
+                    "Filter_result_from_approval_Cluster_State": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "81e75d84-5369-444b-afa9-98c167988f51"
+                  }
+                },
+                "Send_an_email_notification_(V3)": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "request/to": "@parameters('VSB Cloud Serviceaccount mail (vsb_VSBCloudServiceaccountmail)')",
+                      "request/subject": "[@{parameters('Environment Name (vsb_EnvironmentName)')}] Error:  RC100,  to approve project [@{triggerBody()?['text_1']}]",
+                      "request/text": "<p class=\"editor-paragraph\">your request was interrupted, controlling cannot approve your project<br>@{body('Create_HTML_table_of_controlling_approvals')}<br>Your Support Team</p>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sendmail",
+                      "operationId": "SendEmailV3",
+                      "connectionName": "shared_sendmail-1"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_HTML_table_of_controlling_approvals": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "f189ccce-1f8d-413e-a8a6-e4893494c095"
+                  }
+                }
+              },
+              "runAfter": {
+                "Try_portfolio_manager_approval": [
+                  "TimedOut",
+                  "Skipped",
+                  "Failed"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "cabbcfda-8dd6-40c6-96f2-425e0ae068db"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Prepare_Notifications_Array": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "3a7e3ae0-a44c-48f1-9cdd-daa8f200ae4d"
+          }
+        },
+        "Initialize_FlowRunId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "FlowRunId",
+                "type": "string",
+                "value": "@{split(workflow()?['run/id'],'runs/')?[1]}"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "cd221449-342c-43ff-a6dd-586eacaf280a"
+          }
+        },
+        "Initialize_strApprovalMode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strApprovalMode",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "6879cb76-2041-4980-bed4-04a56f869513"
+          }
+        },
+        "Initialize_arrDefaultNotifications": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrDefaultNotifications",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c5989394-b5d0-405c-941a-3c65181935e1"
+          }
+        },
+        "Is_ApprovalMode_Only_Notifications": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "contains": [
+                  "@outputs('Checklist_Default_Approval')?['body/vsb_defaultnotifications']",
+                  "PersonaRole"
+                ]
+              },
+              {
+                "equals": [
+                  "@variables('strApprovalMode')",
+                  "Only Notifications"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Apply_to_each_approvals_notifications_for_approved": {
+              "type": "Foreach",
+              "foreach": "@body('Default_Notifications')",
+              "actions": {
+                "Post_card_in_a_chat_or_channel": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/recipient": "@{item()?['PersonaRole']};",
+                      "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** is completed for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}",
+                      "body/isAlert": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "operationId": "PostCardToConversation",
+                      "connectionName": "shared_teams"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "9a9fdda4-8e94-4556-97fd-962c6f02510f"
+                  }
+                },
+                "Send_an_email_(V2)": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "emailMessage/To": "@{item()?['PersonaRole']};",
+                      "emailMessage/Subject": "Checklist: @{outputs('Project_Checklist')?['body/vsb_name']} is completed for project @{outputs('Project')?['body/vsb_projectname']}",
+                      "emailMessage/Body": "<script type=\"application/adaptivecard+json\" >\n{\n\"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n\"type\": \"AdaptiveCard\",\n\"version\": \"1.4\",\n\"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n\"body\": [\n{\n\"type\": \"TextBlock\",\n\"size\": \"Large\",\n\"weight\": \"Bolder\",\n\"id\": \"Title\",\n\"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** is completed for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n\"horizontalAlignment\": \"Left\",\n\"isSubtle\": false,\n\"wrap\": true\n},\n{\n\"type\": \"Container\",\n\"items\": [\n{\n\"type\": \"TextBlock\",\n\"wrap\": true,\n\"height\": \"stretch\"\n}\n],\n\"separator\": true,\n\"minHeight\": \"32px\"\n},\n{\n\"type\": \"TextBlock\",\n\"text\": \"Project details:\",\n\"weight\": \"Bolder\",\n\"size\": \"Large\",\n\"horizontalAlignment\": \"Left\",\n\"isSubtle\": true\n},\n{\n\"type\": \"ColumnSet\",\n\"spacing\": \"Small\",\n\"columns\": [\n{\n\"type\": \"Column\",\n\"width\": \"stretch\",\n\"items\": [\n{\n\"type\": \"TextBlock\",\n\"text\": \"Name\",\n\"weight\": \"Bolder\",\n}\n]\n},\n{\n\"type\": \"Column\",\n\"width\": \"stretch\",\n\"items\": [\n{\n\"type\": \"TextBlock\",\n\"text\": \"Value\",\n\"weight\": \"Bolder\",\n}\n]\n}\n]\n},\n@{join(variables('arrAdaptiveCardProjectDetails'),',')}\n]\n}</script>",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "operationId": "SendEmailV2",
+                      "connectionName": "shared_office365"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a236f577-9921-4d04-b95c-43213127bc3c"
+                  }
+                }
+              },
+              "runAfter": {
+                "Respond_to_a_Power_App_or_flow_2": [
+                  "SUCCEEDED"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "78b34aa1-c08f-444f-b5ac-374ff9d500fa"
+              }
+            },
+            "Update_Checklist_Tracking": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectchecklists",
+                  "recordId": "@triggerBody()?['text_2']",
+                  "item/vsb_approvalcheckliststate": 952850002,
+                  "item/vsb_approvalstepstatecode": 952850003,
+                  "item/vsb_flowapprovalid": "ONLY-NOTI-FICA-TION",
+                  "item/vsb_flowrunid": "@variables('FlowRunId')",
+                  "item/vsb_taskstate": 952850003
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "bd960091-b39f-44ac-ad1a-f27a883b61b5"
+              }
+            },
+            "Respond_to_a_Power_App_or_flow_2": {
+              "type": "Response",
+              "kind": "PowerApp",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runid": {
+                      "title": "RunId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    },
+                    "approvalid": {
+                      "title": "ApprovalId",
+                      "x-ms-dynamically-added": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": {}
+                },
+                "statusCode": 200,
+                "body": {
+                  "runid": "@{variables('FlowRunId')}",
+                  "approvalid": "NOTIFICATION-ONLY"
+                }
+              },
+              "runAfter": {
+                "Update_Checklist_Tracking": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "9f491dde-ae83-4730-92fa-5395528bcd27"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Terminate_on_required_approvers_did_not_approve": [
+              "Succeeded",
+              "Skipped",
+              "TimedOut",
+              "Failed"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "7b42fef9-6cc6-432d-8c63-01d8fe004df8"
+          }
+        },
+        "Update_Checklist_Task_State_to_Completed": {
+          "type": "Scope",
+          "actions": {
+            "Update_a_row": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectchecklists",
+                  "recordId": "@triggerBody()?['text_2']",
+                  "item/vsb_approvalcheckliststate": 952850002,
+                  "item/vsb_approvalstepstatecode": 952850002,
+                  "item/vsb_taskstate": 952850003
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "UpdateOnlyRecord",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "17dab9b8-d6f8-4efe-90e8-5da53dc7436c"
+              }
+            }
+          },
+          "runAfter": {
+            "Is_ApprovalMode_Only_Notifications": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "7539a376-6dc2-494f-98f6-7951dc7eaaa2"
+          }
+        },
+        "Initialize_arrShareholdingEntities": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrShareholdingEntities",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "5cd2b688-8b23-44c7-bb55-9e0385845fbc"
+          }
+        },
+        "Initialize_arrAdaptiveCardProjectDetails": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrAdaptiveCardProjectDetails",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "c61c3d52-ba53-4779-a4a2-573bbc5509d3"
+          }
+        },
+        "Initialize_boolPortfolioManagerApproved": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "boolPortfolioManagerApproved",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "13106dea-2ce3-4cd9-a3df-d5f31e2e99b5"
+          }
+        },
+        "Initialize_boolApproversApproved": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "boolApproversApproved",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "87660fb3-b0ac-427a-9e2e-5afa4d941dba"
+          }
+        },
+        "Terminate_on_required_approvers_did_not_approve": {
+          "type": "If",
+          "expression": {
+            "or": [
+              {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@outputs('Checklist_Default_Approval')?['body/_vsb_portfoliomanagerid_value']",
+                        "@null"
+                      ]
+                    }
+                  },
+                  {
+                    "equals": [
+                      "@variables('boolPortfolioManagerApproved')",
+                      "@false"
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "contains": [
+                      "@outputs('Checklist_Default_Approval')?['body/vsb_defaultapprovers']",
+                      "PersonaRole"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('boolApproversApproved')",
+                      "@false"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Terminate_3": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Cancelled"
+              },
+              "metadata": {
+                "operationMetadataId": "9f9678cc-472c-4a6f-bf4d-711b8523c164"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Condition_on_Approvers_Approval_is_required": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "2d025fbc-1384-4601-9697-7537c7d72b71"
+          }
+        },
+        "Requester_Email": {
+          "type": "Compose",
+          "inputs": "@triggerOutputs()?['headers/x-ms-user-email']",
+          "runAfter": {
+            "Initialize_FlowRunId": [
+              "Succeeded"
+            ],
+            "Initialize_strApprovalMode": [
+              "Succeeded"
+            ],
+            "Initialize_arrDefaultNotifications": [
+              "Succeeded"
+            ],
+            "Initialize_arrShareholdingEntities": [
+              "Succeeded"
+            ],
+            "Initialize_arrAdaptiveCardProjectDetails": [
+              "Succeeded"
+            ],
+            "Initialize_boolPortfolioManagerApproved": [
+              "Succeeded"
+            ],
+            "Initialize_boolApproversApproved": [
+              "Succeeded"
+            ],
+            "Initialize_arrGateMeetingNotificationRecipients": [
+              "Succeeded"
+            ],
+            "Initialize_strStyleTableRow": [
+              "Succeeded"
+            ],
+            "Initialize_arrAprovalResponses": [
+              "Succeeded"
+            ],
+            "Initialize_arrApprovalResponsesComents": [
+              "Succeeded"
+            ],
+            "Initialize_arrApproverMails": [
+              "Succeeded"
+            ],
+            "Initialize_arrApprovalResponses": [
+              "Succeeded"
+            ],
+            "Initialize_arrAdaptiveCardApprovalResponseRows": [
+              "Succeeded"
+            ],
+            "Initialize_variable": [
+              "Succeeded"
+            ],
+            "Initialize_variable_1": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "48397e65-912c-426f-b095-449f77976c47"
+          }
+        },
+        "Retrieve_Dataverse_Records": {
+          "type": "Scope",
+          "actions": {
+            "Project": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projects",
+                  "recordId": "@triggerBody()?['text_1']",
+                  "$expand": "vsb_Country($select=vsb_name,vsb_title,vsb_isocode), vsb_CountryArea($select=vsb_name)"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "6a7dec3d-34f3-4a3e-81f6-a4ac59e1939a"
+              }
+            },
+            "Checklist_Default_Approval": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_checklistdefaultapprovalses",
+                  "recordId": "@triggerBody()?['text_4']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "3a22ce09-58b1-4459-9eae-332ec3f0a1ae"
+              }
+            },
+            "Current_Project_State": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectstates",
+                  "recordId": "@triggerBody()?['text']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "4499fad1-13ab-40c1-8227-b232d8ba8093"
+              }
+            },
+            "Project_Manager": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "id": "@outputs('Project')?['body/_vsb_projectmanager_value']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                  "operationId": "UserProfile_V2",
+                  "connectionName": "shared_office365users"
+                }
+              },
+              "runAfter": {
+                "Project": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "286db1c8-d242-4ddd-bb6e-3927312ad0de"
+              }
+            },
+            "Set_strApprovalMode": {
+              "type": "Switch",
+              "expression": "@outputs('Checklist_Default_Approval')?['body/vsb_approvalmodecode']",
+              "default": {
+                "actions": {}
+              },
+              "cases": {
+                "Formal_Approval_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Formal_Approval": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Formal Approval"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "07eb82e1-82bc-4387-b5c8-ed82b44a1355"
+                      }
+                    }
+                  },
+                  "case": 952850000
+                },
+                "Local_Approval_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Local_Approval": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Local Approval"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "9494d1b2-c401-4df8-a602-72ec889aca08"
+                      }
+                    }
+                  },
+                  "case": 952850001
+                },
+                "Only_Notifications_1": {
+                  "actions": {
+                    "Set_strApprovalMode_to_Only_Notifications": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strApprovalMode",
+                        "value": "Only Notifications"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "2d5ab38b-d61b-4c3e-a287-537fdf9a1e19"
+                      }
+                    }
+                  },
+                  "case": 952850002
+                }
+              },
+              "runAfter": {
+                "Checklist_Default_Approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "f00dbd8e-1559-43b8-93f3-a97afe9e8f39"
+              }
+            },
+            "Portfolio_Manager": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "id": "@outputs('Checklist_Default_Approval')?['body/_vsb_portfoliomanagerid_value']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users",
+                  "operationId": "UserProfile_V2",
+                  "connectionName": "shared_office365users"
+                }
+              },
+              "runAfter": {
+                "Current_Project_State": [
+                  "Succeeded"
+                ],
+                "Checklist_Default_Approval": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "8d6f533b-4300-48fd-aa2d-8946f23ba34b"
+              }
+            },
+            "Compose_Project_Details": {
+              "type": "Scope",
+              "actions": {
+                "List_Projects_Shareholding_Entities": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_shareholderentitiies",
+                      "$filter": "_vsb_project_value eq @{outputs('Project')?['body/vsb_projectid']}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "e6c63822-d5b1-47fc-b266-d2b44eb1c828"
+                  }
+                },
+                "Shareholding_Entities": {
+                  "type": "Compose",
+                  "inputs": "@join(\r\n  variables('arrShareholdingEntities'),\r\n  '; '\r\n)",
+                  "runAfter": {
+                    "For_each_1": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "594870f9-6d47-41e0-8405-d2bb3ddc57b8"
+                  }
+                },
+                "Select": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@outputs('List_Projects_Shareholding_Entities')?['body/value']",
+                    "select": {
+                      "Result": "@if(\r\n  greater(length(string(item()?['vsb_shareholderentitiytype'])), 0),\r\n  concat(\r\n    item()?['vsb_shareholderentitiytype@OData.Community.Display.V1.FormattedValue'],\r\n    ' - ',\r\n    formatNumber(item()?['vsb_ownership'], '##0.0# %')\r\n  ),\r\n  concat(\r\n    item()?['vsb_customname'],\r\n    ' - ',\r\n    formatNumber(item()?['vsb_ownership'], '##0.0# %')\r\n  )\r\n)"
+                    }
+                  },
+                  "runAfter": {
+                    "List_Projects_Shareholding_Entities": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "5573ed9f-81df-436f-bd9d-8b1c1c247c47"
+                  }
+                },
+                "List_Project_Planning": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectplannings",
+                      "$filter": "_vsb_project_value eq @{outputs('Project')?['body/vsb_projectid']}",
+                      "$top": 1
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "ListRecords",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "bd306fe5-b9b1-4089-8018-e93697fae3e8"
+                  }
+                },
+                "Repowering": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  greaterOrEquals(length(outputs('List_Project_Planning')?['body/value']),1),\r\n  string(first(outputs('List_Project_Planning')?['body/value'])?['vsb_repowering@OData.Community.Display.V1.FormattedValue']),\r\n  'N/A'\r\n)",
+                  "runAfter": {
+                    "List_Project_Planning": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "fe494e9b-ac4c-4ab4-a427-c71e66051222"
+                  }
+                },
+                "Cooperation": {
+                  "type": "Compose",
+                  "inputs": "@if(\r\n  greaterOrEquals(length(outputs('List_Project_Planning')?['body/value']),1),\r\n  string(first(outputs('List_Project_Planning')?['body/value'])?['vsb_cooperation@OData.Community.Display.V1.FormattedValue']),\r\n  'N/A'\r\n)",
+                  "runAfter": {
+                    "List_Project_Planning": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "edd27d86-d3b7-4a87-8e88-cdec479c9494"
+                  }
+                },
+                "For_each_1": {
+                  "type": "Foreach",
+                  "foreach": "@outputs('Select')['body']",
+                  "actions": {
+                    "Append_to_array_variable": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrShareholdingEntities",
+                        "value": "@items('For_each_1')?['Result']"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "6394da59-6606-466f-8963-16ef611f6302"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Select": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d3ac9540-cc79-4464-b7f9-c5dd2c57192d"
+                  }
+                },
+                "Scope": {
+                  "type": "Scope",
+                  "actions": {
+                    "Project_Details": {
+                      "type": "Compose",
+                      "inputs": "| Project Name | @{outputs('Project')?['body/vsb_projectname']} |\n| Project Manager | @{outputs('Project_Manager')?['body/displayName']} |\n| Technology | @{outputs('Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']} |\n| Project Status | @{outputs('Current_Project_State')?['body/vsb_name']} |\n| Country\t | @{outputs('Project')?['body/vsb_country/vsb_name']} |\n| Area/State/Province  | @{outputs('Project')?['body/vsb_countryarea/vsb_name']} |\n| Shareholding Entities | @{outputs('Shareholding_Entities')} |\n| Repowering | @{if(greaterOrEquals(length(outputs('Repowering')),2),outputs('Repowering'),'N/A')} |\n| Cooperation | @{if(greaterOrEquals(length(outputs('Cooperation')),2),outputs('Cooperation'),'N/A')} |",
+                      "metadata": {
+                        "operationMetadataId": "63a057c6-849a-4eaf-858a-132197eb8b43"
+                      }
+                    },
+                    "Adaptive_Card_Project_Details": {
+                      "type": "Compose",
+                      "inputs": [
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Name",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_projectname']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Manager",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project_Manager')?['body/displayName']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Technology",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_technology@OData.Community.Display.V1.FormattedValue']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Project Status",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Current_Project_State')?['body/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Country",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_country/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Area/State/Province",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Project')?['body/vsb_countryarea/vsb_name']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Shareholding Entities",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{outputs('Shareholding_Entities')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Repowering",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{if(greaterOrEquals(length(outputs('Repowering')),2),outputs('Repowering'),'N/A')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        },
+                        {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "Cooperation",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{if(greaterOrEquals(length(outputs('Cooperation')),2),outputs('Cooperation'),'N/A')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        }
+                      ],
+                      "metadata": {
+                        "operationMetadataId": "fb148717-287a-4586-a34a-445c8a716d08"
+                      }
+                    },
+                    "Set_variable": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "arrAdaptiveCardProjectDetails",
+                        "value": "@outputs('Adaptive_Card_Project_Details')"
+                      },
+                      "runAfter": {
+                        "Adaptive_Card_Project_Details": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "37d65ab0-fc18-4690-b61f-d50da990d19d"
+                      }
+                    },
+                    "Set_variable_1": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "strProjectDeatils",
+                        "value": "@outputs('Project_Details')"
+                      },
+                      "runAfter": {
+                        "Project_Details": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "e4fae0f4-8e51-40cc-a5b5-345d955d6a77"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Shareholding_Entities": [
+                      "Succeeded"
+                    ],
+                    "Repowering": [
+                      "Succeeded"
+                    ],
+                    "Cooperation": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a3467ea1-0c5e-4ff4-8a0c-bf5b39cac02e"
+                  }
+                }
+              },
+              "runAfter": {
+                "Current_Project_State": [
+                  "Succeeded"
+                ],
+                "Project_Checklist": [
+                  "Succeeded"
+                ],
+                "Set_strApprovalMode": [
+                  "Succeeded"
+                ],
+                "Set_variable_2": [
+                  "Succeeded",
+                  "Skipped",
+                  "Failed",
+                  "TimedOut"
+                ],
+                "Project": [
+                  "Succeeded"
+                ],
+                "Checklist_Default_Approval": [
+                  "Succeeded"
+                ],
+                "Project_Manager": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "9269bde9-1c31-4b53-bfcc-944af89921a7"
+              }
+            },
+            "Project_Checklist": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "entityName": "vsb_projectchecklists",
+                  "recordId": "@triggerBody()?['text_2']"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_commondataserviceforapps_1"
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "758af60f-7c50-4faa-af32-d25608b40f81"
+              }
+            },
+            "Set_variable_2": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "strPortfolioManagerEmail",
+                "value": "@outputs('Portfolio_Manager')?['body/mail']"
+              },
+              "runAfter": {
+                "Portfolio_Manager": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "0b054828-3ec3-4ff7-b362-8693e1eece53"
+              }
+            }
+          },
+          "runAfter": {
+            "Requester_Email": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "a8038dd4-e574-4933-989a-3493b887cf34"
+          }
+        },
+        "Initialize_arrGateMeetingNotificationRecipients": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrGateMeetingNotificationRecipients",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "5e76f633-a12c-4ffc-83f9-cdc5cb13b55b"
+          }
+        },
+        "Initialize_strStyleTableRow": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strStyleTableRow",
+                "type": "string",
+                "value": "style='font-size: 11px; border: 1px solid #dededf; background-color: #ffffff; color: #000000; padding: 5px;'"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "7de9472d-7f68-47f6-a979-cdc1d6e2202d"
+          }
+        },
+        "Initialize_arrAprovalResponses": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrAprovalResponses",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "ed5010ae-463c-4130-9d11-2efd6f4738e2"
+          }
+        },
+        "Initialize_arrApprovalResponsesComents": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrApprovalResponsesComments",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "0b130e62-3170-4235-bd28-0cc67b3797ac"
+          }
+        },
+        "Prepare_Notifications_Array": {
+          "type": "Scope",
+          "actions": {
+            "Default_Notifications": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@coalesce(outputs('Checklist_Default_Approval')?['body/vsb_defaultnotifications'],'[]')",
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "PersonaRole": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "PersonaRole"
+                    ]
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "86ee3027-6e12-4b73-9435-32f823c750d8"
+              }
+            },
+            "Set_array_to_all_DefaultNotifications": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "arrGateMeetingNotificationRecipients",
+                "value": "@body('Default_Notifications')"
+              },
+              "runAfter": {
+                "Default_Notifications": [
+                  "Succeeded"
+                ]
+              },
+              "metadata": {
+                "operationMetadataId": "248bd34b-df08-4acd-958c-7913717fd860"
+              }
+            }
+          },
+          "runAfter": {
+            "Retrieve_Dataverse_Records": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fbd7a9d7-17b6-469c-a74e-d34a534c2567"
+          }
+        },
+        "Appending_Contributors_to_Notifications_Array": {
+          "type": "Scope",
+          "actions": {
+            "Condition_1": {
+              "type": "If",
+              "expression": {
+                "or": [
+                  {
+                    "contains": [
+                      "@coalesce(outputs('Checklist_Default_Approval')?['body/vsb_defaultcontributors'],'')",
+                      "PersonaRole"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Default_Contributors": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@outputs('Checklist_Default_Approval')?['body/vsb_defaultcontributors']",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "PersonaRole": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "PersonaRole"
+                        ]
+                      }
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "86ee3027-6e12-4b73-9435-32f823c750d8"
+                  }
+                },
+                "For_each": {
+                  "type": "Foreach",
+                  "foreach": "@body('Default_Contributors')",
+                  "actions": {
+                    "Append_Contributor_to_array": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrGateMeetingNotificationRecipients",
+                        "value": "@items('For_each')"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "2f4da1f7-b514-408d-a29c-e6829dfaa0a1"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Default_Contributors": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "73a75b25-9ba0-4506-aeac-4f23f2886aa3"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "metadata": {
+                "operationMetadataId": "89b8fd43-cdde-40cc-81ba-cd9601e53862"
+              }
+            }
+          },
+          "runAfter": {
+            "Condition_on_Portfolio_Manager_Approval_is_required": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "359f20b9-4896-44b5-8ef5-8dd35445bd35"
+          }
+        },
+        "Initialize_arrApproverMails": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrApproverMails",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "008cd86c-c0df-45e8-b636-99983bac1454"
+          }
+        },
+        "Initialize_arrApprovalResponses": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrApprovalResponses",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "0586b5ef-5b48-4e64-b0ff-97e4b780bf3e"
+          }
+        },
+        "Initialize_arrAdaptiveCardApprovalResponseRows": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arrAdaptiveCardApprovalResponseRows",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "e026c393-8c88-4802-940d-1052ded9b4f9"
+          }
+        },
+        "Condition_on_Approvers_Approval_is_required": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "contains": [
+                  "@outputs('Checklist_Default_Approval')?['body/vsb_defaultapprovers']",
+                  "PersonaRole"
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Try_approvals": {
+              "type": "Scope",
+              "actions": {
+                "Parse_JSON_of_project_default_approvals": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@outputs('Checklist_Default_Approval')?['body/vsb_defaultapprovers']",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "PersonaRole": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "PersonaRole"
+                        ]
+                      }
+                    }
+                  },
+                  "metadata": {
+                    "operationMetadataId": "d0cb8175-1d4b-4803-b0a5-29cbf03c2537"
+                  }
+                },
+                "Wait_for_an_approvals": {
+                  "type": "OpenApiConnectionWebhook",
+                  "inputs": {
+                    "parameters": {
+                      "approvalName": "@outputs('Create_an_approvals')?['body/name']"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                      "operationId": "WaitForAnApproval",
+                      "connectionName": "shared_approvals-1"
+                    }
+                  },
+                  "runAfter": {
+                    "Update_a_row_for_approvals_flow_data": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "cebcb38e-ed67-4dc6-a353-51597b19ac6d"
+                  }
+                },
+                "Filter_array_approved_responses": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@outputs('Wait_for_an_approvals')?['body/responses']",
+                    "where": "@equals(item()?['approverResponse'],'Approve')"
+                  },
+                  "runAfter": {
+                    "Select_approver_responses": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "a53a4383-443e-439f-afa2-c06574aa53b7"
+                  }
+                },
+                "Compose_approved_responses_count": {
+                  "type": "Compose",
+                  "inputs": "@length(body('Filter_array_approved_responses'))",
+                  "runAfter": {
+                    "Filter_array_approved_responses": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "c567210c-f8fe-4bbf-b97d-1df47fb8d52d"
+                  }
+                },
+                "Apply_to_each_approvals_response": {
+                  "type": "Foreach",
+                  "foreach": "@outputs('Wait_for_an_approvals')?['body/responses']",
+                  "actions": {
+                    "Compose_approvals_table_row": {
+                      "type": "Compose",
+                      "inputs": "<tr>\n\t<td  @{variables('strStyleTableRow')}>@{formatDateTime(items('Apply_to_each_approvals_response')?['responseDate'], 'ddd, MMM. dd, yyyy hh:mm')}</td>\n\t<td @{variables('strStyleTableRow')}> @{items('Apply_to_each_approvals_response')?['approverResponse']}</td>\n\t<td @{variables('strStyleTableRow')}>@{items('Apply_to_each_approvals_response')?['comments']}</td>\n\t<td @{variables('strStyleTableRow')}>@{items('Apply_to_each_approvals_response')?['responder/displayName']}</td>\n</tr>",
+                      "metadata": {
+                        "operationMetadataId": "1709546c-14f0-4375-92b2-a9038fb28f56"
+                      }
+                    },
+                    "Append_to_array_variable_1": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrApprovalResponses",
+                        "value": "@outputs('Compose_approvals_table_row')"
+                      },
+                      "runAfter": {
+                        "Compose_approvals_table_row": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "4da6eea8-e9a9-4601-b8a2-7003fb7ec0b6"
+                      }
+                    },
+                    "Append_to_arrAdaptiveCardApprovalResponseRows": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrAdaptiveCardApprovalResponseRows",
+                        "value": {
+                          "type": "ColumnSet",
+                          "spacing": "Small",
+                          "columns": [
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{items('Apply_to_each_approvals_response')?['responder/displayName']}",
+                                  "wrap": true
+                                }
+                              ]
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{items('Apply_to_each_approvals_response')?['approverResponse']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{formatDateTime(items('Apply_to_each_approvals_response')?['requestDate'], 'ddd, MMM. dd, yyyy hh:mm')}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            },
+                            {
+                              "type": "Column",
+                              "width": "stretch",
+                              "items": [
+                                {
+                                  "type": "TextBlock",
+                                  "text": "@{items('Apply_to_each_approvals_response')?['comments']}",
+                                  "wrap": true
+                                }
+                              ],
+                              "separator": true
+                            }
+                          ],
+                          "separator": true
+                        }
+                      },
+                      "metadata": {
+                        "operationMetadataId": "7c813ed8-9b32-46ff-81eb-dcc0642260c6"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_approved_responses_count": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "6e977682-7e9f-48d3-9dfd-068cfc5ddfa3"
+                  }
+                },
+                "Compose_HTML_table__of_approvals_responses": {
+                  "type": "Compose",
+                  "inputs": "<table style='border: 1px solid #dededf; height: 100%; width: 100%; table-layout: fixed; border-collapse: collapse; border-spacing: 1px; text-align: left;'>\n<thead>\n\t<tr>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px; text-wrap:nowrap;'>Completed On</th>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Response</th>\n\t\t<th style='font-size: 12px; width: 40%; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Comments</th>\n\t\t<th style='font-size: 12px; border: 1px solid #dededf;background-color: #eceff1; color: #000000;padding: 5px;'>Completed By</th>\n\t</tr>\n</thead>\n<tbody>\n@{join(variables('arrApprovalResponses'), decodeUriComponent('%0A'))}\n</tbody></table>",
+                  "runAfter": {
+                    "Apply_to_each_approvals_response": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "8102c073-b745-41e6-9c6e-8837f31c7498"
+                  }
+                },
+                "Create_an_approvals": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "approvalType": "CustomResponseAwaitAll",
+                      "ApprovalCreationInput/responseOptions": [
+                        "Approve",
+                        "Reject"
+                      ],
+                      "ApprovalCreationInput/title": "Check List \"@{outputs('Project_Checklist')?['body/vsb_name']}\" approval requested for Project \"@{outputs('Project')?['body/vsb_projectname']}\"",
+                      "ApprovalCreationInput/assignedTo": "@{join(variables('arrApproverMails'),';')};",
+                      "ApprovalCreationInput/details": "@{if(\r\n greater(length(coalesce(outputs('Portfolio_Manager')?['body/displayName'],'')),1),\r\n concat(\r\n  'Portfolio Manager **',\r\n  outputs('Portfolio_Manager')?['body/displayName'],\r\n  '** confirmed **Checklist: ',\r\n  outputs('Project_Checklist')?['body/vsb_name'],\r\n  '** meeting for project **',\r\n  outputs('Project')?['body/vsb_projectname'],\r\n  '** took place on **',\r\n  formatDateTime(body('Post_adaptive_card_and_wait_for_a_gate_voting')?['data/outGateMeetingDate'],'ddd, MMM. dd, yyyy'),\r\n  '**. ',decodeUriComponent('%0A')),\r\n  ''\r\n)}\nRequest Due Date: **@{formatDateTime(outputs('Project_Checklist')?['body/vsb_approvalduedate'],'ddd, MMM. dd, yyyy')}**\n\nRequest comment: **@{outputs('Project_Checklist')?['body/vsb_approvalcomment']}**\n\n**Please approve or reject Check List completion.**\n\n**Project Details:**\n| Name | Value |\n|-----------|----------|\n@{variables('strProjectDeatils')}",
+                      "ApprovalCreationInput/requestor": "@outputs('Requester_Email')",
+                      "ApprovalCreationInput/enableNotifications": true,
+                      "ApprovalCreationInput/enableReassignment": true
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+                      "operationId": "CreateAnApproval",
+                      "connectionName": "shared_approvals-1"
+                    }
+                  },
+                  "runAfter": {
+                    "Apply_to_each": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "95d568e4-098b-45b6-aa19-5d0d2f4e1c17"
+                  }
+                },
+                "Condition_2": {
+                  "type": "If",
+                  "expression": {
+                    "or": [
+                      {
+                        "and": [
+                          {
+                            "greater": [
+                              "@float(outputs('Compose_approved_responses_count'))",
+                              "@div(\r\n  float(length(\r\n   outputs('Wait_for_an_approvals')?['body/responses']\r\n   )),\r\n   2\r\n)"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Apply_to_each_approvals_notifications_for_approved_1": {
+                      "type": "Foreach",
+                      "foreach": "@variables('arrGateMeetingNotificationRecipients')",
+                      "actions": {
+                        "Post_card_in_a_chat_or_channel-copy_1": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "poster": "Flow bot",
+                              "location": "Chat with Flow bot",
+                              "body/recipient": "@{item()?['PersonaRole']};",
+                              "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** completion **approved** based on majority voting for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n     {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed By\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Response\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed On\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Comments\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardApprovalResponseRows'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}",
+                              "body/isAlert": true
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                              "operationId": "PostCardToConversation",
+                              "connectionName": "shared_teams"
+                            }
+                          },
+                          "metadata": {
+                            "operationMetadataId": "46cf8799-93b1-4eb4-a46a-dfd621280fa1"
+                          }
+                        },
+                        "Send_an_email_(V2)_3": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "emailMessage/To": "@{item()?['PersonaRole']};",
+                              "emailMessage/Subject": "Check List: @{outputs('Project_Checklist')?['body/vsb_name']} completion approved based on majority voting for Project @{outputs('Project')?['body/vsb_projectname']}",
+                              "emailMessage/Body": "<script type=\"application/adaptivecard+json\" >\n{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n\"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n  \"version\": \"1.4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** completion **approved** based on majority voting for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n     {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed By\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Response\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed On\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Comments\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardApprovalResponseRows'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}\n</script>\n",
+                              "emailMessage/Importance": "Normal"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                              "operationId": "SendEmailV2",
+                              "connectionName": "shared_office365"
+                            }
+                          },
+                          "runAfter": {
+                            "Post_card_in_a_chat_or_channel-copy_1": [
+                              "Succeeded"
+                            ]
+                          },
+                          "metadata": {
+                            "operationMetadataId": "14f5a459-72c6-4085-8d2e-9cf2602f2e93"
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Add_a_new_row": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "78b34aa1-c08f-444f-b5ac-374ff9d500fa"
+                      }
+                    },
+                    "Set_boolApproversApproved_true": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "boolApproversApproved",
+                        "value": true
+                      },
+                      "metadata": {
+                        "operationMetadataId": "9093bc7c-a17e-46f6-bbf6-4e7153ff9c03"
+                      }
+                    },
+                    "Update_a_row_1": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_projectchecklists",
+                          "recordId": "@triggerBody()?['text_2']",
+                          "item/vsb_approvalcheckliststate": 952850002,
+                          "item/vsb_approvalstepstatecode": 952850003
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "UpdateOnlyRecord",
+                          "connectionName": "shared_commondataserviceforapps_1"
+                        }
+                      },
+                      "metadata": {
+                        "operationMetadataId": "48db3c02-ef50-4d90-a93d-0d782b805d94"
+                      }
+                    },
+                    "Add_a_new_row": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "entityName": "vsb_projectchecklisttrackingnotes",
+                          "item/vsb_name": "Approval requested - Checklist completion was approved",
+                          "item/vsb_comment": "Approval requested - Checklist completion was approved",
+                          "item/vsb_note": "@outputs('Compose_HTML_table__of_approvals_responses')",
+                          "item/vsb_notetype": 952850002,
+                          "item/vsb_ProjectChecklist@odata.bind": "@outputs('Project_Checklist')?['body/@odata.id']"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                          "operationId": "CreateRecord",
+                          "connectionName": "shared_commondataserviceforapps_1"
+                        }
+                      },
+                      "runAfter": {
+                        "Update_a_row_1": [
+                          "Succeeded"
+                        ]
+                      },
+                      "metadata": {
+                        "operationMetadataId": "0e89eab1-02e7-4d27-af9c-0be749a964dc"
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Apply_to_each_approvals_notifications_for_rejected": {
+                        "type": "Foreach",
+                        "foreach": "@variables('arrGateMeetingNotificationRecipients')",
+                        "actions": {
+                          "Post_card_in_a_chat_or_channel-copy-copy": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "poster": "Flow bot",
+                                "location": "Chat with Flow bot",
+                                "body/recipient": "@{item()?['PersonaRole']};",
+                                "body/messageBody": "{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** completion **rejected** based on majority voting for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n     {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed By\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Response\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed On\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Comments\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardApprovalResponseRows'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}",
+                                "body/isAlert": true
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                "operationId": "PostCardToConversation",
+                                "connectionName": "shared_teams"
+                              }
+                            },
+                            "metadata": {
+                              "operationMetadataId": "96a28e5e-f4c2-4205-9258-a7ac9916b507"
+                            }
+                          },
+                          "Send_an_email_(V2)_4": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "parameters": {
+                                "emailMessage/To": "@{item()?['PersonaRole']};",
+                                "emailMessage/Subject": "Check List: @{outputs('Project_Checklist')?['body/vsb_name']} completion rejected based on majority voting for Project @{outputs('Project')?['body/vsb_projectname']}",
+                                "emailMessage/Body": "<script type=\"application/adaptivecard+json\" >\n{\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"type\": \"AdaptiveCard\",\n\"originator\": \"999b1b59-33a5-4539-ab8c-d68dfadfcdb4\",\n  \"version\": \"1.4\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"id\": \"Title\",\n      \"text\": \"Check List **@{outputs('Project_Checklist')?['body/vsb_name']}** completion **rejected** based on majority voting for Project **@{outputs('Project')?['body/vsb_projectname']}**\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": false,\n      \"wrap\": true\n    },\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n     {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed By\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Response\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Completed On\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Comments\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardApprovalResponseRows'),',')},\n    {\n      \"type\": \"Container\",\n      \"items\": [\n        {\n          \"type\": \"TextBlock\",\n          \"wrap\": true,\n          \"height\": \"stretch\"\n        }\n      ],\n      \"separator\": true,\n      \"minHeight\": \"32px\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"Project details:\",\n      \"weight\": \"Bolder\",\n      \"size\": \"Large\",\n      \"horizontalAlignment\": \"Left\",\n      \"isSubtle\": true\n    },\n    {\n      \"type\": \"ColumnSet\",\n      \"spacing\": \"Small\",\n      \"columns\": [\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Name\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        },\n        {\n          \"type\": \"Column\",\n          \"width\": \"stretch\",\n          \"items\": [\n            {\n              \"type\": \"TextBlock\",\n              \"text\": \"Value\",\n              \"weight\": \"Bolder\",\n              \"style\": \"columnHeader\"\n            }\n          ]\n        }\n      ]\n    },\n    @{join(variables('arrAdaptiveCardProjectDetails'),',')}\n  ]\n}\n</script>",
+                                "emailMessage/Importance": "Normal"
+                              },
+                              "host": {
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                "operationId": "SendEmailV2",
+                                "connectionName": "shared_office365"
+                              }
+                            },
+                            "runAfter": {
+                              "Post_card_in_a_chat_or_channel-copy-copy": [
+                                "Succeeded"
+                              ]
+                            },
+                            "metadata": {
+                              "operationMetadataId": "4719523a-dc4e-4d42-9c6b-cf3196d9e4c1"
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "Add_a_approvals_rejected_note": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "cfff5a23-ced3-4f7d-a542-585f2106a9f9"
+                        }
+                      },
+                      "Update_a_row_approvals_state_tracking_to_in_progress": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectchecklists",
+                            "recordId": "@triggerBody()?['text_2']",
+                            "item/vsb_approvalcheckliststate": 952850001,
+                            "item/vsb_approvalstepstatecode": 952850003,
+                            "item/vsb_flowapprovalid": "@null",
+                            "item/vsb_flowrunid": "@null"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "UpdateRecord",
+                            "connectionName": "shared_commondataserviceforapps_1"
+                          }
+                        },
+                        "metadata": {
+                          "operationMetadataId": "f34055ff-3381-4dc2-89c5-bdc362a07b2a"
+                        }
+                      },
+                      "Terminate": {
+                        "type": "Terminate",
+                        "inputs": {
+                          "runStatus": "Cancelled"
+                        },
+                        "runAfter": {
+                          "Apply_to_each_approvals_notifications_for_rejected": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "32ed28d8-0b7f-4d71-b592-1bc99bb6357d"
+                        }
+                      },
+                      "Add_a_approvals_rejected_note": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "parameters": {
+                            "entityName": "vsb_projectchecklisttrackingnotes",
+                            "item/vsb_name": "Approval requested - Checklist completion was rejected",
+                            "item/vsb_comment": "Approval requested - Checklist completion was rejected",
+                            "item/vsb_note": "@outputs('Compose_HTML_table__of_approvals_responses')",
+                            "item/vsb_notetype": 952850002,
+                            "item/vsb_ProjectChecklist@odata.bind": "@outputs('Project_Checklist')?['body/@odata.id']"
+                          },
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                            "operationId": "CreateRecord",
+                            "connectionName": "shared_commondataserviceforapps_1"
+                          }
+                        },
+                        "runAfter": {
+                          "Update_a_row_approvals_state_tracking_to_in_progress": [
+                            "Succeeded"
+                          ]
+                        },
+                        "metadata": {
+                          "operationMetadataId": "aaef6bad-0d50-42c7-bdd9-258d409d5bc9"
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_HTML_table__of_approvals_responses": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "ac167174-186e-4773-949c-2cfc5197c724"
+                  }
+                },
+                "Apply_to_each": {
+                  "type": "Foreach",
+                  "foreach": "@body('Parse_JSON_of_project_default_approvals')",
+                  "actions": {
+                    "Append_to_array_variable_2": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "arrApproverMails",
+                        "value": "@item()['PersonaRole']"
+                      },
+                      "metadata": {
+                        "operationMetadataId": "dcd4f01a-06f0-4990-b593-3407274869f3"
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Parse_JSON_of_project_default_approvals": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "f853aa1f-7165-425d-8cad-704bc1cbf5f9"
+                  }
+                },
+                "Update_a_row_for_approvals_flow_data": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "entityName": "vsb_projectchecklists",
+                      "recordId": "@triggerBody()?['text_2']",
+                      "item/vsb_approvalcheckliststate": 952850001,
+                      "item/vsb_approvalstepstatecode": 952850002,
+                      "item/vsb_flowapprovalid": "@outputs('Create_an_approvals')?['body/name']",
+                      "item/vsb_flowrunid": "@variables('FlowRunId')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                      "operationId": "UpdateRecord",
+                      "connectionName": "shared_commondataserviceforapps_1"
+                    }
+                  },
+                  "runAfter": {
+                    "Respond_to_a_Power_App_or_flow": [
+                      "Succeeded",
+                      "TimedOut",
+                      "Skipped",
+                      "Failed"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "450f49cd-444a-47ca-ad21-bd32faa3a45f"
+                  }
+                },
+                "Select_approver_responses": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@outputs('Wait_for_an_approvals')?['body/responses']",
+                    "select": {
+                      "ApproverResponse": "@item()?['approverResponse']"
+                    }
+                  },
+                  "runAfter": {
+                    "Wait_for_an_approvals": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "b1e05531-5322-4504-aa66-b3d364e32d45"
+                  }
+                },
+                "Respond_to_a_Power_App_or_flow": {
+                  "type": "Response",
+                  "kind": "PowerApp",
+                  "inputs": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "runid": {
+                          "title": "RunId",
+                          "x-ms-dynamically-added": true,
+                          "type": "string"
+                        },
+                        "approvalid": {
+                          "title": "ApprovalId",
+                          "x-ms-dynamically-added": true,
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": {}
+                    },
+                    "statusCode": 200,
+                    "body": {
+                      "runid": "@{variables('FlowRunId')}",
+                      "approvalid": "@{outputs('Create_an_approvals')?['body/name']}"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_an_approvals": [
+                      "Succeeded"
+                    ]
+                  },
+                  "metadata": {
+                    "operationMetadataId": "73c3dc21-ca30-4836-9e1f-0b0107de792e"
+                  }
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "7b7b4612-1aba-4690-991b-9817528aa2ba"
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Appending_Contributors_to_Notifications_Array": [
+              "Succeeded",
+              "Skipped"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "1a434394-6c3a-45e8-baae-3d1f62247fb9"
+          }
+        },
+        "Initialize_variable": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strProjectDeatils",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "17dcbfd7-bc47-453b-a903-7bbd7bfc5cca"
+          }
+        },
+        "Initialize_variable_1": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "strPortfolioManagerEmail",
+                "type": "string"
+              }
+            ]
+          },
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "5ab9544c-9d12-4677-8c35-ee51d5f71b41"
+          }
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}
