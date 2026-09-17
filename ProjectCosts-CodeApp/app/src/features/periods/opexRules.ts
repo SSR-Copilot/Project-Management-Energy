@@ -1993,6 +1993,13 @@ export function omAlignWarningVisible(
  */
 export const OPEX_MSG = {
   /**
+   * `ico_ResetStartDay_NewEditCost_OPEXCosts.Tooltip` (`:5949`) — the same string the Land
+   * Lease icon carries. Ours said "Reset to the standard assumption date.", which is not what
+   * the button does: it puts the project's COD back.
+   */
+  resetStartDateTooltip: "Reset to current project COD date.",
+
+  /**
    * `lbl_OpexCosts_Content_GeneratorsInProject_Instruction.Text` (`:309`) — verbatim.
    * Visible when the device gallery is empty and the rail item is Operation & Maintenance.
    */

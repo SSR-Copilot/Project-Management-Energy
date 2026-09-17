@@ -36,7 +36,7 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowCounterclockwiseRegular, ChevronDownRegular, ChevronUpRegular,
+  AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteRegular, EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
 import { ConfirmDialog, EmptyState, FormPanel, LoadingOverlay } from "@/components";
@@ -255,6 +255,18 @@ const useStyles = makeStyles({
   /** Every other panel dropdown is `Parent.Width - Self.X*2`, i.e. the full column. */
   panelDropdown: { width: "100%", minWidth: "unset" },
   dateRow: { display: "flex", alignItems: "center", gap: space.xs },
+  /*
+   * `ico_ResetStartDay_NewEditCost_*` is a `cat_PowerCAT.Icon` with `IconName: ="Refresh"`
+   * at 30 x 30 and no explicit colour, so it takes the PowerCAT default off
+   * `gblAppThemeJson` - the blue circular arrow the screenshots show beside Start Date.
+   * Fluent's `subtle` Button renders it neutral grey, and `ArrowCounterclockwise` points the
+   * wrong way for "Refresh".
+   */
+  resetIcon: {
+    minWidth: "30px", width: "30px", height: "30px",
+    color: palette.themePrimary,
+    ":hover": { color: palette.themePrimary },
+  },
   toggleRow: { display: "flex", alignItems: "center", gap: space.s },
   indent: { paddingLeft: space.xl, display: "flex", flexDirection: "column", gap: space.m },
   required: { color: palette.Error, marginRight: "2px" },
@@ -1330,12 +1342,13 @@ function OpexPanel({
               />
               {/* `ico_ResetStartDay_NewEditCost_OPEXCosts` (`:5942-5963`) — chain roots only. */}
               {resetStartDateVisible({ selected, parent }) ? (
-                <Tooltip content="Reset to the standard assumption date." relationship="label">
+                <Tooltip content={OPEX_MSG.resetStartDateTooltip} relationship="label">
                   <Button
                     appearance="subtle"
-                    icon={<ArrowCounterclockwiseRegular />}
+                    className={styles.resetIcon}
+                    icon={<ArrowClockwiseRegular />}
                     data-testid="opex-reset-start"
-                    aria-label="Reset start date"
+                    aria-label={OPEX_MSG.resetStartDateTooltip}
                     onClick={onResetStartDate}
                   />
                 </Tooltip>
