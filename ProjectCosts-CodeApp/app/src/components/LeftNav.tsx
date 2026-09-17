@@ -46,9 +46,10 @@ const useStyles = makeStyles({
     borderRightColor: tokens.colorNeutralStroke2,
     backgroundColor: tokens.colorNeutralBackground1,
     overflowY: "auto",
-    paddingTop: space.s,
+    // `con_Left_Navigation` is `padding: 4px 0`.
+    paddingTop: "4px",
+    paddingBottom: "4px",
   },
-  toggle: { alignSelf: "flex-start", marginLeft: space.xs, marginBottom: space.s },
   item: {
     display: "flex", alignItems: "center", gap: space.s,
     paddingTop: space.s, paddingBottom: space.s,
@@ -107,15 +108,22 @@ export function LeftNav() {
       aria-label="Cost sections"
       style={{ width: expanded ? layout.railWidth : layout.railWidthCollapsed }}
     >
-      <Tooltip content={expanded ? "Collapse menu" : "Expand menu"} relationship="label">
-        <Button
-          className={styles.toggle}
-          appearance="transparent"
-          icon={<NavigationRegular />}
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-        />
-      </Tooltip>
+      {/*
+        * `con_Left_Navigation_Header` with `icon_Left_Navigation_Expand` inside it, and
+        * `rec_Left_Navigation_Expanded_Delimiter` as its own full-width rectangle below —
+        * the canvas draws the line as a control, not as a border on the button.
+        */}
+      <div className="canvas-rail-header">
+        <Tooltip content={expanded ? "Collapse menu" : "Expand menu"} relationship="label">
+          <Button
+            appearance="transparent"
+            icon={<NavigationRegular />}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          />
+        </Tooltip>
+      </div>
+      <span className="canvas-rail-divider" aria-hidden="true" />
 
       {roots.map((item) => {
         const children = visible.filter((c) => c.parentKey === item.key);

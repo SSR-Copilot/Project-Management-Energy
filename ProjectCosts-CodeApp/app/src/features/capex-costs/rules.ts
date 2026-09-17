@@ -9,7 +9,9 @@
  * Names follow the skeleton's (`VSBCloud-Code-App-Skeleton/vsbcode/src/features/cost/capex-costs/
  * rules.ts`) wherever an equivalent exists, so the two can be diffed.
  */
-import { inRange, isInteger, parseNumber, round } from "@/domain/numeric";
+import {
+  inRange, isInteger, isOneDecimalCanvasParity, parseNumber, round,
+} from "@/domain/numeric";
 import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
@@ -393,6 +395,73 @@ export function validateTotalCost(
     (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
   ).format(max);
   return { valid: ok, message: ok ? null : `Value must be between 0 and ${grouped}` };
+}
+
+/**
+ * `lbl_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_ErrorMessage_*` — the
+ * message under each month box in the Edit panel's right-hand gallery. One control per month,
+ * all twelve carrying the same formula, which branches on the distribution SCHEME:
+ *
+ *   Absolute Values   Not(IsInteger(v))                    → "Value must be a numeric"
+ *                     Not(InRange(v, 0, <max>))            → "Value must be between 0 and
+ *                                                            {max}."
+ *                     where <max> is `If(Country.Name = "Poland", 2250000000, 500000000)`
+ *
+ *   % Values          Not(IsOneDecimal(v))                 → "Value must be numeric upto one
+ *                                                            decimal"
+ *                     Not(InRange(v, 0, 100))              → "Value must be between 0 and 100."
+ *
+ * Both range sentences END IN A FULL STOP here, unlike `validateTotalCost` above, whose canvas
+ * text does not — they are different controls and the punctuation genuinely differs.
+ *
+ * A blank month is not an error: the canvas gates every branch on `Not(IsBlank(...))`, and an
+ * empty box simply means no cost in that month.
+ */
+export function validateMonthAmount(
+  value: string,
+  scheme: CostLine["distributionScheme"],
+  countryName: string | null | undefined,
+  locale?: string,
+): { valid: boolean; message: string | null } {
+  if (value.trim() === "") return { valid: true, message: null };
+
+  const grouped = (n: number) => new Intl.NumberFormat(
+    (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
+  ).format(n);
+
+  if (scheme === "percent") {
+    if (!isOneDecimalCanvasParity(value, locale)) {
+      return { valid: false, message: "Value must be numeric upto one decimal" };
+    }
+    if (!inRange(value, 0, 100, locale)) {
+      return { valid: false, message: "Value must be between 0 and 100." };
+    }
+    return { valid: true, message: null };
+  }
+
+  if (!isInteger(value, locale)) {
+    return { valid: false, message: "Value must be a numeric" };
+  }
+  const max = totalCostMax(countryName);
+  if (!inRange(value, 0, max, locale)) {
+    return { valid: false, message: `Value must be between 0 and ${grouped(max)}.` };
+  }
+  return { valid: true, message: null };
+}
+
+/** Every month box that currently reads as invalid, keyed `"<year>-<month>"`. */
+export function monthAmountErrors(
+  payments: readonly { year: number; month: number; amount: number }[],
+  scheme: CostLine["distributionScheme"],
+  countryName: string | null | undefined,
+  locale?: string,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of payments) {
+    const { message } = validateMonthAmount(String(p.amount), scheme, countryName, locale);
+    if (message) out.set(`${p.year}-${p.month}`, message);
+  }
+  return out;
 }
 
 const MM_YYYY = /^(0[1-9]|1[0-2])\/[0-9]{4}$/;

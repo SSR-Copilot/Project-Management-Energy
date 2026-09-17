@@ -1,6 +1,6 @@
 /* Visual baseline: Existing Solution/UI Screenshots, 1919 x ~1018.
    Shared chrome and form styling is owned here; the PCF owns its own grid CSS. */
-.canvas-shell { background: #f1f1f1; padding: 0 5px 4px; gap: 4px; color: #000; }
+.canvas-shell { background: #ebebeb; padding: 0 5px 4px; gap: 4px; color: #000; }
 /* Right padding clears the AVATAR, not the pill: the avatar is 48 px and hangs off the pill's
    right edge, so an 8 px gutter left it flush against the window (and dragged a page-level
    horizontal scrollbar with it). The canvas leaves a visible margin after it. */
@@ -41,11 +41,14 @@
 /* Rail blue is the VSB brand #006eb9 (palette.themePrimary), not Fluent's #0078d4 —
    sampled off the hamburger, the selected-item left border and the rail icons in
    `UI Screenshots/Cost App Landing Screen - Devex Capex Screen.png`. */
-/* `con_Left_Navigation_Header` is 45 high; `icon_Left_Navigation_Expand` is a 28 box with
-   `padding: 0 6px` holding a 16 x 28 hamburger in `rgba(0,110,185,1)`; and
-   `rec_Left_Navigation_Expanded_Delimiter` is a 2 px bar at `top: 42` across the full 200 —
-   in `rgba(15,108,189,1)` = #0f6cbd, Fluent's brand blue, NOT the VSB #006eb9 the glyph uses. */
-.canvas-rail > button:first-child { height: 45px; min-height: 45px; margin: 0; padding: 0 6px; border-radius: 0; width: 100%; justify-content: flex-start; border-bottom: 2px solid #0f6cbd; color: #006eb9; }
+/* `con_Left_Navigation_Header` is 45 high and holds `icon_Left_Navigation_Expand`, a 28 box
+   with `padding: 0 6px` around a 16 x 28 hamburger in `rgba(0,110,185,1)`. */
+.canvas-rail-header { flex-shrink: 0; display: flex; align-items: center; height: 43px; padding: 0 6px; }
+.canvas-rail-header button { min-width: 28px; width: 28px; height: 28px; padding: 0; border-radius: 0; color: #006eb9; }
+/* `rec_Left_Navigation_Expanded_Delimiter` — its OWN 200 x 2 rectangle at `top: 42`, so it
+   spans the whole nav rather than just the hamburger, in `rgba(15,108,189,1)` = #0f6cbd,
+   Fluent's brand blue and NOT the VSB #006eb9 the glyph itself uses. */
+.canvas-rail-divider { flex-shrink: 0; display: block; height: 2px; background: #0f6cbd; margin-bottom: 6px; }
 .canvas-rail a { border-left-width: 2px; padding: 8px 6px; min-height: 44px; color: #111; font-size: 14px; }
 .canvas-rail a svg { color: #006eb9; flex-shrink: 0; }
 .canvas-rail a[aria-current="page"] { border-left-color: #006eb9; background: #edebe9; color: #111; font-weight: 600; }

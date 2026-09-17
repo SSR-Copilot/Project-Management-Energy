@@ -58,6 +58,7 @@ import {
   needsClusterLinkageConfirmation,
   proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
   applyDescriptionChange, describeDescriptionError, paidToggleNeedsConfirmation,
+  monthAmountErrors,
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
 } from "./rules";
 import {
@@ -131,12 +132,16 @@ const useStyles = makeStyles({
   monthList: {
     display: "flex", flexDirection: "column", gap: space.xs, paddingBottom: space.m,
   },
-  monthRow: { display: "flex", alignItems: "center", gap: space.m, minHeight: "34px" },
+  monthRow: { display: "flex", alignItems: "flex-start", gap: space.m, minHeight: "34px" },
   monthLabel: {
     flexGrow: 1, flexShrink: 1, minWidth: "0",
     fontSize: tokens.fontSizeBase300, color: tokens.colorNeutralForeground1,
   },
-  monthInput: { flexGrow: 0, flexShrink: 0, width: "50%", minWidth: "0" },
+  monthField: {
+    display: "flex", flexDirection: "column", gap: space.xxs,
+    flexGrow: 0, flexShrink: 0, width: "50%", minWidth: "0",
+  },
+  monthInput: { width: "100%", minWidth: "0" },
 });
 
 export default function CapexCostsScreen() {
@@ -448,6 +453,27 @@ export default function CapexCostsScreen() {
   // The end date is checked against the typed START date, not the allowed start — see the rule.
   const endDateError = showsDates ? validateEndMonthYear(endText, startText) : null;
 
+  /**
+   * `lbl_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_ErrorMessage_*` — one
+   * per month box, keyed here by `"<year>-<month>"`. Only an Individual distribution has
+   * typed months; an Equal one computes them, so there is nothing to reject.
+   */
+  const monthErrors = edit && edit.distribution === "individual"
+    ? monthAmountErrors(edit.payments, edit.distributionScheme, countryName)
+    : new Map<string, string>();
+
+  /*
+   * SAVE IS NOT GATED ON `monthErrors`, and that is the canvas' own choice. All twelve
+   * references to `lbl_…_FirstMonth_ErrorMessage_*.Visible` are layout arithmetic —
+   * `If(…Visible, LabelBeforeHeight+12, LabelBeforeHeightErr)` — and no Save or Recalculate
+   * DisplayMode reads them. It has to be that way for Absolute Values: "Recalculate Allocated
+   * Cost" exists to `Round(…, 0)` the months you typed, so gating it on "this month is not a
+   * whole number" would make the rounding unreachable.
+   *
+   * The consequence is that a % month above 100 can still be saved. That is a SOURCE DEFECT,
+   * not a transcription gap — recorded here rather than silently corrected, because tightening
+   * it would also block the rounding path above.
+   */
   const valid = canSaveContract(edit, costValue, rawProposed)
     && !descriptionError && !totalCostError && !startDateError && !endDateError;
 
@@ -795,18 +821,25 @@ export default function CapexCostsScreen() {
                 <div className={styles.monthList}>{MONTH_NUMBERS.map(month => {
                   const label = monthYearLabel(month, y);
                   const stored = rawProposed.find(p => p.year === y && p.month === month);
+                  const monthError = monthErrors.get(`${y}-${month}`);
                   return <div key={month} className={styles.monthRow}>
                     <span className={styles.monthLabel}>{label}</span>
-                    <Input className={styles.monthInput} type="number" appearance="filled-lighter"
-                      aria-label={label} min={0} step="any"
-                      disabled={edit.distribution !== "individual"}
-                      value={stored === undefined ? "" : String(stored.amount)}
-                      onChange={(_, d) => update({
-                        payments: [
-                          ...edit.payments.filter(p => !(p.year === y && p.month === month)),
-                          { year: y, month, amount: Number(d.value), paid: false },
-                        ],
-                      })} />
+                    <div className={styles.monthField}>
+                      <Input className={styles.monthInput} type="number" appearance="filled-lighter"
+                        aria-label={label} min={0} step="any"
+                        aria-invalid={monthError ? true : undefined}
+                        disabled={edit.distribution !== "individual"}
+                        value={stored === undefined ? "" : String(stored.amount)}
+                        onChange={(_, d) => update({
+                          payments: [
+                            ...edit.payments.filter(p => !(p.year === y && p.month === month)),
+                            { year: y, month, amount: Number(d.value), paid: false },
+                          ],
+                        })} />
+                      {monthError
+                        ? <span className="canvas-field-error" role="alert">{monthError}</span>
+                        : null}
+                    </div>
                   </div>;
                 })}</div>
               ) : null}

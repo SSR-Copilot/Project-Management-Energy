@@ -19,6 +19,7 @@ import {
   resolveCategory, resolveEqualMode, resolvePaidTarget, startEndJson,
   totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
   validateTotalCost,
+  validateMonthAmount, monthAmountErrors,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
 
@@ -1011,5 +1012,74 @@ describe("the relink confirmation copy", () => {
     expect(c.description).not.toContain("Costs have been entered");
     expect(c.title).toBe("Change Cost Paid By");
     expect(c.confirmLabel).toBe("Confirm All");
+  });
+});
+
+/* ------------------------------------------- the Edit panel's month boxes */
+
+describe("validateMonthAmount", () => {
+  // `lbl_…_FirstMonth_ErrorMessage_*`, one per month, branching on the distribution SCHEME.
+  it("UT-CAPEXR-060 takes a whole number in range for Absolute Values", () => {
+    expect(validateMonthAmount("1500", "absolute", "Germany"))
+      .toEqual({ valid: true, message: null });
+  });
+
+  it("UT-CAPEXR-061 rejects a decimal for Absolute Values", () => {
+    // `Not(IsInteger(v))` — and the message is the canvas' own wording.
+    expect(validateMonthAmount("1500.5", "absolute", "Germany").message)
+      .toBe("Value must be a numeric");
+  });
+
+  it("UT-CAPEXR-062 bounds Absolute Values by the country ceiling, WITH a full stop", () => {
+    // `InRange(v, 0, If(Country.Name = "Poland", 2250000000, 500000000))`. Unlike
+    // `validateTotalCost`, this sentence ends in a full stop in the canvas.
+    expect(validateMonthAmount("500000001", "absolute", "Germany").message)
+      .toBe("Value must be between 0 and 500,000,000.");
+    expect(validateMonthAmount("500000001", "absolute", "Poland"))
+      .toEqual({ valid: true, message: null });
+    expect(validateMonthAmount("2250000001", "absolute", "Poland").message)
+      .toBe("Value must be between 0 and 2,250,000,000.");
+  });
+
+  it("UT-CAPEXR-063 allows ONE decimal for % Values, not two", () => {
+    // `IsOneDecimal`, not `IsTwoDecimal` — the canvas message says so in as many words.
+    expect(validateMonthAmount("12.5", "percent", "Germany"))
+      .toEqual({ valid: true, message: null });
+    expect(validateMonthAmount("12.55", "percent", "Germany").message)
+      .toBe("Value must be numeric upto one decimal");
+  });
+
+  it("UT-CAPEXR-064 bounds % Values at 0 and 100", () => {
+    expect(validateMonthAmount("100", "percent", "Germany"))
+      .toEqual({ valid: true, message: null });
+    expect(validateMonthAmount("100.1", "percent", "Germany").message)
+      .toBe("Value must be between 0 and 100.");
+    expect(validateMonthAmount("-1", "percent", "Germany").valid).toBe(false);
+  });
+
+  it("UT-CAPEXR-065 treats a blank month as no cost, not as an error", () => {
+    // Every branch is gated on `Not(IsBlank(...))`.
+    expect(validateMonthAmount("", "absolute", "Germany"))
+      .toEqual({ valid: true, message: null });
+    expect(validateMonthAmount("   ", "percent", "Germany"))
+      .toEqual({ valid: true, message: null });
+  });
+});
+
+describe("monthAmountErrors", () => {
+  it("UT-CAPEXR-066 keys each bad month by year and month", () => {
+    const out = monthAmountErrors(
+      [{ year: 2026, month: 1, amount: 10 }, { year: 2026, month: 2, amount: 100.25 }],
+      "percent",
+      "Germany",
+    );
+    expect([...out.keys()]).toEqual(["2026-2"]);
+    expect(out.get("2026-2")).toBe("Value must be numeric upto one decimal");
+  });
+
+  it("UT-CAPEXR-067 is empty when every month passes, so Save stays open", () => {
+    expect(monthAmountErrors(
+      [{ year: 2026, month: 1, amount: 250 }], "absolute", "Germany",
+    ).size).toBe(0);
   });
 });
