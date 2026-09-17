@@ -206,6 +206,12 @@ export const COMMENT_MAX_LENGTH = 255;
 
 export interface ProjectContext {
   projectId: string;
+  /**
+   * `vsb_approvalstates` as its LABEL — "Draft", "Approving", "Approved", "Rejected" or
+   * "Canceled". `gblTableApprovalStateColors` keys on exactly those strings; see
+   * `APPROVAL_STATE_COLOUR` in `components/AppHeader.tsx`.
+   */
+  approvalState?: string;
   /** `vsb_name`, whose DISPLAY name is "Project ID" — used in the derived contract name. */
   projectIdCode: string;
   projectName: string;

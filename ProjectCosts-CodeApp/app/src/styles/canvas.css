@@ -12,8 +12,14 @@
 .canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 1.2; }
 /* 8pt at `font-weight: lighter`, in pure black — not #111 at 10px semibold-ish. */
 .canvas-brand-version { color: #000; font-size: 10.67px; font-weight: 300; line-height: 1.2; }
-.canvas-project-title { border-left: 4px solid #82a51e; padding: 0 8px; height: 70px; line-height: 70px; max-width: none; font-size: 20px; }
-.canvas-user-pill { height: 32px; position: relative; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; border-radius: 90px; font-size: 14.67px; font-weight: 600; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
+.canvas-project-suite { display: flex; align-items: center; gap: 6px; min-width: 250px; flex: 1; }
+/* `rec_cmp_Header_Project_State` — 4 x 70, filled from `gblTableApprovalStateColors` by the
+   project's approval state, with that state as its tooltip. White when it matches none. */
+.canvas-project-state { flex-shrink: 0; width: 4px; height: 70px; }
+.canvas-project-title { padding: 0 8px; max-width: none; font-size: 20px; line-height: 28px; }
+/* `overflow: visible` is load-bearing: Fluent's Button root clips to its own rounded box,
+   and the avatar is positioned to stand proud of the pill's right edge and above its top. */
+.canvas-user-pill { height: 32px; position: relative; overflow: visible; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; border-radius: 90px; font-size: 14.67px; font-weight: 600; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
 /* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
    `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
    `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */

@@ -83,6 +83,22 @@ export function environmentBadge(environmentName: string | undefined): string | 
   }
 }
 
+/**
+ * `gblTableApprovalStateColors` (`App.OnStart`), which `rec_cmp_Header_Project_State.Fill`
+ * looks the project's approval state up in. A state with no row falls back to white — which
+ * is what "Canceled" gets, the canvas table having no entry for it.
+ */
+export const APPROVAL_STATE_COLOUR: Record<string, string> = {
+  Draft: palette.akzent2,
+  Approving: palette.akzent4,
+  Approved: palette.akzent3,
+  Rejected: palette.akzent5,
+};
+
+export function approvalStateColour(state: string | undefined): string {
+  return (state && APPROVAL_STATE_COLOUR[state]) || palette.white;
+}
+
 /** `pcf_HeaderContainerReportError_WarningIcon.Tooltip`, verbatim. */
 export const ERROR_TOOLTIP =
   "An error has occurred!\n\n" +
@@ -93,6 +109,8 @@ export const ERROR_TOOLTIP =
 export interface AppHeaderProps {
   /** The project name, on the project-scoped cost screens. Absent on the overview. */
   pageTitle?: string;
+  /** `Project.Approval` — colours the 4 x 70 bar left of the name, and is its tooltip. */
+  approvalState?: string;
   userName?: string;
   userEmail?: string;
   /** `img_cmp_In_Header_UserImage.Image = User().Image`, already a `data:` URL. */
@@ -113,7 +131,7 @@ export interface AppHeaderProps {
 }
 
 export function AppHeader({
-  pageTitle, userName, userEmail, userPhoto,
+  pageTitle, approvalState, userName, userEmail, userPhoto,
   userLanguage, userBusinessUnit, userCountries, userDataScope,
   appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, commandSlotRef,
 }: AppHeaderProps) {
@@ -131,8 +149,21 @@ export function AppHeader({
         {badge ? <Badge appearance="tint" color="warning">{badge}</Badge> : null}
       </div>
 
+      {/*
+        * `con_cmp_Header_SuitBar` — a 4 x 70 `rec_cmp_Header_Project_State` and the name 6px
+        * apart. The bar is a sibling of the title, not a border on it, because its colour and
+        * tooltip both come from the project's approval state.
+        */}
       {pageTitle ? (
-        <Text className={`${styles.pageTitle} canvas-project-title`} title={pageTitle}>{pageTitle}</Text>
+        <div className="canvas-project-suite">
+          <Tooltip content={approvalState ?? "No approval state"} relationship="label">
+            <span
+              className="canvas-project-state"
+              style={{ backgroundColor: approvalStateColour(approvalState) }}
+            />
+          </Tooltip>
+          <Text className={`${styles.pageTitle} canvas-project-title`} title={pageTitle}>{pageTitle}</Text>
+        </div>
       ) : null}
 
       <div className={styles.commandSlot} ref={commandSlotRef} />

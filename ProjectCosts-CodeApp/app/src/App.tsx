@@ -55,6 +55,9 @@ export default function App() {
     <AppShell
       showRail={onCostScreen}
       {...(onCostScreen && project?.projectName ? { pageTitle: project.projectName } : {})}
+      {...(onCostScreen && project?.approvalState
+        ? { approvalState: project.approvalState }
+        : {})}
       {...(userName ? { userName } : {})}
       {...(userEmail ? { userEmail } : {})}
       {...(currentUser.data?.photo ? { userPhoto: currentUser.data.photo } : {})}

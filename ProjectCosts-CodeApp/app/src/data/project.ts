@@ -8,6 +8,7 @@
  * only the genuinely stored ones are fetched, and in one query rather than five.
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
+import { Vsb_projectsvsb_approvalstates } from "@/generated/models/Vsb_projectsModel";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
 import { Vsb_countryareasService } from "@/generated/services/Vsb_countryareasService";
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
@@ -179,6 +180,8 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
         // `vsb_startcluster` (an option set). `gblSelectedProject.'Cluster State'.Order` gates
         // the Add/Edit Costs panel's "Link to Milestone" list; see `ProjectContext`.
         "_vsb_clusterstate_value",
+        // Drives `rec_cmp_Header_Project_State`, the coloured bar left of the project name.
+        "vsb_approvalstates",
         "_owningbusinessunit_value",
       ],
       filter: and(`vsb_projectid eq ${guid(projectId)}`, ACTIVE),
@@ -202,6 +205,10 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
     projectId: row.vsb_projectid,
     projectIdCode: row.vsb_name ?? "",
     projectName: row.vsb_projectname ?? "",
+    // The option-set value as its LABEL, which is what `gblTableApprovalStateColors` keys on.
+    ...(row.vsb_approvalstates
+      ? { approvalState: Vsb_projectsvsb_approvalstates[row.vsb_approvalstates] }
+      : {}),
     /*
      * BUG FIX — this used to read `vsb_startdate` ("Start Date"), which is BLANK on real
      * project rows (verified on Wirmighausen, 9f5aade5-2b7c-ef11-ac20-000d3a466ab7: only
