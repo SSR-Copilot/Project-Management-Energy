@@ -61,6 +61,18 @@ export default function App() {
       {...(currentUser.data?.companyName
         ? { userBusinessUnit: currentUser.data.companyName }
         : {})}
+      /*
+       * The badge's AddHome row is `$"{Concat(gblCurrentUser.EditableCounties, $"{name}; ")}"`
+       * — one entry per qualifying role, trailing separator and all, which is why the canvas
+       * reference reads "France; France; Germany;".
+       */
+      {...(currentUser.data?.editableCountries.length
+        ? { userCountries: `${currentUser.data.editableCountries.join("; ")};` }
+        : {})}
+      /* Its World row is a fixed label, shown on `IsProjectDataAllCountries`. */
+      {...(currentUser.data?.isProjectDataAllCountries
+        ? { userDataScope: "Project Data All Countries" }
+        : {})}
       {...(envVars.vsb_AppVersion ? { appVersion: envVars.vsb_AppVersion } : {})}
       {...(envVars.vsb_EnvironmentName ? { environmentName: envVars.vsb_EnvironmentName } : {})}
       {...(envVars.vsb_VSBCloudInfoCenterUrl
