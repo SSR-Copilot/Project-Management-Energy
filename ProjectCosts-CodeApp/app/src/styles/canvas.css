@@ -22,16 +22,19 @@
 .canvas-project-title { padding: 0 8px; max-width: none; font-size: 20px; line-height: 28px; }
 /* `overflow: visible` is load-bearing: Fluent's Button root clips to its own rounded box,
    and the avatar is positioned to stand proud of the pill's right edge and above its top. */
-.canvas-user-pill { height: 32px; position: relative; overflow: visible; padding: 0 20px 0 15px; margin-left: 60px; margin-right: 20px; border-radius: 90px; font-size: 14.67px; font-weight: 600; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
+/* Size and padding are in `styles.userPill` (AppHeader.tsx), where they beat Fluent's Button
+   base. `margin-right` is the clearance the avatar needs: it ends 28 px past the pill, and the
+   canvas leaves 2 px between it and the right edge of `con_cmp_Header_UserImage`. */
+.canvas-user-pill { margin-left: 60px; margin-right: 30px; font-size: 14.67px; font-weight: 600; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
+.canvas-user-name { display: block; box-sizing: content-box; width: 165px; margin-left: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 /* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
    `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
    `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */
-.canvas-user-avatar { position: absolute; right: -30px; top: -9px; height: 50px; width: 50px; border: 2px solid #0b0b0b; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
-.canvas-user-avatar svg { width: 40px; height: 40px; color: white; }
+.canvas-user-avatar { position: absolute; right: -28px; top: -8px; height: 47px; width: 47px; border: 2px solid #0b0b0b; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
+.canvas-user-avatar svg { width: 40px; height: 40px; color: #a6a6a6; }
 /* `shp_cmp_In_Image_UserBorder`'s ellipse is filled WHITE and the photo is drawn over it, so
    the grey only belongs to the silhouette fallback. `object-fit: contain` is the canvas'
    own choice — it letterboxes a non-square photo rather than cropping it. */
-.canvas-user-avatar:has(img) { background: #fff; }
 .canvas-user-avatar img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
 .canvas-shell > div { gap: 4px; }
 .canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }

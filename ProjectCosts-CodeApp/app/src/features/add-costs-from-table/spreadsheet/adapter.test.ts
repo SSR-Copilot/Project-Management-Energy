@@ -13,7 +13,7 @@ import {
   ACCOUNT_MARKER, alignOriginalRowIds, identityRoundTripFailures, monthHeaderLabels,
   outputRowsToSheetRows, rowIdentity, sheetRowsToGrid, type SheetAccountGroup,
 } from "./adapter";
-import { gridToJson } from "./SpreadSheet";
+import { gridToJson, wholeNumberCell } from "./SpreadSheet";
 import {
   buildInitialSheet, planContractDeletions, planContractDeletionsCanvasParity,
   type ExistingContract, type ExistingCost, type SheetRow,
@@ -286,5 +286,117 @@ describe("alignOriginalRowIds — UT-ADDCOST-048", () => {
   it("UT-ADDCOST-050 keys a not-yet-saved row on its account/description, not its contract id", () => {
     const fresh = row({ rowId: "Row_7", projectContractId: null, description: "New Contract" });
     expect(rowIdentity(fresh)).toBe("80000_0|Turbine / PV Supply Agreement|New Contract|2015");
+  });
+});
+
+/* ═══════════════════════════════ two contracts, one name (UT-ADDCOST-051..054) ══ */
+
+/**
+ * Nothing in Dataverse enforces a unique `vsb_name` per sub-account, and a real project hit it:
+ * "Standard Turbine / PV Supply Agreement - Same Ind Contract" existed twice under 80000_0.
+ *
+ * The grid grouped its rows by DESCRIPTION, so the two folded into one row — one contract's
+ * months displayed under the other's, and on the way back `resolveRow`'s `.find()` gave both to
+ * the first contract, leaving the second pointing at nothing. Every deletion planner reads that
+ * as "the user removed this row" and takes the contract's whole cost history with it, which is
+ * exactly what `identityRoundTripFailures` exists to stop — so the save was refused and the
+ * screen showed "could not be matched back to the contracts it was built from".
+ */
+describe("two contracts sharing a name under one sub-account", () => {
+  const SAME = "Standard Turbine / PV Supply Agreement - Same Ind Contract";
+  const TWINS: ExistingContract[] = [
+    contract({ id: "c-twin-a", name: SAME }),
+    contract({ id: "c-twin-b", name: SAME }),
+  ];
+  const TWIN_COSTS: ExistingCost[] = [
+    { id: "k-a", contractId: "c-twin-a", year: 2015, month: 1, cost: 111 },
+    { id: "k-b", contractId: "c-twin-b", year: 2015, month: 1, cost: 222 },
+  ];
+
+  const loaded = () => buildInitialSheet({
+    subaccounts: SUBACCOUNTS, contracts: TWINS, costs: TWIN_COSTS, currentYear: 2015,
+  });
+  const roundTrip = (rows: readonly SheetRow[]) => outputRowsToSheetRows(
+    gridToJson(sheetRowsToGrid(rows, ACCOUNTS, [2015]), "2015"), SUBACCOUNTS, TWINS,
+  );
+
+  it("UT-ADDCOST-051 gives each contract its own grid row rather than folding them into one", () => {
+    const rows = sheetRowsToGrid(loaded(), ACCOUNTS, [2015]).slice(1)
+      .filter((r) => r[2]?.value === SAME);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("UT-ADDCOST-052 keeps each contract's money on its own row instead of overwriting it", () => {
+    // Column 6 is January 2015. Folding used to leave only the last contract's 222.
+    const january = sheetRowsToGrid(loaded(), ACCOUNTS, [2015]).slice(1)
+      .filter((r) => r[2]?.value === SAME)
+      .map((r) => r[6]?.value);
+    expect(january).toEqual(["111", "222"]);
+  });
+
+  it("UT-ADDCOST-053 resolves the two rows to DIFFERENT contracts on the way back", () => {
+    const ids = roundTrip(loaded()).filter((r) => r.description === SAME)
+      .map((r) => r.projectContractId);
+    expect(ids).toEqual(["c-twin-a", "c-twin-b"]);
+  });
+
+  it("UT-ADDCOST-054 no longer reports a lost contract, so the save is not refused", () => {
+    const rows = loaded();
+    expect(identityRoundTripFailures(rows, roundTrip(rows))).toEqual([]);
+  });
+
+  it("UT-ADDCOST-055 treats a third row with the same name as a NEW contract, not a third claim", () => {
+    // Only two contracts exist to claim; an extra row the user added is a new one.
+    const rows = [...loaded(), row({ rowId: "extra", description: SAME, projectContractId: null })];
+    const resolved = roundTrip(rows).filter((r) => r.description === SAME);
+    expect(resolved.map((r) => r.projectContractId)).toEqual(["c-twin-a", "c-twin-b", null]);
+  });
+});
+
+/* ══════════════════════════ month cells take whole numbers (UT-ADDCOST-056..) ══ */
+
+/**
+ * The month columns accepted `^[0-9.]*$` and cleared anything else, so a decimal went straight
+ * in and only `validateMonthAmount` downstream ever objected. Costs here are whole units, so a
+ * decimal is now refused at the point of entry — typed or pasted, both of which reach
+ * `handleChange` the same way.
+ */
+describe("wholeNumberCell", () => {
+  it("UT-ADDCOST-056 leaves a whole number and an empty cell alone", () => {
+    expect(wholeNumberCell("1234")).toBe("1234");
+    expect(wholeNumberCell("")).toBe("");
+    expect(wholeNumberCell("   ")).toBe("");
+  });
+
+  it("UT-ADDCOST-057 rounds a pasted decimal instead of letting it through", () => {
+    expect(wholeNumberCell("12.5")).toBe("13");
+    expect(wholeNumberCell("12.4")).toBe("12");
+    expect(wholeNumberCell("1234.56")).toBe("1235");
+  });
+
+  it("UT-ADDCOST-058 reads both locales' separators, since a paste comes from the user's Excel", () => {
+    // The LAST separator followed by one or two digits is the decimal point.
+    expect(wholeNumberCell("1.234,56")).toBe("1235");
+    expect(wholeNumberCell("1,234.56")).toBe("1235");
+    expect(wholeNumberCell("12,5")).toBe("13");
+  });
+
+  it("UT-ADDCOST-059 treats a three-digit group as thousands, not as a fraction", () => {
+    expect(wholeNumberCell("1.234")).toBe("1234");
+    expect(wholeNumberCell("1,234")).toBe("1234");
+    expect(wholeNumberCell("1.234.567")).toBe("1234567");
+  });
+
+  it("UT-ADDCOST-060 leaves a half-typed separator alone rather than fighting the typist", () => {
+    // Rewriting "12." to "12" mid-keystroke would make the separator un-typeable in a way the
+    // person cannot see; it carries no fraction yet, and the next keystroke settles it.
+    expect(wholeNumberCell("12.")).toBe("12.");
+    expect(wholeNumberCell("12,")).toBe("12,");
+  });
+
+  it("UT-ADDCOST-061 still clears anything that is not a figure, as the old rule did", () => {
+    expect(wholeNumberCell("abc")).toBe("");
+    expect(wholeNumberCell("12abc")).toBe("");
+    expect(wholeNumberCell("-5")).toBe("");
   });
 });

@@ -57,11 +57,29 @@ const useStyles = makeStyles({
    * (63, 63, 63). They were rendered `disabled`, which greys the icon with the label.
    */
   badgeMenu: { "& .fui-MenuItem__icon": { color: palette.themePrimary } },
+  /*
+   * `con_cmp_In_Header_UserName` — a FIXED 200 x 32 at radius 90, filled `palette.themePrimary`,
+   * sitting at x 20 / y 21 of the 250 x 74 `con_cmp_Header_UserImage`. Centred on the header's
+   * midline: `Y: =Parent.Height/2-Self.Height/2`.
+   *
+   * Fixed, not content-sized: the label inside it is `Width: =con_cmp_In_Header_UserImage.X -
+   * con_cmp_In_Header_UserName.X-15` = 165 with `Wrap: =false`, so a long name is clipped by the
+   * pill rather than stretching it. `.canvas-user-name` in `canvas.css` is that 165.
+   *
+   * These properties beat Fluent's Button base, which sets its own padding, radius, min-width
+   * and centred content through Griffel rules of equal specificity.
+   */
   userPill: {
     backgroundColor: palette.themePrimary,
     color: palette.white,
-    borderRadius: "16px",
-    paddingLeft: space.m, paddingRight: space.m,
+    position: "relative",
+    boxSizing: "border-box",
+    width: "200px", minWidth: "200px", height: "32px",
+    borderRadius: "90px",
+    paddingLeft: 0, paddingRight: 0,
+    justifyContent: "flex-start",
+    // The avatar is an absolutely positioned child that stands 28 px proud of the right edge.
+    overflow: "visible",
     ":hover": { backgroundColor: palette.themeDarkAlt, color: palette.white },
   },
 });
@@ -210,12 +228,21 @@ export function AppHeader({
         <Menu>
           <MenuTrigger disableButtonEnhancement>
             <Button className={`${styles.userPill} canvas-user-pill`} aria-label="User">
-              {userName ? `Hi ${userName}` : "User"}
               {/*
-                * `img_cmp_In_Header_UserImage` sits inside the 50 x 50
-                * `con_cmp_In_Header_UserImage`, over a white ellipse with the 2 px #0b0b0b
-                * stroke, at `border-radius: 90px` and `object-fit: contain`. The silhouette
-                * is the fallback for a user with no photo.
+                * `lbl_cmp_In_Header_UserName`: `Text: ="Hi " & User().FullName`, Semibold,
+                * `Size: =gblAppSizes.Font.Medium` (11 pt = 14.67 px), `Color: =palette.white`,
+                * `X: =15` with `PaddingLeft: =2`, `Width: =165`, `Wrap: =false`. Its own element
+                * because `Wrap: false` needs `overflow: hidden`, and the pill itself must stay
+                * `overflow: visible` for the avatar to escape it.
+                */}
+              <span className="canvas-user-name">{userName ? `Hi ${userName}` : "User"}</span>
+              {/*
+                * `con_cmp_In_Header_UserImage` is a 50 x 50 box at x 200 / y 12, but what is
+                * VISIBLE is `shp_cmp_In_Image_UserBorder` inside it: a 47 x 47 circle at (1, 1),
+                * `BorderThickness: =2` in `palette.black`, and `Fill: =palette.white` — a white
+                * disc, not a grey one. `img_cmp_In_Header_UserImage` is `User().Image` at 46 x 46
+                * on top of it, `RadiusTopLeft: =90` all round. The silhouette is our fallback for
+                * a user whose photo Graph would not give us; the canvas simply showed nothing.
                 */}
               <span className="canvas-user-avatar">
                 {userPhoto ? <img src={userPhoto} alt="" /> : <PersonRegular />}

@@ -96,15 +96,30 @@ export function sheetRowsToGrid(
           && r.description.trim() !== "",
       );
 
-      const byDescription = new Map<string, SheetRow[]>();
+      /*
+       * Keyed on the CONTRACT, falling back to the description for a row that has no contract
+       * yet (one the user is typing). It was keyed on the description alone, which folded two
+       * contracts that happen to share a name under one sub-account into a single grid row:
+       * `byYear` below then took whichever of them came last for each year, so one contract's
+       * money was displayed under the other's row, and on the way back out `resolveRow`'s
+       * `.find()` handed both rows to the first contract — leaving the second unresolvable.
+       * `identityRoundTripFailures` caught that and refused the save outright, which is how it
+       * surfaced: "could not be matched back to the contracts it was built from".
+       *
+       * Two contracts with one name is a perfectly legal state in Dataverse — nothing enforces
+       * a unique `vsb_name` per sub-account — so the sheet has to be able to show both.
+       */
+      const byContract = new Map<string, SheetRow[]>();
       for (const r of subRows) {
-        byDescription.set(r.description, [...(byDescription.get(r.description) ?? []), r]);
+        const key = r.projectContractId ?? `description:${r.description}`;
+        byContract.set(key, [...(byContract.get(key) ?? []), r]);
       }
 
-      for (const [description, group] of byDescription) {
+      for (const group of byContract.values()) {
         const byYear = new Map(group.map((r) => [r.year, r]));
         const anyRow = group[0];
         if (!anyRow) continue;
+        const description = anyRow.description;
         const rowId = anyRow.rowId;
         // Account Number/Name are left BLANK on contract data rows — as in the PCF, only the
         // account and sub-account rows carry them, and `sanitizeSpreadsheetData`'s fill-down
@@ -142,28 +157,84 @@ export function outputRowsToSheetRows(
   subaccounts: Parameters<typeof resolveRow>[1],
   contracts: Parameters<typeof resolveRow>[2],
 ): SheetRow[] {
-  return outputRows
-    .filter((r) => r.Description.trim() !== "" && r.Description !== ACCOUNT_MARKER)
-    .map((r) => {
-      const months = MONTHS.map((m) => {
-        const raw = r[m];
-        return raw === undefined || raw === "" ? null : Number(raw);
-      });
-      const row: SheetRow = {
-        rowId: r.Row_ID,
-        accountNumber: r.Number,
-        accountName: r.Name,
-        description: r.Description,
-        year: Number(r.Year),
-        costPaidBy: r.CostPaidBy || null,
-        depreciation: r.Depreciation || null,
-        applyVat: r.ApplyVAT || null,
-        months,
-        subAccountId: null,
-        projectContractId: null,
-      };
-      return resolveRow(row, subaccounts, contracts);
+  const kept = outputRows.filter(
+    (r) => r.Description.trim() !== "" && r.Description !== ACCOUNT_MARKER,
+  );
+
+  const subOf = (r: SpreadsheetOutputRow) =>
+    subaccounts.find((s) => s.name === r.Name && s.number === r.Number);
+
+  /*
+   * Which GRID ROW each entry came from.
+   *
+   * `Row_ID` cannot say: `sanitizeSpreadsheetData` bumps its counter only on an account or
+   * sub-account row, so every contract row under one sub-account deliberately shares a single
+   * id (see `rowIdentity`) — two rows with the same name would be indistinguishable by it.
+   *
+   * The ORDER can. `gridToJson` emits one entry per (row, year), all of one row's years
+   * consecutively and ascending from the sheet's first year, so an entry begins a new grid row
+   * whenever its account/description changes or its year fails to advance.
+   */
+  const gridRowOf: number[] = [];
+  let ordinal = -1;
+  let previous: SpreadsheetOutputRow | undefined;
+  for (const r of kept) {
+    const continues = previous !== undefined
+      && previous.Number === r.Number
+      && previous.Name === r.Name
+      && previous.Description === r.Description
+      && Number(r.Year) > Number(previous.Year);
+    if (!continues) ordinal += 1;
+    gridRowOf.push(ordinal);
+    previous = r;
+  }
+
+  /*
+   * Which contract each grid row means, decided for the whole sheet before any row is
+   * converted, so that two rows sharing a (sub-account, description) take DIFFERENT contracts.
+   *
+   * `resolveRow` alone cannot do this: it matches one row at a time with `.find()`, so a second
+   * row with the same name resolves to the same contract as the first and the other contract is
+   * left with no row pointing at it — which every deletion planner reads as "the user removed
+   * it", and `identityRoundTripFailures` rightly refuses to save.
+   *
+   * Rows claim in sheet order, and a row with no contract left to claim resolves to `null` — a
+   * new contract, which is what an extra row carrying a duplicate name is. Which of two
+   * identically named contracts a row gets is arbitrary, because nothing in the sheet
+   * distinguishes them; it only has to be a BIJECTION, so that neither is silently dropped.
+   */
+  const contractByGridRow = new Map<number, string | null>();
+  const claimed = new Map<string, number>();
+  kept.forEach((r, i) => {
+    const sub = subOf(r);
+    const gridRow = gridRowOf[i] as number;
+    if (!sub || contractByGridRow.has(gridRow)) return;
+    const nameKey = `${sub.id}|${r.Description}`;
+    const matches = contracts.filter((c) => c.subaccountId === sub.id && c.name === r.Description);
+    const taken = claimed.get(nameKey) ?? 0;
+    contractByGridRow.set(gridRow, matches[taken]?.id ?? null);
+    claimed.set(nameKey, taken + 1);
+  });
+
+  return kept.map((r, i) => {
+    const months = MONTHS.map((m) => {
+      const raw = r[m];
+      return raw === undefined || raw === "" ? null : Number(raw);
     });
+    return {
+      rowId: r.Row_ID,
+      accountNumber: r.Number,
+      accountName: r.Name,
+      description: r.Description,
+      year: Number(r.Year),
+      costPaidBy: r.CostPaidBy || null,
+      depreciation: r.Depreciation || null,
+      applyVat: r.ApplyVAT || null,
+      months,
+      subAccountId: subOf(r)?.id ?? null,
+      projectContractId: contractByGridRow.get(gridRowOf[i] as number) ?? null,
+    };
+  });
 }
 
 /* ═══════════════════════════════════════════════ identity round-trip safety ══ */

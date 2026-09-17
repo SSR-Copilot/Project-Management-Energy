@@ -45,6 +45,43 @@ export interface ISpreadSheetProps {
 
 const generateRowID = (rowIndex: number) => `Row_${rowIndex + 1}`;
 
+/**
+ * A month cell's value, forced to a whole number — typed, or pasted.
+ *
+ * The month columns used to accept `^[0-9.]*$` and clear anything else, so a decimal went
+ * straight in and only `validateMonthAmount` downstream ever objected ("Value must be a
+ * numeric"). Costs here are whole units, so a decimal is refused at the point of entry instead.
+ *
+ * `handleChange` is the one gate both routes pass through — `react-spreadsheet` reports a typed
+ * edit and a paste the same way — so this is the only place the rule has to live.
+ *
+ * ROUNDS rather than truncates, matching "Recalculate Allocated Cost" (`Round(…, 0)`) on the
+ * CAPEX screen, and because dropping the separator instead would turn a pasted 12.5 into 125.
+ * A value that is still mid-typing ("12.") keeps its trailing separator so the cell does not
+ * fight the person typing; it carries no fractional part yet, and the next keystroke settles it.
+ *
+ * Both locales' conventions are accepted, since a paste comes from whatever the user's Excel
+ * uses: the LAST separator followed by one or two digits is the decimal point and the rest is
+ * thousands grouping, so "1.234,56" and "1,234.56" both read as 1235, and "1.234" as 1234.
+ */
+export function wholeNumberCell(raw: string): string {
+  const value = raw.trim();
+  if (value === "") return "";
+  // Anything that is not a figure is cleared, exactly as the old `^[0-9.]*$` test did.
+  if (!/^[\d.,\s]+$/.test(value)) return "";
+  if (/^\d*[.,]$/.test(value)) return value;
+
+  const cleaned = value.replace(/\s/g, "");
+  const lastSeparator = Math.max(cleaned.lastIndexOf("."), cleaned.lastIndexOf(","));
+  const digits = (s: string) => s.replace(/[.,]/g, "");
+  const normalized = lastSeparator >= 0 && /^\d{1,2}$/.test(cleaned.slice(lastSeparator + 1))
+    ? `${digits(cleaned.slice(0, lastSeparator))}.${cleaned.slice(lastSeparator + 1)}`
+    : digits(cleaned);
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? String(Math.round(n)) : "";
+}
+
 function getRowEditable(rowIndex: number, data: SheetGrid): boolean {
   if (rowIndex === 0) return true;
   const firstCellValue = data[rowIndex]?.[0]?.value;
@@ -243,8 +280,8 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
             const match = options.find((o) => o.trim().toLowerCase() === value.trim().toLowerCase());
             value = match ?? "";
           }
-          if (colIndex > 5 && !/^[0-9.]*$/.test(value)) {
-            value = "";
+          if (colIndex > 5) {
+            value = wholeNumberCell(value);
           }
 
           return { value, Row_ID: rowID };
