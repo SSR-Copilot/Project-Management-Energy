@@ -591,6 +591,14 @@ export interface PageState {
   page: number;
   pageSize: number;
   totalRows: number;
+  /**
+   * The server's own page count, when the list is not a single evenly divided run.
+   *
+   * `loadProjectPage` serves projects as TWO ordered segments — those with a value in the
+   * sorted column, then those without — so the last page of the first segment can be short and
+   * `ceil(total / size)` would under-count. Left out, the even division still applies.
+   */
+  totalPages?: number;
 }
 
 /**
@@ -610,18 +618,22 @@ export function totalPages(totalRows: number, pageSize = PAGE_SIZE): number {
  * whereas the skip token the server hands back is always the truth. See
  * `data/client.ts` → `countedPage`.
  */
-export function clampPage(page: number, totalRows: number, pageSize = PAGE_SIZE): number {
-  const pages = totalPages(totalRows, pageSize);
+export function clampPage(
+  page: number,
+  totalRows: number,
+  pageSize = PAGE_SIZE,
+  pages = totalPages(totalRows, pageSize),
+): number {
   if (!Number.isFinite(page) || page < 1) return 1;
   return page > pages ? 1 : Math.floor(page);
 }
 
 /** `Total Rows: 1129` and `Page: 1 from 6`. */
 export function pagerLabels(state: PageState): { totalRows: string; page: string } {
-  const pages = totalPages(state.totalRows, state.pageSize);
+  const pages = state.totalPages ?? totalPages(state.totalRows, state.pageSize);
   return {
     totalRows: `Total Rows: ${state.totalRows}`,
-    page: `Page: ${clampPage(state.page, state.totalRows, state.pageSize)} from ${pages}`,
+    page: `Page: ${clampPage(state.page, state.totalRows, state.pageSize, pages)} from ${pages}`,
   };
 }
 

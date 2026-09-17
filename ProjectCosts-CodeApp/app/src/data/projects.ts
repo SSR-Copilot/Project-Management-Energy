@@ -15,7 +15,7 @@ import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstates
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
 import { countedPage, fetchAll } from "./client";
-import { ACTIVE, and, asc, desc, eq, guid, lookupEq, or, f } from "./odata";
+import { ACTIVE, and, asc, desc, eq, guid, isNull, lookupEq, notNull, or, f } from "./odata";
 import {
   COL, PROJECT_SELECT, PAGE_SIZE, buildProjectFilter, toProjectRow,
   type ProjectFilter, type ProjectRow, type SortState, type PersonOption,
@@ -30,6 +30,11 @@ export interface ProjectPage {
   rows: ProjectRow[];
   /** The server-side total for the whole filtered set, not the page. */
   totalRows: number;
+  /**
+   * The page count across BOTH segments. Not `ceil(totalRows / pageSize)`: the named segment's
+   * last page is short whenever its count is not a whole number of pages.
+   */
+  totalPages: number;
   page: number;
   pageSize: number;
   /** Whether a further page exists. Forward-only paging cannot infer this from the total. */
@@ -59,25 +64,88 @@ export interface ProjectPageRequest {
  */
 export async function loadProjectPage(req: ProjectPageRequest): Promise<ProjectPage> {
   const pageSize = req.pageSize ?? PAGE_SIZE;
-  const filter = and(buildProjectFilter(req.filter, req.locale), req.scopeFilter, ACTIVE);
+  const base = and(buildProjectFilter(req.filter, req.locale), req.scopeFilter, ACTIVE);
   const orderBy = [req.sort.asc ? asc(req.sort.col) : desc(req.sort.col)];
+  const wanted = Math.max(1, Math.floor(req.page) || 1);
+  // Two different filters or sorts must never share a cached token.
+  const signature = (segment: string) =>
+    `${segment}|${base ?? ""}|${orderBy.join(",")}|${pageSize}`;
 
-  const result = await countedPage<Record<string, unknown>>("load projects", ES_PROJECTS, {
+  /*
+   * A project with NO value in the sorted column goes after every project that has one.
+   *
+   * Dataverse has no `NULLS LAST` — `$orderby=vsb_projectname asc` is SQL Server underneath, so
+   * every nameless project came back FIRST and filled page 1 of the default view with blank
+   * rows. The canvas app never showed that because it never sorts on the server at all: it
+   * `ClearCollect`s the first `DefaultConnectedDataSourceMaxGetRowsCount` rows in table order
+   * and runs `SortByColumns` over that collection, so whichever nameless rows fell outside the
+   * cap were simply invisible. Truncating is not an option here, so the list is served as two
+   * ORDERED SEGMENTS instead, which puts them last without hiding any of them.
+   *
+   * The segments do not share a page: the named one's last page is short whenever its count is
+   * not a whole number of pages, which is why `totalPages` is computed rather than divided out
+   * of `totalRows`.
+   */
+  const named = await countedPage<Record<string, unknown>>("load projects", ES_PROJECTS, {
     select: PROJECT_SELECT,
-    filter,
+    filter: and(base, notNull(req.sort.col)),
     orderBy,
     top: pageSize,
-    page: req.page,
-    // Two different filters or sorts must never share a cached token.
-    signature: `${filter ?? ""}|${orderBy.join(",")}|${pageSize}`,
+    page: wanted,
+    signature: signature("named"),
   });
 
+  /*
+   * Where the named segment ENDS is read off the walk, not off the count.
+   *
+   * `countedPage` stops early only when the data runs out, so `named.page < wanted` means the
+   * named rows were exhausted at `named.page` pages and the rest of the list is the tail.
+   * `@odata.count` cannot be asked instead: Dataverse caps it at 5000, so on a table with more
+   * named projects than that it would put the boundary in the wrong place and strand every
+   * named project past page 25 behind a tail that should come after them. The skip token the
+   * server hands back is always the truth — the same rule `hasNext` already follows.
+   */
+  const wantsTail = named.page < wanted;
+  const namedPages = Math.max(
+    named.page,
+    named.totalRows === 0 ? 0 : Math.ceil(named.totalRows / pageSize),
+  );
+
+  /*
+   * Fetched even when the page being served is a named one, because the pager needs the tail's
+   * size to know how many pages there are in total. That probe asks for a single row and keeps
+   * its own signature, so it never pollutes the tokens of the real walk.
+   */
+  const blank = await countedPage<Record<string, unknown>>(
+    "load projects with no sort value", ES_PROJECTS, {
+      select: PROJECT_SELECT,
+      filter: and(base, isNull(req.sort.col)),
+      // Nothing to sort these by — the column is empty on all of them — so they take the
+      // autonumber, which is never blank and gives them a stable order of their own.
+      orderBy: [asc(COL.projectIdCode)],
+      top: wantsTail ? pageSize : 1,
+      page: wantsTail ? wanted - named.page : 1,
+      signature: signature(wantsTail ? "blank" : "blank-probe"),
+    },
+  );
+
+  const blankPages = blank.totalRows === 0 ? 0 : Math.ceil(blank.totalRows / pageSize);
+  /*
+   * With no tail there is nothing past the named rows, so a page beyond the end falls back to
+   * the last named page — `countedPage` has already clamped `named` to it. That is what asking
+   * for page 9 of a 3-page list did before the split, and it still does.
+   */
+  const servesTail = wantsTail && blank.totalRows > 0;
+  const segment = servesTail ? blank : named;
+
   return {
-    rows: result.rows.map(toProjectRow),
-    totalRows: result.totalRows,
-    page: result.page,
+    rows: segment.rows.map(toProjectRow),
+    totalRows: named.totalRows + blank.totalRows,
+    totalPages: Math.max(1, namedPages + blankPages),
+    page: servesTail ? named.page + blank.page : named.page,
     pageSize,
-    hasNext: result.hasNext,
+    // On the named segment's last page there is no next NAMED page, but the tail still follows.
+    hasNext: servesTail ? blank.hasNext : named.hasNext || blank.totalRows > 0,
   };
 }
 

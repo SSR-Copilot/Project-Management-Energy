@@ -242,6 +242,8 @@ export default function ProjectOverviewScreen() {
     page: page?.page ?? criteria.page,
     pageSize: page?.pageSize ?? PAGE_SIZE,
     totalRows: page?.totalRows ?? 0,
+    // The two segments do not divide evenly, so the server counts the pages.
+    ...(page?.totalPages === undefined ? {} : { totalPages: page.totalPages }),
   });
   const currentPage = page?.page ?? criteria.page;
 

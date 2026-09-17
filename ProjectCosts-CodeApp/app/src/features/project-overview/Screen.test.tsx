@@ -49,6 +49,16 @@ let projectTotal = 1;
 /** Set to a token to pretend a further page exists. */
 let projectNextToken: string | undefined;
 
+/**
+ * The NAMELESS tail — projects with no value in the sorted column.
+ *
+ * `loadProjectPage` serves the list as two ordered segments, so the transport has to answer the
+ * `<col> eq null` half separately; returning the same fixture for both would make the tail look
+ * as big as the list and the pager arithmetic meaningless.
+ */
+let blankRows: Record<string, unknown>[] = [];
+let blankTotal = 0;
+
 vi.mock("@microsoft/power-apps/app", () => ({
   setConfig: vi.fn(),
   getContext: vi.fn().mockResolvedValue({
@@ -70,6 +80,9 @@ vi.mock("@microsoft/power-apps/data", () => ({
       async (table: string, options: Record<string, unknown>) => {
         calls.push({ table, options });
         if (table === "vsb_projects") {
+          if (String(options.filter ?? "").includes(" eq null")) {
+            return { success: true, data: blankRows, count: blankTotal };
+          }
           // A second page exists only when the fixture says so, so the Next button and the
           // skip-token walk are both exercised for real.
           return {
@@ -130,7 +143,16 @@ function CurrentLocation() {
   return <output data-testid="current-location">{location.pathname}{location.search}</output>;
 }
 
-const projectQuery = () => calls.filter((c) => c.table === "vsb_projects").at(-1)?.options;
+const isBlankSegment = (o: Record<string, unknown>) =>
+  String(o.filter ?? "").includes(" eq null");
+
+/** The last query for the NAMED segment — the one that serves all but the tail. */
+const projectQuery = () => calls
+  .filter((c) => c.table === "vsb_projects" && !isBlankSegment(c.options)).at(-1)?.options;
+
+/** The last query for the nameless tail. */
+const blankQuery = () => calls
+  .filter((c) => c.table === "vsb_projects" && isBlankSegment(c.options)).at(-1)?.options;
 
 /** Column headers contain regex metacharacters — "Capacity [MW(p)]" most of all. */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,6 +164,8 @@ describe("ProjectOverviewScreen", () => {
     projectRows = [projectRow()];
     projectTotal = 1;
     projectNextToken = undefined;
+    blankRows = [];
+    blankTotal = 0;
     resetPageTokens();
   });
 
@@ -210,8 +234,10 @@ describe("ProjectOverviewScreen", () => {
   it("UT-OVUI-004 sends no $filter at all when nothing is filtered beyond active", async () => {
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    // `statecode eq 0` is always composed in; what must never appear is an empty `$filter=`.
-    expect(projectQuery()?.filter).toBe("statecode eq 0");
+    // `statecode eq 0` is always composed in, and the segment split adds the sorted column's
+    // null test. What must never appear is an empty `$filter=`.
+    expect(projectQuery()?.filter).toBe("(statecode eq 0) and (vsb_projectname ne null)");
+    expect(blankQuery()?.filter).toBe("(statecode eq 0) and (vsb_projectname eq null)");
   });
 
   it("UT-OVUI-005 renders the footer strings the screenshot shows", async () => {
@@ -351,6 +377,67 @@ describe("ProjectOverviewScreen", () => {
     render(<Harness search="?q=nothingmatches"><ProjectOverviewScreen /></Harness>);
     expect(await screen.findByText("No project matches these filters")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear all filters" })).toBeInTheDocument();
+  });
+
+  /*
+   * A project with no value in the sorted column goes LAST, not first.
+   *
+   * Dataverse has no `NULLS LAST`, so `$orderby=vsb_projectname asc` put every nameless project
+   * at the top and filled page 1 of the default view with blank rows. The canvas app never
+   * showed that because it never sorts on the server: it collects the first
+   * `DefaultConnectedDataSourceMaxGetRowsCount` rows in table order and sorts that collection,
+   * so nameless rows outside the cap were simply invisible. The list is served as two ordered
+   * segments instead, which puts them last without hiding any of them.
+   */
+  it("UT-OVUI-017 asks for the named projects and the nameless ones separately", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(projectQuery()?.orderBy).toEqual(["vsb_projectname asc"]);
+    // Nothing to sort the tail by — the column is empty on every one of them — so it takes the
+    // autonumber, which is never blank.
+    expect(blankQuery()?.orderBy).toEqual(["vsb_name asc"]);
+  });
+
+  it("UT-OVUI-018 splits on the SORTED column, not always on the name", async () => {
+    render(<Harness search="?sort=vsb_shortname&dir=desc"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(String(projectQuery()?.filter)).toContain("vsb_shortname ne null");
+    expect(String(blankQuery()?.filter)).toContain("vsb_shortname eq null");
+  });
+
+  it("UT-OVUI-019 keeps page 1 on the named projects even when nameless ones exist", async () => {
+    projectTotal = 250;
+    blankRows = [projectRow({ vsb_projectname: null, vsb_shortname: null })];
+    blankTotal = 60;
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    // 250 named over two pages, then 60 nameless on a third.
+    expect(screen.getByTestId("total-rows")).toHaveTextContent("Total Rows: 310");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+  });
+
+  it("UT-OVUI-020 offers a next page from the last named one, because the tail follows it", async () => {
+    // No skip token: there is no further NAMED page, but the nameless tail still comes after.
+    blankRows = [projectRow({ vsb_projectname: null })];
+    blankTotal = 5;
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
+  });
+
+  it("UT-OVUI-021 serves the tail once the named pages run out", async () => {
+    blankRows = [projectRow({ vsb_projectname: "", vsb_shortname: "NONAME" })];
+    blankTotal = 5;
+    render(<Harness search="?p=2"><ProjectOverviewScreen /></Harness>);
+    // Page 2 is past the single named page, so it is the tail.
+    expect(await screen.findByText("NONAME")).toBeInTheDocument();
+    expect(blankQuery()?.top).toBe(200);
+  });
+
+  it("UT-OVUI-022 falls back to the last named page when there is no tail at all", async () => {
+    // Asking for page 9 of a 1-page list showed page 1 before the split, and still does.
+    render(<Harness search="?p=9"><ProjectOverviewScreen /></Harness>);
+    expect(await screen.findByText("Contr. Endpoint Testproject")).toBeInTheDocument();
   });
 
   it("UT-OVUI-016 renders without a Griffel or hook-order failure", async () => {
