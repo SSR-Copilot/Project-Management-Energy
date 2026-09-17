@@ -177,7 +177,13 @@ const useStyles = makeStyles({
   rowStandard: { fontStyle: "italic", color: palette.themePrimary },
   /** `FontWeight: =If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1625). */
   rowBold: { fontWeight: tokens.fontWeightSemibold },
-  rowSelected: { backgroundColor: palette.themeLighter },
+  /*
+   * A selected row is NOT tinted. `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent`
+   * and there is not one `Fill: =If(...)` on the Opex, Land Lease or Contracts screen - the
+   * filled radio in the first cell is the whole affordance. The light-blue wash here was
+   * ours. `aria-selected` still carries the state for assistive tech.
+   */
+  rowSelected: {},
   row: { cursor: "pointer" },
   selectCell: { width: "40px", paddingLeft: space.m },
   empty: {
@@ -775,9 +781,11 @@ function SubaccountCard({
             ))}
           </div>
 
-          {rows.length === 0 ? (
-            <Text className={styles.empty}>No periods yet.</Text>
-          ) : (
+          {/*
+            * The header stands even with no rows - `…_CostsTableHeader_1.Visible: =true`,
+            * unlike Opex, whose header is gated on the subaccount having costs.
+            */}
+          {(
             <div className={styles.scroll}>
               <table className={styles.table} aria-label={`${card.name} periods`}>
                 <thead>

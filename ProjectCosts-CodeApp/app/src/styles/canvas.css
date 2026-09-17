@@ -255,7 +255,9 @@
 .canvas-contract-targets { border-collapse: collapse; table-layout: fixed; width: min(835px, 100%); font-size: 14px; }
 .canvas-contract-targets th { background: #fafafa; height: 34px; padding: 0 6px; text-align: left; font-weight: 600; color: #242424; }
 .canvas-contract-targets td { height: 30px; padding: 0 6px; color: #242424; }
-.canvas-contract-targets tr[aria-selected="true"] td { background: #edebe9; }
+/* No tint on a selected row: `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent` and
+   the Contracts screen has no `Fill: =If(...)` at all - the filled radio is the affordance.
+   The wash that was here was ours. */
 .canvas-contract-targets tbody tr { cursor: pointer; }
 .canvas-contract-targets :is(th, td):first-child { width: 40px; }
 .canvas-contract-targets :is(th, td):nth-child(2) { width: 175px; }

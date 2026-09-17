@@ -214,7 +214,13 @@ const useStyles = makeStyles({
    * so it is taken from the palette rather than from Fluent's brand ramp.
    */
   rowStandard: { fontStyle: "italic", color: palette.themePrimary },
-  rowSelected: { backgroundColor: palette.themeLighter },
+  /*
+   * A selected row is NOT tinted. `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent`
+   * and there is not one `Fill: =If(...)` on the Opex, Land Lease or Contracts screen - the
+   * filled radio in the first cell is the whole affordance. The light-blue wash here was
+   * ours. `aria-selected` still carries the state for assistive tech.
+   */
+  rowSelected: {},
   selectCell: { width: "40px", paddingLeft: space.m },
   warnCell: { display: "inline-flex", alignItems: "center", gap: space.xxs },
   warnIcon: { color: palette.Warning, minWidth: "auto", paddingLeft: 0, paddingRight: 0 },
