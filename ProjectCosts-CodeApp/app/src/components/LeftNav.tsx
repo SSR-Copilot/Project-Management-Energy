@@ -10,7 +10,7 @@
  */
 import { Button, makeStyles, mergeClasses, tokens, Tooltip } from "@fluentui/react-components";
 import {
-  DocumentEditRegular, DocumentTextRegular, MoneyRegular, ReadingListFilled,
+  BookOpenFilled, DocumentEditRegular, DocumentPersonRegular, MoneyRegular,
   TableSimpleRegular, ChevronDownRegular, ChevronUpRegular, NavigationRegular,
 } from "@fluentui/react-icons";
 import { useMemo, useState, type ReactElement } from "react";
@@ -28,11 +28,13 @@ import { layout, palette, space } from "@/theme/tokens";
  */
 const ICONS: Record<NavItem["icon"], ReactElement> = {
   projects: <TableSimpleRegular />,
-  capex: <ReadingListFilled />,      // ReadingModeSolid — the only FILLED icon in the rail
-  opex: <DocumentEditRegular />,     // PageEdit
-  document: <DocumentEditRegular />, // PageEdit
-  contract: <DocumentTextRegular />, // TextDocumentShared
-  currency: <MoneyRegular />,        // AllCurrency
+  // ReadingModeSolid — an open book, and the only FILLED glyph in the rail.
+  capex: <BookOpenFilled />,
+  opex: <DocumentEditRegular />,      // PageEdit
+  document: <DocumentEditRegular />,  // PageEdit
+  // TextDocumentShared — a document with a person, not a plain sheet of lines.
+  contract: <DocumentPersonRegular />,
+  currency: <MoneyRegular />,         // AllCurrency
 };
 
 const useStyles = makeStyles({

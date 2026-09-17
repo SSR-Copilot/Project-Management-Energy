@@ -4,27 +4,38 @@
 /* Right padding clears the AVATAR, not the pill: the avatar is 48 px and hangs off the pill's
    right edge, so an 8 px gutter left it flush against the window (and dragged a page-level
    horizontal scrollbar with it). The canvas leaves a visible margin after it. */
-.canvas-shell > header { height: 70px; min-height: 70px; padding: 0 20px 0 3px; gap: 0; border: 0; flex-shrink: 0; }
-.canvas-brand { width: 202px; height: 68px; gap: 14px; }
-.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 30px; }
-.canvas-brand-version { color: #111; font-size: 10px; line-height: 14px; }
-.canvas-project-title { border-left: 4px solid #82a51e; padding: 22px 8px; height: 68px; max-width: none; font-size: 20px; }
-.canvas-user-pill { height: 32px; position: relative; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; font-size: 14px; font-weight: 600; }
+/* `con_cmp_Header` is `height: 74px`, white, `border-radius: 4px` and the same shadow the
+   rail carries — `padding: 0`, `gap: 0`. */
+.canvas-shell > header { height: 74px; min-height: 74px; padding: 0 20px 0 3px; gap: 0; border: 0; border-radius: 4px; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; flex-shrink: 0; }
+/* `con_cmp_Header_Logo` is 210 wide over a 60 x 66 image box. */
+.canvas-brand { width: 210px; height: 74px; gap: 14px; }
+.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 1.2; }
+/* 8pt at `font-weight: lighter`, in pure black — not #111 at 10px semibold-ish. */
+.canvas-brand-version { color: #000; font-size: 10.67px; font-weight: 300; line-height: 1.2; }
+.canvas-project-title { border-left: 4px solid #82a51e; padding: 0 8px; height: 70px; line-height: 70px; max-width: none; font-size: 20px; }
+.canvas-user-pill { height: 32px; position: relative; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; border-radius: 90px; font-size: 14.67px; font-weight: 600; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
 /* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
    `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
    `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */
-.canvas-user-avatar { position: absolute; right: -1px; top: -9px; height: 48px; width: 48px; border: 2px solid #0b0b0b; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
+.canvas-user-avatar { position: absolute; right: -1px; top: -9px; height: 50px; width: 50px; border: 2px solid #0b0b0b; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
 .canvas-user-avatar svg { width: 40px; height: 40px; color: white; }
 .canvas-shell > div { gap: 4px; }
 .canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }
 .canvas-overview-shell main { border: 0; border-radius: 0; }
 .canvas-shell footer { min-height: 28px; height: 28px; background: #fff; border: 0; padding: 0 4px; }
-.canvas-rail { border: 1px solid #ddd; border-radius: 4px; padding: 0; background: #fff; }
+/* `con_Costs_LeftNavigationMenu` is `width: 200px`, white, `border-radius: 4px` and a SHADOW
+   — `rgba(0,0,0,.14) 0 1px 2px, rgba(0,0,0,.12) 0 0 2px` — with no border at all. Its inner
+   `con_Left_Navigation` is a vertical autolayout with `padding: 4px 0` and `gap: 4px`. */
+.canvas-rail { border: 0; border-radius: 4px; padding: 4px 0; background: #fff; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
 /* Rail blue is the VSB brand #006eb9 (palette.themePrimary), not Fluent's #0078d4 —
    sampled off the hamburger, the selected-item left border and the rail icons in
    `UI Screenshots/Cost App Landing Screen - Devex Capex Screen.png`. */
-.canvas-rail > button:first-child { height: 48px; min-height: 48px; margin: 0 0 5px; border-radius: 0; width: 100%; justify-content: flex-start; border-bottom: 2px solid #006eb9; color: #006eb9; }
-.canvas-rail a { border-left-width: 2px; padding: 12px 6px; min-height: 43px; color: #111; font-size: 14px; }
+/* `con_Left_Navigation_Header` is 45 high; `icon_Left_Navigation_Expand` is a 28 box with
+   `padding: 0 6px` holding a 16 x 28 hamburger in `rgba(0,110,185,1)`; and
+   `rec_Left_Navigation_Expanded_Delimiter` is a 2 px bar at `top: 42` across the full 200 —
+   in `rgba(15,108,189,1)` = #0f6cbd, Fluent's brand blue, NOT the VSB #006eb9 the glyph uses. */
+.canvas-rail > button:first-child { height: 45px; min-height: 45px; margin: 0; padding: 0 6px; border-radius: 0; width: 100%; justify-content: flex-start; border-bottom: 2px solid #0f6cbd; color: #006eb9; }
+.canvas-rail a { border-left-width: 2px; padding: 8px 6px; min-height: 44px; color: #111; font-size: 14px; }
 .canvas-rail a svg { color: #006eb9; flex-shrink: 0; }
 .canvas-rail a[aria-current="page"] { border-left-color: #006eb9; background: #edebe9; color: #111; font-weight: 600; }
 .canvas-rail a span { white-space: normal; line-height: 18px; }
