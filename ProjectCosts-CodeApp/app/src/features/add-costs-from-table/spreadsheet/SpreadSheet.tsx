@@ -65,8 +65,34 @@ function getRowClassName(rowIndex: number, data: SheetGrid): string {
 }
 
 /**
+ * Row colouring and editability, applied to EVERY cell of a grid.
+ *
+ * This used to live inside `handleChange` alone, so the sheet was dressed only once the user
+ * typed something: it opened with every row white and fully editable, and the account and
+ * subaccount rows turned grey and locked on the first keystroke. Seeding the state through
+ * the same function makes the first render agree with every render after it.
+ */
+export function decorateGrid(grid: SheetGrid): SheetGrid {
+  const headerRow = grid[0] ?? [];
+  return grid.map((row, i) => {
+    if (!row) return row;
+    if (i === 0) return headerRow.map((cell) => ({ ...cell, readOnly: true, className: "header" }));
+    return row.map((cell, j) => ({
+      ...cell,
+      className: getRowClassName(i, grid),
+      readOnly: getRowEditable(i, grid),
+      ...(j === 3 ? { DataEditor: DropdownEditor } : {}),
+      ...(j === 4 || j === 5 ? { DataEditor: YesNoEditor } : {}),
+    }));
+  });
+}
+
+/**
  * Fills down Account Number/Name from the nearest row above that has them, skips rows whose
  * Description is exactly "*Account*" (pure header/label rows), assigns Row_ID grouping.
+ *
+ * Works on COPIES — `gridToJson` clones every cell before handing them over — so this shapes
+ * the save payload without writing the filled-down account number back into the sheet.
  */
 function sanitizeSpreadsheetData(costDes: SheetCell[][]): SheetCell[][] {
   const returningData: SheetCell[][] = [];
@@ -168,14 +194,14 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   onAddRow, onDeleteRow, onCopyTable,
   addRowToken, deleteRowToken, copyTableToken,
 }) => {
-  const [data, setData] = React.useState<SheetGrid>(initialData);
+  const [data, setData] = React.useState<SheetGrid>(() => decorateGrid(initialData));
   const selectedRowIndexRef = React.useRef<number | null>(null);
   const selectedCtorRef = React.useRef<string>("");
   const hasMountedRef = React.useRef({ add: false, del: false, copy: false });
 
   // Re-hydrate whenever the caller supplies a genuinely new initial grid (e.g. after load).
   React.useEffect(() => {
-    setData(initialData);
+    setData(decorateGrid(initialData));
     // Only when the reference itself changes — the caller controls that by memoizing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData]);
@@ -227,21 +253,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
       sanitizedData[0] = headerRow;
 
-      for (let i = 0; i < sanitizedData.length; i++) {
-        const sanitizedRow = sanitizedData[i];
-        if (!sanitizedRow) continue;
-        for (let j = 0; j < sanitizedRow.length; j++) {
-          const existing = sanitizedRow[j];
-          if (!existing) continue;
-          sanitizedRow[j] = {
-            ...existing,
-            className: getRowClassName(i, sanitizedData),
-            readOnly: i === 0 ? true : getRowEditable(i, sanitizedData),
-            ...(j === 3 ? { DataEditor: DropdownEditor } : {}),
-            ...(j === 4 || j === 5 ? { DataEditor: YesNoEditor } : {}),
-          };
-        }
-      }
+      sanitizedData = decorateGrid(sanitizedData);
 
       if (selectedCtorRef.current === "EntireWorksheetSelection") {
         const valuesEqual = (a: SheetCell[] = [], b: SheetCell[] = []) => {
