@@ -10,6 +10,13 @@
  * year — not just the sheet's visible range, because `planContractDeletions`' past-cost guard
  * has to see history outside that range too.
  *
+ * Each PHASE is awaited before the next begins, but the writes WITHIN a phase are independent
+ * of one another and run through the bounded pool in `./concurrency` instead of one at a time.
+ * That is the whole of the performance story here: a full sheet is one `vsb_capexcosts` write
+ * per changed month cell, several hundred of them, and serialised round trips made saving take
+ * minutes. The ordering BETWEEN phases is what carries the safety guarantees, never the ordering
+ * inside them.
+ *
  * The write half follows `src/data/capexWrites.ts`'s ordering convention: contract writes
  * first, then cost writes, cost deletes, contract-total recompute, and contract deletes last
  * (a delete removes the contract's own comments, then its cost rows, then the contract, so an
@@ -23,6 +30,7 @@ import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsServic
 import { unwrap } from "@/platform/errors";
 import { fetchAll } from "./client";
 import { ACTIVE, and, chunk, lookupEq, lookupIn } from "./odata";
+import { forEachLimit, mapLimit } from "./concurrency";
 import { loadCostAccounts, loadPayerDefaults } from "./costBook";
 import { deleteComment, loadComments } from "./comments";
 import { planDeleteContract } from "@/features/capex-costs/rules";
@@ -196,31 +204,33 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
   const { projectId, owningBusinessUnitId, changedRows, existingContracts, existingCosts } = args;
 
   const upserts = contractUpserts(changedRows, existingContracts);
-  const resolvedIdByGroup = new Map<string, string>();
 
-  for (const u of upserts) {
+  // One contract's write says nothing about another's, so the whole phase goes through the pool.
+  // The ids come back in INPUT order, and the map is built from them afterwards, so both its
+  // contents and its insertion order are what the sequential loop produced.
+  const resolved = await mapLimit(upserts, async (u) => {
     const groupKey = `${u.subaccountId}|${u.name}`;
     if (u.contractId) {
       unwrap(
         await Vsb_capexprojectcontractsService.update(u.contractId, contractPayload(u) as never),
         "update CAPEX contract",
       );
-      resolvedIdByGroup.set(groupKey, u.contractId);
-    } else {
-      const created = unwrap(
-        await Vsb_capexprojectcontractsService.create({
-          ...contractPayload(u),
-          "vsb_Project@odata.bind": bind("vsb_projects", projectId),
-          "vsb_Account@odata.bind": bind("vsb_capexaccountlists", u.subaccountId ?? ""),
-          ...(owningBusinessUnitId
-            ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
-            : {}),
-        } as never),
-        "create CAPEX contract",
-      );
-      resolvedIdByGroup.set(groupKey, created.vsb_capexprojectcontractid);
+      return [groupKey, u.contractId] as const;
     }
-  }
+    const created = unwrap(
+      await Vsb_capexprojectcontractsService.create({
+        ...contractPayload(u),
+        "vsb_Project@odata.bind": bind("vsb_projects", projectId),
+        "vsb_Account@odata.bind": bind("vsb_capexaccountlists", u.subaccountId ?? ""),
+        ...(owningBusinessUnitId
+          ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
+          : {}),
+      } as never),
+      "create CAPEX contract",
+    );
+    return [groupKey, created.vsb_capexprojectcontractid] as const;
+  });
+  const resolvedIdByGroup = new Map<string, string>(resolved);
 
   const resolvedRows = changedRows.map((r) => (
     r.projectContractId
@@ -230,7 +240,10 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
 
   const plan = costWrites(resolvedRows, existingCosts);
 
-  for (const u of plan.upserts) {
+  // The bulk of a save: one write per changed month cell. Every entry names a distinct cost row
+  // — `costWrites` plans at most one per (contract, year, month) — so nothing here waits on
+  // anything else here, and this is the phase the pool actually buys the time back on.
+  await forEachLimit(plan.upserts, async (u) => {
     if (u.costId) {
       unwrap(await Vsb_capexcostsService.update(u.costId, { vsb_cost: u.cost }), "update CAPEX cost");
     } else if (u.contractId) {
@@ -247,32 +260,49 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
         "create CAPEX cost",
       );
     }
-  }
+  });
 
-  // Deletes before the total recompute below, so the sum reflects the sheet's final state.
-  for (const costId of plan.deletes) {
-    await Vsb_capexcostsService.delete(costId);
-  }
+  // Deletes before the total recompute below, so the sum reflects the sheet's final state. That
+  // is why they stay a separate AWAITED phase rather than joining the upserts above.
+  await forEachLimit(plan.deletes, (costId) => Vsb_capexcostsService.delete(costId));
 
-  const touchedContractIds = new Set<string>([
+  const touchedContractIds = [...new Set<string>([
     ...resolvedIdByGroup.values(),
     ...upserts.map((u) => u.contractId).filter((id): id is string => id !== null),
-  ]);
-  for (const contractId of touchedContractIds) {
+  ])];
+
+  /*
+   * Indexed once instead of re-scanned per contract. This loop used to walk ALL of `existingCosts`
+   * and ALL of `plan.upserts` for every touched contract, with an `existingCosts.find` per deleted
+   * row inside that — quadratic in a category that can hold thousands of cost rows. The merge and
+   * its precedence are unchanged: existing values, then this save's, then the deletions.
+   */
+  const group = <T>(rows: readonly T[], key: (row: T) => string) => {
+    const out = new Map<string, T[]>();
+    for (const row of rows) {
+      const k = key(row);
+      const bucket = out.get(k);
+      if (bucket) bucket.push(row); else out.set(k, [row]);
+    }
+    return out;
+  };
+  const existingByContract = group(existingCosts, (c) => c.contractId);
+  const upsertsByContract = group(plan.upserts, (u) => u.contractId ?? "");
+  const existingById = new Map(existingCosts.map((c) => [c.id, c]));
+  const deletedByContract = group(
+    plan.deletes.map((id) => existingById.get(id)).filter((c): c is ExistingCost => c !== undefined),
+    (c) => c.contractId,
+  );
+
+  // One contract's total has no bearing on another's.
+  await forEachLimit(touchedContractIds, (contractId) => {
     const merged = new Map<string, number>();
-    for (const c of existingCosts) {
-      if (c.contractId === contractId) merged.set(`${c.year}-${c.month}`, c.cost ?? 0);
-    }
-    for (const u of plan.upserts) {
-      if (u.contractId === contractId) merged.set(`${u.year}-${u.month}`, u.cost);
-    }
-    for (const deletedId of plan.deletes) {
-      const original = existingCosts.find((c) => c.id === deletedId);
-      if (original && original.contractId === contractId) merged.delete(`${original.year}-${original.month}`);
-    }
+    for (const c of existingByContract.get(contractId) ?? []) merged.set(`${c.year}-${c.month}`, c.cost ?? 0);
+    for (const u of upsertsByContract.get(contractId) ?? []) merged.set(`${u.year}-${u.month}`, u.cost);
+    for (const c of deletedByContract.get(contractId) ?? []) merged.delete(`${c.year}-${c.month}`);
     const total = recomputeContractTotal([...merged.values()].map((cost) => ({ cost })));
-    await Vsb_capexprojectcontractsService.update(contractId, { vsb_totalcost: total } as never);
-  }
+    return Vsb_capexprojectcontractsService.update(contractId, { vsb_totalcost: total } as never);
+  });
 
   /*
    * Deletes last, CHILDREN BEFORE PARENTS: comments, then cost rows, then the contract.
@@ -297,9 +327,17 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
     for (const contractId of args.contractDeleteIds) {
       const plan = planDeleteContract(contractId, flattened);
       for (const commentId of plan.commentIds) await deleteComment(commentId);
-      for (const c of existingCosts.filter((c) => c.contractId === contractId)) {
-        await Vsb_capexcostsService.delete(c.id);
-      }
+      /*
+       * A contract's cost rows are siblings of one another and children of nothing but that
+       * contract, so they may go together — but the three STEPS stay strictly ordered, and so do
+       * the contracts against each other. This is the one place where the ordering IS the
+       * guarantee: the writes are not transactional, so an interrupted delete must never leave a
+       * comment or a cost row pointing at a contract that is already gone.
+       */
+      await forEachLimit(
+        existingCosts.filter((c) => c.contractId === contractId),
+        (c) => Vsb_capexcostsService.delete(c.id),
+      );
       await Vsb_capexprojectcontractsService.delete(plan.contractId);
     }
   }
