@@ -23,7 +23,9 @@ const useStyles = makeStyles({
     minHeight: 0,
     backgroundColor: tokens.colorNeutralBackground1,
   },
-  body: { display: "flex", flex: 1, minHeight: 0 },
+  // `minWidth: 0` is load-bearing: without it this row's flex items keep `min-width: auto`
+  // and a wide screen pushes the row past the shell, which is a horizontal page scrollbar.
+  body: { display: "flex", flex: 1, minHeight: 0, minWidth: 0 },
   content: {
     flex: 1, minWidth: 0, minHeight: 0,
     display: "flex", flexDirection: "column",

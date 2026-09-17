@@ -48,7 +48,7 @@
 .canvas-panel .canvas-panel-header { padding: 10px 20px; height: 48px; background: #006eb9; color: white; flex-shrink: 0; }
 .canvas-panel-header h2 { font-size: 18px; line-height: 26px; color: white; }
 .canvas-panel-header button { color: white; }
-.canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; }
+.canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; container-type: inline-size; }
 /* A panel scrolls VERTICALLY. Anything wide enough to scroll it sideways is a layout bug in the
    field that is too wide, not something the reader should have to drag — the comments card is
    the one that kept doing it. Its own children may still scroll (tables opt in explicitly). */
@@ -83,7 +83,7 @@
 .canvas-radio-group legend > span[data-required="true"]::before { content: '* '; color: #d20532; }
 .canvas-field > input, .canvas-field > select, .canvas-field > textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
 .canvas-field > textarea { height: 64px; resize: vertical; }
-.canvas-field > input:focus, .canvas-field > select:focus { outline: 1px solid #0078d4; }
+.canvas-field > input:focus, .canvas-field > select:focus, .canvas-field > textarea:focus { outline: 1px solid #0078d4; outline-offset: -1px; }
 /* A Fluent control dropped into a `.canvas-field` still has to fill it. `DatePicker` merges
    `fui-DatePicker` onto an `Input` root, so it is that root — not a wrapper — that needs the
    width; its calendar glyph is a `contentAfter` and lays itself out inside. */
@@ -195,7 +195,7 @@
 /* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
 .canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
 .canvas-field[data-invalid] > input, .canvas-field[data-invalid] > select,
-.canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; }
+.canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; outline-offset: -1px; }
 
 /* ===========================================================================
    Contracts screen — `Src/Contracts Screen.pa.yaml`.
@@ -274,11 +274,24 @@
 .canvas-panel-columns { display: grid; grid-template-columns: max(400px, 33.333%) minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; }
 .canvas-panel-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* Only the form column scrolls; the DevCo tree and Comment stay put beside it. */
-.canvas-panel-column:first-child { overflow-y: auto; min-height: 0; padding-top: 10px; padding-right: 10px; }
+.canvas-panel-column:first-child { overflow-y: auto; overflow-x: hidden; min-height: 0; padding-top: 10px; padding-right: 10px; }
 .canvas-panel-column:last-child { align-self: start; }
 @media (max-width: 899px) {
   .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .canvas-panel-column:first-child { overflow-y: visible; padding-right: 0; }
+  .canvas-panel-column:first-child { overflow-y: visible; overflow-x: visible; padding-right: 0; }
+}
+
+/*
+ * `con_Contracts_RightPanel_NewEdit_DevCoCosts.Width` is
+ * `If(Parent.Width >= 800, Parent.Width/2, Parent.Width)` — the split is decided by the
+ * PANEL's width, not the window's. A media query cannot see that (the panel is
+ * `min(960px, 50vw)`), so the body is a container and the columns stack on its inline size,
+ * at the same 800 the canvas uses.
+ */
+@container (max-width: 800px) {
+  .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .canvas-panel-column:first-child { overflow-y: visible; overflow-x: visible; padding-right: 0; }
+  .canvas-panel-column:last-child { align-self: stretch; }
 }
 
 /* The `{Len}/N` counter on the label line — `Align: =Align.Right`, `Size: =12`. */

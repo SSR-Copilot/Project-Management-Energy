@@ -12,7 +12,20 @@ html, body, #root {
   margin: 0;
 }
 
+/*
+ * The app shell is `height: 100vh` and each screen scrolls inside its own region — the
+ * canvas app was a fixed 1366 x 768 frame and behaves the same way. So the DOCUMENT should
+ * never scroll, and a scrollbar on it is always a layout leak somewhere inside. Pinning it
+ * here means one such leak cannot cascade: a horizontal scrollbar eats ~15 px of height,
+ * which brings a vertical one, which narrows the viewport, and so on.
+ */
+html {
+  overflow: hidden;
+}
+
 body {
+  overflow: hidden;
+
   /* Fluent paints its own background inside FluentProvider; this stops a white flash. */
   background-color: #faf9f8;
 
