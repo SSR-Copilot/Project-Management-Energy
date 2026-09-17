@@ -422,8 +422,8 @@ export function validateMonthAmount(
   scheme: CostLine["distributionScheme"],
   countryName: string | null | undefined,
   locale?: string,
-): { valid: boolean; message: string | null } {
-  if (value.trim() === "") return { valid: true, message: null };
+): { valid: boolean; message: string | null; kind: "ok" | "format" | "range" } {
+  if (value.trim() === "") return { valid: true, message: null, kind: "ok" };
 
   const grouped = (n: number) => new Intl.NumberFormat(
     (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
@@ -431,22 +431,22 @@ export function validateMonthAmount(
 
   if (scheme === "percent") {
     if (!isOneDecimalCanvasParity(value, locale)) {
-      return { valid: false, message: "Value must be numeric upto one decimal" };
+      return { valid: false, message: "Value must be numeric upto one decimal", kind: "format" };
     }
     if (!inRange(value, 0, 100, locale)) {
-      return { valid: false, message: "Value must be between 0 and 100." };
+      return { valid: false, message: "Value must be between 0 and 100.", kind: "range" };
     }
-    return { valid: true, message: null };
+    return { valid: true, message: null, kind: "ok" };
   }
 
   if (!isInteger(value, locale)) {
-    return { valid: false, message: "Value must be a numeric" };
+    return { valid: false, message: "Value must be a numeric", kind: "format" };
   }
   const max = totalCostMax(countryName);
   if (!inRange(value, 0, max, locale)) {
-    return { valid: false, message: `Value must be between 0 and ${grouped(max)}.` };
+    return { valid: false, message: `Value must be between 0 and ${grouped(max)}.`, kind: "range" };
   }
-  return { valid: true, message: null };
+  return { valid: true, message: null, kind: "ok" };
 }
 
 /** Every month box that currently reads as invalid, keyed `"<year>-<month>"`. */
@@ -462,6 +462,27 @@ export function monthAmountErrors(
     if (message) out.set(`${p.year}-${p.month}`, message);
   }
   return out;
+}
+
+/**
+ * Whether any month is out of RANGE — the subset of `monthAmountErrors` that Save blocks on.
+ *
+ * A format error (a decimal where the scheme wants a whole number, two decimals where it
+ * wants one) is NOT a Save blocker: "Recalculate Allocated Cost" is `Round(…, 0)` and exists
+ * precisely to fix those, so refusing to Save would also make the rounding unreachable. A
+ * figure past the ceiling, or a percentage over 100, is a different matter — rounding cannot
+ * rescue it and the canvas' own gate lets it through, which is a source defect rather than a
+ * design.
+ */
+export function hasMonthRangeError(
+  payments: readonly { year: number; month: number; amount: number }[],
+  scheme: CostLine["distributionScheme"],
+  countryName: string | null | undefined,
+  locale?: string,
+): boolean {
+  return payments.some(
+    (p) => validateMonthAmount(String(p.amount), scheme, countryName, locale).kind === "range",
+  );
 }
 
 const MM_YYYY = /^(0[1-9]|1[0-2])\/[0-9]{4}$/;

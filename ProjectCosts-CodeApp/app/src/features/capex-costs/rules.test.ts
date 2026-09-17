@@ -19,7 +19,7 @@ import {
   resolveCategory, resolveEqualMode, resolvePaidTarget, startEndJson,
   totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
   validateTotalCost,
-  validateMonthAmount, monthAmountErrors,
+  validateMonthAmount, monthAmountErrors, hasMonthRangeError,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
 
@@ -1021,7 +1021,7 @@ describe("validateMonthAmount", () => {
   // `lbl_…_FirstMonth_ErrorMessage_*`, one per month, branching on the distribution SCHEME.
   it("UT-CAPEXR-060 takes a whole number in range for Absolute Values", () => {
     expect(validateMonthAmount("1500", "absolute", "Germany"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
   });
 
   it("UT-CAPEXR-061 rejects a decimal for Absolute Values", () => {
@@ -1036,7 +1036,7 @@ describe("validateMonthAmount", () => {
     expect(validateMonthAmount("500000001", "absolute", "Germany").message)
       .toBe("Value must be between 0 and 500,000,000.");
     expect(validateMonthAmount("500000001", "absolute", "Poland"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
     expect(validateMonthAmount("2250000001", "absolute", "Poland").message)
       .toBe("Value must be between 0 and 2,250,000,000.");
   });
@@ -1044,14 +1044,14 @@ describe("validateMonthAmount", () => {
   it("UT-CAPEXR-063 allows ONE decimal for % Values, not two", () => {
     // `IsOneDecimal`, not `IsTwoDecimal` — the canvas message says so in as many words.
     expect(validateMonthAmount("12.5", "percent", "Germany"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
     expect(validateMonthAmount("12.55", "percent", "Germany").message)
       .toBe("Value must be numeric upto one decimal");
   });
 
   it("UT-CAPEXR-064 bounds % Values at 0 and 100", () => {
     expect(validateMonthAmount("100", "percent", "Germany"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
     expect(validateMonthAmount("100.1", "percent", "Germany").message)
       .toBe("Value must be between 0 and 100.");
     expect(validateMonthAmount("-1", "percent", "Germany").valid).toBe(false);
@@ -1060,9 +1060,9 @@ describe("validateMonthAmount", () => {
   it("UT-CAPEXR-065 treats a blank month as no cost, not as an error", () => {
     // Every branch is gated on `Not(IsBlank(...))`.
     expect(validateMonthAmount("", "absolute", "Germany"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
     expect(validateMonthAmount("   ", "percent", "Germany"))
-      .toEqual({ valid: true, message: null });
+      .toEqual({ valid: true, message: null, kind: "ok" });
   });
 });
 
@@ -1081,5 +1081,30 @@ describe("monthAmountErrors", () => {
     expect(monthAmountErrors(
       [{ year: 2026, month: 1, amount: 250 }], "absolute", "Germany",
     ).size).toBe(0);
+  });
+});
+
+describe("hasMonthRangeError", () => {
+  // Save blocks on a RANGE error but not on a format one: "Recalculate Allocated Cost" is
+  // `Round(…, 0)`, so it can rescue a decimal and never a figure past the ceiling.
+  it("UT-CAPEXR-068 ignores a decimal, which Recalculate rounds away", () => {
+    expect(hasMonthRangeError(
+      [{ year: 2026, month: 1, amount: 1250.6 }], "absolute", "Germany",
+    )).toBe(false);
+  });
+
+  it("UT-CAPEXR-069 catches a percentage over 100", () => {
+    expect(hasMonthRangeError(
+      [{ year: 2026, month: 1, amount: 150 }], "percent", "Germany",
+    )).toBe(true);
+  });
+
+  it("UT-CAPEXR-070 catches a cost past the country ceiling", () => {
+    expect(hasMonthRangeError(
+      [{ year: 2026, month: 1, amount: 600_000_000 }], "absolute", "Germany",
+    )).toBe(true);
+    expect(hasMonthRangeError(
+      [{ year: 2026, month: 1, amount: 600_000_000 }], "absolute", "Poland",
+    )).toBe(false);
   });
 });

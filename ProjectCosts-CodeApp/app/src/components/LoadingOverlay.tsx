@@ -62,7 +62,13 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold,
     lineHeight: "20px",
   },
+  /*
+   * `mode="inline"` stands in for a whole content area while it loads, so it fills that area
+   * and centres in it. Fixed top/bottom padding left the spinner pinned near the top of a
+   * tall screen with the rest of the panel empty below it.
+   */
   inline: {
+    flexGrow: 1, minHeight: "200px",
     display: "flex", alignItems: "center", justifyContent: "center", gap: space.s,
     paddingTop: space.xxl, paddingBottom: space.xxl,
   },

@@ -58,7 +58,7 @@ import {
   needsClusterLinkageConfirmation,
   proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
   applyDescriptionChange, describeDescriptionError, paidToggleNeedsConfirmation,
-  monthAmountErrors,
+  hasMonthRangeError, monthAmountErrors,
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
 } from "./rules";
 import {
@@ -475,7 +475,9 @@ export default function CapexCostsScreen() {
    * it would also block the rounding path above.
    */
   const valid = canSaveContract(edit, costValue, rawProposed)
-    && !descriptionError && !totalCostError && !startDateError && !endDateError;
+    && !descriptionError && !totalCostError && !startDateError && !endDateError
+    && !(edit && edit.distribution === "individual"
+      && hasMonthRangeError(edit.payments, edit.distributionScheme, countryName));
 
   /* ── Link to Milestone (`drp_…_Form_Link_to_Cluster`) ───────────────────── */
 
