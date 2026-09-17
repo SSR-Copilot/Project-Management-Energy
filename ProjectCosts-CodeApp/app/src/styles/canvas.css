@@ -10,7 +10,10 @@
 .canvas-brand-version { color: #111; font-size: 10px; line-height: 14px; }
 .canvas-project-title { border-left: 4px solid #82a51e; padding: 22px 8px; height: 68px; max-width: none; font-size: 20px; }
 .canvas-user-pill { height: 32px; position: relative; padding: 0 52px 0 16px; margin-left: 60px; margin-right: 0; font-size: 14px; font-weight: 600; }
-.canvas-user-avatar { position: absolute; right: -1px; top: -9px; height: 48px; width: 48px; border: 1px solid #006eb9; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
+/* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
+   `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
+   `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */
+.canvas-user-avatar { position: absolute; right: -1px; top: -9px; height: 48px; width: 48px; border: 2px solid #0b0b0b; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; }
 .canvas-user-avatar svg { width: 40px; height: 40px; color: white; }
 .canvas-shell > div { gap: 4px; }
 .canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }

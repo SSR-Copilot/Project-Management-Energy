@@ -21,8 +21,8 @@ import {
   Text, Tooltip, makeStyles, tokens,
 } from "@fluentui/react-components";
 import {
-  BugRegular, BuildingRegular, GlobeRegular, InfoRegular, LocalLanguageRegular, MailRegular,
-  PersonRegular, WarningFilled, ChevronDownRegular,
+  BugRegular, GlobeRegular, HomeAddRegular, HomeRegular, InfoRegular, LocalLanguageRegular,
+  MailRegular, PersonRegular, WarningFilled, ChevronDownRegular,
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
 import { layout, palette, space } from "@/theme/tokens";
@@ -50,6 +50,13 @@ const useStyles = makeStyles({
     maxWidth: "28ch",
   },
   right: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
+  /*
+   * `pcf_cmpHeader_User_ContextMenu_Info` is a `cat_PowerCAT.ContextMenu`, whose rows are
+   * ordinary items: #3f3f3f text with a themePrimary icon, sampled off
+   * `UI Screenshots/EveryScreen - Current LoggedIn User Badge.png` at (0, 110, 185) and
+   * (63, 63, 63). They were rendered `disabled`, which greys the icon with the label.
+   */
+  badgeMenu: { "& .fui-MenuItem__icon": { color: palette.themePrimary } },
   userPill: {
     backgroundColor: palette.themePrimary,
     color: palette.white,
@@ -179,22 +186,34 @@ export function AppHeader({
             * version. Two unlabelled grey lines was not that list. Rows whose data this app does
             * not hold are omitted rather than shown blank.
             */}
+          {/*
+            * `Items` on that ContextMenu, in order, with its own `ItemIconName`s:
+            *   Mail           `{gblCurrentUser.Mail}`, `ItemVisible: Not(IsBlank(...))`
+            *   LocaleLanguage `{Language}, [{Lang}]`
+            *   Home           `{gblCurrentUser.CompanyName}`
+            *   AddHome        the editable counties, concatenated
+            *   World          "Project Data All Countries", on `IsProjectDataAllCountries`
+            *   Info           `version {gblAppVersion} ({gblEnvironmentName})`
+            * The first item is `$"Hi {User().FullName}"` with no icon - that is the pill's
+            * own label, not a row. Business unit and countries were both a Building glyph
+            * here; the canvas names two different houses.
+            */}
           <MenuPopover>
-            <MenuList>
-              {userEmail ? <MenuItem icon={<MailRegular />} disabled>{userEmail}</MenuItem> : null}
+            <MenuList className={styles.badgeMenu}>
+              {userEmail ? <MenuItem icon={<MailRegular />}>{userEmail}</MenuItem> : null}
               {userLanguage
-                ? <MenuItem icon={<LocalLanguageRegular />} disabled>{userLanguage}</MenuItem>
+                ? <MenuItem icon={<LocalLanguageRegular />}>{userLanguage}</MenuItem>
                 : null}
               {userBusinessUnit
-                ? <MenuItem icon={<BuildingRegular />} disabled>{userBusinessUnit}</MenuItem>
+                ? <MenuItem icon={<HomeRegular />}>{userBusinessUnit}</MenuItem>
                 : null}
               {userCountries
-                ? <MenuItem icon={<BuildingRegular />} disabled>{userCountries}</MenuItem>
+                ? <MenuItem icon={<HomeAddRegular />}>{userCountries}</MenuItem>
                 : null}
               {userDataScope
-                ? <MenuItem icon={<GlobeRegular />} disabled>{userDataScope}</MenuItem>
+                ? <MenuItem icon={<GlobeRegular />}>{userDataScope}</MenuItem>
                 : null}
-              <MenuItem icon={<InfoRegular />} disabled>
+              <MenuItem icon={<InfoRegular />}>
                 {`version ${appVersion ?? ""} (${environmentName ?? ""})`}
               </MenuItem>
             </MenuList>
