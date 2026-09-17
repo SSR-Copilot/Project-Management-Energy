@@ -131,9 +131,15 @@ const useStyles = makeStyles({
     cursor: "pointer",
     ":hover": { backgroundColor: palette.Grayscale40 },
   },
-  /** `lbl_…_CardHeader_SubaccountName` — link colour, Medium, Normal weight. */
+  /*
+   * `lbl_OpexCosts_Content_SubaccountsCardHeader_SubaccountName` — `Size: Medium`,
+   * `FontWeight.Normal` and `Color: =gblAppStyles.Label.Color`, which `App.Formulas` defines
+   * as `ColorValue(gblAppTheme.palette.black)`. Sampled at (11, 11, 11) on both the Other
+   * OPEX and the O&M reference. It is NOT the link colour; an earlier note here said it was,
+   * and the section headings rendered blue because of it.
+   */
   cardTitle: {
-    fontSize: tokens.fontSizeBase400, color: tokens.colorBrandForegroundLink,
+    fontSize: tokens.fontSizeBase400, color: palette.black,
     textAlign: "left", flexGrow: 1, minWidth: 0,
   },
   /** `con_AlignWithProjectDuration_Container` — `SuccessLight` / a 60 % faded `Warning`. */
@@ -153,6 +159,27 @@ const useStyles = makeStyles({
     paddingLeft: space.m, paddingRight: space.m, paddingBottom: space.xs,
   },
   command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
+  /*
+   * `pcf_…_SubaccountsCommandBar` is a `cat_PowerCAT.CommandBar`, the same PCF the Contracts
+   * command bar uses: a BLACK label with a blue leading icon, greying to #595959 / #c8c6c4
+   * when disabled. Sampled off `UI Screenshots/Cost App - Other opex -  Tab selected.png` —
+   * "Add Contract Type" reads (0, 0, 0) with a blue `+`, and the disabled "Add Period"
+   * beside it reads (89, 89, 89). Painting the whole button with the brand link colour made
+   * the toolbar read as a row of hyperlinks.
+   *
+   * NOT `command`, which stays as it is: that one dresses `btn_OneTimePayment2_…`, a modern
+   * `Button@0.0.45` with `Appearance: Outline` inside the panel, which is a different
+   * control with different colours.
+   */
+  toolbarCommand: {
+    color: palette.neutralPrimary,
+    fontWeight: tokens.fontWeightRegular,
+    "& .fui-Button__icon": { color: palette.themePrimary },
+  },
+  toolbarCommandDisabled: {
+    color: palette.neutralTertiary,
+    "& .fui-Button__icon": { color: palette.neutralTertiaryAlt },
+  },
   scroll: { overflowX: "auto", paddingBottom: space.xs },
   table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
   /*
@@ -169,16 +196,24 @@ const useStyles = makeStyles({
     paddingLeft: space.s, paddingRight: space.s,
   },
   thNumeric: { textAlign: "right" },
+  /*
+   * Every cell label carries the SAME colour rule, not one per column:
+   * `Color: =If(StartsWith(ThisItem.Description, "Standard"), themePrimary, Label.Color)`
+   * with `Italic:` on the same predicate. So a normal row is black throughout and a standard
+   * row is blue italic throughout - see `rowStandard`.
+   */
   td: {
-    fontSize: tokens.fontSizeBase200,
+    fontSize: tokens.fontSizeBase200, color: palette.black,
     paddingTop: space.xs, paddingBottom: space.xs,
     paddingLeft: space.s, paddingRight: space.s,
   },
   tdNumeric: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
-  /** `lbl_…_CostsTableRow_DurationMonths.Color` — the months cell is the link colour. */
-  tdMonths: { color: tokens.colorBrandForegroundLink },
-  /** `Italic: StartsWith(ThisItem.Description, "Standard")` and the matching `themePrimary`. */
-  rowStandard: { fontStyle: "italic", color: tokens.colorBrandForegroundLink },
+  /**
+   * `Italic: =StartsWith(ThisItem.Description, "Standard")` and the matching
+   * `ColorValue(gblAppTheme.palette.themePrimary)` — the canvas names that colour exactly,
+   * so it is taken from the palette rather than from Fluent's brand ramp.
+   */
+  rowStandard: { fontStyle: "italic", color: palette.themePrimary },
   rowSelected: { backgroundColor: palette.themeLighter },
   selectCell: { width: "40px", paddingLeft: space.m },
   warnCell: { display: "inline-flex", alignItems: "center", gap: space.xxs },
@@ -1056,7 +1091,9 @@ function OpexCardView({
               <Button
                 key={key}
                 appearance="transparent"
-                className={styles.command}
+                className={mergeClasses(
+                  styles.toolbarCommand, !gates[key] && styles.toolbarCommandDisabled,
+                )}
                 icon={icons[OPEX_COMMAND_ICONS[key]]}
                 disabled={!gates[key]}
                 onClick={() => onCommand(key)}
@@ -1118,7 +1155,6 @@ function OpexCardView({
                             className={mergeClasses(
                               styles.td,
                               c.numeric && styles.tdNumeric,
-                              c.key === "durationMonths" && !row.standard && styles.tdMonths,
                             )}
                           >
                             {c.key === "durationMonths" ? (

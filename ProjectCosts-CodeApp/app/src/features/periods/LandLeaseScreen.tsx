@@ -135,6 +135,27 @@ const useStyles = makeStyles({
     paddingLeft: space.m, paddingRight: space.m, paddingBottom: space.xs,
   },
   command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
+  /*
+   * `pcf_…_SubaccountsCommandBar` is a `cat_PowerCAT.CommandBar`, the same PCF the Contracts
+   * command bar uses: a BLACK label with a blue leading icon, greying to #595959 / #c8c6c4
+   * when disabled. Sampled off `UI Screenshots/Cost App - Other opex -  Tab selected.png` —
+   * "Add Contract Type" reads (0, 0, 0) with a blue `+`, and the disabled "Add Period"
+   * beside it reads (89, 89, 89). Painting the whole button with the brand link colour made
+   * the toolbar read as a row of hyperlinks.
+   *
+   * NOT `command`, which stays as it is: that one dresses `btn_OneTimePayment2_…`, a modern
+   * `Button@0.0.45` with `Appearance: Outline` inside the panel, which is a different
+   * control with different colours.
+   */
+  toolbarCommand: {
+    color: palette.neutralPrimary,
+    fontWeight: tokens.fontWeightRegular,
+    "& .fui-Button__icon": { color: palette.themePrimary },
+  },
+  toolbarCommandDisabled: {
+    color: palette.neutralTertiary,
+    "& .fui-Button__icon": { color: palette.neutralTertiaryAlt },
+  },
   scroll: { overflowX: "auto", paddingBottom: space.xs },
   table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
   /** `Color: gblAppStyles.Label.Color` + Semibold — dark labels, not the card's link blue. */
@@ -741,7 +762,9 @@ function SubaccountCard({
               <Button
                 key={c.key}
                 appearance="transparent"
-                className={styles.command}
+                className={mergeClasses(
+                  styles.toolbarCommand, !c.enabled && styles.toolbarCommandDisabled,
+                )}
                 icon={icons[c.icon]}
                 disabled={!c.enabled}
                 onClick={() => onCommand(c.key)}
