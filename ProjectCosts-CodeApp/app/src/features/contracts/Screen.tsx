@@ -1222,6 +1222,7 @@ function DevCoAccountPicker({
                 type="button"
                 className="canvas-devco-title"
                 aria-expanded={open}
+                aria-controls={`devco-leaves-${parent.id}`}
                 onClick={() => onExpand(open ? undefined : parent.id)}
               >
                 {`${parent.number} ${parent.name}`}
@@ -1232,13 +1233,20 @@ function DevCoAccountPicker({
                 label={`${parent.number} ${parent.name}`}
                 onToggle={() => onToggleParent(parent.id)}
               />
-              <span className="canvas-devco-chevron" aria-hidden="true">
+              <button
+                type="button"
+                className="canvas-devco-chevron"
+                aria-expanded={open}
+                aria-controls={`devco-leaves-${parent.id}`}
+                aria-label={`${open ? "Collapse" : "Expand"} ${parent.number} ${parent.name}`}
+                onClick={() => onExpand(open ? undefined : parent.id)}
+              >
                 {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-              </span>
+              </button>
             </div>
 
             {open ? (
-              <div className="canvas-devco-leaves">
+              <div className="canvas-devco-leaves" id={`devco-leaves-${parent.id}`}>
                 {leaves.map((leaf) => (
                   <div key={leaf.id} className="canvas-devco-row" data-used={leaf.used}>
                     <span className="canvas-devco-name">{`${leaf.number} ${leaf.name}`}</span>

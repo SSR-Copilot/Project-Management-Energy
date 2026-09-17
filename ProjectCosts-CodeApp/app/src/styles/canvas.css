@@ -328,7 +328,7 @@
 .canvas-devco-check:disabled { cursor: default; }
 /* `ico_…_DevCoCosts_Down` / `_Up` — 20 x 18 at `X: =Parent.Width-Self.Width-6`. The 14 on
    its left is what puts the checkbox before it at `Parent.Width-32-40`. */
-.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; margin: 0 6px 0 14px; color: #006eb9; font-size: 18px; }
+.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin: 0 6px 0 14px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
 
 /* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, inset `X: =10`. It has no
    height cap in the canvas; the panel column it sits in is what bounds it, so one is set
