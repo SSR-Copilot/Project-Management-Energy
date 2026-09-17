@@ -1,3 +1,5 @@
+import { numberFormat } from "@/domain/locale";
+
 export const CATEGORIES = [
   "Wind Turbine / Panels", "Development Expenses", "Construction Expenses",
   "Substation / Grid Connection", "Other CAPEX",
@@ -261,7 +263,7 @@ export interface CostPeriod {
   allocatedGeneratorIds?: readonly string[];
 }
 export interface CostBook { accounts: CostAccount[]; lines: CostLine[]; periods: CostPeriod[]; extraGroups: Record<PeriodMode, string[]> }
-export const amount = (value: number, digits = 2) => value === 0 ? "-" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: digits }).format(value);
+export const amount = (value: number, digits = 2) => value === 0 ? "-" : numberFormat("en-GB", { maximumFractionDigits: digits }).format(value);
 export const total = (payments: Payment[]) => payments.reduce((sum, p) => sum + p.amount, 0);
 
 /** Work in cents and assign the remainder once; visible months always sum to the entered total. */

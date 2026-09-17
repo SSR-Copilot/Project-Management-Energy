@@ -9,6 +9,7 @@
  * `control.Property`, so a reviewer can diff against the `.pa.yaml`.
  */
 import { isDecimal, isInteger, inRange, orZero, parseNumber, round, sum } from "@/domain/numeric";
+import { dateFormat, numberFormat } from "@/domain/locale";
 
 /* ══════════════════════════════════════════════════════════════ option sets */
 
@@ -65,9 +66,9 @@ export function cardShowsClosingCosts(contractType: number | undefined): boolean
  */
 export function longAbbreviatedDate(value: Date | undefined, locale?: string): string {
   if (!value) return "-";
-  return value.toLocaleDateString(locale, {
+  return dateFormat(locale, {
     weekday: "short", month: "short", day: "numeric", year: "numeric",
-  });
+  }).format(value);
 }
 
 export function cardTotalLabel(contractType: number | undefined, currency: string): string {
@@ -804,7 +805,7 @@ export function betweenMessage(min: number, max: number): string {
 
 /** Power Fx `Text(n, "#,##0")` with the app's grouping. */
 export function formatThousands(value: number, locale = "de-DE"): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+  return numberFormat(locale, { maximumFractionDigits: 0 }).format(value);
 }
 
 /** `lbl_..._Description_ErrorMessage.Text` — `IsBlank(Trim(value))`. */
@@ -1017,7 +1018,7 @@ export function validateTargetPercent(
 
 /** Power Fx `Text(n, "###,###0.0")`. */
 export function formatOneDecimal(value: number, locale = "de-DE"): string {
-  return new Intl.NumberFormat(locale, {
+  return numberFormat(locale, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(value);

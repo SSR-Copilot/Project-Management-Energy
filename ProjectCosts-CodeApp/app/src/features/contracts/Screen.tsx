@@ -42,6 +42,7 @@ import { Choices, CostField, PanelButtons } from "../costing/Fields";
 import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
 import { parseNumber, round } from "@/domain/numeric";
+import { numberFormat } from "@/domain/locale";
 import { DataError } from "@/platform/errors";
 import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges";
 import {
@@ -871,7 +872,7 @@ export default function ContractsScreen() {
             <CostField
               label={costLabel("Total cost of contract", project ?? {})}
               disabled
-              value={contractTotal.toLocaleString(locale, { maximumFractionDigits: 2 })}
+              value={numberFormat(locale, { maximumFractionDigits: 2 }).format(contractTotal)}
             />
           </div>
 
@@ -1253,7 +1254,7 @@ function DevCoAccountPicker({
                     {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(…)), "-")`. */}
                     <span className="canvas-devco-total">
                       {leaf.totalCost > 0
-                        ? leaf.totalCost.toLocaleString(locale, { maximumFractionDigits: 0 })
+                        ? numberFormat(locale, { maximumFractionDigits: 0 }).format(leaf.totalCost)
                         : "-"}
                     </span>
                     {/*
@@ -1297,7 +1298,7 @@ function ContractCardBody({
   onDeleteTarget: (t: PaymentTarget) => void;
 }) {
   const fmt = (n: number | undefined) =>
-    n === undefined || n === null ? "-" : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    n === undefined || n === null ? "-" : numberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
 
   const untilClosing =
     contract.costsUntilClosingType === CLOSING_DATE_TYPE.Actual

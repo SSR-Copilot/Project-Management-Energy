@@ -15,6 +15,7 @@ import {
 import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
+import { numberFormat } from "@/domain/locale";
 import { distributionSchedule, equalDistributionAmounts } from "./distribution";
 
 /* ═══════════════════════════════════════════════════════════════ constants ══ */
@@ -89,7 +90,7 @@ export function resolveCategory(
 export const formatSummaryAmount = (value: number | undefined): string =>
   value === undefined
     ? ""
-    : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
+    : numberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
 
 /* ══════════════════════════════════════════════════════════════ the panel ══ */
 
@@ -391,7 +392,7 @@ export function validateTotalCost(
 ): { valid: boolean; message: string | null } {
   const max = totalCostMax(countryName);
   const ok = isInteger(value, locale) && inRange(value, 1, max, locale);
-  const grouped = new Intl.NumberFormat(
+  const grouped = numberFormat(
     (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
   ).format(max);
   return { valid: ok, message: ok ? null : `Value must be between 0 and ${grouped}` };
@@ -425,7 +426,7 @@ export function validateMonthAmount(
 ): { valid: boolean; message: string | null; kind: "ok" | "format" | "range" } {
   if (value.trim() === "") return { valid: true, message: null, kind: "ok" };
 
-  const grouped = (n: number) => new Intl.NumberFormat(
+  const grouped = (n: number) => numberFormat(
     (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
   ).format(n);
 

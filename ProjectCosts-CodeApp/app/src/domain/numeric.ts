@@ -72,6 +72,23 @@ export interface DecimalOptions {
 }
 
 /**
+ * The compiled patterns, by source. There are at most sixteen — two separators × four
+ * `places` × two signs — but each `new RegExp` would otherwise be built and compiled afresh
+ * on every keystroke of every numeric field. None carries `g` or `y`, so there is no
+ * `lastIndex` to leak between callers and one instance is safely shared.
+ */
+const decimalPatterns = new Map<string, RegExp>();
+
+function decimalPattern(source: string): RegExp {
+  let pattern = decimalPatterns.get(source);
+  if (pattern === undefined) {
+    pattern = new RegExp(source);
+    decimalPatterns.set(source, pattern);
+  }
+  return pattern;
+}
+
+/**
  * `fn_Numeric.IsOneDecimal` / `IsTwoDecimal` / `IsThreeDecimal`, unified.
  *
  * The canvas pattern `^((\+|-?)?\d+(|\.\d{0,2})?)` allows a bare sign, requires at least one
@@ -87,7 +104,7 @@ export function isDecimal(text: string | null | undefined, options: DecimalOptio
   const sep = decimalSeparator === "." ? "\\." : ",";
   const sign = options.allowNegative ? "[+-]?" : "\\+?";
   const frac = options.places === 0 ? "" : `(?:${sep}\\d{0,${options.places}})?`;
-  return new RegExp(`^${sign}\\d+${frac}$`).test(candidate);
+  return decimalPattern(`^${sign}\\d+${frac}$`).test(candidate);
 }
 
 /** `fn_Numeric.IsInteger` — numeric AND containing no `.` or `,`. */

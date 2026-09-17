@@ -41,6 +41,7 @@
  * purpose — `@/features/costing/model`'s `CostPeriod` is being changed concurrently.
  */
 import { inRange, isDecimal, parseNumber, round } from "@/domain/numeric";
+import { numberFormat } from "@/domain/locale";
 
 /* ═════════════════════════════════════════════════════════════════ option sets ══ */
 
@@ -607,7 +608,7 @@ function formatGrouped(
   maxFrac: number,
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return new Intl.NumberFormat("en-GB", {
+  return numberFormat("en-GB", {
     minimumFractionDigits: minFrac, maximumFractionDigits: maxFrac,
   }).format(value);
 }

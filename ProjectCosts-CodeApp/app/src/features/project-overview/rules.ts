@@ -31,6 +31,7 @@
  */
 import { f } from "@/data/odata";
 import { isDecimal, parseNumber } from "@/domain/numeric";
+import { numberFormat } from "@/domain/locale";
 import { technologyLabel, technologyValue, APPROVAL_STATE, approvalDecoration, rowAccentColor } from "@/domain/project";
 
 /* ═══════════════════════════════════════════════════════════ column names ══ */
@@ -375,7 +376,7 @@ export function toProjectRow(r: Record<string, unknown>): ProjectRow {
  */
 export function formatCapacity(v: number | null | undefined, locale = "en-GB"): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "";
-  return new Intl.NumberFormat(locale, {
+  return numberFormat(locale, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 2,
   }).format(v);

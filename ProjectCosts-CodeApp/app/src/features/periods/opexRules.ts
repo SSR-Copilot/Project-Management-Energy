@@ -38,6 +38,7 @@
  * so a reviewer can diff against the source.
  */
 import { inRange, isDecimal, isNumeric, orZero, parseNumber } from "@/domain/numeric";
+import { numberFormat } from "@/domain/locale";
 
 /* ═══════════════════════════════════════════════════════════════════ dates ══ */
 
@@ -1193,7 +1194,7 @@ export function inflationColumnText(
 /** Power Fx `Text(n, "###,###,###.0 %")`. Blank in, blank out. */
 export function formatOneDecimalPercent(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return `${new Intl.NumberFormat("en-GB", {
+  return `${numberFormat("en-GB", {
     minimumFractionDigits: 1, maximumFractionDigits: 1,
   }).format(value)} %`;
 }
@@ -1201,13 +1202,13 @@ export function formatOneDecimalPercent(value: number | null | undefined): strin
 /** `Text(n, "###,###,###,###")` — the five money columns. */
 export function formatWholeNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
+  return numberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
 }
 
 /** `Text(n, "###,###,###,##0.00 %")` — `Share of Revenues` (`:1754`, `:4244`). */
 export function formatRevenuePercent(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return `${new Intl.NumberFormat("en-GB", {
+  return `${numberFormat("en-GB", {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(value)} %`;
 }
@@ -1224,7 +1225,7 @@ export function thresholdColumnText(
   if (cost.thresholdType === THRESHOLD_TYPE.netYieldP75) return "p75";
   if (cost.thresholdType === THRESHOLD_TYPE.netYieldP90) return "p90";
   if (cost.thresholdIndividual === null || cost.thresholdIndividual === undefined) return "";
-  return new Intl.NumberFormat("en-GB", {
+  return numberFormat("en-GB", {
     minimumFractionDigits: 1, maximumFractionDigits: 1,
   }).format(cost.thresholdIndividual);
 }
@@ -2395,7 +2396,7 @@ export type OpexNumericField = keyof typeof OPEX_RANGES;
 /** `$"Value must be between 0 and {Text(max, "#,###.0#")}."` (`:6381-6384`). */
 export function rangeMessage(max: number): string {
   return `Value must be between 0 and ${
-    new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
+    numberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })
       .format(max)
   }.`;
 }
