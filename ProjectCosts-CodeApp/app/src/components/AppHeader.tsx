@@ -95,6 +95,8 @@ export interface AppHeaderProps {
   pageTitle?: string;
   userName?: string;
   userEmail?: string;
+  /** `img_cmp_In_Header_UserImage.Image = User().Image`, already a `data:` URL. */
+  userPhoto?: string;
   /** The remaining user-badge rows. Each is omitted from the menu when this app has no value. */
   userLanguage?: string;
   userBusinessUnit?: string;
@@ -111,7 +113,8 @@ export interface AppHeaderProps {
 }
 
 export function AppHeader({
-  pageTitle, userName, userEmail, userLanguage, userBusinessUnit, userCountries, userDataScope,
+  pageTitle, userName, userEmail, userPhoto,
+  userLanguage, userBusinessUnit, userCountries, userDataScope,
   appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, commandSlotRef,
 }: AppHeaderProps) {
   const styles = useStyles();
@@ -177,7 +180,15 @@ export function AppHeader({
           <MenuTrigger disableButtonEnhancement>
             <Button className={`${styles.userPill} canvas-user-pill`} aria-label="User">
               {userName ? `Hi ${userName}` : "User"}
-              <span className="canvas-user-avatar"><PersonRegular /></span>
+              {/*
+                * `img_cmp_In_Header_UserImage` sits inside the 50 x 50
+                * `con_cmp_In_Header_UserImage`, over a white ellipse with the 2 px #0b0b0b
+                * stroke, at `border-radius: 90px` and `object-fit: contain`. The silhouette
+                * is the fallback for a user with no photo.
+                */}
+              <span className="canvas-user-avatar">
+                {userPhoto ? <img src={userPhoto} alt="" /> : <PersonRegular />}
+              </span>
             </Button>
           </MenuTrigger>
           {/*

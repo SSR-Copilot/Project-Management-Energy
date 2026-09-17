@@ -35,6 +35,15 @@ export interface CurrentUser {
   /** `aaduser.companyname` — `gblCurrentUser.CompanyName`, the badge's Home row. */
   companyName?: string;
   /**
+   * `img_cmp_In_Header_UserImage.Image = User().Image`, as a `data:` URL.
+   *
+   * Dataverse hands `systemuser.entityimage` back as base64 when it is selected, which is
+   * the same thing the canvas player inlines into that `<img src>`. Undefined when the user
+   * has no photo — the avatar then falls back to a silhouette, which is what the canvas
+   * shows too (its default `User().Image` is a grey person bitmap).
+   */
+  photo?: string;
+  /**
    * `gblCurrentUser.EditableCounties`, the badge's AddHome row — one entry per qualifying
    * ROLE, so a country the user holds two of those roles in appears twice. The canvas does
    * not dedupe (`France; France; Germany;` in the reference screenshot) because
@@ -121,7 +130,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     "look up the signed-in user",
     (o) => SystemusersService.getAll(o),
     {
-      select: ["systemuserid", "fullname", "internalemailaddress"],
+      select: ["systemuserid", "fullname", "internalemailaddress", "entityimage"],
       filter: eq("azureactivedirectoryobjectid", entraObjectId),
       top: 1,
     },
@@ -157,6 +166,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     fullName: row?.fullname ?? undefined,
     mail: row?.internalemailaddress ?? undefined,
     companyName: aad[0]?.companyname ?? undefined,
+    ...(row?.entityimage ? { photo: `data:image/png;base64,${row.entityimage}` } : {}),
     editableCountries: scope?.editableCountries ?? [],
     isProjectDataAllCountries: scope?.isProjectDataAllCountries ?? false,
   };

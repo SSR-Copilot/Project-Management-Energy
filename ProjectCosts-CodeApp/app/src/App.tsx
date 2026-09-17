@@ -57,6 +57,7 @@ export default function App() {
       {...(onCostScreen && project?.projectName ? { pageTitle: project.projectName } : {})}
       {...(userName ? { userName } : {})}
       {...(userEmail ? { userEmail } : {})}
+      {...(currentUser.data?.photo ? { userPhoto: currentUser.data.photo } : {})}
       {...(userLanguage ? { userLanguage } : {})}
       {...(currentUser.data?.companyName
         ? { userBusinessUnit: currentUser.data.companyName }
