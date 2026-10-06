@@ -690,6 +690,16 @@ export const SPO_MSG = {
 export const REPORT_UNAVAILABLE =
   "This report is not configured for this environment.";
 
+/**
+ * NEW — no canvas equivalent.
+ *
+ * The canvas `Launch()` of another app could not fail in a way the user saw. Opening a tab of
+ * this app can: the player URL has to be derivable from `IContext.app.appUrl` or the current
+ * location, and a host that supplies neither leaves nothing to open.
+ */
+export const OPEN_FAILED =
+  "This could not be opened in a new tab. Please select the project again and retry.";
+
 /* ══════════════════════════════════════════════════════════════════ paging ══ */
 
 /** The canvas page size — `colFiltersOverview.PageSize`. */

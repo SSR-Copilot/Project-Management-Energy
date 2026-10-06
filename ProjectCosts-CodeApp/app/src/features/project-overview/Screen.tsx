@@ -33,7 +33,7 @@
  */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { costLocation } from "@/app/deepLinks";
+import { appTabUrl } from "@/app/deepLinks";
 import {
   NEW_PROJECT_PATH, analyticsAppUrl, powerBiReportUrl, projectGeneralDataPath,
 } from "@/app/navigation";
@@ -56,7 +56,8 @@ import { parseMailList } from "@/data/project";
 import { media, palette, space } from "@/theme/tokens";
 import { approvalDecoration, TECHNOLOGY_LABEL } from "@/domain/project";
 import {
-  CAPACITY_OPERATORS, COL, COST_LOCK, DELETE_DIALOG, PAGE_SIZE, REPORT_UNAVAILABLE, SPO_MSG,
+  CAPACITY_OPERATORS, COL, COST_LOCK, DELETE_DIALOG, OPEN_FAILED, PAGE_SIZE,
+  REPORT_UNAVAILABLE, SPO_MSG,
   capacityError, clearIconState, commandBarState, costModuleLock, deleteMessages,
   formatCapacity, isCostModuleLocked, isFilterActive, isPagerVisible, pagerLabels,
   type CapacityOperator, type CommandKey, type ProjectRow, type SelectedProject,
@@ -69,33 +70,78 @@ import {
 /* ────────────────────────────────────────────────────────────────── styles */
 
 const useStyles = makeStyles({
-  page: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0, minHeight: 0 },
   /**
-   * FOUR columns over TWO rows, which is the reference layout:
-   *   row 1  Project · Country · Technology · (empty)
-   *   row 2  Project Manager · Area/State/Province · Capacity + operator · Status
-   * A `repeat(auto-fit, …)` strip put all seven on one line, which is what made the first
-   * cut of this screen look nothing like the app.
+   * `flex: 1` so the screen owns the whole content area — which is what keeps the footer at
+   * the BOTTOM instead of riding up under a short grid or an empty state.
+   */
+  page: {
+    display: "flex", flexDirection: "column", gap: space.m,
+    flex: 1, minWidth: 0, minHeight: 0,
+  },
+  /**
+   * Everything between the filters and the footer. Takes the slack, so `Total Rows` and the
+   * pager sit on the bottom edge whether the grid is full, short, empty or erroring.
+   */
+  body: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
+
+  /*
+   * ── the filter card ──────────────────────────────────────────────────────────────────
+   * `con_Main_Project_Overview_Context_Filter`, transcribed from the running canvas app:
+   *
+   *   card      horizontal auto-layout, `gap: 6px`, `border-radius: 4px`, transparent fill,
+   *             `box-shadow: 0 1px 2px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12)`, height 124
+   *   column    `flex: 1 0 auto; min-width: 250px`, vertical, gap 0 — FOUR of them
+   *   cell      280 px wide; the first in each column 56 px tall, the second 68 px
+   *   label     24 px tall, 10 pt (13.33 px), `rgb(50, 49, 48)`, 5 px padding, line-height 1.2
+   *   control   232 px wide at x=6, so it ends at 238
+   *   funnel    32 x 32 at x=245 — a 7 px gap after the control
+   *
+   * The four columns are real columns, not a 4 x 2 grid: collapsing a grid to two columns
+   * would reflow row-major and split Capacity from its operator and Project from its manager.
+   * As columns, a narrow viewport wraps whole pairs, which is what the canvas auto-layout did.
    */
   filters: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    columnGap: space.l,
-    rowGap: space.s,
-    paddingBottom: space.m,
-    borderBottomWidth: "1px",
-    borderBottomStyle: "solid",
-    borderBottomColor: tokens.colorNeutralStroke2,
-    [media.belowLg]: { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" },
-    [media.belowSm]: { gridTemplateColumns: "minmax(0, 1fr)" },
+    display: "flex",
+    flexFlow: "row wrap",
+    gap: "6px",
+    flex: "none",
+    minWidth: 0,
+    borderRadius: "4px",
+    backgroundColor: palette.white,
+    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12)",
+    paddingTop: "2px", paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
   },
-  filterCell: { display: "flex", alignItems: "flex-end", gap: space.xs, minWidth: 0 },
-  filterField: { flex: 1, minWidth: 0 },
-  capacityCell: { display: "flex", alignItems: "flex-end", gap: space.xs, minWidth: 0 },
-  /** The capacity value is narrow, its operator wide — as in the reference. */
-  capacityValue: { flexBasis: "38%", flexGrow: 0, minWidth: 0 },
-  capacityOperator: { flex: 1, minWidth: 0 },
-  gridWrap: { flex: 1, minHeight: "240px", overflow: "auto" },
+  filterColumn: {
+    display: "flex", flexDirection: "column", rowGap: "4px",
+    flexGrow: 1, flexShrink: 0, flexBasis: "auto",
+    minWidth: "250px",
+    [media.belowSm]: { minWidth: 0, flexBasis: "100%" },
+  },
+  /** One labelled filter. 280 px in the canvas, and never wider. */
+  filterCell: {
+    width: "280px", maxWidth: "100%",
+    paddingLeft: "6px", paddingRight: "6px",
+    boxSizing: "border-box",
+  },
+  /** `lbl_..._Filter_*` — 10 pt, `rgb(50, 49, 48)`, in a 24 px line box. */
+  filterLabel: {
+    display: "block",
+    fontSize: "13.33px",
+    lineHeight: "1.2",
+    color: "#323130",
+    paddingTop: "2px", paddingBottom: "3px",
+  },
+  /** The control and its funnel, with the canvas's 7 px between them. */
+  filterRow: { display: "flex", alignItems: "center", gap: "7px", minWidth: 0 },
+  /** 232 px, so the funnel lands where the canvas puts it rather than at the screen edge. */
+  filterControl: { width: "232px", maxWidth: "100%", minWidth: 0 },
+  /** `pcf_..._ProjectManager` is 266 px and carries NO funnel. */
+  filterPerson: { width: "266px", maxWidth: "100%", minWidth: 0, position: "relative" },
+  /** `txt_..._Capacity` is 100 px; `cbx_..._Capacity_Operator` is 128 px, 6 px after it. */
+  capacityValue: { width: "100px", flexGrow: 0, flexShrink: 1, minWidth: 0 },
+  capacityOperator: { width: "128px", flexGrow: 0, flexShrink: 1, minWidth: 0 },
+
+  gridWrap: { flex: 1, minHeight: 0, overflow: "auto" },
   accentCell: { width: "6px", paddingLeft: 0, paddingRight: 0 },
   accent: { display: "block", width: "4px", height: "22px", borderRadius: "2px" },
   selectCell: { width: "44px" },
@@ -104,13 +150,25 @@ const useStyles = makeStyles({
   /** `AlternateRowColor: =gblAppTheme.palette.themeLighter` on the canvas details list. */
   rowAlt: { backgroundColor: palette.themeLighterAlt },
   rowSelected: { backgroundColor: palette.themeLighter },
-  /** Total Rows and the pager sit together at the LEFT, as in the reference. */
+  /**
+   * Total Rows and the pager sit together at the LEFT, as in the reference.
+   *
+   * `flex: none` with `body` taking the slack above it: the strip belongs to the bottom edge
+   * of the screen, not to the bottom of the rows. With a short, empty or failed grid it used
+   * to ride up and sit under the message, which read as part of the message.
+   */
   footer: {
     display: "flex", alignItems: "center", gap: space.s, flexWrap: "wrap",
+    flex: "none",
     paddingTop: space.s,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.colorNeutralStroke2,
+  },
+  /** An empty or failed grid fills the same space the rows would have. */
+  bodyMessage: {
+    flex: 1, minHeight: 0,
+    display: "flex", flexDirection: "column", justifyContent: "center",
   },
   footerGap: { width: space.xl },
   suggestions: {
@@ -269,6 +327,29 @@ export default function ProjectOverviewScreen() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  /**
+   * Open one of this app's own routes in a new tab.
+   *
+   * `Edit Project` and `Edit Costs` both do this, so the portfolio list stays open behind
+   * them with its filter, page and selection untouched. `Add Project` deliberately does not:
+   * creating a project continues in place.
+   */
+  const openInNewTab = (path: string, projectId?: string) => {
+    try {
+      launch(
+        appTabUrl({
+          currentUrl: window.location.href,
+          ...(session?.appUrl === undefined ? {} : { appUrl: session.appUrl }),
+          path,
+          ...(projectId === undefined ? {} : { projectId }),
+        }),
+        OPEN_FAILED,
+      );
+    } catch {
+      setNotice({ intent: "error", text: OPEN_FAILED });
+    }
+  };
+
   const onCommand = (key: string) => {
     setNotice(undefined);
     const command = gates[key as CommandKey];
@@ -277,25 +358,28 @@ export default function ProjectOverviewScreen() {
     switch (key as CommandKey) {
       /*
        * General Data IS the New Project screen — the canvas blanks its globals and navigates
-       * with nothing selected. Screen #9 is not built yet; `/projects/new` currently renders
-       * the not-yet-built notice rather than a form.
+       * with nothing selected. Creating happens IN PLACE, not in a second tab: there is no
+       * list state worth preserving behind a form you are about to fill in.
+       *
+       * Screen #9 is not built yet, so `/projects/new` renders the not-yet-built notice.
        */
       case "addProject":
         navigate(NEW_PROJECT_PATH);
         return;
 
       case "editProject":
-        if (selected) navigate(projectGeneralDataPath(selected.id));
+        if (selected) openInNewTab(projectGeneralDataPath(selected.id));
         return;
 
       /*
-       * The canvas `Launch(gblCostAppLaunchUrl, {projectId: …})` opened a SECOND app. One app
-       * now, so this is a route — which also keeps the filter, the page and the selection
-       * intact behind the browser's back button.
+       * Still a new tab, as the canvas `Launch(gblCostAppLaunchUrl, {projectId: …})` was —
+       * but of THIS app's own `/costs/capex` route rather than of a second Power Apps app.
+       * The project id rides along as a launch parameter because the player strips the
+       * fragment before `Landing` reads it.
        */
       case "editCosts":
         if (!selected || blockedByCostLock(selected)) return;
-        navigate(costLocation("/costs/capex", selected.id));
+        openInNewTab("/costs/capex", selected.id);
         return;
 
       case "deleteProject":
@@ -441,208 +525,241 @@ export default function ProjectOverviewScreen() {
       </CommandSlot>
 
       {/*
-        The seven filters, in the reference's two rows of four:
-          Project · Country · Technology · (empty)
-          Project Manager · Area/State/Province · Capacity+operator · Status
-        The empty cell is a real grid cell, not a margin — it is what keeps Project Manager
-        under Project rather than beside Technology.
+        The seven filters, as the canvas lays them out: FOUR columns of two, not a 4 x 2 grid.
+          column 1   Project            · Project Manager
+          column 2   Country            · Area/State/Province
+          column 3   Technology         · Capacity + operator
+          column 4   (empty)            · Status
+        Column 4's first cell is genuinely empty in the canvas — it is what puts Status
+        underneath nothing rather than beside Technology.
       */}
       <div className={styles.filters}>
-        <FilterCell
-          label="Project"
-          value={criteria.filter.keyword}
-          onClear={() => setFilter({ keyword: "" })}
-        >
-          <Input
-            className={styles.filterField}
+        <div className={styles.filterColumn}>
+          <FilterCell
+            label="Project"
             value={criteria.filter.keyword}
-            placeholder="Search for Project Name, Short Name and ID"
-            contentBefore={<SearchRegular />}
-            onChange={(_, d) => setFilter({ keyword: d.value })}
-            data-testid="filter-keyword"
-          />
-        </FilterCell>
-
-        <FilterCell
-          label="Country"
-          value={criteria.filter.countryId}
-          onClear={() => setFilter({ countryId: null })}
-        >
-          <Dropdown
-            className={styles.filterField}
-            selectedOptions={criteria.filter.countryId ? [criteria.filter.countryId] : []}
-            value={
-              countries.data?.find((c) => c.id === criteria.filter.countryId)?.name ?? ""
-            }
-            placeholder=""
-            onOptionSelect={(_, d) => setFilter({ countryId: d.optionValue ?? null })}
-            data-testid="filter-country"
+            onClear={() => setFilter({ keyword: "" })}
           >
-            {(countries.data ?? []).map((c) => (
-              <Option key={c.id} value={c.id}>{c.name}</Option>
-            ))}
-          </Dropdown>
-        </FilterCell>
-
-        <FilterCell
-          label="Technology"
-          value={criteria.filter.technology}
-          onClear={() => setFilter({ technology: null })}
-        >
-          <Dropdown
-            className={styles.filterField}
-            selectedOptions={
-              criteria.filter.technology === null ? [] : [String(criteria.filter.technology)]
-            }
-            value={
-              criteria.filter.technology === null
-                ? ""
-                : TECHNOLOGY_LABEL[criteria.filter.technology] ?? ""
-            }
-            placeholder=""
-            onOptionSelect={(_, d) =>
-              setFilter({ technology: d.optionValue ? Number(d.optionValue) : null })
-            }
-            data-testid="filter-technology"
-          >
-            {Object.entries(TECHNOLOGY_LABEL).map(([value, label]) => (
-              <Option key={value} value={value}>{label}</Option>
-            ))}
-          </Dropdown>
-        </FilterCell>
-
-        {/* Row 1 column 4 is empty in the reference. */}
-        <div />
-
-        {/* The Project Manager typeahead. `pcf_..._Filter_ProjectManager` was a PeoplePicker. */}
-        <div className={styles.filterCell}>
-          <Field label="Project Manager" className={styles.filterField}>
             <Input
-              value={managerQuery}
-              placeholder="Search for project manager"
+              className={styles.filterControl}
+              value={criteria.filter.keyword}
+              placeholder="Search for Project Name, Short Name and ID"
               contentBefore={<SearchRegular />}
-              contentAfter={
-                criteria.filter.projectManagerId ? (
-                  <Button
-                    appearance="transparent"
-                    size="small"
-                    icon={<DismissRegular />}
-                    aria-label="Clear project manager"
-                    onClick={() => {
-                      setManagerQuery("");
-                      setFilter({ projectManagerId: null });
-                    }}
-                  />
-                ) : undefined
-              }
-              onChange={(_, d) => setManagerQuery(d.value)}
-              data-testid="filter-manager"
+              onChange={(_, d) => setFilter({ keyword: d.value })}
+              data-testid="filter-keyword"
             />
-            {managerQuery.trim().length >= 2 && !criteria.filter.projectManagerId ? (
-              <ul className={styles.suggestions} aria-label="Suggested people">
-                {(managers.data ?? []).map((p) => (
-                  <li key={p.id}>
+          </FilterCell>
+
+          {/*
+            The Project Manager typeahead — `pcf_..._Filter_ProjectManager`, a PeoplePicker.
+            266 px and NO funnel button, which is the one cell that breaks the pattern; it
+            clears from the ✕ inside the input instead.
+          */}
+          <div className={styles.filterCell}>
+            <label className={styles.filterLabel} htmlFor="filter-manager-input">
+              Project Manager
+            </label>
+            <div className={styles.filterPerson}>
+              <Input
+                id="filter-manager-input"
+                value={managerQuery}
+                placeholder="Search for project manager"
+                contentBefore={<SearchRegular />}
+                contentAfter={
+                  criteria.filter.projectManagerId ? (
                     <Button
-                      appearance="subtle"
-                      className={styles.suggestion}
+                      appearance="transparent"
+                      size="small"
+                      icon={<DismissRegular />}
+                      aria-label="Clear project manager"
                       onClick={() => {
-                        setFilter({ projectManagerId: p.id });
-                        setManagerQuery(p.label);
+                        setManagerQuery("");
+                        setFilter({ projectManagerId: null });
                       }}
-                    >
-                      <span>{p.label}</span>
-                      {p.mail ? (
-                        <span className={styles.suggestionMail}>{p.mail}</span>
-                      ) : null}
-                    </Button>
-                  </li>
+                    />
+                  ) : undefined
+                }
+                onChange={(_, d) => setManagerQuery(d.value)}
+                data-testid="filter-manager"
+              />
+              {managerQuery.trim().length >= 2 && !criteria.filter.projectManagerId ? (
+                <ul className={styles.suggestions} aria-label="Suggested people">
+                  {(managers.data ?? []).map((p) => (
+                    <li key={p.id}>
+                      <Button
+                        appearance="subtle"
+                        className={styles.suggestion}
+                        onClick={() => {
+                          setFilter({ projectManagerId: p.id });
+                          setManagerQuery(p.label);
+                        }}
+                      >
+                        <span>{p.label}</span>
+                        {p.mail ? (
+                          <span className={styles.suggestionMail}>{p.mail}</span>
+                        ) : null}
+                      </Button>
+                    </li>
+                  ))}
+                  {managers.isFetching ? <li><Spinner size="tiny" /></li> : null}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.filterColumn}>
+          <FilterCell
+            label="Country"
+            value={criteria.filter.countryId}
+            onClear={() => setFilter({ countryId: null })}
+          >
+            <Dropdown
+              className={styles.filterControl}
+              selectedOptions={criteria.filter.countryId ? [criteria.filter.countryId] : []}
+              value={
+                countries.data?.find((c) => c.id === criteria.filter.countryId)?.name ?? ""
+              }
+              placeholder=""
+              onOptionSelect={(_, d) => setFilter({ countryId: d.optionValue ?? null })}
+              data-testid="filter-country"
+            >
+              {(countries.data ?? []).map((c) => (
+                <Option key={c.id} value={c.id}>{c.name}</Option>
+              ))}
+            </Dropdown>
+          </FilterCell>
+
+          <FilterCell
+            label="Area/State/Province"
+            value={criteria.filter.areaId}
+            onClear={() => setFilter({ areaId: null })}
+          >
+            <Dropdown
+              className={styles.filterControl}
+              // The canvas filtered CountryAreas by the chosen country, so Area means nothing
+              // until a Country is picked.
+              disabled={!criteria.filter.countryId}
+              selectedOptions={criteria.filter.areaId ? [criteria.filter.areaId] : []}
+              value={areas.data?.find((a) => a.id === criteria.filter.areaId)?.name ?? ""}
+              placeholder={criteria.filter.countryId ? "" : "Select a country first"}
+              onOptionSelect={(_, d) => setFilter({ areaId: d.optionValue ?? null })}
+              data-testid="filter-area"
+            >
+              {(areas.data ?? []).map((a) => (
+                <Option key={a.id} value={a.id}>{a.name}</Option>
+              ))}
+            </Dropdown>
+          </FilterCell>
+        </div>
+
+        <div className={styles.filterColumn}>
+          <FilterCell
+            label="Technology"
+            value={criteria.filter.technology}
+            onClear={() => setFilter({ technology: null })}
+          >
+            <Dropdown
+              className={styles.filterControl}
+              selectedOptions={
+                criteria.filter.technology === null ? [] : [String(criteria.filter.technology)]
+              }
+              value={
+                criteria.filter.technology === null
+                  ? ""
+                  : TECHNOLOGY_LABEL[criteria.filter.technology] ?? ""
+              }
+              placeholder=""
+              onOptionSelect={(_, d) =>
+                setFilter({ technology: d.optionValue ? Number(d.optionValue) : null })
+              }
+              data-testid="filter-technology"
+            >
+              {Object.entries(TECHNOLOGY_LABEL).map(([value, label]) => (
+                <Option key={value} value={value}>{label}</Option>
+              ))}
+            </Dropdown>
+          </FilterCell>
+
+          {/* Capacity is two controls in one cell: 100 px value, then a 128 px operator. */}
+          <div className={styles.filterCell}>
+            <label className={styles.filterLabel} htmlFor="filter-capacity-input">
+              Capacity
+            </label>
+            <div className={styles.filterRow}>
+              <Field
+                className={styles.capacityValue}
+                validationState={
+                  capacityError(criteria.filter.capacity, locale) ? "error" : "none"
+                }
+                validationMessage={capacityError(criteria.filter.capacity, locale) ?? undefined}
+              >
+                <Input
+                  id="filter-capacity-input"
+                  value={criteria.filter.capacity}
+                  onChange={(_, d) => setFilter({ capacity: d.value })}
+                  data-testid="filter-capacity"
+                />
+              </Field>
+              <Dropdown
+                className={styles.capacityOperator}
+                selectedOptions={
+                  criteria.filter.capacityOperator ? [criteria.filter.capacityOperator] : []
+                }
+                value={criteria.filter.capacityOperator}
+                placeholder="Select operator"
+                onOptionSelect={(_, d) =>
+                  setFilter({ capacityOperator: (d.optionValue as CapacityOperator) ?? "" })
+                }
+                data-testid="filter-capacity-operator"
+              >
+                {CAPACITY_OPERATORS.map((op) => (
+                  <Option key={op} value={op}>{op}</Option>
                 ))}
-                {managers.isFetching ? <li><Spinner size="tiny" /></li> : null}
-              </ul>
-            ) : null}
-          </Field>
+              </Dropdown>
+              <ClearFilterButton
+                value={criteria.filter.capacity}
+                onClear={() => setFilter({ capacity: "" })}
+              />
+            </div>
+          </div>
         </div>
 
-        <FilterCell
-          label="Area/State/Province"
-          value={criteria.filter.areaId}
-          onClear={() => setFilter({ areaId: null })}
-        >
-          <Dropdown
-            className={styles.filterField}
-            // The canvas filtered CountryAreas by the chosen country, so Area means nothing
-            // until a Country is picked.
-            disabled={!criteria.filter.countryId}
-            selectedOptions={criteria.filter.areaId ? [criteria.filter.areaId] : []}
-            value={areas.data?.find((a) => a.id === criteria.filter.areaId)?.name ?? ""}
-            placeholder={criteria.filter.countryId ? "" : "Select a country first"}
-            onOptionSelect={(_, d) => setFilter({ areaId: d.optionValue ?? null })}
-            data-testid="filter-area"
-          >
-            {(areas.data ?? []).map((a) => (
-              <Option key={a.id} value={a.id}>{a.name}</Option>
-            ))}
-          </Dropdown>
-        </FilterCell>
+        <div className={styles.filterColumn}>
+          {/* `con_Main_Project_Overview_Context_Filter_Empty` — a real, empty 280 x 56 cell. */}
+          <div className={styles.filterCell} aria-hidden="true" />
 
-        <div className={styles.capacityCell}>
-          <Field
-            label="Capacity"
-            className={styles.capacityValue}
-            validationState={capacityError(criteria.filter.capacity, locale) ? "error" : "none"}
-            validationMessage={capacityError(criteria.filter.capacity, locale) ?? undefined}
+          <FilterCell
+            label="Status"
+            value={criteria.filter.clusterStateId}
+            onClear={() => setFilter({ clusterStateId: null })}
           >
-            <Input
-              value={criteria.filter.capacity}
-              onChange={(_, d) => setFilter({ capacity: d.value })}
-              data-testid="filter-capacity"
-            />
-          </Field>
-          <Dropdown
-            className={styles.capacityOperator}
-            selectedOptions={
-              criteria.filter.capacityOperator ? [criteria.filter.capacityOperator] : []
-            }
-            value={criteria.filter.capacityOperator}
-            placeholder="Select operator"
-            onOptionSelect={(_, d) =>
-              setFilter({ capacityOperator: (d.optionValue as CapacityOperator) ?? "" })
-            }
-            data-testid="filter-capacity-operator"
-          >
-            {CAPACITY_OPERATORS.map((op) => (
-              <Option key={op} value={op}>{op}</Option>
-            ))}
-          </Dropdown>
-          <ClearFilterButton
-            value={criteria.filter.capacity}
-            onClear={() => setFilter({ capacity: "" })}
-          />
+            <Dropdown
+              className={styles.filterControl}
+              selectedOptions={
+                criteria.filter.clusterStateId ? [criteria.filter.clusterStateId] : []
+              }
+              value={
+                states.data?.find((s) => s.id === criteria.filter.clusterStateId)?.name ?? ""
+              }
+              placeholder=""
+              onOptionSelect={(_, d) => setFilter({ clusterStateId: d.optionValue ?? null })}
+              data-testid="filter-status"
+            >
+              {(states.data ?? []).map((s) => (
+                <Option key={s.id} value={s.id}>{s.name}</Option>
+              ))}
+            </Dropdown>
+          </FilterCell>
         </div>
-
-        <FilterCell
-          label="Status"
-          value={criteria.filter.clusterStateId}
-          onClear={() => setFilter({ clusterStateId: null })}
-        >
-          <Dropdown
-            className={styles.filterField}
-            selectedOptions={
-              criteria.filter.clusterStateId ? [criteria.filter.clusterStateId] : []
-            }
-            value={states.data?.find((s) => s.id === criteria.filter.clusterStateId)?.name ?? ""}
-            placeholder=""
-            onOptionSelect={(_, d) => setFilter({ clusterStateId: d.optionValue ?? null })}
-            data-testid="filter-status"
-          >
-            {(states.data ?? []).map((s) => (
-              <Option key={s.id} value={s.id}>{s.name}</Option>
-            ))}
-          </Dropdown>
-        </FilterCell>
       </div>
 
-      {/* ── the grid ──────────────────────────────────────────────────── */}
+      {/*
+        ── the grid ──────────────────────────────────────────────────────
+        Wrapped so this region, not the footer, absorbs the leftover height. Whatever is in
+        here — rows, a spinner, an empty state, an error — the pager stays on the bottom edge.
+      */}
+      <div className={styles.body}>
       {pageQuery.isLoading ? (
         /*
          * The app's FIRST load is the canvas' full-screen wait card, not a small inline spinner
@@ -652,19 +769,25 @@ export default function ProjectOverviewScreen() {
          */
         <LoadingOverlay label="Please wait..." />
       ) : pageQuery.isError ? (
-        <EmptyState
-          title="Projects could not be loaded"
-          description={
-            pageQuery.error instanceof Error ? pageQuery.error.message : String(pageQuery.error)
-          }
-        />
+        <div className={styles.bodyMessage}>
+          <EmptyState
+            title="Projects could not be loaded"
+            description={
+              pageQuery.error instanceof Error
+                ? pageQuery.error.message
+                : String(pageQuery.error)
+            }
+          />
+        </div>
       ) : rows.length === 0 ? (
-        <EmptyState
-          title="No project matches these filters"
-          {...(isFilterActive(criteria.filter)
-            ? { action: { label: "Clear all filters", onClick: clearFilter } }
-            : {})}
-        />
+        <div className={styles.bodyMessage}>
+          <EmptyState
+            title="No project matches these filters"
+            {...(isFilterActive(criteria.filter)
+              ? { action: { label: "Clear all filters", onClick: clearFilter } }
+              : {})}
+          />
+        </div>
       ) : (
         <div className={styles.gridWrap}>
           <Table size="small" aria-label="Projects">
@@ -699,6 +822,7 @@ export default function ProjectOverviewScreen() {
           </Table>
         </div>
       )}
+      </div>
 
       {/* ── footer: Total Rows then the pager, both left ───────────────── */}
       <div className={styles.footer}>
@@ -801,6 +925,10 @@ export default function ProjectOverviewScreen() {
 /**
  * A filter with its funnel button — `con_..._Filter_<field>` plus
  * `ico_..._Filter_<field>`, which the canvas disabled while its filter was blank.
+ *
+ * The label sits ABOVE the control and the funnel beside it, which is why this is a column
+ * containing a row rather than one flex line: with all three on one line the label pushed the
+ * control off its 232 px and the funnel ended up against the screen edge.
  */
 function FilterCell({
   label, value, onClear, children,
@@ -813,8 +941,11 @@ function FilterCell({
   const styles = useStyles();
   return (
     <div className={styles.filterCell}>
-      <Field label={label} className={styles.filterField}>{children}</Field>
-      <ClearFilterButton value={value} onClear={onClear} />
+      <Text as="span" block className={styles.filterLabel}>{label}</Text>
+      <div className={styles.filterRow}>
+        {children}
+        <ClearFilterButton value={value} onClear={onClear} />
+      </div>
     </div>
   );
 }

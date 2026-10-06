@@ -1,8 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { costAppUrl, costLocation, COST_PATHS, launchCostPath } from "./deepLinks";
+import { appTabUrl, costAppUrl, costLocation, COST_PATHS, launchCostPath } from "./deepLinks";
 
 const PROJECT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const OLD_PROJECT = "11111111-2222-3333-4444-555555555555";
+
+describe("appTabUrl", () => {
+  it("opens an arbitrary internal route in the hosted player", () => {
+    // `Edit Project` needs this: the route carries the project in its PATH, so there is no
+    // launch parameter to add.
+    const url = new URL(appTabUrl({
+      currentUrl: "https://env.api.powerplatformusercontent.com/assets/index.html",
+      appUrl: "https://apps.powerapps.com/play/e/env/a/same-app?tenantId=t",
+      path: `/projects/${PROJECT}/general`,
+    }));
+    expect(url.origin + url.pathname).toBe("https://apps.powerapps.com/play/e/env/a/same-app");
+    expect(url.searchParams.get("tenantId")).toBe("t");
+    expect(url.hash).toBe(`#/projects/${PROJECT}/general`);
+    expect(url.searchParams.has("projectId")).toBe(false);
+  });
+
+  it("adds the project as a launch parameter as well when one is given", () => {
+    // The player strips the fragment before `getContext()` runs, so a route that resolves a
+    // project from the launch parameters needs it in the query string too.
+    const url = new URL(appTabUrl({
+      currentUrl: "http://localhost:3000/index.html",
+      path: "/costs/capex",
+      projectId: `{${PROJECT.toUpperCase()}}`,
+    }));
+    expect(url.searchParams.get("projectId")).toBe(PROJECT);
+    expect(url.hash).toBe(`#/costs/capex?projectId=${PROJECT}`);
+  });
+
+  it("drops a stale project id and list state from the inherited URL", () => {
+    const url = new URL(appTabUrl({
+      currentUrl: `http://localhost:3000/index.html?tenantId=t&projectGuid=${OLD_PROJECT}&q=old&p=3`,
+      path: "/projects/new",
+    }));
+    expect(url.searchParams.get("tenantId")).toBe("t");
+    expect(url.searchParams.has("projectGuid")).toBe(false);
+    expect(url.searchParams.has("q")).toBe(false);
+    expect(url.searchParams.has("p")).toBe(false);
+  });
+
+  it("refuses an app URL that is not http(s)", () => {
+    expect(() => appTabUrl({ currentUrl: "javascript:alert(1)", path: "/projects" })).toThrow();
+  });
+});
 
 describe("same-app Cost links", () => {
   it("preserves the local application path and host parameters while replacing stale IDs", () => {
