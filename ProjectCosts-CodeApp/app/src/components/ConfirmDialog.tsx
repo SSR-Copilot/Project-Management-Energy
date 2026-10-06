@@ -271,6 +271,15 @@ export function ConfirmDialog({
             style={{ width: confirmWidth }}
             onClick={onConfirm}
             disabled={busy}
+            /*
+             * Addressable without the accessible-name computation.
+             *
+             * Resolving a name goes through `getComputedStyle` to decide whether the element is
+             * hidden, and Griffel injects its CSS asynchronously — so a `getByRole("button",
+             * {name})` immediately after the dialog opens intermittently finds nothing. The
+             * caption is still asserted separately where it matters; this is only the handle.
+             */
+            data-testid="confirm-dialog-confirm"
           >
             {ICONS[confirmIcon]}
             {confirmText}
@@ -280,6 +289,7 @@ export function ConfirmDialog({
             className={mergeClasses(styles.button, styles.cancel)}
             onClick={onCancel}
             disabled={busy}
+            data-testid="confirm-dialog-cancel"
           >
             {ICONS[cancelIcon]}
             {cancelText}

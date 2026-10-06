@@ -28,6 +28,22 @@
  * than by related NAME — is kept, and for its stated reason: reaching a related name needs
  * `$expand`. It also fixes a real canvas bug, where two identically-named areas in different
  * countries matched each other.
+ *
+ * ## The command bar is now wired
+ *
+ * This file originally shipped with the ten command GATES but no destinations — the screen
+ * rendered every command with its canvas label and then enabled only `Edit Costs`. All ten
+ * `ItemEnabled` / `ItemVisible` formulas were re-checked against the canvas source while
+ * wiring them, and they were already correct. What is new here is the wording and the two
+ * pure helpers the handlers need: `DELETE_DIALOG`, `deleteMessages` (+ its canvas-parity
+ * twin), `COST_LOCK`, `SPO_MSG`, `isPagerVisible` and `applyOptimisticDelete`.
+ *
+ * Two commands still have no screen to reach. `Add Project` and `Edit Project` both open
+ * **Project General Data**, which is screen #9 and is not migrated; they navigate to real
+ * routes that currently render a not-yet-built notice. See `features/general-data/Screen.tsx`.
+ *
+ * `Simulate` launches the Analytics canvas app, which stays canvas for this phase, so that one
+ * is a genuine external launch rather than a route.
  */
 import { f } from "@/data/odata";
 import { isDecimal, parseNumber } from "@/domain/numeric";
@@ -582,6 +598,98 @@ export function commandBarState(ctx: CommandBarContext): Record<CommandKey, Comm
   ]) as Record<CommandKey, CommandState>;
 }
 
+/* ════════════════════════════════════════════════ dialogs and notifications ══ */
+
+/**
+ * `cmp_Project_PopUp_ConfirmationDeleteProject`, transcribed.
+ *
+ * The canvas description double-quotes the project name INSIDE the sentence
+ * (`$"...the project ""{Name}""?"`), which renders as `the project "Foo"?`. The success
+ * notification quotes it with single quotes instead. Both spellings are the canvas's and both
+ * are kept.
+ */
+export const DELETE_DIALOG = {
+  /** `cmp_Project_PopUp_ConfirmationDeleteProject.Title` — verbatim. */
+  title: "Delete project?",
+  /** `.Description` — verbatim, including the inner double quotes. */
+  description: (name: string): string =>
+    `Are you sure you want to delete the project "${name}"?`,
+  /** `.ConfirmButtonText` — verbatim. NOT "Delete project". */
+  confirmText: "Delete",
+  /** `.CancelButtonText` — verbatim. */
+  cancelText: "Cancel",
+} as const;
+
+/**
+ * What the user is told after a delete.
+ *
+ * SOURCE DEFECT: the canvas error string says **"Permit"** where the record is a project —
+ * a copy/paste from the Planning screen (`"Error: Permit could not be deleted. "`). Corrected
+ * here, with the canvas wording kept reachable as `deleteMessagesCanvasParity` so the decision
+ * is reversible; a test pins both halves.
+ *
+ * The canvas also concatenates `FirstError.Source`, `FirstError.Message` and
+ * `FirstError.Details.HttpResponse` into the message the user reads. That is dropped from the
+ * user-facing string and goes to `trace()` instead — an HTTP response body is not a sentence.
+ */
+export function deleteMessages(name: string): { success: string; error: string } {
+  return {
+    success: `The project '${name}' was successfully deleted!`,
+    error:
+      "Error: Project could not be deleted. It may have dependent records, " +
+      "or you may lack the privilege.",
+  };
+}
+
+/** The canvas strings exactly, including the wrong entity name. */
+export function deleteMessagesCanvasParity(name: string): { success: string; error: string } {
+  return {
+    success: `The project '${name}' was successfully deleted!`,
+    error: "Error: Permit could not be deleted. ",
+  };
+}
+
+/**
+ * `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information_2` — the cost-module lock.
+ *
+ * Not a confirmation: one `Close` button and no destructive action, which is why it is its own
+ * dialog rather than a `ConfirmDialog`.
+ *
+ * The bullet glyph is presentation. The canvas labels carry it in the string
+ * (`"• Milestones"`), but `costModuleLock` returns the section names so the list can be
+ * rendered as a real list and read correctly by a screen reader; `bullet()` puts the glyph back
+ * for anywhere that needs the canvas string literally.
+ */
+export const COST_LOCK = {
+  /** `txt_PopUp_Common_Generators_PreventTotalCapacity_Title_2.Text` — verbatim. */
+  title: (projectName: string): string => `Cost Module (${projectName})`,
+  /** `lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_45.Text`. */
+  intro: "Cost module is locked. To unlock it, please complete the following sections:",
+  /** `..._VisibilityMessage_47` … `_50` — the glyph is part of the canvas string. */
+  bullet: (section: string): string => `• ${section}`,
+  /** `btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close_2.Text` — verbatim. */
+  close: "Close",
+} as const;
+
+/**
+ * The two SPO notifications, from the command bar's own `Notify` calls.
+ *
+ * Both are unreachable through the command bar as the canvas gates it — `ItemEnabled` already
+ * requires BOTH urls to be non-blank — so they are the handler's own second guard. Transcribed
+ * and kept for exactly that reason: the gate and the guard disagreeing is how the canvas ends
+ * up with an enabled command that does nothing.
+ */
+export const SPO_MSG = {
+  /** command bar `ViewSharepoint` → `Notify(...)` — verbatim. */
+  noSharepoint: "For this Project, No Sharepoint site is available.",
+  /** command bar `ViewTeams` → `Notify(...)` — verbatim. */
+  noTeams: "For this Project, No Teams channel is available.",
+} as const;
+
+/** The report link could not be built because its environment variable is unset. */
+export const REPORT_UNAVAILABLE =
+  "This report is not configured for this environment.";
+
 /* ══════════════════════════════════════════════════════════════════ paging ══ */
 
 /** The canvas page size — `colFiltersOverview.PageSize`. */
@@ -636,6 +744,41 @@ export function pagerLabels(state: PageState): { totalRows: string; page: string
     totalRows: `Total Rows: ${state.totalRows}`,
     page: `Page: ${clampPage(state.page, state.totalRows, state.pageSize, pages)} from ${pages}`,
   };
+}
+
+/**
+ * Whether the pager shows at all.
+ *
+ * `con_Main_Project_Overview_Context_Filter_Pagination_Buttons.Visible =
+ *  If(First(colFiltersOverview).TotalPages > 1, true, false)` — a single page of results has no
+ * pager and no "Page: 1 from 1" caption, which is what the filtered screenshot shows:
+ * `Total Rows: 1` on its own, with the whole control strip gone rather than greyed.
+ *
+ * `Total Rows` is a separate label and stays visible either way.
+ */
+export function isPagerVisible(state: PageState): boolean {
+  return (state.totalPages ?? totalPages(state.totalRows, state.pageSize)) > 1;
+}
+
+/**
+ * Drop the deleted row out of the page already on screen, and decrement its total.
+ *
+ * The canvas did `Refresh(Projects)` and then re-ran the whole filter by invoking another
+ * control's handler (`Select(but_..._Filter_Apply)`). Here the cached page is patched directly
+ * and the subtree invalidated behind it; without the `totalRows` decrement the footer keeps
+ * reading the pre-delete count for as long as the refetch takes, which reads as a failed
+ * delete.
+ *
+ * Returns `page` unchanged when the row is not on it, so a stale cache entry is not rewritten
+ * with a fabricated count.
+ */
+export function applyOptimisticDelete<T extends { rows: { id: string }[]; totalRows: number }>(
+  page: T,
+  deletedId: string,
+): T {
+  const rows = page.rows.filter((r) => r.id !== deletedId);
+  if (rows.length === page.rows.length) return page;
+  return { ...page, rows, totalRows: Math.max(0, page.totalRows - 1) };
 }
 
 /* ══════════════════════════════════════════════════ URL serialisation ══ */

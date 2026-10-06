@@ -91,6 +91,31 @@ export async function fetchPage<T>(
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════ writes ══ */
+
+/**
+ * A delete whose failure is observable.
+ *
+ * The generated services declare `delete(id): Promise<void>` and **discard** the
+ * `IOperationResult` the SDK hands back, so a Dataverse refusal — a 403 from row-level
+ * security, a cascade the server would not perform — resolves exactly like a success. The SDK
+ * never throws for a failed data call (see `platform/errors.ts`), so there is nothing else to
+ * catch: the row stays, the screen says it went, and the user finds out later.
+ *
+ * `vsb_projects` is the one table where the canvas app itself refused to ignore that: the
+ * delete is wrapped in `IfError` with an error notification. Reproducing that behaviour needs
+ * the result, so this goes to the client directly — the same reason `countedPage` below does,
+ * and for the same kind of gap in pac output, which must not be hand-edited.
+ */
+export async function deleteRecord(
+  operation: string,
+  tableName: string,
+  recordId: string,
+): Promise<void> {
+  const client = getClient(dataSourcesInfo);
+  unwrap(await client.deleteRecordAsync(tableName, recordId), operation);
+}
+
 /* ══════════════════════════════════════════════════════ counted paging ══ */
 
 /**

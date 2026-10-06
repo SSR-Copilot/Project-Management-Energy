@@ -18,6 +18,7 @@ import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath } from "./deepLinks";
 
 const ProjectOverviewScreen = lazy(() => import("@/features/project-overview/Screen"));
+const GeneralDataScreen = lazy(() => import("@/features/general-data/Screen"));
 const ContractsScreen = lazy(() => import("@/features/contracts/Screen"));
 const CapexCostsScreen = lazy(() => import("@/features/capex-costs/Screen"));
 const OpexCostsScreen = lazy(() => import("@/features/opex-costs/Screen"));
@@ -63,6 +64,19 @@ export function AppRoutes() {
       <Routes>
         <Route index element={<Landing />} />
         <Route path="projects" element={<ProjectOverviewScreen />} />
+        {/*
+          The two Project Management destinations the overview's command bar navigates to.
+          `Add Project` is the app's only create path and `Edit Project` the only way into a
+          project's own data, so both are real routes — but the screen behind them is #9 and is
+          not migrated yet, so it renders a not-yet-built notice. See
+          `features/general-data/Screen.tsx` for what replacing it involves.
+
+          `projects/new` is declared BEFORE `projects/:projectId/general` so the literal wins;
+          React Router ranks static segments above dynamic ones, but the order also makes the
+          intent readable.
+        */}
+        <Route path="projects/new" element={<GeneralDataScreen />} />
+        <Route path="projects/:projectId/general" element={<GeneralDataScreen />} />
         <Route path="costs" element={<CostProjectGate />}>
           <Route index element={<Landing />} />
           <Route path="capex" element={<CapexCostsScreen />} />

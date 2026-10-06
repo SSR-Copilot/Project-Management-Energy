@@ -8,15 +8,18 @@
  * default list rather than reaching `$filter` unchecked.
  */
 import { useCallback, useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  keepPreviousData, useMutation, useQuery, useQueryClient,
+} from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  listCountries, listCountryAreas, listProjectStates, loadProjectPage,
-  loadProjectStateOrder, searchProjectManagers,
+  deleteProject, listCountries, listCountryAreas, listProjectStates, loadProjectPage,
+  loadProjectStateOrder, searchProjectManagers, type ProjectPage,
 } from "@/data/projects";
+import { trace } from "@/platform/telemetry";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import {
-  applyFilterPatch, nextSortState, parseCriteria, serialiseCriteria,
+  applyFilterPatch, applyOptimisticDelete, nextSortState, parseCriteria, serialiseCriteria,
   type Criteria, type ProjectFilter, type SortState,
 } from "./rules";
 
@@ -85,11 +88,27 @@ export function useCriteria(): CriteriaController {
 
 /* ═════════════════════════════════════════════════════════════ the queries */
 
+export interface ProjectPageQuery {
+  data: ProjectPage | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+  /**
+   * This page's cache key, so the delete can patch exactly the page on screen.
+   *
+   * It has to come from here rather than be rebuilt at the call site: the key carries the
+   * DEBOUNCED keyword, and a second `useDebouncedValue` in the component would run its own
+   * timer and drift out of step with the request the key stands for.
+   */
+  pageKey: readonly unknown[];
+}
+
 export function useProjectPage(args: {
   criteria: Criteria;
   scopeFilter?: string | undefined;
   locale?: string;
-}) {
+}): ProjectPageQuery {
   const { criteria, scopeFilter, locale } = args;
   // The keyword is the only field typed a character at a time.
   const keyword = useDebouncedValue(criteria.filter.keyword, 350);
@@ -98,11 +117,16 @@ export function useProjectPage(args: {
     [criteria.filter, keyword],
   );
 
-  return useQuery({
-    queryKey: [
+  const pageKey = useMemo(
+    () => [
       "projectPage",
       filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter ?? "",
     ] as const,
+    [filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter],
+  );
+
+  const query = useQuery({
+    queryKey: pageKey,
     queryFn: () =>
       loadProjectPage({ filter, sort: criteria.sort, page: criteria.page, scopeFilter, locale }),
     // Keeps the previous page visible while the next one loads, so the grid does not blank
@@ -110,6 +134,15 @@ export function useProjectPage(args: {
     placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
   });
+
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    isError: query.isError,
+    error: query.error,
+    pageKey,
+  };
 }
 
 export function useCountries() {
@@ -162,5 +195,51 @@ export function useProjectStateOrder(clusterStateId: string | null) {
     queryFn: () => loadProjectStateOrder(clusterStateId),
     enabled: Boolean(clusterStateId),
     staleTime: 30 * 60 * 1000,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════ the delete */
+
+export interface DeleteProjectVars {
+  id: string;
+  /** Carried only so the caller can name the project in the result message. */
+  name: string;
+}
+
+/**
+ * Delete one project.
+ *
+ * The canvas `OnConfirm` is `IfError(Remove(...); Notify(success), Notify(error))` followed by
+ * `Refresh(Projects)` and `Select(but_..._Filter_Apply)` — a full re-query triggered by
+ * invoking another control's handler. Here the page on screen is patched optimistically and
+ * the `projectPage` subtree invalidated behind it, so the grid and the footer agree
+ * immediately and the authoritative list arrives a round trip later.
+ *
+ * On failure the previous page is put back. That matters more than the message: an optimistic
+ * delete that is not rolled back leaves the row missing from a list the server still has it
+ * in, and the next filter change makes it reappear with no explanation.
+ */
+export function useDeleteProject(pageKey: readonly unknown[]) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: DeleteProjectVars) => deleteProject(vars.id),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: pageKey });
+      const previous = qc.getQueryData<ProjectPage>(pageKey);
+      if (previous) {
+        qc.setQueryData<ProjectPage>(pageKey, applyOptimisticDelete(previous, vars.id));
+      }
+      return { previous };
+    },
+    onError: (error, vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(pageKey, ctx.previous);
+      // The canvas put FirstError.Source / .Message / .Details.HttpResponse into the message
+      // the user reads. It belongs here instead.
+      trace("error", "delete project failed", { projectId: vars.id, error });
+    },
+    onSettled: () => {
+      // The row count changed, so every cached page is now off by one — not just this one.
+      void qc.invalidateQueries({ queryKey: ["projectPage"] });
+    },
   });
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { NAV_ITEMS, activeNavKey, parentOf, projectManagementAppUrl } from "./navigation";
+import {
+  NAV_ITEMS, NEW_PROJECT_PATH, activeNavKey, analyticsAppUrl, parentOf,
+  powerBiReportUrl, projectGeneralDataPath, projectManagementAppUrl,
+} from "./navigation";
 
 describe("NAV_ITEMS", () => {
   it("UT-NAV-001 transcribes all seven canvas rail entries, plus Projects", () => {
@@ -114,5 +117,96 @@ describe("projectManagementAppUrl", () => {
     expect(projectManagementAppUrl({
       environmentId: undefined, projectManagementAppId: "app1", tenantId: "ten1",
     })).toBeUndefined();
+  });
+});
+
+/* ───────────────────────────────── the Project Management route helpers */
+
+describe("the Project Management routes", () => {
+  it("UT-NAV-016 sends Add Project to a literal route, not a flagged one", () => {
+    // General Data IS the New Project screen. Marking that in the path rather than in a store
+    // flag is what makes a reloaded or shared "new project" link still work.
+    expect(NEW_PROJECT_PATH).toBe("/projects/new");
+  });
+
+  it("UT-NAV-017 puts the project id in the path for Edit Project", () => {
+    expect(projectGeneralDataPath("abc")).toBe("/projects/abc/general");
+  });
+
+  it("UT-NAV-018 keeps the create route distinguishable from a project's own", () => {
+    // `/projects/new` must not be read as a project whose id is "new", which is what a single
+    // `/projects/:projectId/general` route with an optional segment would have done.
+    expect(projectGeneralDataPath("new")).not.toBe(NEW_PROJECT_PATH);
+  });
+});
+
+/* ────────────────────────────────────────────── the Analytics app launch */
+
+describe("analyticsAppUrl", () => {
+  const base = {
+    environmentId: "env1", analyticsAppId: "ana1", tenantId: "ten1", projectId: "p1",
+  };
+
+  it("UT-NAV-019 builds gblAnalyticsAppLaunchUrl plus the project", () => {
+    expect(analyticsAppUrl(base))
+      .toBe("https://apps.powerapps.com/play/e/env1/a/ana1?tenantId=ten1&projectId=p1");
+  });
+
+  it("UT-NAV-020 spells the parameter projectId, with the capital I", () => {
+    // The canvas is inconsistent: the PM app's own launch uses lowercase `projectid`, the
+    // Cost and Analytics launches use `projectId`. The receiving app reads what it was given,
+    // so the difference cannot be normalised away.
+    const url = new URL(analyticsAppUrl(base)!);
+    expect(url.searchParams.get("projectId")).toBe("p1");
+    expect(url.searchParams.get("projectid")).toBeNull();
+  });
+
+  it("UT-NAV-021 omits an unknown tenant rather than sending 'undefined'", () => {
+    expect(analyticsAppUrl({ ...base, tenantId: undefined }))
+      .toBe("https://apps.powerapps.com/play/e/env1/a/ana1?projectId=p1");
+  });
+
+  it("UT-NAV-022 returns undefined when the environment has no Analytics app", () => {
+    // vsb_AnalyticsAppID unset must surface as "not configured", never as a broken link.
+    expect(analyticsAppUrl({ ...base, analyticsAppId: undefined })).toBeUndefined();
+    expect(analyticsAppUrl({ ...base, environmentId: undefined })).toBeUndefined();
+    expect(analyticsAppUrl({ ...base, projectId: "" })).toBeUndefined();
+  });
+});
+
+/* ──────────────────────────────────────────────── the Power BI report links */
+
+describe("powerBiReportUrl", () => {
+  it("UT-NAV-023 filters the project report to the selected project", () => {
+    const url = new URL(powerBiReportUrl({
+      reportId: "r1", tenantId: "t1", projectId: "p1",
+    })!);
+    expect(url.origin + url.pathname).toBe("https://app.powerbi.com/reportEmbed");
+    expect(url.searchParams.get("reportId")).toBe("r1");
+    expect(url.searchParams.get("autoAuth")).toBe("true");
+    expect(url.searchParams.get("ctid")).toBe("t1");
+    expect(url.searchParams.get("navContentPaneEnabled")).toBe("false");
+    // Lowercase `id`, as the command's own handler writes it. The grid's `CellAction` handler
+    // writes `Project/Id`, but that handler is dead code — no column declares a link cell.
+    expect(url.searchParams.get("filter")).toBe("Project/id eq 'p1'");
+  });
+
+  it("UT-NAV-024 leaves the portfolio report unfiltered", () => {
+    // Which is also why the portfolio command carries no selection gate.
+    const url = new URL(powerBiReportUrl({ reportId: "r2", tenantId: "t1" })!);
+    expect(url.searchParams.get("reportId")).toBe("r2");
+    expect(url.searchParams.has("filter")).toBe(false);
+  });
+
+  it("UT-NAV-025 encodes the project id rather than concatenating it in", () => {
+    // The filter value carries spaces and apostrophes. A hand-built query string would put
+    // whatever this is straight into a URL the browser then opens.
+    const url = powerBiReportUrl({ reportId: "r1", tenantId: "t1", projectId: "a&b=c" })!;
+    expect(url).not.toContain("a&b=c");
+    expect(new URL(url).searchParams.get("filter")).toBe("Project/id eq 'a&b=c'");
+  });
+
+  it("UT-NAV-026 returns undefined without a report id", () => {
+    expect(powerBiReportUrl({ reportId: undefined, tenantId: "t1" })).toBeUndefined();
   });
 });

@@ -7,6 +7,8 @@ import {
   resolveSortColumn, nextSortState, toProjectRow, formatCapacity, formatGridDate,
   costModuleLock, isCostModuleLocked, commandBarState,
   totalPages, clampPage, pagerLabels, parseCriteria, serialiseCriteria, filterPeople,
+  COST_LOCK, DELETE_DIALOG, SPO_MSG, applyOptimisticDelete, deleteMessages,
+  deleteMessagesCanvasParity, isPagerVisible,
   type ProjectFilter, type SelectedProject, type PersonOption,
 } from "./rules";
 import { APPROVAL_STATE, TECHNOLOGY } from "@/domain/project";
@@ -634,5 +636,120 @@ describe("filterPeople", () => {
     }));
     expect(filterPeople(many, "Person")).toHaveLength(8);
     expect(filterPeople(many, "Person", 3)).toHaveLength(3);
+  });
+});
+
+/* ───────────────────────────────────────────── pager visibility and delete */
+
+describe("isPagerVisible", () => {
+  it("UT-OV-078 hides the whole pager for a single page of results", () => {
+    // `con_..._Pagination_Buttons.Visible = If(TotalPages > 1, true, false)`. The filtered
+    // screenshot shows `Total Rows: 1` with the control strip GONE, not greyed.
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 1 })).toBe(false);
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 200 })).toBe(false);
+    // Empty is still one page, per the canvas `If(total = 0, 1, 0)`.
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 0 })).toBe(false);
+  });
+
+  it("UT-OV-079 shows it as soon as a second page exists", () => {
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 201 })).toBe(true);
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 1129 })).toBe(true);
+  });
+
+  it("UT-OV-080 trusts the server's own page count over the even division", () => {
+    // The two ordered segments do not share a page, so `ceil(total / size)` under-counts.
+    // 200 rows divides to one page, but the server says two.
+    expect(isPagerVisible({ page: 1, pageSize: 200, totalRows: 200, totalPages: 2 })).toBe(true);
+  });
+});
+
+describe("applyOptimisticDelete", () => {
+  const page = {
+    rows: [{ id: G1, name: "A" }, { id: G2, name: "B" }],
+    totalRows: 7,
+  };
+
+  it("UT-OV-081 removes the row and decrements the total", () => {
+    // Without the decrement the footer keeps reading the pre-delete "Total Rows" for as long
+    // as the refetch takes, which reads as a delete that failed.
+    const next = applyOptimisticDelete(page, G1);
+    expect(next.rows.map((r) => r.id)).toEqual([G2]);
+    expect(next.totalRows).toBe(6);
+  });
+
+  it("UT-OV-082 leaves a page that does not hold the row untouched", () => {
+    // Returning a fabricated count for a stale cache entry is worse than leaving it stale.
+    const next = applyOptimisticDelete(page, "11111111-1111-1111-1111-111111111111");
+    expect(next).toBe(page);
+  });
+
+  it("UT-OV-083 never drives the total below zero", () => {
+    const one = { rows: [{ id: G1 }], totalRows: 0 };
+    expect(applyOptimisticDelete(one, G1).totalRows).toBe(0);
+  });
+});
+
+/* ──────────────────────────────────────── the dialogs, transcribed verbatim */
+
+describe("delete wording", () => {
+  it("UT-OV-084 transcribes the confirmation dialog exactly", () => {
+    expect(DELETE_DIALOG.title).toBe("Delete project?");
+    // The canvas description double-quotes the name INSIDE the sentence.
+    expect(DELETE_DIALOG.description("Wirmighausen"))
+      .toBe('Are you sure you want to delete the project "Wirmighausen"?');
+    // `.ConfirmButtonText` is "Delete", not "Delete project".
+    expect(DELETE_DIALOG.confirmText).toBe("Delete");
+    expect(DELETE_DIALOG.cancelText).toBe("Cancel");
+  });
+
+  it("UT-OV-085 quotes the name with single quotes in the success notification", () => {
+    // The dialog uses double quotes and the notification single ones. Both are the canvas's.
+    expect(deleteMessages("Foo").success).toBe("The project 'Foo' was successfully deleted!");
+  });
+
+  it("UT-OV-086 SOURCE DEFECT: corrects 'Permit' to 'Project' in the error", () => {
+    // The canvas error is a copy/paste from the Planning screen and names the wrong entity.
+    expect(deleteMessages("Foo").error).toContain("Project could not be deleted");
+    expect(deleteMessages("Foo").error).not.toContain("Permit");
+  });
+
+  it("UT-OV-087 keeps the canvas error reachable as a parity twin", () => {
+    expect(deleteMessagesCanvasParity("Foo").error).toBe("Error: Permit could not be deleted. ");
+    // The success half is identical in both, so a caller swapping them changes only the error.
+    expect(deleteMessagesCanvasParity("Foo").success).toBe(deleteMessages("Foo").success);
+  });
+
+  it("UT-OV-088 keeps the HTTP response body out of what the user reads", () => {
+    // The canvas concatenated FirstError.Source, .Message and .Details.HttpResponse into the
+    // notification. That goes to trace() instead.
+    expect(deleteMessages("Foo").error).not.toMatch(/HttpResponse|FirstError|originated on/);
+  });
+});
+
+describe("cost-module lock wording", () => {
+  it("UT-OV-089 transcribes the lock dialog exactly", () => {
+    expect(COST_LOCK.title("Wirmighausen")).toBe("Cost Module (Wirmighausen)");
+    expect(COST_LOCK.intro)
+      .toBe("Cost module is locked. To unlock it, please complete the following sections:");
+    expect(COST_LOCK.close).toBe("Close");
+  });
+
+  it("UT-OV-090 keeps the canvas bullet glyph available for the four sections", () => {
+    // The canvas labels carry the glyph in the string (`"• Milestones"`); costModuleLock
+    // returns the section names so the list can be rendered as a real list.
+    expect(COST_LOCK.bullet("Milestones")).toBe("• Milestones");
+    expect(costModuleLock({
+      projectStartDate: null, totalCapacity: null, netYieldP50: null, statusName: "Draft",
+    }).map(COST_LOCK.bullet)).toEqual([
+      "• Milestones", "• Generator", "• Production", "• Change the project status from Draft",
+    ]);
+  });
+});
+
+describe("the SPO notifications", () => {
+  it("UT-OV-091 transcribes both, with the canvas's own capitalisation", () => {
+    // "Sharepoint", not "SharePoint"; and both sentences capitalise mid-sentence.
+    expect(SPO_MSG.noSharepoint).toBe("For this Project, No Sharepoint site is available.");
+    expect(SPO_MSG.noTeams).toBe("For this Project, No Teams channel is available.");
   });
 });

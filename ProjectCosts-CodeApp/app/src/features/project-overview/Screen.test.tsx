@@ -9,7 +9,7 @@
  * against a stubbed transport, rather than mocking the repository layer and testing nothing.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -74,11 +74,48 @@ vi.mock("@microsoft/power-apps/app", () => ({
   }),
 }));
 
+/**
+ * A project that MAY be deleted.
+ *
+ * `projectRow()` is Approved (`952850002`), and the canvas `deleteProject.ItemEnabled`
+ * requires `'Approval States' <> 'Approval States'.Approved` — so the default fixture is
+ * deliberately undeletable and every delete test has to opt out of it. UT-OV-049 pins the
+ * block itself at the rule level.
+ */
+const deletableRow = () => projectRow({ vsb_approvalstates: 952850000 });
+
+/**
+ * The environment variables `SessionProvider` resolves, as `schemaname → value`.
+ *
+ * Served through `defaultvalue` on the DEFINITION row, which is the path
+ * `loadEnvironmentVariables` falls back to when a variable has no value row — the shape a
+ * freshly imported solution actually has.
+ */
+let envVarValues: Record<string, string> = {};
+
+/** Every project delete the screen issued, and whether the transport should accept it. */
+const deletes: string[] = [];
+let deleteSucceeds = true;
+
 vi.mock("@microsoft/power-apps/data", () => ({
   getClient: () => ({
     retrieveMultipleRecordsAsync: vi.fn(
       async (table: string, options: Record<string, unknown>) => {
         calls.push({ table, options });
+        if (table === "environmentvariabledefinitions") {
+          return {
+            success: true,
+            // The id MUST be a real GUID: `loadEnvironmentVariables` feeds these ids straight
+            // into `guid()` when it builds the follow-up query for the value rows, and that
+            // helper throws on anything else. A short fake id made the whole query reject, so
+            // every environment variable silently read as unset.
+            data: Object.entries(envVarValues).map(([schemaname, defaultvalue], i) => ({
+              environmentvariabledefinitionid: `0000000${i}-0000-0000-0000-00000000000${i}`,
+              schemaname,
+              defaultvalue,
+            })),
+          };
+        }
         if (table === "vsb_projects") {
           if (String(options.filter ?? "").includes(" eq null")) {
             return { success: true, data: blankRows, count: blankTotal };
@@ -113,7 +150,14 @@ vi.mock("@microsoft/power-apps/data", () => ({
     })),
     createRecordAsync: vi.fn(),
     updateRecordAsync: vi.fn(),
-    deleteRecordAsync: vi.fn(),
+    deleteRecordAsync: vi.fn(async (_table: string, id: string) => {
+      deletes.push(id);
+      // The SDK does NOT throw for a failed call — it returns `success: false`, which is
+      // exactly the shape `deleteRecord` exists to stop the generated service discarding.
+      return deleteSucceeds
+        ? { success: true, data: undefined }
+        : { success: false, data: undefined, error: new Error("forbidden") };
+    }),
     executeAsync: vi.fn(),
   }),
 }));
@@ -143,6 +187,69 @@ function CurrentLocation() {
   return <output data-testid="current-location">{location.pathname}{location.search}</output>;
 }
 
+/**
+ * Select a row and wait for the command bar to settle.
+ *
+ * Selecting a project starts a SECOND query — the cluster state's `Order`, which the Simulate
+ * gate needs and the grid row does not carry. When it lands the gates recompute and the
+ * command bar re-renders, so a click issued in that window can land on a button React is
+ * about to replace. Waiting for the gates to settle is waiting for the state the test is
+ * actually about.
+ */
+async function selectRow(
+  user: ReturnType<typeof userEvent.setup>,
+  id: string = PROJECT_ID,
+): Promise<void> {
+  await user.click(screen.getByTestId(`select-${id}`));
+  await waitFor(() => expect(screen.getByTestId("command-editProject")).toBeEnabled());
+}
+
+/**
+ * Click a command once it is actually clickable.
+ *
+ * Same race as `selectRow`, one level finer: each command has its own gate, so waiting for
+ * `Edit Project` does not prove `Delete Project` has settled. Clicking a button React is
+ * mid-way through replacing dispatches the event at a detached node and nothing happens —
+ * which showed up as a dialog that intermittently never opened.
+ */
+async function clickCommand(
+  user: ReturnType<typeof userEvent.setup>,
+  key: string,
+): Promise<void> {
+  await waitFor(() => expect(screen.getByTestId(`command-${key}`)).toBeEnabled());
+  await user.click(screen.getByTestId(`command-${key}`));
+}
+
+/**
+ * Click a command and wait for the dialog it opens.
+ *
+ * A click on a Fluent `Toolbar` button is occasionally lost in jsdom: the toolbar runs Tabster's
+ * mover with `memorizeCurrent`, so focusing a button during the gesture can re-render the bar
+ * between `pointerdown` and `click`, and the `click` then lands on a node React has replaced.
+ * It reproduces for roughly one in ten of these tests and never for the same one twice.
+ *
+ * So the click is repeated until the dialog appears. That is safe for exactly these commands
+ * and is the reason this helper is limited to them: `deleteProject` and `editCosts` only open
+ * a dialog, and nothing is written or navigated until the dialog is confirmed — a repeated
+ * click cannot delete twice. Do NOT reuse this for a command that acts on the first click.
+ */
+async function openDialogVia(
+  user: ReturnType<typeof userEvent.setup>,
+  key: string,
+  title: string,
+): Promise<void> {
+  await waitFor(() => expect(screen.getByTestId(`command-${key}`)).toBeEnabled());
+  await waitFor(
+    async () => {
+      if (!screen.queryByText(title)) {
+        await user.click(screen.getByTestId(`command-${key}`));
+      }
+      expect(screen.getByText(title)).toBeInTheDocument();
+    },
+    { timeout: 5000 },
+  );
+}
+
 const isBlankSegment = (o: Record<string, unknown>) =>
   String(o.filter ?? "").includes(" eq null");
 
@@ -166,6 +273,9 @@ describe("ProjectOverviewScreen", () => {
     projectNextToken = undefined;
     blankRows = [];
     blankTotal = 0;
+    envVarValues = {};
+    deletes.length = 0;
+    deleteSucceeds = true;
     resetPageTokens();
   });
 
@@ -278,38 +388,38 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.getByTestId("command-editProject")).toBeDisabled();
   });
 
-  it("UT-OVUI-009 enables Edit Costs once a row is selected", async () => {
+  it("UT-OVUI-009 enables the selection commands once a row is selected", async () => {
+    projectRows = [deletableRow()];
     const user = userEvent.setup();
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    await user.click(screen.getByTestId(`select-${PROJECT_ID}`));
+    await selectRow(user);
     expect(screen.getByTestId("command-editCosts")).toBeEnabled();
-    expect(screen.getByTestId("command-addProject")).toBeDisabled();
-    expect(screen.getByTestId("command-editProject")).toBeDisabled();
-    expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeDisabled();
+    expect(screen.getByTestId("command-editProject")).toBeEnabled();
+    expect(screen.getByTestId("command-deleteProject")).toBeEnabled();
+    // `ItemEnabled: DataSourceInfo(Projects, CreatePermission)` — never gated on selection.
+    expect(screen.getByTestId("command-addProject")).toBeEnabled();
+    // Neither Dashboard nor Portfolio Overview declares ItemEnabled in the canvas source, so
+    // both stay enabled with nothing selected. See rules.ts SKELETON FIX 3 and UT-OV-057.
+    expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
-  it("opens the same app at CAPEX in a new tab while keeping the filtered overview", async () => {
+  it("UT-OVUI-023 navigates INTERNALLY to CAPEX rather than launching a second app", async () => {
+    // The canvas `Launch(gblCostAppLaunchUrl, {projectId: …})` opened a separate Power Apps
+    // app. One app now, so Edit Costs is a route — which is also what gives the back button
+    // its way home to the filtered list.
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const user = userEvent.setup();
     render(<Harness search="?q=endpoint"><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    await user.click(screen.getByTestId(`select-${PROJECT_ID}`));
-    await user.click(screen.getByTestId("command-editCosts"));
-    expect(open).toHaveBeenCalledOnce();
-    const [href, target, features] = open.mock.calls[0]!;
-    const url = new URL(String(href));
-    expect(url.origin).toBe(window.location.origin);
-    expect(url.pathname).toBe(window.location.pathname);
-    expect(url.hash).toBe(`#/costs/capex?projectId=${PROJECT_ID}`);
-    expect(url.searchParams.get("projectId")).toBe(PROJECT_ID);
-    expect(target).toBe("_blank");
-    expect(features).toBe("noopener,noreferrer");
-    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?q=endpoint");
+    await selectRow(user);
+    await clickCommand(user, "editCosts");
+    expect(screen.getByTestId("current-location"))
+      .toHaveTextContent(`/costs/capex?projectId=${PROJECT_ID}`);
+    expect(open).not.toHaveBeenCalled();
   });
 
-  it("UT-OVUI-010 blocks Edit Costs for a Draft project with the prerequisites dialog", async () => {
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
+  it("UT-OVUI-010 blocks Edit Costs for a Draft project with the lock dialog", async () => {
     // The canvas gate is the Draft test alone:
     // If(ClusterState.Name = "Draft", <popup>, Launch(costApp)).
     projectRows = [projectRow({
@@ -321,16 +431,26 @@ describe("ProjectOverviewScreen", () => {
     const user = userEvent.setup();
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    await user.click(screen.getByTestId(`select-${PROJECT_ID}`));
-    await user.click(screen.getByTestId("command-editCosts"));
-    expect(await screen.findByText("Costs cannot be edited yet")).toBeInTheDocument();
-    expect(screen.getByText(/Milestones, Generator, Production/)).toBeInTheDocument();
-    expect(open).not.toHaveBeenCalled();
+    await selectRow(user);
+    // `txt_PopUp_Common_Generators_PreventTotalCapacity_Title_2` — verbatim.
+    await openDialogVia(user, "editCosts", "Cost Module (Contr. Endpoint Testproject)");
+    expect(screen.getByText(
+      "Cost module is locked. To unlock it, please complete the following sections:",
+    )).toBeInTheDocument();
+    // Asserted on the text rather than the `listitem` role: the wording is the requirement,
+    // and the role is computed from CSS the test environment does not fully apply.
+    for (const section of [
+      "Milestones", "Generator", "Production", "Change the project status from Draft",
+    ]) {
+      expect(await screen.findByText(section)).toBeInTheDocument();
+    }
+    // Blocked means blocked: the route must not have changed.
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects");
   });
 
-  it("UT-OVUI-011 keeps Delete Project in its reference position, permanently disabled", async () => {
-    // Decision D12: destructive, and it belongs to Project Management. It stays FOURTH in
-    // the bar rather than being shuffled to the end.
+  it("UT-OVUI-011 keeps Delete Project fourth in the bar, disabled without a selection", async () => {
+    // It is destructive and it belongs to Project Management, but it stays FOURTH rather than
+    // being shuffled to the end.
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
     expect(screen.getByTestId("command-deleteProject")).toBeDisabled();
@@ -359,10 +479,18 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.queryByTestId("command-viewProjectOverviewPowerBI")).toBeNull();
   });
 
-  it("UT-OVUI-013 retains Dashboard's position but disables it for the Cost-only demo", async () => {
+  it("UT-OVUI-013 leaves Dashboard enabled with nothing selected", async () => {
+    // `{ItemKey: "viewDashboardFunctionality", ItemVisible: true}` and NO `ItemEnabled`, so
+    // the canvas never gated it. The dashboard link is not project-scoped either — it is a
+    // whole URL from `vsb_PowerBIDashboardLink`.
+    //
+    // CANVAS DIVERGENCE (recorded, not resolved): GUIDE p06 reads the recording as showing
+    // Dashboard greyed with nothing selected, and the harness plan says it was "corrected" to
+    // a selection gate. The YAML has no such gate and the screen plan's own non-negotiable is
+    // to inspect the YAML, so the source wins here. UT-OV-057 pins the rule side.
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeDisabled();
+    expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
   it("UT-OVUI-014 disables the Area filter until a Country is chosen", async () => {
@@ -447,5 +575,205 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     spy.mockRestore();
     expect(errors).toEqual([]);
+  });
+
+  /* ───────────────────────────────── the commands wired to a destination */
+
+  it("UT-OVUI-024 sends Add Project to General Data with no project selected", async () => {
+    // `+ Add Project` blanks the globals and navigates — General Data IS the New Project
+    // screen, and this is the app's only create path.
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await clickCommand(user, "addProject");
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects/new");
+  });
+
+  it("UT-OVUI-025 sends Edit Project to the selected project's General Data", async () => {
+    // The canvas forked on `gblProduction` and RELAUNCHED the whole app in the player. One
+    // app, one route.
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "editProject");
+    expect(screen.getByTestId("current-location"))
+      .toHaveTextContent(`/projects/${PROJECT_ID}/general`);
+  });
+
+  /* ──────────────────────────────────────────────────────────── the delete */
+
+  it("UT-OVUI-026 asks before deleting, in the canvas's own words", async () => {
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await openDialogVia(user, "deleteProject", "Delete project?");
+    expect(screen.getByText(
+      'Are you sure you want to delete the project "Contr. Endpoint Testproject"?',
+    )).toBeInTheDocument();
+    // Opening the dialog deletes nothing.
+    expect(deletes).toEqual([]);
+  });
+
+  it("UT-OVUI-027 cancelling deletes nothing", async () => {
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await openDialogVia(user, "deleteProject", "Delete project?");
+    await user.click(await screen.findByTestId("confirm-dialog-cancel"));
+    expect(deletes).toEqual([]);
+  });
+
+  it("UT-OVUI-028 deletes the project and names it in the confirmation", async () => {
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await openDialogVia(user, "deleteProject", "Delete project?");
+    await user.click(await screen.findByTestId("confirm-dialog-confirm"));
+    expect(deletes).toEqual([PROJECT_ID]);
+    expect(await screen.findByTestId("notice")).toHaveTextContent(
+      "The project 'Contr. Endpoint Testproject' was successfully deleted!",
+    );
+  });
+
+  it("UT-OVUI-029 says so when the delete is refused, and keeps the row", async () => {
+    // The SDK returns `success: false` rather than throwing, and the generated service
+    // discards it — this is the path `deleteRecord` exists for. The corrected wording says
+    // "Project", not the canvas's copy/pasted "Permit".
+    projectRows = [deletableRow()];
+    deleteSucceeds = false;
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await openDialogVia(user, "deleteProject", "Delete project?");
+    await user.click(await screen.findByTestId("confirm-dialog-confirm"));
+    const notice = await screen.findByTestId("notice");
+    expect(notice).toHaveTextContent("Project could not be deleted");
+    expect(notice).not.toHaveTextContent("Permit");
+    // The optimistic removal is rolled back, so the row the server still has is still shown.
+    expect(screen.getByText("Contr. Endpoint Testproject")).toBeInTheDocument();
+  });
+
+  /* ───────────────────────────────────────── the launches and their guards */
+
+  it("UT-OVUI-030 launches the Power BI dashboard from its environment variable", async () => {
+    envVarValues = {
+      vsb_PowerBIDashboardLink: "https://app.powerbi.com/dashboards/d1",
+      // Only so the test has a visible signal that the environment variables have landed:
+      // Simulate's VISIBILITY is `User().Email in colAnalyticsAppUsers`, so the command
+      // appears (disabled, with nothing selected) as soon as the env query resolves. The
+      // project rows arrive on a separate query and cannot be waited on instead.
+      vsb_AnalyticsAppUsers: "demo.user@vsb.energy",
+    };
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await screen.findByTestId("command-simulateProject");
+    await clickCommand(user, "viewDashboardFunctionality");
+    expect(open).toHaveBeenCalledWith(
+      "https://app.powerbi.com/dashboards/d1", "_blank", "noopener,noreferrer",
+    );
+  });
+
+  it("UT-OVUI-031 says the dashboard is unconfigured rather than opening nothing", async () => {
+    // An unset environment variable must surface, not produce `window.open(undefined)`.
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await clickCommand(user, "viewDashboardFunctionality");
+    expect(open).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("notice"))
+      .toHaveTextContent("This report is not configured for this environment.");
+  });
+
+  it("UT-OVUI-032 hides both Power BI reports from a user off the allow-list", async () => {
+    // `ItemVisible: CountIf(Filter(colReportViewers, Mail = gblCurrentUser.Mail), true) > 0`.
+    // demo.user@vsb.energy is not one of the ten hardcoded addresses, so neither command
+    // renders at all — with or without a selection.
+    envVarValues = { vsb_ProjectOverviewPowerBIReportID: "r1", vsb_PowerBITenantID: "t1" };
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.queryByTestId("command-viewProjectOverviewPowerBI")).toBeNull();
+    expect(screen.queryByTestId("command-viewPortfolioOverviewPowerBI")).toBeNull();
+    await selectRow(user);
+    expect(screen.queryByTestId("command-viewProjectOverviewPowerBI")).toBeNull();
+  });
+
+  it("UT-OVUI-033 keeps SharePoint and Teams out of a non-Croatian project", async () => {
+    // `ItemVisible: varProjectRecord.Country.Name = "Croatia"` — a hardcoded country string.
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    expect(screen.queryByTestId("command-viewSharepoint")).toBeNull();
+    expect(screen.queryByTestId("command-viewTeams")).toBeNull();
+  });
+
+  it("UT-OVUI-034 launches the stored SharePoint and Teams urls for Croatia", async () => {
+    projectRows = [projectRow({
+      [`_vsb_country_value${FV}`]: "Croatia",
+      vsb_sposharepointurl: "https://vsb.sharepoint.com/sites/p1",
+      vsb_spoteamsurl: "https://teams.microsoft.com/l/team/p1",
+    })];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "viewSharepoint");
+    expect(open).toHaveBeenCalledWith(
+      "https://vsb.sharepoint.com/sites/p1", "_blank", "noopener,noreferrer",
+    );
+    await clickCommand(user, "viewTeams");
+    expect(open).toHaveBeenLastCalledWith(
+      "https://teams.microsoft.com/l/team/p1", "_blank", "noopener,noreferrer",
+    );
+  });
+
+  it("UT-OVUI-035 needs BOTH urls before either command is usable", async () => {
+    // The canvas `ItemEnabled` requires both, on both commands — so a project with a
+    // SharePoint site but no Teams channel offers neither.
+    projectRows = [projectRow({
+      [`_vsb_country_value${FV}`]: "Croatia",
+      vsb_sposharepointurl: "https://vsb.sharepoint.com/sites/p1",
+      vsb_spoteamsurl: null,
+    })];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    expect(screen.getByTestId("command-viewSharepoint")).toBeDisabled();
+    expect(screen.getByTestId("command-viewTeams")).toBeDisabled();
+  });
+
+  /* ───────────────────────────────────────────────────────────── the pager */
+
+  it("UT-OVUI-036 hides the pager entirely for a single page of results", async () => {
+    // `con_..._Pagination_Buttons.Visible = If(TotalPages > 1, …)`. Total Rows stays.
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("total-rows")).toHaveTextContent("Total Rows: 1");
+    expect(screen.queryByTestId("page-label")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "First page" })).toBeNull();
+  });
+
+  it("UT-OVUI-037 shows the pager once a second page exists", async () => {
+    projectTotal = 1129;
+    projectNextToken = "tok";
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 6");
+    expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
   });
 });

@@ -14,7 +14,7 @@ import { Vsb_countryareasService } from "@/generated/services/Vsb_countryareasSe
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
-import { countedPage, fetchAll } from "./client";
+import { countedPage, deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, asc, desc, eq, guid, isNull, lookupEq, notNull, or, f } from "./odata";
 import {
   COL, PROJECT_SELECT, PAGE_SIZE, buildProjectFilter, toProjectRow,
@@ -165,6 +165,25 @@ export async function loadProjectStateOrder(
   });
   if (!result.success) return null;
   return unwrap(result, "load project state").vsb_order ?? null;
+}
+
+/* ═══════════════════════════════════════════════════════════════ the delete */
+
+/**
+ * `Remove(Projects, gblRecordSelectedProject)` from
+ * `cmp_Project_PopUp_ConfirmationDeleteProject.OnConfirm`.
+ *
+ * Goes through `deleteRecord` rather than `Vsb_projectsService.delete`, which discards the
+ * result — the canvas wraps this one call in `IfError` and notifies on failure, so the failure
+ * has to be reachable. See `data/client.ts`.
+ *
+ * The approved-project block is a COMMAND gate, not a check here: the canvas enforces it only
+ * in `ItemEnabled`, so a direct call succeeds. `docs/SECURITY.md` records that the real
+ * boundary is a pre-operation plug-in on `vsb_project` Delete; this function deliberately does
+ * not re-implement it on the client, because a client-side guard would read as the boundary.
+ */
+export async function deleteProject(projectId: string): Promise<void> {
+  await deleteRecord("delete project", ES_PROJECTS, projectId);
 }
 
 /* ══════════════════════════════════════════════════════════ filter sources */
