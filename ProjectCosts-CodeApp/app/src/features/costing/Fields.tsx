@@ -78,15 +78,23 @@ const useStyles = makeStyles({
  * `Y: =8`, i.e. beside the caption, not under the box. Same for the contract panel's
  * `Comment  0/255`.
  */
-export function CostField({ label, required, value, onChange, type = "text", disabled = false, error, maxLength, placeholder, counter, children }: {
-  label: string; required?: boolean; value?: string | number; onChange?: (value: string) => void;
+export function CostField({ label, name, required, value, onChange, type = "text", disabled = false, error, maxLength, placeholder, counter, children }: {
+  label: string;
+  /**
+   * The original canvas control's own name (`txt_Screen_Panel_Field_1`), when known — Tosca's
+   * prior scans of the canvas app identify a field by this name, not by its caption. Carried as
+   * `data-testid`, NOT `aria-label`: `aria-label` stays the visible caption so a screen reader
+   * still announces "Description", not an internal control name — only Tosca needs the latter.
+   */
+  name?: string;
+  required?: boolean; value?: string | number; onChange?: (value: string) => void;
   type?: string; disabled?: boolean; error?: string; maxLength?: number; placeholder?: string;
   counter?: string; children?: ReactNode;
 }) {
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required} data-counter={counter ? true : undefined}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
-    {children ?? <input type={type} value={value ?? ""} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
+    {children ?? <input type={type} value={value ?? ""} aria-label={label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </label>;
 }
@@ -120,16 +128,19 @@ export function CostSelect({ label, value, options, onChange, required, error }:
  * `label` renders the group with no caption at all, which is the Margin Type radio: the
  * canvas gives it no `lbl_` of its own, it simply follows the Yes/No group.
  */
-export function Choices({ label, value, options, onChange, required, disabled, action }: {
-  label: string; value: string; options: readonly string[]; onChange: (value: string) => void;
+export function Choices({ label, name, value, options, onChange, required, disabled, action }: {
+  label: string;
+  /** The canvas radio GROUP's own name (`rad_Screen_Panel_Field_1`), when known — see `CostField`'s `name`. */
+  name?: string;
+  value: string; options: readonly string[]; onChange: (value: string) => void;
   required?: boolean; disabled?: boolean; action?: ReactNode;
 }) {
   const styles = useStyles();
   return <fieldset className={mergeClasses("canvas-radio-group", disabled && styles.choicesDisabled)}
-    disabled={disabled} aria-disabled={disabled || undefined}>
+    disabled={disabled} aria-disabled={disabled || undefined} data-testid={name}>
     {label || action ? <legend><span data-required={required}>{label}</span>{action}</legend> : null}
     {options.map(option => <label key={option}>
-      <input type="radio" checked={value === option} onChange={() => onChange(option)} />{option}</label>)}
+      <input type="radio" checked={value === option} onChange={() => onChange(option)} aria-label={option} />{option}</label>)}
   </fieldset>;
 }
 

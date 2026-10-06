@@ -695,7 +695,8 @@ export default function CapexCostsScreen() {
       {edit ? <div className={styles.panelColumns}>
         {/* ── left: the form ─────────────────────────────────────────────── */}
         <div className={styles.formColumn}>
-          <CostField label="Description" required maxLength={DESCRIPTION_MAX_LENGTH}
+          <CostField label="Description" name="txt_AddContract_RightPanel_Description_1"
+            required maxLength={DESCRIPTION_MAX_LENGTH}
             value={edit.description} error={descriptionError ?? undefined}
             onChange={v => update(clearStandardFlag(v, edit.standard))} />
           {/*
@@ -706,7 +707,8 @@ export default function CapexCostsScreen() {
             * formula COMMENTED OUT followed by a bare `DisplayMode.Edit` (`:10697`), and Link
             * to Milestone / Cost Paid By / Apply VAT / Depreciation set no `DisplayMode` at all.
             */}
-          <Choices label="Distribution" disabled={distributionLocked(isEdit)}
+          <Choices label="Distribution" name="rad_AddContract_RightPanel_DistributionType_1"
+            disabled={distributionLocked(isEdit)}
             value={edit.distribution === "equal" ? "Equal Distribution" : "Individual Distribution"}
             options={["Equal Distribution", "Individual Distribution"]}
             onChange={v => update({
@@ -720,14 +722,16 @@ export default function CapexCostsScreen() {
               * The client's screenshot shows exactly that: a star on Distribution Scheme and
               * Link to Milestone, none on Distribution or Cost Paid By.
               */}
-            <Choices label="Distribution Scheme" required disabled={distributionLocked(isEdit)}
+            <Choices label="Distribution Scheme" name="rad_AddContract_RightPanel_DistributionScheme_1"
+              required disabled={distributionLocked(isEdit)}
               value={edit.distributionScheme === "percent" ? "% Values" : "Absolute Values"}
               options={["Absolute Values", "% Values"]}
               onChange={v => update({
                 distributionScheme: v === "% Values" ? "percent" : "absolute",
               })} />
             {edit.distributionScheme === "percent" ? (
-              <CostField label={costLabel("Total Costs", { isoCurrencyCode })} required
+              <CostField label={costLabel("Total Costs", { isoCurrencyCode })}
+                name="txt_AddContract_RightPanel_TotalCost_1" required
                 value={costValue} type="number" error={totalCostError ?? undefined}
                 onChange={setCostValue} />
             ) : null}
@@ -737,11 +741,13 @@ export default function CapexCostsScreen() {
             {linkToMilestoneField}
           </> : null}
           {edit.distribution === "equal" ? <>
-            <Choices label="Equal Distribution" required
+            <Choices label="Equal Distribution" name="rad_AddContract_RightPanel_DistributionBy_1"
+              required
               value={edit.equalMode === "cluster" ? "By Cluster" : "By Start and End Date"}
               options={["By Cluster", "By Start and End Date"]}
               onChange={v => update({ equalMode: v === "By Cluster" ? "cluster" : "dates" })} />
-            <CostField label={costLabel("Total Costs", { isoCurrencyCode })} required
+            <CostField label={costLabel("Total Costs", { isoCurrencyCode })}
+              name="txt_AddContract_RightPanel_TotalCost_1" required
               value={costValue} type="number" error={totalCostError ?? undefined}
               onChange={setCostValue} />
             {edit.equalMode === "cluster" ? (
@@ -776,10 +782,12 @@ export default function CapexCostsScreen() {
                 * placeholder (`CapexScreenCode.txt:11420-11445`) — there is no day component
                 * anywhere in this feature, and a `type="date"` picker invented one.
                 */}
-              <CostField label="Start Date" required placeholder="MM/YYYY" value={startText}
+              <CostField label="Start Date" name="txt_AddContract_RightPanel_StartDate_1"
+                required placeholder="MM/YYYY" value={startText}
                 error={startDateError ?? undefined}
                 onChange={v => { setStartText(v); update({ startDate: monthYearToIso(v) }); }} />
-              <CostField label="End Date" required placeholder="MM/YYYY" value={endText}
+              <CostField label="End Date" name="txt_AddContract_RightPanel_EndDate_1"
+                required placeholder="MM/YYYY" value={endText}
                 error={endDateError ?? undefined}
                 onChange={v => { setEndText(v); update({ endDate: monthYearToIso(v) }); }} />
             </>}
@@ -788,9 +796,11 @@ export default function CapexCostsScreen() {
               options={FREQUENCY_OPTIONS.map(frequencyLabel)}
               onChange={v => update({ frequency: parseInt(v, 10) })} />
             <CostField label={costLabel("Average Amount per Payment", { isoCurrencyCode })}
+              name="txt_AddContract_RightPanel_AverageAmountPerPayment_1"
               value={average === undefined ? "" : amount(average)} disabled />
           </> : null}
-          <Choices label="Cost Paid By" value={edit.payer} options={["DevCo", "SPV"]}
+          <Choices label="Cost Paid By" name="rad_AddContract_RightPanel_CostPaidBy_1"
+            value={edit.payer} options={["DevCo", "SPV"]}
             onChange={v => update({ payer: v as CostLine["payer"] })} />
           {/* Label LEFT of the toggle, as the reference shows. */}
           <Switch className={styles.toggle} labelPosition="before" label="Apply VAT"

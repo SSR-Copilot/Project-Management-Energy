@@ -1291,9 +1291,11 @@ function OpexPanel({
   const numberField = (
     field: "fixCosts" | "percentOfRevenues" | "eurPerMwh" | "eurPerMw" | "eurPerWtg",
     label: string,
+    name: string,
   ) => (
     <CostField
       label={label}
+      name={name}
       type="number"
       value={form[field]}
       disabled={disabled(modes[field])}
@@ -1322,6 +1324,7 @@ function OpexPanel({
         <div className={styles.panelColumn}>
           <CostField
             label={OPEX_PANEL_LABELS.description}
+            name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description"
             required={required.description}
             value={form.description}
             disabled={disabled(modes.description)}
@@ -1412,13 +1415,18 @@ function OpexPanel({
             </Dropdown>
           </div>
 
-          {numberField("fixCosts", `Fix Costs p.a. [${project.isoCurrencyCode || "EUR"}]`)}
-          {numberField("percentOfRevenues", OPEX_PANEL_LABELS.percentOfRevenues)}
-          {numberField("eurPerMwh", panelRateLabel(currencyCode, "MWh"))}
-          {numberField("eurPerMw", panelRateLabel(currencyCode, "MW"))}
+          {numberField("fixCosts", `Fix Costs p.a. [${project.isoCurrencyCode || "EUR"}]`,
+            "txt_OpexCosts_RightPanel_NewEditCost_BodyContent_FixCosts")}
+          {numberField("percentOfRevenues", OPEX_PANEL_LABELS.percentOfRevenues,
+            "txt_OpexCosts_RightPanel_NewEditCost_BodyContent_ProcentOfRevenues")}
+          {numberField("eurPerMwh", panelRateLabel(currencyCode, "MWh"),
+            "txt_OpexCosts_RightPanel_NewEditCost_BodyContent_EuroPerMwh")}
+          {numberField("eurPerMw", panelRateLabel(currencyCode, "MW"),
+            "txt_OpexCosts_RightPanel_NewEditCost_BodyContent_EuroPerMw")}
           {/* `con_…_EuroPerWtg.Visible` (`:6868-6871`) — hidden for a PV module. */}
           {showEurPerWtgField(ctx.recordType)
-            ? numberField("eurPerWtg", panelRateLabel(currencyCode, "WTG"))
+            ? numberField("eurPerWtg", panelRateLabel(currencyCode, "WTG"),
+              "txt_OpexCosts_RightPanel_NewEditCost_BodyContent_EuroPerWtg")
             : null}
 
           <div>
@@ -1503,6 +1511,7 @@ function OpexPanel({
 
               <CostField
                 label={OPEX_PANEL_LABELS.inflationStartYear}
+                name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear"
                 required={required.inflationStartYear}
                 value={form.inflationStartYear}
                 disabled={disabled(modes.inflationStartYear)}
@@ -1613,6 +1622,7 @@ function OpexPanel({
                   {form.thresholdType === THRESHOLD_TYPE.individual ? (
                     <CostField
                       label={OPEX_PANEL_LABELS.individualThreshold}
+                      name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual"
                       required={required.thresholdIndividual}
                       type="number"
                       value={form.thresholdIndividual}

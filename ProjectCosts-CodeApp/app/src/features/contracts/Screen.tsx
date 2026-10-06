@@ -740,6 +740,7 @@ export default function ContractsScreen() {
           <div className="canvas-panel-column">
             <CostField
               label={MSG.description}
+              name="txt_Contracts_RightPanel_NewEdit_Description"
               required
               value={form.description}
               error={errorFor("description")}
@@ -760,6 +761,9 @@ export default function ContractsScreen() {
 
             <ClosingHalf
               legend={costLabel("Costs Until Closing Date", project ?? {})}
+              choiceName="rad_Contracts_RightPanel_NewEdit_CostsUntilClosingDate"
+              planName="txt_Contracts_RightPanel_NewEdit_CostsUntilClosingDate_Plan"
+              actualName="txt_Contracts_RightPanel_NewEdit_CostsUntilClosingDate_Actual"
               type={form.costsUntilClosingType}
               planValue={form.costsUntilClosingPlan}
               actualValue={form.costsUntilClosingActual}
@@ -770,6 +774,9 @@ export default function ContractsScreen() {
 
             <ClosingHalf
               legend={costLabel("Costs After Closing Date", project ?? {})}
+              choiceName="rad_Contracts_RightPanel_NewEdit_CostsAfterClosingDate"
+              planName="txt_Contracts_RightPanel_NewEdit_CostsAfterClosingDate_Plan"
+              actualName="txt_Contracts_RightPanel_NewEdit_CostsAfterClosingDate_Actual"
               type={form.costsAfterClosingType}
               planValue={form.costsAfterClosingPlan}
               actualValue={form.costsAfterClosingActual}
@@ -780,6 +787,7 @@ export default function ContractsScreen() {
 
             <Choices
               label={costLabel("Total Costs", project ?? {})}
+              name="rad_Contracts_RightPanel_NewEdit_TotalCosts"
               value={form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? MSG.calculated : MSG.overwrite}
               options={[MSG.calculated, MSG.overwrite]}
               onChange={(v) => updateForm({
@@ -789,10 +797,12 @@ export default function ContractsScreen() {
             />
             {form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? (
               // `txt_…_TotalCosts_Calculated` is what Recalculate writes, so it is read-only.
-              <CostField label={MSG.calculated} required disabled value={form.totalCostsCalculated} />
+              <CostField label={MSG.calculated} name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Calculated"
+                required disabled value={form.totalCostsCalculated} />
             ) : (
               <CostField
                 label={MSG.overwrite}
+                name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Overwrite"
                 required
                 value={form.totalCostsOverwrite}
                 error={errorFor("totalCostsOverwrite")}
@@ -811,6 +821,7 @@ export default function ContractsScreen() {
               */}
             <Choices
               label={MSG.margin}
+              name="rad_Contracts_RightPanel_NewEdit_Margin"
               value={form.margin ? "Yes" : "No"}
               options={["Yes", "No"]}
               onChange={(v) => updateForm({
@@ -836,6 +847,7 @@ export default function ContractsScreen() {
               <>
                 <Choices
                   label=""
+                  name="rad_Contracts_RightPanel_NewEdit_MarginType"
                   value={form.marginType === MARGIN_TYPE.Percentage ? "Percentage" : "Fixed Value"}
                   options={["Percentage", "Fixed Value"]}
                   onChange={(v) => updateForm({
@@ -848,6 +860,7 @@ export default function ContractsScreen() {
                 {form.marginType === MARGIN_TYPE.Percentage ? (
                   <CostField
                     label={MSG.marginPercent}
+                    name="txt_Contracts_RightPanel_NewEdit_MarginPercentage"
                     required
                     value={form.marginPercentage}
                     error={errorFor("marginPercentage")}
@@ -858,6 +871,7 @@ export default function ContractsScreen() {
                 ) : (
                   <CostField
                     label={costLabel(MSG.marginFixedValue, project ?? {})}
+                    name="txt_Contracts_RightPanel_NewEdit_MarginFixedValues"
                     required
                     value={form.marginFixedValue}
                     error={errorFor("marginFixedValue")}
@@ -871,6 +885,7 @@ export default function ContractsScreen() {
 
             <CostField
               label={costLabel("Total cost of contract", project ?? {})}
+              name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract"
               disabled
               value={numberFormat(locale, { maximumFractionDigits: 2 }).format(contractTotal)}
             />
@@ -923,6 +938,7 @@ export default function ContractsScreen() {
       >
         <CostField
           label={MSG.description}
+          name="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_Description"
           required
           value={form.description}
           error={errorFor("description")}
@@ -938,6 +954,7 @@ export default function ContractsScreen() {
         </div>
         <CostField
           label={`Total Costs Contract [${currency}]`}
+          name="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts"
           required
           value={form.totalCostsOverwrite}
           error={errorFor("totalCostsOverwrite")}
@@ -967,6 +984,7 @@ export default function ContractsScreen() {
       >
         <CostField
           label={MSG.description}
+          name="txt_Contracts_RightPanel_NewEdit_PaymentTarget_Description"
           required
           value={targetForm.description}
           error={targetErrorFor("description")}
@@ -979,6 +997,7 @@ export default function ContractsScreen() {
         */}
         <CostField
           label={MSG.paymentDate}
+          name="txt_Contracts_RightPanel_NewEdit_PaymentTarget_PaymentDate"
           required
           placeholder={MSG.paymentDatePlaceholder}
           value={targetForm.paymentDate}
@@ -987,6 +1006,7 @@ export default function ContractsScreen() {
         />
         <CostField
           label={MSG.totalCostsContractPercent}
+          name="txt_Contracts_Payment_Targets_RightPanel_TotalCosts"
           required
           value={targetForm.totalCostsContract}
           error={targetErrorFor("totalCostsContract")}
@@ -1089,6 +1109,10 @@ export default function ContractsScreen() {
  */
 function ClosingHalf(props: {
   legend: string;
+  /** The canvas radio group's name for THIS half — "Until" and "After" are different controls. */
+  choiceName?: string;
+  planName?: string;
+  actualName?: string;
   type: ContractForm["costsUntilClosingType"];
   planValue: string;
   actualValue: string;
@@ -1101,6 +1125,7 @@ function ClosingHalf(props: {
     <>
       <Choices
         label={props.legend}
+        name={props.choiceName}
         value={isPlan ? MSG.plan : MSG.actual}
         options={[MSG.plan, MSG.actual]}
         onChange={(v) => props.onType(
@@ -1110,10 +1135,11 @@ function ClosingHalf(props: {
       {isPlan ? (
         // The Plan figure is what Recalculate writes, so it is read-only here — the canvas
         // left it editable and then overwrote whatever was typed on the next Recalculate.
-        <CostField label={MSG.plan} required disabled value={props.planValue} />
+        <CostField label={MSG.plan} name={props.planName} required disabled value={props.planValue} />
       ) : (
         <CostField
           label={MSG.actual}
+          name={props.actualName}
           required
           value={props.actualValue}
           error={props.actualError}
@@ -1327,12 +1353,18 @@ function ContractCardBody({
   const selectedTarget = targets.find((t) => t.id === selectedTargetId);
   const showsClosingCosts = cardShowsClosingCosts(contract.contractType);
   const closingDateField = (
-    <CostField label={MSG.closingDate} disabled
+    <CostField label={MSG.closingDate} name="dtp_Contracts_List_Card_Body_Fields_ClosingDate" disabled
       value={longAbbreviatedDate(contract.closingDate)} />
   );
+  // Two DIFFERENT canvas controls, not one with a conditional — see `cardTotalLabel`'s own
+  // comment in rules.ts. The aria-label stays the same single `cardTotalLabel` text either way;
+  // only the Tosca-facing `data-testid` needs to pick the matching control per contract type.
   const totalField = (
-    <CostField label={cardTotalLabel(contract.contractType, currency)} disabled
-      value={fmt(contract.totalCostOfContract)} />
+    <CostField label={cardTotalLabel(contract.contractType, currency)}
+      name={contract.contractType === CONTRACT_TYPE.ProjectRights
+        ? "txt_Contracts_List_Card_Body_Fields_TotalCosts_RC"
+        : "txt_Contracts_List_Card_Body_Fields_TotalDevContract"}
+      disabled value={fmt(contract.totalCostOfContract)} />
   );
 
   return (
@@ -1340,11 +1372,19 @@ function ContractCardBody({
       <div className="canvas-contract-fields">
         {showsClosingCosts ? (
           <>
-            <CostField label={`Costs Until Closing [${currency}]`} disabled value={fmt(untilClosing)} />
+            <CostField label={`Costs Until Closing [${currency}]`}
+              name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
+              disabled value={fmt(untilClosing)} />
             {closingDateField}
-            <CostField label={`Costs After Closing [${currency}]`} disabled value={fmt(afterClosing)} />
-            <CostField label={`Total Costs [${currency}]`} disabled value={fmt(totalCosts)} />
-            <CostField label={`Margin [${marginUnit}]`} disabled value={fmt(marginValue)} />
+            <CostField label={`Costs After Closing [${currency}]`}
+              name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
+              disabled value={fmt(afterClosing)} />
+            <CostField label={`Total Costs [${currency}]`}
+              name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
+              disabled value={fmt(totalCosts)} />
+            <CostField label={`Margin [${marginUnit}]`}
+              name="txt_Contracts_List_Card_Body_Fields_Margins"
+              disabled value={fmt(marginValue)} />
             {totalField}
           </>
         ) : (

@@ -982,6 +982,7 @@ function LeasePanelBody({
       <div className={styles.panelColumn}>
         <CostField
           label={LEASE_LABELS.description}
+          name="txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1"
           // `lbl_…_DescriptionAsterisk_1.Visible = IsBlank(locSelectedLandLeasePeriod)` (LL:2246).
           required={panel.period === null}
           value={form.description}
@@ -1074,24 +1075,34 @@ function LeasePanelBody({
         </div>
 
         <CostField
-          label={leaseCurrencyLabel.fixCosts(iso)} type="number" value={form.fixedCosts}
+          label={leaseCurrencyLabel.fixCosts(iso)}
+          name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_FixedCosts_1"
+          type="number" value={form.fixedCosts}
           error={errorFor("fixedCosts")} onChange={(v) => patch({ fixedCosts: v })}
         />
         <CostField
-          label="Share of Revenues [%]" type="number" value={form.percentOfRevenues}
+          label="Share of Revenues [%]"
+          name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_PercentOfRevenues_1"
+          type="number" value={form.percentOfRevenues}
           error={errorFor("percentOfRevenues")}
           onChange={(v) => patch({ percentOfRevenues: v })}
         />
         <CostField
-          label={rateLabel("MWh", iso)} type="number" value={form.eurPerMwh}
+          label={rateLabel("MWh", iso)}
+          name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMWh_1"
+          type="number" value={form.eurPerMwh}
           error={errorFor("eurPerMwh")} onChange={(v) => patch({ eurPerMwh: v })}
         />
         <CostField
-          label={rateLabel("MW", iso)} type="number" value={form.eurPerMw}
+          label={rateLabel("MW", iso)}
+          name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMW_1"
+          type="number" value={form.eurPerMw}
           error={errorFor("eurPerMw")} onChange={(v) => patch({ eurPerMw: v })}
         />
         <CostField
-          label={rateLabel("WTG", iso)} type="number" value={form.eurPerWtg}
+          label={rateLabel("WTG", iso)}
+          name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroWTG_1"
+          type="number" value={form.eurPerWtg}
           error={errorFor("eurPerWtg")} onChange={(v) => patch({ eurPerWtg: v })}
         />
 
@@ -1237,6 +1248,7 @@ function LeasePanelBody({
 
             <CostField
               label={LEASE_LABELS.inflationStartYear}
+              name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1"
               required
               value={form.inflationStartYear}
               placeholder={LEASE_LABELS.inflationStartYearPlaceholder}
@@ -1285,6 +1297,7 @@ function LeasePanelBody({
             ) : (
               <CostField
                 label={inflationProfileLabel(false)}
+                name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
                 required
                 type="number"
                 value={form.inflationProfile}
@@ -1384,10 +1397,14 @@ function PaymentBlock({
 }) {
   const dateKey = (n === 1 ? "dueDate" : `dueDate${n}`) as "dueDate" | "dueDate2" | "dueDate3";
   const amountKey = (n === 1 ? "amount" : `amount${n}`) as "amount" | "amount2" | "amount3";
+  // The canvas names the first payment block `..._DueDate_1`/`..._Amount_1` and the other two
+  // `..._DueDate2_1`/`..._DueDate3_1` — the digit mid-name, not after it.
+  const nSuffix = n === 1 ? "" : String(n);
   return (
     <>
       <CostField
         label={LEASE_LABELS.oneTimePaymentDate(n)}
+        name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_DueDate${nSuffix}_1`}
         value={form.payments[dateKey]}
         placeholder={LEASE_LABELS.dueDatePlaceholder}
         disabled={disabled}
@@ -1396,6 +1413,7 @@ function PaymentBlock({
       />
       <CostField
         label={leaseCurrencyLabel.oneTimePaymentAmount(n, iso)}
+        name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_Amount${nSuffix}_1`}
         type="number"
         value={form.payments[amountKey]}
         disabled={disabled}

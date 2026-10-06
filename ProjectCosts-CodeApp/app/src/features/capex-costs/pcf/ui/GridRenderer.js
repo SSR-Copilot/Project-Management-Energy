@@ -769,7 +769,7 @@ export class GridRenderer {
         // floating tooltip (CommentTooltip text) — see createCommentDot for why this
         // dot uses a body-mounted tooltip instead of the CSS one.
         if (contract.hasComments) {
-            nameLine.appendChild(this.createCommentDot("pcf-name-dot", contract.commentTooltip));
+            nameLine.appendChild(this.createCommentDot("pcf-name-dot", contract.commentTooltip, `capex-comment-name-${contract.id}`));
         }
         nameContainer.appendChild(nameLine);
         if (contract.subLabel) {
@@ -952,7 +952,7 @@ export class GridRenderer {
             tr.appendChild(td);
             return;
         }
-        this.setMonthCellContent(td, this.formatCostValue(val), hasMonthComments, monthCommentTooltip);
+        this.setMonthCellContent(td, this.formatCostValue(val), hasMonthComments, monthCommentTooltip, `capex-comment-month-${contract.id}-${monthIndex}`);
         const isPaid = contract.monthPaid?.[monthIndex] || false;
         if (isPaid) {
             td.classList.add("pcf-paid-cell");
@@ -967,6 +967,7 @@ export class GridRenderer {
         td.tabIndex = 0;
         td.setAttribute("role", "button");
         td.setAttribute("aria-label", `${this.formatCostValue(val)}. Click to ${isPaid ? "set as unpaid" : "set as paid"}.`);
+        td.setAttribute("data-testid", `capex-month-cell-${contract.id}-${monthIndex}`);
         td.onclick = (e) => {
             e.stopPropagation();
             this.showMonthActionDropdown(e, contract, monthIndex, startYear, isPaid, td);
@@ -986,13 +987,13 @@ export class GridRenderer {
      * (pcf-month-value) so CSS can position the dot relative to the number without
      * disturbing the cell's right-aligned layout.
      */
-    setMonthCellContent(td, value, hasComments, commentTooltip) {
+    setMonthCellContent(td, value, hasComments, commentTooltip, testId) {
         const valueSpan = document.createElement("span");
         valueSpan.className = "pcf-month-value";
         valueSpan.innerText = value;
         td.appendChild(valueSpan);
         if (hasComments) {
-            td.appendChild(this.createCommentDot("pcf-month-comment-dot", commentTooltip));
+            td.appendChild(this.createCommentDot("pcf-month-comment-dot", commentTooltip, testId));
         }
     }
     /**
@@ -1004,9 +1005,12 @@ export class GridRenderer {
      * The dot swallows clicks so hovering users don't accidentally open the
      * paid/unpaid dropdown of the underlying month cell.
      */
-    createCommentDot(className, commentTooltip) {
+    createCommentDot(className, commentTooltip, testId) {
         const dot = document.createElement("span");
         dot.className = `${className} pcf-comment-dot`;
+        if (testId) {
+            dot.setAttribute("data-testid", testId);
+        }
         const tooltipText = this.formatCommentTooltip(commentTooltip);
         if (tooltipText) {
             dot.setAttribute("aria-label", tooltipText);
