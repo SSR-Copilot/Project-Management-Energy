@@ -82,9 +82,21 @@ export function CostField({ label, name, required, value, onChange, type = "text
   label: string;
   /**
    * The original canvas control's own name (`txt_Screen_Panel_Field_1`), when known — Tosca's
-   * prior scans of the canvas app identify a field by this name, not by its caption. Carried as
-   * `data-testid`, NOT `aria-label`: `aria-label` stays the visible caption so a screen reader
-   * still announces "Description", not an internal control name — only Tosca needs the latter.
+   * prior scans of the canvas app identify a field by this name, not by its caption.
+   *
+   * Carried on **both** `data-testid` and `aria-label`, so a Tosca module recorded against the
+   * canvas app — which keys on `AriaLabel` equal to this name — matches this app unchanged,
+   * with no re-record and no per-module property edit.
+   *
+   * ACCESSIBILITY COST, accepted deliberately: `aria-label` overrides the wrapping caption, so
+   * a screen reader announces `"txt_AddContract_RightPanel_Description_1"` rather than
+   * "Description" on every mapped field. Sighted users see no change — the caption `<span>` is
+   * still rendered and still visible. `migration-plans/09-tosca-automation-conventions.md`
+   * originally rejected exactly this trade; it was reversed by an explicit product decision to
+   * keep the existing Tosca modules working, and that document records the reversal.
+   *
+   * Falls back to the caption where no canvas name is mapped, so an unmapped field keeps the
+   * accessible name it always had.
    */
   name?: string;
   required?: boolean; value?: string | number; onChange?: (value: string) => void;
@@ -94,7 +106,7 @@ export function CostField({ label, name, required, value, onChange, type = "text
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required} data-counter={counter ? true : undefined}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
-    {children ?? <input type={type} value={value ?? ""} aria-label={label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
+    {children ?? <input type={type} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </label>;
 }
@@ -137,7 +149,13 @@ export function Choices({ label, name, value, options, onChange, required, disab
 }) {
   const styles = useStyles();
   return <fieldset className={mergeClasses("canvas-radio-group", disabled && styles.choicesDisabled)}
-    disabled={disabled} aria-disabled={disabled || undefined} data-testid={name}>
+    disabled={disabled} aria-disabled={disabled || undefined}
+    /*
+     * The canvas name goes on the GROUP, mirroring `data-testid` exactly — not on each radio.
+     * Every option sharing one name is the identical-fingerprint collision the live Tosca scan
+     * reported as "N items are not unique"; each radio keeps its own option text below.
+     */
+    aria-label={name ?? (label || undefined)} data-testid={name}>
     {label || action ? <legend><span data-required={required}>{label}</span>{action}</legend> : null}
     {options.map(option => <label key={option}>
       <input type="radio" checked={value === option} onChange={() => onChange(option)} aria-label={option} />{option}</label>)}

@@ -20,6 +20,11 @@ four findings below are now fixed; none required touching a screen file.
 | CAPEX grid, comment indicator dot (`GridRenderer.js:1012`) | `aria-label` is the **literal comment text** | Not unique, not stable, leaks user text into a DOM attribute | **Fixed** — `data-testid` added, `aria-label` left alone |
 | Dropdowns, toolbar buttons, nav (`CostSelect`, `CommandBar.tsx`, `LeftNav.tsx`, etc.) | Static `aria-label`, set once from the control's own config | None — already stable, confirmed by the same scan | No change |
 
+> **Note:** the `aria-label` values described in this table are the *caption* text, which
+> was the original decision. The canvas control name was later put on `aria-label` as well —
+> see "Reversed: the canvas name now goes on `aria-label` too" below, which is what the code
+> does today.
+
 ## What the Tosca scan actually showed
 
 The recording walks Tosca's **Advanced View → Identify by Properties** panel over the Capex
@@ -68,14 +73,44 @@ the same `txt_`/`rad_`/`drp_` naming this repo's own code comments already cite 
 same control-name identity, so that any Tosca module already recorded against the canvas app (or
 against that reference implementation) might keep working unchanged?
 
-**Decision:** yes, carry the canvas control name forward — but as `data-testid`, not
-`aria-label`. The reference recording's own scan showed that app's `AriaLabel` populated with
+**Decision (superseded — see below):** carry the canvas control name forward as `data-testid`,
+not `aria-label`. The reference recording's own scan showed that app's `AriaLabel` populated with
 the control name directly, which — had we copied it exactly — would have meant a screen reader
 announcing `"txt_AddContract_RightPanel_Description_1"` instead of `"Description"` for every
 field in the app. That's a real accessibility regression for an actual screen-reader user, not
 just a cosmetic difference, so it was rejected even though it would have mirrored the reference
 implementation more literally. `data-testid` gets Tosca the exact same stable string — it's just
 never read aloud.
+
+### Reversed: the canvas name now goes on `aria-label` too
+
+**Current decision, and the one the code implements:** the canvas control name is carried on
+**both** `data-testid` and `aria-label`.
+
+The trade above was re-examined and reversed deliberately. The reason the original call was
+wrong in practice is item 3 of "What Tosca-side still needs a human" below: every Tosca module
+already recorded against the canvas app keys on `AriaLabel` equal to the control name, so
+putting that string anywhere else meant each of those modules needed a property edit or a
+re-record before it would match this app. Paying an accessibility cost once, in one shared
+primitive, is cheaper than a per-module migration that someone has to do by hand and keep
+doing — and it makes "does the existing automation still work" a question with the answer yes.
+
+What this costs, stated plainly: a screen reader announces
+`"txt_AddContract_RightPanel_Description_1"` rather than "Description" on every mapped field.
+**Sighted users see no change** — the caption `<span>` is still rendered and still visible, and
+nothing about the layout moves. The cost falls entirely on screen-reader users, and it is real;
+it is accepted, not overlooked. If that becomes unacceptable, the fix is not to move the string
+back but to give Tosca a non-ARIA property to key on and edit the modules once.
+
+Mechanically, in [Fields.tsx](ProjectCosts-CodeApp/app/src/features/costing/Fields.tsx):
+
+- `CostField` — `aria-label={name ?? label}`. An unmapped field (no canvas counterpart) keeps
+  the caption as its accessible name, exactly as before.
+- `Choices` — the canvas name goes on the **group** (`<fieldset>`), mirroring where its
+  `data-testid` already sat. Each radio keeps its own option text as `aria-label`: giving every
+  option the one group name would recreate the identical-fingerprint collision the live scan
+  reported as "N items are not unique", which is the problem this document opened with.
+- `CostSelect` takes no `name` and has no `data-testid`, so nothing changed there.
 
 Both `CostField` and `Choices` ([Fields.tsx](ProjectCosts-CodeApp/app/src/features/costing/Fields.tsx))
 now take an optional `name` prop carrying that canvas control name, rendered as `data-testid` on
@@ -174,22 +209,21 @@ has access to. Once this build reaches an environment Tosca can scan, someone wh
 project still needs to:
 
 1. **Re-scan every panel using `CostField`/`Choices`** (Capex Costs, Contracts, Opex Costs, Land
-   Lease) and tick **`data-testid`**, not `AriaLabel`, as the identifying property — that's where
-   the canvas control name now lives (see "Carrying forward the original canvas control names"
-   above). `AriaLabel` is still populated (the caption text, e.g. "Description"), but it's no
-   longer guaranteed unique the way `data-testid` now is for every mapped field. Existing modules
-   recorded against the old (empty-label, `value=on`) fingerprint may currently be working off
-   XPath/position instead; worth checking which, since those will keep working but are still
-   fragile.
+   Lease) and confirm the canvas control name now resolves. Since the reversal above, it is on
+   **both** `AriaLabel` and `data-testid`, so either property identifies a mapped field and
+   `AriaLabel` is unique again rather than being the shared caption text. Either is fine to tick;
+   `data-testid` is the more honest anchor if you are recording fresh, because it cannot be
+   changed by a future accessibility fix. Existing modules recorded against the old
+   (empty-label, `value=on`) fingerprint may currently be working off XPath/position instead;
+   worth checking which, since those will keep working but are still fragile.
 2. **Point the two CAPEX grid modules (paid/unpaid cell, comment dot) at `data-testid`** instead
    of whatever they're anchored to today, the same way.
-3. **If any Tosca module already exists for the reference canvas app and keys on `AriaLabel`
-   equal to the control name** (e.g. `txt_AddContract_RightPanel_Description_1`), it will
-   **not** match this Code App's fields as-is — this app deliberately puts that string in
-   `data-testid` instead, for the accessibility reason explained above. Those modules would need
-   either a one-property edit (switch their identifying property from `AriaLabel` to
-   `data-testid`) or re-recording — there was no way to give Tosca the same string on the same
-   property without regressing screen-reader behavior.
+3. ~~**If any Tosca module already exists for the reference canvas app and keys on `AriaLabel`
+   equal to the control name**, it will not match this Code App's fields as-is.~~ **Closed by
+   the reversal above** — this was the finding that drove it. A module keyed on `AriaLabel`
+   equal to `txt_AddContract_RightPanel_Description_1` now matches this app directly: no
+   property edit, no re-record. Worth confirming on the first such module rather than assuming,
+   since it is the whole return on the accessibility cost that was accepted to get it.
 4. Nothing else needs a re-scan — the dropdown/button/nav modules the recording showed already
    resolving cleanly need no action.
 
