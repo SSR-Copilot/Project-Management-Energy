@@ -166,6 +166,7 @@ import { resetPageTokens } from "@/data/client";
 import { vsbTheme } from "@/theme/fluent";
 import { SessionProvider } from "@/app/SessionContext";
 import ProjectOverviewScreen from "./Screen";
+import { DELETE_DIALOG } from "./rules";
 
 function Harness({ children, search = "" }: { children: ReactNode; search?: string }) {
   const client = new QueryClient({
@@ -642,7 +643,7 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     await selectRow(user);
     await openDialogVia(user, "deleteProject", "Delete project?");
-    await user.click(await screen.findByTestId("confirm-dialog-cancel"));
+    await user.click(await screen.findByLabelText(DELETE_DIALOG.cancelText));
     expect(deletes).toEqual([]);
   });
 
@@ -653,7 +654,7 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     await selectRow(user);
     await openDialogVia(user, "deleteProject", "Delete project?");
-    await user.click(await screen.findByTestId("confirm-dialog-confirm"));
+    await user.click(await screen.findByLabelText(DELETE_DIALOG.confirmText));
     expect(deletes).toEqual([PROJECT_ID]);
     expect(await screen.findByTestId("notice")).toHaveTextContent(
       "The project 'Contr. Endpoint Testproject' was successfully deleted!",
@@ -671,7 +672,7 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     await selectRow(user);
     await openDialogVia(user, "deleteProject", "Delete project?");
-    await user.click(await screen.findByTestId("confirm-dialog-confirm"));
+    await user.click(await screen.findByLabelText(DELETE_DIALOG.confirmText));
     const notice = await screen.findByTestId("notice");
     expect(notice).toHaveTextContent("Project could not be deleted");
     expect(notice).not.toHaveTextContent("Permit");

@@ -33,8 +33,11 @@ export function EmptyState({ title, description, action, children }: EmptyStateP
     <div className={styles.root} role="status">
       <Text className={styles.title}>{title}</Text>
       {description ? <Text className={styles.description}>{description}</Text> : null}
+      {/* Tosca rule 1 — explicit label, taken from the action's own caption. */}
       {action ? (
-        <Button appearance="primary" onClick={action.onClick}>{action.label}</Button>
+        <Button appearance="primary" aria-label={action.label} onClick={action.onClick}>
+          {action.label}
+        </Button>
       ) : null}
       {children}
     </div>

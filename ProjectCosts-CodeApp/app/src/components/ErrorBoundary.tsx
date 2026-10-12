@@ -46,7 +46,10 @@ export class ErrorBoundary extends Component<Props, State> {
           {error.message}
         </MessageBarBody>
         <MessageBarActions>
-          <Button appearance="transparent" onClick={this.reset}>Try again</Button>
+          {/* Tosca rule 1 — explicit label, same string as the caption. */}
+          <Button appearance="transparent" aria-label="Try again" onClick={this.reset}>
+            Try again
+          </Button>
         </MessageBarActions>
       </MessageBar>
     );

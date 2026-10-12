@@ -546,6 +546,7 @@ export default function ProjectOverviewScreen() {
               placeholder="Search for Project Name, Short Name and ID"
               contentBefore={<SearchRegular />}
               onChange={(_, d) => setFilter({ keyword: d.value })}
+              aria-label="Project"
               data-testid="filter-keyword"
             />
           </FilterCell>
@@ -580,7 +581,8 @@ export default function ProjectOverviewScreen() {
                   ) : undefined
                 }
                 onChange={(_, d) => setManagerQuery(d.value)}
-                data-testid="filter-manager"
+                aria-label="Project Manager"
+              data-testid="filter-manager"
               />
               {managerQuery.trim().length >= 2 && !criteria.filter.projectManagerId ? (
                 <ul className={styles.suggestions} aria-label="Suggested people">
@@ -622,6 +624,7 @@ export default function ProjectOverviewScreen() {
               }
               placeholder=""
               onOptionSelect={(_, d) => setFilter({ countryId: d.optionValue ?? null })}
+              aria-label="Country"
               data-testid="filter-country"
             >
               {(countries.data ?? []).map((c) => (
@@ -644,6 +647,7 @@ export default function ProjectOverviewScreen() {
               value={areas.data?.find((a) => a.id === criteria.filter.areaId)?.name ?? ""}
               placeholder={criteria.filter.countryId ? "" : "Select a country first"}
               onOptionSelect={(_, d) => setFilter({ areaId: d.optionValue ?? null })}
+              aria-label="Area/State/Province"
               data-testid="filter-area"
             >
               {(areas.data ?? []).map((a) => (
@@ -673,6 +677,7 @@ export default function ProjectOverviewScreen() {
               onOptionSelect={(_, d) =>
                 setFilter({ technology: d.optionValue ? Number(d.optionValue) : null })
               }
+              aria-label="Technology"
               data-testid="filter-technology"
             >
               {Object.entries(TECHNOLOGY_LABEL).map(([value, label]) => (
@@ -698,7 +703,8 @@ export default function ProjectOverviewScreen() {
                   id="filter-capacity-input"
                   value={criteria.filter.capacity}
                   onChange={(_, d) => setFilter({ capacity: d.value })}
-                  data-testid="filter-capacity"
+                  aria-label="Capacity"
+              data-testid="filter-capacity"
                 />
               </Field>
               <Dropdown
@@ -711,13 +717,15 @@ export default function ProjectOverviewScreen() {
                 onOptionSelect={(_, d) =>
                   setFilter({ capacityOperator: (d.optionValue as CapacityOperator) ?? "" })
                 }
-                data-testid="filter-capacity-operator"
+                aria-label="Select operator"
+              data-testid="filter-capacity-operator"
               >
                 {CAPACITY_OPERATORS.map((op) => (
                   <Option key={op} value={op}>{op}</Option>
                 ))}
               </Dropdown>
               <ClearFilterButton
+                field="Capacity"
                 value={criteria.filter.capacity}
                 onClear={() => setFilter({ capacity: "" })}
               />
@@ -744,6 +752,7 @@ export default function ProjectOverviewScreen() {
               }
               placeholder=""
               onOptionSelect={(_, d) => setFilter({ clusterStateId: d.optionValue ?? null })}
+              aria-label="Status"
               data-testid="filter-status"
             >
               {(states.data ?? []).map((s) => (
@@ -944,13 +953,15 @@ function FilterCell({
       <Text as="span" block className={styles.filterLabel}>{label}</Text>
       <div className={styles.filterRow}>
         {children}
-        <ClearFilterButton value={value} onClear={onClear} />
+        <ClearFilterButton field={label} value={value} onClear={onClear} />
       </div>
     </div>
   );
 }
 
-function ClearFilterButton({ value, onClear }: { value: unknown; onClear: () => void }) {
+function ClearFilterButton({
+  field, value, onClear,
+}: { field: string; value: unknown; onClear: () => void }) {
   const { active, disabled } = clearIconState(value);
   return (
     <Tooltip content={active ? "Clear this filter" : "Nothing to clear"} relationship="label">
@@ -958,6 +969,13 @@ function ClearFilterButton({ value, onClear }: { value: unknown; onClear: () => 
         appearance="subtle"
         disabled={disabled}
         icon={active ? <FilterDismissRegular /> : <FilterRegular />}
+        /*
+         * Tosca rule 1, and rule 2's uniqueness point: the tooltip names all SEVEN of these
+         * buttons "Clear this filter", which is the identical-fingerprint case the live scan
+         * flagged as "N items are not unique" on the radio groups. Naming each one after the
+         * field it clears makes it distinguishable without putting a value in the label.
+         */
+        aria-label={`Clear ${field} filter`}
         onClick={onClear}
       />
     </Tooltip>

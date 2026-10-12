@@ -200,7 +200,13 @@ export function AppHeader({
 
         <Menu>
           <MenuTrigger disableButtonEnhancement>
-            <Button appearance="transparent" icon={<ChevronDownRegular />} iconPosition="after">
+            {/* Tosca rule 1 — `pcf_HeaderContainerReportError_CommandBar_1.Items[help]`. */}
+            <Button
+              appearance="transparent"
+              icon={<ChevronDownRegular />}
+              iconPosition="after"
+              aria-label="Help"
+            >
               Help
             </Button>
           </MenuTrigger>

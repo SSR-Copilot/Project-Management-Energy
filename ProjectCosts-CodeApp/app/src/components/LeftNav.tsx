@@ -119,6 +119,12 @@ export function LeftNav() {
             appearance="transparent"
             icon={<NavigationRegular />}
             aria-expanded={expanded}
+            /*
+             * Tosca rule 1. The `Tooltip relationship="label"` above already names this for a
+             * screen reader, but it does so through `aria-labelledby` pointing at a tooltip
+             * that only exists while hovered — nothing for a scanner to read at rest.
+             */
+            aria-label={expanded ? "Collapse menu" : "Expand menu"}
             onClick={() => setExpanded((v) => !v)}
           />
         </Tooltip>
@@ -145,6 +151,9 @@ export function LeftNav() {
                 icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
                 iconPosition="before"
                 aria-expanded={open}
+                // Tosca rule 1 — and the label is not rendered at all on a collapsed rail,
+                // so without this the group header has no accessible name there either.
+                aria-label={item.label}
                 onClick={() =>
                   setOpenGroups((prev) => {
                     const next = new Set(prev);
@@ -193,6 +202,9 @@ function NavItemLink({
         )
       }
       aria-disabled={!item.enabled}
+      // Tosca rule 1. `title` is a tooltip, not a name a scanner reads, and the label span is
+      // not rendered on a collapsed rail — so the icon-only state had no name at all.
+      aria-label={item.label}
       title={item.label}
     >
       {ICONS[item.icon]}

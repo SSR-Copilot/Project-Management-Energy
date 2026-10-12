@@ -272,14 +272,16 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             /*
-             * Addressable without the accessible-name computation.
+             * Rule 1 of `migration-plans/09-tosca-automation-conventions.md`: every interactive
+             * control carries an explicit `aria-label`. Both buttons had only their text
+             * content, which Tosca's HTML adapter scans as an empty `AriaLabel`.
              *
-             * Resolving a name goes through `getComputedStyle` to decide whether the element is
-             * hidden, and Griffel injects its CSS asynchronously — so a `getByRole("button",
-             * {name})` immediately after the dialog opens intermittently finds nothing. The
-             * caption is still asserted separately where it matters; this is only the handle.
+             * The label is the caption itself, per rule 2 — from configuration, never from
+             * bound data — so a screen reader still announces "Delete", and the attribute is
+             * the same string the user reads. `data-testid` stays free for the canvas control
+             * name, which is what it carries everywhere else in this app.
              */
-            data-testid="confirm-dialog-confirm"
+            aria-label={confirmText}
           >
             {ICONS[confirmIcon]}
             {confirmText}
@@ -289,7 +291,7 @@ export function ConfirmDialog({
             className={mergeClasses(styles.button, styles.cancel)}
             onClick={onCancel}
             disabled={busy}
-            data-testid="confirm-dialog-cancel"
+            aria-label={cancelText}
           >
             {ICONS[cancelIcon]}
             {cancelText}

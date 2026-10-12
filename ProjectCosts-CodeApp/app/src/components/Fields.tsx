@@ -60,6 +60,13 @@ export function TextField({
           disabled={disabled}
           maxLength={maxLength}
           onChange={(_, data) => onChange(data.value)}
+          /*
+           * Tosca rule 1. `Field` does associate a real `<label for>`, but the scan that
+           * produced `migration-plans/09-tosca-automation-conventions.md` read
+           * `AriaLabel: (empty)` off exactly this shape, so the caption is stated outright.
+           * Same string as the visible label, so nothing a screen reader says changes.
+           */
+          aria-label={label}
           data-testid={testId}
         />
       </Field>
@@ -92,6 +99,7 @@ export function TextAreaField({
           disabled={disabled}
           maxLength={maxLength}
           onChange={(_, data) => onChange(data.value)}
+          aria-label={label}
           data-testid={testId}
         />
       </Field>
@@ -125,7 +133,13 @@ export function ReadOnlyField({
 }: { label: string; value: ReactNode; testId?: string }) {
   return (
     <Field label={label}>
-      <Input value={String(value ?? "")} readOnly disabled data-testid={testId} />
+      <Input
+        value={String(value ?? "")}
+        readOnly
+        disabled
+        aria-label={label}
+        data-testid={testId}
+      />
     </Field>
   );
 }

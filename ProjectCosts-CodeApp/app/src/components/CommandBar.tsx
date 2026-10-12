@@ -99,6 +99,13 @@ export function CommandBar({ commands, onCommand, children, ariaLabel }: Command
             icon={c.icon ? ICONS[c.icon] : undefined}
             disabled={!enabled}
             onClick={() => onCommand(c.key)}
+            /*
+             * Tosca rule 1 — explicit, not inferred from the text node. The caption is the
+             * label (rule 2: from configuration), so this is the same string the user reads
+             * and the same one a screen reader announced before. The canvas `ItemKey` stays in
+             * `data-testid`, where the canvas control name belongs.
+             */
+            aria-label={c.label}
             data-testid={`command-${c.key}`}
           >
             {c.label}
