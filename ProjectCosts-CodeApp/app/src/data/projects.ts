@@ -12,6 +12,7 @@ import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
 import { Vsb_countryareasService } from "@/generated/services/Vsb_countryareasService";
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
+import { Vsb_basecasesService } from "@/generated/services/Vsb_basecasesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
 import { countedPage, deleteRecord, fetchAll } from "./client";
@@ -165,6 +166,24 @@ export async function loadProjectStateOrder(
   });
   if (!result.success) return null;
   return unwrap(result, "load project state").vsb_order ?? null;
+}
+
+/**
+ * `IsBlank(LookUp('Base cases', ThisRecord.Project.Project = GUID(selected.vsb_projectid)))`,
+ * negated — `simulateProject`'s second `OnSelect` guard.
+ *
+ * `top: 1` keeps this an existence check, not a listing: the canvas only ever asked whether a
+ * row existed, never how many. Not cached — the canvas re-ran this `LookUp` on every click, so
+ * this reads fresh every time too, same as `loadProjectStateOrder` above.
+ */
+export async function loadHasBaseCase(projectId: string): Promise<boolean> {
+  const result = await Vsb_basecasesService.getAll({
+    select: ["vsb_basecaseid"],
+    filter: lookupEq("vsb_project", projectId),
+    top: 1,
+  });
+  if (!result.success) return false;
+  return unwrap(result, "load base case").length > 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════ the delete */

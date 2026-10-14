@@ -35,3 +35,6 @@ bin/
 # Vite / test caches
 .vite/
 coverage/
+
+# Local-only, not part of this app
+codeapp-knowledge-base/

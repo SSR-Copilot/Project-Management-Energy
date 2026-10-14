@@ -33,7 +33,7 @@
  */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { appTabUrl } from "@/app/deepLinks";
+import { appTabUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import {
   NEW_PROJECT_PATH, analyticsAppUrl, powerBiReportUrl, projectGeneralDataPath,
 } from "@/app/navigation";
@@ -52,7 +52,7 @@ import {
   CommandBar, CommandSlot, ConfirmDialog, EmptyState, LoadingOverlay, type Command,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
-import { parseMailList } from "@/data/project";
+import { loadHasBaseCase } from "@/data/projects";
 import { media, palette, space } from "@/theme/tokens";
 import { approvalDecoration, TECHNOLOGY_LABEL } from "@/domain/project";
 import {
@@ -60,6 +60,7 @@ import {
   REPORT_UNAVAILABLE, SPO_MSG,
   capacityError, clearIconState, commandBarState, costModuleLock, deleteMessages,
   formatCapacity, isCostModuleLocked, isFilterActive, isPagerVisible, pagerLabels,
+  simulateGate,
   type CapacityOperator, type CommandKey, type ProjectRow, type SelectedProject,
 } from "./rules";
 import {
@@ -222,12 +223,14 @@ export default function ProjectOverviewScreen() {
 
   const [selectedId, setSelectedId] = useState<string>();
   const [managerQuery, setManagerQuery] = useState("");
-  /** `locPreventEditCostPopUp` — the cost-module lock, shared by Edit Costs and Simulate. */
+  /** `locPreventEditCostPopUp` — the cost-module lock. Edit Costs's own guard; Simulate has its
+   * own separate validation (`simulateGate`) and does not share this dialog. */
   const [lock, setLock] = useState<{ name: string; sections: string[] } | null>(null);
   /** `locProjectDelitionDialog` (the canvas's own spelling). */
   const [confirmDelete, setConfirmDelete] = useState(false);
-  /** What the canvas said with `Notify()`. */
-  const [notice, setNotice] = useState<{ intent: "success" | "error" | "info"; text: string }>();
+  /** What the canvas said with `Notify()`. `NotificationType.Warning` maps to `"warning"`. */
+  const [notice, setNotice] =
+    useState<{ intent: "success" | "error" | "info" | "warning"; text: string }>();
 
   const pageQuery = useProjectPage({ criteria, locale });
   const countries = useCountries();
@@ -241,11 +244,6 @@ export default function ProjectOverviewScreen() {
   const deletion = useDeleteProject(pageQuery.pageKey);
 
   /* ── command bar ─────────────────────────────────────────────────────── */
-
-  const analyticsAppUsers = useMemo(
-    () => parseMailList(envVars.vsb_AnalyticsAppUsers),
-    [envVars.vsb_AnalyticsAppUsers],
-  );
 
   const selectedForGates = useMemo<SelectedProject | null>(
     () =>
@@ -273,9 +271,8 @@ export default function ProjectOverviewScreen() {
         canCreate: true,
         canEditSelected: true,
         userMail: session?.userPrincipalName ?? null,
-        analyticsAppUsers,
       }),
-    [selectedForGates, session?.userPrincipalName, analyticsAppUsers],
+    [selectedForGates, session?.userPrincipalName],
   );
 
   const commands = useMemo<Command[]>(() => {
@@ -301,7 +298,9 @@ export default function ProjectOverviewScreen() {
   /* ── the handlers ────────────────────────────────────────────────────── */
 
   /**
-   * `locPreventEditCostPopUp` — the gate Edit Costs and Simulate share.
+   * `locPreventEditCostPopUp` — Edit Costs's own gate. Simulate does NOT share it: the canvas
+   * `simulateProject` OnSelect has its own, separate validation (`simulateGate`, below) and
+   * never tests `'Cluster State'.Name = "Draft"`. Conflating the two was the easy mistake here.
    *
    * The gate is the Draft test ALONE (`varProjectRecord.'Cluster State'.Name = "Draft"`); the
    * four bullets the dialog lists are each independently visible. So a non-Draft project with
@@ -336,10 +335,19 @@ export default function ProjectOverviewScreen() {
    */
   const openInNewTab = (path: string, projectId?: string) => {
     try {
+      // `resolvePlayAppUrl` is what makes this dynamic across environments: a pushed app uses
+      // the host-reported `session.appUrl`, a local `npm run dev` + `pac code run` session
+      // builds the `…/app/local?_localAppUrl=…` shape instead, and if neither applies,
+      // `appTabUrl` falls back to the current browser URL on its own. See `app/deepLinks.ts`.
+      const appUrl = resolvePlayAppUrl({
+        sessionAppUrl: session?.appUrl,
+        environmentId: session?.environmentId,
+        appOrigin: window.location.origin,
+      });
       launch(
         appTabUrl({
           currentUrl: window.location.href,
-          ...(session?.appUrl === undefined ? {} : { appUrl: session.appUrl }),
+          ...(appUrl === undefined ? {} : { appUrl }),
           path,
           ...(projectId === undefined ? {} : { projectId }),
         }),
@@ -348,6 +356,36 @@ export default function ProjectOverviewScreen() {
     } catch {
       setNotice({ intent: "error", text: OPEN_FAILED });
     }
+  };
+
+  /**
+   * `simulateProject`'s `OnSelect` — see `simulateGate` in `rules.ts` for the formula itself.
+   *
+   * The canvas's `With({ varProjectRecord: …, varBaseCaseRecord: LookUp('Base cases', …) }, …)`
+   * evaluates both lookups EAGERLY, before the `If` that decides whether either result is used.
+   * `loadHasBaseCase` is awaited up front here for the same reason — not skipped just because
+   * the technology/cluster check is about to fail.
+   */
+  const handleSimulate = async (row: ProjectRow): Promise<void> => {
+    const hasBaseCase = await loadHasBaseCase(row.id);
+    const result = simulateGate({
+      technology: row.technology,
+      clusterStateOrder: stateOrder.data ?? null,
+      hasBaseCase,
+    });
+    if (!result.ok) {
+      setNotice({ intent: "warning", text: result.message });
+      return;
+    }
+    launch(
+      analyticsAppUrl({
+        environmentId: session?.environmentId,
+        analyticsAppId: envVars.vsb_AnalyticsAppID,
+        tenantId: session?.tenantId,
+        projectId: row.id,
+      }),
+      "Simulation is not configured for this environment.",
+    );
   };
 
   const onCommand = (key: string) => {
@@ -386,23 +424,10 @@ export default function ProjectOverviewScreen() {
         setConfirmDelete(true);
         return;
 
-      /*
-       * Analytics is still a separate canvas app, so this stays a real external launch. The
-       * Draft check is the canvas's own second guard and is unreachable through the command
-       * bar — `ItemEnabled` already requires `'Cluster State'.Order > 0` — but it is what the
-       * handler does, and the two gates drifting apart is the defect it guards against.
-       */
+      // Analytics is still a separate canvas app, so this stays a real external launch. The
+      // validation lives entirely in `handleSimulate` / `simulateGate` — see their own comments.
       case "simulateProject":
-        if (!selected || blockedByCostLock(selected)) return;
-        launch(
-          analyticsAppUrl({
-            environmentId: session?.environmentId,
-            analyticsAppId: envVars.vsb_AnalyticsAppID,
-            tenantId: session?.tenantId,
-            projectId: selected.id,
-          }),
-          "Simulation is not configured for this environment.",
-        );
+        if (selected) void handleSimulate(selected);
         return;
 
       // `If(IsBlank(url), Notify(...), Launch(url))` — the handler's own guard, kept because

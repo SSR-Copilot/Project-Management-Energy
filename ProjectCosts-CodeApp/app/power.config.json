@@ -160,6 +160,10 @@
         "milestonesstandardassumptions": {
           "entitySetName": "vsb_milestonesstandardassumptionses",
           "logicalName": "vsb_milestonesstandardassumptions"
+        },
+        "basecases": {
+          "entitySetName": "vsb_basecases",
+          "logicalName": "vsb_basecase"
         }
       },
       "environmentVariableName": ""

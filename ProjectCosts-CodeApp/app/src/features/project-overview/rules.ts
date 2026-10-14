@@ -13,9 +13,16 @@
  *      **'Project ID'** (`vsb_name`) as its fourth field, not the area — and the input's own
  *      placeholder says "Search for Project Name, Short Name and ID". Filtering a GUID column
  *      with `contains()` would also have been a 400 against live Dataverse.
- *   2. `simulateProject` was gated `environmentName === "Dev"`. The canvas gates it on
- *      `User().Email in colAnalyticsAppUsers` — the `vsb_AnalyticsAppUsers` environment
- *      variable.
+ *   2. `simulateProject` was gated `environmentName === "Dev"`. CORRECTED AGAIN below: the
+ *      canvas's `ItemVisible`/`ItemEnabled` for this item each carry a commented-out formula
+ *      (`/* Or(IsEmpty(colAnalyticsAppUsers), User().Email in colAnalyticsAppUsers) *\/`,
+ *      `/* …RecordInfo EditPermission…'Cluster State'.Order > 0 *\/`) that is DEAD — the LIVE
+ *      value right after each comment is `ItemVisible: true` and
+ *      `ItemEnabled: Not(IsBlank(locDetailsListRowKey))`. So Simulate is always visible and
+ *      enabled by selection alone, same as Edit Project / Edit Costs. Everything the
+ *      commented-out formulas tried to check — Wind/PV technology, Cluster State Order 1–5,
+ *      and whether a 'Base cases' row exists — happens in the OnSelect handler instead, exactly
+ *      where the canvas puts it. See `simulateGate` below and its use in `Screen.tsx`.
  *   3. `dashboard` was gated on having a selection. The canvas item has **no** `ItemEnabled`,
  *      so it is always enabled. Same for Show Portfolio Overview.
  *   4. `REPORT_VIEWERS` listed three addresses the canvas does not have and omitted three it
@@ -509,8 +516,6 @@ export interface CommandBarContext {
   /** `RecordInfo(record, EditPermission)` — per record, from the server. */
   canEditSelected: boolean;
   userMail: string | null;
-  /** `colAnalyticsAppUsers`, from the `vsb_AnalyticsAppUsers` environment variable. */
-  analyticsAppUsers: readonly string[];
   reportViewers?: readonly string[];
 }
 
@@ -525,7 +530,7 @@ export interface CommandBarContext {
 export function commandBarState(ctx: CommandBarContext): Record<CommandKey, CommandState> {
   const {
     selected, canCreate, canEditSelected, userMail,
-    analyticsAppUsers, reportViewers = REPORT_VIEWERS,
+    reportViewers = REPORT_VIEWERS,
   } = ctx;
 
   const has = Boolean(selected);
@@ -567,14 +572,10 @@ export function commandBarState(ctx: CommandBarContext): Record<CommandKey, Comm
           ? "An approved project cannot be deleted."
           : "You do not have permission to delete this project.",
     ),
-    st(
-      "simulateProject",
-      // SKELETON FIX 2 — the canvas gate is `User().Email in colAnalyticsAppUsers`.
-      inList(analyticsAppUsers),
-      has && canEditSelected && (selected?.statusOrder ?? 0) > 0,
-      "Simulate", "Play",
-      "Simulation needs a saved project past Draft.",
-    ),
+    // `ItemVisible: true` and `ItemEnabled: Not(IsBlank(locDetailsListRowKey))` — the LIVE
+    // formulas; the allow-list/permission/cluster-order checks beside them are commented out
+    // in the canvas source. The real validation runs at launch time: see `simulateGate`.
+    st("simulateProject", true, has, "Simulate", "Play", SELECT_FIRST),
     st(
       "viewSharepoint", isCroatia, has && bothSpoUrls,
       "View Sharepoint Site", "View",
@@ -596,6 +597,71 @@ export function commandBarState(ctx: CommandBarContext): Record<CommandKey, Comm
     ),
     st("viewDashboardFunctionality", true, true, "Dashboard", "BIDashboard"),
   ]) as Record<CommandKey, CommandState>;
+}
+
+/* ═══════════════════════════════════════════════════════ the Simulate launch ══ */
+
+/**
+ * `simulateProject`'s `OnSelect`, transcribed verbatim (both `Notify` strings and their order):
+ *
+ * ```
+ * With(
+ *     { varProjectRecord: LookUp(Projects, …), varBaseCaseRecord: LookUp('Base cases', …) },
+ *     Set(gblRecordSelectedProject, …);
+ *     If(
+ *         Not(And(
+ *             Or(varProjectRecord.Technology = Technology.Wind, varProjectRecord.Technology = Technology.PV),
+ *             varProjectRecord.'Cluster State'.Order >= 1,
+ *             varProjectRecord.'Cluster State'.Order <= 5
+ *         )),
+ *         Notify("Simulation is supported only for Wind/PV …", NotificationType.Warning),
+ *         IsBlank(varBaseCaseRecord),
+ *         Notify("Base data missing: …", NotificationType.Warning),
+ *         Launch(gblAnalyticsAppLaunchUrl, {projectId: …})
+ *     )
+ * )
+ * ```
+ *
+ * Both `With` scope variables are evaluated EAGERLY — Power Fx resolves every named value
+ * before the body runs — so the canvas always looks up `varBaseCaseRecord` on every Simulate
+ * click, even when the technology/cluster check is about to fail and the result goes unused.
+ * The caller (`Screen.tsx`) reproduces that: it fetches `hasBaseCase` before calling this,
+ * rather than short-circuiting the read when the first check alone would already block.
+ */
+export const SIMULATE_MSG = {
+  /** `Not(And(Or(Technology=Wind,Technology=PV), Order>=1, Order<=5))`. */
+  unsupportedTechnologyOrCluster:
+    "Simulation is supported only for Wind/PV projects in Clusters 1 to 5. Cluster 6, Draft, " +
+    "Inactive, Abandoned, and BESS projects are not supported.",
+  /** `IsBlank(varBaseCaseRecord)` — no 'Base cases' row for this project. */
+  baseDataMissing:
+    "Base data missing: The current VSB Cloud inputs do not produce a valid financial result " +
+    "for the selected project. Please review and adjust your inputs to allow for a successful " +
+    "financial result before using the simulation functionality.",
+} as const;
+
+export type SimulateGateResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * The `If(...)` body above, as a pure function. `technology` is the LABEL
+ * (`"Wind"` / `"PV"`), matching `ProjectRow.technology` — any other label, including `null`,
+ * fails the first check exactly as `Or(Technology = Wind, Technology = PV)` does for BESS,
+ * Hybrid, Hydrogen, Hydro and Substation projects.
+ */
+export function simulateGate(args: {
+  technology: string | null | undefined;
+  clusterStateOrder: number | null | undefined;
+  hasBaseCase: boolean;
+}): SimulateGateResult {
+  const supportedTechnology = args.technology === "Wind" || args.technology === "PV";
+  const order = args.clusterStateOrder ?? 0;
+  if (!(supportedTechnology && order >= 1 && order <= 5)) {
+    return { ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster };
+  }
+  if (!args.hasBaseCase) {
+    return { ok: false, message: SIMULATE_MSG.baseDataMissing };
+  }
+  return { ok: true };
 }
 
 /* ════════════════════════════════════════════════ dialogs and notifications ══ */

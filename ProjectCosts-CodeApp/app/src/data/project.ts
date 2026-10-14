@@ -32,8 +32,6 @@ export const ENV_VAR_NAMES = [
   "vsb_VSBCloudInfoCenterUrl",
   "vsb_VSBcloudControllingApprovalGroup",
   /* Added for the Main Project Overview, which is now the landing screen. */
-  /** `colAnalyticsAppUsers` — gates the Simulate command's visibility. */
-  "vsb_AnalyticsAppUsers",
   /** The Analytics app Simulate launches. */
   "vsb_AnalyticsAppID",
   /** `gblPowerBIDashboardLink` — what the Dashboard command launches. */
@@ -43,21 +41,6 @@ export const ENV_VAR_NAMES = [
   "vsb_PortfolioOverviewPowerBIReportID",
   "vsb_PowerBITenantID",
 ] as const;
-
-/**
- * Splits a semicolon- or comma-separated environment-variable value into an allow-list.
- *
- * `vsb_AnalyticsAppUsers` holds several addresses in one string. The canvas parsed it into
- * `colAnalyticsAppUsers`; a blank value must yield an EMPTY list, which correctly hides the
- * command, rather than a one-element list containing "".
- */
-export function parseMailList(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(/[;,\r\n]+/)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
-}
 
 export type EnvVarName = (typeof ENV_VAR_NAMES)[number];
 export type EnvVars = Partial<Record<EnvVarName, string>>;

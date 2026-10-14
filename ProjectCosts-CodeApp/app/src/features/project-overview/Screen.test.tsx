@@ -97,6 +97,9 @@ let envVarValues: Record<string, string> = {};
 const deletes: string[] = [];
 let deleteSucceeds = true;
 
+/** `'Base cases'` rows for the selected project — `simulateProject`'s second OnSelect guard. */
+let baseCaseRows: Record<string, unknown>[] = [{ vsb_basecaseid: "bc1" }];
+
 vi.mock("@microsoft/power-apps/data", () => ({
   getClient: () => ({
     retrieveMultipleRecordsAsync: vi.fn(
@@ -140,6 +143,9 @@ vi.mock("@microsoft/power-apps/data", () => ({
             success: true,
             data: [{ vsb_projectstateid: "s1", vsb_name: "Cluster 4", vsb_order: 4 }],
           };
+        }
+        if (table === "vsb_basecases") {
+          return { success: true, data: baseCaseRows };
         }
         return { success: true, data: [] };
       },
@@ -277,6 +283,7 @@ describe("ProjectOverviewScreen", () => {
     envVarValues = {};
     deletes.length = 0;
     deleteSucceeds = true;
+    baseCaseRows = [{ vsb_basecaseid: "bc1" }];
     resetPageTokens();
   });
 
@@ -481,11 +488,13 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
-  it("UT-OVUI-012 hides Simulate and the Power BI items for a user on neither list", async () => {
+  it("UT-OVUI-012 hides the Power BI items for a user off the allow-list, but always shows Simulate", async () => {
+    // Simulate's `ItemVisible` is unconditionally `true` in the canvas — the analytics
+    // allow-list formula beside it is commented out and never runs.
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(screen.queryByTestId("command-simulateProject")).toBeNull();
     expect(screen.queryByTestId("command-viewProjectOverviewPowerBI")).toBeNull();
+    expect(screen.getByTestId("command-simulateProject")).toBeInTheDocument();
   });
 
   it("UT-OVUI-013 leaves Dashboard enabled with nothing selected", async () => {
@@ -685,17 +694,11 @@ describe("ProjectOverviewScreen", () => {
   it("UT-OVUI-030 launches the Power BI dashboard from its environment variable", async () => {
     envVarValues = {
       vsb_PowerBIDashboardLink: "https://app.powerbi.com/dashboards/d1",
-      // Only so the test has a visible signal that the environment variables have landed:
-      // Simulate's VISIBILITY is `User().Email in colAnalyticsAppUsers`, so the command
-      // appears (disabled, with nothing selected) as soon as the env query resolves. The
-      // project rows arrive on a separate query and cannot be waited on instead.
-      vsb_AnalyticsAppUsers: "demo.user@vsb.energy",
     };
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const user = userEvent.setup();
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    await screen.findByTestId("command-simulateProject");
     await clickCommand(user, "viewDashboardFunctionality");
     expect(open).toHaveBeenCalledWith(
       "https://app.powerbi.com/dashboards/d1", "_blank", "noopener,noreferrer",
@@ -712,6 +715,51 @@ describe("ProjectOverviewScreen", () => {
     expect(open).not.toHaveBeenCalled();
     expect(await screen.findByTestId("notice"))
       .toHaveTextContent("This report is not configured for this environment.");
+  });
+
+  /* ── Simulate: `simulateProject`'s OnSelect, not its ItemEnabled/ItemVisible ──────────── */
+
+  it("UT-OVUI-033 launches Analytics for a Wind/PV project in Clusters 1-5 with a Base Case row", async () => {
+    // Fixture default: Wind, Cluster 4 (order 4), and `baseCaseRows` has one row.
+    envVarValues = { vsb_AnalyticsAppID: "ana-1" };
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    const [url] = open.mock.calls[0]!;
+    expect(String(url)).toContain(`projectId=${PROJECT_ID}`);
+    expect(screen.queryByTestId("notice")).toBeNull();
+  });
+
+  it("UT-OVUI-034 warns instead of launching for a non-Wind/PV technology", async () => {
+    projectRows = [projectRow({
+      vsb_technology: 952850003, [`vsb_technology${FV}`]: "BESS",
+    })];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    expect(await screen.findByTestId("notice")).toHaveTextContent(
+      "Simulation is supported only for Wind/PV projects in Clusters 1 to 5.",
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("UT-OVUI-035 warns instead of launching when the project has no Base Case row", async () => {
+    baseCaseRows = [];
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    await clickCommand(user, "simulateProject");
+    expect(await screen.findByTestId("notice")).toHaveTextContent("Base data missing");
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("UT-OVUI-032 hides both Power BI reports from a user off the allow-list", async () => {

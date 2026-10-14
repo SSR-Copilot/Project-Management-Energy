@@ -51,6 +51,51 @@ export function appTabUrl(args: {
   return url.toString();
 }
 
+const DEFAULT_LOCAL_CONNECTION_URL = "http://localhost:8080";
+
+/**
+ * Where `appTabUrl` should open a new tab when the SDK gave us no `ctx.app.appUrl`.
+ *
+ * `ctx.app.appUrl` is only populated for a PUSHED app — it is how `appTabUrl` targets the
+ * hosted player instead of the raw iframe asset URL (see its own comment). Under `npm run dev`
+ * + `pac code run`, this app is never "pushed"; it is proxied through the connection host on
+ * `:8080` behind the player's `…/app/local?_localAppUrl=…&_localConnectionUrl=…` shape (see
+ * `docs/03-STATUS.md`). Without this, a missing `appUrl` falls back to `window.location.href`,
+ * which — because the dev server runs INSIDE that player's iframe — is just
+ * `http://localhost:3000/…`. Opening that in a new tab reproduces the exact bug this exists to
+ * avoid: a tab with no Power context, no user, no data (see `docs/03-STATUS.md`'s "Do not open
+ * `http://localhost:3000` directly").
+ *
+ * `environmentId` comes from `ctx.app.environmentId`, which IS populated locally (the
+ * connection host has to know which environment to proxy). The connection host's own port is
+ * not discoverable from inside the app, so it defaults to the documented `:8080` and can be
+ * overridden with `VITE_LOCAL_CONNECTION_URL` for a dev session started on a different port.
+ * `appOrigin` is `window.location.origin`, read by the caller rather than here, so this stays
+ * a pure function like everything else in this file.
+ */
+export function localPlayUrl(args: { environmentId?: string; appOrigin: string }): string | undefined {
+  if (!import.meta.env.DEV || !args.environmentId) return undefined;
+  const connectionUrl = import.meta.env.VITE_LOCAL_CONNECTION_URL || DEFAULT_LOCAL_CONNECTION_URL;
+  const url = new URL(`https://apps.powerapps.com/play/e/${args.environmentId}/app/local`);
+  url.searchParams.set("_localAppUrl", args.appOrigin);
+  url.searchParams.set("_localConnectionUrl", connectionUrl);
+  return url.toString();
+}
+
+/**
+ * Resolves the base URL `appTabUrl` should open a new tab against, whichever environment this
+ * is running in: the host-reported `ctx.app.appUrl` for a pushed app (production, or any other
+ * real deployment), `localPlayUrl` for a local dev session, or neither — in which case
+ * `appTabUrl` falls back to the current browser URL itself.
+ */
+export function resolvePlayAppUrl(args: {
+  sessionAppUrl?: string;
+  environmentId?: string;
+  appOrigin: string;
+}): string | undefined {
+  return args.sessionAppUrl ?? localPlayUrl({ environmentId: args.environmentId, appOrigin: args.appOrigin });
+}
+
 /**
  * The cost module in a new tab.
  *

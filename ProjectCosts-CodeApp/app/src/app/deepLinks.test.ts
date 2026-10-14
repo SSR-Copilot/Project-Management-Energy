@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { appTabUrl, costAppUrl, costLocation, COST_PATHS, launchCostPath } from "./deepLinks";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  appTabUrl, costAppUrl, costLocation, COST_PATHS, launchCostPath, localPlayUrl, resolvePlayAppUrl,
+} from "./deepLinks";
 
 const PROJECT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const OLD_PROJECT = "11111111-2222-3333-4444-555555555555";
+const ENVIRONMENT_ID = "be41add6-6f60-ebb0-9c73-2480d6bc615d";
 
 describe("appTabUrl", () => {
   it("opens an arbitrary internal route in the hosted player", () => {
@@ -90,5 +93,60 @@ describe("same-app Cost links", () => {
     expect(launchCostPath({ costScreen: "https://other.example" })).toBe("/costs/capex");
     expect(launchCostPath({ COSTSCREEN: "/costs/land-lease" })).toBe("/costs/land-lease");
     expect(launchCostPath({}, "?costScreen=/costs/opex/om")).toBe("/costs/opex/om");
+  });
+});
+
+describe("local-dev play host", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("builds the pac code run play URL under Vite dev mode", () => {
+    vi.stubEnv("DEV", true);
+    const url = localPlayUrl({ environmentId: ENVIRONMENT_ID, appOrigin: "http://localhost:3000" });
+    expect(url).toBeDefined();
+    const parsed = new URL(url!);
+    expect(parsed.origin + parsed.pathname).toBe(
+      `https://apps.powerapps.com/play/e/${ENVIRONMENT_ID}/app/local`,
+    );
+    expect(parsed.searchParams.get("_localAppUrl")).toBe("http://localhost:3000");
+    expect(parsed.searchParams.get("_localConnectionUrl")).toBe("http://localhost:8080");
+  });
+
+  it("honours VITE_LOCAL_CONNECTION_URL when the connection host runs on another port", () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_LOCAL_CONNECTION_URL", "http://localhost:9090");
+    const url = localPlayUrl({ environmentId: ENVIRONMENT_ID, appOrigin: "http://localhost:3000" });
+    expect(new URL(url!).searchParams.get("_localConnectionUrl")).toBe("http://localhost:9090");
+  });
+
+  it("stays undefined outside dev mode, so a build never fabricates a play URL", () => {
+    vi.stubEnv("DEV", false);
+    expect(localPlayUrl({ environmentId: ENVIRONMENT_ID, appOrigin: "http://localhost:3000" }))
+      .toBeUndefined();
+  });
+
+  it("stays undefined with no environment id to target", () => {
+    vi.stubEnv("DEV", true);
+    expect(localPlayUrl({ appOrigin: "http://localhost:3000" })).toBeUndefined();
+  });
+
+  it("resolvePlayAppUrl prefers the host-reported appUrl over the local play URL", () => {
+    vi.stubEnv("DEV", true);
+    const url = resolvePlayAppUrl({
+      sessionAppUrl: "https://apps.powerapps.com/play/e/env/a/same-app",
+      environmentId: ENVIRONMENT_ID,
+      appOrigin: "http://localhost:3000",
+    });
+    expect(url).toBe("https://apps.powerapps.com/play/e/env/a/same-app");
+  });
+
+  it("resolvePlayAppUrl falls back to the local play URL when the host gave none", () => {
+    vi.stubEnv("DEV", true);
+    const url = resolvePlayAppUrl({
+      environmentId: ENVIRONMENT_ID,
+      appOrigin: "http://localhost:3000",
+    });
+    expect(url).toContain("/app/local?");
   });
 });

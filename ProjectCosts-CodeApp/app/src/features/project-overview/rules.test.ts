@@ -5,7 +5,7 @@ import {
   keywordClause, resolveCapacityOperator, capacityError, capacityClause,
   buildProjectFilter, applyFilterPatch, isFilterActive, clearIconState,
   resolveSortColumn, nextSortState, toProjectRow, formatCapacity, formatGridDate,
-  costModuleLock, isCostModuleLocked, commandBarState,
+  costModuleLock, isCostModuleLocked, commandBarState, simulateGate, SIMULATE_MSG,
   totalPages, clampPage, pagerLabels, parseCriteria, serialiseCriteria, filterPeople,
   COST_LOCK, DELETE_DIALOG, SPO_MSG, applyOptimisticDelete, deleteMessages,
   deleteMessagesCanvasParity, isPagerVisible,
@@ -380,6 +380,52 @@ describe("cost module lock", () => {
   });
 });
 
+/* ───────────────────────────────────────────────── the Simulate launch gate */
+
+describe("simulateGate", () => {
+  const ok = { technology: "Wind", clusterStateOrder: 3, hasBaseCase: true };
+
+  it("UT-OV-054 allows a Wind/PV project in Clusters 1-5 with a Base Case row", () => {
+    expect(simulateGate(ok)).toEqual({ ok: true });
+    expect(simulateGate({ ...ok, technology: "PV" })).toEqual({ ok: true });
+    expect(simulateGate({ ...ok, clusterStateOrder: 1 })).toEqual({ ok: true });
+    expect(simulateGate({ ...ok, clusterStateOrder: 5 })).toEqual({ ok: true });
+  });
+
+  it("UT-OV-055 blocks any technology other than Wind/PV", () => {
+    for (const technology of ["BESS", "Hybrid", "Hydrogen", "Hydro", "Substation", null, undefined]) {
+      expect(simulateGate({ ...ok, technology })).toEqual({
+        ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster,
+      });
+    }
+  });
+
+  it("UT-OV-056 blocks Cluster 0 (Draft's order), 6, and anything out of 1-5", () => {
+    expect(simulateGate({ ...ok, clusterStateOrder: 0 })).toEqual({
+      ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster,
+    });
+    expect(simulateGate({ ...ok, clusterStateOrder: null })).toEqual({
+      ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster,
+    });
+    expect(simulateGate({ ...ok, clusterStateOrder: 6 })).toEqual({
+      ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster,
+    });
+  });
+
+  it("UT-OV-057 blocks a technology/cluster pass with no Base Case row", () => {
+    expect(simulateGate({ ...ok, hasBaseCase: false })).toEqual({
+      ok: false, message: SIMULATE_MSG.baseDataMissing,
+    });
+  });
+
+  it("UT-OV-058 reports the technology/cluster failure even when the Base Case is also missing", () => {
+    // Matches the canvas `If(Not(And(...)), Notify(A), IsBlank(varBaseCaseRecord), Notify(B), …)`
+    // branch order: the first failing condition wins.
+    expect(simulateGate({ technology: "BESS", clusterStateOrder: 3, hasBaseCase: false }))
+      .toEqual({ ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster });
+  });
+});
+
 /* ─────────────────────────────────────────────────────────── command bar */
 
 describe("commandBarState", () => {
@@ -389,7 +435,7 @@ describe("commandBarState", () => {
   };
   const base = {
     selected, canCreate: true, canEditSelected: true,
-    userMail: "nobody@vsb.energy", analyticsAppUsers: [] as string[],
+    userMail: "nobody@vsb.energy",
   };
 
   it("UT-OV-046 disables the six selection commands with nothing selected", () => {
@@ -432,22 +478,23 @@ describe("commandBarState", () => {
     expect(commandBarState(base).addProject.enabled).toBe(true);
   });
 
-  it("UT-OV-051 SKELETON FIX 2: Simulate visibility is the analytics allow-list", () => {
-    // The skeleton gated it on environmentName === "Dev"; the canvas gates it on
-    // User().Email in colAnalyticsAppUsers.
-    expect(commandBarState(base).simulateProject.visible).toBe(false);
-    const allowed = commandBarState({
-      ...base, userMail: "a@vsb.energy", analyticsAppUsers: ["A@VSB.ENERGY"],
-    });
-    expect(allowed.simulateProject.visible).toBe(true);
+  it("UT-OV-051 Simulate is always visible — the analytics allow-list formula is dead in the canvas", () => {
+    // `ItemVisible` carries `/* Or(IsEmpty(colAnalyticsAppUsers), User().Email in … ) */` as a
+    // COMMENT; the live value right after it is `ItemVisible: true`.
+    expect(commandBarState(base).simulateProject.visible).toBe(true);
+    expect(commandBarState({ ...base, selected: null }).simulateProject.visible).toBe(true);
   });
 
-  it("UT-OV-052 needs a status past Draft for Simulate", () => {
+  it("UT-OV-052 Simulate is enabled by selection alone, like Edit Project / Edit Costs", () => {
+    // `ItemEnabled` carries a commented-out `RecordInfo`/`'Cluster State'.Order > 0` check; the
+    // live value is `Not(IsBlank(locDetailsListRowKey))`. The real business validation — Wind/PV
+    // technology, Cluster State Order 1-5, a 'Base cases' row — runs in the OnSelect handler
+    // (`simulateGate`), not here.
     const s = commandBarState({
-      ...base, userMail: "a@b", analyticsAppUsers: ["a@b"],
-      selected: { ...selected, statusOrder: 0 },
+      ...base, canEditSelected: false, selected: { ...selected, statusOrder: 0 },
     });
-    expect(s.simulateProject.enabled).toBe(false);
+    expect(s.simulateProject.enabled).toBe(true);
+    expect(commandBarState({ ...base, selected: null }).simulateProject.enabled).toBe(false);
   });
 
   it("UT-OV-053 shows SharePoint and Teams for Croatia only", () => {

@@ -28,6 +28,13 @@ pac code run --appUrl http://localhost:3000    # the connection host, on :8080
 URL that `pac code run` prints — not `localhost:3000` directly. Full detail, including how to
 land on a project, is in [docs/03-STATUS.md](docs/03-STATUS.md).
 
+**Edit Costs / Edit Project (new tab) are environment-aware.** They resolve their target with
+`resolvePlayAppUrl` in `app/src/app/deepLinks.ts`: a pushed app opens the host-reported
+`ctx.app.appUrl`, and a local dev session (`import.meta.env.DEV`, no `appUrl` from the host)
+rebuilds the same `…/app/local?_localAppUrl=…&_localConnectionUrl=…` shape instead of opening
+bare `localhost:3000` in the new tab. If your connection host isn't on the default `:8080`, set
+`VITE_LOCAL_CONNECTION_URL` in `app/.env.local`.
+
 The landing screen is the Main Project Overview (`#/projects`); **Edit Costs** is the way
 into the cost module. Routes are hash-based — see that doc for why, and note it is the URL
 shape the PM app's "Edit Costs" button has to target. `?projectId=<guid>` is the deep-link

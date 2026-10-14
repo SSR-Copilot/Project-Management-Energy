@@ -88,7 +88,11 @@ export default function App() {
       {error ? (
         <EmptyState
           title="The app could not finish starting"
-          description="Please try opening the app again. If the problem continues, use Help to report it."
+          description={
+            import.meta.env.DEV
+              ? `DEV: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`
+              : "Please try opening the app again. If the problem continues, use Help to report it."
+          }
           {...(onCostScreen ? { action: { label: "Back to Projects", onClick: () => navigate("/projects") } } : {})}
         />
       ) : (
