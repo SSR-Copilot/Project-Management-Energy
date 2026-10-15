@@ -201,6 +201,7 @@ export default function AddCostsFromTableScreen() {
         currentYear,
       });
     const contractDeleteIds = deletion.deleteIds;
+    const contractDeleteIdSet = new Set(contractDeleteIds);
 
     /*
      * A (contract, year) that was on the sheet and no longer is has its months blanked, so the
@@ -213,7 +214,7 @@ export default function AddCostsFromTableScreen() {
     );
     const orphanCleanup = originalRows
       .filter((orig) => orig.projectContractId !== null && !stillPresent.has(rowIdentity(orig)))
-      .filter((orig) => !contractDeleteIds.includes(orig.projectContractId as string))
+      .filter((orig) => !contractDeleteIdSet.has(orig.projectContractId as string))
       .map((orig) => ({ ...orig, months: emptyMonths() }));
 
     try {

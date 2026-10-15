@@ -164,6 +164,11 @@
         "basecases": {
           "entitySetName": "vsb_basecases",
           "logicalName": "vsb_basecase"
+        },
+        "environment_39a902ba": {
+          "entitySetName": "Environment",
+          "logicalName": "environment_39a902ba",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

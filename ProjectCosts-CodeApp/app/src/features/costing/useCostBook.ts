@@ -448,6 +448,18 @@ export function useAddCostSheet(category: number) {
  * the Summary tab's totals and the Contracts recalculation exactly like a single-line save
  * does — plus its own `add-cost-sheet` query, so re-opening the table shows the saved state
  * rather than the stale pre-save one.
+ *
+ * NOT awaited by the mutation. `invalidateQueries` refetches every ACTIVE query it touches —
+ * up to six real network round trips here — and `useMutation` awaits whatever `onSuccess`
+ * returns before the mutation (and `mutateAsync`'s promise) settles. Returning `invalidate()`
+ * directly used to mean the Save button's spinner, and `doSave`'s `await save.mutateAsync(...)`
+ * in `Screen.tsx`, stayed blocked for all six of those refetches on top of the save itself. The
+ * cache still gets invalidated — correctness is identical — it just no longer gates how soon
+ * the user is told the save finished. Nothing downstream reads the refreshed cache synchronously
+ * off this call: `doSave` either shows a notice and stays on the same screen, or navigates away
+ * to a screen that mounts its own query and reads whatever is in the cache at that moment, stale
+ * or not — ordinary stale-while-revalidate, not a correctness dependency on this invalidation
+ * having finished first.
  */
 export function useSaveAddCostSheet(category: number) {
   const { projectId, project } = useSession();
@@ -473,7 +485,7 @@ export function useSaveAddCostSheet(category: number) {
         projectId: projectId as string,
         owningBusinessUnitId: project?.owningBusinessUnitId,
       }),
-    onSuccess: invalidate,
+    onSuccess: () => { void invalidate(); },
   });
 }
 

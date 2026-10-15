@@ -456,8 +456,11 @@ export function contractUpserts(
 ): ContractUpsert[] {
   const byGroup = new Map<string, SheetRow>();
   for (const r of rows) byGroup.set(`${r.accountName}|${r.accountNumber}|${r.description}`, r);
+  // First match wins, as `.find` did — indexed once instead of scanned once per group.
+  const existingById = new Map<string, ExistingContract>();
+  for (const c of existingContracts) if (!existingById.has(c.id)) existingById.set(c.id, c);
   return [...byGroup.values()].map((r) => {
-    const existing = existingContracts.find((c) => c.id === r.projectContractId);
+    const existing = r.projectContractId === null ? undefined : existingById.get(r.projectContractId);
     return {
       contractId: r.projectContractId,
       subaccountId: r.subAccountId,
@@ -495,13 +498,25 @@ export function costWrites(
   const deletes: string[] = [];
   let candidates = 0;
 
+  /*
+   * Indexed once. This used to be an `existingCosts.find` per (row, month) — and `existingCosts`
+   * is every cost row of every contract in the category, for EVERY year — so a 500-row save
+   * against 9,000 stored cost rows was ~54 million comparisons before the first network call.
+   * The FIRST stored row for a key wins, exactly as `.find` returned the first match.
+   */
+  const index = new Map<string, ExistingCost>();
+  for (const c of existingCosts) {
+    const k = `${c.contractId}|${c.year}|${c.month}`;
+    if (!index.has(k)) index.set(k, c);
+  }
+
   for (const row of rows) {
     for (let m = 1; m <= 12; m += 1) {
       candidates += 1;
       const value = row.months[m - 1] ?? null;
-      const existing = existingCosts.find(
-        (c) => c.contractId === row.projectContractId && c.year === row.year && c.month === m,
-      );
+      const existing = row.projectContractId === null
+        ? undefined
+        : index.get(`${row.projectContractId}|${row.year}|${m}`);
       if (value === null) {
         if (existing) deletes.push(existing.id);
         continue;
@@ -561,17 +576,22 @@ export function planContractDeletions(args: {
       .filter((x): x is string => x !== null && !stillPresent.has(x)),
   )];
 
-  const hasPastCosts = (contractId: string) =>
-    costs.some((c) => c.contractId === contractId && c.year < currentYear && (c.cost ?? 0) !== 0);
-
   if (args.allowPastCostDeletion) return { deleteIds: removed, blockedByPastCosts: [] };
 
-  const blocked = removed.filter(hasPastCosts);
+  // One pass over `costs` rather than one `.some()` scan of it per removed contract — the same
+  // result, just O(costs + removed) instead of O(costs × removed) for a category with a large
+  // cost history and several contracts removed in the same save.
+  const contractsWithPastCosts = new Set<string>();
+  for (const c of costs) {
+    if (c.year < currentYear && (c.cost ?? 0) !== 0) contractsWithPastCosts.add(c.contractId);
+  }
+  const nameById = new Map(contracts.map((c) => [c.id, c.name]));
+
+  const blocked = removed.filter((id) => contractsWithPastCosts.has(id));
+  const blockedSet = new Set(blocked);
   return {
-    deleteIds: removed.filter((id) => !blocked.includes(id)),
-    blockedByPastCosts: blocked.map((id) => ({
-      id, name: contracts.find((c) => c.id === id)?.name ?? id,
-    })),
+    deleteIds: removed.filter((id) => !blockedSet.has(id)),
+    blockedByPastCosts: blocked.map((id) => ({ id, name: nameById.get(id) ?? id })),
   };
 }
 

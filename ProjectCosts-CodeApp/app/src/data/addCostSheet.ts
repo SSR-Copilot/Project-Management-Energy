@@ -10,27 +10,34 @@
  * year — not just the sheet's visible range, because `planContractDeletions`' past-cost guard
  * has to see history outside that range too.
  *
- * Each PHASE is awaited before the next begins, but the writes WITHIN a phase are independent
- * of one another and run through the bounded pool in `./concurrency` instead of one at a time.
- * That is the whole of the performance story here: a full sheet is one `vsb_capexcosts` write
- * per changed month cell, several hundred of them, and serialised round trips made saving take
- * minutes. The ordering BETWEEN phases is what carries the safety guarantees, never the ordering
- * inside them.
+ * Each PHASE is awaited before the next begins; ordering BETWEEN phases is what carries the
+ * safety guarantees here, same as it always was. WITHIN the contract, cost-cell and
+ * contract-total phases, the writes are no longer one row at a time, pooled or otherwise — they
+ * go through `bulkWrite.ts`'s `UpsertMultiple`/`UpdateMultiple`, one Dataverse round trip per
+ * PHASE (chunked only if the phase is unusually large) instead of one per row. A full sheet is
+ * easily several hundred changed month cells; that used to be several hundred round trips run
+ * eight at a time through `./concurrency`, now it is one or two. See `bulkWrite.ts`'s module
+ * comment for how that is reachable at all without a raw Web API call, and why it is
+ * all-or-nothing PER PHASE rather than per row — which is also why each of those three phases
+ * is wrapped to turn a failure into a message naming exactly what the user can trust survived.
+ * Cost deletes and the contract-delete cascade are UNCHANGED: there is no bulk delete for a
+ * standard table (`DeleteMultiple` is elastic-tables-only), so they still go one row at a time
+ * through the same bounded pool as before.
  *
  * The write half follows `src/data/capexWrites.ts`'s ordering convention: contract writes
  * first, then cost writes, cost deletes, contract-total recompute, and contract deletes last
  * (a delete removes the contract's own comments, then its cost rows, then the contract, so an
  * interrupted save cannot orphan a comment or a cost row pointing at a deleted contract — the
- * same order `deleteCostLine` in `capexWrites.ts` uses). It is NOT transactional, for
- * the same reason `capexWrites.ts` is not: the SDK exposes create/update/delete per record and
- * no changeset.
+ * same order `deleteCostLine` in `capexWrites.ts` uses). None of it is transactional: Dataverse's
+ * bulk messages are all-or-nothing per request, not across requests, and the per-row calls that
+ * remain (deletes) never were transactional either.
  */
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
-import { unwrap } from "@/platform/errors";
 import { fetchAll } from "./client";
 import { ACTIVE, and, chunk, lookupEq, lookupIn } from "./odata";
-import { forEachLimit, mapLimit } from "./concurrency";
+import { forEachLimit } from "./concurrency";
+import { BulkWriteError, createAndUpdateMultiple, updateMultiple } from "./bulkWrite";
 import { loadCostAccounts, loadPayerDefaults } from "./costBook";
 import { deleteComment, loadComments } from "./comments";
 import { planDeleteContract } from "@/features/capex-costs/rules";
@@ -40,6 +47,30 @@ import {
 } from "@/features/add-costs-from-table/rules";
 
 const bind = (entitySet: string, id: string) => `/${entitySet}(${id})`;
+
+/**
+ * Wall time per save phase, logged ONCE per successful save as a single console line with the
+ * row counts beside it. Purely diagnostic — nothing reads it — so a slow save in a live
+ * environment says which phase was slow and for how many rows, instead of being guessed at.
+ */
+function phaseTimer() {
+  const started = performance.now();
+  let last = started;
+  const phases: Record<string, number> = {};
+  return {
+    lap(name: string) {
+      const now = performance.now();
+      phases[name] = Math.round(now - last);
+      last = now;
+    },
+    done(counts: Record<string, number>) {
+      // eslint-disable-next-line no-console -- deliberate: the one place save timing is surfaced.
+      console.info("Add Cost from Table save timings (ms)", {
+        ...phases, total: Math.round(performance.now() - started), ...counts,
+      });
+    },
+  };
+}
 
 /** Option sets arrive as a number or as its string form depending on the column. */
 function numberOf(value: unknown): number | undefined {
@@ -88,7 +119,10 @@ export async function loadAddCostSheetData(
   projectId: string,
   category: number,
 ): Promise<AddCostSheetData> {
-  const chart = await loadCostAccounts();
+  // Neither of these needs the other's result, so they go in flight together rather than one
+  // waiting on the other — `payerDefaults` used to start only after `chart` resolved, for no
+  // reason tied to what either of them actually reads.
+  const [chart, payerDefaults] = await Promise.all([loadCostAccounts(), loadPayerDefaults()]);
   const inCategory = chart.filter((a) => a.category === category);
   // `loadCostAccounts` returns level 2 (accounts, no `parentId`) and level 3 (sub-accounts)
   // interleaved and already in chart order, so a single pass preserves that order.
@@ -107,21 +141,18 @@ export async function loadAddCostSheetData(
   }
 
   const subIds = subaccounts.map((s) => s.id);
-  const [payerDefaults, contractBatches] = await Promise.all([
-    loadPayerDefaults(),
-    Promise.all(
-      chunk(subIds).map((ids) =>
-        fetchAll(
-          "list Add Cost from Table contracts",
-          (o) => Vsb_capexprojectcontractsService.getAll(o),
-          {
-            select: CONTRACT_SELECT,
-            filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids), ACTIVE),
-          },
-        ),
+  const contractBatches = await Promise.all(
+    chunk(subIds).map((ids) =>
+      fetchAll(
+        "list Add Cost from Table contracts",
+        (o) => Vsb_capexprojectcontractsService.getAll(o),
+        {
+          select: CONTRACT_SELECT,
+          filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids), ACTIVE),
+        },
       ),
     ),
-  ]);
+  );
 
   const rawContracts = contractBatches.flat();
   const contracts: ExistingContract[] = rawContracts.map((c) => ({
@@ -191,80 +222,258 @@ function contractPayload(u: ContractUpsert) {
 }
 
 /**
+ * Existing contracts this save will NOT change any stored setting of — every field
+ * `contractPayload` would send already equals what Dataverse holds.
+ *
+ * Their cost rows can be written while the contracts step is still running, because nothing
+ * about the contract a cost row belongs to changes underneath it. A contract whose settings DO
+ * change (VAT, depreciation, cost type, distribution …) keeps the old order — its update lands
+ * first, its cost rows after — so a Dataverse plug-in on cost rows that reads the parent
+ * contract can never see a setting this same save is about to overwrite.
+ *
+ * Compared against the PAYLOAD's own keys, so a field added to `contractPayload` later and not
+ * here reads as "changed" (the safe direction). Two loaded fields lose a stored null on the way
+ * in — `isEditedFromPcf` (null -> false) and `name` (null -> "") — so a contract only counts as
+ * unchanged when those were genuinely `true` and non-empty, never on a coincidence with null.
+ */
+function contractsWithUnchangedSettings(
+  existingUpserts: readonly ContractUpsert[],
+  existingContracts: readonly ExistingContract[],
+): Set<string> {
+  const byId = new Map(existingContracts.map((c) => [c.id, c]));
+  const stable = new Set<string>();
+  for (const u of existingUpserts) {
+    const stored = u.contractId ? byId.get(u.contractId) : undefined;
+    if (!stored || stored.isEditedFromPcf !== true || stored.name === "") continue;
+    const storedPayload: Record<string, unknown> = {
+      vsb_name: stored.name,
+      vsb_applyvat: stored.applyVat,
+      vsb_depreciation: stored.depreciation,
+      vsb_costtype: stored.costType,
+      vsb_distribution: stored.distribution,
+      vsb_distributionscheme: stored.distributionScheme,
+      vsb_iseditedfrompcf: stored.isEditedFromPcf,
+      vsb_initialcontractsource: stored.initialContractSource,
+    };
+    const sent = contractPayload(u) as Record<string, unknown>;
+    if (Object.keys(sent).every((k) => k in storedPayload && storedPayload[k] === sent[k])) {
+      stable.add(u.contractId as string);
+    }
+  }
+  return stable;
+}
+
+/**
+ * A thrown error from one bulk phase, reworded into the one thing the end user needs to know:
+ * what this save step was for, and — honestly, not optimistically — whether anything from it
+ * might already be sitting in Dataverse. There is no automatic undo of a partially-written
+ * phase: a compensating bulk delete is itself a bulk call that can fail, which would leave the
+ * user worse off than an accurate message and a safe retry. Reopening the sheet after a failure
+ * re-reads the real state from Dataverse, so a retry is always starting from what is actually
+ * true, never from stale in-memory data.
+ */
+function bulkStepError(
+  step: string,
+  /** What EARLIER phases of this save already wrote, as a full sentence — or "" for the first. */
+  earlierPhasesSaved: string,
+  whatDidNotHappen: string,
+  error: unknown,
+  /**
+   * True when something ELSE running concurrently with this step may already have written —
+   * so "nothing was written" can no longer be claimed, whatever this step's own error says.
+   */
+  concurrentLegMayHaveWritten = false,
+) {
+  if (concurrentLegMayHaveWritten || (error instanceof BulkWriteError && error.partial)) {
+    return new Error(
+      `${step} stopped partway through. ${earlierPhasesSaved ? `${earlierPhasesSaved} ` : ""}` +
+      "Some changes may already have been written. Reopen this sheet to see the real current " +
+      "state before retrying.",
+      { cause: error },
+    );
+  }
+  return new Error(`${step} failed — ${whatDidNotHappen}. Please retry.`, { cause: error });
+}
+
+/**
  * Writes a diffed sheet: contract upserts, then cost upserts, then cost deletes, then the
  * touched contracts' totals, then contract deletes (their cost rows first).
  *
- * A new contract has no id until the create round-trips, so `contractUpserts`' `contractId:
- * null` rows are created here FIRST and the resulting ids are threaded back onto the changed
- * rows (keyed by `subaccountId|description`, which is exactly how `contractUpserts` groups
- * them) before `costWrites` runs — otherwise every cost row under a brand-new contract would
- * have nothing to bind to.
+ * Contracts, cost cells and totals go through `UpsertMultiple`/`UpdateMultiple` — one Dataverse
+ * round trip per PHASE instead of one per ROW — chunked by `bulkWrite.ts` if a phase is large.
+ * See that module's comment for why this is reachable at all (the CLI-generated services, not a
+ * raw Web API call) and for the all-or-nothing-per-chunk failure shape `bulkStepError` reports.
+ *
+ * A new contract's id comes back from `CreateMultiple`'s response, same as the server-assigned
+ * id the old per-row `create()` call used to return — the cost-cell phase waits for this call to
+ * settle before it binds anything to a brand-new contract, same ordering as before. Existing
+ * contracts are addressed by the id they already have, through `UpdateMultiple`.
  */
 export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void> {
   const { projectId, owningBusinessUnitId, changedRows, existingContracts, existingCosts } = args;
 
   const upserts = contractUpserts(changedRows, existingContracts);
-
-  // One contract's write says nothing about another's, so the whole phase goes through the pool.
-  // The ids come back in INPUT order, and the map is built from them afterwards, so both its
-  // contents and its insertion order are what the sequential loop produced.
-  const resolved = await mapLimit(upserts, async (u) => {
-    const groupKey = `${u.subaccountId}|${u.name}`;
-    if (u.contractId) {
-      unwrap(
-        await Vsb_capexprojectcontractsService.update(u.contractId, contractPayload(u) as never),
-        "update CAPEX contract",
-      );
-      return [groupKey, u.contractId] as const;
-    }
-    const created = unwrap(
-      await Vsb_capexprojectcontractsService.create({
+  const newUpserts = upserts.filter((u) => !u.contractId);
+  const existingUpserts = upserts.filter((u) => u.contractId);
+  const stableContractIds = contractsWithUnchangedSettings(existingUpserts, existingContracts);
+  const contractRows = [
+    ...newUpserts.map((u) => ({
+      ...contractPayload(u),
+      "vsb_Project@odata.bind": bind("vsb_projects", projectId),
+      "vsb_Account@odata.bind": bind("vsb_capexaccountlists", u.subaccountId ?? ""),
+      ...(owningBusinessUnitId
+        ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
+        : {}),
+    })),
+    /*
+     * An existing contract whose stored settings already equal everything this update would
+     * send (`contractsWithUnchangedSettings`) is NOT sent it: the write could change no value.
+     * It is not left untouched either — every contract this save touches gets its total written
+     * by `updateMultiple` at the end of this same save (`touchedContractIds` includes it), so its
+     * modified date, audit trail and any update plug-in still see exactly one update from this
+     * save, where before they saw two, the first of which changed nothing.
+     */
+    ...existingUpserts
+      .filter((u) => !stableContractIds.has(u.contractId as string))
+      .map((u) => ({
+        vsb_capexprojectcontractid: u.contractId as string,
         ...contractPayload(u),
-        "vsb_Project@odata.bind": bind("vsb_projects", projectId),
-        "vsb_Account@odata.bind": bind("vsb_capexaccountlists", u.subaccountId ?? ""),
-        ...(owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
-          : {}),
-      } as never),
-      "create CAPEX contract",
-    );
-    return [groupKey, created.vsb_capexprojectcontractid] as const;
-  });
-  const resolvedIdByGroup = new Map<string, string>(resolved);
+      })),
+  ];
 
-  const resolvedRows = changedRows.map((r) => (
+  // A row with neither an existing id nor a contract to create under cannot be written — this
+  // mirrors the original `if (u.costId) {…} else if (u.contractId) {…}`, which silently skipped
+  // exactly that case rather than sending a half-formed row.
+  const costRowsFor = (writes: ReturnType<typeof costWrites>["upserts"]) => writes
+    .filter((u) => u.costId || u.contractId !== null)
+    .map((u) => (
+      u.costId
+        ? { vsb_capexcostid: u.costId, vsb_cost: u.cost }
+        : {
+          vsb_cost: u.cost,
+          vsb_year: u.year,
+          vsb_month: u.month,
+          // `u.contractId` is non-null here: the filter above only lets a costId-less row
+          // through when it is.
+          "vsb_Contract@odata.bind": bind("vsb_capexprojectcontracts", u.contractId as string),
+          ...(owningBusinessUnitId
+            ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
+            : {}),
+        }
+    ));
+  const deleteCostRows = (ids: readonly string[]) =>
+    forEachLimit(ids, (costId) => Vsb_capexcostsService.delete(costId));
+
+  /*
+   * EARLY cost writes: rows whose contract already exists AND whose stored settings this save
+   * leaves untouched (`contractsWithUnchangedSettings`). They need nothing from the contracts
+   * step — their contract id is already known, and nothing on it changes — so they go out
+   * ALONGSIDE it instead of after it. This is the ordinary case for editing an existing sheet, and
+   * it removes one whole round trip from it. Every other row (new contracts, contracts whose
+   * settings change) is LATE and keeps the previous order: after the contracts step.
+   *
+   * `costWrites` works row by row with no cross-row de-duplication, so planning the two groups
+   * separately produces exactly the plan one call over all rows would have.
+   */
+  const isEarly = (r: SheetRow) =>
+    r.projectContractId !== null && stableContractIds.has(r.projectContractId);
+  const earlyPlan = costWrites(changedRows.filter(isEarly), existingCosts);
+  const earlyCostRows = costRowsFor(earlyPlan.upserts);
+  const earlyWritesSent = earlyCostRows.length > 0 || earlyPlan.deletes.length > 0;
+
+  const timer = phaseTimer();
+  let createdContractIds: string[] = [];
+  let contractError: unknown;
+  let earlyUpsertError: unknown;
+  let earlyDeleteError: unknown;
+  await Promise.all([
+    createAndUpdateMultiple(
+      "vsb_capexprojectcontracts", "vsb_capexprojectcontract",
+      contractRows, "vsb_capexprojectcontractid",
+    )
+      .then((r) => { createdContractIds = r.createdIds; })
+      .catch((error: unknown) => { contractError = error; }),
+    createAndUpdateMultiple("vsb_capexcosts", "vsb_capexcost", earlyCostRows, "vsb_capexcostid")
+      .catch((error: unknown) => { earlyUpsertError = error; }),
+    deleteCostRows(earlyPlan.deletes).catch((error: unknown) => { earlyDeleteError = error; }),
+  ]);
+  throwFailures([
+    contractError === undefined ? undefined : earlyWritesSent
+      ? new Error(
+        "Saving contracts failed. Cost values for contracts whose details did not change were " +
+        "being saved at the same time, and some of them may already be written. Reopen this " +
+        "sheet to see the real current state before retrying.",
+        { cause: contractError },
+      )
+      : bulkStepError("Saving contracts", "", "no contracts were saved", contractError),
+    earlyUpsertError === undefined ? undefined : bulkStepError(
+      "Saving cost values", contractError === undefined ? "Contracts were saved." : "",
+      "no cost values were written", earlyUpsertError,
+      // The contracts step and the cleared-cell deletes ran alongside; either may have landed.
+      contractRows.length > 0 || earlyPlan.deletes.length > 0,
+    ),
+    earlyDeleteError === undefined ? undefined : new Error(
+      "Removing the cleared cost cells failed — some cells you cleared may still show their " +
+      "old value. Reopen this sheet and clear them again.",
+      { cause: earlyDeleteError },
+    ),
+  ]);
+  timer.lap("contractsAndEarlyCosts");
+
+  const resolvedIdByGroup = new Map<string, string>([
+    ...newUpserts.map((u, i) => (
+      [`${u.subaccountId}|${u.name}`, createdContractIds[i] as string] as const
+    )),
+    ...existingUpserts.map((u) => [`${u.subaccountId}|${u.name}`, u.contractId as string] as const),
+  ]);
+
+  const lateRows = changedRows.filter((r) => !isEarly(r)).map((r) => (
     r.projectContractId
       ? r
       : { ...r, projectContractId: resolvedIdByGroup.get(`${r.subAccountId}|${r.description}`) ?? null }
   ));
+  const latePlan = costWrites(lateRows, existingCosts);
+  const lateCostRows = costRowsFor(latePlan.upserts);
 
-  const plan = costWrites(resolvedRows, existingCosts);
+  /*
+   * LATE cost writes. The upsert (changed cells) and the deletes (blanked cells) never touch the
+   * same row — `costWrites` assigns a given (contract, year, month) to exactly one of the two
+   * plans, never both — so they run CONCURRENTLY. Each leg's failure is caught on its OWN, so a
+   * delete failure is never reported as an upsert failure or vice versa. There is no
+   * standard-table bulk delete (`DeleteMultiple` is elastic-table-only), so deletes stay per
+   * row, through the bounded pool.
+   */
+  let costUpsertError: unknown;
+  let costDeleteError: unknown;
+  await Promise.all([
+    createAndUpdateMultiple("vsb_capexcosts", "vsb_capexcost", lateCostRows, "vsb_capexcostid")
+      .catch((error: unknown) => { costUpsertError = error; }),
+    deleteCostRows(latePlan.deletes).catch((error: unknown) => { costDeleteError = error; }),
+  ]);
+  throwFailures([
+    costUpsertError === undefined ? undefined : bulkStepError(
+      "Saving cost values",
+      earlyWritesSent
+        ? "Contracts, and the cost values for contracts whose details did not change, were saved."
+        : "Contracts were saved.",
+      "contracts were saved, but no cost values were written", costUpsertError,
+      // Earlier cost writes, or the cleared-cell deletes running alongside, may have landed.
+      earlyWritesSent || latePlan.deletes.length > 0,
+    ),
+    costDeleteError === undefined ? undefined : new Error(
+      "Removing the cleared cost cells failed — some cells you cleared may still show their " +
+      "old value. Reopen this sheet and clear them again.",
+      { cause: costDeleteError },
+    ),
+  ]);
+  timer.lap("lateCosts");
 
-  // The bulk of a save: one write per changed month cell. Every entry names a distinct cost row
-  // — `costWrites` plans at most one per (contract, year, month) — so nothing here waits on
-  // anything else here, and this is the phase the pool actually buys the time back on.
-  await forEachLimit(plan.upserts, async (u) => {
-    if (u.costId) {
-      unwrap(await Vsb_capexcostsService.update(u.costId, { vsb_cost: u.cost }), "update CAPEX cost");
-    } else if (u.contractId) {
-      unwrap(
-        await Vsb_capexcostsService.create({
-          vsb_cost: u.cost,
-          vsb_year: u.year,
-          vsb_month: u.month,
-          "vsb_Contract@odata.bind": bind("vsb_capexprojectcontracts", u.contractId),
-          ...(owningBusinessUnitId
-            ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
-            : {}),
-        } as never),
-        "create CAPEX cost",
-      );
-    }
-  });
-
-  // Deletes before the total recompute below, so the sum reflects the sheet's final state. That
-  // is why they stay a separate AWAITED phase rather than joining the upserts above.
-  await forEachLimit(plan.deletes, (costId) => Vsb_capexcostsService.delete(costId));
+  // The whole save's cost plan, for the totals below — early and late together.
+  const plan = {
+    upserts: [...earlyPlan.upserts, ...latePlan.upserts],
+    deletes: [...earlyPlan.deletes, ...latePlan.deletes],
+  };
+  const costRows = [...earlyCostRows, ...lateCostRows];
 
   const touchedContractIds = [...new Set<string>([
     ...resolvedIdByGroup.values(),
@@ -294,18 +503,27 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
     (c) => c.contractId,
   );
 
-  // One contract's total has no bearing on another's.
-  await forEachLimit(touchedContractIds, (contractId) => {
+  // One contract's total has no bearing on another's, so all of them go in one call.
+  const totalsRows = touchedContractIds.map((contractId) => {
     const merged = new Map<string, number>();
     for (const c of existingByContract.get(contractId) ?? []) merged.set(`${c.year}-${c.month}`, c.cost ?? 0);
     for (const u of upsertsByContract.get(contractId) ?? []) merged.set(`${u.year}-${u.month}`, u.cost);
     for (const c of deletedByContract.get(contractId) ?? []) merged.delete(`${c.year}-${c.month}`);
     const total = recomputeContractTotal([...merged.values()].map((cost) => ({ cost })));
-    return Vsb_capexprojectcontractsService.update(contractId, { vsb_totalcost: total } as never);
+    return { vsb_capexprojectcontractid: contractId, vsb_totalcost: total };
   });
 
   /*
-   * Deletes last, CHILDREN BEFORE PARENTS: comments, then cost rows, then the contract.
+   * The totals write and the delete cascade below touch PROVABLY disjoint contracts, so they
+   * run concurrently rather than the cascade waiting for totals to finish first. This is not an
+   * assumption: the screen that calls this function (`features/add-costs-from-table/Screen.tsx`)
+   * explicitly filters `changedRows` to exclude any row whose contract is in
+   * `contractDeleteIds` before ever calling this function — a contract can never be both
+   * touched by `touchedContractIds` here and present in `args.contractDeleteIds`. Each leg's
+   * failure is still caught on its own, same reasoning as the cost upsert/delete split above.
+   *
+   * Deletes within the cascade go CHILDREN BEFORE PARENTS: comments, then cost rows, then the
+   * contract.
    *
    * The comment half was missing here exactly as it was in `deleteCostLine`
    * (`capexWrites.ts`) before it was fixed — the canvas runs `RemoveIf('Capex Comments', …)` as
@@ -321,24 +539,73 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void
    * chunks its `lookupIn` at 40 ids, and this screen can delete a whole category's worth at once.
    * It is hoisted out of the loop so the single round trip happens before any delete does.
    */
-  if (args.contractDeleteIds.length > 0) {
+  const deleteCascade = async () => {
+    if (args.contractDeleteIds.length === 0) return;
     const comments = await loadComments(args.contractDeleteIds);
     const flattened = comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" }));
-    for (const contractId of args.contractDeleteIds) {
-      const plan = planDeleteContract(contractId, flattened);
-      for (const commentId of plan.commentIds) await deleteComment(commentId);
-      /*
-       * A contract's cost rows are siblings of one another and children of nothing but that
-       * contract, so they may go together — but the three STEPS stay strictly ordered, and so do
-       * the contracts against each other. This is the one place where the ordering IS the
-       * guarantee: the writes are not transactional, so an interrupted delete must never leave a
-       * comment or a cost row pointing at a contract that is already gone.
-       */
-      await forEachLimit(
-        existingCosts.filter((c) => c.contractId === contractId),
-        (c) => Vsb_capexcostsService.delete(c.id),
-      );
-      await Vsb_capexprojectcontractsService.delete(plan.contractId);
-    }
+    const plans = args.contractDeleteIds.map((id) => planDeleteContract(id, flattened));
+    const doomed = new Set(args.contractDeleteIds);
+    /*
+     * THREE GLOBAL PHASES, each pooled, each fully awaited before the next: every comment of
+     * every doomed contract, then every cost row of every doomed contract, then the contracts.
+     *
+     * This is a STRONGER children-before-parents guarantee than one sequential chain per
+     * contract, not a weaker one: no contract row is touched until every child of EVERY doomed
+     * contract is already gone, so an interrupted delete can never leave a comment or a cost row
+     * pointing at a contract that no longer exists. Inside a phase the rows are siblings with no
+     * ordering between them, so they share the ordinary bounded pool. The previous shape deleted
+     * each contract's cost rows one at a time — a contract with fifteen years of history (180
+     * monthly rows) cost 180 back-to-back round trips on its own.
+     */
+    await forEachLimit(plans.flatMap((p) => p.commentIds), (id) => deleteComment(id));
+    await forEachLimit(
+      existingCosts.filter((c) => doomed.has(c.contractId)),
+      (c) => Vsb_capexcostsService.delete(c.id),
+    );
+    await forEachLimit(plans, (p) => Vsb_capexprojectcontractsService.delete(p.contractId));
+  };
+
+  let totalsError: unknown;
+  let cascadeError: unknown;
+  await Promise.all([
+    updateMultiple("vsb_capexprojectcontracts", "vsb_capexprojectcontract", totalsRows)
+      .catch((error: unknown) => { totalsError = error; }),
+    deleteCascade().catch((error: unknown) => { cascadeError = error; }),
+  ]);
+  throwFailures([
+    totalsError === undefined ? undefined : bulkStepError(
+      "Updating contract totals", "Contracts and cost values were saved.",
+      "contracts and cost values were saved, but totals were not updated — reopen this sheet " +
+      "and save again to recalculate them",
+      totalsError,
+    ),
+    cascadeError === undefined ? undefined : new Error(
+      "Removing one or more deleted contracts failed partway through. Reopen this sheet to see " +
+      "which of them, if any, were actually removed before retrying.",
+      { cause: cascadeError },
+    ),
+  ]);
+  timer.lap("totalsAndContractDeletes");
+  timer.done({
+    newContracts: newUpserts.length,
+    updatedContracts: existingUpserts.length - stableContractIds.size,
+    unchangedContractsNotResent: stableContractIds.size,
+    costRowsWritten: costRows.length,
+    costRowsWrittenEarly: earlyCostRows.length,
+    costCellsCleared: plan.deletes.length,
+    contractTotals: totalsRows.length,
+    contractsDeleted: args.contractDeleteIds.length,
+  });
+}
+
+/**
+ * Throws whatever failed out of two CONCURRENT legs of one phase — both messages if both failed,
+ * so neither failure is ever hidden behind the other.
+ */
+function throwFailures(failures: (Error | undefined)[]): void {
+  const real = failures.filter((f): f is Error => f !== undefined);
+  if (real.length === 1) throw real[0];
+  if (real.length > 1) {
+    throw new Error(real.map((f) => f.message).join(" "), { cause: real });
   }
 }
