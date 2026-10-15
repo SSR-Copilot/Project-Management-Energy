@@ -15,7 +15,7 @@ import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstates
 import { Vsb_basecasesService } from "@/generated/services/Vsb_basecasesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { unwrap } from "@/platform/errors";
-import { countedPage, deleteRecord, fetchAll } from "./client";
+import { countedPage, deleteRecord, fetchAll, resetPageTokens } from "./client";
 import { ACTIVE, and, asc, desc, eq, guid, isNull, lookupEq, notNull, or, f } from "./odata";
 import {
   COL, PROJECT_SELECT, PAGE_SIZE, buildProjectFilter, toProjectRow,
@@ -25,6 +25,19 @@ import {
 /** The entity set `countedPage` addresses; the generated services use the same string. */
 const ES_PROJECTS = "vsb_projects";
 
+/** The nameless-project count per criteria, shared across page loads for a short while. */
+const blankCountCache = new Map<string, { at: number; count: Promise<number> }>();
+const BLANK_COUNT_TTL_MS = 30_000;
+
+/** The platform caps `@odata.count` here: a count of exactly this is "at least", not a total. */
+const COUNT_CAP = 5000;
+
+/** Forgets every cached skip token and count — after a write, or between tests. */
+export function resetProjectPageCache(): void {
+  blankCountCache.clear();
+  resetPageTokens();
+}
+
 /* ═══════════════════════════════════════════════════════════ the project page */
 
 export interface ProjectPage {
@@ -32,8 +45,10 @@ export interface ProjectPage {
   /** The server-side total for the whole filtered set, not the page. */
   totalRows: number;
   /**
-   * The page count across BOTH segments. Not `ceil(totalRows / pageSize)`: the named segment's
-   * last page is short whenever its count is not a whole number of pages.
+   * The canvas's `RoundUp(totalRows / pageSize, 0) + If(totalRows = 0, 1, 0)`. The named and the
+   * nameless segments are stitched into one continuous list, so this is plain division — except
+   * past the platform's 5000 `@odata.count` ceiling, where a further page from the skip token
+   * still raises it to at least `page + 1`.
    */
   totalPages: number;
   page: number;
@@ -66,11 +81,39 @@ export interface ProjectPageRequest {
 export async function loadProjectPage(req: ProjectPageRequest): Promise<ProjectPage> {
   const pageSize = req.pageSize ?? PAGE_SIZE;
   const base = and(buildProjectFilter(req.filter, req.locale), req.scopeFilter, ACTIVE);
+  // The named query's order. The sort column is usually NOT unique (Technology, Short Name,
+  // Capacity and Approval repeat heavily), and skip-token pages are cut at an arbitrary row of a
+  // tie, so rows of equal value could repeat or vanish across a page boundary. The autonumber is
+  // never blank and unique, so it makes the order total — unless it already is the sort column.
   const orderBy = [req.sort.asc ? asc(req.sort.col) : desc(req.sort.col)];
-  const wanted = Math.max(1, Math.floor(req.page) || 1);
-  // Two different filters or sorts must never share a cached token.
+  if (req.sort.col !== COL.projectIdCode) orderBy.push(asc(COL.projectIdCode));
+  // Two different filters or sorts must never share a cached token. The full orderBy (tie-break
+  // included) is part of the key.
   const signature = (segment: string) =>
     `${segment}|${base ?? ""}|${orderBy.join(",")}|${pageSize}`;
+
+  const namedQuery = (wanted: number) => countedPage<Record<string, unknown>>(
+    "load projects", ES_PROJECTS, {
+      select: PROJECT_SELECT,
+      filter: and(base, notNull(req.sort.col)),
+      orderBy,
+      top: pageSize,
+      page: wanted,
+      signature: signature("named"),
+    });
+
+  // Nothing to sort these by — the column is empty on all of them — so they take the
+  // autonumber, which is never blank and gives them a stable order of their own. The cache key
+  // inside `countedPage` includes `top`, so a short top-up page never shares tokens with a full one.
+  const blankQuery = (segment: string, top: number, page: number) =>
+    countedPage<Record<string, unknown>>("load projects with no sort value", ES_PROJECTS, {
+      select: PROJECT_SELECT,
+      filter: and(base, isNull(req.sort.col)),
+      orderBy: [asc(COL.projectIdCode)],
+      top,
+      page,
+      signature: signature(segment),
+    });
 
   /*
    * A project with NO value in the sorted column goes after every project that has one.
@@ -80,74 +123,138 @@ export async function loadProjectPage(req: ProjectPageRequest): Promise<ProjectP
    * rows. The canvas app never showed that because it never sorts on the server at all: it
    * `ClearCollect`s the first `DefaultConnectedDataSourceMaxGetRowsCount` rows in table order
    * and runs `SortByColumns` over that collection, so whichever nameless rows fell outside the
-   * cap were simply invisible. Truncating is not an option here, so the list is served as two
-   * ORDERED SEGMENTS instead, which puts them last without hiding any of them.
+   * cap were simply invisible. Truncating is not an option here, so the list is read as two
+   * ORDERED SEGMENTS (named, then blank tail) and STITCHED into one continuous list.
    *
-   * The segments do not share a page: the named one's last page is short whenever its count is
-   * not a whole number of pages, which is why `totalPages` is computed rather than divided out
-   * of `totalRows`.
-   */
-  const named = await countedPage<Record<string, unknown>>("load projects", ES_PROJECTS, {
-    select: PROJECT_SELECT,
-    filter: and(base, notNull(req.sort.col)),
-    orderBy,
-    top: pageSize,
-    page: wanted,
-    signature: signature("named"),
-  });
-
-  /*
-   * Where the named segment ENDS is read off the walk, not off the count.
+   * SOURCE DEFECT (data layer, not a canvas one): the segments used to be paged separately, each
+   * starting on a page of its own, so `totalPages = ceil(named / size) + ceil(blank / size)`.
+   * 1,100 named + 29 nameless at size 200 gave 6 + 1 = 7 pages where the canvas's
+   * `RoundUp(1129 / 200, 0)` is 6, and the last "named" page was short. Now page P is always
+   * rows [(P-1)*size, P*size) of `named ++ blank`, and `totalPages` is the canvas formula
+   * `max(1, ceil((N + B) / size))` (`RoundUp(total/size, 0) + If(total = 0, 1, 0)`):
    *
-   * `countedPage` stops early only when the data runs out, so `named.page < wanted` means the
-   * named rows were exhausted at `named.page` pages and the rest of the list is the tail.
-   * `@odata.count` cannot be asked instead: Dataverse caps it at 5000, so on a table with more
-   * named projects than that it would put the boundary in the wrong place and strand every
-   * named project past page 25 behind a tail that should come after them. The skip token the
-   * server hands back is always the truth — the same rule `hasNext` already follows.
+   *  - pure named page: the named walk alone (plus a one-row probe of the tail for its count);
+   *  - boundary page (the named rows end part-way through it): the named rows, topped up with
+   *    the FIRST `size - namedRows` blank rows, fetched as a short page of their own;
+   *  - pure tail page: the tail rows start `o = (P-1)*size - N` rows into the tail, which is
+   *    generally NOT a tail-page boundary, so tail pages floor(o/size)+1 and, when o % size > 0,
+   *    the next one are fetched and sliced.
+   *
+   * Where the named segment ENDS is read off the walk, not off `@odata.count`: `countedPage`
+   * stops early only when the skip tokens run out, so an exhausted walk gives N exactly
+   * (`(pages - 1) * size + rows on the last page`). The count is capped at 5000 by the
+   * platform, so it is only trusted for the totals when the named walk is NOT exhausted
+   * (then `hasNext` from the token still guarantees at least one more page).
    */
-  const wantsTail = named.page < wanted;
-  const namedPages = Math.max(
-    named.page,
-    named.totalRows === 0 ? 0 : Math.ceil(named.totalRows / pageSize),
-  );
-
-  /*
-   * Fetched even when the page being served is a named one, because the pager needs the tail's
-   * size to know how many pages there are in total. That probe asks for a single row and keeps
-   * its own signature, so it never pollutes the tokens of the real walk.
-   */
-  const blank = await countedPage<Record<string, unknown>>(
-    "load projects with no sort value", ES_PROJECTS, {
-      select: PROJECT_SELECT,
-      filter: and(base, isNull(req.sort.col)),
-      // Nothing to sort these by — the column is empty on all of them — so they take the
-      // autonumber, which is never blank and gives them a stable order of their own.
-      orderBy: [asc(COL.projectIdCode)],
-      top: wantsTail ? pageSize : 1,
-      page: wantsTail ? wanted - named.page : 1,
-      signature: signature(wantsTail ? "blank" : "blank-probe"),
-    },
-  );
-
-  const blankPages = blank.totalRows === 0 ? 0 : Math.ceil(blank.totalRows / pageSize);
-  /*
-   * With no tail there is nothing past the named rows, so a page beyond the end falls back to
-   * the last named page — `countedPage` has already clamped `named` to it. That is what asking
-   * for page 9 of a 3-page list did before the split, and it still does.
-   */
-  const servesTail = wantsTail && blank.totalRows > 0;
-  const segment = servesTail ? blank : named;
-
-  return {
-    rows: segment.rows.map(toProjectRow),
-    totalRows: named.totalRows + blank.totalRows,
-    totalPages: Math.max(1, namedPages + blankPages),
-    page: servesTail ? named.page + blank.page : named.page,
-    pageSize,
-    // On the named segment's last page there is no next NAMED page, but the tail still follows.
-    hasNext: servesTail ? blank.hasNext : named.hasNext || blank.totalRows > 0,
+  // How many nameless projects there are — a 1-row read, memoised per criteria so paging through
+  // the named rows does not pay for it on every page.
+  const blankCount = (): Promise<number> => {
+    const key = signature("blank-probe");
+    const hit = blankCountCache.get(key);
+    if (hit && Date.now() - hit.at < BLANK_COUNT_TTL_MS) return hit.count;
+    const count = blankQuery("blank-probe", 1, 1).then((p) => p.totalRows);
+    blankCountCache.set(key, { at: Date.now(), count });
+    // A failed read must not be remembered.
+    count.catch(() => blankCountCache.delete(key));
+    return count;
   };
+
+  const load = async (wanted: number, mayRetry: boolean): Promise<ProjectPage> => {
+    // Independent reads, so they overlap: the page itself, and the tail's size for the pager.
+    const [named, probeCount] = await Promise.all([
+      namedQuery(wanted),
+      blankCount().catch(() => undefined),
+    ]);
+
+    const result = (
+      rows: Record<string, unknown>[], n: number, b: number, knownNext: boolean,
+    ): ProjectPage => {
+      const totalRows = n + b;
+      const totalPages = Math.max(1, Math.ceil(totalRows / pageSize), knownNext ? wanted + 1 : 1);
+      return {
+        rows: rows.map(toProjectRow),
+        totalRows,
+        totalPages,
+        page: wanted,
+        pageSize,
+        hasNext: wanted < totalPages,
+      };
+    };
+
+    // More named rows past this page: it is a pure named page. The tail only contributes its size.
+    // A token is only taken as proof of a further page when the count cannot say (it is capped):
+    // below the cap `@odata.count` is exact, and a token on an exactly-full last page must not
+    // invent a page that is not there.
+    if (named.hasNext) {
+      return result(
+        named.rows, named.totalRows, probeCount ?? await blankCount(),
+        named.totalRows >= COUNT_CAP,
+      );
+    }
+
+    // The named walk is exhausted, so N is exact (an empty segment reports page 1, zero rows).
+    const namedOnPage = named.page === wanted ? named.rows.length : 0;
+    const N = (named.page - 1) * pageSize + named.rows.length;
+    const need = pageSize - namedOnPage;
+    // How far into the tail this page starts. Non-zero only on a pure tail page; a boundary page
+    // (namedOnPage > 0) starts at the tail's first row.
+    const offset = (wanted - 1) * pageSize + namedOnPage - N;
+
+    let tailRows: Record<string, unknown>[] = [];
+    let B: number;
+    if (need === 0) {
+      // The named rows fill this page exactly; the tail is only counted.
+      B = probeCount ?? await blankCount();
+    } else if (need < pageSize) {
+      // Boundary page: a short top-up from the head of the tail.
+      const head = await blankQuery("blank-head", need, 1);
+      tailRows = head.rows;
+      B = head.totalRows;
+    } else {
+      const k = Math.floor(offset / pageSize) + 1;
+      const skip = offset % pageSize;
+      const first = await blankQuery("blank", pageSize, k);
+      B = first.totalRows;
+      // `countedPage` clamps a page beyond the end to the last one; `first.page < k` is that case
+      // and is handled by the out-of-range check below, which discards these rows.
+      if (first.page === k) {
+        if (skip === 0) {
+          tailRows = first.rows;
+        } else {
+          const second = first.hasNext ? await blankQuery("blank", pageSize, k + 1) : null;
+          const joined = second && second.page === k + 1
+            ? [...first.rows, ...second.rows]
+            : first.rows;
+          tailRows = joined.slice(skip, skip + pageSize);
+        }
+      }
+    }
+
+    // A page past the end serves PAGE 1, as the canvas Apply formula does
+    // (`adjustedPage = 1` when `currentPage > TotalPages`). `ProjectPage.page` reports the page
+    // actually served, so the caller can see the reset and correct its URL.
+    const lastPage = Math.max(1, Math.ceil((N + B) / pageSize));
+    if (wanted > lastPage && mayRetry) return load(1, false);
+
+    return result([...(namedOnPage > 0 ? named.rows : []), ...tailRows], N, B, false);
+  };
+
+  const wanted = Math.max(1, Math.floor(req.page) || 1);
+  const first = await load(wanted, true);
+
+  /*
+   * A page of a set that has rows must not come back short. The totals and the page disagree
+   * only when something cached is stale — a skip token the server no longer honours, a count
+   * from before rows were added or removed — so forget every cached token and count and read
+   * the page once more from page 1. Once only: if the data really did shrink, the second
+   * answer stands. Skipped at the count cap, where the count is a floor, not a total.
+   */
+  const expected = Math.min(pageSize, Math.max(0, first.totalRows - (first.page - 1) * pageSize));
+  if (first.rows.length < expected && first.totalRows < COUNT_CAP) {
+    resetProjectPageCache();
+    return load(wanted, true);
+  }
+  return first;
 }
 
 /**
@@ -180,7 +287,7 @@ export async function loadHasBaseCase(projectId: string): Promise<boolean> {
   const result = await Vsb_basecasesService.getAll({
     select: ["vsb_basecaseid"],
     filter: lookupEq("vsb_project", projectId),
-    top: 1,
+    maxPageSize: 1,
   });
   if (!result.success) return false;
   return unwrap(result, "load base case").length > 0;
@@ -203,6 +310,8 @@ export async function loadHasBaseCase(projectId: string): Promise<boolean> {
  */
 export async function deleteProject(projectId: string): Promise<void> {
   await deleteRecord("delete project", ES_PROJECTS, projectId);
+  // The totals and the paging cookies were counted with this row in the set.
+  resetProjectPageCache();
 }
 
 /* ══════════════════════════════════════════════════════════ filter sources */
@@ -295,7 +404,10 @@ export async function searchProjectManagers(term: string, limit = 25): Promise<P
         "azureactivedirectoryobjectid ne null",
       ),
       orderBy: ["fullname asc"],
-      top: limit,
+      // `maxPageSize`, not `top`: the SDK always sends `Prefer: odata.maxpagesize` (500 unless
+      // overridden) and Dataverse ignores `$top` when that header is present, so `top: limit`
+      // silently returned up to 500 people. See `countedPage` in `./client`.
+      maxPageSize: limit,
       maxPages: 1,
     },
   );
@@ -322,7 +434,7 @@ export async function canReadProject(projectId: string): Promise<boolean> {
   const result = await Vsb_projectsService.getAll({
     select: [COL.id],
     filter: f.and(`vsb_projectid eq ${guid(projectId)}`, ACTIVE),
-    top: 1,
+    maxPageSize: 1,
   });
   if (!result.success) return false;
   return (result.data ?? []).length > 0;

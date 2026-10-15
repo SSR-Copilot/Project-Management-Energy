@@ -132,7 +132,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     {
       select: ["systemuserid", "fullname", "internalemailaddress", "entityimage"],
       filter: eq("azureactivedirectoryobjectid", entraObjectId),
-      top: 1,
+      maxPageSize: 1,
     },
   ).catch(() => []);
 
@@ -145,7 +145,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
   const aad = await fetchAll(
     "look up the signed-in user's directory entry",
     (o) => AadusersService.getAll(o),
-    { select: ["aaduserid", "companyname"], filter: eq("id", entraObjectId), top: 1 },
+    { select: ["aaduserid", "companyname"], filter: eq("id", entraObjectId), maxPageSize: 1 },
   ).catch(() => []);
 
   /*

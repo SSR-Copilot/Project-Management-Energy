@@ -262,3 +262,30 @@ Each is pinned by a test (UT-OV-005, 051, 057, 058, 053) so the difference is re
 **Needed from you:** the two hard-coded address lists — `colReportViewers` (in the canvas
 source) and `colAnalyticsAppUsers` (already an environment variable, `vsb_AnalyticsAppUsers`) —
 should both be environment variables before go-live. Only one is.
+
+---
+
+## D14 · The shared header/command bar still renders in the Project Costs app's font
+
+**Open.** `src/components/CommandSlot.tsx`, `src/components/AppHeader.tsx`,
+`src/theme/tokens.ts`
+
+`src/theme/tokens.ts`'s `fontFamily` (Open Sans) is transcribed from the Project Costs canvas
+app's own theme — correct for its five screens. `features/project-overview/Screen.tsx` is
+ported from the Project Management app's `Project Main Screen.pa.yaml` instead, which sets
+`Font: =Font.'Segoe UI'` explicitly on every control checked, so that screen's own body (the
+filter bar, grid, footer, dialogs) now carries a scoped `Segoe UI` override.
+
+**What that override does NOT reach**: the command bar. `CommandSlot` portals it into the
+shared `AppShell` header via `createPortal`, which is outside the Project Overview screen's
+own DOM subtree — CSS inheritance follows the DOM tree, not the React component tree, so a
+style scoped to the screen's wrapper div stops at the portal boundary. The header/command-bar
+chrome is shared by every screen, Costs and PM alike, and the shell has no notion of "which
+canvas app does the active screen come from" to pick a font per screen.
+
+**Needed from you:** confirm whether the PM app's header/command bar canvas controls also use
+Segoe UI (likely, given every other PM control checked does) — and if so, decide how the shell
+should express a per-source-app font without hardcoding a screen-by-screen special case that
+the next migrated PM screen would have to repeat. Not fixed here: it's a shared-shell change
+affecting every screen, not a Project Overview-only one, and shouldn't be made without that
+sign-off.

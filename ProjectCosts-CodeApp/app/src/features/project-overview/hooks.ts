@@ -7,7 +7,7 @@
  * change. `parseCriteria` validates everything it reads, so a hand-edited link renders the
  * default list rather than reaching `$filter` unchecked.
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from "@tanstack/react-query";
@@ -30,7 +30,11 @@ export interface CriteriaController {
   setFilter: (patch: Partial<ProjectFilter>) => void;
   clearFilter: () => void;
   setSort: (clickedColumn: string) => void;
-  setPage: (page: number) => void;
+  /**
+   * Go to a page. Pushes a history entry by default; `{ replace: true }` rewrites the current
+   * one (used to normalise an out-of-range page the server reset, so Back does not return to it).
+   */
+  setPage: (page: number, options?: { replace?: boolean }) => void;
 }
 
 export function useCriteria(): CriteriaController {
@@ -43,13 +47,13 @@ export function useCriteria(): CriteriaController {
   );
 
   const write = useCallback(
-    (next: Criteria) => {
+    (next: Criteria, replaceOverride?: boolean) => {
       const search = serialiseCriteria(next).toString();
       navigate(
         { pathname: location.pathname, search: search ? `?${search}` : "" },
         // A filter change replaces rather than pushes: twenty keystrokes must not become
         // twenty back-button steps. Paging DOES push, so Back returns to the previous page.
-        { replace: next.page === criteria.page },
+        { replace: replaceOverride ?? next.page === criteria.page },
       );
     },
     [navigate, location.pathname, criteria.page],
@@ -79,7 +83,8 @@ export function useCriteria(): CriteriaController {
   );
 
   const setPage = useCallback(
-    (page: number) => write({ ...criteria, page: Math.max(1, Math.floor(page)) }),
+    (page: number, options?: { replace?: boolean }) =>
+      write({ ...criteria, page: Math.max(1, Math.floor(page)) }, options?.replace),
     [criteria, write],
   );
 
@@ -92,6 +97,8 @@ export interface ProjectPageQuery {
   data: ProjectPage | undefined;
   isLoading: boolean;
   isFetching: boolean;
+  /** True while the previous page is kept on screen for a key that has no data of its own yet. */
+  isPlaceholderData: boolean;
   isError: boolean;
   error: unknown;
   /**
@@ -108,8 +115,15 @@ export function useProjectPage(args: {
   criteria: Criteria;
   scopeFilter?: string | undefined;
   locale?: string;
+  /**
+   * Called when the settled page is not the page the URL asked for — the server reset an
+   * out-of-range page to 1 (canvas `adjustedPage`). The caller should rewrite the URL page,
+   * WITHOUT adding a history entry: `onPageCorrected: (p) => setPage(p, { replace: true })`.
+   * Fires once per mismatch, never for the kept-previous placeholder.
+   */
+  onPageCorrected?: (page: number) => void;
 }): ProjectPageQuery {
-  const { criteria, scopeFilter, locale } = args;
+  const { criteria, scopeFilter, locale, onPageCorrected } = args;
   // The keyword is the only field typed a character at a time.
   const keyword = useDebouncedValue(criteria.filter.keyword, 350);
   const filter = useMemo<ProjectFilter>(
@@ -117,28 +131,77 @@ export function useProjectPage(args: {
     [criteria.filter, keyword],
   );
 
-  const pageKey = useMemo(
-    () => [
+  const keyFor = useCallback(
+    (page: number) => [
       "projectPage",
-      filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter ?? "",
+      filter, criteria.sort.col, criteria.sort.asc, page, scopeFilter ?? "",
     ] as const,
-    [filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter],
+    [filter, criteria.sort.col, criteria.sort.asc, scopeFilter],
+  );
+  const pageKey = useMemo(() => keyFor(criteria.page), [keyFor, criteria.page]);
+
+  const loadPage = useCallback(
+    (page: number) =>
+      loadProjectPage({ filter, sort: criteria.sort, page, scopeFilter, locale }),
+    [filter, criteria.sort, scopeFilter, locale],
   );
 
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: pageKey,
-    queryFn: () =>
-      loadProjectPage({ filter, sort: criteria.sort, page: criteria.page, scopeFilter, locale }),
+    queryFn: () => loadPage(criteria.page),
     // Keeps the previous page visible while the next one loads, so the grid does not blank
     // out and the pager does not jump.
     placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
   });
 
+  /*
+   * Read the NEXT page while the user reads this one. Paging is forward-only, and the page just
+   * loaded left the skip token for its successor in the token cache, so this is a single request;
+   * by the time Next is clicked the page is already in React Query's cache and renders at once.
+   * Only once the real page (not the kept-previous placeholder) has settled, so it never competes
+   * with the page the user is waiting for, and a failed prefetch is silent — Next simply loads it.
+   */
+  const settled = query.data;
+  const settledReal = Boolean(settled) && !query.isPlaceholderData && !query.isFetching;
+  const nextPage = settled?.hasNext ? settled.page + 1 : 0;
+  useEffect(() => {
+    if (!settledReal || !nextPage) return;
+    void queryClient
+      .prefetchQuery({
+        queryKey: keyFor(nextPage),
+        queryFn: () => loadPage(nextPage),
+        staleTime: 30 * 1000,
+      })
+      .catch(() => undefined);
+  }, [settledReal, nextPage, queryClient, keyFor, loadPage]);
+
+  /*
+   * The server answered with a different page than the URL asked for (it reset an out-of-range
+   * page to 1). Hand the page it actually served back to the caller to normalise the URL. The
+   * placeholder is the PREVIOUS key's data and says nothing about this request, so it is skipped.
+   * `corrected` remembers the mismatch already reported so a caller that does not navigate (or a
+   * re-render before the URL changes) cannot fire twice; it clears once the mismatch is gone.
+   */
+  const servedPage = query.isPlaceholderData ? undefined : query.data?.page;
+  const corrected = useRef<string | null>(null);
+  useEffect(() => {
+    if (servedPage === undefined || servedPage === criteria.page) {
+      corrected.current = null;
+      return;
+    }
+    const mismatch = `${criteria.page}->${servedPage}`;
+    if (corrected.current === mismatch) return;
+    corrected.current = mismatch;
+    onPageCorrected?.(servedPage);
+  }, [servedPage, criteria.page, onPageCorrected]);
+
   return {
     data: query.data,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
+    isPlaceholderData: query.isPlaceholderData,
     isError: query.isError,
     error: query.error,
     pageKey,

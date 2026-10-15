@@ -22,7 +22,7 @@ import {
   GlassesRegular, OpenRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
-import { palette, space } from "@/theme/tokens";
+import { palette } from "@/theme/tokens";
 
 /**
  * The PowerCAT `ItemIconName` values both apps actually use, mapped to their Fluent v9
@@ -58,8 +58,18 @@ export interface Command {
 }
 
 const useStyles = makeStyles({
+  /**
+   * No explicit `gap`. The canvas `cat_PowerCAT.CommandBar` PCF carries no `Gap`/`Items
+   * Padding` property in its own `Items`/`Properties` table (checked against the extracted
+   * `.pa.yaml`), and the bundled PCF's own CSS doesn't expose a readable spacing rule either
+   * — this control wraps Fluent v8's `CommandBar`, whose own convention is adjacent buttons
+   * with no added gap, relying on each button's own internal padding for visual separation,
+   * the same way Office's command bars are spaced. An earlier `gap: space.xs` here added 4px
+   * on top of that per-button padding with no canvas measurement behind it — removed rather
+   * than kept on a guess.
+   */
   bar: {
-    display: "flex", flexWrap: "wrap", alignItems: "center", gap: space.xs,
+    display: "flex", flexWrap: "wrap", alignItems: "center",
     minHeight: "40px",
   },
   command: {

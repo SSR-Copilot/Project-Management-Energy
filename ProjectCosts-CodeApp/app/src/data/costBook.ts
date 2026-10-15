@@ -947,7 +947,7 @@ export async function loadMilestoneDurations(
         eq("vsb_technology", technology),
         ACTIVE,
       ),
-      top: 1,
+      maxPageSize: 1,
     },
   );
   const row = rows[0];

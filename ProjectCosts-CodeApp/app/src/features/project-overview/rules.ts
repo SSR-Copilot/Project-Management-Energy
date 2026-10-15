@@ -105,7 +105,7 @@ export const fv = (col: string): string => `${col}@OData.Community.Display.V1.Fo
 /** Everything the grid and the command gates need, and nothing else. */
 export const PROJECT_SELECT: string[] = [
   COL.id, COL.name, COL.shortName, COL.projectIdCode, COL.internalProjectId,
-  COL.technology, COL.totalCapacity, COL.weightedMw, COL.approvalState,
+  COL.technology, COL.totalCapacity, COL.approvalState,
   COL.spoSharepointUrl, COL.spoTeamsUrl, COL.projectStartDate, COL.netYieldP50,
   COL.m1FeasibilityStudies, COL.m2ProjectDevelopmentStarted, COL.m3ApplicationSubmitted,
   COL.m4LegallyBindingPermits, COL.m5Construction,
@@ -299,10 +299,13 @@ export function clearIconState(value: unknown): { active: boolean; disabled: boo
  * FormattedValues, and ordering by them needs `$orderby` over a navigation path. Sorting
  * them client-side within one page would order the page differently from the table, which is
  * a lie visible at every page boundary, so the grid marks them unsortable instead.
+ *
+ * Approval is absent too: the canvas Approval column has no `ColSortable`. A stale
+ * `?sort=vsb_approvalstates` link falls back to the default through `resolveSortColumn`.
  */
 export const SORTABLE: readonly string[] = [
   COL.name, COL.shortName, COL.internalProjectId, COL.technology,
-  COL.totalCapacity, COL.weightedMw, COL.approvalState, COL.projectStartDate,
+  COL.totalCapacity, COL.projectStartDate,
   COL.m1FeasibilityStudies, COL.m2ProjectDevelopmentStarted, COL.m3ApplicationSubmitted,
   COL.m4LegallyBindingPermits, COL.m5Construction,
 ];
@@ -334,7 +337,6 @@ export interface ProjectRow {
   areaName: string;
   technology: string;
   totalCapacity: number | null;
-  weightedMw: number | null;
   /** What the grid's "Project ID" column shows. */
   internalProjectId: string;
   /** `vsb_name` — used to derive names on the Cost screens. */
@@ -369,7 +371,6 @@ export function toProjectRow(r: Record<string, unknown>): ProjectRow {
     areaName: str(r[fv(COL.area)]),
     technology: technologyLabel(r[COL.technology], r[fv(COL.technology)]),
     totalCapacity: num(r[COL.totalCapacity]),
-    weightedMw: num(r[COL.weightedMw]),
     internalProjectId: str(r[COL.internalProjectId]),
     projectIdCode: str(r[COL.projectIdCode]),
     approvalState,

@@ -59,6 +59,52 @@ let projectNextToken: string | undefined;
 let blankRows: Record<string, unknown>[] = [];
 let blankTotal = 0;
 
+/**
+ * A STATEFUL skip-token server for the named segment: maps the token a request carries to
+ * that page's rows and the token for the page after it. The flat `projectRows` fixture above
+ * answers every call identically, which is fine for single-page assertions but cannot
+ * reproduce a real Next → Previous → Next walk — the three calls would all look alike.
+ */
+let namedPager:
+  | ((skipToken: unknown) => { rows: Record<string, unknown>[]; next?: string; total: number })
+  | undefined;
+
+/**
+ * A Dataverse-faithful server for the whole `vsb_projects` table: `named` rows with a project
+ * name, then `blank` rows without one. Unlike `namedPager` it honours what Dataverse honours —
+ * the page size is `Prefer: odata.maxpagesize` (the SDK's `maxPageSize`), a skip token opens
+ * the page after the one that issued it, and a last page carries no token — so the real page
+ * arithmetic (200 a page) and the real boundary / tail pages can be walked through the UI.
+ */
+let faithful: { named: number; blank: number } | undefined;
+
+/** While set, every `vsb_projects` read waits for it — holds a refetch mid-flight for a test. */
+let holdProjects: Promise<void> | undefined;
+
+function faithfulPage(options: Record<string, unknown>) {
+  const isBlank = String(options.filter ?? "").includes(" eq null");
+  const total = isBlank ? faithful!.blank : faithful!.named;
+  const size = (options.maxPageSize as number | undefined) ?? 500;
+  const offset = typeof options.skipToken === "string" ? Number(options.skipToken.split("@")[0]) : 0;
+  const end = Math.min(total, offset + size);
+  const data = Array.from({ length: end - offset }, (_, i) => {
+    const n = offset + i + 1;
+    const code = `${isBlank ? "B" : "N"}${String(n).padStart(4, "0")}`;
+    return projectRow({
+      vsb_projectid: `${isBlank ? "00000002" : "00000001"}-0000-0000-0000-${String(n).padStart(12, "0")}`,
+      vsb_projectname: isBlank ? null : `Named ${code}`,
+      vsb_shortname: null,
+      vsb_internalprojectid: code,
+    });
+  });
+  return {
+    success: true,
+    data,
+    ...(end < total ? { skipToken: `${end}@${size}` } : {}),
+    ...(options.count ? { count: total } : {}),
+  };
+}
+
 vi.mock("@microsoft/power-apps/app", () => ({
   setConfig: vi.fn(),
   getContext: vi.fn().mockResolvedValue({
@@ -120,8 +166,19 @@ vi.mock("@microsoft/power-apps/data", () => ({
           };
         }
         if (table === "vsb_projects") {
+          if (holdProjects) await holdProjects;
+          if (faithful) return faithfulPage(options);
           if (String(options.filter ?? "").includes(" eq null")) {
             return { success: true, data: blankRows, count: blankTotal };
+          }
+          if (namedPager) {
+            const p = namedPager(options.skipToken);
+            return {
+              success: true,
+              data: p.rows,
+              count: p.total,
+              ...(p.next ? { skipToken: p.next } : {}),
+            };
           }
           // A second page exists only when the fixture says so, so the Next button and the
           // skip-token walk are both exercised for real.
@@ -168,16 +225,27 @@ vi.mock("@microsoft/power-apps/data", () => ({
   }),
 }));
 
-import { resetPageTokens } from "@/data/client";
+import { resetProjectPageCache } from "@/data/projects";
 import { vsbTheme } from "@/theme/fluent";
 import { SessionProvider } from "@/app/SessionContext";
 import ProjectOverviewScreen from "./Screen";
 import { DELETE_DIALOG } from "./rules";
 
+/**
+ * The query defaults the Harness builds its client with. `gcTime: 0` is the suite's usual choice
+ * (nothing leaks between assertions), but it also means a page left behind is DISCARDED, so
+ * every Previous/Next re-fetches. Production keeps pages for five minutes and serves them from
+ * cache for `staleTime`, so the paging tests that are about that must opt into the real values.
+ */
+let queryDefaults: { gcTime?: number; staleTime?: number } = { gcTime: 0 };
+/** The client the last Harness built, so a test can expire its cache the way 30 s of idling does. */
+let activeClient: QueryClient | undefined;
+
 function Harness({ children, search = "" }: { children: ReactNode; search?: string }) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: { queries: { retry: false, ...queryDefaults } },
   });
+  activeClient = client;
   return (
     <FluentProvider theme={vsbTheme}>
       <QueryClientProvider client={client}>
@@ -284,7 +352,11 @@ describe("ProjectOverviewScreen", () => {
     deletes.length = 0;
     deleteSucceeds = true;
     baseCaseRows = [{ vsb_basecaseid: "bc1" }];
-    resetPageTokens();
+    namedPager = undefined;
+    faithful = undefined;
+    holdProjects = undefined;
+    queryDefaults = { gcTime: 0 };
+    resetProjectPageCache();
   });
 
   it("UT-OVUI-001 renders the grid columns the screenshot shows", async () => {
@@ -325,8 +397,11 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     const q = projectQuery();
     expect(q?.count).toBe(true);
-    expect(q?.top).toBe(200);
-    expect(q?.orderBy).toEqual(["vsb_projectname asc"]);
+    // The page size is `maxPageSize`; a `$top` would be ignored by Dataverse (UT-PROJPAGE-012).
+    expect(q?.maxPageSize).toBe(200);
+    expect(q).not.toHaveProperty("top");
+    // The sort column, then the unique autonumber so the order is total (stable across pages).
+    expect(q?.orderBy).toEqual(["vsb_projectname asc", "vsb_name asc"]);
     // $select is mandatory — without it Dataverse returns all 112 project columns.
     expect(Array.isArray(q?.select)).toBe(true);
     expect((q?.select as string[]).length).toBeGreaterThan(15);
@@ -360,6 +435,10 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-005 renders the footer strings the screenshot shows", async () => {
     projectTotal = 1129;
+    // A real 1,129-row list has a page 1 with a further page behind it. The old fixture was a
+    // single row with a 1129 count and no token, which only "worked" because the named segment's
+    // end was never read off the walk; the end is the walk's truth now.
+    projectNextToken = "tok";
     render(<Harness><ProjectOverviewScreen /></Harness>);
     // The footer renders during loading too, reading 0 — so wait for the data, not the
     // element, or the assertion races the query.
@@ -377,7 +456,7 @@ describe("ProjectOverviewScreen", () => {
     );
     await screen.findByText("Contr. Endpoint Testproject");
     const q = projectQuery();
-    expect(q?.orderBy).toEqual(["vsb_shortname desc"]);
+    expect(q?.orderBy).toEqual(["vsb_shortname desc", "vsb_name asc"]);
     expect(q?.skipToken).toBe("TOKEN-PAGE-2");
     expect(q).not.toHaveProperty("skip");
     expect(String(q?.filter)).toContain("contains(vsb_projectname,'endpoint')");
@@ -481,10 +560,11 @@ describe("ProjectOverviewScreen", () => {
   });
 
   it("UT-OVUI-011b disables Next when the server hands back no token", async () => {
-    // Forward-only paging: the token is the truth, not a count the platform caps at 5000.
-    projectTotal = 1129;
-    render(<Harness><ProjectOverviewScreen /></Harness>);
-    await screen.findByText("Contr. Endpoint Testproject");
+    // Forward-only paging: the token is the truth, not a count the platform caps at 5000. Page 3
+    // of a three-page chain ends without a token, so Next is disabled there.
+    threeNamedPages();
+    render(<Harness search="?p=3"><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Page3 Project 1");
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
@@ -538,7 +618,7 @@ describe("ProjectOverviewScreen", () => {
   it("UT-OVUI-017 asks for the named projects and the nameless ones separately", async () => {
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(projectQuery()?.orderBy).toEqual(["vsb_projectname asc"]);
+    expect(projectQuery()?.orderBy).toEqual(["vsb_projectname asc", "vsb_name asc"]);
     // Nothing to sort the tail by — the column is empty on every one of them — so it takes the
     // autonumber, which is never blank.
     expect(blankQuery()?.orderBy).toEqual(["vsb_name asc"]);
@@ -553,31 +633,44 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-019 keeps page 1 on the named projects even when nameless ones exist", async () => {
     projectTotal = 250;
+    projectNextToken = "tok"; // more named rows follow page 1
     blankRows = [projectRow({ vsb_projectname: null, vsb_shortname: null })];
     blankTotal = 60;
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    // 250 named over two pages, then 60 nameless on a third.
+    // SOURCE DEFECT fixed: this read "from 3" (250 named = 2 pages, + 60 nameless on a page of
+    // their own). The segments are one continuous list now: ceil((250 + 60) / 200) = 2.
     expect(screen.getByTestId("total-rows")).toHaveTextContent("Total Rows: 310");
-    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 2");
   });
 
-  it("UT-OVUI-020 offers a next page from the last named one, because the tail follows it", async () => {
-    // No skip token: there is no further NAMED page, but the nameless tail still comes after.
+  it("UT-OVUI-020 offers a next page when the tail overflows the boundary page", async () => {
+    // One named row, no skip token: the nameless tail shares page 1 (1 + 199 rows) and, at 400
+    // rows, overflows onto more pages. SOURCE DEFECT fixed: with only 5 tail rows this used to
+    // offer a second page; they now fit on page 1 with the named row (UT-OVUI-021).
     blankRows = [projectRow({ vsb_projectname: null })];
-    blankTotal = 5;
+    blankTotal = 400;
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
     expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
   });
 
-  it("UT-OVUI-021 serves the tail once the named pages run out", async () => {
-    blankRows = [projectRow({ vsb_projectname: "", vsb_shortname: "NONAME" })];
+  it("UT-OVUI-021 serves the tail on the same page as the last named rows", async () => {
+    // SOURCE DEFECT fixed: 1 named row + 5 nameless used to be TWO pages (the tail started on
+    // its own page 2, and ?p=2 showed it). Now it is 1 page of 6 rows, the tail topping the
+    // named page up, and ?p=2 is past the end so it is clamped to that page.
+    blankRows = Array.from({ length: 5 }, (_, i) =>
+      projectRow({ vsb_projectname: "", vsb_shortname: `NONAME${i + 1}` }));
     blankTotal = 5;
     render(<Harness search="?p=2"><ProjectOverviewScreen /></Harness>);
-    // Page 2 is past the single named page, so it is the tail.
-    expect(await screen.findByText("NONAME")).toBeInTheDocument();
-    expect(blankQuery()?.top).toBe(200);
+    expect(await screen.findByText("NONAME5")).toBeInTheDocument();
+    expect(screen.getByText("Contr. Endpoint Testproject")).toBeInTheDocument();
+    expect(screen.getByTestId("total-rows")).toHaveTextContent("Total Rows: 6");
+    expect(screen.queryByTestId("page-label")).toBeNull(); // one page: no pager
+    // The top-up asks for exactly the 199 rows that fill the page, as maxPageSize (never $top).
+    expect(blankQuery()?.maxPageSize).toBe(199);
+    expect(blankQuery()).not.toHaveProperty("top");
   });
 
   it("UT-OVUI-022 falls back to the last named page when there is no tail at all", async () => {
@@ -835,6 +928,159 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.queryByRole("button", { name: "First page" })).toBeNull();
   });
 
+  it("UT-OVUI-040 walks Next → Previous → Next → Next with the right rows and an enabled Next each time", async () => {
+    // Reported against the live app: Next to page 2, Previous back, then Next did nothing and
+    // the grid showed the wrong rows. Three pages behind a real skip-token chain (count 450 at
+    // 200 a page), so every step is distinguishable by its own row names.
+    const makeRows = (page: number) => [1, 2].map((i) => projectRow({
+      vsb_projectid: `0000000${page}-0000-0000-0000-00000000000${i}`,
+      vsb_projectname: `Page${page} Project ${i}`,
+    }));
+    namedPager = (token) => {
+      if (token === undefined) return { rows: makeRows(1), next: "T1", total: 450 };
+      if (token === "T1") return { rows: makeRows(2), next: "T2", total: 450 };
+      return { rows: makeRows(3), total: 450 };
+    };
+
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Page1 Project 1");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+
+    const next = () => screen.getByRole("button", { name: "Next page" });
+    const previous = () => screen.getByRole("button", { name: "Previous page" });
+
+    await waitFor(() => expect(next()).toBeEnabled());
+    await user.click(next());
+    await screen.findByText("Page2 Project 1");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 2 from 3");
+    expect(screen.queryByText("Page1 Project 1")).toBeNull();
+
+    await waitFor(() => expect(previous()).toBeEnabled());
+    await user.click(previous());
+    await screen.findByText("Page1 Project 1");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+    expect(screen.queryByText("Page2 Project 1")).toBeNull();
+
+    // The step that was reported broken.
+    await waitFor(() => expect(next()).toBeEnabled());
+    await user.click(next());
+    await screen.findByText("Page2 Project 1");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 2 from 3");
+    expect(screen.queryByText("Page1 Project 1")).toBeNull();
+
+    await waitFor(() => expect(next()).toBeEnabled());
+    await user.click(next());
+    await screen.findByText("Page3 Project 1");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 3 from 3");
+    expect(next()).toBeDisabled();
+  });
+
+  /** Three named pages behind a real skip-token chain, one distinct pair of rows per page. */
+  const threeNamedPages = (opts: { countOnFirstPageOnly?: boolean } = {}) => {
+    const makeRows = (page: number) => [1, 2].map((i) => projectRow({
+      vsb_projectid: `0000000${page}-0000-0000-0000-00000000000${i}`,
+      vsb_projectname: `Page${page} Project ${i}`,
+    }));
+    namedPager = (token) => {
+      if (token === undefined) return { rows: makeRows(1), next: "T1", total: 450 };
+      const total = opts.countOnFirstPageOnly ? (undefined as unknown as number) : 450;
+      if (token === "T1") return { rows: makeRows(2), next: "T2", total };
+      return { rows: makeRows(3), total };
+    };
+  };
+
+  /**
+   * Next → Previous → Next → Next, optionally expiring the whole query cache before each click
+   * (what 30 s of idling does to every page already visited).
+   */
+  const walkNextPreviousNext = async (expire: boolean) => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Page1 Project 1");
+    const next = () => screen.getByRole("button", { name: "Next page" });
+    const previous = () => screen.getByRole("button", { name: "Previous page" });
+    const label = (n: number) =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent(`Page: ${n} from 3`);
+    const click = async (button: () => HTMLElement) => {
+      await waitFor(() => expect(button()).toBeEnabled());
+      if (expire) await activeClient?.invalidateQueries({ refetchType: "none" });
+      await user.click(button());
+    };
+
+    await click(next);
+    await screen.findByText("Page2 Project 1");
+    label(2);
+    await click(previous);
+    await screen.findByText("Page1 Project 1");
+    label(1);
+    await click(next);
+    await screen.findByText("Page2 Project 1");
+    label(2);
+    expect(screen.queryByText("Page1 Project 1")).toBeNull();
+    await click(next);
+    await screen.findByText("Page3 Project 1");
+    label(3);
+    expect(next()).toBeDisabled();
+  };
+
+  it("UT-OVUI-041 walks Next → Previous → Next with the production cache (pages kept, served while fresh)", async () => {
+    threeNamedPages();
+    queryDefaults = {};
+    await walkNextPreviousNext(false);
+  });
+
+  it("UT-OVUI-042 walks Next → Previous → Next when every visited page has gone stale", async () => {
+    threeNamedPages();
+    queryDefaults = {};
+    await walkNextPreviousNext(true);
+  });
+
+  it("UT-OVUI-043 walks Next → Previous → Next when the server sends @odata.count on page 1 only", async () => {
+    threeNamedPages({ countOnFirstPageOnly: true });
+    queryDefaults = {};
+    await walkNextPreviousNext(false);
+  });
+
+  /** Next, Next, … to the last page, waiting for each page's own rows before the next click. */
+  const walkToLastPage = async (pages: number) => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("N0001", {}, { timeout: 15000 });
+    expect(screen.getByTestId("page-label")).toHaveTextContent(`Page: 1 from ${pages}`);
+    for (let p = 2; p <= pages; p += 1) {
+      const next = () => screen.getByRole("button", { name: "Next page" });
+      await waitFor(() => expect(next()).toBeEnabled(), { timeout: 15000 });
+      await user.click(next());
+      await waitFor(
+        () => expect(screen.getByTestId("page-label")).toHaveTextContent(`Page: ${p} from ${pages}`),
+        { timeout: 15000 },
+      );
+    }
+  };
+
+  it("UT-OVUI-044 Next to a BOUNDARY last page renders its named rows then the nameless ones", async () => {
+    // 450 named + 29 nameless at 200 a page: page 3 = named 401..450 followed by nameless 1..29.
+    faithful = { named: 450, blank: 29 };
+    queryDefaults = {};
+    await walkToLastPage(3);
+    expect(await screen.findByText("N0450", {}, { timeout: 15000 })).toBeTruthy();
+    expect(screen.getByText("B0029")).toBeTruthy();
+    expect(screen.queryByText("No project matches these filters")).toBeNull();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(screen.getAllByRole("radio")).toHaveLength(79);
+  }, 120_000);
+
+  it("UT-OVUI-045 Next to a PURE-TAIL last page renders the nameless rows", async () => {
+    // 200 named + 250 nameless: page 2 = nameless 1..200, page 3 = nameless 201..250.
+    faithful = { named: 200, blank: 250 };
+    queryDefaults = {};
+    await walkToLastPage(3);
+    expect(await screen.findByText("B0250", {}, { timeout: 15000 })).toBeTruthy();
+    expect(screen.queryByText("No project matches these filters")).toBeNull();
+    expect(screen.getAllByRole("radio")).toHaveLength(50);
+  }, 120_000);
+
   it("UT-OVUI-037 shows the pager once a second page exists", async () => {
     projectTotal = 1129;
     projectNextToken = "tok";
@@ -842,5 +1088,188 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 6");
     expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
+  });
+
+  /** The data cells of the one rendered row, in column order (select, stripe, then the ten). */
+  const rowCells = async () => {
+    const name = await screen.findByText("Contr. Endpoint Testproject");
+    return within(name.closest("tr") as HTMLElement).getAllByRole("cell");
+  };
+
+  it("UT-OVUI-046 renders empty values as empty cells, not a '-' placeholder", async () => {
+    // The canvas details list shows an empty string where a value is blank.
+    projectRows = [projectRow({
+      vsb_shortname: null,
+      vsb_internalprojectid: null,
+      vsb_totalcapacity: null,
+      [`_vsb_countryarea_value${FV}`]: null,
+      [`_vsb_country_value${FV}`]: null,
+      [`_vsb_projectmanager_value${FV}`]: null,
+    })];
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    const cells = await rowCells();
+    // 3 short name · 5 manager · 6 country · 7 area · 9 capacity · 10 project id.
+    for (const i of [3, 5, 6, 7, 9, 10]) expect(cells[i]?.textContent).toBe("");
+    expect(cells.map((c) => c.textContent).join("")).not.toContain("-");
+  });
+
+  it("UT-OVUI-047 right-aligns Project ID, and centres Approval, in header and cell", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    const cells = await rowCells();
+    expect(getComputedStyle(cells[10] as HTMLElement).textAlign).toBe("right");
+    expect(getComputedStyle(cells[11] as HTMLElement).textAlign).toBe("center");
+    const grid = within(screen.getByRole("table", { name: "Projects" }));
+    const idHeader = grid.getByRole("columnheader", { name: /Project ID/ });
+    const approvalHeader = grid.getByRole("columnheader", { name: /Approval/ });
+    expect(getComputedStyle(idHeader).textAlign).toBe("right");
+    expect(getComputedStyle(approvalHeader).textAlign).toBe("center");
+  });
+
+  it("UT-OVUI-048 does not sort on the Approval header (no ColSortable in the canvas)", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const header = within(screen.getByRole("table", { name: "Projects" }))
+      .getByRole("columnheader", { name: /Approval/ });
+    expect(header).not.toHaveAttribute("aria-sort");
+    const before = screen.getByTestId("current-location").textContent;
+    await user.click(header);
+    expect(header).not.toHaveAttribute("aria-sort");
+    expect(screen.getByTestId("current-location").textContent).toBe(before);
+    expect(screen.getByTestId("current-location").textContent).not.toContain("sort=");
+  });
+
+  it("UT-OVUI-049 draws a glyph for a known approval state and none for an unknown one", async () => {
+    const { unmount } = render(<Harness><ProjectOverviewScreen /></Harness>);
+    const known = (await rowCells())[11] as HTMLElement;
+    const approved = within(known).getByRole("img", { name: "Approved" });
+    expect(approved.querySelector("svg")).not.toBeNull();
+    unmount();
+
+    // `loc_iconstate` is `Blank()` for a state the Switch does not list.
+    projectRows = [projectRow({
+      vsb_approvalstates: null,
+      [`vsb_approvalstates${FV}`]: undefined,
+    })];
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    const unknown = (await rowCells())[11] as HTMLElement;
+    const none = within(unknown).getByRole("img", { name: "No approval state" });
+    expect(none.querySelector("svg")).toBeNull();
+    expect(none.textContent).toBe("");
+  });
+
+  /* ─────────────────── page correction, keyboard sorting, refetch feedback, selection */
+
+  it("UT-OVUI-050 shows page 1 when the URL page is past the end, and rewrites the URL", async () => {
+    // The server resets an out-of-range page to 1 (canvas `adjustedPage`); the screen follows it
+    // with a `replace`, so the dead page is not left behind in the history.
+    faithful = { named: 450, blank: 29 }; // 479 rows = 3 pages of 200
+    render(<Harness search="?p=99"><ProjectOverviewScreen /></Harness>);
+    expect(await screen.findByText("N0001", {}, { timeout: 15000 })).toBeInTheDocument();
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+    await waitFor(() =>
+      expect(screen.getByTestId("current-location").textContent).not.toContain("p=99"));
+    expect(screen.getByTestId("current-location").textContent).not.toContain("p=");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+  }, 60_000);
+
+  it("UT-OVUI-051 sorts from the keyboard: Enter sorts, Enter again and Space flip the direction", async () => {
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const grid = within(screen.getByRole("table", { name: "Projects" }));
+    const shortName = () => grid.getByRole("columnheader", { name: /Short Name/ });
+    const location = () => screen.getByTestId("current-location").textContent ?? "";
+
+    // The header exposes a focusable button, and reports "none" until it is the sort column.
+    const button = within(shortName()).getByRole("button");
+    expect(button).toHaveAttribute("tabindex", "0");
+    expect(shortName()).toHaveAttribute("aria-sort", "none");
+
+    button.focus();
+    expect(button).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(location()).toContain("sort=vsb_shortname"));
+    expect(location()).not.toContain("dir=desc");
+    expect(shortName()).toHaveAttribute("aria-sort", "ascending");
+
+    within(shortName()).getByRole("button").focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(location()).toContain("dir=desc"));
+    expect(shortName()).toHaveAttribute("aria-sort", "descending");
+
+    within(shortName()).getByRole("button").focus();
+    await user.keyboard(" ");
+    await waitFor(() => expect(location()).not.toContain("dir=desc"));
+    expect(shortName()).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("UT-OVUI-052 leaves the non-sortable headers out of the tab order, without aria-sort", async () => {
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const grid = within(screen.getByRole("table", { name: "Projects" }));
+    for (const name of [/^Status/, /Project Manager/, /^Country/, /Area\/State/, /Approval/]) {
+      const header = grid.getByRole("columnheader", { name });
+      expect(header).not.toHaveAttribute("aria-sort");
+      expect(within(header).queryByRole("button")).toBeNull();
+      expect(header.querySelector("[tabindex]")).toBeNull();
+    }
+  });
+
+  it("UT-OVUI-053 covers the stale rows with a scrim, and disables row commands, while a page loads", async () => {
+    threeNamedPages();
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Page1 Project 1");
+    await selectRow(user, "00000001-0000-0000-0000-000000000001");
+    const next = () => screen.getByRole("button", { name: "Next page" });
+    await waitFor(() => expect(next()).toBeEnabled());
+    expect(screen.queryByTestId("grid-scrim")).toBeNull();
+
+    // Forget the prefetched page 2, then hold the transport so its fetch stays in flight.
+    let release!: () => void;
+    holdProjects = new Promise<void>((resolve) => { release = resolve; });
+    activeClient?.removeQueries({
+      queryKey: ["projectPage"], predicate: (q) => q.getObserversCount() === 0,
+    });
+    await user.click(next());
+
+    await waitFor(() => expect(screen.getByTestId("grid-scrim")).toBeInTheDocument());
+    // The previous page is still what is on screen, but it is busy and nothing acts on it.
+    expect(screen.getByText("Page1 Project 1")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Projects" }).parentElement)
+      .toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("command-editProject")).toBeDisabled();
+    expect(screen.getByTestId("command-editCosts")).toBeDisabled();
+
+    release();
+    await screen.findByText("Page2 Project 1");
+    await waitFor(() => expect(screen.queryByTestId("grid-scrim")).toBeNull());
+    expect(screen.getByRole("table", { name: "Projects" }).parentElement)
+      .toHaveAttribute("aria-busy", "false");
+  });
+
+  it("UT-OVUI-054 loses the selection once its row has left the page, and does not restore it", async () => {
+    threeNamedPages();
+    const id1 = "00000001-0000-0000-0000-000000000001";
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Page1 Project 1");
+    await selectRow(user, id1);
+    expect(screen.getByTestId(`select-${id1}`)).toBeChecked();
+
+    const next = () => screen.getByRole("button", { name: "Next page" });
+    const previous = () => screen.getByRole("button", { name: "Previous page" });
+    await waitFor(() => expect(next()).toBeEnabled());
+    await user.click(next());
+    await screen.findByText("Page2 Project 1");
+    await waitFor(() => expect(previous()).toBeEnabled());
+    await user.click(previous());
+    await screen.findByText("Page1 Project 1");
+
+    expect(screen.getByTestId(`select-${id1}`)).not.toBeChecked();
+    expect(screen.getByTestId("command-editProject")).toBeDisabled();
+    expect(screen.getByTestId("command-editCosts")).toBeDisabled();
+    expect(screen.getByTestId("command-deleteProject")).toBeDisabled();
   });
 });

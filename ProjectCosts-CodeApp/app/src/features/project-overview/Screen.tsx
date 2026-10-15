@@ -31,14 +31,14 @@
  * Every caption, dialog title and notification on this screen is transcribed in `rules.ts`
  * with the canvas control it came from; none of them are written here.
  */
-import { useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { appTabUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import {
   NEW_PROJECT_PATH, analyticsAppUrl, powerBiReportUrl, projectGeneralDataPath,
 } from "@/app/navigation";
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
+  Button, buttonClassNames, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
   Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner, Table, TableBody,
   TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip, makeStyles, mergeClasses,
   tokens,
@@ -46,7 +46,8 @@ import {
 import {
   ArrowSortDownRegular, ArrowSortUpRegular, ChevronLeftRegular, ChevronRightRegular,
   ChevronDoubleLeftRegular, DismissRegular, FilterRegular, FilterDismissRegular,
-  SearchRegular,
+  SearchRegular, CircleRegular, ClockRegular, CheckmarkCircleFilled, DismissCircleFilled,
+  ProhibitedRegular, type FluentIcon,
 } from "@fluentui/react-icons";
 import {
   CommandBar, CommandSlot, ConfirmDialog, EmptyState, LoadingOverlay, type Command,
@@ -54,7 +55,9 @@ import {
 import { useSession } from "@/app/SessionContext";
 import { loadHasBaseCase } from "@/data/projects";
 import { media, palette, space } from "@/theme/tokens";
-import { approvalDecoration, TECHNOLOGY_LABEL } from "@/domain/project";
+import {
+  approvalDecoration, TECHNOLOGY_LABEL, type ApprovalIconToken,
+} from "@/domain/project";
 import {
   CAPACITY_OPERATORS, COL, COST_LOCK, DELETE_DIALOG, OPEN_FAILED, PAGE_SIZE,
   REPORT_UNAVAILABLE, SPO_MSG,
@@ -70,6 +73,41 @@ import {
 
 /* ────────────────────────────────────────────────────────────────── styles */
 
+/**
+ * `src/theme/tokens.ts`'s global `fontFamily` is transcribed from the PROJECT COSTS canvas
+ * app's own theme (Open Sans) — correct for the five Cost screens, which that token exists
+ * for. This screen is ported from `Project Main Screen.pa.yaml` in the PROJECT MANAGEMENT
+ * canvas app instead, which sets `Font: =Font.'Segoe UI'` explicitly on every label and
+ * input checked (filter labels, header title, pagination text) — confirmed directly from
+ * the extracted canvas source, not inferred. Scoped here rather than changed globally, so
+ * the Cost screens keep their own correct font.
+ *
+ * Does NOT reach the command bar: `CommandSlot` portals it into the shared `AppShell` header
+ * (outside this div's DOM subtree), which every screen's command bar shares — see
+ * `docs/02-OPEN-DECISIONS.md` for that one, recorded rather than silently left as Open Sans
+ * or changed shell-wide without sign-off.
+ */
+const PM_FONT_FAMILY = "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif";
+
+/**
+ * Column widths in px, from the canvas grid's `columns_Items` (`ColWidth`): Project Name 350,
+ * Short Name / Status / Country / Technology / Project ID 100 each (`defaultWidth`; the canvas
+ * `stateWidth` variable is declared but unused), Project Manager 200, Area 220, Capacity 160,
+ * Approval 60. `select` is this app's own radio column (no canvas equivalent). `accent` is the
+ * stripe's cell, left at its existing 6 px (the canvas stripe tag is 4 px; the 4 px bar inside
+ * it is unchanged — see the report on G7).
+ */
+const COL_PX = {
+  select: 44, accent: 6, name: 350, shortName: 100, status: 100, manager: 200,
+  country: 100, area: 220, technology: 100, capacity: 160, projectId: 100, approval: 60,
+} as const;
+const GRID_MIN_WIDTH = Object.values(COL_PX).reduce((sum, px) => sum + px, 0);
+
+/** A column pinned to exactly `px`: fixed table layout reads the width, min/max make it firm. */
+const colWidth = (px: number) => ({
+  width: `${px}px`, minWidth: `${px}px`, maxWidth: `${px}px`, boxSizing: "border-box" as const,
+});
+
 const useStyles = makeStyles({
   /**
    * `flex: 1` so the screen owns the whole content area — which is what keeps the footer at
@@ -78,12 +116,28 @@ const useStyles = makeStyles({
   page: {
     display: "flex", flexDirection: "column", gap: space.m,
     flex: 1, minWidth: 0, minHeight: 0,
+    fontFamily: PM_FONT_FAMILY,
   },
   /**
    * Everything between the filters and the footer. Takes the slack, so `Total Rows` and the
    * pager sit on the bottom edge whether the grid is full, short, empty or erroring.
    */
-  body: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
+  body: {
+    flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
+    position: "relative",
+  },
+  /**
+   * `cmp_MS_Spinner` — a light scrim with a small centred spinner and no text, laid over the
+   * grid while a refetch (filter / page / sort) is still showing the PREVIOUS page. Non-modal:
+   * the rest of the screen (filters, pager, command bar) stays live; only the stale rows are
+   * covered, so they cannot be clicked. Below dialogs and the command bar's popovers.
+   */
+  scrim: {
+    position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
+    zIndex: 1,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+  },
 
   /*
    * ── the filter card ──────────────────────────────────────────────────────────────────
@@ -91,7 +145,8 @@ const useStyles = makeStyles({
    *
    *   card      horizontal auto-layout, `gap: 6px`, `border-radius: 4px`, transparent fill,
    *             `box-shadow: 0 1px 2px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12)`, height 124
-   *   column    `flex: 1 0 auto; min-width: 250px`, vertical, gap 0 — FOUR of them
+   *   column    1/6 of the bar's width each (`Parent.Width/6`, all four columns), vertical,
+   *             gap 0, `min-width: 250px` floor — FOUR of them, filling only 2/3 of the bar
    *   cell      280 px wide; the first in each column 56 px tall, the second 68 px
    *   label     24 px tall, 10 pt (13.33 px), `rgb(50, 49, 48)`, 5 px padding, line-height 1.2
    *   control   232 px wide at x=6, so it ends at 238
@@ -112,9 +167,18 @@ const useStyles = makeStyles({
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12)",
     paddingTop: "2px", paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
   },
+  /**
+   * `Width: =Parent.Width/6` on EVERY one of the four columns — confirmed from
+   * `Project Main Screen.pa.yaml`, not inferred. Four columns at 1/6 each fill only 2/3 of
+   * the filter bar's width; the remaining third is genuinely empty space on the right in the
+   * canvas, not a rounding artefact. `flexGrow: 1` here previously stretched all four to
+   * split 100% evenly, which is a real, visible width/placement mismatch — removed in favour
+   * of the fixed 16.666% basis canvas actually uses. `minWidth` stays as the practical floor
+   * once that fraction would otherwise shrink a column below where its own content wraps.
+   */
   filterColumn: {
     display: "flex", flexDirection: "column", rowGap: "4px",
-    flexGrow: 1, flexShrink: 0, flexBasis: "auto",
+    flexGrow: 0, flexShrink: 0, flexBasis: "16.666%",
     minWidth: "250px",
     [media.belowSm]: { minWidth: 0, flexBasis: "100%" },
   },
@@ -143,14 +207,46 @@ const useStyles = makeStyles({
   capacityOperator: { width: "128px", flexGrow: 0, flexShrink: 1, minWidth: 0 },
 
   gridWrap: { flex: 1, minHeight: 0, overflow: "auto" },
-  accentCell: { width: "6px", paddingLeft: 0, paddingRight: 0 },
+  /**
+   * Exactly the sum of the column widths, so the table scrolls horizontally inside `gridWrap`
+   * rather than squeezing its columns. `canvas.css` only switches on `table-layout: fixed`; it
+   * no longer sets a width of its own.
+   */
+  gridTable: { width: `${GRID_MIN_WIDTH}px`, minWidth: `${GRID_MIN_WIDTH}px` },
+  accentCell: { ...colWidth(COL_PX.accent), paddingLeft: 0, paddingRight: 0 },
   accent: { display: "block", width: "4px", height: "22px", borderRadius: "2px" },
-  selectCell: { width: "44px" },
+  selectCell: colWidth(COL_PX.select),
+  /* Fixed column widths — the canvas `columns_Items` `ColWidth` values (header AND cell). */
+  colName: colWidth(COL_PX.name),
+  colShortName: colWidth(COL_PX.shortName),
+  colStatus: colWidth(COL_PX.status),
+  colManager: colWidth(COL_PX.manager),
+  colCountry: colWidth(COL_PX.country),
+  colArea: colWidth(COL_PX.area),
+  colTechnology: colWidth(COL_PX.technology),
+  colCapacity: colWidth(COL_PX.capacity),
+  colProjectId: colWidth(COL_PX.projectId),
+  colApproval: colWidth(COL_PX.approval),
+  /** Data cells are one line with an ellipsis (`guide-ui-notes-p06-p14.md`: "truncated, no wrap"). */
+  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   numeric: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
+  /** `ColHorizontalAlign: "Right"` — cell text. */
+  alignEnd: { textAlign: "right" },
+  /** `ColHorizontalAlign: "Center"` — cell text. */
+  alignCenter: { textAlign: "center" },
+  /** The header's inner button is a flex box, so its content aligns by `justify-content`. */
+  headerEnd: { justifyContent: "flex-end" },
+  headerCenter: { justifyContent: "center" },
   sortable: { cursor: "pointer", userSelect: "none" },
   /** `AlternateRowColor: =gblAppTheme.palette.themeLighter` on the canvas details list. */
-  rowAlt: { backgroundColor: palette.themeLighterAlt },
-  rowSelected: { backgroundColor: palette.themeLighter },
+  rowAlt: { backgroundColor: palette.themeLighter },
+  /**
+   * DELIBERATE DEVIATION: the PowerCAT details list's selected-row colour is not in the canvas
+   * YAML, so there is nothing to transcribe. With the banding now themeLighter, the previous
+   * themeLighter selection would be indistinguishable from a banded row, so selection uses the
+   * next darker theme step. Must come after `rowAlt` in `mergeClasses` so it wins.
+   */
+  rowSelected: { backgroundColor: palette.themeLight },
   /**
    * Total Rows and the pager sit together at the LEFT, as in the reference.
    *
@@ -159,7 +255,7 @@ const useStyles = makeStyles({
    * to ride up and sit under the message, which read as part of the message.
    */
   footer: {
-    display: "flex", alignItems: "center", gap: space.s, flexWrap: "wrap",
+    display: "flex", alignItems: "center", flexWrap: "wrap",
     flex: "none",
     paddingTop: space.s,
     borderTopWidth: "1px",
@@ -171,7 +267,69 @@ const useStyles = makeStyles({
     flex: 1, minHeight: 0,
     display: "flex", flexDirection: "column", justifyContent: "center",
   },
-  footerGap: { width: space.xl },
+  /**
+   * `con_..._Pagination_Info` — a 120 px box, 10 px padding each side, holding `Total Rows`.
+   * The box is fixed, so a long count is cut with an ellipsis (the full text is in `title`)
+   * rather than pushing the pager along.
+   */
+  totalRowsBox: {
+    flex: "none", width: "120px", boxSizing: "border-box",
+    height: "32px", display: "flex", alignItems: "center",
+    paddingLeft: "10px", paddingRight: "10px",
+    overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+  },
+  /**
+   * `con_..._Pagination_Buttons` — a 32 px strip, items vertically centred, 10 px gap, 10 px
+   * padding left and 20 px right.
+   */
+  pager: {
+    display: "flex", alignItems: "center", columnGap: "10px",
+    height: "32px", boxSizing: "border-box",
+    paddingLeft: "10px", paddingRight: "20px",
+  },
+  /**
+   * `ico_..._Pagination_*` (PowerCAT Icon, IconButon): 32 x 32, `themePrimary` fill, white 16 px
+   * glyph; hover swaps to `themeLighter` fill with a `themePrimary` glyph. Written out for the
+   * hover and pressed states too, because Fluent's own transparent-button rules would otherwise
+   * win on those selectors.
+   */
+  pagerButton: {
+    width: "32px", minWidth: "32px", height: "32px", maxWidth: "32px",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+    backgroundColor: palette.themePrimary,
+    color: palette.white,
+    [`& .${buttonClassNames.icon}`]: { fontSize: "16px", color: palette.white },
+    ":hover": {
+      backgroundColor: palette.themeLighter,
+      color: palette.themePrimary,
+      [`& .${buttonClassNames.icon}`]: { color: palette.themePrimary },
+    },
+    ":hover:active": {
+      backgroundColor: palette.themeLighter,
+      color: palette.themePrimary,
+      [`& .${buttonClassNames.icon}`]: { color: palette.themePrimary },
+    },
+  },
+  /** `DisplayMode.Disabled` — muted and inert. Must come after `pagerButton` in `mergeClasses`. */
+  pagerButtonDisabled: {
+    backgroundColor: tokens.colorNeutralBackgroundDisabled,
+    color: tokens.colorNeutralForegroundDisabled,
+    cursor: "not-allowed",
+    [`& .${buttonClassNames.icon}`]: { color: tokens.colorNeutralForegroundDisabled },
+    ":hover": {
+      backgroundColor: tokens.colorNeutralBackgroundDisabled,
+      color: tokens.colorNeutralForegroundDisabled,
+      [`& .${buttonClassNames.icon}`]: { color: tokens.colorNeutralForegroundDisabled },
+    },
+    ":hover:active": {
+      backgroundColor: tokens.colorNeutralBackgroundDisabled,
+      color: tokens.colorNeutralForegroundDisabled,
+      [`& .${buttonClassNames.icon}`]: { color: tokens.colorNeutralForegroundDisabled },
+    },
+  },
+  /** `lbl_..._Pagination` — 12 px, centred. */
+  pageLabel: { fontSize: "12px", textAlign: "center", whiteSpace: "nowrap" },
+  footerSpinner: { marginLeft: "10px" },
   suggestions: {
     listStyleType: "none", margin: 0, padding: 0,
     borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: tokens.colorNeutralStroke2,
@@ -195,10 +353,8 @@ const useStyles = makeStyles({
     lineHeight: "1.6",
   },
   approval: { display: "inline-flex", alignItems: "center", gap: space.xs },
-  dot: {
-    display: "inline-block", width: "12px", height: "12px", borderRadius: "50%",
-    flexShrink: 0,
-  },
+  /** The approval glyph; its colour is set inline from `approvalDecoration`. */
+  glyph: { fontSize: "16px", flexShrink: 0 },
 });
 
 /** `ItemIconName` → a Fluent icon. Keeps `rules.ts` free of React. */
@@ -210,6 +366,20 @@ const COMMAND_ICON: Record<string, Command["icon"]> = {
   Play: "Play",
   View: "Document",
   BIDashboard: "BIDashboard",
+};
+
+/**
+ * The approval glyph per state — the canvas `loc_iconstate` icon names, as Fluent v9 glyphs:
+ * StatusCircleOuter → ring, AwayStatus → clock, SkypeCircleCheck → filled check circle,
+ * StatusErrorFull → filled dismiss circle, Cancel → prohibited. A state the canvas does not know
+ * gets NO glyph (`Blank()`), handled at the call site.
+ */
+const APPROVAL_GLYPH: Record<ApprovalIconToken, FluentIcon> = {
+  circle: CircleRegular,
+  clock: ClockRegular,
+  check: CheckmarkCircleFilled,
+  dismiss: DismissCircleFilled,
+  prohibited: ProhibitedRegular,
 };
 
 /* ─────────────────────────────────────────────────────────────── the screen */
@@ -228,18 +398,62 @@ export default function ProjectOverviewScreen() {
   const [lock, setLock] = useState<{ name: string; sections: string[] } | null>(null);
   /** `locProjectDelitionDialog` (the canvas's own spelling). */
   const [confirmDelete, setConfirmDelete] = useState(false);
-  /** What the canvas said with `Notify()`. `NotificationType.Warning` maps to `"warning"`. */
-  const [notice, setNotice] =
-    useState<{ intent: "success" | "error" | "info" | "warning"; text: string }>();
+  /**
+   * What the canvas said with `Notify()`. `NotificationType.Warning` maps to `"warning"`.
+   *
+   * `timeoutMs` is per-notice, not a screen-wide constant: the canvas's own `Notify()` calls
+   * disagree with each other on purpose. Delete's success notice passes an explicit
+   * `Timeout` of 1000 ms, which this screen already overrides to "stays until dismissed"
+   * for a documented reason (a message naming the just-deleted project is worth more than a
+   * one-second flash). Simulate's two `Notify(message, NotificationType.Warning)` calls pass
+   * NO `Timeout` argument at all, so Power Fx's own default applies — 10,000 ms, per
+   * https://learn.microsoft.com/power-platform/power-fx/reference/function-notify — and
+   * unlike the delete case, nothing here argues for overriding that default.
+   */
+  const [notice, setNotice] = useState<
+    { intent: "success" | "error" | "info" | "warning"; text: string; timeoutMs?: number }
+  >();
 
-  const pageQuery = useProjectPage({ criteria, locale });
+  useEffect(() => {
+    if (!notice?.timeoutMs) return;
+    const id = setTimeout(() => setNotice(undefined), notice.timeoutMs);
+    return () => clearTimeout(id);
+  }, [notice]);
+
+  const pageQuery = useProjectPage({
+    criteria,
+    locale,
+    // The server resets an out-of-range page to 1 (canvas `adjustedPage`); mirror that in the
+    // URL without adding a history entry, so Back does not return to the dead page.
+    onPageCorrected: (p) => setPage(p, { replace: true }),
+  });
+  /*
+   * A refetch for a new key (filter / page / sort) keeps the PREVIOUS page on screen as
+   * placeholder data. A refetch of a key that already has data (a stale-time refresh) is not
+   * "stale rows" and is excluded by `isPlaceholderData`.
+   */
+  const stalePage = pageQuery.isFetching && pageQuery.isPlaceholderData;
   const countries = useCountries();
   const areas = useCountryAreas(criteria.filter.countryId);
   const states = useProjectStates();
   const managers = useProjectManagerSearch(managerQuery);
 
   const rows = pageQuery.data?.rows ?? [];
-  const selected = rows.find((r) => r.id === selectedId);
+  // While a stale page is on screen nothing counts as selected, so every row-dependent command
+  // gate disables rather than acting on a row the user is about to lose.
+  const selected = stalePage ? undefined : rows.find((r) => r.id === selectedId);
+
+  /*
+   * Selection does not outlive its row. The canvas lost it on every grid event; here it is
+   * cleared once a SETTLED page no longer contains the selected project, so returning to a page
+   * does not silently re-check a radio the user stopped seeing. Skipped for the stale
+   * placeholder, whose rows say nothing about the page being loaded.
+   */
+  useEffect(() => {
+    if (!selectedId || stalePage || !pageQuery.data) return;
+    if (!pageQuery.data.rows.some((r) => r.id === selectedId)) setSelectedId(undefined);
+  }, [selectedId, stalePage, pageQuery.data]);
+
   const stateOrder = useProjectStateOrder(selected?.clusterStateId ?? null);
   const deletion = useDeleteProject(pageQuery.pageKey);
 
@@ -374,7 +588,9 @@ export default function ProjectOverviewScreen() {
       hasBaseCase,
     });
     if (!result.ok) {
-      setNotice({ intent: "warning", text: result.message });
+      // Canvas's own `Notify(message, NotificationType.Warning)` for both of Simulate's
+      // guards passes no `Timeout`, so Power Fx's documented default — 10,000 ms — applies.
+      setNotice({ intent: "warning", text: result.message, timeoutMs: 10_000 });
       return;
     }
     launch(
@@ -498,6 +714,10 @@ export default function ProjectOverviewScreen() {
   const labels = pagerLabels(pagerState);
   const showPager = isPagerVisible(pagerState);
   const currentPage = page?.page ?? criteria.page;
+  const firstDisabled = currentPage <= 1 || pageQuery.isFetching;
+  // Forward-only paging knows whether a next page exists from the server's token, which is
+  // more reliable than deriving it from a count the platform caps at 5000.
+  const nextDisabled = !(page?.hasNext ?? false) || pageQuery.isFetching;
 
   const sortIcon = (col: string) =>
     criteria.sort.col !== col
@@ -506,15 +726,37 @@ export default function ProjectOverviewScreen() {
         ? <ArrowSortUpRegular />
         : <ArrowSortDownRegular />;
 
-  const header = (label: string, col?: string, numeric = false) => (
+  const header = (
+    label: string, widthClass: string, col?: string, align?: "end" | "center",
+  ) => (
     <TableHeaderCell
       key={label}
-      className={mergeClasses(numeric && styles.numeric, col && styles.sortable)}
+      // Fluent's own sortable pattern: the inner button gets role="button" and tabIndex 0 and
+      // Enter / Space click it (the click bubbles to `onClick` below). Non-sortable headers get
+      // none of that and no aria-sort.
+      sortable={Boolean(col)}
+      className={mergeClasses(
+        widthClass,
+        align === "end" && styles.numeric,
+        align === "center" && styles.alignCenter,
+        col && styles.sortable,
+      )}
+      button={{
+        className: mergeClasses(
+          align === "end" && styles.headerEnd,
+          align === "center" && styles.headerCenter,
+        ),
+      }}
       onClick={col ? () => setSort(col) : undefined}
+      // Set here rather than through `sortDirection`, which would also add Fluent's own sort
+      // icon beside the label's (`sortIcon`, below). A sortable column that is not the active
+      // sort reports "none".
       aria-sort={
-        col && criteria.sort.col === col
-          ? criteria.sort.asc ? "ascending" : "descending"
-          : undefined
+        !col
+          ? undefined
+          : criteria.sort.col === col
+            ? criteria.sort.asc ? "ascending" : "descending"
+            : "none"
       }
     >
       {label}
@@ -565,11 +807,17 @@ export default function ProjectOverviewScreen() {
             value={criteria.filter.keyword}
             onClear={() => setFilter({ keyword: "" })}
           >
+            {/*
+              No `contentBefore` icon here — the canvas `inp_..._ProjectKeyword` text input
+              carries no icon of its own, only the same external funnel Filter/ClearFilter
+              icon `FilterCell` already renders after it, same as Country/Area/Technology/
+              Status. A search glyph INSIDE this input as well would show two icons on this
+              one field where every other plain input/dropdown field shows exactly one.
+            */}
             <Input
               className={styles.filterControl}
               value={criteria.filter.keyword}
               placeholder="Search for Project Name, Short Name and ID"
-              contentBefore={<SearchRegular />}
               onChange={(_, d) => setFilter({ keyword: d.value })}
               aria-label="Project"
               data-testid="filter-keyword"
@@ -823,22 +1071,24 @@ export default function ProjectOverviewScreen() {
           />
         </div>
       ) : (
-        <div className={styles.gridWrap}>
-          <Table size="small" aria-label="Projects">
+        <div className={styles.gridWrap} aria-busy={stalePage}>
+          <Table size="small" aria-label="Projects" className={styles.gridTable}>
             <TableHeader>
               <TableRow>
                 <TableHeaderCell className={styles.selectCell} />
                 <TableHeaderCell className={styles.accentCell} />
-                {header("Project Name", COL.name)}
-                {header("Short Name", COL.shortName)}
-                {header("Status")}
-                {header("Project Manager")}
-                {header("Country")}
-                {header("Area/State/Province/Voivodeship")}
-                {header("Technology", COL.technology)}
-                {header("Capacity [MW(p)]", COL.totalCapacity, true)}
-                {header("Project ID", COL.internalProjectId)}
-                {header("Approval", COL.approvalState)}
+                {header("Project Name", styles.colName, COL.name)}
+                {header("Short Name", styles.colShortName, COL.shortName)}
+                {header("Status", styles.colStatus)}
+                {header("Project Manager", styles.colManager)}
+                {header("Country", styles.colCountry)}
+                {header("Area/State/Province/Voivodeship", styles.colArea)}
+                {header("Technology", styles.colTechnology, COL.technology)}
+                {header("Capacity [MW(p)]", styles.colCapacity, COL.totalCapacity, "end")}
+                {/* `ColHorizontalAlign: "Right"` */}
+                {header("Project ID", styles.colProjectId, COL.internalProjectId, "end")}
+                {/* `ColHorizontalAlign: "Center"`, and no `ColSortable` in the canvas. */}
+                {header("Approval", styles.colApproval, undefined, "center")}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -847,8 +1097,10 @@ export default function ProjectOverviewScreen() {
                   key={row.id}
                   row={row}
                   selected={row.id === selectedId}
-                  alternate={index % 2 === 1}
-                  onSelect={() => setSelectedId(row.id)}
+                  // First row banded: the `nth-child(odd)` rule this replaced in canvas.css
+                  // (calibrated against the screenshots) painted rows 1, 3, 5 …
+                  alternate={index % 2 === 0}
+                  onSelect={setSelectedId}
                   locale={locale}
                 />
               ))}
@@ -856,11 +1108,24 @@ export default function ProjectOverviewScreen() {
           </Table>
         </div>
       )}
+      {/*
+        `cmp_MS_Spinner`: while the previous page is still on screen waiting for the next, a
+        light scrim with a small centred spinner and no text. Decorative (`aria-hidden`) — the
+        grid's `aria-busy` carries the state. NOT the blocking `LoadingOverlay`, which stays
+        for the first load only.
+      */}
+      {stalePage ? (
+        <div className={styles.scrim} aria-hidden="true" data-testid="grid-scrim">
+          <Spinner size="small" />
+        </div>
+      ) : null}
       </div>
 
       {/* ── footer: Total Rows then the pager, both left ───────────────── */}
       <div className={styles.footer}>
-        <Text data-testid="total-rows">{labels.totalRows}</Text>
+        <Text className={styles.totalRowsBox} title={labels.totalRows} data-testid="total-rows">
+          {labels.totalRows}
+        </Text>
         {/*
           `con_..._Pagination_Buttons.Visible = If(TotalPages > 1, true, false)` — a single
           page has no pager and no "Page: 1 from 1" caption at all, which is what the filtered
@@ -868,35 +1133,46 @@ export default function ProjectOverviewScreen() {
           greyed. `Total Rows` is its own label and stays either way.
         */}
         {showPager ? (
-          <>
-            <span className={styles.footerGap} />
+          <div className={styles.pager}>
             <Button
-              appearance="subtle"
+              appearance="transparent"
+              className={mergeClasses(
+                styles.pagerButton, firstDisabled && styles.pagerButtonDisabled,
+              )}
               icon={<ChevronDoubleLeftRegular />}
               aria-label="First page"
-              disabled={currentPage <= 1 || pageQuery.isFetching}
+              title="Navigate to first page"
+              disabled={firstDisabled}
               onClick={() => setPage(1)}
             />
             <Button
-              appearance="subtle"
+              appearance="transparent"
+              className={mergeClasses(
+                styles.pagerButton, firstDisabled && styles.pagerButtonDisabled,
+              )}
               icon={<ChevronLeftRegular />}
               aria-label="Previous page"
-              disabled={currentPage <= 1 || pageQuery.isFetching}
+              title="Navigate to previous page"
+              disabled={firstDisabled}
               onClick={() => setPage(currentPage - 1)}
             />
-            <Text data-testid="page-label">{labels.page}</Text>
+            <Text className={styles.pageLabel} data-testid="page-label">{labels.page}</Text>
             <Button
-              appearance="subtle"
+              appearance="transparent"
+              className={mergeClasses(
+                styles.pagerButton, nextDisabled && styles.pagerButtonDisabled,
+              )}
               icon={<ChevronRightRegular />}
               aria-label="Next page"
-              // Forward-only paging knows whether a next page exists from the server's token,
-              // which is more reliable than deriving it from a count the platform caps at 5000.
-              disabled={!(page?.hasNext ?? false) || pageQuery.isFetching}
+              title="Navigate to next page"
+              disabled={nextDisabled}
               onClick={() => setPage(currentPage + 1)}
             />
-          </>
+          </div>
         ) : null}
-        {pageQuery.isFetching ? <Spinner size="tiny" aria-label="Loading" /> : null}
+        {pageQuery.isFetching ? (
+          <Spinner size="tiny" aria-label="Loading" className={styles.footerSpinner} />
+        ) : null}
       </div>
 
       {/*
@@ -1007,21 +1283,29 @@ function ClearFilterButton({
   );
 }
 
-function ProjectGridRow({
+/*
+ * Memoised: a page is up to 200 rows, and a selection click or a pager state change used to
+ * re-render every one of them. `onSelect` is the state setter (stable) and takes the row id, so
+ * only the row that gains or loses the selection re-renders.
+ */
+const ProjectGridRow = memo(function ProjectGridRow({
   row, selected, alternate, onSelect, locale,
 }: {
   row: ProjectRow;
   selected: boolean;
   alternate: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
   locale: string;
 }) {
   const styles = useStyles();
   const decoration = approvalDecoration(row.approvalState);
+  const unknownApproval = decoration.tag === "unknown";
+  const Glyph = unknownApproval ? null : APPROVAL_GLYPH[decoration.icon];
+  const select = () => onSelect(row.id);
   return (
     <TableRow
       className={mergeClasses(alternate && styles.rowAlt, selected && styles.rowSelected)}
-      onClick={onSelect}
+      onClick={select}
       aria-selected={selected}
     >
       <TableCell className={styles.selectCell}>
@@ -1031,8 +1315,8 @@ function ProjectGridRow({
           type="radio"
           name="selectedProject"
           checked={selected}
-          onChange={onSelect}
-          aria-label={`Select ${row.name}`}
+          onChange={select}
+          aria-label={row.name ? `Select ${row.name}` : "Select project"}
           data-testid={`select-${row.id}`}
         />
       </TableCell>
@@ -1045,33 +1329,51 @@ function ProjectGridRow({
           />
         ) : null}
       </TableCell>
-      <TableCell>{row.name || "-"}</TableCell>
-      <TableCell>{row.shortName || "-"}</TableCell>
-      <TableCell>{row.statusName || "-"}</TableCell>
-      <TableCell>{row.managerName || "-"}</TableCell>
-      <TableCell>{row.countryName || "-"}</TableCell>
-      <TableCell>{row.areaName || "-"}</TableCell>
-      <TableCell>{row.technology || "-"}</TableCell>
-      <TableCell className={styles.numeric}>
-        {formatCapacity(row.totalCapacity, locale) || "-"}
+      {/* Empty values render empty, as the canvas details list does — no "-" placeholder. */}
+      <TableCell className={mergeClasses(styles.colName, styles.truncate)}>{row.name}</TableCell>
+      <TableCell className={mergeClasses(styles.colShortName, styles.truncate)}>
+        {row.shortName}
       </TableCell>
-      <TableCell>{row.internalProjectId || "-"}</TableCell>
-      <TableCell>
+      <TableCell className={mergeClasses(styles.colStatus, styles.truncate)}>
+        {row.statusName}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colManager, styles.truncate)}>
+        {row.managerName}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colCountry, styles.truncate)}>
+        {row.countryName}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colArea, styles.truncate)}>
+        {row.areaName}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colTechnology, styles.truncate)}>
+        {row.technology}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colCapacity, styles.truncate, styles.numeric)}>
+        {formatCapacity(row.totalCapacity, locale)}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colProjectId, styles.truncate, styles.alignEnd)}>
+        {row.internalProjectId}
+      </TableCell>
+      <TableCell className={mergeClasses(styles.colApproval, styles.alignCenter)}>
         {/*
           The reference renders the approval state as a coloured glyph and NO text — the
           canvas `loc_iconstate` Switch produced icon:SkypeCircleCheck / icon:StatusErrorFull
           / icon:StatusCircleOuter. The label is the accessible name, so a screen reader still
           announces "Approved" where a sighted user reads the colour.
+
+          A state the canvas Switch does not know renders NO icon (`Blank()`): nothing visible,
+          but the accessible name is kept so the cell is not silently unlabelled.
         */}
         <span
           className={styles.approval}
           role="img"
-          aria-label={row.approvalLabel || "No approval state"}
-          title={row.approvalLabel}
+          aria-label={unknownApproval ? "No approval state" : row.approvalLabel || decoration.label}
+          title={unknownApproval ? undefined : row.approvalLabel || decoration.label}
         >
-          <span className={styles.dot} style={{ backgroundColor: decoration.color }} />
+          {Glyph ? <Glyph className={styles.glyph} style={{ color: decoration.color }} /> : null}
         </span>
       </TableCell>
     </TableRow>
   );
-}
+});

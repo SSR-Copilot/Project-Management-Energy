@@ -244,6 +244,16 @@ describe("sorting", () => {
     expect(SORTABLE).not.toContain(COL.area);
   });
 
+  it("UT-OV-031b Approval is not sortable (the canvas column has no ColSortable); a stale link falls back", () => {
+    expect(SORTABLE).not.toContain(COL.approvalState);
+    expect(resolveSortColumn(COL.approvalState)).toBe(DEFAULT_SORT.col);
+    expect(resolveSortColumn("vsb_approvalstates")).toBe(COL.name);
+    // ...and the URL parser applies it, so a bookmarked `?sort=vsb_approvalstates` renders the default.
+    expect(
+      parseCriteria(new URLSearchParams("sort=vsb_approvalstates&dir=desc")).sort.col,
+    ).toBe(DEFAULT_SORT.col);
+  });
+
   it("UT-OV-032 flips direction on the sorted column and resets on another", () => {
     const cur = { col: COL.name, asc: true };
     expect(nextSortState(cur, COL.name)).toEqual({ col: COL.name, asc: false });

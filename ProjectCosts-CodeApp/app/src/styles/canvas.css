@@ -65,19 +65,18 @@
 .canvas-project-overview > div:first-of-type { border-bottom: 1px solid #ddd; }
 .canvas-project-overview .fui-Field label { font-size: 13px; font-weight: 400; }
 .canvas-project-overview .fui-Input, .canvas-project-overview .fui-Dropdown { background: #f4f4f4; border: 0; border-radius: 3px; min-height: 32px; }
-.canvas-project-overview .fui-Table { table-layout: fixed; width: max(1720px, 90%); }
+/* Column widths are fixed per column (the canvas `columns_Items` ColWidth values) and owned by
+   `Screen.tsx` (`COL_PX` / `styles.gridTable`), which also sets the table's own width to their sum
+   inside the scrolling `gridWrap`. This rule only switches on the fixed layout so those widths are
+   honoured; it must NOT set a width of its own (it used to say `max(1720px, 90%)` plus per-column
+   `nth-child` widths, which fought the real column widths and stretched the grid). */
+.canvas-project-overview .fui-Table { table-layout: fixed; }
 .canvas-project-overview .fui-TableHeaderCell { font-size: 13px; font-weight: 600; height: 40px; border-bottom: 1px solid #eee; }
 .canvas-project-overview .fui-TableCell { font-size: 12px; height: 38px; border: 0; }
-.canvas-project-overview .fui-TableBody .fui-TableRow:nth-child(odd) { background: #cde4f4; }
-.canvas-project-overview .fui-TableBody .fui-TableRow[aria-selected="true"] { background: #e1dfdd; }
-.canvas-project-overview .fui-TableCell:nth-child(1) { width: 44px; }
-.canvas-project-overview .fui-TableCell:nth-child(2) { width: 20px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(1) { width: 44px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(2) { width: 20px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(3) { width: 365px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(6) { width: 220px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(8) { width: 240px; }
-.canvas-project-overview .fui-TableHeaderCell:nth-child(10) { width: 160px; }
+/* Row banding (`AlternateRowColor` = themeLighter) and the selected-row fill now live in
+   `Screen.tsx` (`rowAlt` / `rowSelected`), the single source of truth. The `nth-child(odd)` and
+   `[aria-selected]` rules that used to sit here out-ranked those classes, banded the OPPOSITE
+   parity and painted the selection grey, so they are removed rather than kept in step. */
 .canvas-project-overview input[type="radio"] { accent-color: #006eb9; width: 17px; height: 17px; }
 .canvas-panel .canvas-panel-header { padding: 10px 20px; height: 48px; background: #006eb9; color: white; flex-shrink: 0; }
 .canvas-panel-header h2 { font-size: 18px; line-height: 26px; color: white; }

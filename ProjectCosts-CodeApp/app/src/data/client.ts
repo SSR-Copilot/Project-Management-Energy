@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Paging, and the rule that `select` is mandatory.
  *
  * `retrieveMultipleRecordsAsync` returns one page plus a `skipToken`. The canvas app had no
@@ -19,8 +19,8 @@ type PageFn<T> = (options: IOperationOptions) => Promise<IOperationResult<T[]>>;
 
 export interface FetchAllOptions extends Omit<IOperationOptions, "filter"> {
   /**
-   * `$select` is required, not optional. Dataverse returns EVERY column without it — on
-   * `vsb_projects` that is 112 columns per row — and the formatted-value annotations on top.
+   * `$select` is required, not optional. Dataverse returns EVERY column without it â€” on
+   * `vsb_projects` that is 112 columns per row â€” and the formatted-value annotations on top.
    */
   select: string[];
   /**
@@ -68,7 +68,7 @@ export async function fetchAll<T>(
       // so say so rather than returning a plausible-looking short list.
       trace(
         "error",
-        `${operation} stopped after ${pages} pages with more rows available — the filter is too broad`,
+        `${operation} stopped after ${pages} pages with more rows available â€” the filter is too broad`,
         { rows: rows.length },
       );
       break;
@@ -91,20 +91,20 @@ export async function fetchPage<T>(
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════ writes ══ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• writes â•â• */
 
 /**
  * A delete whose failure is observable.
  *
  * The generated services declare `delete(id): Promise<void>` and **discard** the
- * `IOperationResult` the SDK hands back, so a Dataverse refusal — a 403 from row-level
- * security, a cascade the server would not perform — resolves exactly like a success. The SDK
+ * `IOperationResult` the SDK hands back, so a Dataverse refusal â€” a 403 from row-level
+ * security, a cascade the server would not perform â€” resolves exactly like a success. The SDK
  * never throws for a failed data call (see `platform/errors.ts`), so there is nothing else to
  * catch: the row stays, the screen says it went, and the user finds out later.
  *
  * `vsb_projects` is the one table where the canvas app itself refused to ignore that: the
  * delete is wrapped in `IfError` with an error notification. Reproducing that behaviour needs
- * the result, so this goes to the client directly — the same reason `countedPage` below does,
+ * the result, so this goes to the client directly â€” the same reason `countedPage` below does,
  * and for the same kind of gap in pac output, which must not be hand-edited.
  */
 export async function deleteRecord(
@@ -116,7 +116,7 @@ export async function deleteRecord(
   unwrap(await client.deleteRecordAsync(tableName, recordId), operation);
 }
 
-/* ══════════════════════════════════════════════════════ counted paging ══ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• counted paging â•â• */
 
 /**
  * A page of rows plus the server-side total, paged with a SKIP TOKEN.
@@ -127,9 +127,10 @@ export async function deleteRecord(
  * request and the result. That is why this walks rather than jumps, and it is also why the
  * canvas pager only ever had First / Previous / Next and no page-number box.
  *
- * Tokens are cached per query signature so Previous is free and a re-render does not re-walk.
- * A shared link that names page 3 walks pages 1 and 2 to get there — two extra round trips,
- * once, which is the honest cost of a forward-only cursor.
+ * A cold walk to page N costs N sequential requests: a shared link that names page 3 walks
+ * pages 1 and 2 to get there, which is the honest cost of a forward-only cursor. Once walked,
+ * the tokens are replayed for `TOKEN_TTL_MS`, so Next, Previous and a jump to any page already
+ * passed cost one request; React Query's cache (see `useProjectPage`) makes a revisit free.
  *
  * Why not the generated service: `IGetAllOptions` in `src/generated/models/CommonModels.ts`
  * declares no `count`, though the SDK's `IOperationOptions` does and the runtime honours it.
@@ -148,8 +149,28 @@ export interface CountedPage<T> {
   hasNext: boolean;
 }
 
-/** Token caches, keyed by query signature. `tokens[0]` is always undefined — page 1. */
-const tokenCache = new Map<string, (string | undefined)[]>();
+/**
+ * One query's walk: the skip token that opens each page (`tokens[0]` is always undefined â€”
+ * page 1) and the total counted when page 1 was read.
+ */
+interface Walk {
+  tokens: (string | undefined)[];
+  total: number;
+  /** When page 1 was read. Tokens are trusted for `TOKEN_TTL_MS` after that, no longer. */
+  at: number;
+}
+
+/**
+ * How long a walk's tokens are replayed. Page P otherwise costs P sequential round trips, which
+ * is what made deep pages and Next-after-Previous slow. A skip token is a paging cookie and
+ * Dataverse says a page re-read later "can be different" when rows were added or removed in
+ * between, so the replay window is short and sits just above React Query's 30 s `staleTime`: a
+ * page is never built from a cookie older than the cached page it would replace.
+ */
+const TOKEN_TTL_MS = 60_000;
+
+/** Walk caches, keyed by query signature and page size. */
+const tokenCache = new Map<string, Walk>();
 
 /** Discards the walk when the filter or sort changes; a stale token returns the wrong rows. */
 export function resetPageTokens(signature?: string): void {
@@ -163,7 +184,7 @@ export interface CountedPageRequest extends FetchAllOptions {
   /** 1-based. */
   page: number;
   /**
-   * Identifies the query the tokens belong to — the filter and the sort. Two different
+   * Identifies the query the tokens belong to â€” the filter and the sort. Two different
    * filters must never share a token.
    */
   signature: string;
@@ -174,37 +195,91 @@ export async function countedPage<T>(
   tableName: string,
   request: CountedPageRequest,
 ): Promise<CountedPage<T>> {
-  const { maxPages: _ignored, page, signature, ...query } = request;
+  const { maxPages: _ignored, maxPageSize: _sdkDefault, top, page, signature, ...query } = request;
   const client = getClient(dataSourcesInfo);
   const wanted = Math.max(1, Math.floor(page) || 1);
 
-  const tokens = tokenCache.get(signature) ?? [undefined];
-  tokenCache.set(signature, tokens);
+  /*
+   * SOURCE DEFECT (data layer, not a canvas one): the page size travels as `maxPageSize`, NEVER
+   * as `$top`.
+   *
+   * The SDK sends `Prefer: odata.maxpagesize=<maxPageSize ?? 500>` on every read, and Dataverse
+   * documents that with that header present "`$top` is ignored" (Web API > Query data > Page
+   * results). So `top: 200` used to mean "pages of 500": the grid showed 500 rows against a
+   * pager that counted 200, `totalPages` came from `count / 200` while the skip-token chain
+   * ran out after `count / 500` pages, and a Next past the end of that chain quietly re-served
+   * the last real page under a higher page number. The same header is also what the skip
+   * tokens are bound to ("use the same odata.maxpagesize preference value used in the
+   * original request"), so it is part of the cache key below.
+   */
+  const cacheKey = `${signature}|${top}`;
 
-  const fetchAt = async (index: number) => {
+  const fetchAt = async (tokens: (string | undefined)[], index: number) => {
     const result = await client.retrieveMultipleRecordsAsync<T>(
       tableName,
-      compact({ ...query, count: true, skipToken: tokens[index] }),
+      /*
+       * EVERY request of a walk carries identical query options (`$select`, `$filter`,
+       * `$orderby`, `$count`) and the same `maxPageSize`. Dataverse: "Don't change the
+       * `@odata.nextLink` URL value or append any query options to it" and "use the same
+       * `odata.maxpagesize` preference value used in the original request". A skip token
+       * issued for a `$count=true` request is therefore never replayed on a request that asks
+       * for something different â€” that is how a deep page, the last one above all, stops
+       * rendering. `@odata.count` is capped at 5000, so asking every time stays cheap.
+       */
+      compact({ ...query, maxPageSize: top, count: true, skipToken: tokens[index] }),
     );
     const rows = unwrap(result, `${operation} (page ${index + 1})`);
-    // Remember the token that reaches the NEXT page, so Previous never re-walks.
     if (result.skipToken) tokens[index + 1] = result.skipToken;
-    return { rows, totalRows: result.count ?? rows.length, next: result.skipToken };
+    return { rows, count: result.count, next: result.skipToken };
   };
 
-  let index = 0;
-  let current = await fetchAt(0);
+  const walkTo = async (cached: Walk | undefined) => {
+    const tokens = cached?.tokens ?? [undefined];
+    // Resume from the furthest page at or before the wanted one whose token is known.
+    let index = 0;
+    for (let i = Math.min(wanted - 1, tokens.length - 1); i > 0; i -= 1) {
+      if (tokens[i]) { index = i; break; }
+    }
 
-  // Walk forward to the requested page, stopping early if the data runs out.
-  while (index + 1 < wanted && current.next) {
-    index += 1;
-    current = await fetchAt(index);
+    // An uncached walk always opens on page 1.
+    let current = await fetchAt(tokens, index);
+    const first = current;
+    // Walk forward to the requested page, stopping early if the data runs out.
+    while (index + 1 < wanted && current.next) {
+      index += 1;
+      current = await fetchAt(tokens, index);
+    }
+
+    // The total comes from PAGE 1, never from whichever page was served last: a later page is
+    // not guaranteed to repeat `@odata.count`, and `rows.length` of a page 2 is not a total.
+    const walk: Walk = cached ?? {
+      tokens,
+      total: first.count ?? first.rows.length,
+      at: Date.now(),
+    };
+    tokenCache.set(cacheKey, walk);
+
+    return {
+      rows: current.rows,
+      totalRows: walk.total,
+      page: index + 1,
+      hasNext: Boolean(current.next),
+    };
+  };
+
+  /*
+   * Replays the walk's cached skip tokens while they are fresh, so a page costs one request
+   * instead of one per page before it. The total rides along with them (counted once, on
+   * page 1). A replay that fails â€” an expired or invalidated cookie â€” falls back to a clean
+   * walk from page 1 rather than surfacing an error the user did not cause.
+   */
+  const cached = tokenCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < TOKEN_TTL_MS) {
+    try {
+      return await walkTo(cached);
+    } catch {
+      tokenCache.delete(cacheKey);
+    }
   }
-
-  return {
-    rows: current.rows,
-    totalRows: current.totalRows,
-    page: index + 1,
-    hasNext: Boolean(current.next),
-  };
+  return walkTo(undefined);
 }

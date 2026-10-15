@@ -168,7 +168,7 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
         "_owningbusinessunit_value",
       ],
       filter: and(`vsb_projectid eq ${guid(projectId)}`, ACTIVE),
-      top: 1,
+      maxPageSize: 1,
     },
   );
   const row = rows[0];
@@ -236,7 +236,7 @@ export async function loadProjectExtras(projectId: string): Promise<ProjectExtra
     {
       select: ["vsb_projectid", "_vsb_country_value", "vsb_technology"],
       filter: `vsb_projectid eq ${guid(projectId)}`,
-      top: 1,
+      maxPageSize: 1,
     },
   );
   const row = rows[0];
@@ -345,7 +345,9 @@ export async function searchProjects(term: string, limit = 50): Promise<ProjectS
       ],
       filter: and(ACTIVE, search),
       orderBy: ["vsb_projectname asc"],
-      top: limit,
+      // `maxPageSize`, not `top` — Dataverse ignores `$top` when the SDK's always-present
+      // `odata.maxpagesize` header is set, so the cap never applied. See `countedPage`.
+      maxPageSize: limit,
       maxPages: 1,
     },
   );

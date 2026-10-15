@@ -346,7 +346,7 @@ export async function findBopStandardAssumption(args: {
         eq("vsb_contracttypes", args.contractType),
         ACTIVE,
       ),
-      top: 1,
+      maxPageSize: 1,
     },
   );
   return rows[0];
