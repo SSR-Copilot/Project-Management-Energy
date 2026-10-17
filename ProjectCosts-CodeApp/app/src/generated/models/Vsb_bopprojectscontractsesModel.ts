@@ -14,9 +14,9 @@ export const Vsb_bopprojectscontractsesstatuscode = {
 export type Vsb_bopprojectscontractsesstatuscode = keyof typeof Vsb_bopprojectscontractsesstatuscode;
 export const Vsb_bopprojectscontractsesvsb_contracttypes = {
   952850000: 'None',
-  952850001: 'DevelopmentContract',
-  952850002: 'ConstructionContract',
-  952850003: 'ProjectRightsContract'
+  952850001: 'Development Contract',
+  952850002: 'Construction Contract',
+  952850003: 'Project Rights Contract'
 } as const;
 export type Vsb_bopprojectscontractsesvsb_contracttypes = keyof typeof Vsb_bopprojectscontractsesvsb_contracttypes;
 export const Vsb_bopprojectscontractsesvsb_costsafterclosingdate = {
@@ -33,7 +33,7 @@ export const Vsb_bopprojectscontractsesvsb_costsuntilclosingdate = {
 export type Vsb_bopprojectscontractsesvsb_costsuntilclosingdate = keyof typeof Vsb_bopprojectscontractsesvsb_costsuntilclosingdate;
 export const Vsb_bopprojectscontractsesvsb_margintype = {
   952850000: 'Percentage',
-  952850001: 'FixedValue'
+  952850001: 'Fixed Value'
 } as const;
 export type Vsb_bopprojectscontractsesvsb_margintype = keyof typeof Vsb_bopprojectscontractsesvsb_margintype;
 export const Vsb_bopprojectscontractsesvsb_totalcoststype = {
@@ -46,9 +46,7 @@ export type Vsb_bopprojectscontractsesvsb_totalcoststype = keyof typeof Vsb_bopp
 export interface Vsb_bopprojectscontractsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_bopprojectscontractsesstatecode;
   statuscode?: Vsb_bopprojectscontractsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -80,23 +78,12 @@ export interface Vsb_bopprojectscontractsesBase {
 }
 
 export interface Vsb_bopprojectscontractses extends Vsb_bopprojectscontractsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_bopstandardassumptioncontractname?: string;
   vsb_contracttypesname?: string;
   vsb_costsafterclosingdatename?: string;
   vsb_costsuntilclosingdatename?: string;
@@ -104,7 +91,6 @@ export interface Vsb_bopprojectscontractses extends Vsb_bopprojectscontractsesBa
   vsb_isstandardcontractname?: string;
   vsb_marginname?: string;
   vsb_margintypename?: string;
-  vsb_projectname?: string;
   vsb_totalcoststypename?: string;
   createdby?: object;
   _createdby_value?: string;

@@ -74,6 +74,44 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
+  it("E2: no error bar by default", () => {
+    mount();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("E2: an error renders as an alert under the description, inside the body", () => {
+    mount({ error: "Deleting the account failed: forbidden" });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Deleting the account failed: forbidden");
+    const description = screen.getByText("Are you sure?");
+    expect(description.parentElement).toContainElement(alert);
+    expect(description.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("E2: busy without lockWhileBusy keeps today's ✕ and Escape (unchanged callers)", () => {
+    const onCancel = vi.fn();
+    mount({ busy: true, onCancel });
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close).not.toBeDisabled();
+    fireEvent.click(close);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("E2: lockWhileBusy + busy disables ✕ and ignores Escape", () => {
+    const onCancel = vi.fn();
+    mount({ busy: true, lockWhileBusy: true, onCancel });
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Confirm" }), { key: "Escape" });
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("E2: lockWhileBusy without busy still cancels on Escape", () => {
+    const onCancel = vi.fn();
+    mount({ lockWhileBusy: true, onCancel });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Confirm" }), { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   /**
    * The canvas builds the relink description with `Char(10)` and a `•` per line
    * (`CapexScreenCode.txt:19873-19884`); without `pre-line` every bullet runs into the last.

@@ -8,6 +8,7 @@ import type { IGetOptions, IGetAllOptions } from '../models/CommonModels';
 import type { IOperationResult } from '@microsoft/power-apps/data';
 import type { Vsb_generatorsBase, Vsb_generators } from '../models/Vsb_generatorsModel';
 import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
+import { deserializeMultiSelectPicklistFields, serializeMultiSelectPicklistFields } from '@microsoft/power-apps/data';
 import { getClient } from '@microsoft/power-apps/data';
 
 
@@ -15,28 +16,37 @@ export class Vsb_generatorsService {
   private static readonly dataSourceName = 'vsb_generators';
 
   private static readonly client = getClient(dataSourcesInfo);
+  private static readonly multiSelectPicklistFields = ['vsb_countryavailability'] as const;
 
   public static async create(record: Omit<Vsb_generatorsBase, 'vsb_generatorid'>): Promise<IOperationResult<Vsb_generators>> {
-    const result = await Vsb_generatorsService.client.createRecordAsync<Omit<Vsb_generatorsBase, 'vsb_generatorid'>, Vsb_generators>(
+    const result = await Vsb_generatorsService.client.createRecordAsync<Record<string, unknown>, Vsb_generators>(
       Vsb_generatorsService.dataSourceName,
-      record
+      serializeMultiSelectPicklistFields(record as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields)
     );
+    if (result.data) {
+      deserializeMultiSelectPicklistFields(result.data as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields);
+    }
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_generatorsBase, 'vsb_generatorid'>>): Promise<IOperationResult<Vsb_generators>> {
-    const result = await Vsb_generatorsService.client.updateRecordAsync<Partial<Omit<Vsb_generatorsBase, 'vsb_generatorid'>>, Vsb_generators>(
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_generatorsBase, 'vsb_generatorid'>>, partitionId?: string): Promise<IOperationResult<Vsb_generators>> {
+    const result = await Vsb_generatorsService.client.updateRecordAsync<Record<string, unknown>, Vsb_generators>(
       Vsb_generatorsService.dataSourceName,
       id,
-      changedFields
+      serializeMultiSelectPicklistFields(changedFields as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields),
+      partitionId
     );
+    if (result.data) {
+      deserializeMultiSelectPicklistFields(result.data as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields);
+    }
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_generatorsService.client.deleteRecordAsync(
       Vsb_generatorsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_generators>> {
@@ -45,6 +55,9 @@ export class Vsb_generatorsService {
       id,
       options
     );
+    if (result.data) {
+      deserializeMultiSelectPicklistFields(result.data as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields);
+    }
     return result;
   }
 
@@ -53,6 +66,7 @@ export class Vsb_generatorsService {
       Vsb_generatorsService.dataSourceName,
       options
     );
+    result.data?.forEach(record => deserializeMultiSelectPicklistFields(record as unknown as Record<string, unknown>, Vsb_generatorsService.multiSelectPicklistFields));
     return result;
   }
 

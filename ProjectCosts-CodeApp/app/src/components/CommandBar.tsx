@@ -19,10 +19,11 @@ import {
 import {
   AddRegular, EditRegular, DeleteRegular, ArrowSyncRegular, SaveRegular,
   DocumentRegular, MoreHorizontalRegular, PlayRegular, DataBarVerticalRegular,
-  GlassesRegular, OpenRegular,
+  GlassesRegular, OpenRegular, TextNumberListLtrRegular, PauseRegular, CheckmarkRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
 import { palette } from "@/theme/tokens";
+import { DisabledReason } from "./DisabledReason";
 
 /**
  * The PowerCAT `ItemIconName` values both apps actually use, mapped to their Fluent v9
@@ -34,7 +35,9 @@ import { palette } from "@/theme/tokens";
  */
 export type CommandIcon =
   | "Add" | "Edit" | "Delete" | "Refresh" | "Save" | "Document" | "More"
-  | "Play" | "BIDashboard" | "ReadingMode" | "View";
+  | "Play" | "BIDashboard" | "ReadingMode" | "View"
+  // M13: the Application Settings commands (CAPEX Accounts' `CapexToolbar` icons, same glyphs).
+  | "Reorder" | "Activate" | "Deactivate" | "Apply";
 
 const ICONS: Record<CommandIcon, ReactElement> = {
   Add: <AddRegular />,
@@ -48,6 +51,10 @@ const ICONS: Record<CommandIcon, ReactElement> = {
   BIDashboard: <DataBarVerticalRegular />,
   ReadingMode: <GlassesRegular />,
   View: <OpenRegular />,
+  Reorder: <TextNumberListLtrRegular />,
+  Activate: <PlayRegular />,
+  Deactivate: <PauseRegular />,
+  Apply: <CheckmarkRegular />,
 };
 
 export interface Command {
@@ -55,6 +62,13 @@ export interface Command {
   label: string;
   icon?: CommandIcon;
   enabled?: boolean;
+  /** E3: `false` = not rendered (replaces callers' `.filter`). Default true. */
+  visible?: boolean;
+  /**
+   * E3: a disabled command that says why — focusable, `aria-disabled`, the reason as a tooltip
+   * description (C4 `DisabledReason`). Only used while the command is disabled.
+   */
+  disabledReason?: string;
 }
 
 const useStyles = makeStyles({
@@ -93,15 +107,19 @@ export interface CommandBarProps {
   /** Rendered to the right of the commands — the toggles the Capex screen puts there. */
   children?: React.ReactNode;
   ariaLabel: string;
+  /** E3: the Fluent `Toolbar` size. Omitted = Fluent's default, as today. */
+  size?: "small" | "medium";
+  /** E3: an extra class on the bar (Check List Settings sets `paddingLeft: 0`). */
+  className?: string;
 }
 
-export function CommandBar({ commands, onCommand, children, ariaLabel }: CommandBarProps) {
+export function CommandBar({ commands, onCommand, children, ariaLabel, size, className }: CommandBarProps) {
   const styles = useStyles();
   return (
-    <Toolbar className={styles.bar} aria-label={ariaLabel}>
-      {commands.map((c) => {
+    <Toolbar className={mergeClasses(styles.bar, className)} aria-label={ariaLabel} {...(size ? { size } : {})}>
+      {commands.filter((c) => c.visible !== false).map((c) => {
         const enabled = c.enabled !== false;
-        return (
+        const button = (
           <Button
             key={c.key}
             appearance="transparent"
@@ -121,6 +139,9 @@ export function CommandBar({ commands, onCommand, children, ariaLabel }: Command
             {c.label}
           </Button>
         );
+        return !enabled && c.disabledReason
+          ? <DisabledReason key={c.key} reason={c.disabledReason}>{button}</DisabledReason>
+          : button;
       })}
       {children}
     </Toolbar>

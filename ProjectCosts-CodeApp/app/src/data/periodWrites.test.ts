@@ -41,12 +41,25 @@ let writes: Write[] = [];
 const NEW_ID: Record<string, string[]> = {};
 const nextId = (table: string) => NEW_ID[table]?.shift() ?? `${table}-new`;
 
-vi.mock("./client", () => ({
+vi.mock("./client", async (importOriginal) => ({
+  // The REAL `updateRecordIfExists` (V-1 guard) runs against the SDK fake below.
+  ...(await importOriginal<typeof import("./client")>()),
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
   },
 }));
+// Single-row updates go through `updateRecordIfExists` → the SDK client: existence read, then
+// PATCH. The fake answers the read (row exists unless in `guardedSdk.gone`) and records PATCHes.
+vi.mock("@microsoft/power-apps/data", async () => (await import("./testing/guardedSdkFake")).sdkModule);
+
+/** Entity set → the short table label the service doubles below record writes under. */
+const TABLE_LABEL: Record<string, string> = {
+  vsb_opexprojectcosts: "opex",
+  vsb_landleaseprojectcosts: "llcost",
+  vsb_landleaseperiods: "llperiod",
+  vsb_landleaseallocationwtgs: "llalloc",
+};
 
 /** A generated service double that records what it was asked to write. */
 function service(table: string, idColumn: string) {
@@ -109,8 +122,11 @@ vi.mock("@/generated/services/Vsb_countryinflationprofilesService", () => ({
   Vsb_countryinflationprofilesService: service("inflation", "vsb_countryinflationprofileid"),
 }));
 
+import { guardedSdk, resetGuardedSdk } from "./testing/guardedSdkFake";
+import { RecordGoneError } from "@/platform/errors";
+
 const {
-  addStandardContract, deletePeriod, nextLandLeaseSlot, savePeriod,
+  addStandardContract, deletePeriod, nextLandLeaseSlot, savePeriod, sortStandardAssumptions,
 } = await import("./periodWrites");
 const { mapOpexRow, mapLandLeasePeriodRow } = await import("./costBook");
 const { loadLeaseBook } = await import("./landLease");
@@ -134,6 +150,13 @@ const DEVICE_WTG_1630 = "1b1cb4ed-0b64-effb-b30b-6212d05ad0ff";
 /** Two of the twelve `Locations` headers on Project New Data. */
 const LOCATIONS = "cfc603b0-d2d0-ee11-9079-000d3abd8704";
 const HDR_COST101 = "6f189e32-3c0a-f011-bae2-6045bd882926";
+
+/** Two later periods of an O&M chain (GUIDs: the V-1 guard's existence read rejects others). */
+const CHILD_A = "c4110a0a-0000-4000-8000-00000000000a";
+const CHILD_B = "c4110b0b-0000-4000-8000-00000000000b";
+/** Periods 1 and 2 of the Cost 101 Land Lease contract. */
+const LL_P1 = "11e5e001-0000-4000-8000-000000000001";
+const LL_P2 = "11e5e002-0000-4000-8000-000000000002";
 
 const CTX = {
   projectId: QUELLENDORF,
@@ -214,6 +237,10 @@ beforeEach(() => {
   queriedBy = {};
   writes = [];
   for (const key of Object.keys(NEW_ID)) delete NEW_ID[key];
+  resetGuardedSdk();
+  guardedSdk.onUpdate = (u) => {
+    writes.push({ op: "update", table: TABLE_LABEL[u.table] ?? u.table, id: u.id, fields: u.body });
+  };
 });
 
 /* ══════════════════════════════════════════════════════ O&M / Other OPEX ══ */
@@ -278,8 +305,8 @@ describe("saveOpexPeriod", () => {
      */
     const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
     rowsByLabel["list OPEX chain children"] = [
-      { vsb_opexprojectcostid: "child-b", vsb_name: "…- 3" },
-      { vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" },
+      { vsb_opexprojectcostid: CHILD_B, vsb_name: "…- 3" },
+      { vsb_opexprojectcostid: CHILD_A, vsb_name: "…- 2" },
     ];
 
     await savePeriod(
@@ -288,8 +315,8 @@ describe("saveOpexPeriod", () => {
       false,
     );
 
-    const cascades = writes.filter((w) => w.op === "update" && w.id?.startsWith("child-"));
-    expect(cascades.map((w) => w.id)).toEqual(["child-a", "child-b"]);
+    const cascades = writes.filter((w) => w.op === "update" && (w.id === CHILD_A || w.id === CHILD_B));
+    expect(cascades.map((w) => w.id)).toEqual([CHILD_A, CHILD_B]);
     for (const c of cascades) {
       expect(c.fields).toEqual({
         vsb_useinflationprofile: true,
@@ -440,14 +467,14 @@ describe("deleteOpexPeriod", () => {
      */
     const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
     rowsByLabel["list OPEX chain children"] = [
-      { vsb_opexprojectcostid: "child-b", vsb_name: "…- 3" },
-      { vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" },
+      { vsb_opexprojectcostid: CHILD_B, vsb_name: "…- 3" },
+      { vsb_opexprojectcostid: CHILD_A, vsb_name: "…- 2" },
     ];
 
     await deletePeriod({ ...OM_PERIOD, id: HEAD, contractId: HEAD, periodIndex: 1 });
 
     expect(writes.map((w) => `${w.op}:${w.id}`))
-      .toEqual(["delete:child-a", "delete:child-b", `delete:${HEAD}`]);
+      .toEqual([`delete:${CHILD_A}`, `delete:${CHILD_B}`, `delete:${HEAD}`]);
   });
 
   it("UT-PWRITE-008 deletes a later period alone", async () => {
@@ -524,7 +551,7 @@ describe("saveLandLeasePeriod", () => {
       vsb_amountonetimepayment: 10_000,
     });
     rowsByLabel["list Land Lease period slots"] = [
-      { vsb_landleaseperiodid: "p1", vsb_period: 952850000 },
+      { vsb_landleaseperiodid: LL_P1, vsb_period: 952850000 },
     ];
     NEW_ID.llperiod = ["d41e4d8f-1f57-ea11-a811-000d3a4a9d2f"];
 
@@ -554,7 +581,7 @@ describe("saveLandLeasePeriod", () => {
     await savePeriod(
       LAND_CTX,
       {
-        ...LAND_PERIOD, id: "p1", contractId: HDR_COST101, periodIndex: 1, currency: "Euro",
+        ...LAND_PERIOD, id: LL_P1, contractId: HDR_COST101, periodIndex: 1, currency: "Euro",
         // Renamed in the panel. The canvas writes the one Description box into BOTH the
         // contract's `Description` and the period's `Name` (`:5895`), so renaming Period 1
         // renames the contract — reading `contractName` back instead would make it a no-op.
@@ -573,7 +600,7 @@ describe("saveLandLeasePeriod", () => {
     rowsByLabel = landReferenceRows(header);
     await savePeriod(
       LAND_CTX,
-      { ...LAND_PERIOD, id: "p3", contractId: HDR_COST101, periodIndex: 3, currency: "Euro" },
+      { ...LAND_PERIOD, id: "11e5e003-0000-4000-8000-000000000003", contractId: HDR_COST101, periodIndex: 3, currency: "Euro" },
       false,
     );
     expect(writes.filter((w) => w.table === "llcost")).toEqual([]);
@@ -588,7 +615,7 @@ describe("saveLandLeasePeriod", () => {
     });
     await savePeriod(
       LAND_CTX,
-      { ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 },
+      { ...LAND_PERIOD, id: LL_P2, contractId: HDR_COST101, periodIndex: 2 },
       false,
     );
     const update = writes.find((w) => w.op === "update" && w.table === "llperiod");
@@ -631,20 +658,20 @@ describe("deleteLandLeasePeriod", () => {
         { vsb_landleaseallocationwtgid: "alloc-2" },
       ],
       "list Land Lease periods to delete": [
-        { vsb_landleaseperiodid: "p1" }, { vsb_landleaseperiodid: "p2" },
+        { vsb_landleaseperiodid: LL_P1 }, { vsb_landleaseperiodid: LL_P2 },
       ],
     };
 
-    await deletePeriod({ ...LAND_PERIOD, id: "p1", contractId: HDR_COST101, periodIndex: 1 });
+    await deletePeriod({ ...LAND_PERIOD, id: LL_P1, contractId: HDR_COST101, periodIndex: 1 });
 
     expect(writes.map((w) => `${w.table}:${w.id}`)).toEqual([
-      "llalloc:alloc-1", "llalloc:alloc-2", "llperiod:p1", "llperiod:p2", `llcost:${HDR_COST101}`,
+      "llalloc:alloc-1", "llalloc:alloc-2", `llperiod:${LL_P1}`, `llperiod:${LL_P2}`, `llcost:${HDR_COST101}`,
     ]);
   });
 
   it("UT-PWRITE-015 deletes a later period alone and leaves the contract standing", async () => {
-    await deletePeriod({ ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 });
-    expect(writes).toEqual([{ op: "delete", table: "llperiod", id: "p2" }]);
+    await deletePeriod({ ...LAND_PERIOD, id: LL_P2, contractId: HDR_COST101, periodIndex: 2 });
+    expect(writes).toEqual([{ op: "delete", table: "llperiod", id: LL_P2 }]);
   });
 });
 
@@ -789,6 +816,51 @@ describe("addStandardContract", () => {
     expect(seeded.every((p) => p.contractId === HDR_COST101)).toBe(true);
     // Every seeded period reports the header's flags, so the grid is right before any refetch.
     expect(seeded.every((p) => p.secured === true && p.hasOneTimePayment === true)).toBe(true);
+  });
+
+  it("UT-PWRITE-019b a 10-period contract chains Period 10 AFTER Period 9, not after Period 1", async () => {
+    // Costs settings writes up to 10 numbered periods ("… - 2" … "… - 10"). Sorting by the
+    // description text put "Standard O&M - 10" straight after Period 1.
+    rowsByLabel["check for an existing OPEX standard contract"] = [];
+    rowsByLabel["list OPEX / Land Lease standard assumptions"] =
+      [10, 3, 1, 9, 2, 4, 5, 6, 7, 8].map((n) => assumption(n));
+    NEW_ID.opex = Array.from({ length: 10 }, (_, i) =>
+      `00000000-0000-0000-0000-${String(i + 1).padStart(12, "0")}`);
+
+    const seeded = await addStandardContract(CTX, ARGS);
+    expect(seeded.map((p) => p.description)).toEqual([
+      "Standard O&M", ...[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `Standard O&M - ${n}`),
+    ]);
+    expect(seeded.map((p) => p.periodIndex)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+describe("sortStandardAssumptions", () => {
+  const row = (sub: string, period: number, description: string) => ({
+    _vsb_opexsubaccount_value: sub, vsb_period: 952850000 + (period - 1), vsb_description: description,
+  });
+
+  it("UT-PWRITE-SORT-001 orders each contract by the numeric period, not the description", () => {
+    const sorted = sortStandardAssumptions([
+      row("s1", 10, "Lease - 10"), row("s1", 2, "Lease - 2"), row("s1", 1, "Lease - 1"),
+      row("s1", 9, "Lease - 9"),
+    ]);
+    expect(sorted.map((r) => r.vsb_description)).toEqual(["Lease - 1", "Lease - 2", "Lease - 9", "Lease - 10"]);
+  });
+
+  it("UT-PWRITE-SORT-002 keeps contracts together, the first by its Period-1 description", () => {
+    const sorted = sortStandardAssumptions([
+      row("s2", 2, "Alpha - 2"), row("s1", 1, "Zulu"), row("s2", 1, "Alpha"), row("s1", 2, "Zulu - 2"),
+    ]);
+    expect(sorted.map((r) => r.vsb_description)).toEqual(["Alpha", "Alpha - 2", "Zulu", "Zulu - 2"]);
+  });
+
+  it("UT-PWRITE-SORT-003 legacy data with two Period-1 rows under one sub-account stays chainable", () => {
+    const sorted = sortStandardAssumptions([
+      row("s1", 2, "B - 2"), row("s1", 1, "A"), row("s1", 10, "A - 10"), row("s1", 1, "B"),
+      row("s1", 2, "A - 2"),
+    ]);
+    expect(sorted.map((r) => r.vsb_description)).toEqual(["A", "A - 2", "A - 10", "B", "B - 2"]);
   });
 });
 
@@ -1169,5 +1241,68 @@ describe("period round trip", () => {
       inflationPercent: 0, inflationYear: 0,
       align: false,
     });
+  });
+});
+
+/* ═════════════════════════════════════ V-1 guard (09-upsert-risk.md P10-P13) ══ */
+
+describe("V-1 — a deleted period or contract is never recreated by an edit", () => {
+  const HEAD = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
+  const LAND_CTX = { ...CTX, projectId: PROJECT_NEW_DATA, projectName: "Project New Data" };
+
+  it("UT-PWRITE-V1-001 P10: an OPEX period deleted meanwhile — nothing sent, no cascade, RecordGoneError", async () => {
+    rowsByLabel = { ...opexReferenceRows(), "list OPEX chain children": [{ vsb_opexprojectcostid: CHILD_A, vsb_name: "…- 2" }] };
+    guardedSdk.gone.add(HEAD);
+    const error = await savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RecordGoneError);
+    expect(guardedSdk.updates).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-PWRITE-V1-002 P10/P11: an existing period is checked then PATCHed; a child deleted meanwhile is SKIPPED", async () => {
+    rowsByLabel = {
+      ...opexReferenceRows(),
+      "list OPEX chain children": [
+        { vsb_opexprojectcostid: CHILD_A, vsb_name: "…- 2" },
+        { vsb_opexprojectcostid: CHILD_B, vsb_name: "…- 3" },
+      ],
+    };
+    guardedSdk.gone.add(CHILD_A);
+    await savePeriod(CTX, { ...OM_PERIOD, id: HEAD }, false);
+    expect(guardedSdk.reads.map((r) => r.id)).toEqual([HEAD, CHILD_A, CHILD_B]);
+    expect(writes.map((w) => `${w.op}:${w.id}`)).toEqual([`update:${HEAD}`, `update:${CHILD_B}`]);
+  });
+
+  it("UT-PWRITE-V1-003 P13: a Land Lease period deleted meanwhile — nothing written at all", async () => {
+    rowsByLabel = landReferenceRows({ vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850001 });
+    guardedSdk.gone.add(LL_P1);
+    const error = await savePeriod(
+      LAND_CTX, { ...LAND_PERIOD, id: LL_P1, contractId: HDR_COST101, periodIndex: 1, currency: "Euro" }, false,
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RecordGoneError);
+    // The period PATCH runs FIRST, so the header and allocations are untouched too.
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-PWRITE-V1-004 P12: a header deleted after it was read is not recreated by the Period 1 edit", async () => {
+    rowsByLabel = landReferenceRows({ vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850001 });
+    guardedSdk.gone.add(HDR_COST101);
+    const error = await savePeriod(
+      LAND_CTX, { ...LAND_PERIOD, id: LL_P1, contractId: HDR_COST101, periodIndex: 1, currency: "Euro" }, false,
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RecordGoneError);
+    expect(writes.filter((w) => w.table === "llcost")).toEqual([]);
+  });
+
+  it("UT-PWRITE-V1-005 P12/P13: existing rows are checked, then PATCHed — period first, then header", async () => {
+    rowsByLabel = landReferenceRows({ vsb_landleaseprojectcostid: HDR_COST101, vsb_secured: 952850001 });
+    await savePeriod(
+      LAND_CTX, { ...LAND_PERIOD, id: LL_P1, contractId: HDR_COST101, periodIndex: 1, currency: "Euro" }, false,
+    );
+    expect(guardedSdk.reads).toEqual([
+      { table: "vsb_landleaseperiods", id: LL_P1 },
+      { table: "vsb_landleaseprojectcosts", id: HDR_COST101 },
+    ]);
+    expect(writes.filter((w) => w.op === "update").map((w) => w.table)).toEqual(["llperiod", "llcost"]);
   });
 });

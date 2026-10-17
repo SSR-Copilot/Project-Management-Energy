@@ -18,7 +18,8 @@
  */
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
-import { unwrap } from "@/platform/errors";
+import { RecordGoneError, unwrap } from "@/platform/errors";
+import { updateRecordIfExists } from "./client";
 import { capexWriteSet, type CostRowInput } from "@/features/capex-costs/writeSet";
 import { byClusterJson, planDeleteContract, startEndJson } from "@/features/capex-costs/rules";
 import { deleteComment, loadComments } from "./comments";
@@ -49,12 +50,13 @@ export interface CapexWriteContext {
  * A single field on a single row — the cheapest write in the module, and the one the grid
  * triggers most. The PCF only makes a cell clickable when it holds a cost, so `costId` is
  * always known by the time this is called.
+ *
+ * Guarded (V-1, `updateRecordIfExists`): another user's contract save can delete the month's
+ * row, and the SDK 1.3.1's If-Match-less PATCH would then recreate it holding only `vsb_costpaid`.
+ * A gone row throws `RecordGoneError` and nothing is sent.
  */
 export async function setCostPaid(costId: string, paid: boolean): Promise<void> {
-  unwrap(
-    await Vsb_capexcostsService.update(costId, { vsb_costpaid: paid }),
-    "set cost paid",
-  );
+  await updateRecordIfExists("set cost paid", "vsb_capexcosts", costId, { vsb_costpaid: paid });
 }
 
 /* ═════════════════════════════════════════════════════════════ save line ══ */
@@ -214,11 +216,10 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
 
   if (!isNew) {
     // UPDATE keeps the null. It is the whole point — see `linkedCluster` above.
-    unwrap(
-      await Vsb_capexprojectcontractsService.update(
-        contractId, { ...fields, ...linkedCluster } as never,
-      ),
-      "update CAPEX contract",
+    // Guarded (V-1) and FIRST: a contract another user deleted throws `RecordGoneError` before
+    // any cost row is written, instead of being recreated by the SDK's upsert-style PATCH.
+    await updateRecordIfExists(
+      "update CAPEX contract", "vsb_capexprojectcontracts", contractId, { ...fields, ...linkedCluster },
     );
   } else {
     const created = unwrap(
@@ -243,7 +244,13 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
   // that survives the save is already unpaid rather than being patched twice.
   if (args.resetPaidAndPaymentDateComments && !isNew) {
     for (const payment of line.payments) {
-      if (payment.paid && payment.id) await setCostPaid(payment.id, false);
+      if (!payment.paid || !payment.id) continue;
+      try {
+        await setCostPaid(payment.id, false);
+      } catch (error) {
+        // A month deleted meanwhile has no "Paid" marker left to clear — skip it, never recreate it.
+        if (!(error instanceof RecordGoneError)) throw error;
+      }
     }
     const existing = await loadComments([contractId]);
     for (const comment of existing) {
@@ -261,10 +268,9 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
 
   for (const upsert of plan.upserts) {
     if (upsert.costId) {
-      unwrap(
-        await Vsb_capexcostsService.update(upsert.costId, { vsb_cost: upsert.cost }),
-        "update CAPEX cost",
-      );
+      // Guarded (V-1): a month row deleted since the panel opened fails the save rather than
+      // coming back as a partial row holding only `vsb_cost`.
+      await updateRecordIfExists("update CAPEX cost", "vsb_capexcosts", upsert.costId, { vsb_cost: upsert.cost });
     } else {
       unwrap(
         await Vsb_capexcostsService.create({

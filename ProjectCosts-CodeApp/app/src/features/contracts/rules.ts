@@ -208,11 +208,16 @@ export const COMMENT_MAX_LENGTH = 255;
 export interface ProjectContext {
   projectId: string;
   /**
-   * `vsb_approvalstates` as its LABEL — "Draft", "Approving", "Approved", "Rejected" or
-   * "Canceled". `gblTableApprovalStateColors` keys on exactly those strings; see
-   * `APPROVAL_STATE_COLOUR` in `components/AppHeader.tsx`.
+   * `vsb_approvalstates` as its display LABEL — "Draft", "Approving", "Approved", "Rejected" or
+   * "Canceled". Display only (the header bar's tooltip).
    */
   approvalState?: string;
+  /**
+   * `vsb_approvalstates` as its OPTION VALUE (`APPROVAL_STATE` in `@/domain/project`). Logic —
+   * the header bar colour, `APPROVAL_STATE_COLOUR` in `components/AppHeader.tsx` — keys on this,
+   * never on the label.
+   */
+  approvalStateValue?: number;
   /** `vsb_name`, whose DISPLAY name is "Project ID" — used in the derived contract name. */
   projectIdCode: string;
   projectName: string;
@@ -671,6 +676,99 @@ export interface ContractForm {
   comment: string;
   /** True while the margin still came from a standard assumption, untouched by the user. */
   isMarginStandardAssumption: boolean;
+}
+
+/**
+ * A stored number as the text a form input holds, in the locale the form parses it with:
+ * the locale's decimal separator, no grouping, every significant digit. So
+ * `parseNumber(numberInputText(n, locale), locale) === n`. Blank / non-finite → "".
+ */
+export function numberInputText(value: number | null | undefined, locale?: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  return numberFormat(locale, { useGrouping: false, maximumFractionDigits: 20 }).format(value);
+}
+
+/**
+ * A saved contract as the Edit panel's form. Every number goes through `numberInputText` so it
+ * parses back to itself in the session locale — `String(12.5)` read as 125 in de-DE.
+ */
+export function contractFormFromRecord(c: BopContract, locale?: string): ContractForm {
+  const s = (n: number | null | undefined) => numberInputText(n, locale);
+  return {
+    description: c.description ?? "",
+    contractType: c.contractType,
+    closingDate: c.closingDate,
+    costsUntilClosingType:
+      c.costsUntilClosingType === CLOSING_DATE_TYPE.None
+        ? CLOSING_DATE_TYPE.Plan : c.costsUntilClosingType,
+    costsUntilClosingPlan: s(c.costsUntilClosingPlan),
+    costsUntilClosingActual: s(c.costsUntilClosingActual),
+    costsAfterClosingType:
+      c.costsAfterClosingType === CLOSING_DATE_TYPE.None
+        ? CLOSING_DATE_TYPE.Plan : c.costsAfterClosingType,
+    costsAfterClosingPlan: s(c.costsAfterClosingPlan),
+    costsAfterClosingActual: s(c.costsAfterClosingActual),
+    totalCostsType:
+      c.totalCostsType === TOTAL_COSTS_TYPE.None
+        ? TOTAL_COSTS_TYPE.Calculated : c.totalCostsType,
+    totalCostsCalculated: s(c.totalCostsCalculated),
+    totalCostsOverwrite: s(c.totalCostsOverwrite),
+    margin: c.margin,
+    marginType: c.marginType ?? MARGIN_TYPE.Percentage,
+    marginPercentage: s(c.marginPercentage),
+    marginFixedValue: s(c.marginFixedValue),
+    comment: c.comment ?? "",
+    isMarginStandardAssumption: c.isMarginStandardAssumption,
+  };
+}
+
+/** The numeric columns Save writes, parsed from the form's text in the session locale. */
+export function contractNumbersFromForm(form: ContractForm, locale?: string) {
+  const num = (raw: string) => parseNumber(raw, locale);
+  return {
+    costsUntilClosingPlan: num(form.costsUntilClosingPlan),
+    costsUntilClosingActual: num(form.costsUntilClosingActual),
+    costsAfterClosingPlan: num(form.costsAfterClosingPlan),
+    costsAfterClosingActual: num(form.costsAfterClosingActual),
+    totalCostsCalculated: num(form.totalCostsCalculated),
+    totalCostsOverwrite: num(form.totalCostsOverwrite),
+    marginPercentage: num(form.marginPercentage),
+    marginFixedValue: num(form.marginFixedValue),
+  };
+}
+
+/** The margin columns of a `vsb_bopcontractsstandardassumptionses` row, as the SDK returns them. */
+export interface StandardMarginRow {
+  vsb_margin?: boolean | null;
+  vsb_margintype?: number | null;
+  vsb_marginpercentage?: number | null;
+  vsb_marginfixedvalue?: number | null;
+}
+
+/**
+ * The margin a NEW Development / Construction contract is seeded with from the standard contract.
+ *
+ * The Contracts settings screen writes `null` to the margin column it does not use (and to both
+ * when Margin = No), so a blank column must seed an EMPTY field — never the text "null" (contracts
+ * settings audit B-8 (3)).
+ *
+ * The number becomes input text in the session's locale (`numberInputText`), because the form
+ * parses its margin fields with `parseNumber(text, locale)`. `String(12.5)` gave "12.5", which a
+ * de-DE session reads as 125 (the "." is its group separator) and rejected, blocking Save
+ * (application-settings contracts parity check r2, NG-1).
+ */
+export function standardMarginSeed(
+  a: StandardMarginRow,
+  locale?: string,
+): Pick<ContractForm, "margin" | "marginType" | "marginPercentage" | "marginFixedValue" | "isMarginStandardAssumption"> {
+  const text = (v: number | null | undefined) => numberInputText(v, locale);
+  return {
+    margin: a.vsb_margin === true,
+    marginType: (typeof a.vsb_margintype === "number" ? a.vsb_margintype : MARGIN_TYPE.Percentage) as MarginType,
+    marginPercentage: text(a.vsb_marginpercentage),
+    marginFixedValue: text(a.vsb_marginfixedvalue),
+    isMarginStandardAssumption: true,
+  };
 }
 
 /**
@@ -1180,13 +1278,13 @@ export function recalculateForm(
     ...form,
     costsUntilClosingPlan:
       form.costsUntilClosingType === CLOSING_DATE_TYPE.Plan
-        ? String(untilClosingPlan) : form.costsUntilClosingPlan,
+        ? numberInputText(untilClosingPlan, locale) : form.costsUntilClosingPlan,
     costsAfterClosingPlan:
       form.costsAfterClosingType === CLOSING_DATE_TYPE.Plan
-        ? String(afterClosingPlan) : form.costsAfterClosingPlan,
+        ? numberInputText(afterClosingPlan, locale) : form.costsAfterClosingPlan,
     totalCostsCalculated:
       form.totalCostsType === TOTAL_COSTS_TYPE.Calculated
-        ? String(calculated) : form.totalCostsCalculated,
+        ? numberInputText(calculated, locale) : form.totalCostsCalculated,
   };
 }
 

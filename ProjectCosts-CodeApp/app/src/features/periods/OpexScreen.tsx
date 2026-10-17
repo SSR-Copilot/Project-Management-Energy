@@ -42,6 +42,7 @@ import {
 import { ConfirmDialog, EmptyState, FormPanel, LoadingOverlay } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { useProjectExtras } from "@/features/contracts/hooks";
+import { writeErrorText } from "@/features/shared/recordGone";
 import { CostField, PanelButtons } from "@/features/costing/Fields";
 import {
   useAddStandardContract, useCostBook, useCountryInflation, useCountryInflationAreas,
@@ -884,8 +885,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
         periods: [...book.periods.filter((p) => p.id !== saved.id), saved],
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setBanner(OPEX_MSG.saveFailed("Save", message));
+      // `writeErrorText`: a period someone else deleted (V-1 `RecordGoneError`) reads as such.
+      setBanner(OPEX_MSG.saveFailed("Save", writeErrorText(e)));
     } finally {
       setBusyLabel(null);
     }

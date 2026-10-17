@@ -28,6 +28,9 @@ let contractDeleteFails = false;
 /** Set to make EVERY cost-row delete reject, to test the cleared-cell leg's failure handling. */
 let costDeletesFail = false;
 
+/** Cost-row ids whose delete answers 404, as if someone else removed them first. */
+let alreadyGone = new Set<string>();
+
 /** Rows `fetchAll` should answer with, by the label its caller passes. */
 let rowsByLabel: Record<string, unknown[]> = {};
 
@@ -38,6 +41,24 @@ vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
+  },
+  // The save deletes through `deleteRecord`, which surfaces a refused delete as a throw.
+  deleteRecord: async (_operation: string, table: string, id: string) => {
+    if (table === "vsb_capexprojectcontracts") {
+      if (contractDeleteFails) { contractDeleteFails = false; throw new Error("contract delete denied"); }
+      deleted.push(`contract:${id}`);
+    } else if (table === "vsb_capexcosts") {
+      if (costDeletesFail) throw new Error("cost delete denied");
+      if (alreadyGone.has(id)) {
+        const { DataError } = await import("@/platform/errors");
+        throw new DataError("delete", "not found", 404);
+      }
+      deleted.push(`cost:${id}`);
+    } else if (table === "vsb_capexcommentses") {
+      deleted.push(`comment:${id}`);
+    } else {
+      throw new Error(`unexpected delete from ${table}`);
+    }
   },
 }));
 
@@ -184,6 +205,7 @@ const save = (contractDeleteIds: string[], existingCosts: ReturnType<typeof cost
 
 beforeEach(() => {
   deleted = [];
+  alreadyGone = new Set();
   contractDeleteFails = false;
   costDeletesFail = false;
   holdContractUpdate = undefined;
@@ -596,8 +618,8 @@ describe("saveAddCostSheet contract and cost upserts", () => {
     .flatMap((c) => c.targets.map((t) => t["vsb_capexcostid"]));
 
   it(
-    "UT-ADDCOST-051 cost rows of a contract whose settings DON'T change are sent while the " +
-      "contracts step is still in flight; those of one whose settings DO change are not",
+    "UT-ADDCOST-051 cost rows of EVERY existing contract — settings changed or not — are sent " +
+      "while the contracts step is still in flight",
     async () => {
       let release: () => void = () => {};
       holdContractUpdate = new Promise((r) => { release = r; });
@@ -616,13 +638,38 @@ describe("saveAddCostSheet contract and cost upserts", () => {
         contractDeleteIds: [],
       });
 
-      // Contract B's update is being held. Contract A's cost row has gone out anyway...
-      await until(() => costIdsUpdated().includes(EXISTING_COST));
-      // ...and Contract B's has not — it still waits for its own contract to land.
-      expect(costIdsUpdated()).not.toContain(CHANGED_COST);
+      // Contract B's settings update is being held; both contracts' cost rows go out anyway.
+      await until(() => costIdsUpdated().includes(EXISTING_COST)
+        && costIdsUpdated().includes(CHANGED_COST));
       release();
       await saving;
-      expect(costIdsUpdated()).toContain(CHANGED_COST);
+    },
+  );
+
+  it(
+    "UT-ADDCOST-059 the contract-delete cascade runs while the contracts step is still in " +
+      "flight, children before parents",
+    async () => {
+      let release: () => void = () => {};
+      holdContractUpdate = new Promise((r) => { release = r; });
+
+      const saving = saveAddCostSheet({
+        projectId: PROJECT_ID,
+        changedRows: [
+          sheetRow({ projectContractId: CHANGED_CONTRACT, description: "Contract B", month1: 60 }),
+        ],
+        existingContracts: [changedContract],
+        existingCosts: [
+          { id: CHANGED_COST, contractId: CHANGED_CONTRACT, year: 2026, month: 1, cost: 10 },
+          cost("doomed-cost", DOOMED),
+        ],
+        contractDeleteIds: [DOOMED],
+      });
+
+      await until(() => deleted.includes(`contract:${DOOMED}`));
+      expect(deleted).toEqual(["cost:doomed-cost", `contract:${DOOMED}`]);
+      release();
+      await saving;
     },
   );
 
@@ -670,9 +717,64 @@ describe("saveAddCostSheet contract and cost upserts", () => {
     },
   );
 
+  const totalsCalls = () => updateCalls.filter((c) => "vsb_totalcost" in (c.targets[0] ?? {}));
+
   it(
-    "UT-ADDCOST-052 cost rows of a contract whose settings DO change still wait for the " +
-      "contract update to land first",
+    "UT-ADDCOST-062 a total equal to the stored one is not re-sent, and with nothing else to " +
+      "write the totals step makes no request",
+    async () => {
+      // Month 1 moves 100 -> 250, month 2 moves 50 -> -100: the sum stays 150.
+      const changedRow = sheetRow({ projectContractId: EXISTING_CONTRACT, month1: 250 });
+      changedRow.months[1] = -100;
+      await saveAddCostSheet({
+        projectId: PROJECT_ID,
+        changedRows: [changedRow],
+        existingContracts: [{ ...unchangedContract, totalCost: 150 }],
+        existingCosts: [
+          { id: EXISTING_COST, contractId: EXISTING_CONTRACT, year: 2026, month: 1, cost: 100 },
+          { id: "feb-cost", contractId: EXISTING_CONTRACT, year: 2026, month: 2, cost: 50 },
+        ],
+        contractDeleteIds: [],
+      });
+
+      expect(costIdsUpdated()).toEqual([EXISTING_COST, "feb-cost"]);
+      expect(totalsCalls()).toEqual([]);
+    },
+  );
+
+  it("UT-ADDCOST-063 a total that differs from the stored one is written", async () => {
+    await saveAddCostSheet({
+      projectId: PROJECT_ID,
+      changedRows: [sheetRow({ projectContractId: EXISTING_CONTRACT, month1: 250 })],
+      existingContracts: [{ ...unchangedContract, totalCost: 100 }],
+      existingCosts: [
+        { id: EXISTING_COST, contractId: EXISTING_CONTRACT, year: 2026, month: 1, cost: 100 },
+      ],
+      contractDeleteIds: [],
+    });
+
+    expect(totalsCalls().flatMap((c) => c.targets)).toEqual([expect.objectContaining({
+      vsb_capexprojectcontractid: EXISTING_CONTRACT, vsb_totalcost: 250,
+    })]);
+  });
+
+  it("UT-ADDCOST-064 a missing stored total (null) is always written", async () => {
+    await saveAddCostSheet({
+      projectId: PROJECT_ID,
+      changedRows: [sheetRow({ projectContractId: EXISTING_CONTRACT, month1: 100 })],
+      existingContracts: [{ ...unchangedContract, totalCost: null }],
+      existingCosts: [],
+      contractDeleteIds: [],
+    });
+
+    expect(totalsCalls().flatMap((c) => c.targets)).toEqual([expect.objectContaining({
+      vsb_capexprojectcontractid: EXISTING_CONTRACT, vsb_totalcost: 100,
+    })]);
+  });
+
+  it(
+    "UT-ADDCOST-052 cost rows of a contract whose settings DO change no longer wait for the " +
+      "contract update — no plug-in reads the parent contract",
     async () => {
       let release: () => void = () => {};
       holdContractUpdate = new Promise((r) => { release = r; });
@@ -688,11 +790,9 @@ describe("saveAddCostSheet contract and cost upserts", () => {
         contractDeleteIds: [],
       });
 
-      await new Promise((r) => setTimeout(r, 50));
-      expect(costUpdateSent()).toBe(false); // nothing on its cost rows while the contract is held
+      await until(costUpdateSent); // sent while the contract update is still held
       release();
       await saving;
-      expect(costUpdateSent()).toBe(true);
     },
   );
 
@@ -912,6 +1012,12 @@ describe("saveAddCostSheet contract deletion", () => {
     await save([]);
     expect(queriedBy["list CAPEX comments"]).toBeUndefined();
     expect(deleted).toEqual([]);
+  });
+
+  it("UT-ADDCOST-061 a cost row already deleted elsewhere (404) does not fail the cascade", async () => {
+    alreadyGone = new Set(["gone-cost"]);
+    await save([DOOMED], [cost("gone-cost", DOOMED), cost("live-cost", DOOMED)]);
+    expect(deleted).toEqual(["cost:live-cost", `contract:${DOOMED}`]);
   });
 
   it("UT-ADDCOST-037 still deletes a contract that has no comments", async () => {

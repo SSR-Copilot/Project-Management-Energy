@@ -26,15 +26,13 @@ export type Vsb_generatorsvsb_countryavailability = keyof typeof Vsb_generatorsv
 export interface Vsb_generatorsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_generatorsstatecode;
   statuscode?: Vsb_generatorsstatuscode;
   timezoneruleversionnumber?: number;
   utcconversiontimezonecode?: number;
   vsb_additionalfoundationcost?: number;
-  vsb_countryavailability?: Vsb_generatorsvsb_countryavailability;
+  vsb_countryavailability?: Vsb_generatorsvsb_countryavailability[];
   vsb_countryavailabilityimport?: string;
   vsb_earliestphaseout?: string;
   vsb_energyreferenceyield?: number;
@@ -63,19 +61,9 @@ export interface Vsb_generatorsBase {
 }
 
 export interface Vsb_generators extends Vsb_generatorsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;

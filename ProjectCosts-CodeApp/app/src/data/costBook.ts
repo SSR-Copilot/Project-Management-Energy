@@ -78,8 +78,9 @@ import type { MilestoneDurations } from "@/features/capex-costs/clusters";
 import type {
   LeaseAllocationRow, LeaseCostRow, LeasePeriodRow,
 } from "@/features/periods/landLeaseRules";
+import { MILESTONE_ASSUMPTION_KIND } from "@/domain/milestones";
 import { loadLeaseBook } from "./landLease";
-import { fetchAll } from "./client";
+import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, chunk, eq, guid, lookupEq, lookupIn, or } from "./odata";
 
 /**
@@ -903,7 +904,7 @@ export async function loadProjectStates(): Promise<ProjectState[]> {
  * (`CapexScreenCode.txt:18139-18142`) and so must this: reading the wrong row would back-date
  * clusters by a fraction of a month and look almost right.
  */
-const AVERAGE_DURATION_NAME = "average duration [months]";
+const AVERAGE_DURATION_NAME = MILESTONE_ASSUMPTION_KIND.months;
 
 /**
  * The cluster durations for a project's country and technology, for `synthesiseClusterDates`.
@@ -932,7 +933,7 @@ export async function loadMilestoneDurations(
   technology: number | undefined,
 ): Promise<MilestoneDurations | undefined> {
   if (!countryId || technology === undefined) return undefined;
-  const rows = await fetchAll(
+  const rows = await fetchPage(
     "load milestone standard assumptions",
     (o) => Vsb_milestonesstandardassumptionsesService.getAll(o),
     {
@@ -947,12 +948,21 @@ export async function loadMilestoneDurations(
         eq("vsb_technology", technology),
         ACTIVE,
       ),
+      /*
+       * Deterministic when the table holds duplicates (Milestones D-DATA-1): the FIRST row by
+       * `createdon`, then id — the same order the Milestones settings screen reads and edits
+       * (`data/settings/milestones.ts`, DR-3). Without it the timeline could read a duplicate the
+       * admin never edits, so a save would appear to do nothing (milestones audit B3 / F-4).
+       * One row, one request: `fetchPage`, because `fetchAll` with `maxPageSize: 1` walked every
+       * matching row one request at a time.
+       */
+      orderBy: ["createdon asc", "vsb_milestonesstandardassumptionsid asc"],
       maxPageSize: 1,
     },
   );
   const row = rows[0];
   if (!row) return undefined;
-  const months = (value: number | undefined) =>
+  const months =(value: number | undefined) =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
   return {
     cluster1: months(row.vsb_cluster1),

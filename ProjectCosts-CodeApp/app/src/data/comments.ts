@@ -7,7 +7,7 @@
  */
 import { Vsb_capexcommentsesService } from "@/generated/services/Vsb_capexcommentsesService";
 import { unwrap } from "@/platform/errors";
-import { fetchAll } from "./client";
+import { fetchAll, updateRecordIfExists } from "./client";
 import { ACTIVE, and, lookupIn } from "./odata";
 import { chunk } from "./odata";
 import { COMMENT_TYPE, commentName, type CapexComment } from "@/features/capex-costs/comments";
@@ -199,10 +199,9 @@ export async function saveComment(args: SaveCommentArgs): Promise<string> {
     // takes effect if the PATCH rewrites `vsb_CapexCost`, and `@odata.bind: null` is the only
     // disassociation this data layer has — `_vsb_capexcost_value` is the READ form and Dataverse
     // rejects it in a write payload (`docs/CONVENTIONS.md`).
-    unwrap(
-      await Vsb_capexcommentsesService.update(args.id, { ...scalars, ...links } as never),
-      "update CAPEX comment",
-    );
+    // Guarded (V-1, `updateRecordIfExists`): a comment deleted meanwhile throws
+    // `RecordGoneError` instead of being recreated by the SDK 1.3.1's If-Match-less PATCH.
+    await updateRecordIfExists("update CAPEX comment", "vsb_capexcommentses", args.id, { ...scalars, ...links });
     return args.id;
   }
   // CREATE drops them. A brand-new row has nothing to disassociate, and a null `@odata.bind` in

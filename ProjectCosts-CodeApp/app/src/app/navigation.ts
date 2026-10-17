@@ -28,7 +28,11 @@ export interface NavItem {
    *   contract -> TextDocumentShared    (Contracts — NOT the same icon as its siblings)
    *   currency -> AllCurrency           (Total Summary, hidden)
    */
-  icon: "projects" | "capex" | "opex" | "document" | "contract" | "currency";
+  icon:
+    | "projects" | "capex" | "opex" | "document" | "contract" | "currency" | "info"
+    // Application Settings (`LeftAdminNavigationMenu`): CheckList, ReminderGroup,
+    // AccountManagement, DateTime.
+    | "checklist" | "gates" | "accounts" | "calendar";
   path?: string;
   parentKey?: string;
   enabled: boolean;
@@ -141,10 +145,21 @@ export const NEW_PROJECT_PATH = "/projects/new";
 /**
  * Where `Edit Project` goes, for a project that exists.
  *
- * The canvas forked here: `If(gblProduction, Launch(gblPMAppURL, {projectid: …}), <set four
- * globals>; Navigate('Project General Data Screen', …, {locGeneralDataTabSelected:
- * "generalDataTab"}))`. In the player that means editing a project RELOADS the whole app with
- * `?projectid=`. The fork is gone — one app, one route, client-side.
+ * The canvas forked here: `If(gblProduction, Launch(gblPMAppURL, {projectid: …}), <Set
+ * gblRecordSelectedProject, gblRecordSelectedProjectCountry, gblCurrentUser.
+ * CanEditSelectedProject, gblProjectHeaderData, gblLeftNavigationSelected>; Navigate(
+ * 'Project General Data Screen', ScreenTransition.Fade, {locGeneralDataTabSelected:
+ * "generalDataTab"}))` — a cross-app `Launch` in production (Project Management and this Cost
+ * app were separate deployments) versus an in-app, same-tab `Navigate` everywhere else, to the
+ * very screen `Add Project` also targets. One unified app now, so the non-production branch is
+ * the one ported: plain client-side routing, in the SAME tab. `GeneralDataScreen` loads the
+ * project itself from the `:projectId` path param (`@/data/generalData.ts`'s `loadGeneralData`),
+ * which is what the canvas's `Set(gblRecordSelectedProject, LookUp(Projects, …))` did; the
+ * `CanEditSelectedProject` / `gblProjectHeaderData` / `gblLeftNavigationSelected` globals and the
+ * `locGeneralDataTabSelected` nav parameter have no equivalent here — the first is superseded by
+ * the optimistic, server-enforced privilege model (`@/platform/privileges.ts`), and the other
+ * two addressed canvas-only UI state (a shared header bar, a left-nav highlight, an internal tab
+ * selector) this screen does not have.
  */
 export const projectGeneralDataPath = (projectId: string): string =>
   `/projects/${projectId}/general`;

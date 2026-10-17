@@ -14,11 +14,11 @@ export const Vsb_capexaccountlistsstatuscode = {
 export type Vsb_capexaccountlistsstatuscode = keyof typeof Vsb_capexaccountlistsstatuscode;
 export const Vsb_capexaccountlistsvsb_accountcategory = {
   952850000: 'BoP',
-  987220001: 'ConstructionExpenses',
-  987220002: 'DevelopmentExpenses',
-  987220003: 'Substation_GridConnection',
-  987220004: 'OtherCAPEX',
-  987220005: 'WindTurbine_Panels',
+  987220001: 'Construction Expenses',
+  987220002: 'Development Expenses',
+  987220003: 'Substation / Grid Connection',
+  987220004: 'Other CAPEX',
+  987220005: 'Wind Turbine / Panels',
   987220006: 'Overleveraging'
 } as const;
 export type Vsb_capexaccountlistsvsb_accountcategory = keyof typeof Vsb_capexaccountlistsvsb_accountcategory;
@@ -26,9 +26,7 @@ export type Vsb_capexaccountlistsvsb_accountcategory = keyof typeof Vsb_capexacc
 export interface Vsb_capexaccountlistsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_capexaccountlistsstatecode;
   statuscode?: Vsb_capexaccountlistsstatuscode;
   timezoneruleversionnumber?: number;
@@ -42,24 +40,13 @@ export interface Vsb_capexaccountlistsBase {
 }
 
 export interface Vsb_capexaccountlists extends Vsb_capexaccountlistsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_accountcategoryname?: string;
-  vsb_parentaccountname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

@@ -13,8 +13,13 @@ import { makeStyles, Text, tokens } from "@fluentui/react-components";
 import { useState, type ReactNode } from "react";
 import { layout, space } from "@/theme/tokens";
 import { AppHeader, type AppHeaderProps } from "./AppHeader";
+import { AppToaster } from "./AppToaster";
 import { CommandSlotProvider } from "./CommandSlot";
 import { LeftNav } from "./LeftNav";
+import { PmLeftNav } from "./PmLeftNav";
+import { SettingsLeftNav } from "./SettingsLeftNav";
+import { NavigationGuardProvider } from "./NavigationGuardProvider";
+import { useNavigationGuard } from "@/app/unsavedChanges";
 
 const useStyles = makeStyles({
   shell: {
@@ -53,27 +58,58 @@ const useStyles = makeStyles({
 
 export interface AppShellProps extends Omit<AppHeaderProps, "commandSlotRef"> {
   children: ReactNode;
-  /** The cost screens show the rail; the project overview does not. */
+  /** The cost and PM project screens show a rail; the project overview list does not. */
   showRail?: boolean;
+  /** Which section's rail to render when `showRail` is true. */
+  rail?: RailVariant;
 }
 
-export function AppShell({ children, showRail = true, ...header }: AppShellProps) {
+export type RailVariant = "cost" | "pm" | "settings";
+
+const RAILS: Record<RailVariant, { element: ReactNode; shellClass: string }> = {
+  cost: { element: <LeftNav />, shellClass: "canvas-cost-shell" },
+  pm: { element: <PmLeftNav />, shellClass: "canvas-pm-shell" },
+  settings: { element: <SettingsLeftNav />, shellClass: "canvas-settings-shell" },
+};
+
+export function AppShell(props: AppShellProps) {
+  return (
+    <NavigationGuardProvider>
+      <ShellFrame {...props} />
+    </NavigationGuardProvider>
+  );
+}
+
+/**
+ * The frame proper, inside the navigation guard (M7): the header's way out (logo / back arrow)
+ * and its Application Settings row ask first when a screen has registered unsaved changes.
+ */
+function ShellFrame({ children, showRail = true, rail = "cost", ...props }: AppShellProps) {
   const styles = useStyles();
+  const { guard } = useNavigationGuard();
+  const { onHome, onOpenSettings } = props;
+  const header: Omit<AppHeaderProps, "commandSlotRef"> = {
+    ...props,
+    ...(onHome ? { onHome: () => guard(onHome) } : {}),
+    ...(onOpenSettings ? { onOpenSettings: () => guard(onOpenSettings) } : {}),
+  };
   // A ref callback into state, not a `useRef`: the portal has to re-render once the element
   // exists, and a ref object mutating does not trigger that.
   const [commandSlot, setCommandSlot] = useState<HTMLDivElement | null>(null);
 
   return (
     <CommandSlotProvider element={commandSlot}>
-      <div className={`${styles.shell} canvas-shell ${showRail ? "canvas-cost-shell" : "canvas-overview-shell"}`}>
+      <div className={`${styles.shell} canvas-shell ${showRail ? RAILS[rail].shellClass : "canvas-overview-shell"}`}>
         <AppHeader {...header} commandSlotRef={setCommandSlot} />
         <div className={styles.body}>
-          {showRail ? <LeftNav /> : null}
+          {showRail ? RAILS[rail].element : null}
           <main className={styles.content}>{children}</main>
         </div>
         {showRail ? <footer className={styles.footer}>
           <Text className={styles.footerText}>{`Version ${header.appVersion ?? ""}`}</Text>
         </footer> : null}
+        {/* The app's single toast region; screens reach it through `useNotify()`. */}
+        <AppToaster />
       </div>
     </CommandSlotProvider>
   );

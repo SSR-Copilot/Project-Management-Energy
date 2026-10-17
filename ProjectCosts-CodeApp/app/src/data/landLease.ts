@@ -56,7 +56,7 @@ import {
   type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
   type LeasePeriodRow, type LeaseSubaccountRow, type LeaseWrite,
 } from "@/features/periods/landLeaseRules";
-import { fetchAll } from "./client";
+import { fetchAll, updateRecordIfExists } from "./client";
 import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
 
 /** Option sets arrive as a number or as its string form depending on the column. */
@@ -407,7 +407,9 @@ export async function loadLeaseAssumptions(
   return rows.map((r) => ({
     id: r.vsb_opexlandleasestandardassumptionsid,
     subaccountId: r._vsb_landleasesubaccount_value ?? null,
-    subaccountName: r.vsb_landleasesubaccountname ?? "",
+    // Not in the SDK 1.5 model (lookup display names are not generated); read loosely so the
+    // behaviour is unchanged.
+    subaccountName: (r as { vsb_landleasesubaccountname?: string | null }).vsb_landleasesubaccountname ?? "",
     name: r.vsb_name ?? "",
     description: r.vsb_description ?? "",
     period: numberOf(r.vsb_period) ?? 0,
@@ -445,7 +447,11 @@ interface LeaseWriter {
   /** The primary key a create returns, so a `ref` can be resolved into it. */
   idField: string;
   create: (payload: Row) => Promise<IOperationResult<Row>>;
-  update: (id: string, payload: Row) => Promise<IOperationResult<Row>>;
+  /**
+   * Guarded PATCH (V-1, `updateRecordIfExists`): a row another save deleted throws
+   * `RecordGoneError` and is never recreated by the SDK 1.3.1's If-Match-less upsert.
+   */
+  update: (id: string, payload: Row) => Promise<unknown>;
   remove: (id: string) => Promise<void>;
   /** The noun `unwrap`'s operation string uses, so a 403 names what was refused. */
   label: string;
@@ -462,7 +468,7 @@ const WRITERS: Record<string, LeaseWriter> = {
     idField: "vsb_landleaseprojectcostid",
     create: (p) => Vsb_landleaseprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
-      Vsb_landleaseprojectcostsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
+      updateRecordIfExists("update Land Lease contract", LEASE_ENTITY_SET.cost, id, p),
     remove: (id) => Vsb_landleaseprojectcostsService.delete(id),
     label: "Land Lease contract",
   },
@@ -470,7 +476,7 @@ const WRITERS: Record<string, LeaseWriter> = {
     idField: "vsb_landleaseperiodid",
     create: (p) => Vsb_landleaseperiodsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
-      Vsb_landleaseperiodsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
+      updateRecordIfExists("update Land Lease period", LEASE_ENTITY_SET.period, id, p),
     remove: (id) => Vsb_landleaseperiodsService.delete(id),
     label: "Land Lease period",
   },
@@ -479,7 +485,7 @@ const WRITERS: Record<string, LeaseWriter> = {
     create: (p) =>
       Vsb_landleaseallocationwtgsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
-      Vsb_landleaseallocationwtgsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
+      updateRecordIfExists("update Land Lease WTG allocation", LEASE_ENTITY_SET.allocation, id, p),
     remove: (id) => Vsb_landleaseallocationwtgsService.delete(id),
     label: "Land Lease WTG allocation",
   },
@@ -522,7 +528,9 @@ export async function applyLeaseWrites(
       );
     }
     if (bound.op === "update") {
-      unwrap(await writer.update(bound.id, bound.payload), `update ${writer.label}`);
+      // Guarded: a row deleted since the plan was made throws `RecordGoneError` before any
+      // PATCH, so it is never resurrected; the rest of the plan does not run.
+      await writer.update(bound.id, bound.payload);
       continue;
     }
     const created = unwrap(await writer.create(bound.payload), `create ${writer.label}`);

@@ -11,11 +11,11 @@
  *   footer        Total Rows + the pager
  *
  * Which commands do what, in THIS app:
- *   Add Project    → `/projects/new`, which is General Data's New Project state. Screen #9 is
- *                    not migrated, so the route renders a not-yet-built notice for now.
- *   Edit Project   → `/projects/:projectId/general`. Same screen, same caveat. The canvas
- *                    forked on `gblProduction` and RELAUNCHED the whole app in the player;
- *                    one app now, so it is plain client-side routing.
+ *   Add Project    → `/projects/new`, which is General Data's New Project state.
+ *   Edit Project   → `/projects/:projectId/general`, same screen, in the SAME tab. The canvas
+ *                    forked on `gblProduction` (`Launch` a second app deployment vs. an in-app
+ *                    `Navigate`); one unified app now, so the in-app `Navigate` branch is the
+ *                    one ported — plain client-side routing, exactly like Add Project.
  *   Edit Costs     → `/costs/capex?projectId=…`, internal. The canvas `Launch`ed a second
  *                    Power Apps app. The Draft gate is reproduced exactly: a project whose
  *                    cluster state is "Draft" gets the cost-module lock dialog instead.
@@ -583,7 +583,7 @@ export default function ProjectOverviewScreen() {
   const handleSimulate = async (row: ProjectRow): Promise<void> => {
     const hasBaseCase = await loadHasBaseCase(row.id);
     const result = simulateGate({
-      technology: row.technology,
+      technology: row.technologyCode,
       clusterStateOrder: stateOrder.data ?? null,
       hasBaseCase,
     });
@@ -614,15 +614,23 @@ export default function ProjectOverviewScreen() {
        * General Data IS the New Project screen — the canvas blanks its globals and navigates
        * with nothing selected. Creating happens IN PLACE, not in a second tab: there is no
        * list state worth preserving behind a form you are about to fill in.
-       *
-       * Screen #9 is not built yet, so `/projects/new` renders the not-yet-built notice.
        */
       case "addProject":
         navigate(NEW_PROJECT_PATH);
         return;
 
+      /*
+       * The canvas `editProject` OnSelect is itself `If(gblProduction, Launch(gblPMAppURL,
+       * {projectid: …}), <Set 4 globals>; Navigate('Project General Data Screen', …))` — a
+       * fork between a cross-app `Launch` (production, where Project Management and this Cost
+       * app were separate deployments) and an in-app, SAME-TAB `Navigate` to the very screen
+       * `Add Project` also targets (non-production). One unified app now, so the non-production
+       * branch is the one that applies: plain client-side routing, in place, exactly like
+       * `addProject` above. `openInNewTab` (below, for `editCosts`) is for a genuinely
+       * different route; it does not belong here.
+       */
       case "editProject":
-        if (selected) openInNewTab(projectGeneralDataPath(selected.id));
+        if (selected) navigate(projectGeneralDataPath(selected.id));
         return;
 
       /*

@@ -29,6 +29,7 @@
  * This is on the open-decision list. Whichever is chosen, `PrivilegeProvider` is the only
  * thing that changes.
  */
+import { useMemo } from "react";
 import { DataError } from "./errors";
 
 export interface TablePrivileges {
@@ -72,4 +73,21 @@ export function permissionMessage(error: unknown, action: string): string | unde
     return `You do not have permission to ${action}. Ask your administrator if you believe you should.`;
   }
   return undefined;
+}
+
+/** Table privileges plus a record-level lookup on the same table. */
+export type TablePrivilegesWithRecord = TablePrivileges & { forRecord(id: string): TablePrivileges };
+
+/**
+ * E13 — one table's privileges for a screen, memoised on `entitySet` and `provider` (CAPEX
+ * Accounts / Check List Settings `hooks.ts`, Contracts `Screen.tsx:110`, Costs `hooks.ts:84-86` +
+ * `Screen.tsx:149-154`). `forRecord(id)` is the canvas `RecordInfo` on that table.
+ */
+export function useTablePrivileges(
+  entitySet: string, provider: PrivilegeProvider = serverEnforcedProvider,
+): TablePrivilegesWithRecord {
+  return useMemo(() => ({
+    ...provider.forTable(entitySet),
+    forRecord: (id: string) => provider.forRecord(entitySet, id),
+  }), [entitySet, provider]);
 }

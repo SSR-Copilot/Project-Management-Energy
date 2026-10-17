@@ -13,19 +13,17 @@ export const Vsb_generatortypeinprojectsstatuscode = {
 } as const;
 export type Vsb_generatortypeinprojectsstatuscode = keyof typeof Vsb_generatortypeinprojectsstatuscode;
 export const Vsb_generatortypeinprojectsvsb_requestpermissionstate = {
-  952850000: 'RequestApproved',
-  952850001: 'RequestDeclined',
-  952850002: 'RequestPending',
-  952850003: 'RequestCanceled'
+  952850000: 'Request Approved',
+  952850001: 'Request  Declined',
+  952850002: 'Request Pending',
+  952850003: 'Request Canceled'
 } as const;
 export type Vsb_generatortypeinprojectsvsb_requestpermissionstate = keyof typeof Vsb_generatortypeinprojectsvsb_requestpermissionstate;
 
 export interface Vsb_generatortypeinprojectsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_generatortypeinprojectsstatecode;
   statuscode?: Vsb_generatortypeinprojectsstatuscode;
   timezoneruleversionnumber?: number;
@@ -44,24 +42,12 @@ export interface Vsb_generatortypeinprojectsBase {
 }
 
 export interface Vsb_generatortypeinprojects extends Vsb_generatortypeinprojectsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_generatorname?: string;
-  vsb_projectname?: string;
   vsb_requestpermissionstatename?: string;
   createdby?: object;
   _createdby_value?: string;

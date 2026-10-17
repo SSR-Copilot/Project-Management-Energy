@@ -8,6 +8,7 @@ import { loadMilestoneDurations, loadProjectStates } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import type { LeaseWrite } from "@/features/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/contracts/hooks";
+import { isRecordGone } from "@/features/shared/recordGone";
 import type { CostBook, CostLine, CostPeriod } from "./model";
 
 /**
@@ -128,6 +129,12 @@ export function useCostBook(category?: number) {
         void queryClient.invalidateQueries({ queryKey });
         void queryClient.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
       }
+    },
+    // V-1: a period / contract another user deleted (`RecordGoneError`) — refetch the book.
+    onError: (error) => {
+      if (!isRecordGone(error)) return;
+      void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
     },
   });
   return { ...query, save, projectId };
@@ -297,6 +304,13 @@ export function useLeaseWrites(projectId: string | undefined) {
         client.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] }),
       ]);
     },
+    // V-1: a row another user deleted (`RecordGoneError`) — refetch so the screen stops showing it.
+    onError: (error) => {
+      if (!isRecordGone(error)) return;
+      void client.invalidateQueries({ queryKey: leaseBookKey(projectId) });
+      void client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] });
+      void client.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
+    },
   });
 }
 
@@ -395,10 +409,14 @@ export function useCapexWrites(category?: number) {
     ]);
   };
 
+  /** V-1: a row deleted by someone else (`RecordGoneError`) — refetch so the grid drops it. */
+  const invalidateIfGone = (error: unknown) => { if (isRecordGone(error)) void invalidate(); };
+
   const setPaid = useMutation({
     mutationFn: (args: { lineId: string; year: number; month: number; paid: boolean; costId?: string }) =>
       costRepository().setCostPaid(projectId as string, args),
     onSuccess: invalidate,
+    onError: invalidateIfGone,
   });
 
   const saveLine = useMutation({
@@ -413,6 +431,7 @@ export function useCapexWrites(category?: number) {
       owningBusinessUnitId: project?.owningBusinessUnitId,
     }),
     onSuccess: invalidate,
+    onError: invalidateIfGone,
   });
 
   const deleteLine = useMutation({
@@ -601,6 +620,8 @@ export function useCommentWrites() {
   const save = useMutation({
     mutationFn: (args: Omit<Parameters<typeof saveComment>[0], "owningBusinessUnitId">) =>
       saveComment({ ...args, owningBusinessUnitId: project?.owningBusinessUnitId }),
+    // V-1: a comment another user deleted (`RecordGoneError`) — refresh the threads.
+    onError: (error) => { if (isRecordGone(error)) invalidate(); },
   });
   const remove = useMutation({ mutationFn: (id: string) => deleteComment(id) });
   return { save, remove, invalidate };

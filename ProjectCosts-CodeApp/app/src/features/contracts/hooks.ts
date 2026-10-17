@@ -16,6 +16,7 @@ import { qk, contractInvalidations } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
 import type { ContractWrite, PaymentTargetWrite } from "@/data/contracts";
 import { loadProjectExtras } from "@/data/project";
+import { isRecordGone } from "@/features/shared/recordGone";
 import {
   applySelection, applyUsage, buildAccountTree, sortContracts,
   type AccountNode, type BopContract, type ContractType, type PaymentTarget,
@@ -200,6 +201,11 @@ export function useSaveContract(projectId: string | undefined) {
         ),
       );
     },
+    // V-1: the contract was deleted by someone else (`RecordGoneError`) — refetch the list.
+    onError: (error) => {
+      if (!projectId || !isRecordGone(error)) return;
+      for (const key of contractInvalidations(projectId)) void queryClient.invalidateQueries({ queryKey: key });
+    },
   });
 }
 
@@ -225,6 +231,10 @@ export function useSavePaymentTarget(projectId: string | undefined) {
       costRepository().savePaymentTarget(projectId as string, write),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: qk.paymentTargets(projectId ?? "none") }),
+    // V-1: the target was deleted by someone else (`RecordGoneError`) — refetch the list.
+    onError: (error) => {
+      if (isRecordGone(error)) void queryClient.invalidateQueries({ queryKey: qk.paymentTargets(projectId ?? "none") });
+    },
   });
 }
 

@@ -13,7 +13,7 @@
  *
  * DELETION BEHAVIOUR is a single switch — `CANVAS_PARITY_DELETION` below.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@fluentui/react-components";
 import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -95,8 +95,8 @@ export default function AddCostsFromTableScreen() {
   const [deleteRowToken, setDeleteRowToken] = useState(0);
   const [copyTableToken, setCopyTableToken] = useState(0);
 
-  const subaccounts = sheetQuery.data?.subaccounts ?? [];
-  const existingContracts = sheetQuery.data?.contracts ?? [];
+  const subaccounts = useMemo(() => sheetQuery.data?.subaccounts ?? [], [sheetQuery.data]);
+  const existingContracts = useMemo(() => sheetQuery.data?.contracts ?? [], [sheetQuery.data]);
   const existingCosts = sheetQuery.data?.costs ?? [];
 
   /*
@@ -160,10 +160,11 @@ export default function AddCostsFromTableScreen() {
 
   const back = () => navigate({ pathname: "/costs/capex", search: `?category=${category}` });
 
-  const handleDataChange = (grid: SheetGrid) => {
+  // Stable across renders so the memoised grid does not re-render when only save state changes.
+  const handleDataChange = useCallback((grid: SheetGrid) => {
     const json = gridToJson(grid, String(years.start));
     setCurrentRows(outputRowsToSheetRows(json, subaccounts, existingContracts));
-  };
+  }, [years.start, subaccounts, existingContracts]);
 
   const doSave = async () => {
     setSaveError(null);

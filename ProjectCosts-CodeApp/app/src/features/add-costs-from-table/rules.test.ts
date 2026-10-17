@@ -424,6 +424,32 @@ describe("costWrites", () => {
     expect(w.upserts).toHaveLength(0);
   });
 
+  it("UT-ADDCOST-058 a month already holding the same value is not re-sent", () => {
+    const months = emptyMonths();
+    months[0] = 100; // unchanged from the stored 100
+    months[1] = 250; // changed from the stored 50
+    const w = costWrites([row({ months, projectContractId: "c-1" })], [
+      cost({ id: "jan", month: 1, cost: 100 }),
+      cost({ id: "feb", month: 2, cost: 50 }),
+    ]);
+    expect(w.upserts).toEqual([
+      { costId: "feb", contractId: "c-1", year: 2026, month: 2, cost: 250 },
+    ]);
+    expect(w.deletes).toEqual([]);
+  });
+
+  it("UT-ADDCOST-060 a same-value month IS re-sent when it has duplicate stored rows", () => {
+    const months = emptyMonths();
+    months[0] = 100;
+    const w = costWrites([row({ months, projectContractId: "c-1" })], [
+      cost({ id: "jan-a", month: 1, cost: 100 }),
+      cost({ id: "jan-b", month: 1, cost: 40 }),
+    ]);
+    expect(w.upserts).toEqual([
+      { costId: "jan-a", contractId: "c-1", year: 2026, month: 1, cost: 100 },
+    ]);
+  });
+
   it("UT-ADDCOST-023 a blank month that never existed is not created", () => {
     const months = emptyMonths();
     months[0] = 100;

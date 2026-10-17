@@ -692,9 +692,9 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-024 sends Add Project to General Data in the SAME tab", async () => {
     // `+ Add Project` blanks the globals and navigates — General Data IS the New Project
-    // screen, and this is the app's only create path. Unlike Edit Project and Edit Costs it
-    // stays in place: there is no list state worth preserving behind a form you are about to
-    // fill in, and a new tab for an empty form is just a lost tab.
+    // screen, and this is the app's only create path. Same tab as Edit Project (both are the
+    // in-app `Navigate` branch of the canvas's own fork); unlike Edit Costs, which still opens
+    // a new tab for what is a genuinely different route.
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const user = userEvent.setup();
     render(<Harness><ProjectOverviewScreen /></Harness>);
@@ -704,9 +704,11 @@ describe("ProjectOverviewScreen", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it("UT-OVUI-025 opens the project's General Data in a new tab", async () => {
-    // The canvas forked on `gblProduction` and relaunched the whole app in the player, which
-    // is a new tab too. The fork is gone; the new tab is not.
+  it("UT-OVUI-025 sends Edit Project to General Data in the SAME tab", async () => {
+    // The canvas `editProject` OnSelect forks on `gblProduction`: a cross-app `Launch` in
+    // production, an in-app `Navigate` everywhere else, to the very screen `Add Project` also
+    // targets. One unified app now, so the in-app branch is the one ported — no new tab, same
+    // as Add Project.
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const user = userEvent.setup();
     render(<Harness search="?q=endpoint"><ProjectOverviewScreen /></Harness>);
@@ -714,12 +716,8 @@ describe("ProjectOverviewScreen", () => {
     await selectRow(user);
     await clickCommand(user, "editProject");
 
-    expect(open).toHaveBeenCalledOnce();
-    const url = new URL(String(open.mock.calls[0]![0]));
-    expect(url.hash).toBe(`#/projects/${PROJECT_ID}/general`);
-    // Unlike Edit Costs, no `projectId` launch parameter: the route carries it in the path.
-    expect(url.searchParams.has("projectId")).toBe(false);
-    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?q=endpoint");
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.getByTestId("current-location")).toHaveTextContent(`/projects/${PROJECT_ID}/general`);
   });
 
   /* ──────────────────────────────────────────────────────────── the delete */

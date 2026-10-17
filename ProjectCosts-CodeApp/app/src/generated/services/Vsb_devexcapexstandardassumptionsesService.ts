@@ -24,19 +24,21 @@ export class Vsb_devexcapexstandardassumptionsesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_devexcapexstandardassumptionsesBase, 'vsb_devexcapexstandardassumptionsid'>>): Promise<IOperationResult<Vsb_devexcapexstandardassumptionses>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_devexcapexstandardassumptionsesBase, 'vsb_devexcapexstandardassumptionsid'>>, partitionId?: string): Promise<IOperationResult<Vsb_devexcapexstandardassumptionses>> {
     const result = await Vsb_devexcapexstandardassumptionsesService.client.updateRecordAsync<Partial<Omit<Vsb_devexcapexstandardassumptionsesBase, 'vsb_devexcapexstandardassumptionsid'>>, Vsb_devexcapexstandardassumptionses>(
       Vsb_devexcapexstandardassumptionsesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_devexcapexstandardassumptionsesService.client.deleteRecordAsync(
       Vsb_devexcapexstandardassumptionsesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_devexcapexstandardassumptionses>> {

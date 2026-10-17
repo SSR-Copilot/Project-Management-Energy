@@ -30,6 +30,40 @@ export class DataError extends Error {
   }
 }
 
+/**
+ * V-1 (shared): the row a single-row update targeted no longer exists, so nothing was changed.
+ *
+ * Raised by `updateRecordIfExists` (`@/data/client`) when the pre-PATCH existence read finds no
+ * row, or when the PATCH itself is refused with 404. Since `@microsoft/power-apps` 1.5.0 every
+ * Dataverse PATCH carries `If-Match: *` (update-only), so a row deleted between the read and the
+ * PATCH is no longer recreated: the PATCH fails with 404 and `asRecordGone` turns that into this
+ * error too. It is a `DataError` with status 404, so `userMessage` already renders the "record no
+ * longer exists" hint and `isRetryable` says no; screens that want their own wording test
+ * `instanceof RecordGoneError`.
+ */
+export class RecordGoneError extends DataError {
+  readonly table: string;
+  readonly id: string;
+
+  constructor(operation: string, table: string, id: string) {
+    super(operation, `${table} row ${id} no longer exists`, 404);
+    this.name = "RecordGoneError";
+    this.table = table;
+    this.id = id;
+  }
+}
+
+/**
+ * A PATCH refused with 404 means the row was deleted after the existence read: with the SDK 1.5
+ * `If-Match: *` header the update does not upsert, it fails. Returns the `RecordGoneError` to throw
+ * for such an error, otherwise the error unchanged.
+ */
+export function asRecordGone(error: unknown, operation: string, table: string, id: string): unknown {
+  if (error instanceof RecordGoneError) return error;
+  if (error instanceof DataError && error.status === 404) return new RecordGoneError(operation, table, id);
+  return error;
+}
+
 function describe(cause: unknown): string {
   if (!cause) return "no error detail was returned";
   if (cause instanceof Error) return cause.message;

@@ -21,9 +21,7 @@ export type Vsb_landleaseprojectcostsvsb_secured = keyof typeof Vsb_landleasepro
 export interface Vsb_landleaseprojectcostsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_landleaseprojectcostsstatecode;
   statuscode?: Vsb_landleaseprojectcostsstatuscode;
   timezoneruleversionnumber?: number;
@@ -53,29 +51,16 @@ export interface Vsb_landleaseprojectcostsBase {
 }
 
 export interface Vsb_landleaseprojectcosts extends Vsb_landleaseprojectcostsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_allwtgallocatedname?: string;
-  vsb_currencyname?: string;
   vsb_isstandardcontractname?: string;
   vsb_isstartdatestandardassumptionname?: string;
-  vsb_projectname?: string;
   vsb_securedname?: string;
-  vsb_subaccountname?: string;
   vsb_usecountryinflationprofilename?: string;
   vsb_useinflationprofilename?: string;
   createdby?: object;

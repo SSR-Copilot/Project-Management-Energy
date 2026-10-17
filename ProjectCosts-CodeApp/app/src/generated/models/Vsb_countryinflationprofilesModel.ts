@@ -21,9 +21,7 @@ export type Vsb_countryinflationprofilesvsb_revenuelabel = keyof typeof Vsb_coun
 export interface Vsb_countryinflationprofilesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_countryinflationprofilesstatecode;
   statuscode?: Vsb_countryinflationprofilesstatuscode;
   timezoneruleversionnumber?: number;
@@ -39,23 +37,12 @@ export interface Vsb_countryinflationprofilesBase {
 }
 
 export interface Vsb_countryinflationprofiles extends Vsb_countryinflationprofilesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_countryname?: string;
   vsb_revenuelabelname?: string;
   createdby?: object;
   _createdby_value?: string;

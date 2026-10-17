@@ -22,9 +22,7 @@ export type Vsb_spvdevcomappingcapexdevexesvsb_devcospv = keyof typeof Vsb_spvde
 export interface Vsb_spvdevcomappingcapexdevexesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_spvdevcomappingcapexdevexesstatecode;
   statuscode?: Vsb_spvdevcomappingcapexdevexesstatuscode;
   timezoneruleversionnumber?: number;
@@ -36,25 +34,14 @@ export interface Vsb_spvdevcomappingcapexdevexesBase {
 }
 
 export interface Vsb_spvdevcomappingcapexdevexes extends Vsb_spvdevcomappingcapexdevexesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_accountnumber?: string;
   vsb_devcospvname?: string;
-  vsb_namesubaccountname?: string;
   vsb_relatedaccountname?: string;
   createdby?: object;
   _createdby_value?: string;

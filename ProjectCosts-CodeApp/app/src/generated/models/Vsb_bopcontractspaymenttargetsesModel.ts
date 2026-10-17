@@ -16,9 +16,7 @@ export type Vsb_bopcontractspaymenttargetsesstatuscode = keyof typeof Vsb_bopcon
 export interface Vsb_bopcontractspaymenttargetsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_bopcontractspaymenttargetsesstatecode;
   statuscode?: Vsb_bopcontractspaymenttargetsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -33,23 +31,12 @@ export interface Vsb_bopcontractspaymenttargetsesBase {
 }
 
 export interface Vsb_bopcontractspaymenttargetses extends Vsb_bopcontractspaymenttargetsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_bopprojectcontractname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

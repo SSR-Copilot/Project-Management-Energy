@@ -24,19 +24,21 @@ export class Vsb_generatortypeinprojectsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_generatortypeinprojectsBase, 'vsb_generatortypeinprojectid'>>): Promise<IOperationResult<Vsb_generatortypeinprojects>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_generatortypeinprojectsBase, 'vsb_generatortypeinprojectid'>>, partitionId?: string): Promise<IOperationResult<Vsb_generatortypeinprojects>> {
     const result = await Vsb_generatortypeinprojectsService.client.updateRecordAsync<Partial<Omit<Vsb_generatortypeinprojectsBase, 'vsb_generatortypeinprojectid'>>, Vsb_generatortypeinprojects>(
       Vsb_generatortypeinprojectsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_generatortypeinprojectsService.client.deleteRecordAsync(
       Vsb_generatortypeinprojectsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_generatortypeinprojects>> {

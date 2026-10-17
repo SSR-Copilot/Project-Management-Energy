@@ -16,9 +16,7 @@ export type Vsb_generatorinprojectsstatuscode = keyof typeof Vsb_generatorinproj
 export interface Vsb_generatorinprojectsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_generatorinprojectsstatecode;
   statuscode?: Vsb_generatorinprojectsstatuscode;
   timezoneruleversionnumber?: number;
@@ -29,32 +27,20 @@ export interface Vsb_generatorinprojectsBase {
   vsb_foundationplinthm?: number;
   vsb_generatorinprojectid: string;
   vsb_hubheightexclfoundationplinthm?: number;
-  "vsb_ModuleTypeInProjectId@odata.bind"?: string;
-  vsb_moduletypeinprojectidtype?: string;
+  "vsb_ModuleTypeInProjectId_vsb_generatortypeinproject@odata.bind"?: string;
+  "vsb_ModuleTypeInProjectId_vsb_pvmoduletypeinproject@odata.bind"?: string;
   vsb_name: string;
   vsb_totalheight?: number;
 }
 
 export interface Vsb_generatorinprojects extends Vsb_generatorinprojectsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_effectivehubheightchangedname?: string;
-  vsb_moduletypeinprojectidname?: string;
-  vsb_moduletypeinprojectidyominame?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

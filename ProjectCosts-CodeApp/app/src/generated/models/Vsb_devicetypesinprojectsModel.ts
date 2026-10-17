@@ -16,38 +16,24 @@ export type Vsb_devicetypesinprojectsstatuscode = keyof typeof Vsb_devicetypesin
 export interface Vsb_devicetypesinprojectsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_devicetypesinprojectsstatecode;
   statuscode?: Vsb_devicetypesinprojectsstatuscode;
   timezoneruleversionnumber?: number;
   utcconversiontimezonecode?: number;
   vsb_devicetypesinprojectid: string;
   vsb_name: string;
-  "vsb_TypeInProjectId@odata.bind": string;
-  vsb_typeinprojectidtype?: string;
+  "vsb_TypeInProjectId_vsb_generatortypeinproject@odata.bind"?: string;
+  "vsb_TypeInProjectId_vsb_pvmoduletypeinproject@odata.bind"?: string;
 }
 
 export interface Vsb_devicetypesinprojects extends Vsb_devicetypesinprojectsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_typeinprojectidname?: string;
-  vsb_typeinprojectidyominame?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

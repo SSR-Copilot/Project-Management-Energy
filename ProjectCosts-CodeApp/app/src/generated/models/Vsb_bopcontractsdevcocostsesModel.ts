@@ -16,9 +16,7 @@ export type Vsb_bopcontractsdevcocostsesstatuscode = keyof typeof Vsb_bopcontrac
 export interface Vsb_bopcontractsdevcocostsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_bopcontractsdevcocostsesstatecode;
   statuscode?: Vsb_bopcontractsdevcocostsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -31,25 +29,12 @@ export interface Vsb_bopcontractsdevcocostsesBase {
 }
 
 export interface Vsb_bopcontractsdevcocostses extends Vsb_bopcontractsdevcocostsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_accountname?: string;
-  vsb_bopcontractname?: string;
-  vsb_bopcontractstandardassumptionname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

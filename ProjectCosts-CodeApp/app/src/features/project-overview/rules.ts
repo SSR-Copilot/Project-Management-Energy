@@ -45,9 +45,11 @@
  * pure helpers the handlers need: `DELETE_DIALOG`, `deleteMessages` (+ its canvas-parity
  * twin), `COST_LOCK`, `SPO_MSG`, `isPagerVisible` and `applyOptimisticDelete`.
  *
- * Two commands still have no screen to reach. `Add Project` and `Edit Project` both open
- * **Project General Data**, which is screen #9 and is not migrated; they navigate to real
- * routes that currently render a not-yet-built notice. See `features/general-data/Screen.tsx`.
+ * `Add Project` and `Edit Project` both open **Project General Data** (screen #9, now built —
+ * see `features/general-data/Screen.tsx`), in the SAME tab: the canvas's `editProject` forked
+ * on `gblProduction` between a cross-app `Launch` and an in-app `Navigate` to that same screen,
+ * and the non-production (in-app) branch is the one that applies now that Project Management
+ * and this Cost app are one unified app. See `app/navigation.ts`'s `projectGeneralDataPath`.
  *
  * `Simulate` launches the Analytics canvas app, which stays canvas for this phase, so that one
  * is a genuine external launch rather than a route.
@@ -55,7 +57,9 @@
 import { f } from "@/data/odata";
 import { isDecimal, parseNumber } from "@/domain/numeric";
 import { numberFormat } from "@/domain/locale";
-import { technologyLabel, technologyValue, APPROVAL_STATE, approvalDecoration, rowAccentColor } from "@/domain/project";
+import {
+  technologyLabel, technologyValue, APPROVAL_STATE, TECHNOLOGY, approvalDecoration, rowAccentColor,
+} from "@/domain/project";
 
 /* ═══════════════════════════════════════════════════════════ column names ══ */
 
@@ -335,7 +339,10 @@ export interface ProjectRow {
   managerName: string;
   countryName: string;
   areaName: string;
+  /** The Technology column's DISPLAY label (FormattedValue first). Never used for logic. */
   technology: string;
+  /** The `vsb_technology` option value — what logic (the Simulate gate) keys on. */
+  technologyCode: number | null;
   totalCapacity: number | null;
   /** What the grid's "Project ID" column shows. */
   internalProjectId: string;
@@ -370,6 +377,7 @@ export function toProjectRow(r: Record<string, unknown>): ProjectRow {
     countryName: str(r[fv(COL.country)]),
     areaName: str(r[fv(COL.area)]),
     technology: technologyLabel(r[COL.technology], r[fv(COL.technology)]),
+    technologyCode: technologyValue(r[COL.technology]),
     totalCapacity: num(r[COL.totalCapacity]),
     internalProjectId: str(r[COL.internalProjectId]),
     projectIdCode: str(r[COL.projectIdCode]),
@@ -644,17 +652,19 @@ export const SIMULATE_MSG = {
 export type SimulateGateResult = { ok: true } | { ok: false; message: string };
 
 /**
- * The `If(...)` body above, as a pure function. `technology` is the LABEL
- * (`"Wind"` / `"PV"`), matching `ProjectRow.technology` — any other label, including `null`,
- * fails the first check exactly as `Or(Technology = Wind, Technology = PV)` does for BESS,
- * Hybrid, Hydrogen, Hydro and Substation projects.
+ * The `If(...)` body above, as a pure function. `technology` is the `vsb_technology` OPTION
+ * VALUE (`ProjectRow.technologyCode`), not its label: the canvas `Technology = Wind` compares the
+ * choice itself, and keying on the option value keeps the gate correct if a display label ever
+ * changes (SDK 1.5 regeneration, label audit). Any other value, including `null`, fails the first
+ * check exactly as `Or(Technology = Wind, Technology = PV)` does for BESS, Hybrid, Hydrogen, Hydro
+ * and Substation projects.
  */
 export function simulateGate(args: {
-  technology: string | null | undefined;
+  technology: number | null | undefined;
   clusterStateOrder: number | null | undefined;
   hasBaseCase: boolean;
 }): SimulateGateResult {
-  const supportedTechnology = args.technology === "Wind" || args.technology === "PV";
+  const supportedTechnology = args.technology === TECHNOLOGY.wind || args.technology === TECHNOLOGY.pv;
   const order = args.clusterStateOrder ?? 0;
   if (!(supportedTechnology && order >= 1 && order <= 5)) {
     return { ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster };

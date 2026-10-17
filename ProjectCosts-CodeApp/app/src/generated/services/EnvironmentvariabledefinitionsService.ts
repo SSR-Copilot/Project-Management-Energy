@@ -24,19 +24,21 @@ export class EnvironmentvariabledefinitionsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<EnvironmentvariabledefinitionsBase, 'environmentvariabledefinitionid'>>): Promise<IOperationResult<Environmentvariabledefinitions>> {
+  public static async update(id: string, changedFields: Partial<Omit<EnvironmentvariabledefinitionsBase, 'environmentvariabledefinitionid'>>, partitionId?: string): Promise<IOperationResult<Environmentvariabledefinitions>> {
     const result = await EnvironmentvariabledefinitionsService.client.updateRecordAsync<Partial<Omit<EnvironmentvariabledefinitionsBase, 'environmentvariabledefinitionid'>>, Environmentvariabledefinitions>(
       EnvironmentvariabledefinitionsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await EnvironmentvariabledefinitionsService.client.deleteRecordAsync(
       EnvironmentvariabledefinitionsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Environmentvariabledefinitions>> {

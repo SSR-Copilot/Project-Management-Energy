@@ -2719,20 +2719,32 @@ export function leaseAssumptionQuery(
  * `Switch`'s default arm, `'Land Lease Period'.'Period 1'` (LL:388).
  *
  * This is the SAME defect shape as LL-D1 and the same default: an assumption set that runs to
- * ten periods silently produces a second Period 1. Reproduced here because the import must
- * match what the live app has already written; `mapAssumptionPeriodStrict` returns null so a
- * caller can refuse instead.
+ * ten periods silently produces a second Period 1.
+ *
+ * CORRECTED: the mapping is by exact period NUMBER — the assumption's choice value is resolved
+ * to its period number (1..10) and that number to the same-numbered `'Land Lease Period'`
+ * value. A number the child option set has no value for (Period 10, or any unknown value)
+ * returns `null`; it is never folded into Period 1. `planStandardImport` refuses the whole
+ * import with `refusedReason: "unmappedPeriod"` in that case. `mapAssumptionPeriodCanvasParity`
+ * keeps the LL:388 default arm reachable for parity only.
  */
-export function mapAssumptionPeriod(assumptionPeriod: number): number {
+export function assumptionPeriodNumber(assumptionPeriod: number | null | undefined): number {
+  if (assumptionPeriod === null || assumptionPeriod === undefined) return 0;
   const i = OPEX_PERIOD_VALUES.indexOf(assumptionPeriod);
-  if (i < 0 || i > 8) return LAND_LEASE_PERIOD.period1;
-  return PERIOD_VALUES[i] ?? LAND_LEASE_PERIOD.period1;
+  return i < 0 ? 0 : i + 1;
 }
 
-export function mapAssumptionPeriodStrict(assumptionPeriod: number): number | null {
-  const i = OPEX_PERIOD_VALUES.indexOf(assumptionPeriod);
-  if (i < 0 || i > 8) return null;
-  return PERIOD_VALUES[i] ?? null;
+export function mapAssumptionPeriod(assumptionPeriod: number | null | undefined): number | null {
+  const n = assumptionPeriodNumber(assumptionPeriod);
+  return n === 0 ? null : periodValue(n);
+}
+
+/** Alias kept for existing callers — `mapAssumptionPeriod` is now strict itself. */
+export const mapAssumptionPeriodStrict = mapAssumptionPeriod;
+
+/** Bug-for-bug twin of LL:388's `Switch` default (Period 10 → Period 1). Parity only. */
+export function mapAssumptionPeriodCanvasParity(assumptionPeriod: number): number {
+  return mapAssumptionPeriod(assumptionPeriod) ?? LAND_LEASE_PERIOD.period1;
 }
 
 /**
@@ -2876,6 +2888,14 @@ export interface LeaseStandardImportPlan {
   /** Empty when the import is refused because a standard contract already exists. */
   writes: LeaseWrite[];
   refused: boolean;
+  /**
+   * Why the import was refused. `standardContractExists` is the canvas' silent no-op;
+   * `unmappedPeriod` is the corrected LL:388 period bridge — at least one assumption carries a
+   * period the `'Land Lease Period'` choice has no value for (see `unmappedPeriods`).
+   */
+  refusedReason?: "standardContractExists" | "unmappedPeriod";
+  /** Assumptions whose period could not be mapped; empty unless `refusedReason` says so. */
+  unmappedPeriods?: { id: string; description: string; periodNumber: number | null }[];
   costCount: number;
   periodCount: number;
   allocationCount: number;
@@ -2898,7 +2918,22 @@ export function planStandardImport(args: {
     writes: [], refused: true, costCount: 0, periodCount: 0, allocationCount: 0,
   };
   // Step 0 — `CountRows(recFilteredStandardContractsForProject) = 0`.
-  if (args.existingCostsInSubaccount.some((c) => c.isStandardContract)) return empty;
+  if (args.existingCostsInSubaccount.some((c) => c.isStandardContract)) {
+    return { ...empty, refusedReason: "standardContractExists" };
+  }
+
+  // Corrected Rule 14 — refuse loudly rather than write a period under the wrong choice
+  // (the canvas folds Period 10 into a second Period 1). Refusing the whole import, not just
+  // the bad row, because a partial standard contract would then block a re-import (step 0).
+  const unmappedPeriods = args.assumptions
+    .filter((a) => mapAssumptionPeriod(a.period) === null)
+    .map((a) => {
+      const n = assumptionPeriodNumber(a.period);
+      return { id: a.id, description: a.description, periodNumber: n === 0 ? null : n };
+    });
+  if (unmappedPeriods.length > 0) {
+    return { ...empty, refusedReason: "unmappedPeriod", unmappedPeriods };
+  }
 
   const writes: LeaseWrite[] = [];
   const codYear = inflationStartYearFromCod(ctx.codDate);

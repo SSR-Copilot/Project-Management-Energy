@@ -24,19 +24,21 @@ export class Vsb_countryareasService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_countryareasBase, 'vsb_countryareaid'>>): Promise<IOperationResult<Vsb_countryareas>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_countryareasBase, 'vsb_countryareaid'>>, partitionId?: string): Promise<IOperationResult<Vsb_countryareas>> {
     const result = await Vsb_countryareasService.client.updateRecordAsync<Partial<Omit<Vsb_countryareasBase, 'vsb_countryareaid'>>, Vsb_countryareas>(
       Vsb_countryareasService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_countryareasService.client.deleteRecordAsync(
       Vsb_countryareasService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_countryareas>> {

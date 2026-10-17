@@ -24,19 +24,21 @@ export class Vsb_devicetypesinprojectsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_devicetypesinprojectsBase, 'vsb_devicetypesinprojectid'>>): Promise<IOperationResult<Vsb_devicetypesinprojects>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_devicetypesinprojectsBase, 'vsb_devicetypesinprojectid'>>, partitionId?: string): Promise<IOperationResult<Vsb_devicetypesinprojects>> {
     const result = await Vsb_devicetypesinprojectsService.client.updateRecordAsync<Partial<Omit<Vsb_devicetypesinprojectsBase, 'vsb_devicetypesinprojectid'>>, Vsb_devicetypesinprojects>(
       Vsb_devicetypesinprojectsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_devicetypesinprojectsService.client.deleteRecordAsync(
       Vsb_devicetypesinprojectsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_devicetypesinprojects>> {

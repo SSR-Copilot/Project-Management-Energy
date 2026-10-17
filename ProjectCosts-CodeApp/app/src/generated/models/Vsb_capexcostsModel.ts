@@ -31,9 +31,7 @@ export type Vsb_capexcostsvsb_month = keyof typeof Vsb_capexcostsvsb_month;
 export interface Vsb_capexcostsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_capexcostsstatecode;
   statuscode?: Vsb_capexcostsstatuscode;
   timezoneruleversionnumber?: number;
@@ -49,24 +47,12 @@ export interface Vsb_capexcostsBase {
 }
 
 export interface Vsb_capexcosts extends Vsb_capexcostsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_capexcontractstandardassumptionname?: string;
-  vsb_contractname?: string;
   vsb_costpaidname?: string;
   vsb_monthname?: string;
   createdby?: object;

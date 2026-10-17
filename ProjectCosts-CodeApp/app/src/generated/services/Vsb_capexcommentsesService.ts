@@ -24,19 +24,21 @@ export class Vsb_capexcommentsesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_capexcommentsesBase, 'vsb_capexcommentsid'>>): Promise<IOperationResult<Vsb_capexcommentses>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_capexcommentsesBase, 'vsb_capexcommentsid'>>, partitionId?: string): Promise<IOperationResult<Vsb_capexcommentses>> {
     const result = await Vsb_capexcommentsesService.client.updateRecordAsync<Partial<Omit<Vsb_capexcommentsesBase, 'vsb_capexcommentsid'>>, Vsb_capexcommentses>(
       Vsb_capexcommentsesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_capexcommentsesService.client.deleteRecordAsync(
       Vsb_capexcommentsesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_capexcommentses>> {

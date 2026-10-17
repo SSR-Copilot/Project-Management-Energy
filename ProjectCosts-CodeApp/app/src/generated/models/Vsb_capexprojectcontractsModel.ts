@@ -19,13 +19,13 @@ export const Vsb_capexprojectcontractsvsb_costtype = {
 } as const;
 export type Vsb_capexprojectcontractsvsb_costtype = keyof typeof Vsb_capexprojectcontractsvsb_costtype;
 export const Vsb_capexprojectcontractsvsb_distribution = {
-  952850000: 'EqualDistribution',
-  952850001: 'IndividualDistribution'
+  952850000: 'Equal Distribution',
+  952850001: 'Individual Distribution'
 } as const;
 export type Vsb_capexprojectcontractsvsb_distribution = keyof typeof Vsb_capexprojectcontractsvsb_distribution;
 export const Vsb_capexprojectcontractsvsb_distributionscheme = {
-  952850000: '_Values',
-  952850001: 'AbsoluteValues'
+  952850000: '% Values',
+  952850001: 'Absolute Values'
 } as const;
 export type Vsb_capexprojectcontractsvsb_distributionscheme = keyof typeof Vsb_capexprojectcontractsvsb_distributionscheme;
 export const Vsb_capexprojectcontractsvsb_initialcontractsource = {
@@ -37,9 +37,7 @@ export type Vsb_capexprojectcontractsvsb_initialcontractsource = keyof typeof Vs
 export interface Vsb_capexprojectcontractsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_capexprojectcontractsstatecode;
   statuscode?: Vsb_capexprojectcontractsstatuscode;
   timezoneruleversionnumber?: number;
@@ -68,25 +66,13 @@ export interface Vsb_capexprojectcontractsBase {
 }
 
 export interface Vsb_capexprojectcontracts extends Vsb_capexprojectcontractsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_accountname?: string;
   vsb_applyvatname?: string;
-  vsb_capexstandardassumptioncontractname?: string;
   vsb_costtypename?: string;
   vsb_depreciationname?: string;
   vsb_distributionname?: string;
@@ -94,8 +80,6 @@ export interface Vsb_capexprojectcontracts extends Vsb_capexprojectcontractsBase
   vsb_initialcontractsourcename?: string;
   vsb_iseditedfrompcfname?: string;
   vsb_isstandardcontractname?: string;
-  vsb_linkedclustername?: string;
-  vsb_projectname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

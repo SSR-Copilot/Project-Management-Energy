@@ -14,8 +14,10 @@ import {
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
+  standardMarginSeed, contractFormFromRecord, contractNumbersFromForm, numberInputText,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
+import { parseNumber } from "@/domain/numeric";
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -794,5 +796,112 @@ describe("contract card body (canvas parity)", () => {
     expect(MSG.closingDate).toBe("Closing Date");
     expect(MSG.contractClosingDate).toBe("Contract Closing Date");
     expect(CONTRACT_TYPE_NAME[CONTRACT_TYPE.Development]).toBe("Development Contract");
+  });
+});
+
+describe("standardMarginSeed — the margin a new contract takes from the standard contract", () => {
+  it("UT-CR-SEED-001 a blank (null) margin column seeds an empty field, never \"null\"", () => {
+    // Contracts settings writes null to the unused margin type, and to both when Margin = No.
+    const seed = standardMarginSeed({
+      vsb_margin: true, vsb_margintype: MARGIN_TYPE.Percentage,
+      vsb_marginpercentage: 7.5, vsb_marginfixedvalue: null,
+    });
+    expect(seed).toEqual({
+      margin: true, marginType: MARGIN_TYPE.Percentage,
+      marginPercentage: "7.5", marginFixedValue: "", isMarginStandardAssumption: true,
+    });
+    const none = standardMarginSeed({
+      vsb_margin: false, vsb_margintype: null, vsb_marginpercentage: null, vsb_marginfixedvalue: null,
+    });
+    expect(none.marginPercentage).toBe("");
+    expect(none.marginFixedValue).toBe("");
+    expect(none.margin).toBe(false);
+    expect(none.marginType).toBe(MARGIN_TYPE.Percentage);
+  });
+
+  it("UT-CR-SEED-002 absent columns and a fixed-value margin", () => {
+    expect(standardMarginSeed({})).toMatchObject({ marginPercentage: "", marginFixedValue: "", margin: false });
+    expect(standardMarginSeed({ vsb_margin: true, vsb_margintype: MARGIN_TYPE.FixedValue, vsb_marginfixedvalue: 0 }))
+      .toMatchObject({ marginType: MARGIN_TYPE.FixedValue, marginFixedValue: "0" });
+  });
+
+  // NG-1 (application-settings contracts parity check r2): `String(12.5)` seeded "12.5", which a
+  // de-DE session parses as 125 / rejects, so Save stayed disabled until the user retyped it.
+  it.each([
+    ["en-US", "12.5"],
+    ["de-DE", "12,5"],
+  ])("UT-CR-SEED-003 %s: a seeded 12.5 round-trips to 12.5 and Save is enabled untouched", (locale, shown) => {
+    const tree = applySelection(buildAccountTree(accounts, []), ["l3a"]);
+    const seed = standardMarginSeed({
+      vsb_margin: true, vsb_margintype: MARGIN_TYPE.Percentage,
+      vsb_marginpercentage: 12.5, vsb_marginfixedvalue: 12500,
+    }, locale);
+    // The text the margin input displays.
+    expect(seed.marginPercentage).toBe(shown);
+    expect(seed.marginFixedValue).toBe("12500"); // no group separator — the field is integer-only
+    const form: ContractForm = { ...validForm, ...seed };
+    // The form's own parse, validation and Save gate.
+    expect(parseNumber(form.marginPercentage, locale)).toBe(12.5);
+    expect(validateMarginPercentage(form.marginPercentage, locale)).toBeUndefined();
+    expect(canSaveContract({ form, tree, recalculated: true, locale })).toBe(true);
+    expect(canSaveContract({
+      form: { ...form, marginType: MARGIN_TYPE.FixedValue }, tree, recalculated: true, locale,
+    })).toBe(true);
+    // What Save writes (`Screen.tsx` saves `parseNumber(form.marginPercentage, locale)`).
+    expect(parseNumber(form.marginPercentage, locale)).toBe(12.5);
+    expect(parseNumber(form.marginFixedValue, locale)).toBe(12500);
+    expect(totalCostOfContract(form, 1000, locale)).toBe(1125);
+  });
+});
+
+describe("contractFormFromRecord — a saved contract opened for Edit", () => {
+  const saved: BopContract = {
+    id: "c1", description: "Main works", contractType: CONTRACT_TYPE.Development,
+    closingDate: new Date(2026, 5, 15),
+    costsUntilClosingType: CLOSING_DATE_TYPE.Actual, costsUntilClosingActual: 1234567,
+    costsAfterClosingType: CLOSING_DATE_TYPE.Actual, costsAfterClosingActual: 2000,
+    totalCostsType: TOTAL_COSTS_TYPE.Overwrite, totalCostsOverwrite: 1236567,
+    margin: true, marginType: MARGIN_TYPE.Percentage, marginPercentage: 12.5, marginFixedValue: 12500,
+    totalCostOfContract: 1391137.88, comment: "", isStandardContract: false,
+    isMarginStandardAssumption: false,
+  };
+
+  it.each([
+    ["en-US", "12.5"],
+    ["de-DE", "12,5"],
+  ])("UT-CON-EDIT-001 %s: opens, saves unchanged without edits, and keeps every value", (locale, shownPct) => {
+    const tree = applySelection(buildAccountTree(accounts, []), ["l3a"]);
+    const opened = contractFormFromRecord(saved, locale);
+    expect(opened.marginPercentage).toBe(shownPct);
+    expect(opened.costsUntilClosingActual).toBe("1234567"); // no group separator
+    expect(validateMarginPercentage(opened.marginPercentage, locale)).toBeUndefined();
+    // Save needs one Recalculate; with Actual / Overwrite radios it changes nothing.
+    const form = recalculateForm(opened, [], locale);
+    expect(canSaveContract({ form, tree, recalculated: true, locale })).toBe(true);
+    expect(contractNumbersFromForm(form, locale)).toEqual({
+      costsUntilClosingPlan: undefined, costsUntilClosingActual: 1234567,
+      costsAfterClosingPlan: undefined, costsAfterClosingActual: 2000,
+      totalCostsCalculated: undefined, totalCostsOverwrite: 1236567,
+      marginPercentage: 12.5, marginFixedValue: 12500,
+    });
+    expect(Math.round(contractTotalFromForm(form, locale) * 100) / 100).toBe(saved.totalCostOfContract);
+  });
+
+  it("UT-CON-EDIT-002 recalculated Plan figures are input text that parses back in de-DE", () => {
+    const form = recalculateForm(
+      { ...contractFormFromRecord(saved, "de-DE"), costsUntilClosingType: CLOSING_DATE_TYPE.Plan },
+      [], "de-DE",
+    );
+    expect(parseNumber(form.costsUntilClosingPlan, "de-DE")).toBe(0);
+  });
+
+  it("UT-CON-EDIT-003 numberInputText round-trips decimals and blanks per locale", () => {
+    for (const locale of ["en-US", "de-DE"]) {
+      for (const n of [0, 7.5, 12.5, 99.9, 1234567, 1234567.25]) {
+        expect(parseNumber(numberInputText(n, locale), locale)).toBe(n);
+      }
+      expect(numberInputText(undefined, locale)).toBe("");
+      expect(numberInputText(null, locale)).toBe("");
+    }
   });
 });

@@ -16,9 +16,7 @@ export type Vsb_opexaccountsstatuscode = keyof typeof Vsb_opexaccountsstatuscode
 export interface Vsb_opexaccountsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_opexaccountsstatecode;
   statuscode?: Vsb_opexaccountsstatuscode;
   timezoneruleversionnumber?: number;
@@ -30,19 +28,9 @@ export interface Vsb_opexaccountsBase {
 }
 
 export interface Vsb_opexaccounts extends Vsb_opexaccountsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;

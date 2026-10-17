@@ -16,9 +16,7 @@ export type Vsb_projectstatesstatuscode = keyof typeof Vsb_projectstatesstatusco
 export interface Vsb_projectstatesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_projectstatesstatecode;
   statuscode?: Vsb_projectstatesstatuscode;
   timezoneruleversionnumber?: number;
@@ -31,19 +29,9 @@ export interface Vsb_projectstatesBase {
 }
 
 export interface Vsb_projectstates extends Vsb_projectstatesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;

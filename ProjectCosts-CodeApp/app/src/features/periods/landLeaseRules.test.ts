@@ -49,6 +49,7 @@ import {
   planLeaseDelete, deleteDialog,
   isStandardLocked, leaseCommands, leaseCommandGates,
   leaseAssumptionQuery, mapAssumptionPeriod, mapAssumptionPeriodStrict, mapAggregation,
+  mapAssumptionPeriodCanvasParity, assumptionPeriodNumber,
   mapSecured, mapAllWtgAllocated, roundTwoDecimals, resolveStandardInflationProfile,
   planStandardAllocation, standardPeriodStarts, planStandardImport,
   type LeaseCostRow, type LeasePeriodRow, type LeaseAllocationRow, type LeaseAssumptionRow,
@@ -1682,15 +1683,66 @@ describe("Land Lease — the standard-assumption import", () => {
     expect(mapAllWtgAllocated(true)).toBe(true);
   });
 
-  it("UT-LAND-115 Period 10 has nowhere to go and falls to Period 1", () => {
-    // Ported from skeleton UT-LEASE-027's second half. The same defect shape as LL-D1.
-    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period10))
-      .toBe(LAND_LEASE_PERIOD.period1);
-    expect(mapAssumptionPeriod(999)).toBe(LAND_LEASE_PERIOD.period1);
-    // The strict twin refuses instead, so a caller can choose.
+  it("UT-LAND-115 Period 10 has nowhere to go and is refused, never folded into Period 1", () => {
+    // Corrected LL:388 default arm (same defect shape as LL-D1).
+    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period10)).toBeNull();
+    expect(mapAssumptionPeriod(999)).toBeNull();
+    expect(mapAssumptionPeriod(null)).toBeNull();
     expect(mapAssumptionPeriodStrict(OPEX_LAND_LEASE_PERIOD.period10)).toBeNull();
     expect(mapAssumptionPeriodStrict(OPEX_LAND_LEASE_PERIOD.period3))
       .toBe(LAND_LEASE_PERIOD.period3);
+    // The canvas behaviour stays reachable for parity only.
+    expect(mapAssumptionPeriodCanvasParity(OPEX_LAND_LEASE_PERIOD.period10))
+      .toBe(LAND_LEASE_PERIOD.period1);
+  });
+
+  it("UT-LAND-115b every period maps by exact number — 1, 2, 9 to their own choice; 10, 11 to none", () => {
+    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period1)).toBe(LAND_LEASE_PERIOD.period1);
+    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period2)).toBe(LAND_LEASE_PERIOD.period2);
+    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period9)).toBe(LAND_LEASE_PERIOD.period9);
+    // 'Land Lease Period' has no Period 10 (verified, Vsb_landleaseperiodsModel stops at 9).
+    expect(mapAssumptionPeriod(OPEX_LAND_LEASE_PERIOD.period10)).toBeNull();
+    // A hypothetical "Period 11" (next value in the series) is unknown on both option sets.
+    expect(mapAssumptionPeriod(952850010)).toBeNull();
+    expect(assumptionPeriodNumber(OPEX_LAND_LEASE_PERIOD.period10)).toBe(10);
+    expect(assumptionPeriodNumber(952850010)).toBe(0);
+    // Each of 1..9 maps to a distinct value, in order.
+    const all = Object.values(OPEX_LAND_LEASE_PERIOD).map((v) => mapAssumptionPeriod(v));
+    expect(all).toEqual([...Object.values(LAND_LEASE_PERIOD), null]);
+  });
+
+  it("UT-LAND-115c a 9-period standard contract imports in period order with each period's choice", () => {
+    const opex = Object.values(OPEX_LAND_LEASE_PERIOD).slice(0, 9);
+    const plan = planStandardImport({
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+      assumptions: opex.map((p, i) => assumption({
+        id: `a${i + 1}`, period: p, description: `Standard Lease Holder - ${i + 1}`, durationYears: 1,
+      })),
+      existingCostsInSubaccount: [], generators: [], countryInflationProfile: null,
+    });
+    expect(plan.refused).toBe(false);
+    const periods = plan.writes.filter((w) => w.entitySet === LEASE_ENTITY_SET.period);
+    expect(periods.map((w) => payloadOf(w)[LEASE_PERIOD_COL.period]))
+      .toEqual(Object.values(LAND_LEASE_PERIOD));
+    expect(periods.map((w) => payloadOf(w)[LEASE_PERIOD_COL.startDate])).toEqual(
+      Array.from({ length: 9 }, (_, i) => `${2027 + i}-04-01`),
+    );
+  });
+
+  it("UT-LAND-115d a 10-period standard contract is refused with the reason, not written as a second Period 1", () => {
+    const plan = planStandardImport({
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+      assumptions: Object.values(OPEX_LAND_LEASE_PERIOD).map((p, i) => assumption({
+        id: `a${i + 1}`, period: p, description: `Standard Lease Holder - ${i + 1}`, durationYears: 1,
+      })),
+      existingCostsInSubaccount: [], generators: [], countryInflationProfile: null,
+    });
+    expect(plan.refused).toBe(true);
+    expect(plan.refusedReason).toBe("unmappedPeriod");
+    expect(plan.writes).toEqual([]);
+    expect(plan.unmappedPeriods).toEqual([
+      { id: "a10", description: "Standard Lease Holder - 10", periodNumber: 10 },
+    ]);
   });
 
   it("UT-LAND-116 money is normalised to two decimals through text", () => {
@@ -1768,6 +1820,7 @@ describe("Land Lease — the standard-assumption import", () => {
       generators: [], countryInflationProfile: null,
     });
     expect(plan.refused).toBe(true);
+    expect(plan.refusedReason).toBe("standardContractExists");
     expect(plan.writes).toEqual([]);
   });
 

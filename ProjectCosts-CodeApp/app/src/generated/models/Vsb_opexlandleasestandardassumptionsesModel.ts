@@ -19,16 +19,16 @@ export const Vsb_opexlandleasestandardassumptionsesvsb_aggregation = {
 } as const;
 export type Vsb_opexlandleasestandardassumptionsesvsb_aggregation = keyof typeof Vsb_opexlandleasestandardassumptionsesvsb_aggregation;
 export const Vsb_opexlandleasestandardassumptionsesvsb_period = {
-  952850000: 'Period1',
-  952850001: 'Period2',
-  952850002: 'Period3',
-  952850003: 'Period4',
-  952850004: 'Period5',
-  952850005: 'Period6',
-  952850006: 'Period7',
-  952850007: 'Period8',
-  952850008: 'Period9',
-  952850009: 'Period10'
+  952850000: 'Period 1',
+  952850001: 'Period 2',
+  952850002: 'Period 3',
+  952850003: 'Period 4',
+  952850004: 'Period 5',
+  952850005: 'Period 6',
+  952850006: 'Period 7',
+  952850007: 'Period 8',
+  952850008: 'Period 9',
+  952850009: 'Period 10'
 } as const;
 export type Vsb_opexlandleasestandardassumptionsesvsb_period = keyof typeof Vsb_opexlandleasestandardassumptionsesvsb_period;
 export const Vsb_opexlandleasestandardassumptionsesvsb_technology = {
@@ -42,16 +42,16 @@ export const Vsb_opexlandleasestandardassumptionsesvsb_technology = {
 } as const;
 export type Vsb_opexlandleasestandardassumptionsesvsb_technology = keyof typeof Vsb_opexlandleasestandardassumptionsesvsb_technology;
 export const Vsb_opexlandleasestandardassumptionsesvsb_thresholdtype = {
-  952850000: 'NetYieldp75',
-  952850001: 'NetYieldp90',
+  952850000: 'Net Yield p75',
+  952850001: 'Net Yield p90',
   952850002: 'Individual'
 } as const;
 export type Vsb_opexlandleasestandardassumptionsesvsb_thresholdtype = keyof typeof Vsb_opexlandleasestandardassumptionsesvsb_thresholdtype;
 export const Vsb_opexlandleasestandardassumptionsesvsb_typeofcontract = {
   952850000: 'Landlease',
-  952850001: 'OpexO_M',
-  952850002: 'OpexOther',
-  952850003: 'DEVEX_CAPEX',
+  952850001: 'Opex O&M',
+  952850002: 'Opex Other',
+  952850003: 'DEVEX/CAPEX',
   128470001: 'BoP'
 } as const;
 export type Vsb_opexlandleasestandardassumptionsesvsb_typeofcontract = keyof typeof Vsb_opexlandleasestandardassumptionsesvsb_typeofcontract;
@@ -59,9 +59,7 @@ export type Vsb_opexlandleasestandardassumptionsesvsb_typeofcontract = keyof typ
 export interface Vsb_opexlandleasestandardassumptionsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_opexlandleasestandardassumptionsesstatecode;
   statuscode?: Vsb_opexlandleasestandardassumptionsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -112,32 +110,18 @@ export interface Vsb_opexlandleasestandardassumptionsesBase {
 }
 
 export interface Vsb_opexlandleasestandardassumptionses extends Vsb_opexlandleasestandardassumptionsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_aggregationname?: string;
   vsb_alignwithprojectdurationname?: string;
   vsb_allwtgallocatedname?: string;
-  vsb_countryname?: string;
-  vsb_currencyname?: string;
   vsb_externalcontractname?: string;
   vsb_iscollapsedname?: string;
   vsb_islastperiodname?: string;
-  vsb_landleasesubaccountname?: string;
-  vsb_opexsubaccountname?: string;
   vsb_periodname?: string;
   vsb_securedname?: string;
   vsb_technologyname?: string;

@@ -18,14 +18,26 @@ const update = vi.fn(async (_id: string, _fields: Record<string, unknown>) => ({
 vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   Vsb_capexcommentsesService: {
     create: (r: Record<string, unknown>) => create(r),
-    update: (id: string, f: Record<string, unknown>) => update(id, f),
     delete: vi.fn(async () => undefined),
     getAll: vi.fn(),
   },
 }));
+// Updates go through the shared V-1 guard (`updateRecordIfExists`), i.e. the SDK client.
+vi.mock("@microsoft/power-apps/data", async () => (await import("./testing/guardedSdkFake")).sdkModule);
+
+import { guardedSdk, resetGuardedSdk } from "./testing/guardedSdkFake";
+import { RecordGoneError } from "@/platform/errors";
 
 const { saveComment } = await import("./comments");
 const { COMMENT_TYPE } = await import("@/features/capex-costs/comments");
+
+/** An existing comment — a GUID, because the guard's existence read rejects anything else. */
+const C1 = "209b7556-12b0-f111-aaac-7ced8d15d85e";
+
+beforeEach(() => {
+  resetGuardedSdk();
+  guardedSdk.onUpdate = (u) => { void update(u.id, u.body); };
+});
 
 const base = {
   text: "Added General Comment",
@@ -122,7 +134,7 @@ describe("saveComment — resolve", () => {
     // the Entra object id, and `Session.entraObjectId` binds straight to it. Pointing this at
     // `systemusers` would bind a different table's key.
     await saveComment({
-      ...base, id: "c1", resolved: true,
+      ...base, id: C1, resolved: true,
       resolvedById: "a26645ca-b7b5-4642-80cd-095628456979",
     });
     expect(updatedPayload().vsb_resolved).toBe(true);
@@ -132,7 +144,7 @@ describe("saveComment — resolve", () => {
 
   it("UT-CMT-085 reopening clears the resolver on the same update", async () => {
     // `{Resolved: No, IsModified: true, Resolver: Blank()}` (:9830-9834).
-    await saveComment({ ...base, id: "c1", resolved: false });
+    await saveComment({ ...base, id: C1, resolved: false });
     expect(updatedPayload().vsb_resolved).toBe(false);
     expect(updatedPayload()["vsb_ResolvedBy@odata.bind"]).toBeNull();
   });
@@ -147,14 +159,33 @@ describe("saveComment — edit", () => {
     // off, and the red dot with it. `@odata.bind: null` is the only disassociation available —
     // `_vsb_capexcost_value` is the READ form and is rejected in a write body
     // (`docs/CONVENTIONS.md`).
-    await saveComment({ ...base, id: "c1", commentType: COMMENT_TYPE.general });
+    await saveComment({ ...base, id: C1, commentType: COMMENT_TYPE.general });
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0]?.[0]).toBe("c1");
+    expect(update.mock.calls[0]?.[0]).toBe(C1);
     expect(updatedPayload()["vsb_CapexCost@odata.bind"]).toBeNull();
     expect(updatedPayload()["vsb_ParentComment@odata.bind"]).toBeNull();
     expect(updatedPayload()["vsb_RootComment@odata.bind"]).toBeNull();
     // An update must not try to re-own the row.
     expect(updatedPayload()["owningbusinessunit@odata.bind"]).toBeUndefined();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveComment — V-1 guard (a deleted comment is never recreated)", () => {
+  beforeEach(() => { create.mockClear(); update.mockClear(); });
+
+  it("UT-CMT-087 an edit of a comment deleted meanwhile sends NOTHING and throws RecordGoneError", async () => {
+    guardedSdk.gone.add(C1);
+    const error = await saveComment({ ...base, id: C1 }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RecordGoneError);
+    expect(guardedSdk.reads).toEqual([{ table: "vsb_capexcommentses", id: C1 }]);
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("UT-CMT-088 an edit of an existing comment is checked first, then PATCHed", async () => {
+    await saveComment({ ...base, id: C1 });
+    expect(guardedSdk.reads).toEqual([{ table: "vsb_capexcommentses", id: C1 }]);
+    expect(guardedSdk.updates.map((u) => [u.table, u.id])).toEqual([["vsb_capexcommentses", C1]]);
   });
 });

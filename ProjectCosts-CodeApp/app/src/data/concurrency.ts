@@ -31,6 +31,13 @@
 export const WRITE_CONCURRENCY = 8;
 
 /**
+ * Pool width for per-row deletes on the Add Cost from Table save, the one path still bound to
+ * one request per row. A save's peak in-flight count at this width (two delete pools plus at
+ * most eight bulk chunks) stays under half of the 52-request ceiling.
+ */
+export const DELETE_CONCURRENCY = 16;
+
+/**
  * `items.map(fn)`, run at most `limit` at a time, resolving to the results IN INPUT ORDER.
  *
  * Input order is guaranteed for the results; COMPLETION order is not, so this is only for tasks

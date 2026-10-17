@@ -1,0 +1,488 @@
+/**
+ * Application Settings — CAPEX Accounts. Replaces the canvas `Admin CAPEX Accounts`.
+ *
+ * Composition only: rules live in `./rules.ts`, Dataverse I/O in `@/data/settings/capex-accounts.ts`,
+ * queries/mutation in `./hooks.ts`. Requirements and canvas analysis:
+ * `codeapp-knowledge-base/screens/application-settings/capex-accounts/` (build log: `07-build-log.md`).
+ *
+ * Shell (header, settings rail, role gate) is provided by the route; this renders Modules C-L.
+ *
+ * Reusable components (Wave B): load states `useQueryHealth` + `QueryStates`, page bars
+ * `NoticeBar`, tabs `SettingsTabStrip`, expand set `useToggleSet`, panel state `usePanelState`,
+ * dialog `useConfirmDialog` + `ConfirmDialog error lockWhileBusy`, writes `useBusyRunner`.
+ */
+import { useMemo, useState } from "react";
+import { makeStyles } from "@fluentui/react-components";
+import {
+  CommandBar, ConfirmDialog, EmptyState, LoadingOverlay, NoticeBar, QueryStates, SettingsTabStrip, useNotify,
+  type Command,
+} from "@/components";
+import { useBusyRunner } from "@/app/useBusyRunner";
+import { useConfirmDialog, type ConfirmState } from "@/app/useConfirmDialog";
+import { usePanelState } from "@/app/usePanelState";
+import { useQueryHealth } from "@/app/useQueryHealth";
+import { useToggleSet } from "@/app/useToggleSet";
+import { userReason } from "@/platform/userMessage";
+import {
+  DuplicateNumberError, RecordGoneError, activateCapexAccount, activateCapexSubaccount, createCapexAccount,
+  deactivateCapexAccount, deactivateCapexSubaccount, deleteCapexAccount, deleteCapexSubaccount,
+  renameCapexAccount, saveCapexOrder,
+} from "@/data/settings/capex-accounts";
+import { reorderDiff } from "@/domain/reorder";
+import { palette } from "@/theme/tokens";
+import { AccountCard } from "./AccountCard";
+import { AccountPanel, ReorderPanel, SubaccountPanel } from "./Panels";
+import { useCapexPrivileges, useCapexTree, useCapexWrite, useHasContracts } from "./hooks";
+import { describeWriteError } from "./messages";
+import {
+  BUSY, CONTRACT_CHECK_FAILED, GONE, GONE_STATUS, accountCommands, accountDeleteUnavailable, accountStatusDialog, composeSubaccountNumber, deleteAccountDialog,
+  deleteSubaccountDialog, forecastCutoff, subaccountStatusDialog,
+  type CapexNode, type CommandState, type DialogText,
+} from "./rules";
+
+const useStyles = makeStyles({
+  /** Right content: white, vertical, gap 10 (CA:139-154). */
+  page: {
+    display: "flex", flexDirection: "column", rowGap: "10px",
+    backgroundColor: palette.white, minHeight: "100%", paddingBottom: "20px",
+  },
+  commands: { paddingLeft: "20px", paddingRight: "20px" },
+  cards: { display: "flex", flexDirection: "column", paddingLeft: "3px", paddingRight: "10px" },
+});
+
+/**
+ * New vs Edit is FROZEN when the panel opens (gap G4 / B3): `editing` is a snapshot of the row,
+ * never re-derived from the live tree, so a refetch that drops the row cannot turn an Edit panel
+ * into a New panel whose Save would create a record.
+ */
+type Panel =
+  | { kind: "account"; editing: CapexNode | undefined }
+  | { kind: "subaccount"; parent: CapexNode; editing: CapexNode | undefined }
+  | { kind: "reorder"; parentId: string; subaccounts: boolean };
+
+type DialogKind = "deleteAccount" | "deleteSubaccount" | "accountStatus" | "subaccountStatus";
+interface DialogPayload { targetId: string; text: DialogText; wasActive: boolean }
+
+const READ_ACTION = "read CAPEX accounts";
+
+/** The user-facing action of a dialog, for its failure text. */
+function dialogAction({ kind, payload }: ConfirmState<DialogKind, DialogPayload>): string {
+  return {
+    deleteSubaccount: "delete the subaccount",
+    deleteAccount: "delete the account",
+    accountStatus: payload.wasActive ? "deactivate the account" : "activate the account",
+    subaccountStatus: payload.wasActive ? "deactivate the subaccount" : "activate the subaccount",
+  }[kind];
+}
+
+export default function CAPEXAccountsSettingsScreen() {
+  const styles = useStyles();
+  const treeQuery = useCapexTree();
+  const tree = treeQuery.tree;
+  const health = useQueryHealth([treeQuery]);
+  const privileges = useCapexPrivileges();
+  const write = useCapexWrite();
+
+  const [categoryId, setCategoryId] = useState<string | undefined>();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
+  // Component state, not data: survives every refetch (AC-3.3); all collapsed on entry (CA:34-38).
+  const expanded = useToggleSet();
+  const panels = usePanelState<Panel>();
+  const panel = panels.panel;
+  const [duplicate, setDuplicate] = useState(false);
+  const dialog = useConfirmDialog<DialogKind, DialogPayload>();
+  const runner = useBusyRunner();
+  const busy = runner.busy;
+  // Outcomes of completed writes are toasts (M5); inline/persistent states stay MessageBars.
+  const notify = useNotify();
+
+  /* ── derived ── */
+  const categories = useMemo(() => tree?.categories ?? [], [tree]);
+  const category = categories.find((c) => c.id === categoryId) ?? categories[0];
+  const accounts = useMemo(() => category?.children ?? [], [category]);
+  const selected = accounts.find((a) => a.id === selectedAccountId);
+
+  const expandedIds = expanded.values;
+  const contractCheckIds = useMemo(() => {
+    const ids: string[] = [];
+    if (selected && selected.children.length === 0) ids.push(selected.id);
+    for (const a of accounts) if (expandedIds.has(a.id)) for (const s of a.children) ids.push(s.id);
+    return ids;
+  }, [accounts, expandedIds, selected]);
+  const { checks: contracts, retryFailed: retryContractChecks } = useHasContracts(contractCheckIds);
+
+  const selectedHasContracts = selected ? contracts.get(selected.id) : undefined;
+  const commands = accountCommands({
+    selected,
+    categorySelected: Boolean(category),
+    categoryAccountCount: accounts.length,
+    selectedHasContracts,
+    privileges,
+  });
+  // G10: Delete is shown disabled; this says why instead of hiding it silently.
+  const deleteUnavailable = accountDeleteUnavailable({ selected, selectedHasContracts });
+
+  const node = (id: string | undefined): CapexNode | undefined => (id ? tree?.byId.get(id) : undefined);
+
+  /** Module D — the account command bar (CA:184-368); hidden commands are not rendered. */
+  const accountBar: (Command & CommandState & { run: () => void })[] = [
+    {
+      key: "reorder", label: "Reorder", icon: "Reorder", ...commands.reorder,
+      run: () => { if (category) openPanel({ kind: "reorder", parentId: category.id, subaccounts: false }); },
+    },
+    {
+      key: "new", label: "New", icon: "Add", ...commands.create,
+      // NG-1: canvas New sets `locSelectedAccount: Blank()` (CA:334-340), so after Cancel no
+      // account is selected; a successful create selects the new row (saveAccount).
+      run: () => { setSelectedAccountId(undefined); openPanel({ kind: "account", editing: undefined }); },
+    },
+    { key: "edit", label: "Edit", icon: "Edit", ...commands.edit, run: () => { if (selected) openPanel({ kind: "account", editing: selected }); } },
+    {
+      key: "activate", label: "Activate", icon: "Activate", ...commands.activate,
+      run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
+    },
+    {
+      key: "deactivate", label: "Deactivate", icon: "Deactivate", ...commands.deactivate,
+      run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
+    },
+    {
+      key: "delete", label: "Delete", icon: "Delete", ...commands.delete,
+      run: () => { if (selected) openDialog("deleteAccount", selected, deleteAccountDialog(selected.name)); },
+    },
+  ];
+
+  /* ── write plumbing ── */
+  function run<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    return runner.run(label, async () => (await write.mutateAsync(fn)) as T);
+  }
+
+  function openPanel(next: Panel) {
+    setDuplicate(false);
+    panels.open(next);
+  }
+  function closePanel() {
+    panels.close();
+    setDuplicate(false);
+  }
+  /** Stale messages from the previous attempt must not sit next to the new outcome (B6). */
+  function startSave() {
+    panels.setError(undefined);
+    setDuplicate(false);
+  }
+  function openDialog(kind: DialogKind, target: CapexNode, text: DialogText) {
+    dialog.ask(kind, { targetId: target.id, text, wasActive: target.active });
+  }
+
+  /* ── account panel ── */
+  async function saveAccount(form: { number: string; name: string }) {
+    if (!panel || panel.kind !== "account" || !category) return;
+    const editing = panel.editing;
+    // Edit mode never falls through to create; a vanished row is refused (G4).
+    if (editing && !node(editing.id)) { panels.setError(GONE.account); return; }
+    startSave();
+    const action = editing ? "save the account" : "create the account";
+    try {
+      if (editing) {
+        await run(BUSY.saveAccount, () => renameCapexAccount(editing.id, form.name));
+        notify.success(`Account "${form.name.trim()}" saved.`);
+      } else {
+        // CA:1436 `Trim(number)` — the user's input is trimmed; stored numbers never are (NG-3).
+        const result = await run(BUSY.saveAccount, () => createCapexAccount({
+          parentId: category.id, number: form.number.trim(), name: form.name,
+        }));
+        if (result.inactiveError instanceof RecordGoneError) {
+          // R3-2: the new row was deleted before its Inactive step; it is not "still Active",
+          // and there is nothing to select.
+          notify.warning(`Account "${form.name.trim()}" was created but has since been deleted by someone else.`);
+        } else if (result.inactiveError) {
+          setSelectedAccountId(result.id);
+          notify.warning(
+            `Account "${form.name.trim()}" was created but is still Active: setting it Inactive failed. ` +
+              "Deactivate it before it is used for costing.",
+          );
+        } else {
+          setSelectedAccountId(result.id);
+          notify.success(`Account "${form.name.trim()}" created as Inactive.`);
+        }
+      }
+      closePanel();
+    } catch (error) {
+      if (error instanceof DuplicateNumberError) { setDuplicate(true); return; }
+      if (error instanceof RecordGoneError) { panels.setError(GONE.account); return; } // V-1
+      panels.setError(describeWriteError(error, action));
+    }
+  }
+
+  /* ── subaccount panel ── */
+  async function saveSubaccount(form: { suffix: string; name: string }) {
+    if (!panel || panel.kind !== "subaccount") return;
+    const parent = panel.parent;
+    const editing = panel.editing;
+    if (editing && !node(editing.id)) { panels.setError(GONE.subaccount); return; }
+    if (!editing && !node(parent.id)) { panels.setError(GONE.parent); return; }
+    startSave();
+    const action = editing ? "save the subaccount" : "create the subaccount";
+    try {
+      if (editing) {
+        await run(BUSY.saveSubaccount, () => renameCapexAccount(editing.id, form.name));
+        notify.success(`Subaccount "${form.name.trim()}" saved.`);
+      } else {
+        const result = await run(BUSY.saveSubaccount, () => createCapexAccount({
+          parentId: parent.id, number: composeSubaccountNumber(parent.number, form.suffix), name: form.name,
+        }));
+        if (result.inactiveError instanceof RecordGoneError) {
+          // R3-2: deleted before its Inactive step; not "still Active".
+          notify.warning(`Subaccount "${form.name.trim()}" was created but has since been deleted by someone else.`);
+        } else if (result.inactiveError) {
+          notify.warning(
+            `Subaccount "${form.name.trim()}" was created but is still Active: setting it Inactive failed. ` +
+              "Deactivate it before it is used for costing.",
+          );
+        } else {
+          notify.success(`Subaccount "${form.name.trim()}" created as Inactive.`);
+        }
+      }
+      closePanel();
+    } catch (error) {
+      if (error instanceof DuplicateNumberError) { setDuplicate(true); return; }
+      if (error instanceof RecordGoneError) { panels.setError(GONE.subaccount); return; } // V-1
+      panels.setError(describeWriteError(error, action));
+    }
+  }
+
+  /* ── reorder panel ── */
+  async function saveOrder(list: CapexNode[]) {
+    if (!panel || panel.kind !== "reorder") return;
+    const changes = reorderDiff(list.map((n) => ({ id: n.id, order: n.order })));
+    startSave();
+    try {
+      if (changes.length > 0) {
+        await run(BUSY.saveOrder, () => saveCapexOrder(changes));
+        notify.success("New order saved.");
+      }
+      if (!panel.subaccounts) setSelectedAccountId(undefined); // AC-8.3
+      closePanel();
+    } catch (error) {
+      panels.setError(describeWriteError(error, "save the new order"));
+    }
+  }
+
+  /* ── dialogs ── */
+  /**
+   * Default `useConfirmDialog` flow: busy while the write runs, closes on success, stays open with
+   * the error (shown by `ConfirmDialog error`, `role="alert"` — V3) on failure.
+   */
+  async function confirmDialog() {
+    const current = dialog.state;
+    if (!current) return;
+    const { year, month } = forecastCutoff(new Date());
+    await dialog.confirm(async ({ kind, payload: { targetId, wasActive } }) => {
+      switch (kind) {
+        case "deleteSubaccount":
+          await run(BUSY.deleteSubaccount, () => deleteCapexSubaccount(targetId));
+          notify.success("Subaccount deleted.");
+          break;
+        case "deleteAccount":
+          await run(BUSY.deleteAccount, () => deleteCapexAccount(targetId));
+          setSelectedAccountId(undefined); // AC-10.4
+          notify.success("Account deleted.");
+          break;
+        case "accountStatus":
+          if (wasActive) {
+            // G9: the data layer reads the subaccounts live; the cached tree is not used.
+            await run(BUSY.updateAccount, () => deactivateCapexAccount({ accountId: targetId, year, month }));
+            notify.success("Account and its subaccounts deactivated; forecast costs cleaned up.");
+          } else {
+            await run(BUSY.updateAccount, () => activateCapexAccount(targetId));
+            notify.success("Account activated.");
+          }
+          break;
+        case "subaccountStatus":
+          if (wasActive) {
+            await run(BUSY.updateSubaccount, () => deactivateCapexSubaccount(targetId, year, month));
+            notify.success("Subaccount deactivated; forecast costs cleaned up.");
+          } else {
+            await run(BUSY.updateSubaccount, () => activateCapexSubaccount(targetId));
+            notify.success("Subaccount activated.");
+          }
+          break;
+      }
+    }, {
+      errorText: (error) => {
+        // V-1: the status target was deleted by someone else; nothing was written.
+        if (error instanceof RecordGoneError && (current.kind === "accountStatus" || current.kind === "subaccountStatus")) {
+          return current.kind === "accountStatus" ? GONE_STATUS.account : GONE_STATUS.subaccount;
+        }
+        return describeWriteError(error, dialogAction(current));
+      },
+    });
+  }
+
+  /* ── render ── */
+  // Full-page error only when there is NOTHING to show (gap G2 / B1): `useQueryHealth` treats a
+  // failed background refetch with cached data as `staleError` (a warning bar), never as fatal,
+  // so open panels/dialogs and the outcome of the write just made stay on screen.
+  const empty = !tree?.root
+    ? {
+      when: true,
+      title: "CAPEX account tree not found",
+      description: 'No root CAPEX account (number "00001") exists, so there are no categories to show. Ask an administrator to check the CAPEX Account Lists table.',
+    }
+    : categories.length === 0
+      ? { when: true, title: "No CAPEX categories", description: 'The root CAPEX account "00001" has no categories yet.' }
+      : undefined;
+
+  const reorderItems = panel?.kind === "reorder"
+    ? (panel.subaccounts ? node(panel.parentId)?.children : accounts) ?? []
+    : [];
+  // G4: the frozen row (or the new subaccount's parent) is gone from the latest tree.
+  const panelGone = panel?.kind === "account"
+    ? (panel.editing && !node(panel.editing.id) ? GONE.account : undefined)
+    : panel?.kind === "subaccount"
+      ? (panel.editing
+        ? (!node(panel.editing.id) ? GONE.subaccount : undefined)
+        : (!node(panel.parent.id) ? GONE.parent : undefined))
+      : undefined;
+
+  return (
+    <QueryStates
+      health={health}
+      loadingLabel="Loading CAPEX accounts…"
+      fatal={{
+        title: "CAPEX accounts could not be loaded",
+        text: (error) => userReason(error, READ_ACTION,
+          "Something went wrong while reading the CAPEX account list. Please try again."),
+      }}
+      {...(empty ? { empty } : {})}
+    >
+      {() => (
+        <div className={styles.page}>
+          {/* Module C — category tabs (CA:156-183). */}
+          <SettingsTabStrip
+            size="medium" bandHeight={50} ariaLabel="CAPEX account categories"
+            tabs={categories.map((c) => ({ id: c.id, label: c.name }))}
+            selected={category?.id}
+            onSelect={(id) => { setCategoryId(id); setSelectedAccountId(undefined); }}
+          />
+
+          {/* Module D — account command bar (CA:184-368). */}
+          <div className={styles.commands}>
+            <CommandBar
+              ariaLabel="Account commands"
+              commands={accountBar.map(({ key, label, icon, enabled, visible }) => ({ key, label, icon, enabled, visible }))}
+              onCommand={(key) => accountBar.find((c) => c.key === key)?.run()}
+            />
+          </div>
+
+          {deleteUnavailable ? (
+            <NoticeBar
+              intent="warning" inset={20} testId="delete-check-failed"
+              action={{ label: "Retry check", onClick: retryContractChecks }}
+            >
+              {CONTRACT_CHECK_FAILED.account}
+            </NoticeBar>
+          ) : null}
+
+          {health.staleError !== undefined ? (
+            <NoticeBar intent="warning" inset={20} alert action={{ label: "Retry", onClick: health.retryFailed }}>
+              {userReason(health.staleError, READ_ACTION,
+                "The CAPEX account list could not be refreshed. What you see may be out of date.")}
+            </NoticeBar>
+          ) : null}
+
+          {/* Module E — account cards (CA:369-941). */}
+          {accounts.length === 0 ? (
+            <EmptyState title="No accounts in this category" description="Use New to add the first account." />
+          ) : (
+            <div className={styles.cards} role="list" aria-label={`Accounts of ${category?.name ?? ""}`}>
+              {accounts.map((account) => (
+                <div role="listitem" key={account.id}>
+                  <AccountCard
+                    account={account}
+                    selected={account.id === selectedAccountId}
+                    expanded={expanded.has(account.id)}
+                    privileges={privileges}
+                    contractsBySubaccount={contracts}
+                    // AC-3.1: click toggles selection.
+                    onSelect={() => setSelectedAccountId((cur) => (cur === account.id ? undefined : account.id))}
+                    // AC-3.2: chevron selects (never deselects) and toggles expansion.
+                    onToggleExpand={() => {
+                      setSelectedAccountId(account.id);
+                      expanded.toggle(account.id);
+                    }}
+                    onAddSubaccount={() => {
+                      setSelectedAccountId(account.id);
+                      openPanel({ kind: "subaccount", parent: account, editing: undefined });
+                    }}
+                    onReorderSubaccounts={() => {
+                      setSelectedAccountId(account.id);
+                      openPanel({ kind: "reorder", parentId: account.id, subaccounts: true });
+                    }}
+                    // AC-4.2: every row action selects the parent account.
+                    onEditSubaccount={(sub) => {
+                      setSelectedAccountId(account.id);
+                      openPanel({ kind: "subaccount", parent: account, editing: sub });
+                    }}
+                    onChangeSubaccountStatus={(sub) => {
+                      setSelectedAccountId(account.id);
+                      openDialog("subaccountStatus", sub, subaccountStatusDialog(sub));
+                    }}
+                    onDeleteSubaccount={(sub) => {
+                      setSelectedAccountId(account.id);
+                      openDialog("deleteSubaccount", sub, deleteSubaccountDialog(sub.name));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Modules H, I, J — right panels. */}
+          {panel?.kind === "account" ? (
+            <AccountPanel
+              key={panels.key} open isNew={!panel.editing} account={panel.editing} category={category}
+              saving={Boolean(busy)} duplicate={duplicate} error={panelGone ?? panels.error}
+              blocked={Boolean(panelGone)}
+              onSave={(f) => { void saveAccount(f); }} onCancel={closePanel}
+            />
+          ) : null}
+          {panel?.kind === "subaccount" ? (
+            <SubaccountPanel
+              key={panels.key} open isNew={!panel.editing} parent={panel.parent} subaccount={panel.editing}
+              saving={Boolean(busy)} duplicate={duplicate} error={panelGone ?? panels.error}
+              blocked={Boolean(panelGone)}
+              onSave={(f) => { void saveSubaccount(f); }} onCancel={closePanel}
+            />
+          ) : null}
+          {panel?.kind === "reorder" ? (
+            <ReorderPanel
+              key={panels.key} open subaccounts={panel.subaccounts} items={reorderItems}
+              saving={Boolean(busy)} error={panels.error}
+              onSave={(list) => { void saveOrder(list); }} onCancel={closePanel}
+            />
+          ) : null}
+
+          {/* Module K — confirmation dialogs (one at a time). The failure is a `role="alert"`
+              MessageBar inside the dialog (E2 / V3); ✕ and Escape are locked while it runs. */}
+          <ConfirmDialog
+            open={Boolean(dialog.state)}
+            title={dialog.state?.payload.text.title ?? ""}
+            description={dialog.state?.payload.text.description ?? ""}
+            confirmText={dialog.state?.payload.text.confirmText ?? "Confirm"}
+            confirmWidth={128}
+            destructive={dialog.state?.kind === "deleteAccount" || dialog.state?.kind === "deleteSubaccount"}
+            busy={dialog.busy}
+            lockWhileBusy
+            error={dialog.error ?? null}
+            onConfirm={() => { void confirmDialog(); }}
+            onCancel={dialog.cancel}
+          />
+
+          {/* Module L — the progress overlay the canvas declared but never rendered (D-UX-1). */}
+          {/* Portalled so it stacks above an open drawer/dialog (both are Fluent portals). */}
+          {busy ? <LoadingOverlay portal label={busy} /> : null}
+        </div>
+      )}
+    </QueryStates>
+  );
+}

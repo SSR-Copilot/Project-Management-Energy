@@ -24,6 +24,7 @@ import { RolesService } from "@/generated/services/RolesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { TeamsService } from "@/generated/services/TeamsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
+import { trace } from "@/platform/telemetry";
 import { fetchAll } from "./client";
 import { chunk, eq, guid, or } from "./odata";
 
@@ -53,7 +54,42 @@ export interface CurrentUser {
   editableCountries: string[];
   /** `gblCurrentUser.IsProjectDataAllCountries`, the badge's World row. */
   isProjectDataAllCountries: boolean;
+  /** `gblCurrentUser.IsApplicationAdministrator` — one of the two Application Settings roles. */
+  isApplicationAdministrator: boolean;
+  /** `gblCurrentUser.IsControllerOwnData` — the other Application Settings role. */
+  isControllerOwnData: boolean;
+  /**
+   * False when the role flags above could not be fully read — the user row was missing or
+   * unreadable, or a security-role / team read failed. The flags then stay fail-closed (G4), and
+   * `SettingsGate` offers Retry instead of claiming the user lacks a role. A role read that DID
+   * succeed still counts (05-gap-analysis A1: a directly held admin role survives a team-read
+   * failure).
+   */
+  rolesResolved: boolean;
 }
+
+/**
+ * Logs a failed read the badge degrades past (G4; the canvas `Trace`d the role failure,
+ * App:962-965). Severity "warning", not "error": `role`, `team` and `aaduser` are not readable by
+ * every security role, so for some ordinary users these fail on every start — an "error" would
+ * light the header's error icon (`lastError`) permanently for them. The trace still reaches the
+ * Report Problem buffer.
+ */
+function logged<T>(operation: string, fallback: T, onFail?: () => void) {
+  return (error: unknown): T => {
+    trace("warning", `Current user: could not ${operation}`, error);
+    onFail?.();
+    return fallback;
+  };
+}
+
+/**
+ * Who may open Application Settings: the header item and every `LeftAdminNavigationMenu` entry
+ * share `ItemVisible: Or(gblCurrentUser.IsApplicationAdministrator, gblCurrentUser.IsControllerOwnData)`.
+ */
+export const canOpenApplicationSettings = (
+  user: Pick<CurrentUser, "isApplicationAdministrator" | "isControllerOwnData"> | undefined,
+): boolean => Boolean(user?.isApplicationAdministrator || user?.isControllerOwnData);
 
 /**
  * The role names `App.OnStart` keys the user profile off, verbatim.
@@ -66,6 +102,9 @@ export interface CurrentUser {
  *                                           "VSB - Project Data Own Country"])), {...})
  */
 export const ROLE_ALL_COUNTRIES = "VSB - Project Data All Countries";
+/** `IsApplicationAdministrator` / `IsControllerOwnData` (`App.pa.yaml:1004-1024`). */
+export const ROLE_APPLICATION_ADMINISTRATOR = "VSB - Application Administrator";
+export const ROLE_CONTROLLER_OWN_DATA = "VSB - Controller Own Data";
 export const ROLE_OWN_COUNTRY = [
   "VSB - Project Manager Own Projects",
   "VSB - Project Data Own Country",
@@ -90,7 +129,10 @@ export interface UserRole {
 export function badgeScopeFromRoles(
   roles: readonly UserRole[],
   countryByBusinessUnit: ReadonlyMap<string, string>,
-): Pick<CurrentUser, "editableCountries" | "isProjectDataAllCountries"> {
+): Pick<
+  CurrentUser,
+  "editableCountries" | "isProjectDataAllCountries" | "isApplicationAdministrator" | "isControllerOwnData"
+> {
   const seen = new Set<string>();
   const distinct = roles.filter((r) => {
     if (!r.name.startsWith("VSB") || seen.has(r.roleId)) return false;
@@ -106,6 +148,8 @@ export function badgeScopeFromRoles(
   return {
     editableCountries,
     isProjectDataAllCountries: distinct.some((r) => r.name === ROLE_ALL_COUNTRIES),
+    isApplicationAdministrator: distinct.some((r) => r.name === ROLE_APPLICATION_ADMINISTRATOR),
+    isControllerOwnData: distinct.some((r) => r.name === ROLE_CONTROLLER_OWN_DATA),
   };
 }
 
@@ -124,7 +168,13 @@ export function languageLabel(locale: string | undefined): string | undefined {
 }
 
 export async function loadCurrentUser(entraObjectId: string | undefined): Promise<CurrentUser> {
-  if (!entraObjectId) return { editableCountries: [], isProjectDataAllCountries: false };
+  if (!entraObjectId) {
+    return {
+      editableCountries: [], isProjectDataAllCountries: false,
+      isApplicationAdministrator: false, isControllerOwnData: false,
+      rolesResolved: false,
+    };
+  }
 
   const users = await fetchAll(
     "look up the signed-in user",
@@ -134,7 +184,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
       filter: eq("azureactivedirectoryobjectid", entraObjectId),
       maxPageSize: 1,
     },
-  ).catch(() => []);
+  ).catch(logged("look up the signed-in user (systemuser)", []));
 
   const row = users[0];
   /*
@@ -146,7 +196,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     "look up the signed-in user's directory entry",
     (o) => AadusersService.getAll(o),
     { select: ["aaduserid", "companyname"], filter: eq("id", entraObjectId), maxPageSize: 1 },
-  ).catch(() => []);
+  ).catch(logged("read the directory entry (aaduser)", []));
 
   /*
    * The user's EFFECTIVE roles — held directly, and through every team they belong to. The
@@ -158,8 +208,9 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
    * badge's last two rows only — not the name, the mail and the business unit beside them.
    */
   const userId = row?.systemuserid;
+  if (!userId) trace("warning", "Current user: no systemuser row, so the security roles cannot be read");
   const scope = userId
-    ? await loadBadgeScope(userId).catch(() => undefined)
+    ? await loadBadgeScope(userId).catch(logged("read the security roles", undefined))
     : undefined;
 
   return {
@@ -169,6 +220,9 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     ...(row?.entityimage ? { photo: `data:image/png;base64,${row.entityimage}` } : {}),
     editableCountries: scope?.editableCountries ?? [],
     isProjectDataAllCountries: scope?.isProjectDataAllCountries ?? false,
+    isApplicationAdministrator: scope?.isApplicationAdministrator ?? false,
+    isControllerOwnData: scope?.isControllerOwnData ?? false,
+    rolesResolved: scope?.complete === true,
   };
 }
 
@@ -176,6 +230,10 @@ const ROLE_SELECT = ["roleid", "name", "_businessunitid_value"];
 
 async function loadBadgeScope(systemUserId: string) {
   const id = guid(systemUserId);
+  // Whether every ROLE read succeeded. The country read below only feeds the badge's country
+  // row, so its failure does not make the role flags unreliable.
+  let complete = true;
+  const incomplete = () => { complete = false; };
 
   const direct = fetchAll(
     "read the signed-in user's security roles",
@@ -184,7 +242,7 @@ async function loadBadgeScope(systemUserId: string) {
       select: ROLE_SELECT,
       filter: `systemuserroles_association/any(o:o/systemuserid eq ${id})`,
     },
-  ).catch(() => []);
+  ).catch(logged("read the directly assigned security roles", [], incomplete));
 
   const teams = await fetchAll(
     "read the signed-in user's teams",
@@ -193,7 +251,7 @@ async function loadBadgeScope(systemUserId: string) {
       select: ["teamid"],
       filter: `teammembership_association/any(o:o/systemuserid eq ${id})`,
     },
-  ).catch(() => []);
+  ).catch(logged("read the team memberships", [], incomplete));
 
   // `or` over a chunk of team ids rather than one request per team.
   const teamRoles = await Promise.all(
@@ -205,7 +263,7 @@ async function loadBadgeScope(systemUserId: string) {
           select: ROLE_SELECT,
           filter: or(...ids.map((t) => `teamroles_association/any(o:o/teamid eq ${guid(t)})`)),
         },
-      ).catch(() => []),
+      ).catch(logged("read the team security roles", [], incomplete)),
     ),
   );
 
@@ -213,7 +271,7 @@ async function loadBadgeScope(systemUserId: string) {
     "read the country list for the user's business units",
     (o) => Vsb_countriesService.getAll(o),
     { select: ["vsb_name", "_vsb_businessunit_value"] },
-  ).catch(() => []);
+  ).catch(logged("read the country list for the business units", []));
 
   const countryByBusinessUnit = new Map<string, string>();
   for (const c of countries) {
@@ -222,7 +280,7 @@ async function loadBadgeScope(systemUserId: string) {
   }
 
   const rows = [...(await direct), ...teamRoles.flat()];
-  return badgeScopeFromRoles(
+  const scope = badgeScopeFromRoles(
     rows.map((r) => ({
       roleId: r.roleid,
       name: r.name ?? "",
@@ -230,4 +288,5 @@ async function loadBadgeScope(systemUserId: string) {
     })),
     countryByBusinessUnit,
   );
+  return { ...scope, complete };
 }

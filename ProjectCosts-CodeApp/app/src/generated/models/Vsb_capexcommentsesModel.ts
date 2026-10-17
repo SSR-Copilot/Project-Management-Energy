@@ -13,17 +13,15 @@ export const Vsb_capexcommentsesstatuscode = {
 } as const;
 export type Vsb_capexcommentsesstatuscode = keyof typeof Vsb_capexcommentsesstatuscode;
 export const Vsb_capexcommentsesvsb_commenttype = {
-  1: 'GeneralComment',
-  2: 'Commentstopaymentdate'
+  1: 'General Comment',
+  2: 'Comments to payment date'
 } as const;
 export type Vsb_capexcommentsesvsb_commenttype = keyof typeof Vsb_capexcommentsesvsb_commenttype;
 
 export interface Vsb_capexcommentsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_capexcommentsesstatecode;
   statuscode?: Vsb_capexcommentsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -41,29 +39,14 @@ export interface Vsb_capexcommentsesBase {
 }
 
 export interface Vsb_capexcommentses extends Vsb_capexcommentsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_capexcontractname?: string;
-  vsb_capexcostname?: string;
   vsb_commenttypename?: string;
-  vsb_parentcommentname?: string;
-  vsb_resolvedbyname?: string;
   vsb_resolvedname?: string;
-  vsb_rootcommentname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

@@ -13,19 +13,17 @@ export const Vsb_pvmoduletypeinprojectsstatuscode = {
 } as const;
 export type Vsb_pvmoduletypeinprojectsstatuscode = keyof typeof Vsb_pvmoduletypeinprojectsstatuscode;
 export const Vsb_pvmoduletypeinprojectsvsb_requestpermissionstate = {
-  952850000: 'RequestApproved',
-  952850001: 'RequestDeclined',
-  952850002: 'RequestPending',
-  952850003: 'RequestCanceled'
+  952850000: 'Request Approved',
+  952850001: 'Request  Declined',
+  952850002: 'Request Pending',
+  952850003: 'Request Canceled'
 } as const;
 export type Vsb_pvmoduletypeinprojectsvsb_requestpermissionstate = keyof typeof Vsb_pvmoduletypeinprojectsvsb_requestpermissionstate;
 
 export interface Vsb_pvmoduletypeinprojectsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_pvmoduletypeinprojectsstatecode;
   statuscode?: Vsb_pvmoduletypeinprojectsstatuscode;
   timezoneruleversionnumber?: number;
@@ -52,24 +50,12 @@ export interface Vsb_pvmoduletypeinprojectsBase {
 }
 
 export interface Vsb_pvmoduletypeinprojects extends Vsb_pvmoduletypeinprojectsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_projectname?: string;
-  vsb_pvmodulename?: string;
   vsb_requestpermissionstatename?: string;
   createdby?: object;
   _createdby_value?: string;

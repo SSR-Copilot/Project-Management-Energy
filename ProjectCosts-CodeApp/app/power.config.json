@@ -169,6 +169,42 @@
           "entitySetName": "Environment",
           "logicalName": "environment_39a902ba",
           "isHidden": false
+        },
+        "shareholderentityinprojects": {
+          "entitySetName": "vsb_shareholderentitiies",
+          "logicalName": "vsb_shareholderentitiy",
+          "isHidden": false
+        },
+        "projectstatetrackings": {
+          "entitySetName": "vsb_projectstatetrackings",
+          "logicalName": "vsb_projectstatetracking",
+          "isHidden": false
+        },
+        "projectdefaultapprovals": {
+          "entitySetName": "vsb_projectdefaultapprovalses",
+          "logicalName": "vsb_projectdefaultapprovals",
+          "isHidden": false
+        },
+        "customchoicevalues": {
+          "entitySetName": "vsb_customchoicevalues",
+          "logicalName": "vsb_customchoicevalue",
+          "isHidden": false
+        },
+        "projectdefaultchecklists": {
+          "entitySetName": "vsb_projectdefaultchecklistses",
+          "logicalName": "vsb_projectdefaultchecklists"
+        },
+        "checklistcountryandtechnologies": {
+          "entitySetName": "vsb_checklistcountryandtechnologies",
+          "logicalName": "vsb_checklistcountryandtechnology"
+        },
+        "checklistdefaultapprovals": {
+          "entitySetName": "vsb_checklistdefaultapprovalses",
+          "logicalName": "vsb_checklistdefaultapprovals"
+        },
+        "bopcontractsstandardassumptiondevcocosts": {
+          "entitySetName": "vsb_bopcontractsstandardassumptiondevcocostses",
+          "logicalName": "vsb_bopcontractsstandardassumptiondevcocosts"
         }
       },
       "environmentVariableName": ""

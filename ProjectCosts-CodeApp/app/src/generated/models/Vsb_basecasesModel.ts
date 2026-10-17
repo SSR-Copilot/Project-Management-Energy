@@ -16,9 +16,7 @@ export type Vsb_basecasesstatuscode = keyof typeof Vsb_basecasesstatuscode;
 export interface Vsb_basecasesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_basecasesstatecode;
   statuscode?: Vsb_basecasesstatuscode;
   timezoneruleversionnumber?: number;
@@ -33,25 +31,14 @@ export interface Vsb_basecasesBase {
 }
 
 export interface Vsb_basecases extends Vsb_basecasesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_projectdatajson?: string;
   vsb_projectdatajson_name?: string;
-  vsb_projectname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;
@@ -69,4 +56,6 @@ export interface Vsb_basecases extends Vsb_basecasesBase {
   vsb_project?: object;
   _vsb_project_value?: string;
 }
-export type Vsb_basecasesUploadColumnName = 'vsb_projectdatajson';
+export type Vsb_basecasesFileColumnName = 'vsb_projectdatajson';
+
+export type Vsb_basecasesUploadColumnName = Vsb_basecasesFileColumnName;

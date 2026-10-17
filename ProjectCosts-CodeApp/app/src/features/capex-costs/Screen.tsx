@@ -27,6 +27,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ConfirmDialog, EmptyState, FormPanel, LoadingOverlay } from "@/components";
 import { costLocation } from "@/app/deepLinks";
+import { writeErrorText } from "@/features/shared/recordGone";
 import { useSession } from "@/app/SessionContext";
 import { palette, space } from "@/theme/tokens";
 import { CLUSTERS, amount, type CostLine } from "../costing/model";
@@ -926,10 +927,10 @@ export default function CapexCostsScreen() {
     ) : null}
     {actionError ? <div className="canvas-error" role="alert">{actionError}</div> : null}
     {writeError ? (
-      <div className="canvas-error" role="alert">{(writeError as Error).message}</div>
+      <div className="canvas-error" role="alert">{writeErrorText(writeError)}</div>
     ) : null}
     {save.error ? (
-      <p className="canvas-error" role="alert">{(save.error as Error).message}</p>
+      <p className="canvas-error" role="alert">{writeErrorText(save.error)}</p>
     ) : null}
   </div>;
 }

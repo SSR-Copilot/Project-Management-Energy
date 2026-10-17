@@ -16,9 +16,7 @@ export type Vsb_countryareasstatuscode = keyof typeof Vsb_countryareasstatuscode
 export interface Vsb_countryareasBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_countryareasstatecode;
   statuscode?: Vsb_countryareasstatuscode;
   timezoneruleversionnumber?: number;
@@ -29,23 +27,12 @@ export interface Vsb_countryareasBase {
 }
 
 export interface Vsb_countryareas extends Vsb_countryareasBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_areascountryname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

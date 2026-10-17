@@ -6,8 +6,7 @@
 import type { GetEntityMetadataOptions, EntityMetadata } from '@microsoft/power-apps/data/metadata/dataverse';
 import type { IGetOptions, IGetAllOptions } from '../models/CommonModels';
 import type { IOperationResult } from '@microsoft/power-apps/data';
-import type { TransactioncurrenciesBase, Transactioncurrencies } from '../models/TransactioncurrenciesModel';
-import type { TransactioncurrenciesUploadColumnName } from '../models/TransactioncurrenciesModel';
+import type { TransactioncurrenciesBase, Transactioncurrencies, TransactioncurrenciesImageColumnName, TransactioncurrenciesUploadColumnName } from '../models/TransactioncurrenciesModel';
 import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import { getClient } from '@microsoft/power-apps/data';
 
@@ -25,19 +24,21 @@ export class TransactioncurrenciesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<TransactioncurrenciesBase, 'transactioncurrencyid'>>): Promise<IOperationResult<Transactioncurrencies>> {
+  public static async update(id: string, changedFields: Partial<Omit<TransactioncurrenciesBase, 'transactioncurrencyid'>>, partitionId?: string): Promise<IOperationResult<Transactioncurrencies>> {
     const result = await TransactioncurrenciesService.client.updateRecordAsync<Partial<Omit<TransactioncurrenciesBase, 'transactioncurrencyid'>>, Transactioncurrencies>(
       TransactioncurrenciesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await TransactioncurrenciesService.client.deleteRecordAsync(
       TransactioncurrenciesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Transactioncurrencies>> {
@@ -71,7 +72,7 @@ export class TransactioncurrenciesService {
     });
   }
 
-  public static async upload(id: string, columnName: TransactioncurrenciesUploadColumnName, file: File, fileDisplayName?: string): Promise<IOperationResult<void>> {
+  public static async upload(id: string, columnName: TransactioncurrenciesUploadColumnName, file: File, fileDisplayName?: string, partitionId?: string): Promise<IOperationResult<void>> {
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const result = await TransactioncurrenciesService.client.uploadFileToRecord(
@@ -80,6 +81,27 @@ export class TransactioncurrenciesService {
       columnName,
       fileDisplayName || file.name,
       data,
+      partitionId,
+    );
+    return result;
+  }
+
+  public static async downloadImage(id: string, columnName: TransactioncurrenciesImageColumnName, fullSize: boolean = false): Promise<IOperationResult<Uint8Array>> {
+    const result = await TransactioncurrenciesService.client.downloadImageFromRecord(
+      TransactioncurrenciesService.dataSourceName,
+      id,
+      columnName,
+      fullSize,
+    );
+    return result;
+  }
+
+  public static async deleteFileOrImage(id: string, columnName: TransactioncurrenciesUploadColumnName, partitionId?: string): Promise<IOperationResult<void>> {
+    const result = await TransactioncurrenciesService.client.deleteFileOrImageFromRecord(
+      TransactioncurrenciesService.dataSourceName,
+      id,
+      columnName,
+      partitionId,
     );
     return result;
   }

@@ -51,15 +51,16 @@
  * FAILURE IS ALL-OR-NOTHING PER CHUNK. Dataverse's bulk messages are not transactional on
  * standard tables (only elastic tables get per-item results — none of these are elastic): one
  * bad row fails every row sent in the same request. Rows are still split into chunks of
- * `BULK_CHUNK_SIZE`, sent one chunk after another, because a single sheet save can carry several
- * hundred rows and an unbounded payload risks the platform's message-size and time limits. That
- * means a later chunk's failure can follow an earlier chunk's real, already-committed write —
- * `BulkWriteError.partial` is true exactly then, so a caller's error message can say so honestly
- * instead of claiming nothing was saved when something was.
+ * `BULK_CHUNK_SIZE`, sent `BULK_CHUNK_CONCURRENCY` at a time, because a single sheet save can
+ * carry several hundred rows and an unbounded payload risks the platform's message-size and time
+ * limits. That means one chunk's failure can sit beside another chunk's real, already-committed
+ * write — `BulkWriteError.partial` is true exactly then, so a caller's error message can say so
+ * honestly instead of claiming nothing was saved when something was.
  */
 import { CreateMultipleService } from "@/generated/services/CreateMultipleService";
 import { UpdateMultipleService } from "@/generated/services/UpdateMultipleService";
 import { UpsertMultipleService } from "@/generated/services/UpsertMultipleService";
+import { WRITE_CONCURRENCY, mapLimit } from "./concurrency";
 
 /**
  * Rows per `Targets` array sent in one request. Chosen well under Dataverse's documented
@@ -115,20 +116,48 @@ function logChunkFailure(
   );
 }
 
+/**
+ * Chunks of one call carry disjoint rows, so they are sent up to this many at a time rather
+ * than strictly one after another. No new chunk starts once one has failed.
+ */
+export const BULK_CHUNK_CONCURRENCY = 4;
+
+type ChunkResult = { success: boolean; data?: unknown; error?: unknown };
+
+/**
+ * Sends every chunk and resolves to each chunk's `data`, in chunk order. On failure it waits for
+ * the chunks already in flight, so `partial` is true exactly when some other chunk landed.
+ */
+async function sendChunks(
+  entitySetName: string,
+  chunks: readonly Record<string, unknown>[][],
+  run: (chunk: Record<string, unknown>[]) => Promise<ChunkResult>,
+): Promise<unknown[]> {
+  let failure: { error: unknown } | undefined;
+  let landed = 0;
+  const data = await mapLimit(chunks, async (chunk, i) => {
+    if (failure) return undefined;
+    const result = await run(chunk);
+    if (!result.success) {
+      if (!failure) {
+        failure = { error: result.error };
+        logChunkFailure(entitySetName, i, chunks.length, chunk, result.error);
+      }
+      return undefined;
+    }
+    landed += 1;
+    return result.data;
+  }, BULK_CHUNK_CONCURRENCY);
+  if (failure) throw new BulkWriteError(failure.error, landed > 0);
+  return data;
+}
+
 async function runChunks(
   entitySetName: string,
   rows: readonly Record<string, unknown>[],
-  run: (chunk: Record<string, unknown>[]) => Promise<{ success: boolean; error?: unknown }>,
+  run: (chunk: Record<string, unknown>[]) => Promise<ChunkResult>,
 ): Promise<void> {
-  const chunks = chunkRows(rows, BULK_CHUNK_SIZE);
-  for (let i = 0; i < chunks.length; i += 1) {
-    // eslint-disable-next-line no-await-in-loop -- each chunk must land before the next is sent.
-    const result = await run(chunks[i] as Record<string, unknown>[]);
-    if (!result.success) {
-      logChunkFailure(entitySetName, i, chunks.length, chunks[i] as Record<string, unknown>[], result.error);
-      throw new BulkWriteError(result.error, i > 0);
-    }
-  }
+  await sendChunks(entitySetName, chunkRows(rows, BULK_CHUNK_SIZE), run);
 }
 
 /**
@@ -181,20 +210,12 @@ export async function createMultiple(
     const { [primaryKeyField]: _dropped, ...rest } = row;
     return rest;
   };
-  const ids: string[] = [];
   const chunks = chunkRows(rows.map((r) => withType(withoutId(r), odataType)), BULK_CHUNK_SIZE);
-  for (let i = 0; i < chunks.length; i += 1) {
-    const chunk = chunks[i] as Record<string, unknown>[];
-    // eslint-disable-next-line no-await-in-loop -- each chunk must land before the next is sent.
-    const result = await CreateMultipleService.CreateMultiple(entitySetName, chunk);
-    if (!result.success) {
-      logChunkFailure(entitySetName, i, chunks.length, chunk, result.error);
-      throw new BulkWriteError(result.error, ids.length > 0);
-    }
-    const data = result.data as { Ids?: string[] } | null | undefined;
-    ids.push(...(data?.Ids ?? []));
-  }
-  return ids;
+  const perChunk = await sendChunks(
+    entitySetName, chunks, (chunk) => CreateMultipleService.CreateMultiple(entitySetName, chunk),
+  );
+  // Reassembled by chunk index, so ids stay in input order whatever order the chunks finished.
+  return perChunk.flatMap((data) => (data as { Ids?: string[] } | null | undefined)?.Ids ?? []);
 }
 
 /** One phase's split outcome: the new rows' server-assigned ids, zipped to their caller order. */
@@ -254,4 +275,76 @@ export async function createAndUpdateMultiple(
   ].filter((c) => c !== undefined);
 
   throw new BulkWriteError(causes.length === 1 ? causes[0] : causes, partial);
+}
+
+/* ═══════════════════════════════════════════════ E15 bulkWithFallback (Wave A) ══ */
+
+export interface BulkWithFallbackOptions<R, T> {
+  rows: readonly R[];
+  /** The bulk write. May resolve to one result per row, in row order (e.g. created ids). */
+  bulk: (rows: readonly R[]) => Promise<readonly T[] | void>;
+  /** The per-row write used when the bulk write is refused. */
+  perRow: (row: R) => Promise<T>;
+  /**
+   * Whether a bulk error falls back to per-row writes. Milestones: any error (`() => true`);
+   * Contracts: refused AND nothing written (`e instanceof BulkWriteError && !e.partial`).
+   * False → the bulk error is rethrown.
+   */
+  fallback: (bulkError: unknown) => boolean;
+  /** Per-row concurrency; default `WRITE_CONCURRENCY`. */
+  concurrency?: number;
+  /**
+   * Per-row phase is fail-fast exactly like `mapLimit`: no new row starts after a failure and the
+   * FIRST error is rethrown (Contracts' DevCo links today). Default false: every row runs and the
+   * failures are collected (Milestones).
+   */
+  stopOnFirstError?: boolean;
+  /** Called once when falling back (Contracts traces a warning). */
+  onFallback?: (bulkError: unknown) => void;
+}
+
+export interface BulkWithFallbackResult<R, T> {
+  saved: R[];
+  failed: { row: R; error: unknown }[];
+  /** Index-aligned with `rows`: each saved row's result (`undefined` for a failed row or a void bulk). */
+  results: (T | undefined)[];
+  /** True when the per-row path ran. */
+  fellBack: boolean;
+}
+
+/**
+ * The "bulk first, per row if the bulk message is refused" write Milestones
+ * (`data/settings/milestones.ts:150-185`) and Contracts (`data/settings/contracts.ts:273-290`)
+ * each hand-built. An empty `rows` writes nothing.
+ */
+export async function bulkWithFallback<R, T = void>(opts: BulkWithFallbackOptions<R, T>): Promise<BulkWithFallbackResult<R, T>> {
+  const { rows, bulk, perRow, fallback, concurrency = WRITE_CONCURRENCY, stopOnFirstError = false, onFallback } = opts;
+  if (rows.length === 0) return { saved: [], failed: [], results: [], fellBack: false };
+  try {
+    const out = await bulk(rows);
+    return { saved: [...rows], failed: [], results: rows.map((_, i) => (out ? out[i] : undefined)), fellBack: false };
+  } catch (error) {
+    if (!fallback(error)) throw error;
+    onFallback?.(error);
+  }
+  if (stopOnFirstError) {
+    const results = await mapLimit(rows, (row) => perRow(row), concurrency);
+    return { saved: [...rows], failed: [], results, fellBack: true };
+  }
+  const outcomes = await mapLimit(rows, async (row) => {
+    try {
+      return { ok: true as const, value: await perRow(row) };
+    } catch (error) {
+      return { ok: false as const, error };
+    }
+  }, concurrency);
+  return {
+    saved: rows.filter((_, i) => outcomes[i]!.ok),
+    failed: rows.flatMap((row, i) => {
+      const o = outcomes[i]!;
+      return o.ok ? [] : [{ row, error: o.error }];
+    }),
+    results: outcomes.map((o) => (o.ok ? o.value : undefined)),
+    fellBack: true,
+  };
 }

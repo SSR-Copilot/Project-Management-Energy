@@ -18,14 +18,15 @@
  */
 import {
   Badge, Button, Menu, MenuItem, MenuList, MenuPopover, MenuTrigger,
-  Text, Tooltip, makeStyles, tokens,
+  Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  BugRegular, GlobeRegular, HomeAddRegular, HomeRegular, InfoRegular, LocalLanguageRegular,
-  MailRegular, PersonRegular, WarningFilled, ChevronDownRegular,
+  ArrowLeftRegular, BugRegular, GlobeRegular, HomeAddRegular, HomeRegular, InfoRegular, LocalLanguageRegular,
+  MailRegular, PersonRegular, SettingsRegular, WarningFilled, ChevronDownRegular,
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
 import { layout, palette, space } from "@/theme/tokens";
+import { APPROVAL_STATE } from "@/domain/project";
 import { VsbLogo } from "./VsbLogo";
 
 const useStyles = makeStyles({
@@ -39,6 +40,46 @@ const useStyles = makeStyles({
     borderBottomColor: tokens.colorNeutralStroke2,
   },
   brand: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
+  /** The logo as a "Back to projects" button: no Fluent padding, so the band does not shift. */
+  logoButton: {
+    minWidth: 0, height: "auto",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+  },
+  /** A page title with no approval-state bar beside it (settings screens). */
+  plainTitle: {
+    display: "flex", alignItems: "center", gap: space.xs, minWidth: 0, flexShrink: 1,
+  },
+  headingReset: { marginTop: 0, marginBottom: 0 },
+  /*
+   * `cmp_Header`'s `Image3` (Header:300-325): a 35 x 35 image (`Height: =35`, `Width:
+   * =Self.Height`, :309/:325) whose SVG is a white square with a 1-px `#006EB9` stroke and rx 3.5
+   * on a 32 grid (:315-316) and a `#006EB9` arrow (:317). Parity round 1, G-6.
+   */
+  backArrow: {
+    boxSizing: "border-box",
+    width: "35px", minWidth: "35px", height: "35px",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+    backgroundColor: palette.white,
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+    borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+    borderTopLeftRadius: "4px", borderTopRightRadius: "4px",
+    borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
+    color: palette.themePrimary,
+    flexShrink: 0,
+    // `HoverFill` / `PressedFill` are transparent over the SVG (:311, :324): the square never changes.
+    ":hover": {
+      backgroundColor: palette.white, color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+    },
+    ":hover:active": {
+      backgroundColor: palette.white, color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+    },
+  },
   brandText: { display: "flex", flexDirection: "column", lineHeight: 1.15 },
   title: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase500 },
   version: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase100 },
@@ -105,16 +146,20 @@ export function environmentBadge(environmentName: string | undefined): string | 
  * `gblTableApprovalStateColors` (`App.OnStart`), which `rec_cmp_Header_Project_State.Fill`
  * looks the project's approval state up in. A state with no row falls back to white — which
  * is what "Canceled" gets, the canvas table having no entry for it.
+ *
+ * Keyed on the `vsb_approvalstates` OPTION VALUE, not the label: the canvas table keys on the
+ * label text, but a label is display data (the SDK 1.5 regeneration showed generated labels can
+ * change under us), so the colour follows the stored value and the label is only the tooltip.
  */
-export const APPROVAL_STATE_COLOUR: Record<string, string> = {
-  Draft: palette.akzent2,
-  Approving: palette.akzent4,
-  Approved: palette.akzent3,
-  Rejected: palette.akzent5,
+export const APPROVAL_STATE_COLOUR: Record<number, string> = {
+  [APPROVAL_STATE.draft]: palette.akzent2,
+  [APPROVAL_STATE.approving]: palette.akzent4,
+  [APPROVAL_STATE.approved]: palette.akzent3,
+  [APPROVAL_STATE.rejected]: palette.akzent5,
 };
 
-export function approvalStateColour(state: string | undefined): string {
-  return (state && APPROVAL_STATE_COLOUR[state]) || palette.white;
+export function approvalStateColour(state: number | undefined): string {
+  return (state !== undefined && APPROVAL_STATE_COLOUR[state]) || palette.white;
 }
 
 /** `pcf_HeaderContainerReportError_WarningIcon.Tooltip`, verbatim. */
@@ -127,8 +172,10 @@ export const ERROR_TOOLTIP =
 export interface AppHeaderProps {
   /** The project name, on the project-scoped cost screens. Absent on the overview. */
   pageTitle?: string;
-  /** `Project.Approval` — colours the 4 x 70 bar left of the name, and is its tooltip. */
+  /** `Project.Approval` as its display LABEL — the tooltip of the 4 x 70 bar left of the name. */
   approvalState?: string;
+  /** `Project.Approval` as its OPTION VALUE — what colours that bar (`approvalStateColour`). */
+  approvalStateValue?: number;
   userName?: string;
   userEmail?: string;
   /** `img_cmp_In_Header_UserImage.Image = User().Image`, already a `data:` URL. */
@@ -144,14 +191,35 @@ export interface AppHeaderProps {
   /** True once the equivalent of `App.OnError` has captured something. */
   hasError: boolean;
   onReportProblem: () => void;
+  /**
+   * `cmp_Header`'s `appSettingsKey` item ("Application Settings", icon Settings). Passed only for
+   * users the canvas shows it to: `Or(IsApplicationAdministrator, IsControllerOwnData)`.
+   */
+  onOpenSettings?: () => void;
   /** Receives the element the active screen portals its command bar into. */
   commandSlotRef?: Ref<HTMLDivElement>;
+  /**
+   * `cmp_Header.OnLogoClick` — the way out of an area with no other link home. When set, the
+   * logo becomes a button and a back arrow is drawn before the title; both call it. The six
+   * admin screens pass `Navigate('Project Main Screen')` (01-entry-and-access §1.4, G7).
+   * Absent → the logo is a plain image, as it is on the cost and PM screens today.
+   */
+  onHome?: () => void;
+  /**
+   * Draw `pageTitle` without the approval-state bar and its tooltip. For screens whose title is
+   * not a project (Application Settings), where the bar would read "No approval state".
+   */
+  hideApprovalState?: boolean;
 }
 
+/** Accessible name of both the logo button and the back arrow. */
+export const HOME_LABEL = "Back to projects";
+
 export function AppHeader({
-  pageTitle, approvalState, userName, userEmail, userPhoto,
+  pageTitle, approvalState, approvalStateValue, userName, userEmail, userPhoto,
   userLanguage, userBusinessUnit, userCountries, userDataScope,
-  appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, commandSlotRef,
+  appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, onOpenSettings,
+  commandSlotRef, onHome, hideApprovalState,
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
@@ -159,7 +227,15 @@ export function AppHeader({
   return (
     <header className={styles.header}>
       <div className={`${styles.brand} canvas-brand`}>
-        <VsbLogo size={60} />
+        {onHome ? (
+          <Tooltip content={HOME_LABEL} relationship="label">
+            <Button appearance="transparent" className={styles.logoButton} onClick={onHome}>
+              <VsbLogo size={60} />
+            </Button>
+          </Tooltip>
+        ) : (
+          <VsbLogo size={60} />
+        )}
         <div className={styles.brandText}>
           <Text className={`${styles.title} canvas-brand-title`}>Cloud</Text>
           <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
@@ -172,12 +248,37 @@ export function AppHeader({
         * apart. The bar is a sibling of the title, not a border on it, because its colour and
         * tooltip both come from the project's approval state.
         */}
-      {pageTitle ? (
+      {/*
+        * `cmp_Header`'s blue back arrow (`Image3`, Header:300-322) at the start of the title bar,
+        * raising the same `OnLogoClick` as the logo. Drawn as the canvas's bordered white square.
+        */}
+      {onHome ? (
+        <Tooltip content={HOME_LABEL} relationship="label">
+          <Button
+            appearance="outline"
+            className={mergeClasses("canvas-back-arrow", styles.backArrow)}
+            icon={<ArrowLeftRegular color={palette.themePrimary} />}
+            onClick={onHome}
+          />
+        </Tooltip>
+      ) : null}
+
+      {pageTitle && hideApprovalState ? (
+        <div className={styles.plainTitle}>
+          <Text
+            as="h1"
+            className={`${styles.pageTitle} ${styles.headingReset} canvas-project-title`}
+            title={pageTitle}
+          >
+            {pageTitle}
+          </Text>
+        </div>
+      ) : pageTitle ? (
         <div className="canvas-project-suite">
           <Tooltip content={approvalState ?? "No approval state"} relationship="label">
             <span
               className="canvas-project-state"
-              style={{ backgroundColor: approvalStateColour(approvalState) }}
+              style={{ backgroundColor: approvalStateColour(approvalStateValue) }}
             />
           </Tooltip>
           <Text className={`${styles.pageTitle} canvas-project-title`} title={pageTitle}>{pageTitle}</Text>
@@ -275,6 +376,10 @@ export function AppHeader({
             */}
           <MenuPopover>
             <MenuList className={styles.badgeMenu}>
+              {/* The row right after the greeting (`cmp_Header.pa.yaml:860-868`). */}
+              {onOpenSettings
+                ? <MenuItem icon={<SettingsRegular />} onClick={onOpenSettings}>Application Settings</MenuItem>
+                : null}
               {userEmail ? <MenuItem icon={<MailRegular />}>{userEmail}</MenuItem> : null}
               {userLanguage
                 ? <MenuItem icon={<LocalLanguageRegular />}>{userLanguage}</MenuItem>

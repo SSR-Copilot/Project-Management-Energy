@@ -6,12 +6,12 @@ export const Environmentvariabledefinitionscomponentstate = {
   0: 'Published',
   1: 'Unpublished',
   2: 'Deleted',
-  3: 'DeletedUnpublished'
+  3: 'Deleted Unpublished'
 } as const;
 export type Environmentvariabledefinitionscomponentstate = keyof typeof Environmentvariabledefinitionscomponentstate;
 export const Environmentvariabledefinitionssecretstore = {
-  0: 'AzureKeyVault',
-  1: 'MicrosoftDataverse'
+  0: 'Azure Key Vault',
+  1: 'Microsoft Dataverse'
 } as const;
 export type Environmentvariabledefinitionssecretstore = keyof typeof Environmentvariabledefinitionssecretstore;
 export const Environmentvariabledefinitionsstatecode = {
@@ -29,7 +29,7 @@ export const Environmentvariabledefinitionstype = {
   100000001: 'Number',
   100000002: 'Boolean',
   100000003: 'JSON',
-  100000004: 'DataSource',
+  100000004: 'Data Source',
   100000005: 'Secret'
 } as const;
 export type Environmentvariabledefinitionstype = keyof typeof Environmentvariabledefinitionstype;
@@ -49,9 +49,7 @@ export interface EnvironmentvariabledefinitionsBase {
   isrequired: boolean;
   learnmoreurl?: string;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   parameterkey?: string;
   "ParentDefinitionId@odata.bind"?: string;
   schemaname: string;
@@ -67,25 +65,14 @@ export interface EnvironmentvariabledefinitionsBase {
 export interface Environmentvariabledefinitions extends EnvironmentvariabledefinitionsBase {
   componentstate: Environmentvariabledefinitionscomponentstate;
   componentstatename?: string;
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
   environmentvariabledefinitionidunique: string;
   ismanaged: boolean;
   ismanagedname?: string;
   isrequiredname?: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
   overwritetime: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
-  parentdefinitionidname?: string;
+  ownerid: string;
   secretstorename?: string;
   solutionid: string;
   statecodename?: string;

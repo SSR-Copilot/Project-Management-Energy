@@ -30,20 +30,18 @@ export const Vsb_devexcapexstandardassumptionsesvsb_technology = {
 export type Vsb_devexcapexstandardassumptionsesvsb_technology = keyof typeof Vsb_devexcapexstandardassumptionsesvsb_technology;
 export const Vsb_devexcapexstandardassumptionsesvsb_unit = {
   952850000: 'EUR',
-  952850001: 'EUR_MW_p_',
-  952850002: 'EUR_WTG',
+  952850001: 'EUR/MW(p)',
+  952850002: 'EUR/WTG',
   952850003: 'PLN',
-  952850004: 'PLN_MW_p_',
-  952850005: 'PLN_WTG'
+  952850004: 'PLN/MW(p)',
+  952850005: 'PLN/WTG'
 } as const;
 export type Vsb_devexcapexstandardassumptionsesvsb_unit = keyof typeof Vsb_devexcapexstandardassumptionsesvsb_unit;
 
 export interface Vsb_devexcapexstandardassumptionsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_devexcapexstandardassumptionsesstatecode;
   statuscode?: Vsb_devexcapexstandardassumptionsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -72,33 +70,20 @@ export interface Vsb_devexcapexstandardassumptionsesBase {
 }
 
 export interface Vsb_devexcapexstandardassumptionses extends Vsb_devexcapexstandardassumptionsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_applyvatname?: string;
-  vsb_categoryname?: string;
   vsb_cluster1name?: string;
   vsb_cluster2name?: string;
   vsb_cluster3name?: string;
   vsb_cluster4name?: string;
   vsb_cluster5name?: string;
   vsb_costpaidbyname?: string;
-  vsb_countryname?: string;
   vsb_depreciationname?: string;
-  vsb_subaccountname?: string;
   vsb_technologyname?: string;
   vsb_unitname?: string;
   createdby?: object;

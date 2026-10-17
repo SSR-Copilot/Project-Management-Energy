@@ -6,8 +6,7 @@
 import type { GetEntityMetadataOptions, EntityMetadata } from '@microsoft/power-apps/data/metadata/dataverse';
 import type { IGetOptions, IGetAllOptions } from '../models/CommonModels';
 import type { IOperationResult } from '@microsoft/power-apps/data';
-import type { SystemusersBase, Systemusers } from '../models/SystemusersModel';
-import type { SystemusersUploadColumnName } from '../models/SystemusersModel';
+import type { SystemusersBase, Systemusers, SystemusersImageColumnName, SystemusersUploadColumnName } from '../models/SystemusersModel';
 import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import { getClient } from '@microsoft/power-apps/data';
 
@@ -25,19 +24,21 @@ export class SystemusersService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<SystemusersBase, 'address1_addressid'>>): Promise<IOperationResult<Systemusers>> {
+  public static async update(id: string, changedFields: Partial<Omit<SystemusersBase, 'address1_addressid'>>, partitionId?: string): Promise<IOperationResult<Systemusers>> {
     const result = await SystemusersService.client.updateRecordAsync<Partial<Omit<SystemusersBase, 'address1_addressid'>>, Systemusers>(
       SystemusersService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await SystemusersService.client.deleteRecordAsync(
       SystemusersService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Systemusers>> {
@@ -71,7 +72,7 @@ export class SystemusersService {
     });
   }
 
-  public static async upload(id: string, columnName: SystemusersUploadColumnName, file: File, fileDisplayName?: string): Promise<IOperationResult<void>> {
+  public static async upload(id: string, columnName: SystemusersUploadColumnName, file: File, fileDisplayName?: string, partitionId?: string): Promise<IOperationResult<void>> {
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const result = await SystemusersService.client.uploadFileToRecord(
@@ -80,6 +81,27 @@ export class SystemusersService {
       columnName,
       fileDisplayName || file.name,
       data,
+      partitionId,
+    );
+    return result;
+  }
+
+  public static async downloadImage(id: string, columnName: SystemusersImageColumnName, fullSize: boolean = false): Promise<IOperationResult<Uint8Array>> {
+    const result = await SystemusersService.client.downloadImageFromRecord(
+      SystemusersService.dataSourceName,
+      id,
+      columnName,
+      fullSize,
+    );
+    return result;
+  }
+
+  public static async deleteFileOrImage(id: string, columnName: SystemusersUploadColumnName, partitionId?: string): Promise<IOperationResult<void>> {
+    const result = await SystemusersService.client.deleteFileOrImageFromRecord(
+      SystemusersService.dataSourceName,
+      id,
+      columnName,
+      partitionId,
     );
     return result;
   }

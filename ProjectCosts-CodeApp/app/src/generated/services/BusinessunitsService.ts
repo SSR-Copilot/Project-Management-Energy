@@ -24,19 +24,21 @@ export class BusinessunitsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<BusinessunitsBase, 'address1_addressid'>>): Promise<IOperationResult<Businessunits>> {
+  public static async update(id: string, changedFields: Partial<Omit<BusinessunitsBase, 'address1_addressid'>>, partitionId?: string): Promise<IOperationResult<Businessunits>> {
     const result = await BusinessunitsService.client.updateRecordAsync<Partial<Omit<BusinessunitsBase, 'address1_addressid'>>, Businessunits>(
       BusinessunitsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await BusinessunitsService.client.deleteRecordAsync(
       BusinessunitsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Businessunits>> {

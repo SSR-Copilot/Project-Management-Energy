@@ -19,8 +19,8 @@ export const Vsb_opexprojectcostsvsb_aggregation = {
 } as const;
 export type Vsb_opexprojectcostsvsb_aggregation = keyof typeof Vsb_opexprojectcostsvsb_aggregation;
 export const Vsb_opexprojectcostsvsb_thresholdtype = {
-  952850000: 'NetYieldp75',
-  952850001: 'NetYieldp90',
+  952850000: 'Net Yield p75',
+  952850001: 'Net Yield p90',
   952850002: 'Individual'
 } as const;
 export type Vsb_opexprojectcostsvsb_thresholdtype = keyof typeof Vsb_opexprojectcostsvsb_thresholdtype;
@@ -28,9 +28,7 @@ export type Vsb_opexprojectcostsvsb_thresholdtype = keyof typeof Vsb_opexproject
 export interface Vsb_opexprojectcostsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_opexprojectcostsstatecode;
   statuscode?: Vsb_opexprojectcostsstatuscode;
   timezoneruleversionnumber?: number;
@@ -69,32 +67,17 @@ export interface Vsb_opexprojectcostsBase {
 }
 
 export interface Vsb_opexprojectcosts extends Vsb_opexprojectcostsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_aggregationname?: string;
   vsb_alignwithprojectdurationname?: string;
-  vsb_currencyname?: string;
-  vsb_devicetypeinprojectname?: string;
   vsb_externalcontractname?: string;
   vsb_isstandardcontractname?: string;
   vsb_isstartdatestandardassumptionname?: string;
-  vsb_parentcostname?: string;
-  vsb_projectname?: string;
-  vsb_subaccountname?: string;
   vsb_thresholdname?: string;
   vsb_thresholdtypename?: string;
   vsb_usecountryinflationprofilename?: string;

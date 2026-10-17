@@ -50,6 +50,7 @@ import { CostField, PanelButtons } from "@/features/costing/Fields";
 import { useSession } from "@/app/SessionContext";
 import { useProjectExtras } from "@/features/contracts/hooks";
 import { serverEnforcedProvider } from "@/platform/privileges";
+import { writeErrorText } from "@/features/shared/recordGone";
 /*
  * `gblAreaWithRegion` is a property of the PROJECT, not of either period screen: `App.OnStart`
  * derives it once and both screens read it. `opexRules` holds the single transcription of that
@@ -462,6 +463,17 @@ export default function LandLeaseScreen() {
     });
     // `refused` is the canvas' `If(CountRows(recFilteredStandardContractsForProject) = 0, …)`
     // with no else arm: the command simply does nothing and says nothing.
+    // An unmappable period (e.g. Period 10 — `'Land Lease Period'` stops at 9) is NOT silent:
+    // the canvas folded it into a second Period 1; here the import is refused with the reason.
+    if (plan.refusedReason === "unmappedPeriod") {
+      const rows = (plan.unmappedPeriods ?? [])
+        .map((u) => `"${u.description}" (${u.periodNumber ? `Period ${u.periodNumber}` : "unknown period"})`)
+        .join(", ");
+      setError(
+        `Add Standard Contract: the standard contract was not imported because Land Lease periods only go up to Period 9. Unsupported: ${rows}.`,
+      );
+      return;
+    }
     if (plan.refused || plan.writes.length === 0) return;
     setBusy(LEASE_MSG.loadingStandardContract);
     setError(null);
@@ -1451,8 +1463,10 @@ function standardCountryProfile(
   return rows.find((r) => r.year === year + 1)?.inflation ?? null;
 }
 
-/** A thrown `DataError`'s message, for the two `Notify(...)` strings on the save path. */
+/**
+ * A thrown `DataError`'s message, for the two `Notify(...)` strings on the save path. A row
+ * someone else deleted (V-1 `RecordGoneError`) gets the plain "deleted by someone else" text.
+ */
 function messageOf(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+  return writeErrorText(error);
 }

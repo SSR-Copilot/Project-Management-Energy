@@ -10,12 +10,15 @@
  *  - **the page title.** The cost screens put the project name in the header band; the
  *    overview does not, because no project is selected yet.
  */
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { languageLabel, loadCurrentUser } from "@/data/currentUser";
+import { canOpenApplicationSettings, languageLabel } from "@/data/currentUser";
+import {
+  isSettingsPath, SETTINGS_HOME, settingsDocumentTitle, settingsPageTitle,
+} from "@/app/navigation-settings";
 import { AppShell, LoadingOverlay, EmptyState } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { useCurrentUser } from "@/app/useCurrentUser";
 import { AppRoutes } from "@/app/routes";
 import { lastError } from "@/platform/telemetry";
 import { ReportProblemPanel } from "@/features/report-problem/ReportProblemPanel";
@@ -30,12 +33,25 @@ export default function App() {
    * purpose: neither is needed to render a screen, so a slow or forbidden read of the Graph
    * virtual table behind `companyName` must not hold up the app's first paint.
    */
-  const currentUser = useQuery({
-    queryKey: ["current-user", session?.entraObjectId ?? ""],
-    enabled: Boolean(session?.entraObjectId),
-    staleTime: Infinity,
-    queryFn: () => loadCurrentUser(session?.entraObjectId),
-  });
+  const currentUser = useCurrentUser();
+
+  const onSettingsScreen = isSettingsPath(pathname);
+  /*
+   * Parity round 1, G-2: the canvas hides every admin nav item from a non-admin (`ItemVisible`,
+   * App:315-419). Until the user is known to be allowed — loading, denied or roles unreadable —
+   * a settings URL shows neither the settings rail nor a settings page title; `SettingsGate`'s
+   * message is the only content. The way out (logo / back arrow) stays.
+   */
+  const settingsAllowed = canOpenApplicationSettings(currentUser.data);
+  const settingsTitle = onSettingsScreen && settingsAllowed ? settingsPageTitle(pathname) : undefined;
+
+  /* The browser tab names the settings screen; the previous title comes back on leaving. */
+  useEffect(() => {
+    if (!settingsTitle) return undefined;
+    const previous = document.title;
+    document.title = settingsDocumentTitle(settingsTitle);
+    return () => { document.title = previous; };
+  }, [settingsTitle]);
 
   if (loading) return <LoadingOverlay mode="blocking" label="Please wait..." />;
 
@@ -50,13 +66,37 @@ export default function App() {
   const userLanguage = languageLabel(navigator.language);
 
   const onCostScreen = pathname.startsWith("/costs/");
+  // Show the PM rail for any project-specific screen — /projects/new or /projects/:id/…
+  // but NOT for the plain /projects overview list.
+  const onPmProjectScreen = pathname.startsWith("/projects/") && pathname !== "/projects";
+  const backToProjects = () => navigate("/projects");
 
   return (
     <AppShell
-      showRail={onCostScreen}
+      showRail={onCostScreen || onPmProjectScreen || (onSettingsScreen && settingsAllowed)}
+      rail={onSettingsScreen ? "settings" : onPmProjectScreen ? "pm" : "cost"}
+      {...(settingsAllowed
+        ? { onOpenSettings: () => navigate(SETTINGS_HOME) }
+        : {})}
       {...(onCostScreen && project?.projectName ? { pageTitle: project.projectName } : {})}
       {...(onCostScreen && project?.approvalState
         ? { approvalState: project.approvalState }
+        : {})}
+      {...(onCostScreen && project?.approvalStateValue !== undefined
+        ? { approvalStateValue: project.approvalStateValue }
+        : {})}
+      /*
+       * Application Settings: the screen's title with no approval bar (it is not a project), and
+       * the logo / back arrow as the way out — every admin screen's `OnLogoClick` is
+       * `Navigate('Project Main Screen')` (01-entry-and-access §1.4, G7). Cost and PM screens
+       * keep a plain logo.
+       */
+      {...(onSettingsScreen
+        ? {
+          hideApprovalState: true,
+          onHome: backToProjects,
+          ...(settingsTitle ? { pageTitle: settingsTitle } : {}),
+        }
         : {})}
       {...(userName ? { userName } : {})}
       {...(userEmail ? { userEmail } : {})}
@@ -93,7 +133,9 @@ export default function App() {
               ? `DEV: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`
               : "Please try opening the app again. If the problem continues, use Help to report it."
           }
-          {...(onCostScreen ? { action: { label: "Back to Projects", onClick: () => navigate("/projects") } } : {})}
+          {...(onCostScreen || onSettingsScreen
+            ? { action: { label: "Back to Projects", onClick: backToProjects } }
+            : {})}
         />
       ) : (
         <AppRoutes />

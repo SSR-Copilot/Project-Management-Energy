@@ -24,19 +24,21 @@ export class Vsb_pvmoduletypeinprojectsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_pvmoduletypeinprojectsBase, 'vsb_pvmoduletypeinprojectid'>>): Promise<IOperationResult<Vsb_pvmoduletypeinprojects>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_pvmoduletypeinprojectsBase, 'vsb_pvmoduletypeinprojectid'>>, partitionId?: string): Promise<IOperationResult<Vsb_pvmoduletypeinprojects>> {
     const result = await Vsb_pvmoduletypeinprojectsService.client.updateRecordAsync<Partial<Omit<Vsb_pvmoduletypeinprojectsBase, 'vsb_pvmoduletypeinprojectid'>>, Vsb_pvmoduletypeinprojects>(
       Vsb_pvmoduletypeinprojectsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_pvmoduletypeinprojectsService.client.deleteRecordAsync(
       Vsb_pvmoduletypeinprojectsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_pvmoduletypeinprojects>> {

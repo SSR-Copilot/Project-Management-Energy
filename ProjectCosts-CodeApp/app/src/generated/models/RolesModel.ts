@@ -6,7 +6,7 @@ export const Rolescomponentstate = {
   0: 'Published',
   1: 'Unpublished',
   2: 'Deleted',
-  3: 'DeletedUnpublished'
+  3: 'Deleted Unpublished'
 } as const;
 export type Rolescomponentstate = keyof typeof Rolescomponentstate;
 export const Rolesisautoassigned = {
@@ -15,15 +15,15 @@ export const Rolesisautoassigned = {
 } as const;
 export type Rolesisautoassigned = keyof typeof Rolesisautoassigned;
 export const Rolesisinherited = {
-  0: 'Teamprivilegesonly',
-  1: 'DirectUser_Basic_accesslevelandTeamprivileges'
+  0: 'Team privileges only',
+  1: 'Direct User (Basic) access level and Team privileges'
 } as const;
 export type Rolesisinherited = keyof typeof Rolesisinherited;
 
 export interface RolesBase {
   applicationid?: string;
   appliesto: string;
-  "BusinessUnitId@odata.bind": string;
+  "businessunitid@odata.bind": string;
   canbedeleted: string;
   description: string;
   importsequencenumber?: number;
@@ -38,28 +38,17 @@ export interface RolesBase {
 }
 
 export interface Roles extends RolesBase {
-  businessunitidname: string;
   componentstate: Rolescomponentstate;
-  createdbyname?: string;
-  createdbyyominame?: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame?: string;
   isautoassignedname?: string;
   isinheritedname?: string;
   ismanaged: boolean;
   ismanagedname?: string;
   issytemgeneratedname?: string;
-  modifiedbyname?: string;
-  modifiedbyyominame?: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame?: string;
   organizationid: string;
   organizationidname: string;
   overwritetime: string;
-  parentroleidname: string;
-  parentrootroleidname: string;
   roleidunique: string;
   solutionid: string;
   supportingsolutionid?: string;

@@ -15,17 +15,15 @@ export type Vsb_opexsubaccountsstatuscode = keyof typeof Vsb_opexsubaccountsstat
 export const Vsb_opexsubaccountsvsb_costtype = {
   200: 'CAPEX',
   400: 'DEVEX',
-  600: 'OPEX',
-  800: 'LandLease'
+  600: 'OPEX ',
+  800: 'Land Lease'
 } as const;
 export type Vsb_opexsubaccountsvsb_costtype = keyof typeof Vsb_opexsubaccountsvsb_costtype;
 
 export interface Vsb_opexsubaccountsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_opexsubaccountsstatecode;
   statuscode?: Vsb_opexsubaccountsstatuscode;
   timezoneruleversionnumber?: number;
@@ -39,23 +37,12 @@ export interface Vsb_opexsubaccountsBase {
 }
 
 export interface Vsb_opexsubaccounts extends Vsb_opexsubaccountsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_accountname?: string;
   vsb_costtypename?: string;
   createdby?: object;
   _createdby_value?: string;

@@ -39,7 +39,7 @@
  */
 import type { ReactNode } from "react";
 import {
-  Dialog, DialogSurface, Text, makeStyles, mergeClasses, tokens,
+  Dialog, DialogSurface, MessageBar, MessageBarBody, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { CheckmarkRegular, DeleteRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
 import { fontFamily, palette } from "@/theme/tokens";
@@ -94,6 +94,7 @@ const useStyles = makeStyles({
     borderTopStyle: "none", borderRightStyle: "none",
     borderBottomStyle: "none", borderLeftStyle: "none",
     ":hover": { color: palette.themeLighter },
+    ":disabled": { cursor: "default", opacity: 0.6 },
   },
   closeIcon: { fontSize: "20px" },
   /** `con_PopUpConfirmation_BodyDescription_2` — the padded band the description sits in. */
@@ -125,6 +126,8 @@ const useStyles = makeStyles({
   },
   infoIcon: { flexShrink: 0, width: "22px", fontSize: "16px", color: "#323130" },
   infoText: { fontSize: pt(9) },
+  /** E2: the failure of the confirmed action, under the description (the body scrolls). */
+  error: { marginTop: "12px" },
   /** `con_PopUpConfirmation_BodyButtons_2` — `Height: =60`, Confirm then Cancel, 20 px apart. */
   actions: {
     flexShrink: 0,
@@ -206,6 +209,16 @@ export interface ConfirmDialogProps {
   cancelIcon?: ConfirmDialogIcon;
   /** `WidthConfirmButton` — 96 unless the caller widens it for a longer label. */
   confirmWidth?: number;
+  /**
+   * E2: the confirmed action failed — a red `MessageBar` (`role="alert"`) under the description.
+   * The fixed surface height is unchanged; the body scrolls.
+   */
+  error?: string | null;
+  /**
+   * E2 (opt-in): while `busy`, the header ✕ is disabled and Escape is ignored. Off by default, so
+   * the screens that pass `busy` today keep their current ✕ / Escape behaviour.
+   */
+  lockWhileBusy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -217,9 +230,11 @@ export function ConfirmDialog({
   variant = "plain",
   confirmIcon = "checkmark", cancelIcon = "dismiss",
   confirmWidth = 96,
+  error, lockWhileBusy = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
+  const locked = lockWhileBusy && busy;
 
   const body = (
     <Text
@@ -237,7 +252,7 @@ export function ConfirmDialog({
     <Dialog
       open={open}
       modalType="alert"
-      onOpenChange={(_, data) => { if (!data.open) onCancel(); }}
+      onOpenChange={(_, data) => { if (!data.open && !locked) onCancel(); }}
     >
       <DialogSurface
         className={mergeClasses(styles.surface, variant === "info" && styles.surfaceInfo)}
@@ -247,7 +262,7 @@ export function ConfirmDialog({
         <div className={styles.header}>
           <h2 className={styles.title}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
-          <button type="button" className={styles.close} aria-label="Close" onClick={onCancel}>
+          <button type="button" className={styles.close} aria-label="Close" onClick={onCancel} disabled={locked}>
             <DismissRegular className={styles.closeIcon} />
           </button>
         </div>
@@ -259,6 +274,11 @@ export function ConfirmDialog({
               {body}
             </div>
           ) : body}
+          {error ? (
+            <MessageBar intent="error" role="alert" className={styles.error}>
+              <MessageBarBody>{error}</MessageBarBody>
+            </MessageBar>
+          ) : null}
         </div>
 
         {/* Confirm sits LEFT of Cancel: `Confirm.X = Cancel.X - Self.Width - 20`. */}

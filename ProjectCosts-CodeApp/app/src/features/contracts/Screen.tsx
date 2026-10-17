@@ -44,6 +44,7 @@ import { palette } from "@/theme/tokens";
 import { parseNumber, round } from "@/domain/numeric";
 import { numberFormat } from "@/domain/locale";
 import { DataError } from "@/platform/errors";
+import { writeErrorText } from "@/features/shared/recordGone";
 import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges";
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
@@ -53,7 +54,8 @@ import {
   contractName, costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
-  contractTotalFromForm, selectedLeafAccounts, toggleParentAccounts,
+  contractTotalFromForm, selectedLeafAccounts, standardMarginSeed, toggleParentAccounts,
+  contractFormFromRecord, contractNumbersFromForm, numberInputText,
   type AccountNode, type BopContract, type CapexCostRow, type ContractForm,
   type ContractType, type ParentCheckState, type PaymentTarget, type PaymentTargetForm,
 } from "./rules";
@@ -120,36 +122,6 @@ function emptyContractForm(contractType: ContractType): ContractForm {
     marginFixedValue: "",
     comment: "",
     isMarginStandardAssumption: false,
-  };
-}
-
-function formFromContract(c: BopContract): ContractForm {
-  const s = (n: number | undefined) => (n === undefined || n === null ? "" : String(n));
-  return {
-    description: c.description ?? "",
-    contractType: c.contractType,
-    closingDate: c.closingDate,
-    costsUntilClosingType:
-      c.costsUntilClosingType === CLOSING_DATE_TYPE.None
-        ? CLOSING_DATE_TYPE.Plan : c.costsUntilClosingType,
-    costsUntilClosingPlan: s(c.costsUntilClosingPlan),
-    costsUntilClosingActual: s(c.costsUntilClosingActual),
-    costsAfterClosingType:
-      c.costsAfterClosingType === CLOSING_DATE_TYPE.None
-        ? CLOSING_DATE_TYPE.Plan : c.costsAfterClosingType,
-    costsAfterClosingPlan: s(c.costsAfterClosingPlan),
-    costsAfterClosingActual: s(c.costsAfterClosingActual),
-    totalCostsType:
-      c.totalCostsType === TOTAL_COSTS_TYPE.None
-        ? TOTAL_COSTS_TYPE.Calculated : c.totalCostsType,
-    totalCostsCalculated: s(c.totalCostsCalculated),
-    totalCostsOverwrite: s(c.totalCostsOverwrite),
-    margin: c.margin,
-    marginType: c.marginType ?? MARGIN_TYPE.Percentage,
-    marginPercentage: s(c.marginPercentage),
-    marginFixedValue: s(c.marginFixedValue),
-    comment: c.comment ?? "",
-    isMarginStandardAssumption: c.isMarginStandardAssumption,
   };
 }
 
@@ -240,16 +212,9 @@ export default function ContractsScreen() {
     if (panel !== "contract" || editing) return;
     const a = standardAssumption.data;
     if (!a) return;
-    setForm((f) => ({
-      ...f,
-      margin: a.vsb_margin === true,
-      marginType: (typeof a.vsb_margintype === "number"
-        ? a.vsb_margintype : MARGIN_TYPE.Percentage) as ContractForm["marginType"],
-      marginPercentage: a.vsb_marginpercentage === undefined ? "" : String(a.vsb_marginpercentage),
-      marginFixedValue: a.vsb_marginfixedvalue === undefined ? "" : String(a.vsb_marginfixedvalue),
-      isMarginStandardAssumption: true,
-    }));
-  }, [panel, editing, standardAssumption.data]);
+    // A blank (null) margin column seeds an empty field, not "null" — see `standardMarginSeed`.
+    setForm((f) => ({ ...f, ...standardMarginSeed(a, locale) }));
+  }, [panel, editing, standardAssumption.data, locale]);
 
   /* ── recalculation ──────────────────────────────────────────────────── */
 
@@ -359,17 +324,8 @@ export default function ContractsScreen() {
    */
   const resetMarginToStandardAssumption = useCallback(() => {
     const a = standardAssumption.data;
-    updateForm({
-      margin: a?.vsb_margin === true,
-      marginType: (typeof a?.vsb_margintype === "number"
-        ? a.vsb_margintype : MARGIN_TYPE.Percentage) as ContractForm["marginType"],
-      marginPercentage:
-        a?.vsb_marginpercentage === undefined ? "" : String(a.vsb_marginpercentage),
-      marginFixedValue:
-        a?.vsb_marginfixedvalue === undefined ? "" : String(a.vsb_marginfixedvalue),
-      isMarginStandardAssumption: Boolean(a),
-    }, true);
-  }, [standardAssumption.data, updateForm]);
+    updateForm({ ...standardMarginSeed(a ?? {}, locale), isMarginStandardAssumption: Boolean(a) }, true);
+  }, [standardAssumption.data, updateForm, locale]);
 
   const contractTotal = useMemo(
     () => contractTotalFromForm(form, locale),
@@ -409,7 +365,7 @@ export default function ContractsScreen() {
   const openEditContract = () => {
     if (!selectedContract) return;
     setEditing(true);
-    setForm(formFromContract(selectedContract));
+    setForm(contractFormFromRecord(selectedContract, locale));
     setSelectedAccountIds(
       (devCoLinksQuery.data ?? [])
         .filter((l) => l.contractId === selectedContract.id)
@@ -453,7 +409,8 @@ export default function ContractsScreen() {
     if (message) { setBanner(message); return; }
     setBanner(
       error instanceof DataError
-        ? `Error: BoP Contract could not be saved correctly. ${error.message}`
+        // `writeErrorText`: a row someone else deleted (V-1 `RecordGoneError`) reads as such.
+        ? `Error: BoP Contract could not be saved correctly. ${writeErrorText(error)}`
         : `Error: BoP Contract could not be saved correctly.`,
     );
   };
@@ -461,7 +418,6 @@ export default function ContractsScreen() {
   const saveContractNow = async () => {
     if (!project || !projectId) return;
     const leaves = selectedLeafAccounts(tree);
-    const num = (raw: string) => parseNumber(raw, locale);
     /*
      * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS.
      *
@@ -487,18 +443,11 @@ export default function ContractsScreen() {
           contractType: form.contractType,
           closingDate: form.closingDate as Date,
           costsUntilClosingType: form.costsUntilClosingType,
-          costsUntilClosingPlan: num(form.costsUntilClosingPlan),
-          costsUntilClosingActual: num(form.costsUntilClosingActual),
           costsAfterClosingType: form.costsAfterClosingType,
-          costsAfterClosingPlan: num(form.costsAfterClosingPlan),
-          costsAfterClosingActual: num(form.costsAfterClosingActual),
           totalCostsType: form.totalCostsType,
-          totalCostsCalculated: num(form.totalCostsCalculated),
-          totalCostsOverwrite: num(form.totalCostsOverwrite),
           margin: form.margin,
           marginType: form.marginType,
-          marginPercentage: num(form.marginPercentage),
-          marginFixedValue: num(form.marginFixedValue),
+          ...contractNumbersFromForm(form, locale),
           totalCostOfContract: round(contractTotal, 2),
           comment: form.comment,
           isMarginStandardAssumption: form.isMarginStandardAssumption,
@@ -697,7 +646,7 @@ export default function ContractsScreen() {
                           description: t.description ?? "",
                           paymentDate: t.paymentDate ?? "",
                           totalCostsContract:
-                            t.totalCostsContract === undefined ? "" : String(t.totalCostsContract),
+                            numberInputText(t.totalCostsContract, locale),
                           note: t.note ?? "",
                         });
                         setPanelTouched(false);

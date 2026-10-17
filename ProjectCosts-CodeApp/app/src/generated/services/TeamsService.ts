@@ -24,19 +24,21 @@ export class TeamsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<TeamsBase, 'teamid'>>): Promise<IOperationResult<Teams>> {
+  public static async update(id: string, changedFields: Partial<Omit<TeamsBase, 'teamid'>>, partitionId?: string): Promise<IOperationResult<Teams>> {
     const result = await TeamsService.client.updateRecordAsync<Partial<Omit<TeamsBase, 'teamid'>>, Teams>(
       TeamsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await TeamsService.client.deleteRecordAsync(
       TeamsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Teams>> {

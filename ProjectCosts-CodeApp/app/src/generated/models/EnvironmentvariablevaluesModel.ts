@@ -6,7 +6,7 @@ export const Environmentvariablevaluescomponentstate = {
   0: 'Published',
   1: 'Unpublished',
   2: 'Deleted',
-  3: 'DeletedUnpublished'
+  3: 'Deleted Unpublished'
 } as const;
 export type Environmentvariablevaluescomponentstate = keyof typeof Environmentvariablevaluescomponentstate;
 export const Environmentvariablevaluesstatecode = {
@@ -38,23 +38,13 @@ export interface EnvironmentvariablevaluesBase {
 export interface Environmentvariablevalues extends EnvironmentvariablevaluesBase {
   componentstate: Environmentvariablevaluescomponentstate;
   componentstatename?: string;
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  environmentvariabledefinitionidname?: string;
   environmentvariablevalueidunique: string;
   ismanaged: boolean;
   ismanagedname?: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
   overwritetime: string;
   ownerid: string;
-  owneridtype: string;
   solutionid: string;
   statecodename?: string;
   statuscodename?: string;

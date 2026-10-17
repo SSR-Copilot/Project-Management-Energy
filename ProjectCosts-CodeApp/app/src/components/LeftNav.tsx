@@ -9,33 +9,14 @@
  * The green left-edge accent bar on the selected item (screenshot r06) is reproduced.
  */
 import { Button, makeStyles, mergeClasses, tokens, Tooltip } from "@fluentui/react-components";
-import {
-  BookOpenFilled, DocumentEditRegular, DocumentPersonRegular, MoneyRegular,
-  TableSimpleRegular, ChevronDownRegular, ChevronUpRegular, NavigationRegular,
-} from "@fluentui/react-icons";
-import { useMemo, useState, type ReactElement } from "react";
+import { ChevronDownRegular, ChevronUpRegular, NavigationRegular } from "@fluentui/react-icons";
+import { useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { NAV_ITEMS, activeNavKey, parentOf, type NavItem } from "@/app/navigation";
 import { useSession } from "@/app/SessionContext";
 import { costLocation, COST_PATHS } from "@/app/deepLinks";
 import { layout, palette, space } from "@/theme/tokens";
-
-/*
- * `LeftNavigationMenu.ItemIconName` (`App.pa.yaml:87-140`), which names Fabric icons, mapped to
- * their Fluent v9 equivalents. Every rail item used to render `DocumentRegular` — a plain sheet —
- * so DEVEX/CAPEX lost its solid reading-mode glyph, the OPEX items lost the pencil that makes
- * them editable pages, and Contracts was indistinguishable from its siblings.
- */
-const ICONS: Record<NavItem["icon"], ReactElement> = {
-  projects: <TableSimpleRegular />,
-  // ReadingModeSolid — an open book, and the only FILLED glyph in the rail.
-  capex: <BookOpenFilled />,
-  opex: <DocumentEditRegular />,      // PageEdit
-  document: <DocumentEditRegular />,  // PageEdit
-  // TextDocumentShared — a document with a person, not a plain sheet of lines.
-  contract: <DocumentPersonRegular />,
-  currency: <MoneyRegular />,         // AllCurrency
-};
+import { NAV_ICONS as ICONS } from "./navIcons";
 
 const useStyles = makeStyles({
   rail: {

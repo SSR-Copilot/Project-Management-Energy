@@ -224,7 +224,11 @@ export function gridToJson(grid: SheetGrid, startYear: string): SpreadsheetOutpu
   return jsonData;
 }
 
-export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
+/*
+ * Memoised: the grid is non-virtualised and renders every cell, so the parent's save-state
+ * changes (pending overlay, error banners) must not re-render it when its props are unchanged.
+ */
+const SpreadSheetInner: React.FC<ISpreadSheetProps> = ({
   data: initialData,
   onDataChange,
   subaccountDataIn,
@@ -453,5 +457,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
     </div>
   );
 };
+
+export const SpreadSheetComp = React.memo(SpreadSheetInner);
 
 export { gridToJson as spreadsheetGridToJson };

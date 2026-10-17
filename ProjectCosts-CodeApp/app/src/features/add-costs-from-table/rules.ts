@@ -61,6 +61,8 @@ export interface ExistingContract {
   costType: number | null;
   depreciation: boolean | null;
   applyVat: boolean | null;
+  /** Stored `vsb_totalcost`, so a save can skip writing a total that would not change. */
+  totalCost?: number | null;
 }
 
 export interface ExistingCost {
@@ -505,22 +507,26 @@ export function costWrites(
    * The FIRST stored row for a key wins, exactly as `.find` returned the first match.
    */
   const index = new Map<string, ExistingCost>();
+  const duplicated = new Set<string>();
   for (const c of existingCosts) {
     const k = `${c.contractId}|${c.year}|${c.month}`;
-    if (!index.has(k)) index.set(k, c);
+    if (!index.has(k)) index.set(k, c); else duplicated.add(k);
   }
 
   for (const row of rows) {
     for (let m = 1; m <= 12; m += 1) {
       candidates += 1;
       const value = row.months[m - 1] ?? null;
-      const existing = row.projectContractId === null
-        ? undefined
-        : index.get(`${row.projectContractId}|${row.year}|${m}`);
+      const key = `${row.projectContractId}|${row.year}|${m}`;
+      const existing = row.projectContractId === null ? undefined : index.get(key);
       if (value === null) {
         if (existing) deletes.push(existing.id);
         continue;
       }
+      // A changed row re-sends all 12 months; a month already holding this value would be a
+      // no-op write. Not skipped when the month has duplicate stored rows: the totals overlay
+      // then needs the upsert to pin the month to this value.
+      if (existing && existing.cost === value && !duplicated.has(key)) continue;
       upserts.push({
         costId: existing?.id ?? null, contractId: row.projectContractId,
         year: row.year, month: m, cost: value,

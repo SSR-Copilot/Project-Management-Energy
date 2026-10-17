@@ -60,9 +60,9 @@ import { Vsb_landleasesubaccountsService } from "@/generated/services/Vsb_landle
 import { Vsb_landleaseallocationwtgsService } from "@/generated/services/Vsb_landleaseallocationwtgsService";
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
-import { unwrap } from "@/platform/errors";
+import { RecordGoneError, unwrap } from "@/platform/errors";
 import type { CostPeriod, PeriodMode } from "@/features/costing/model";
-import { fetchAll } from "./client";
+import { fetchAll, updateRecordIfExists } from "./client";
 import { ACTIVE, and, eq, guid, lookupEq, lookupIn } from "./odata";
 import {
   LAND_LEASE_PERIOD_CHOICE, LAND_LEASE_SECURED, THRESHOLD_TYPE_VALUE,
@@ -414,10 +414,9 @@ export async function saveOpexPeriod(
     );
     savedId = created.vsb_opexprojectcostid;
   } else {
-    unwrap(
-      await Vsb_opexprojectcostsService.update(period.id, { ...fields, ...bindings } as never),
-      "update OPEX period",
-    );
+    // Guarded (V-1, `updateRecordIfExists`): a period another user deleted throws
+    // `RecordGoneError` before the cascade, instead of being recreated by the SDK's upsert PATCH.
+    await updateRecordIfExists("update OPEX period", "vsb_opexprojectcosts", period.id, { ...fields, ...bindings });
   }
 
   // Rule 12's cascade. Run for every save, exactly as the canvas does: on a later period the
@@ -425,10 +424,15 @@ export async function saveOpexPeriod(
   const children = await childrenOfChain(savedId);
   const cascade = cascadeFields(fields);
   for (const child of children) {
-    unwrap(
-      await Vsb_opexprojectcostsService.update(child.id, cascade as never),
-      "cascade OPEX inflation to a child period",
-    );
+    try {
+      await updateRecordIfExists(
+        "cascade OPEX inflation to a child period", "vsb_opexprojectcosts", child.id, cascade,
+      );
+    } catch (error) {
+      // A child deleted between `childrenOfChain` and here has nothing left to cascade onto:
+      // SKIP it (never recreate it). Any other failure still fails the save.
+      if (!(error instanceof RecordGoneError)) throw error;
+    }
   }
 
   // Where the saved row now sits in its chain, read back rather than assumed: the slot depends on
@@ -598,12 +602,11 @@ async function resolveLandLeaseHeader(
       resolveCurrencyId(period.currency),
       resolveLandLeaseSubaccount(period.group),
     ]);
-    unwrap(
-      await Vsb_landleaseprojectcostsService.update(
-        existing.id,
-        landLeaseHeaderFields(period, currencyId, ctx.projectName, subaccount.name) as never,
-      ),
-      "update Land Lease contract",
+    // Guarded (V-1): two lookups sit between `readLandLeaseHeader` and this PATCH, so a header
+    // deleted in that gap throws `RecordGoneError` rather than being recreated.
+    await updateRecordIfExists(
+      "update Land Lease contract", "vsb_landleaseprojectcosts", existing.id,
+      landLeaseHeaderFields(period, currencyId, ctx.projectName, subaccount.name),
     );
     return {
       ...existing,
@@ -753,8 +756,18 @@ export async function saveLandLeasePeriod(
   period: CostPeriod,
   isNew: boolean,
 ): Promise<CostPeriod> {
-  const header = await resolveLandLeaseHeader(ctx, period, isNew);
   const fields = landLeasePeriodFields(period);
+
+  if (!isNew) {
+    if (!period.contractId) throw new Error("This Land Lease period is not attached to a contract.");
+    // `vsb_period` is NOT re-written on an edit: the canvas keeps `locSelectedLandLeasePeriod
+    // .Period` and only computes a new slot when `locRightPanelState = "New"`.
+    // Guarded (V-1) and FIRST: a period deleted by another save throws `RecordGoneError` before
+    // the header or allocations are touched, and is never recreated by the SDK's upsert PATCH.
+    await updateRecordIfExists("update Land Lease period", "vsb_landleaseperiods", period.id, fields);
+  }
+
+  const header = await resolveLandLeaseHeader(ctx, period, isNew);
 
   // The WTG allocations belong to the CONTRACT, so they are reconciled on the same saves that own
   // the header: a create, or an edit of Period 1. A later period carries the same list only
@@ -764,12 +777,6 @@ export async function saveLandLeasePeriod(
   }
 
   if (!isNew) {
-    // `vsb_period` is NOT re-written on an edit: the canvas keeps `locSelectedLandLeasePeriod
-    // .Period` and only computes a new slot when `locRightPanelState = "New"`.
-    unwrap(
-      await Vsb_landleaseperiodsService.update(period.id, fields as never),
-      "update Land Lease period",
-    );
     return {
       ...period,
       contractId: header.id,
@@ -971,14 +978,53 @@ async function loadAssumptions(
       ),
     },
   ) as AssumptionRow[];
-  // `Sort(…, Description, SortOrder.Ascending)` then the `Period` chain order. The canvas sorts
-  // by Description for the Period-1 pick and walks the rest in `Period` order; doing both here
-  // means a catalogue with two contracts per sub-account still chains each one correctly.
-  return [...rows].sort(
-    (a, b) =>
-      (a.vsb_description ?? "").localeCompare(b.vsb_description ?? "")
-      || (a.vsb_period ?? 0) - (b.vsb_period ?? 0),
-  );
+  return sortStandardAssumptions(rows);
+}
+
+/** The contract an assumption row belongs to: one standard contract per sub-account. */
+function assumptionContractKey(a: Pick<AssumptionRow, "_vsb_opexsubaccount_value" | "_vsb_landleasesubaccount_value">): string {
+  return a._vsb_opexsubaccount_value ?? a._vsb_landleasesubaccount_value ?? "";
+}
+
+/**
+ * Chain order for the seeding loops: grouped by contract (sub-account), each group in NUMERIC
+ * `Period` order (Period1 = 952850000 … Period10 = 952850009, so the choice value sorts the same as
+ * the period number).
+ *
+ * The canvas sorts by Description for the Period-1 pick and walks the rest in `Period` order. The
+ * old single sort put Description FIRST for every row, so a contract whose periods are described
+ * "Lease - 1" … "Lease - 10" chained Period 10 straight after Period 1 ("…10" sorts before "…2")
+ * — and Costs settings now writes contracts of up to 10 numbered periods (costs audit (f) 4).
+ * Description still decides which CONTRACT comes first (by its Period-1 row's description, the
+ * canvas' Period-1 pick), which matters for O&M, whose catalogue is not scoped by sub-account.
+ *
+ * Legacy data with SEVERAL Period-1 rows under one sub-account cannot be split by sub-account;
+ * that group keeps the description-first order (with numeric-aware collation, so "… 10" still
+ * follows "… 9"), which chains each contract as long as its periods share a description prefix.
+ */
+export function sortStandardAssumptions<T extends Pick<
+  AssumptionRow, "vsb_description" | "vsb_period" | "_vsb_opexsubaccount_value" | "_vsb_landleasesubaccount_value"
+>>(rows: readonly T[]): T[] {
+  const collate = (x: string, y: string) => x.localeCompare(y, undefined, { numeric: true });
+  const period = (a: T) => (typeof a.vsb_period === "number" ? a.vsb_period : Number.MAX_SAFE_INTEGER);
+  const description = (a: T) => a.vsb_description ?? "";
+  const byPeriod = (a: T, b: T) => period(a) - period(b) || collate(description(a), description(b));
+  const byDescription = (a: T, b: T) => collate(description(a), description(b)) || period(a) - period(b);
+
+  const groups = new Map<string, T[]>();
+  for (const a of rows) {
+    const key = assumptionContractKey(a);
+    groups.set(key, [...(groups.get(key) ?? []), a]);
+  }
+
+  const ordered = [...groups.entries()].map(([key, members]) => {
+    const heads = members.filter((a) => a.vsb_period === ASSUMPTION_PERIOD_1).length;
+    const chain = [...members].sort(heads > 1 ? byDescription : byPeriod);
+    // The group's rank: its first row — the Period-1 row when there is one.
+    return { key, chain, rank: description(chain[0] as T) };
+  });
+  ordered.sort((x, y) => collate(x.rank, y.rank) || x.key.localeCompare(y.key));
+  return ordered.flatMap((g) => g.chain);
 }
 
 /**

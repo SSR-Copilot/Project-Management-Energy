@@ -29,7 +29,7 @@ import type { Vsb_bopcontractsstandardassumptionses } from "@/generated/models/V
 import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountlistsModel";
 import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexprojectcontractsModel";
 import { unwrap } from "@/platform/errors";
-import { fetchAll } from "./client";
+import { fetchAll, fetchPage, updateRecordIfExists } from "./client";
 import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn } from "./odata";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
@@ -325,14 +325,26 @@ export async function listDevCoCapexContracts(
  *   - fresher numbers, because the Fabric copy lags by `vsb_FabricSyncDelayMinutes`.
  * If the Fabric table is deliberately allowed to differ from Dataverse, this has to move
  * back onto the SQL connector. ON THE OPEN-DECISION LIST.
+ *
+ * WHICH ROW SEEDS (open product decision D-14). The Contracts settings screen allows up to 10
+ * standard contracts per type for a country + technology; the canvas `First(Filter(…))` had no
+ * order, so the seed was whatever the server returned first. Until D-14 is decided the rule is:
+ *   - ACTIVE rows only (`statecode eq 0`) — an inactive standard contract never seeds, whatever
+ *     the settings screen decides about listing inactive rows (D-12);
+ *   - the OLDEST by `createdon`, then by id — the server's natural order for a table with no
+ *     re-ordering, made explicit so the same contract seeds every time.
+ * One page of one row: `fetchAll` with `maxPageSize: 1` walked every matching row a request at a
+ * time (contracts settings audit B-8).
  */
+export const BOP_STANDARD_SEED_ORDER = ["createdon asc", "vsb_bopcontractsstandardassumptionsid asc"] as const;
+
 export async function findBopStandardAssumption(args: {
   countryId: string | undefined;
   technology: number | undefined;
   contractType: ContractType;
 }): Promise<Vsb_bopcontractsstandardassumptionses | undefined> {
   if (!args.countryId || args.technology === undefined) return undefined;
-  const rows = await fetchAll(
+  const rows = await fetchPage(
     "find BoP standard assumption",
     (o) => Vsb_bopcontractsstandardassumptionsesService.getAll(o),
     {
@@ -346,6 +358,7 @@ export async function findBopStandardAssumption(args: {
         eq("vsb_contracttypes", args.contractType),
         ACTIVE,
       ),
+      orderBy: [...BOP_STANDARD_SEED_ORDER],
       maxPageSize: 1,
     },
   );
@@ -454,10 +467,15 @@ export function contractPayload(w: ContractWrite) {
 
 export async function saveContract(w: ContractWrite): Promise<BopContract> {
   const payload = contractPayload(w);
-  const result = w.id
-    ? await Vsb_bopprojectscontractsesService.update(w.id, payload as never)
-    : await Vsb_bopprojectscontractsesService.create(payload as never);
-  return toContract(unwrap(result, w.id ? "update BoP contract" : "create BoP contract"));
+  // UPDATE is guarded (V-1, `updateRecordIfExists`): a contract another user deleted throws
+  // `RecordGoneError` and is never recreated by the SDK 1.3.1's If-Match-less (upsert) PATCH.
+  if (w.id) {
+    return toContract(await updateRecordIfExists<typeof payload, Vsb_bopprojectscontractses>(
+      "update BoP contract", "vsb_bopprojectscontractses", w.id, payload,
+    ));
+  }
+  const result = await Vsb_bopprojectscontractsesService.create(payload as never);
+  return toContract(unwrap(result, "create BoP contract"));
 }
 
 export async function deleteContract(id: string): Promise<void> {
@@ -532,12 +550,15 @@ export async function savePaymentTarget(w: PaymentTargetWrite): Promise<PaymentT
       ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
       : {}),
   };
-  const result = w.id
-    ? await Vsb_bopcontractspaymenttargetsesService.update(w.id, payload as never)
-    : await Vsb_bopcontractspaymenttargetsesService.create(payload as never);
-  return toPaymentTarget(
-    unwrap(result, w.id ? "update payment target" : "create payment target"),
-  );
+  // UPDATE guarded (V-1): a target deleted meanwhile (directly, or by its contract's delete)
+  // throws `RecordGoneError` instead of coming back as an orphan row.
+  if (w.id) {
+    return toPaymentTarget(await updateRecordIfExists<typeof payload, Vsb_bopcontractspaymenttargetses>(
+      "update payment target", "vsb_bopcontractspaymenttargetses", w.id, payload,
+    ));
+  }
+  const result = await Vsb_bopcontractspaymenttargetsesService.create(payload as never);
+  return toPaymentTarget(unwrap(result, "create payment target"));
 }
 
 export async function deletePaymentTarget(id: string): Promise<void> {

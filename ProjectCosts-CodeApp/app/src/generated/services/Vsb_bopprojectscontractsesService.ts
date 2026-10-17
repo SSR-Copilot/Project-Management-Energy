@@ -24,19 +24,21 @@ export class Vsb_bopprojectscontractsesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_bopprojectscontractsesBase, 'vsb_bopprojectscontractsid'>>): Promise<IOperationResult<Vsb_bopprojectscontractses>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_bopprojectscontractsesBase, 'vsb_bopprojectscontractsid'>>, partitionId?: string): Promise<IOperationResult<Vsb_bopprojectscontractses>> {
     const result = await Vsb_bopprojectscontractsesService.client.updateRecordAsync<Partial<Omit<Vsb_bopprojectscontractsesBase, 'vsb_bopprojectscontractsid'>>, Vsb_bopprojectscontractses>(
       Vsb_bopprojectscontractsesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_bopprojectscontractsesService.client.deleteRecordAsync(
       Vsb_bopprojectscontractsesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_bopprojectscontractses>> {

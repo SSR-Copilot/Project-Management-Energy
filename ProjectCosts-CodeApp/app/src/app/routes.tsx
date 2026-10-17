@@ -16,6 +16,8 @@ import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath } from "./deepLinks";
+import { SETTINGS_HOME } from "./navigation-settings";
+import { SettingsGate } from "@/features/settings/SettingsGate";
 
 const ProjectOverviewScreen = lazy(() => import("@/features/project-overview/Screen"));
 const GeneralDataScreen = lazy(() => import("@/features/general-data/Screen"));
@@ -24,6 +26,12 @@ const CapexCostsScreen = lazy(() => import("@/features/capex-costs/Screen"));
 const OpexCostsScreen = lazy(() => import("@/features/opex-costs/Screen"));
 const LandLeaseScreen = lazy(() => import("@/features/land-lease/Screen"));
 const AddCostsFromTableScreen = lazy(() => import("@/features/add-costs-from-table/Screen"));
+const ChecklistSettingsScreen = lazy(() => import("@/features/settings/checklist-settings/Screen"));
+const ProjectGatesSettingsScreen = lazy(() => import("@/features/settings/project-gates/Screen"));
+const CapexAccountsSettingsScreen = lazy(() => import("@/features/settings/capex-accounts/Screen"));
+const MilestonesSettingsScreen = lazy(() => import("@/features/settings/milestones/Screen"));
+const CostsSettingsScreen = lazy(() => import("@/features/settings/costs/Screen"));
+const ContractsSettingsScreen = lazy(() => import("@/features/settings/contracts/Screen"));
 
 /**
  * The landing route.
@@ -85,6 +93,16 @@ export function AppRoutes() {
           <Route path="land-lease" element={<LandLeaseScreen />} />
           <Route path="contracts" element={<ContractsScreen />} />
           <Route path="add-from-table" element={<AddCostsFromTableScreen />} />
+        </Route>
+        {/* Application Settings — the canvas admin screens, behind the admin role gate. */}
+        <Route path="settings" element={<SettingsGate />}>
+          <Route index element={<Navigate replace to={SETTINGS_HOME} />} />
+          <Route path="checklists" element={<ChecklistSettingsScreen />} />
+          <Route path="gates" element={<ProjectGatesSettingsScreen />} />
+          <Route path="capex-accounts" element={<CapexAccountsSettingsScreen />} />
+          <Route path="milestones" element={<MilestonesSettingsScreen />} />
+          <Route path="costs" element={<CostsSettingsScreen />} />
+          <Route path="contracts" element={<ContractsSettingsScreen />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

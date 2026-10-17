@@ -20,12 +20,15 @@ interface Write { op: string; table: string; id?: string; payload?: Record<strin
 let writes: Write[] = [];
 const NEW_ID: Record<string, string[]> = {};
 
-vi.mock("./client", () => ({
+vi.mock("./client", async (importOriginal) => ({
+  // The REAL `updateRecordIfExists` (V-1 guard) runs against the SDK fake below.
+  ...(await importOriginal<typeof import("./client")>()),
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
   },
 }));
+vi.mock("@microsoft/power-apps/data", async () => (await import("./testing/guardedSdkFake")).sdkModule);
 
 function service(table: string, idColumn: string) {
   return {
@@ -78,6 +81,9 @@ vi.mock("@/generated/services/TransactioncurrenciesService", () => ({
   TransactioncurrenciesService: service("currency", "transactioncurrencyid"),
 }));
 
+import { guardedSdk, resetGuardedSdk } from "./testing/guardedSdkFake";
+import { RecordGoneError } from "@/platform/errors";
+
 const {
   applyLeaseWrites, loadCountryInflation, loadCurrencies, loadLeaseAssumptions, loadLeaseBook,
   loadLeaseGenerators,
@@ -97,6 +103,11 @@ beforeEach(() => {
   queriedBy = {};
   writes = [];
   for (const key of Object.keys(NEW_ID)) delete NEW_ID[key];
+  resetGuardedSdk();
+  const label: Record<string, string> = {
+    vsb_landleaseprojectcosts: "cost", vsb_landleaseperiods: "period", vsb_landleaseallocationwtgs: "alloc",
+  };
+  guardedSdk.onUpdate = (u) => { writes.push({ op: "update", table: label[u.table] ?? u.table, id: u.id, payload: u.body }); };
 });
 
 describe("loadLeaseBook", () => {
@@ -361,5 +372,38 @@ describe("applyLeaseWrites", () => {
     await expect(applyLeaseWrites([
       { op: "delete", entitySet: "vsb_somethingelse", id: "x" },
     ] as never)).rejects.toThrow(/No writer/);
+  });
+
+  /*
+   * V-1 (`09-upsert-risk.md` P9): every update in a plan goes through `updateRecordIfExists`,
+   * so a row another save deleted since the plan was built is never recreated by the SDK's
+   * SDK 1.3.1 If-Match-less (upsert) PATCH — the plan stops with `RecordGoneError` at that write.
+   */
+  it("UT-LLDATA-014 an update of a row deleted meanwhile sends nothing and stops the plan", async () => {
+    const PERIOD = "11e5e001-0000-4000-8000-000000000001";
+    guardedSdk.gone.add(HDR_COST101);
+    const error = await applyLeaseWrites([
+      { op: "update", entitySet: LEASE_ENTITY_SET.cost, id: HDR_COST101, payload: { vsb_description: "x" } },
+      { op: "update", entitySet: LEASE_ENTITY_SET.period, id: PERIOD, payload: { vsb_name: "x" } },
+    ] as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RecordGoneError);
+    expect(guardedSdk.updates).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("UT-LLDATA-015 updates of existing rows are checked, then PATCHed, for all three tables", async () => {
+    const PERIOD = "11e5e001-0000-4000-8000-000000000001";
+    const ALLOC = "a110c001-0000-4000-8000-000000000001";
+    await applyLeaseWrites([
+      { op: "update", entitySet: LEASE_ENTITY_SET.cost, id: HDR_COST101, payload: { vsb_description: "x" } },
+      { op: "update", entitySet: LEASE_ENTITY_SET.period, id: PERIOD, payload: { vsb_name: "x" } },
+      { op: "update", entitySet: LEASE_ENTITY_SET.allocation, id: ALLOC, payload: {} },
+    ] as never);
+    expect(guardedSdk.reads.map((r) => r.table)).toEqual([
+      "vsb_landleaseprojectcosts", "vsb_landleaseperiods", "vsb_landleaseallocationwtgs",
+    ]);
+    expect(writes.map((w) => `${w.op}:${w.table}:${w.id}`)).toEqual([
+      `update:cost:${HDR_COST101}`, `update:period:${PERIOD}`, `update:alloc:${ALLOC}`,
+    ]);
   });
 });

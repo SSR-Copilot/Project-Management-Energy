@@ -305,6 +305,12 @@ describe("toProjectRow", () => {
     expect(toProjectRow({ ...raw, [fv(COL.technology)]: "Viento" }).technology).toBe("Viento");
   });
 
+  it("UT-OV-035b keeps the technology OPTION VALUE for logic, whatever the label says", () => {
+    expect(toProjectRow(raw).technologyCode).toBe(TECHNOLOGY.wind);
+    expect(toProjectRow({ ...raw, [fv(COL.technology)]: "Viento" }).technologyCode).toBe(TECHNOLOGY.wind);
+    expect(toProjectRow({}).technologyCode).toBeNull();
+  });
+
   it("UT-OV-036 never renders the raw option-set integer", () => {
     const row = toProjectRow({ [COL.technology]: TECHNOLOGY.pv });
     expect(row.technology).toBe("PV");
@@ -393,17 +399,20 @@ describe("cost module lock", () => {
 /* ───────────────────────────────────────────────── the Simulate launch gate */
 
 describe("simulateGate", () => {
-  const ok = { technology: "Wind", clusterStateOrder: 3, hasBaseCase: true };
+  const ok = { technology: TECHNOLOGY.wind as number, clusterStateOrder: 3, hasBaseCase: true };
 
   it("UT-OV-054 allows a Wind/PV project in Clusters 1-5 with a Base Case row", () => {
     expect(simulateGate(ok)).toEqual({ ok: true });
-    expect(simulateGate({ ...ok, technology: "PV" })).toEqual({ ok: true });
+    expect(simulateGate({ ...ok, technology: TECHNOLOGY.pv })).toEqual({ ok: true });
     expect(simulateGate({ ...ok, clusterStateOrder: 1 })).toEqual({ ok: true });
     expect(simulateGate({ ...ok, clusterStateOrder: 5 })).toEqual({ ok: true });
   });
 
   it("UT-OV-055 blocks any technology other than Wind/PV", () => {
-    for (const technology of ["BESS", "Hybrid", "Hydrogen", "Hydro", "Substation", null, undefined]) {
+    for (const technology of [
+      TECHNOLOGY.bess, TECHNOLOGY.hybrid, TECHNOLOGY.hydrogen, TECHNOLOGY.hydro, TECHNOLOGY.substation,
+      null, undefined,
+    ]) {
       expect(simulateGate({ ...ok, technology })).toEqual({
         ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster,
       });
@@ -431,7 +440,7 @@ describe("simulateGate", () => {
   it("UT-OV-058 reports the technology/cluster failure even when the Base Case is also missing", () => {
     // Matches the canvas `If(Not(And(...)), Notify(A), IsBlank(varBaseCaseRecord), Notify(B), …)`
     // branch order: the first failing condition wins.
-    expect(simulateGate({ technology: "BESS", clusterStateOrder: 3, hasBaseCase: false }))
+    expect(simulateGate({ technology: TECHNOLOGY.bess, clusterStateOrder: 3, hasBaseCase: false }))
       .toEqual({ ok: false, message: SIMULATE_MSG.unsupportedTechnologyOrCluster });
   });
 });

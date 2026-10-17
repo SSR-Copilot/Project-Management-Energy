@@ -16,9 +16,7 @@ export type Vsb_landleaseallocationwtgsstatuscode = keyof typeof Vsb_landleaseal
 export interface Vsb_landleaseallocationwtgsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_landleaseallocationwtgsstatecode;
   statuscode?: Vsb_landleaseallocationwtgsstatuscode;
   timezoneruleversionnumber?: number;
@@ -30,24 +28,12 @@ export interface Vsb_landleaseallocationwtgsBase {
 }
 
 export interface Vsb_landleaseallocationwtgs extends Vsb_landleaseallocationwtgsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
-  vsb_generatorinprojectname?: string;
-  vsb_projectcostname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

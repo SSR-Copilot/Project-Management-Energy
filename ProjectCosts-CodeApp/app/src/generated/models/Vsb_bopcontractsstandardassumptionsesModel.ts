@@ -13,21 +13,21 @@ export const Vsb_bopcontractsstandardassumptionsesstatuscode = {
 } as const;
 export type Vsb_bopcontractsstandardassumptionsesstatuscode = keyof typeof Vsb_bopcontractsstandardassumptionsesstatuscode;
 export const Vsb_bopcontractsstandardassumptionsesvsb_closingdatereference = {
-  952850000: 'Cluster4',
+  952850000: 'Cluster 4',
   952850001: 'FID',
-  952850002: 'Cluster5'
+  952850002: 'Cluster 5'
 } as const;
 export type Vsb_bopcontractsstandardassumptionsesvsb_closingdatereference = keyof typeof Vsb_bopcontractsstandardassumptionsesvsb_closingdatereference;
 export const Vsb_bopcontractsstandardassumptionsesvsb_contracttypes = {
   952850000: 'None',
-  952850001: 'DevelopmentContract',
-  952850002: 'ConstructionContract',
-  952850003: 'ProjectRightsContract'
+  952850001: 'Development Contract',
+  952850002: 'Construction Contract',
+  952850003: 'Project Rights Contract'
 } as const;
 export type Vsb_bopcontractsstandardassumptionsesvsb_contracttypes = keyof typeof Vsb_bopcontractsstandardassumptionsesvsb_contracttypes;
 export const Vsb_bopcontractsstandardassumptionsesvsb_margintype = {
   952850000: 'Percentage',
-  952850001: 'FixedValue'
+  952850001: 'Fixed Value'
 } as const;
 export type Vsb_bopcontractsstandardassumptionsesvsb_margintype = keyof typeof Vsb_bopcontractsstandardassumptionsesvsb_margintype;
 export const Vsb_bopcontractsstandardassumptionsesvsb_technology = {
@@ -44,9 +44,7 @@ export type Vsb_bopcontractsstandardassumptionsesvsb_technology = keyof typeof V
 export interface Vsb_bopcontractsstandardassumptionsesBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_bopcontractsstandardassumptionsesstatecode;
   statuscode?: Vsb_bopcontractsstandardassumptionsesstatuscode;
   timezoneruleversionnumber?: number;
@@ -68,25 +66,14 @@ export interface Vsb_bopcontractsstandardassumptionsesBase {
 }
 
 export interface Vsb_bopcontractsstandardassumptionses extends Vsb_bopcontractsstandardassumptionsesBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_closingdatereferencename?: string;
   vsb_contracttypesname?: string;
-  vsb_countryname?: string;
   vsb_marginname?: string;
   vsb_margintypename?: string;
   vsb_technologyname?: string;

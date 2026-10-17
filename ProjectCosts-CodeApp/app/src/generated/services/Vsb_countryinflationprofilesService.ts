@@ -24,19 +24,21 @@ export class Vsb_countryinflationprofilesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_countryinflationprofilesBase, 'vsb_countryinflationprofileid'>>): Promise<IOperationResult<Vsb_countryinflationprofiles>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_countryinflationprofilesBase, 'vsb_countryinflationprofileid'>>, partitionId?: string): Promise<IOperationResult<Vsb_countryinflationprofiles>> {
     const result = await Vsb_countryinflationprofilesService.client.updateRecordAsync<Partial<Omit<Vsb_countryinflationprofilesBase, 'vsb_countryinflationprofileid'>>, Vsb_countryinflationprofiles>(
       Vsb_countryinflationprofilesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_countryinflationprofilesService.client.deleteRecordAsync(
       Vsb_countryinflationprofilesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_countryinflationprofiles>> {

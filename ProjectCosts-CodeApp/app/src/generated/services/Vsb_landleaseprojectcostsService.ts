@@ -24,19 +24,21 @@ export class Vsb_landleaseprojectcostsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_landleaseprojectcostsBase, 'vsb_landleaseprojectcostid'>>): Promise<IOperationResult<Vsb_landleaseprojectcosts>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_landleaseprojectcostsBase, 'vsb_landleaseprojectcostid'>>, partitionId?: string): Promise<IOperationResult<Vsb_landleaseprojectcosts>> {
     const result = await Vsb_landleaseprojectcostsService.client.updateRecordAsync<Partial<Omit<Vsb_landleaseprojectcostsBase, 'vsb_landleaseprojectcostid'>>, Vsb_landleaseprojectcosts>(
       Vsb_landleaseprojectcostsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_landleaseprojectcostsService.client.deleteRecordAsync(
       Vsb_landleaseprojectcostsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_landleaseprojectcosts>> {

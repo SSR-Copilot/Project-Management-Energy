@@ -38,8 +38,8 @@ vi.mock("@/generated/services/UpsertMultipleService", () => ({
 }));
 
 const {
-  BulkWriteError, BULK_CHUNK_SIZE, createAndUpdateMultiple, createMultiple, updateMultiple,
-  upsertMultiple,
+  BulkWriteError, BULK_CHUNK_CONCURRENCY, BULK_CHUNK_SIZE, createAndUpdateMultiple,
+  createMultiple, updateMultiple, upsertMultiple,
 } = await import("./bulkWrite");
 
 beforeEach(() => {
@@ -96,11 +96,15 @@ describe("upsertMultiple", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("UT-BULK-006 never sends a third chunk once the second one has failed", async () => {
-    upsertQueue = [{ success: true }, { success: false, error: "stop here" }];
-    const rows = Array.from({ length: BULK_CHUNK_SIZE * 2 + 1 }, (_, i) => ({ id: `r${i}` }));
-    await expect(upsertMultiple("t", "t", rows)).rejects.toThrow();
-    expect(calls).toHaveLength(2);
+  it("UT-BULK-006 starts no new chunk once one has failed, and reports the in-flight ones as partial", async () => {
+    upsertQueue = [{ success: false, error: "stop here" }];
+    const chunkCount = BULK_CHUNK_CONCURRENCY + 2;
+    const rows = Array.from({ length: BULK_CHUNK_SIZE * chunkCount }, (_, i) => ({ id: `r${i}` }));
+    const error = await upsertMultiple("t", "t", rows).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BulkWriteError);
+    expect((error as InstanceType<typeof BulkWriteError>).partial).toBe(true);
+    // Only the first wave was ever sent; the two chunks queued behind it never started.
+    expect(calls).toHaveLength(BULK_CHUNK_CONCURRENCY);
   });
 });
 
@@ -261,5 +265,76 @@ describe("createAndUpdateMultiple", () => {
   it("UT-BULK-021 an all-existing batch calls update and never calls create at all", async () => {
     await createAndUpdateMultiple("t", "t", [{ id: "a" }, { id: "b" }], "id");
     expect(calls.every((c) => c.service === "update")).toBe(true);
+  });
+});
+
+describe("bulkWithFallback (E15)", () => {
+  const rows = ["a", "b", "c"];
+
+  it("bulk ok: every row saved, results from the bulk, no per-row call", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const perRow = vi.fn(async (r: string) => `id-${r}`);
+    const out = await bulkWithFallback({ rows, bulk: async (rs) => rs.map((r) => `bulk-${r}`), perRow, fallback: () => true });
+    expect(out).toEqual({ saved: rows, failed: [], results: ["bulk-a", "bulk-b", "bulk-c"], fellBack: false });
+    expect(perRow).not.toHaveBeenCalled();
+  });
+
+  it("empty rows: nothing written", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const bulk = vi.fn(async () => {});
+    const out = await bulkWithFallback({ rows: [], bulk, perRow: vi.fn(), fallback: () => true });
+    expect(bulk).not.toHaveBeenCalled();
+    expect(out.saved).toEqual([]);
+  });
+
+  it("fallback on: per-row writes, mixed results collected (Milestones)", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const onFallback = vi.fn();
+    const boom = new Error("b refused");
+    const out = await bulkWithFallback({
+      rows,
+      bulk: async () => { throw new Error("bulk refused"); },
+      perRow: async (r: string) => { if (r === "b") throw boom; return `id-${r}`; },
+      fallback: () => true,
+      onFallback,
+    });
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(out.saved).toEqual(["a", "c"]);
+    expect(out.failed).toEqual([{ row: "b", error: boom }]);
+    expect(out.results).toEqual(["id-a", undefined, "id-c"]);
+    expect(out.fellBack).toBe(true);
+  });
+
+  it("fallback off: the bulk error is rethrown and no row is written per row", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const perRow = vi.fn(async () => {});
+    const err = new Error("partial");
+    await expect(bulkWithFallback({ rows, bulk: async () => { throw err; }, perRow, fallback: () => false })).rejects.toBe(err);
+    expect(perRow).not.toHaveBeenCalled();
+  });
+
+  it("stopOnFirstError: fail-fast like mapLimit, first error rethrown (Contracts)", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const started: string[] = [];
+    const err = new Error("a failed");
+    await expect(bulkWithFallback({
+      rows,
+      bulk: async () => { throw new Error("refused"); },
+      perRow: async (r: string) => { started.push(r); if (r === "a") throw err; return r; },
+      fallback: () => true,
+      concurrency: 1,
+      stopOnFirstError: true,
+    })).rejects.toBe(err);
+    expect(started).toEqual(["a"]);
+  });
+
+  it("stopOnFirstError success returns every per-row result in order", async () => {
+    const { bulkWithFallback } = await import("./bulkWrite");
+    const out = await bulkWithFallback({
+      rows, bulk: async () => { throw new Error("refused"); }, perRow: async (r: string) => `id-${r}`,
+      fallback: () => true, stopOnFirstError: true,
+    });
+    expect(out.results).toEqual(["id-a", "id-b", "id-c"]);
+    expect(out.saved).toEqual(rows);
   });
 });

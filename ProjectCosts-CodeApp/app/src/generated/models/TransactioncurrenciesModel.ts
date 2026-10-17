@@ -34,20 +34,12 @@ export interface TransactioncurrenciesBase {
 }
 
 export interface Transactioncurrencies extends TransactioncurrenciesBase {
-  createdbyname?: string;
-  createdbyyominame?: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame?: string;
   currencytypename?: string;
   entityimage_timestamp?: number;
   entityimage_url?: string;
   entityimageid?: string;
-  modifiedbyname?: string;
-  modifiedbyyominame?: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame?: string;
   statecodename?: string;
   statuscodename?: string;
   uniquedscid?: string;
@@ -63,4 +55,6 @@ export interface Transactioncurrencies extends TransactioncurrenciesBase {
   organizationid?: object;
   _organizationid_value?: string;
 }
-export type TransactioncurrenciesUploadColumnName = 'entityimage';
+export type TransactioncurrenciesImageColumnName = 'entityimage';
+
+export type TransactioncurrenciesUploadColumnName = TransactioncurrenciesImageColumnName;

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { badgeScopeFromRoles, languageLabel, ROLE_ALL_COUNTRIES } from "./currentUser";
+import {
+  badgeScopeFromRoles, canOpenApplicationSettings, languageLabel, ROLE_ALL_COUNTRIES,
+  ROLE_APPLICATION_ADMINISTRATOR, ROLE_CONTROLLER_OWN_DATA,
+} from "./currentUser";
 
 describe("languageLabel", () => {
   it("UT-CU-001 formats the badge row as `<tag>, [<lang>]`", () => {
@@ -84,5 +87,23 @@ describe("badgeScopeFromRoles", () => {
       .isProjectDataAllCountries).toBe(true);
     expect(badgeScopeFromRoles([role("r1", "VSB - Controller Own Data")], countries)
       .isProjectDataAllCountries).toBe(false);
+  });
+});
+
+describe("Application Settings access", () => {
+  it("UT-CU-020 derives IsApplicationAdministrator and IsControllerOwnData from role names", () => {
+    const admin = badgeScopeFromRoles([role("r1", ROLE_APPLICATION_ADMINISTRATOR)], countries);
+    expect(admin.isApplicationAdministrator).toBe(true);
+    expect(admin.isControllerOwnData).toBe(false);
+    const controller = badgeScopeFromRoles([role("r2", ROLE_CONTROLLER_OWN_DATA)], countries);
+    expect(controller.isControllerOwnData).toBe(true);
+    expect(controller.isApplicationAdministrator).toBe(false);
+  });
+
+  it("UT-CU-021 opens for either role, and for nobody else", () => {
+    expect(canOpenApplicationSettings({ isApplicationAdministrator: true, isControllerOwnData: false })).toBe(true);
+    expect(canOpenApplicationSettings({ isApplicationAdministrator: false, isControllerOwnData: true })).toBe(true);
+    expect(canOpenApplicationSettings({ isApplicationAdministrator: false, isControllerOwnData: false })).toBe(false);
+    expect(canOpenApplicationSettings(undefined)).toBe(false);
   });
 });

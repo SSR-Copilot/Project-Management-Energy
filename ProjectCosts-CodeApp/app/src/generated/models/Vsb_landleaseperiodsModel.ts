@@ -19,24 +19,22 @@ export const Vsb_landleaseperiodsvsb_aggregation = {
 } as const;
 export type Vsb_landleaseperiodsvsb_aggregation = keyof typeof Vsb_landleaseperiodsvsb_aggregation;
 export const Vsb_landleaseperiodsvsb_period = {
-  952850000: 'Period1',
-  952850001: 'Period2',
-  952850002: 'Period3',
-  952850003: 'Period4',
-  952850004: 'Period5',
-  952850005: 'Period6',
-  952850006: 'Period7',
-  952850007: 'Period8',
-  952850008: 'Period9'
+  952850000: 'Period 1',
+  952850001: 'Period 2',
+  952850002: 'Period 3',
+  952850003: 'Period 4',
+  952850004: 'Period 5',
+  952850005: 'Period 6',
+  952850006: 'Period 7',
+  952850007: 'Period 8',
+  952850008: 'Period 9'
 } as const;
 export type Vsb_landleaseperiodsvsb_period = keyof typeof Vsb_landleaseperiodsvsb_period;
 
 export interface Vsb_landleaseperiodsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_landleaseperiodsstatecode;
   statuscode?: Vsb_landleaseperiodsstatuscode;
   timezoneruleversionnumber?: number;
@@ -59,25 +57,14 @@ export interface Vsb_landleaseperiodsBase {
 }
 
 export interface Vsb_landleaseperiods extends Vsb_landleaseperiodsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
   vsb_aggregationname?: string;
   vsb_periodname?: string;
-  vsb_projectcostname?: string;
   createdby?: object;
   _createdby_value?: string;
   createdonbehalfby?: object;

@@ -188,9 +188,13 @@ export async function loadProject(projectId: string): Promise<ProjectContext | u
     projectId: row.vsb_projectid,
     projectIdCode: row.vsb_name ?? "",
     projectName: row.vsb_projectname ?? "",
-    // The option-set value as its LABEL, which is what `gblTableApprovalStateColors` keys on.
-    ...(row.vsb_approvalstates
-      ? { approvalState: Vsb_projectsvsb_approvalstates[row.vsb_approvalstates] }
+    // The option value drives the header bar colour; the label (from the regenerated model,
+    // i.e. the Dataverse display label) is only its tooltip.
+    ...(row.vsb_approvalstates !== undefined && row.vsb_approvalstates !== null
+      ? {
+        approvalStateValue: Number(row.vsb_approvalstates),
+        approvalState: (Vsb_projectsvsb_approvalstates as Record<number, string>)[Number(row.vsb_approvalstates)],
+      }
       : {}),
     /*
      * BUG FIX — this used to read `vsb_startdate` ("Start Date"), which is BLANK on real
@@ -356,7 +360,8 @@ export async function searchProjects(term: string, limit = 50): Promise<ProjectS
     projectIdCode: r.vsb_name ?? "",
     projectName: r.vsb_projectname ?? "",
     shortName: r.vsb_shortname,
-    countryName: r.vsb_countryname,
+    // Selected above; the SDK 1.5 model no longer declares lookup display names.
+    countryName: (r as { vsb_countryname?: string }).vsb_countryname,
     technologyName: r.vsb_technologyname,
   }));
 }

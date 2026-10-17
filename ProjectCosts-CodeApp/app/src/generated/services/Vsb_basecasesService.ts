@@ -6,8 +6,7 @@
 import type { GetEntityMetadataOptions, EntityMetadata } from '@microsoft/power-apps/data/metadata/dataverse';
 import type { IGetOptions, IGetAllOptions } from '../models/CommonModels';
 import type { IOperationResult } from '@microsoft/power-apps/data';
-import type { Vsb_basecasesBase, Vsb_basecases } from '../models/Vsb_basecasesModel';
-import type { Vsb_basecasesUploadColumnName } from '../models/Vsb_basecasesModel';
+import type { Vsb_basecasesBase, Vsb_basecases, Vsb_basecasesFileColumnName, Vsb_basecasesUploadColumnName } from '../models/Vsb_basecasesModel';
 import { dataSourcesInfo } from '../../../.power/schemas/appschemas/dataSourcesInfo';
 import { getClient } from '@microsoft/power-apps/data';
 
@@ -25,19 +24,21 @@ export class Vsb_basecasesService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_basecasesBase, 'vsb_basecaseid'>>): Promise<IOperationResult<Vsb_basecases>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_basecasesBase, 'vsb_basecaseid'>>, partitionId?: string): Promise<IOperationResult<Vsb_basecases>> {
     const result = await Vsb_basecasesService.client.updateRecordAsync<Partial<Omit<Vsb_basecasesBase, 'vsb_basecaseid'>>, Vsb_basecases>(
       Vsb_basecasesService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_basecasesService.client.deleteRecordAsync(
       Vsb_basecasesService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_basecases>> {
@@ -71,7 +72,7 @@ export class Vsb_basecasesService {
     });
   }
 
-  public static async upload(id: string, columnName: Vsb_basecasesUploadColumnName, file: File, fileDisplayName?: string): Promise<IOperationResult<void>> {
+  public static async upload(id: string, columnName: Vsb_basecasesUploadColumnName, file: File, fileDisplayName?: string, partitionId?: string): Promise<IOperationResult<void>> {
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const result = await Vsb_basecasesService.client.uploadFileToRecord(
@@ -80,6 +81,27 @@ export class Vsb_basecasesService {
       columnName,
       fileDisplayName || file.name,
       data,
+      partitionId,
+    );
+    return result;
+  }
+
+  public static async downloadFile(id: string, columnName: Vsb_basecasesFileColumnName, partitionId?: string): Promise<IOperationResult<Uint8Array>> {
+    const result = await Vsb_basecasesService.client.downloadFileFromRecord(
+      Vsb_basecasesService.dataSourceName,
+      id,
+      columnName,
+      partitionId,
+    );
+    return result;
+  }
+
+  public static async deleteFileOrImage(id: string, columnName: Vsb_basecasesUploadColumnName, partitionId?: string): Promise<IOperationResult<void>> {
+    const result = await Vsb_basecasesService.client.deleteFileOrImageFromRecord(
+      Vsb_basecasesService.dataSourceName,
+      id,
+      columnName,
+      partitionId,
     );
     return result;
   }

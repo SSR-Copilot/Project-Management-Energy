@@ -56,12 +56,30 @@ let costPaidUpdates: { id: string; paid: unknown }[] = [];
 /** The options every `fetchAll` was called with, by label — so a test can assert the query. */
 let queriedBy: Record<string, unknown[]> = {};
 
-vi.mock("./client", () => ({
-  fetchAll: async (label: string, _page: unknown, options: unknown) => {
+vi.mock("./client", () => {
+  const read = async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? rows;
-  },
-}));
+  };
+  /*
+   * The V-1 guard (`updateRecordIfExists`) is covered against the real SDK path in
+   * `capexWrites.test.ts` / `comments.test.ts`; here it simply forwards to the service doubles
+   * below so these payload tests keep asserting what each update sent.
+   */
+  type Updatable = { update: (id: string, fields: unknown) => Promise<{ data: unknown }> };
+  const updateRecordIfExists = async (_op: string, table: string, id: string, fields: unknown) => {
+    const service = table === "vsb_capexprojectcontracts"
+      ? (await import("@/generated/services/Vsb_capexprojectcontractsService")).Vsb_capexprojectcontractsService
+      : table === "vsb_capexcosts"
+        ? (await import("@/generated/services/Vsb_capexcostsService")).Vsb_capexcostsService
+        : table === "vsb_capexcommentses"
+          ? (await import("@/generated/services/Vsb_capexcommentsesService")).Vsb_capexcommentsesService
+          : undefined;
+    if (!service) throw new Error(`costBook.test: no update double for ${table}`);
+    return (await (service as unknown as Updatable).update(id, fields)).data;
+  };
+  return { fetchAll: read, fetchPage: read, updateRecordIfExists };
+});
 
 vi.mock("@/generated/services/Vsb_capexaccountlistsService", () => ({
   Vsb_capexaccountlistsService: { getAll: async () => ({ success: true, data: [] }) },
@@ -1642,6 +1660,18 @@ describe("loadMilestoneDurations", () => {
       cluster1: 17, cluster2: 18, cluster3: 30, cluster4: 6, cluster5: 12,
       finalInvestmentDecision: 12,
     });
+  });
+
+  it("UT-BOOK-054 reads the first duplicate by createdon then id — the row Milestones settings edits", async () => {
+    rowsByLabel = { "load milestone standard assumptions": [germanyWind] };
+    await loadMilestoneDurations(GERMANY, WIND);
+    const options = queriedBy["load milestone standard assumptions"]?.[0] as {
+      orderBy: string[]; maxPageSize: number;
+    };
+    // Same order as `data/settings/milestones.ts` (DR-3), so both screens agree on the row.
+    expect(options.orderBy).toEqual(["createdon asc", "vsb_milestonesstandardassumptionsid asc"]);
+    // One row in one request (`fetchPage`), not one row per request across every page.
+    expect(options.maxPageSize).toBe(1);
   });
 
   it("UT-BOOK-052 asks nothing when the country or the technology is unknown", async () => {

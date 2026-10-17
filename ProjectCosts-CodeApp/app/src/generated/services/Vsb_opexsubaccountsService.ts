@@ -24,19 +24,21 @@ export class Vsb_opexsubaccountsService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Vsb_opexsubaccountsBase, 'vsb_opexsubaccountid'>>): Promise<IOperationResult<Vsb_opexsubaccounts>> {
+  public static async update(id: string, changedFields: Partial<Omit<Vsb_opexsubaccountsBase, 'vsb_opexsubaccountid'>>, partitionId?: string): Promise<IOperationResult<Vsb_opexsubaccounts>> {
     const result = await Vsb_opexsubaccountsService.client.updateRecordAsync<Partial<Omit<Vsb_opexsubaccountsBase, 'vsb_opexsubaccountid'>>, Vsb_opexsubaccounts>(
       Vsb_opexsubaccountsService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
+  public static async delete(id: string, partitionId?: string): Promise<void> {
     await Vsb_opexsubaccountsService.client.deleteRecordAsync(
       Vsb_opexsubaccountsService.dataSourceName,
-      id);
+      id,
+      partitionId);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Vsb_opexsubaccounts>> {

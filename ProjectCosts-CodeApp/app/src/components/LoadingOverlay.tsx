@@ -25,7 +25,7 @@
  * `CapexScreenCode.txt:17413`), which is what the reference filename spells out. That ordering
  * is the caller's job — see `capex-costs/Screen.tsx`'s `persist()`.
  */
-import { makeStyles, Spinner, Text, tokens } from "@fluentui/react-components";
+import { makeStyles, Portal, Spinner, Text, tokens } from "@fluentui/react-components";
 import { palette, space } from "@/theme/tokens";
 
 const useStyles = makeStyles({
@@ -61,6 +61,8 @@ const useStyles = makeStyles({
     fontSize: "14.7px",
     fontWeight: tokens.fontWeightSemibold,
     lineHeight: "20px",
+    // E7 / V6: the canvas spinner texts are multi-line (Project Gates passes `\n`).
+    whiteSpace: "pre-line",
   },
   /*
    * `mode="inline"` stands in for a whole content area while it loads, so it fills that area
@@ -78,9 +80,24 @@ export interface LoadingOverlayProps {
   /** `"blocking"` is the modal save spinner; `"inline"` fills a content area. */
   mode?: "blocking" | "inline";
   label?: string;
+  /**
+   * Blocking mode only: render through a Fluent `Portal` into `document.body` (M8). A portal
+   * mounted while a drawer is open lands AFTER the drawer's own portal in the body, so the scrim
+   * covers the drawer whatever stacking contexts the shell creates — what CAPEX, Project Gates
+   * and Milestones did by hand with `<Portal><LoadingOverlay/></Portal>`. Off by default so
+   * every existing caller renders exactly where it did.
+   */
+  portal?: boolean;
 }
 
-export function LoadingOverlay({ mode = "blocking", label }: LoadingOverlayProps) {
+export function LoadingOverlay({ mode = "blocking", label, portal = false }: LoadingOverlayProps) {
+  if (mode === "blocking" && portal) {
+    return <Portal><LoadingOverlayBody mode="blocking" label={label} /></Portal>;
+  }
+  return <LoadingOverlayBody mode={mode} label={label} />;
+}
+
+function LoadingOverlayBody({ mode = "blocking", label }: LoadingOverlayProps) {
   const styles = useStyles();
 
   if (mode === "inline") {

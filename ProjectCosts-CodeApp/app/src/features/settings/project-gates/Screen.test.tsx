@@ -1,0 +1,560 @@
+// @vitest-environment jsdom
+/**
+ * Project Gates screen — render smoke test and the behaviours only a mounted screen can show:
+ * open/cancel writes nothing (D-01/D-02), no stale state between editors (FR-11 AC2, D-04),
+ * the delete confirmation names the clicked row (D-10), a failed toggle reverts (D-09), a
+ * failed save keeps the panel and the input (FR-17), and a missing table degrades gracefully.
+ * The repository is mocked; its own I/O is covered by `@/data/settings/project-gates.test.ts`.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, configure, render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+/*
+ * Determinism under load: every findBy / waitFor in this file waits up to 5 s instead of the
+ * 1 s default (Fluent drawers/dialogs mount through portals and motion, which is slow on a
+ * busy worker), and each test gets a generous overall budget.
+ */
+configure({ asyncUtilTimeout: 5000 });
+const TEST_TIMEOUT = 20_000;
+import { FluentProvider } from "@fluentui/react-components";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
+const repo = vi.hoisted(() => ({
+  listProjectStates: vi.fn(),
+  loadDataset: vi.fn(),
+  searchPeople: vi.fn(),
+  resolvePeople: vi.fn(),
+  setGateActive: vi.fn(),
+  setTaskActive: vi.fn(),
+  saveGate: vi.fn(),
+  saveTask: vi.fn(),
+  resetGate: vi.fn(),
+  deleteTask: vi.fn(),
+}));
+
+vi.mock("@/data/settings/project-gates", () => ({ projectGatesRepository: repo }));
+
+/** Countries come from the shared `@/data/countries` read, which calls the generated service. */
+const countriesService = vi.hoisted(() => ({ getAll: vi.fn() }));
+vi.mock("@/generated/services/Vsb_countriesService", () => ({ Vsb_countriesService: countriesService }));
+
+import { vsbTheme } from "@/theme/fluent";
+import { AppToaster, RowActions } from "@/components";
+import { EditRegular } from "@fluentui/react-icons";
+import { DataError } from "@/platform/errors";
+import { ERROR_HINT } from "@/platform/userMessage";
+import {
+  FIXTURE_APPROVALS, FIXTURE_CHECKLISTS, FIXTURE_COUNTRIES, FIXTURE_COUNTRY_ROWS, FIXTURE_STATES, FIXTURE_TEMPLATES, fixtureDataset,
+  HIDDEN_CHECKLISTS, person,
+} from "./fixtures";
+import { GATE_BLANK_MESSAGE } from "./rules";
+import ProjectGatesSettingsScreen from "./Screen";
+
+function Harness({ children }: { children: ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  return (
+    <FluentProvider theme={vsbTheme}>
+      <QueryClientProvider client={client}>
+        {/* Toasts go through the shared `useNotify` → `<AppToaster />` (mounted by AppShell in the app). */}
+        <AppToaster />
+        {children}
+      </QueryClientProvider>
+    </FluentProvider>
+  );
+}
+
+const renderScreen = () => render(<Harness><ProjectGatesSettingsScreen /></Harness>);
+const writeMocks = () => [repo.setGateActive, repo.setTaskActive, repo.saveGate, repo.saveTask, repo.resetGate, repo.deleteTask];
+const noWrites = () => writeMocks().forEach((m) => expect(m).not.toHaveBeenCalled());
+/** The text of the element(s) an element's `aria-describedby` points at (C4 tooltip). */
+const describedText = (el: HTMLElement) => (el.getAttribute("aria-describedby") ?? "")
+  .split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  countriesService.getAll.mockResolvedValue({ success: true, data: FIXTURE_COUNTRY_ROWS });
+  repo.listProjectStates.mockResolvedValue(FIXTURE_STATES);
+  repo.loadDataset.mockResolvedValue(fixtureDataset());
+  repo.searchPeople.mockResolvedValue([]);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  // Explicit unmount so no drawer/dialog portal or tabster state survives into the next test.
+  cleanup();
+  document.body.innerHTML = "";
+  vi.restoreAllMocks();
+});
+
+describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
+  it("renders Germany / Wind by default with one row per visible gate; Spain is not offered", async () => {
+    renderScreen();
+    expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
+    expect(await screen.findByText("Draft to Cluster 1")).toBeInTheDocument();
+    for (let o = 0; o < 6; o += 1) expect(screen.getByTestId(`gate-row-${o}`)).toBeInTheDocument();
+    expect(screen.queryByTestId("gate-row-6")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Spain" })).not.toBeInTheDocument();
+    expect(screen.getByText("4 Approvers")).toBeInTheDocument();
+    expect(screen.getByText("Grid connection request")).toBeInTheDocument();
+    expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[1]!.id, 952850000);
+  });
+
+  it("selecting France → PV reloads for that context", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Expand France technologies" }));
+    fireEvent.click(screen.getByRole("button", { name: "France PV" }));
+    expect(await screen.findByText("Project Gates | France | PV")).toBeInTheDocument();
+    await waitFor(() => expect(repo.loadDataset).toHaveBeenCalledWith(FIXTURE_COUNTRIES[0]!.id, 952850001));
+  });
+
+  it("opening a placeholder gate and cancelling writes nothing", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 2 to Cluster 3" }));
+    expect(await screen.findByText("Add Approvers")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(); // Notifications required
+    expect(screen.getByRole("button", { name: "Reset Gate" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
+    noWrites();
+  });
+
+  it("Add Task opens a fresh form for THAT gate and Cancel writes nothing", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" }));
+    expect(await screen.findByText("Add Approvers")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Check List" })).toHaveTextContent("Land lease signed");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
+    noWrites();
+    // Cluster 3 has no check list task without an approval. V8: disabled-focusable (aria-disabled).
+    expect(screen.getByRole("button", { name: "Add task approval to Cluster 3 to Cluster 4" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Add task approval to Cluster 2 to Cluster 3" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add task approval to Cluster 2 to Cluster 3" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("no stale state: gate editor, cancel, then a task editor shows only the task's data", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Gate" })).toHaveValue("Cluster 1 to Cluster 2");
+    expect(within(screen.getByLabelText("Selected Portfolio Manager")).getByText(person(1).name)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // Wait until the gate editor is fully gone before opening the next one.
+    await waitFor(() => {
+      expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Reset Gate" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Selected Portfolio Manager")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" }));
+    expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
+    /*
+     * `hidden: true`: in jsdom, Fluent's modalizer from the drawer that just closed can leave the
+     * NEW drawer's portal marked aria-hidden for a while, which hides it from default role
+     * queries depending on timing. Same role + name assertions, independent of that state.
+     */
+    const all = { hidden: true } as const;
+    const local = await screen.findByRole("radio", { name: "Local Approval", ...all });
+    expect(local).toBeChecked();
+    expect(screen.queryByRole("button", { name: "Reset Gate", ...all })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Search Portfolio Manager", ...all })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Selected Approvers")).getByText(person(8).name)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Gate active", ...all })).not.toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Check List", ...all })).toBeDisabled();
+    noWrites();
+  });
+
+  it("the delete confirmation names the clicked row, and Delete issues one delete", async () => {
+    repo.deleteTask.mockResolvedValue(undefined);
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Delete approval of task Grid connection request" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Delete Check List Approval Item?")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Germany - Wind");
+    expect(dialog).toHaveTextContent("Cluster 1 to Cluster 2");
+    expect(dialog).toHaveTextContent("Check List Item: 'Grid connection request'");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(repo.deleteTask).toHaveBeenCalledTimes(1));
+    expect(repo.deleteTask).toHaveBeenCalledWith("60000000-0000-0000-0000-000000000001");
+  });
+
+  it("a failed toggle reverts the pill and shows an error", async () => {
+    repo.setTaskActive.mockRejectedValue(new DataError("update", "denied", 403));
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    const pill = screen.getByRole("button", { name: /Task Grid connection request: Inactive/ });
+    fireEvent.click(pill);
+    await waitFor(() => expect(repo.setTaskActive).toHaveBeenCalledWith("60000000-0000-0000-0000-000000000001", true));
+    expect(await screen.findByText(/do not have permission to change the status/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Task Grid connection request: Inactive/ })).toBeEnabled());
+  });
+
+  it("the Draft gate and placeholder pills are locked", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    expect(screen.getByRole("button", { name: /Gate Draft to Cluster 1: Active \(cannot be changed here\)/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Gate Cluster 2 to Cluster 3: Inactive \(cannot be changed here\)/ })).toBeDisabled();
+  });
+
+  it("a failed save keeps the panel open with the input and a readable error", async () => {
+    repo.saveGate.mockRejectedValue(new DataError("update gate approval template", "Server busy", 500));
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    fireEvent.click(screen.getByRole("radio", { name: "Local Approval" }));
+    // Local requires Approvers — Save disabled until satisfied, so go back to a valid mode.
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: "Only Notifications" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Not saved")).toBeInTheDocument();
+    // Shared M11 wording: lead + hint; the raw server text ("Server busy") is traced, not shown.
+    expect(screen.getByText(`Could not save the approvals. ${ERROR_HINT.server}`)).toBeInTheDocument();
+    expect(screen.queryByText(/Server busy/)).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Selected Notifications")).getByText(person(7).name)).toBeInTheDocument();
+    expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
+    expect(repo.saveGate).toHaveBeenCalledTimes(1);
+    expect(repo.saveGate.mock.calls[0]![0]).toBe("40000000-0000-0000-0000-000000000002");
+    expect(repo.saveGate.mock.calls[0]![1]).toMatchObject({ vsb_gateactive: true, vsb_approvalmodecode: 952850002 });
+  });
+
+  it("Reset Gate asks for confirmation first, then issues one reset", async () => {
+    repo.resetGate.mockResolvedValue(undefined);
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reset Gate" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Remove all cluster gate participants");
+    expect(repo.resetGate).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reset Gate" }));
+    await waitFor(() => expect(repo.resetGate).toHaveBeenCalledWith("40000000-0000-0000-0000-000000000001"));
+  });
+
+  it("a missing checklist table shows a warning, not a crash; gates still render", async () => {
+    repo.loadDataset.mockResolvedValue(fixtureDataset({
+      checklists: [], approvals: [],
+      checklistError: "The table 'Check List Default Approvals' (vsb_checklistdefaultapprovalses) could not be read.",
+    }));
+    renderScreen();
+    expect(await screen.findByText("Check list task approvals are unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("gate-row-1")).toBeInTheDocument();
+    // V8: disabled-focusable (aria-disabled) with the reason as a tooltip.
+    expect(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  /* ─────────────────────────────────── reusable-components binding (V6 / V8) ── */
+
+  it("V8: a disabled Add Task is keyboard-reachable, explains why in a tooltip (no native title) and does nothing", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    const add = screen.getByRole("button", { name: "Add task approval to Cluster 3 to Cluster 4" });
+    expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).not.toBeDisabled(); // focusable: no native `disabled`
+    expect(add).not.toHaveAttribute("title");
+    add.focus();
+    expect(add).toHaveFocus();
+    await waitFor(() => expect(describedText(add)).toBe("Every check list task of this gate already has an approval."));
+    fireEvent.click(add);
+    expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument();
+    noWrites();
+  });
+
+  it("V8: without check list tasks the Add Task reason says they are unavailable", async () => {
+    repo.loadDataset.mockResolvedValue(fixtureDataset({ checklists: [], approvals: [], checklistError: "Unreadable." }));
+    renderScreen();
+    await screen.findByText("Check list task approvals are unavailable");
+    const add = screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" });
+    add.focus();
+    await waitFor(() => expect(describedText(add)).toBe("Check list tasks are not available."));
+  });
+
+  it("V6: the delete overlay shows the multi-line canvas text with its line break", async () => {
+    let finish: () => void = () => {};
+    repo.deleteTask.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Delete approval of task Grid connection request" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    const label = await screen.findByText(/being deleted, please wait/);
+    expect(label.textContent).toBe(
+      "Approval item for Project Gates | Germany | Wind\nCheck List: 'Grid connection request' being deleted, please wait...",
+    );
+    expect(label).toHaveStyle({ whiteSpace: "pre-line" });
+    finish();
+    await waitFor(() => expect(screen.queryByText(/being deleted, please wait/)).not.toBeInTheDocument());
+  });
+
+  /* ─────────────────────────────────────────────── gap closure (08-gap-analysis) ── */
+
+  it("G-3: Esc in the people search closes the suggestions, not the drawer; ArrowDown + Enter adds", async () => {
+    const anna = { entraId: "30000000-0000-0000-0000-0000000000aa", name: "Anna Müller", mail: "anna@vsb.energy" };
+    repo.searchPeople.mockResolvedValue([anna]);
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    await user.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    const input = await screen.findByRole("combobox", { name: "Search Notifications", ...all });
+    await user.click(input);
+    await user.keyboard("mü");
+    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
+    expect(input).toHaveFocus();
+    await user.keyboard("{Escape}");
+    // The (inline) listbox stays mounted while the input has focus, but it is collapsed.
+    await waitFor(() => expect(input).toHaveAttribute("aria-expanded", "false"));
+    expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    // Keyboard only: reopen with typing, ArrowDown, Enter.
+    await user.keyboard("ü");
+    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(await within(screen.getByLabelText("Selected Notifications")).findByText("Anna Müller")).toBeInTheDocument();
+    noWrites();
+  });
+
+  it("G-4: inactive and 'To Delete' tasks are neither nested rows nor Add Task options", async () => {
+    const hiddenApprovals = HIDDEN_CHECKLISTS.map((c, i) => ({ ...FIXTURE_APPROVALS[0]!, id: `6000000${i}-0000-0000-0000-000000000009`, checklistId: c.id }));
+    repo.loadDataset.mockResolvedValue(fixtureDataset({
+      checklists: [...FIXTURE_CHECKLISTS, ...HIDDEN_CHECKLISTS, { ...HIDDEN_CHECKLISTS[0]!, id: "50000000-0000-0000-0000-000000000006", name: "Inactive free task" }],
+      approvals: [...FIXTURE_APPROVALS, ...hiddenApprovals],
+    }));
+    renderScreen();
+    await screen.findByText("Grid connection request");
+    expect(screen.queryByText("Inactive task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Soft-deleted task")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" }));
+    await screen.findByText("Add Approvers");
+    const all = { hidden: true } as const;
+    fireEvent.click(screen.getByRole("combobox", { name: "Check List", ...all }));
+    const options = await screen.findAllByRole("option", all);
+    expect(options.map((o) => o.textContent)).toEqual(["Land lease signed"]);
+  });
+
+  it("G-2 / B1: under a gate whose next state is terminal, task approvals can still be saved; the gate cannot", async () => {
+    repo.listProjectStates.mockResolvedValue(
+      FIXTURE_STATES.map((s) => (s.order === 2 ? { ...s, name: "Abandoned", visibleOnChecklist: false } : s)),
+    );
+    repo.saveTask.mockResolvedValue("60000000-0000-0000-0000-000000000001");
+    renderScreen();
+    await screen.findByText("Grid connection request");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    expect(screen.getByRole("textbox", { name: "Gate", ...all })).toHaveValue("Cluster 1 to Cluster 2");
+    expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save", ...all });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(repo.saveTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    await screen.findByText("Edit Approvers");
+    expect(await screen.findByText(GATE_BLANK_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save", ...all })).toBeDisabled();
+  });
+
+  it("FR-6 / G-9: collapse is per country × technology and survives a refetch", async () => {
+    renderScreen();
+    await screen.findByText("Grid connection request");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse tasks of Cluster 1 to Cluster 2" }));
+    expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand France technologies" }));
+    fireEvent.click(screen.getByRole("button", { name: "France PV" }));
+    expect(await screen.findByText("Project Gates | France | PV")).toBeInTheDocument();
+    expect(await screen.findByText("Grid connection request")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Germany Wind" }));
+    expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Expand tasks of Cluster 1 to Cluster 2" })).toBeInTheDocument());
+    expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
+
+    // A refetch (here: after a task toggle elsewhere would invalidate) keeps the collapsed gate.
+    repo.setGateActive.mockResolvedValue(undefined);
+    const calls = repo.loadDataset.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Gate Cluster 1 to Cluster 2: Active\. Click/ }));
+    await waitFor(() => expect(repo.loadDataset.mock.calls.length).toBeGreaterThan(calls));
+    expect(screen.getByRole("button", { name: "Expand tasks of Cluster 1 to Cluster 2" })).toBeInTheDocument();
+  });
+
+  it("FR-17 AC1: a successful gate create is one POST, closes the panel and confirms", async () => {
+    repo.saveGate.mockResolvedValue("40000000-0000-0000-0000-000000000099");
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 2 to Cluster 3" }));
+    await screen.findByText("Add Approvers");
+    // Satisfy "Notifications required" with the picker.
+    repo.searchPeople.mockResolvedValue([person(5)]);
+    const user = userEvent.setup();
+    const all = { hidden: true } as const;
+    await user.click(screen.getByRole("combobox", { name: "Search Notifications", ...all }));
+    await user.keyboard("pe");
+    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
+    await user.keyboard("{ArrowDown}{Enter}");
+    const save = screen.getByRole("button", { name: "Save", ...all });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    await waitFor(() => expect(repo.saveGate).toHaveBeenCalledTimes(1));
+    expect(repo.saveGate.mock.calls[0]![0]).toBeUndefined();
+    expect(repo.saveGate.mock.calls[0]![1]).toMatchObject({
+      vsb_name: "Cluster 2 to Cluster 3", statecode: 0,
+      vsb_defaultnotifications: JSON.stringify([{ PersonaKey: person(5).entraId, PersonaName: person(5).name, PersonaRole: person(5).mail }]),
+    });
+    await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
+    expect(await screen.findByText("Approvals for 'Cluster 2 to Cluster 3' were saved.")).toBeInTheDocument();
+  });
+
+  it("FR-15 AC1: the mode switch shows / hides the people fields", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    const searchBox = (label: string) => screen.queryByRole("combobox", { name: `Search ${label}`, ...all });
+    expect(searchBox("Portfolio Manager")).not.toBeInTheDocument();
+    expect(searchBox("Approvers")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
+    expect(searchBox("Portfolio Manager")).toBeInTheDocument();
+    expect(searchBox("Contributors")).toBeInTheDocument();
+    expect(searchBox("Approvers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Local Approval", ...all }));
+    expect(searchBox("Portfolio Manager")).not.toBeInTheDocument();
+    expect(searchBox("Contributors")).not.toBeInTheDocument();
+    expect(searchBox("Approvers")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save", ...all })).toBeDisabled(); // FR-16 AC2: approvers required
+    noWrites();
+  });
+
+  it("M7: Cancel after an edit asks 'Discard changes?'; Discard closes without writing", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel", ...all }));
+    const dialog = await screen.findByRole("alertdialog", all);
+    expect(dialog).toHaveTextContent("Discard changes?");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard", ...all }));
+    await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
+    noWrites();
+  });
+
+  it("FR-1 AC3: a 403 on save shows the permission text in the panel", async () => {
+    repo.saveGate.mockRejectedValue(new DataError("update gate approval template", "denied", 403));
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    fireEvent.click(screen.getByRole("button", { name: "Save", hidden: true }));
+    expect(await screen.findByText(/do not have permission to save the approvals/)).toBeInTheDocument();
+    expect(screen.getByText("Edit Approvers")).toBeInTheDocument();
+  });
+
+  /* ───────────────────────────────────────────── parity round 1 (09-parity-check-r1) ── */
+
+  it("GAP-1 / GAP-5 / GAP-6: ';' task notifications, '[]' pill clickable, last visible gate saves vsb_name ' '", async () => {
+    const asJson = (ns: number[]) =>
+      JSON.stringify(ns.map((n) => ({ PersonaKey: person(n).entraId, PersonaName: person(n).name, PersonaRole: person(n).mail })));
+    // Visible states 0..5 only: Cluster 5 is the highest visible state (PGAS:2705-2717).
+    repo.listProjectStates.mockResolvedValue(FIXTURE_STATES.map((s) => (s.order === 6 ? { ...s, visibleOnChecklist: false } : s)));
+    const gate5 = {
+      ...FIXTURE_TEMPLATES[1]!, id: "40000000-0000-0000-0000-000000000005", name: " ", stateId: FIXTURE_STATES[5]!.id,
+      gateActive: false, contributors: "[]", notifications: asJson([7]),
+    };
+    // GAP-5: a legacy "[]" with no other participant — the canvas IsBlank test keeps the pill editable.
+    const legacy = { ...gate5, id: "40000000-0000-0000-0000-000000000004", stateId: FIXTURE_STATES[4]!.id, notifications: null };
+    repo.loadDataset.mockResolvedValue(fixtureDataset({
+      templates: [...FIXTURE_TEMPLATES, gate5, legacy],
+      approvals: [{ ...FIXTURE_APPROVALS[0]!, notifications: asJson([9, 10]) }],
+    }));
+    repo.saveGate.mockResolvedValue(gate5.id);
+    renderScreen();
+    await screen.findByText("Grid connection request");
+
+    // GAP-1: "(mail);" after every listed notification but the last (PGAS:1398-1402).
+    const taskRow = screen.getByTestId(`task-row-${FIXTURE_APPROVALS[0]!.id}`);
+    expect(within(taskRow).getByText(`(${person(9).mail});`)).toBeInTheDocument();
+    expect(within(taskRow).getByText(`(${person(10).mail})`)).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: /Gate Cluster 4 to Cluster 5: Inactive\. Click/ })).toBeEnabled();
+
+    // GAP-6: no label, no blank-gate message, Save enabled, vsb_name " ".
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 5 to Cluster 6" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    expect(screen.getByRole("textbox", { name: "Gate", ...all })).toHaveValue("");
+    expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save", ...all });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(repo.saveGate).toHaveBeenCalledTimes(1));
+    expect(repo.saveGate.mock.calls[0]![0]).toBe(gate5.id);
+    expect(repo.saveGate.mock.calls[0]![1]).toMatchObject({ vsb_name: " " });
+  });
+
+  it("GAP-2: the Portfolio Manager picker shows the canvas hint 'Select Portfolio Manager' (PGAS:3085)", async () => {
+    renderScreen();
+    await screen.findByText("Draft to Cluster 1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await screen.findByText("Edit Approvers");
+    const all = { hidden: true } as const;
+    fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
+    expect(screen.getByRole("combobox", { name: "Search Portfolio Manager", ...all })).toHaveAttribute("placeholder", "Select Portfolio Manager");
+    noWrites();
+  });
+
+  it("a failed load shows an error state with a retry", async () => {
+    repo.loadDataset.mockRejectedValue(new DataError("list gate approval templates", "offline", 503));
+    renderScreen();
+    expect(await screen.findByText("Gate approvals could not be loaded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("Wave C (H1 fatalWhen any-error): a failed REFETCH over cached data still shows the error state", async () => {
+    renderScreen();
+    await screen.findByText("Grid connection request");
+    repo.setGateActive.mockResolvedValue(undefined);
+    repo.loadDataset.mockRejectedValue(new DataError("list gate approval templates", "offline", 503));
+    // A successful toggle invalidates the dataset; that refetch fails while the old data is cached.
+    fireEvent.click(screen.getByRole("button", { name: /Gate Cluster 1 to Cluster 2: Active\. Click/ }));
+    expect(await screen.findByText("Gate approvals could not be loaded")).toBeInTheDocument();
+    expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
+  });
+
+  it("Wave C: the Gate field is the shared ReadOnlyField (disabled, error wired) and task-row icons use RowActions gap 4", async () => {
+    repo.listProjectStates.mockResolvedValue(
+      FIXTURE_STATES.map((s) => (s.order === 2 ? { ...s, name: "Abandoned", visibleOnChecklist: false } : s)),
+    );
+    const reference = render(
+      <FluentProvider theme={vsbTheme}>
+        <RowActions tooltip="always" tone="brand" gap={4} actions={[{ key: "edit", icon: <EditRegular />, label: "ref", testId: "ref", onClick: () => {} }]} />
+      </FluentProvider>,
+    );
+    const gap4Class = screen.getByTestId("ref").parentElement!.className;
+    reference.unmount();
+
+    renderScreen();
+    await screen.findByText("Grid connection request");
+    const taskEdit = screen.getByRole("button", { name: "Edit approvers of task Grid connection request" });
+    expect(taskEdit.parentElement!.className).toBe(gap4Class);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    await screen.findByText("Edit Approvers");
+    const gate = screen.getByRole("textbox", { name: "Gate", hidden: true });
+    expect(gate).toBeDisabled();
+    expect(gate).toHaveAttribute("readonly");
+    expect(gate).toHaveAttribute("aria-invalid", "true");
+    expect(describedText(gate)).toContain(GATE_BLANK_MESSAGE);
+  });
+});

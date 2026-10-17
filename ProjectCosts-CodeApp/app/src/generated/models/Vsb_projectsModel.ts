@@ -21,51 +21,51 @@ export const Vsb_projectsvsb_approvalstates = {
 } as const;
 export type Vsb_projectsvsb_approvalstates = keyof typeof Vsb_projectsvsb_approvalstates;
 export const Vsb_projectsvsb_developmenttype = {
-  952850000: 'AcquiredProject',
-  952850001: 'OwnDevelopment'
+  952850000: 'Acquired Project',
+  952850001: 'Own Development'
 } as const;
 export type Vsb_projectsvsb_developmenttype = keyof typeof Vsb_projectsvsb_developmenttype;
 export const Vsb_projectsvsb_financingoptions = {
-  952850000: 'AllEquity',
-  952850001: 'DebtFinancing'
+  952850000: 'All Equity',
+  952850001: 'Debt Financing'
 } as const;
 export type Vsb_projectsvsb_financingoptions = keyof typeof Vsb_projectsvsb_financingoptions;
 export const Vsb_projectsvsb_ownershiptype = {
-  952850000: '_3rdParty',
-  952850001: 'GreenYieldOne_IPP2_',
-  952850002: 'VSBGroup',
+  952850000: '3rd Party',
+  952850001: 'Green Yield One (IPP2)',
+  952850002: 'VSB Group',
   952850003: 'IPP1'
 } as const;
 export type Vsb_projectsvsb_ownershiptype = keyof typeof Vsb_projectsvsb_ownershiptype;
 export const Vsb_projectsvsb_projectstatus = {
-  952850000: '_1_feasibilitystudiesdone',
-  952850001: '_2_projectdevelopmentstarted',
-  952850002: '_3_applicationsubmitted',
-  952850003: '_4_legallybindingpermits_all_',
-  952850004: '_5_Construction',
-  952850005: '_6_operating',
+  952850000: '1 - feasibility studies done',
+  952850001: '2 - project development started',
+  952850002: '3 - application submitted',
+  952850003: '4 - legally binding permits (all)',
+  952850004: '5 - Construction',
+  952850005: '6 - operating',
   952850006: 'abandoned',
   952850007: 'inactive'
 } as const;
 export type Vsb_projectsvsb_projectstatus = keyof typeof Vsb_projectsvsb_projectstatus;
 export const Vsb_projectsvsb_projecttype = {
-  952850000: 'Onlyoperatingcompany',
-  952850001: 'Onlyinfrastructure',
-  952850002: 'Operatingcompanywithinfrastructure'
+  952850000: 'Only operating company',
+  952850001: 'Only infrastructure',
+  952850002: 'Operating company with infrastructure'
 } as const;
 export type Vsb_projectsvsb_projecttype = keyof typeof Vsb_projectsvsb_projecttype;
 export const Vsb_projectsvsb_spvlegalstructure = {
   952850000: 'GmbH',
-  952850001: 'GmbH_Co_KG'
+  952850001: 'GmbH & Co. KG'
 } as const;
 export type Vsb_projectsvsb_spvlegalstructure = keyof typeof Vsb_projectsvsb_spvlegalstructure;
 export const Vsb_projectsvsb_startcluster = {
-  1: 'Cluster1',
-  2: 'Cluster2',
-  3: 'Cluster3',
-  4: 'Cluster4',
-  5: 'Cluster5',
-  6: 'Cluster6',
+  1: 'Cluster 1',
+  2: 'Cluster 2',
+  3: 'Cluster 3',
+  4: 'Cluster 4',
+  5: 'Cluster 5',
+  6: 'Cluster 6',
   0: 'Greenfield'
 } as const;
 export type Vsb_projectsvsb_startcluster = keyof typeof Vsb_projectsvsb_startcluster;
@@ -110,9 +110,7 @@ export type Vsb_projectsvsb_technology = keyof typeof Vsb_projectsvsb_technology
 export interface Vsb_projectsBase {
   importsequencenumber?: number;
   overriddencreatedon?: string;
-  ownerid: string;
-  owneridtype: string;
-  "OwningBusinessUnit@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
   statecode: Vsb_projectsstatecode;
   statuscode?: Vsb_projectsstatuscode;
   timezoneruleversionnumber?: number;
@@ -215,19 +213,9 @@ export interface Vsb_projectsBase {
 }
 
 export interface Vsb_projects extends Vsb_projectsBase {
-  createdbyname?: string;
-  createdbyyominame: string;
   createdon?: string;
-  createdonbehalfbyname?: string;
-  createdonbehalfbyyominame: string;
-  modifiedbyname?: string;
-  modifiedbyyominame: string;
   modifiedon?: string;
-  modifiedonbehalfbyname?: string;
-  modifiedonbehalfbyyominame: string;
-  owneridname: string;
-  owneridyominame: string;
-  owningbusinessunitname: string;
+  ownerid: string;
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
@@ -235,11 +223,7 @@ export interface Vsb_projects extends Vsb_projectsBase {
   vsb_bopstandardcontractscreatedname?: string;
   vsb_capexstandardcontractscreatedname?: string;
   vsb_capexstandardcostscreatedname?: string;
-  vsb_clusterstatename?: string;
   vsb_clustersynchronizedname?: string;
-  vsb_countryareaname?: string;
-  vsb_countryname?: string;
-  vsb_deputyprojectmanagerentraname?: string;
   vsb_developmenttypename?: string;
   vsb_feasibilitystudiesstandardassumptionname?: string;
   vsb_financingoptionsname?: string;
@@ -255,7 +239,6 @@ export interface Vsb_projects extends Vsb_projectsBase {
   vsb_isstandardshareoffarmdownname?: string;
   vsb_ownershiptypename?: string;
   vsb_pmremindedtoinitiateupcomingclusterapprovname?: string;
-  vsb_projectmanagername?: string;
   vsb_projectstatusname?: string;
   vsb_projecttypename?: string;
   vsb_spvlegalstructurename?: string;
@@ -265,7 +248,6 @@ export interface Vsb_projects extends Vsb_projectsBase {
   vsb_subtechnology2name?: string;
   vsb_subtechnology3name?: string;
   vsb_technologyname?: string;
-  vsb_terrainutilizationlookupname?: string;
   vsb_totalcapacity?: number;
   createdby?: object;
   _createdby_value?: string;
