@@ -7,9 +7,15 @@
  *     `defaultTo` policy decides; after a pick, the pick stands (it is not re-validated against
  *     a refetched list — the screens do not do that today either).
  *   - `useCountryTechnologyUrlSelection` (Contracts): `?country=<guid>&tech=<code>` IS the selection, so back /
- *     forward and deep links work. A missing or unknown pair falls back to `defaultTo`
- *     (`none` for Contracts → the explicit "Select a country and technology" state, D-29).
- *     `history: "push"` is what Contracts does today (`setParams` without `replace`).
+ *     forward and deep links work. A missing, unknown or stale pair falls back to `defaultTo`,
+ *     which since the PO requirement of 2026-10-17 is a REAL default (first country / first
+ *     technology), not `none`. The default is DISPLAY-ONLY: nothing writes the params on load, so
+ *     the URL stays clean until the user's first pick, and a stale pair is left in the URL while
+ *     the default renders. `history: "push"` is unchanged, so Back walks the user's picks and
+ *     finally returns to the default view.
+ *
+ * Both fallbacks are DERIVED (`chosen ?? fallback`, `fromUrl ?? fallback`), never written by an
+ * effect — that is what makes a late-arriving country list unable to overwrite a user's pick.
  */
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -34,7 +40,7 @@ export interface CountryTechnologySelectionOptions {
 }
 
 export interface CountryTechnologySelection {
-  /** `undefined` when nothing is selected (policy `none`, or no countries). */
+  /** `undefined` when nothing is selected (no countries yet, or none offering a technology). */
   selection: CountryTechnology | undefined;
   /** The selected country's row (name, ISO currency, …). */
   country: PickerCountry | undefined;

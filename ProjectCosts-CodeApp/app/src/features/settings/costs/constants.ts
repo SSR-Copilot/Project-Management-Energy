@@ -25,9 +25,12 @@ export const COST_CATEGORIES: readonly CostCategoryDef[] = [
 ];
 
 /*
- * FR-3 — the picker order, Germany / Wind default and Wind then PV come from the shared M6
+ * FR-3 — the picker order, the default selection and Wind then PV come from the shared M6
  * configuration: `COST_DEFAULT` (`@/domain/countryPicker`) and `COST_TECHNOLOGIES`
- * (`@/domain/technology`).
+ * (`@/domain/technology`). Since the PO requirement of 2026-10-17 `COST_DEFAULT` is
+ * `{kind:"first"}` — the first listed country that offers technologies, with its first
+ * technology — which on every list is Germany / Wind, exactly as the previous `preferred`
+ * spelling produced (only configured countries offer technologies and all list Wind first).
  */
 
 /**

@@ -94,7 +94,10 @@ export const MARGIN_TYPE_LABEL: Record<number, string> = {
  * The picker model is shared (batch 2b, M6): `@/domain/countryPicker` holds the six-country
  * allow-list (`pickerCountries(rows, CONTRACT_COUNTRY_RULE)`: exact name match, canvas order,
  * ISO-2 badge), `parseSelectionParams` / `sameCountryTechnology` (B-2) and `CONTRACT_DEFAULT`
- * (none, D-29); `@/domain/technology` holds `CONTRACT_TECHNOLOGIES` (Wind, PV, BESS).
+ * (`{kind:"first"}` — the first listed country with its first technology, PO requirement of
+ * 2026-10-17, which supersedes D-29's "no selection"; the default is display-only, so the URL
+ * stays clean until the first pick); `@/domain/technology` holds `CONTRACT_TECHNOLOGIES`
+ * (Wind, PV, BESS).
  */
 
 /** `Contracts / <Country> / <Technology>` (FR-3, ACS:565). */

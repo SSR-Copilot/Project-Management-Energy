@@ -75,8 +75,10 @@ describe("picker (FR-2, D-20)", () => {
     expect(parseSelection(GERMANY_ID, "952850005", countries)).toBeUndefined(); // Hydro (D-16)
     expect(parseSelection("33333333-3333-3333-3333-333333333333", "952850000", countries)).toBeUndefined();
     expect(parseSelection(null, null, countries)).toBeUndefined();
-    // No default selection (D-29), and the badge is the ISO-2 code.
-    expect(defaultSelection(countries, CONTRACT_TECHNOLOGIES, CONTRACT_DEFAULT)).toBeUndefined();
+    // The default is the first listed country with the first technology (PO 2026-10-17,
+    // supersedes D-29); the badge is the ISO-2 code.
+    expect(defaultSelection(countries, CONTRACT_TECHNOLOGIES, CONTRACT_DEFAULT))
+      .toEqual({ countryId: GERMANY_ID, technology: TECHNOLOGY.Wind });
     expect(countries.map((c) => c.code)).toEqual(["DE", "FR", "PL"]);
     expect(CONTRACT_TECHNOLOGIES.map((t) => t.code)).toEqual([TECHNOLOGY.Wind, TECHNOLOGY.PV, TECHNOLOGY.BESS]);
   });

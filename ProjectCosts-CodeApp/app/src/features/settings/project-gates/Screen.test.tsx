@@ -41,6 +41,7 @@ const countriesService = vi.hoisted(() => ({ getAll: vi.fn() }));
 vi.mock("@/generated/services/Vsb_countriesService", () => ({ Vsb_countriesService: countriesService }));
 
 import { vsbTheme } from "@/theme/fluent";
+import { appliedRules } from "@/test/appliedRules";
 import { AppToaster, RowActions } from "@/components";
 import { EditRegular } from "@fluentui/react-icons";
 import { DataError } from "@/platform/errors";
@@ -556,5 +557,22 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(gate).toHaveAttribute("readonly");
     expect(gate).toHaveAttribute("aria-invalid", "true");
     expect(describedText(gate)).toContain(GATE_BLANK_MESSAGE);
+  });
+});
+
+/**
+ * Rail-height parity (work order 13-reusable-components/09, Option 4). jsdom has no layout,
+ * so the applied RULES are asserted, not pixel heights.
+ */
+describe("ProjectGatesSettingsScreen — picker/rail height parity", () => {
+  it("stretches the picker's row and keeps the scroller on the content section", async () => {
+    renderScreen();
+    const picker = await screen.findByRole("navigation", { name: "Country and technology" });
+    expect(appliedRules(picker.parentElement!)["align-items"]).toBe("stretch");
+    // 03-responsive-layout:39 "Avoid nested scroll regions" — the content section scrolls.
+    expect(appliedRules(screen.getByRole("region", { name: "Project gate approvals" }))["overflow-y"]).toBe("auto");
+    const column = appliedRules(picker);
+    expect(column["align-self"]).toBe("stretch");
+    expect(column["overflow-y"]).not.toBe("auto");
   });
 });

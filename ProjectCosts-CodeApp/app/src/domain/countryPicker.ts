@@ -6,18 +6,19 @@
  * and encodes each screen's CURRENT rule as configuration, so adopting the shared picker does
  * not change behaviour.
  *
- * OPEN PRODUCT DECISION (recorded in `06-shared-build-log.md`, Batch 2a): the screens disagree.
+ * COUNTRY LISTS still differ per screen (recorded in `06-shared-build-log.md`, Batch 2a):
  *   - Project Gates and Contracts use an ALLOW-list (a new country never appears by itself;
  *     Gates D-24, Contracts D-20). Gates matches names case-insensitively after trimming;
  *     Contracts matches exactly.
  *   - Costs uses a DENY-list (Spain, Greece, Romania) and APPENDS any unknown country,
  *     alphabetically, after the six.
- *   - Default selection: Gates = first country / first technology; Costs = Germany / Wind
- *     (else the first country); Contracts = none (explicit empty state, D-29).
- * Unifying them is a PO decision; until then each screen passes its own `CountryRule` /
- * `DefaultSelection` below.
+ * DEFAULT SELECTION is now unified (PO requirement, 2026-10-17): ALL THREE screens default to the
+ * FIRST listed country with the FIRST technology it offers — `{kind:"first"}`. This supersedes
+ * Contracts' D-29 ("no selection, explicit empty state") and restates the Costs Germany / Wind
+ * default as the same rule (provably the same result; see
+ * `13-reusable-components/08-default-selection-change.md`).
  */
-import { TECHNOLOGY, type TechnologyOption } from "./technology";
+import type { TechnologyOption } from "./technology";
 
 /** Stripes for the inline SVG flag, top-to-bottom (`h`) or left-to-right (`v`). */
 export type FlagSpec =
@@ -121,10 +122,14 @@ export interface CountryTechnology {
 
 /**
  * What a screen shows before the user picks.
- * - `none`: nothing (Contracts, D-29).
- * - `first`: the first listed country and its first technology (Project Gates FR-2 AC1).
+ * - `first`: the first listed country and its first technology. This is the rule every screen
+ *   uses (PO requirement, 2026-10-17).
+ * - `none`: nothing, an explicit empty state. Retained as a supported policy (and tested) but NO
+ *   screen uses it any more — it was Contracts' D-29 default before the PO requirement.
  * - `preferred`: the named country with the given technology, else the first listed country
- *   with that technology (Costs FR-3: Germany / Wind).
+ *   with that technology. Retained as a supported policy (and tested) but NO screen uses it any
+ *   more — it was the Costs Germany / Wind spelling of FR-3, which `first` reproduces exactly
+ *   because only the configured countries offer technologies and all of them list Wind first.
  */
 export type DefaultSelection =
   | { kind: "none" }
@@ -132,8 +137,8 @@ export type DefaultSelection =
   | { kind: "preferred"; countryName: string; technology: number };
 
 export const GATE_DEFAULT: DefaultSelection = { kind: "first" };
-export const COST_DEFAULT: DefaultSelection = { kind: "preferred", countryName: "Germany", technology: TECHNOLOGY.wind };
-export const CONTRACT_DEFAULT: DefaultSelection = { kind: "none" };
+export const COST_DEFAULT: DefaultSelection = { kind: "first" };
+export const CONTRACT_DEFAULT: DefaultSelection = { kind: "first" };
 
 export function defaultSelection(
   countries: readonly PickerCountry[],

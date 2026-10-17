@@ -13,6 +13,7 @@ import {
   type CountryTechnology,
 } from "@/domain/countryPicker";
 import { CONTRACT_TECHNOLOGIES, COST_TECHNOLOGIES, GATE_TECHNOLOGIES, TECHNOLOGY } from "@/domain/technology";
+import { appliedMediaRules, appliedPseudoRules, appliedRules } from "@/test/appliedRules";
 import { CountryTechnologyPicker, type CountryTechnologyPickerProps } from "./CountryTechnologyPicker";
 
 const ROWS = [
@@ -194,5 +195,253 @@ describe("CountryTechnologyPicker — E6 per-country technologies", () => {
     render(<Harness countries={[]} technologies={GATE_TECHNOLOGIES} compact emptyText="No configured countries" />);
     expect(screen.getByText("No configured countries")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Canvas parity (13-reusable-components/10-picker-canvas-parity). jsdom has no layout, so the
+ * spec's px values are asserted as the Griffel rules / attributes the elements carry.
+ */
+describe("CountryTechnologyPicker — canvas look", () => {
+  const norm = (v: string | undefined) => v?.replace(/\s+/g, "");
+  const GREY = "rgba(0,0,0,0.1)"; // jsdom serialises #ffffff / #BFBFBF as rgb(...)
+  const nav = () => screen.getByRole("navigation", { name: "Country and technology" });
+  /** The 50 px country row of `name` (first child of its list item). */
+  const rowOf = (name: string) => {
+    const li = within(nav()).getByText(name).closest("li");
+    return li!.firstElementChild as HTMLElement;
+  };
+  const flagOf = (name: string) => within(rowOf(name)).getByTestId(/^country-flag/);
+  const renderCosts = (initial?: CountryTechnology, extra: Partial<Parameters<typeof Harness>[0]> = {}) => render(
+    <Harness countries={pickerCountries(ROWS, COST_COUNTRY_RULE)} technologies={COST_TECHNOLOGIES}
+      initial={initial} {...extra} />,
+  );
+
+  it("the column owns a fixed 200 px width, flush, with no padding and no height", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    const rules = appliedRules(nav());
+    expect(rules["width"]).toBe("200px");
+    expect(rules["min-width"]).toBe("200px");
+    expect(rules["flex-shrink"]).toBe("0");
+    expect(rules["box-sizing"]).toBe("border-box");
+    expect(rules["background-color"]).toBe("rgb(255, 255, 255)");
+    expect(rules["box-shadow"]).toBeTruthy();
+    for (const side of ["top", "bottom", "left", "right"]) expect(parseFloat(rules[`padding-${side}`] ?? "0")).toBe(0);
+  });
+
+  it("narrow (< 900 px) keeps the fixed 200 px: no width:100% override, still not stretched", () => {
+    renderCosts();
+    const narrow = appliedMediaRules(nav(), "max-width: 899px");
+    expect(narrow["width"]).toBeUndefined();
+    expect(narrow["min-width"]).toBeUndefined();
+    expect(narrow["align-self"]).toBe("auto");
+    expect(narrow["max-width"]).toBe("100%");
+  });
+
+  it("country rows are 50 px with 8 px left padding", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    for (const name of ["Germany", "France"]) {
+      const rules = appliedRules(rowOf(name));
+      expect(rules["height"]).toBe("50px");
+      expect(rules["padding-left"]).toBe("8px");
+      expect(rules["box-sizing"]).toBe("border-box");
+    }
+  });
+
+  it("the +/- is a boxed 16 x 16 button placed BEFORE the flag, with no text", () => {
+    renderCosts();
+    const toggle = screen.getByRole("button", { name: "Expand Germany" });
+    const rules = appliedRules(toggle);
+    expect(rules["width"]).toBe("16px");
+    expect(rules["height"]).toBe("16px");
+    expect(rules["box-sizing"]).toBe("border-box");
+    expect(rules["border-top-width"]).toBe("1px");
+    expect(rules["border-left-style"]).toBe("solid");
+    expect(norm(rules["border-top-color"])).toBe("rgb(53,61,63)");
+    expect(rules["border-top-left-radius"]).toBe("4px");
+    expect(rules["background-color"]).toBe("transparent");
+    expect(norm(appliedPseudoRules(toggle, ":hover")["background-color"])).toBe("rgb(237,237,237)");
+    expect(toggle.textContent).toBe("");
+    expect(toggle.querySelector("svg")).not.toBeNull();
+    const flag = flagOf("Germany");
+    expect(toggle.compareDocumentPosition(flag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toggle.parentElement).toBe(rowOf("Germany"));
+  });
+
+  it("flags are 36 x 24, and 40 x 28 for the selected country (SVG, badge and stretched)", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    const de = flagOf("Germany");
+    const fr = flagOf("France");
+    expect([fr.getAttribute("width"), fr.getAttribute("height")]).toEqual(["36", "24"]);
+    expect([de.getAttribute("width"), de.getAttribute("height")]).toEqual(["40", "28"]);
+    expect(de.getAttribute("preserveAspectRatio")).toBe("none");
+    const flagRules = appliedRules(fr);
+    expect(flagRules["border-radius"]).toBe("4px");
+    expect(flagRules["box-shadow"]).toContain("shadow8");
+  });
+
+  it("code badges follow the same boxes", () => {
+    render(<Harness countries={pickerCountries(ROWS, CONTRACT_COUNTRY_RULE)} technologies={CONTRACT_TECHNOLOGIES}
+      flag="code" initial={{ countryId: "de", technology: TECHNOLOGY.wind }} />);
+    const [de, fr] = screen.getAllByTestId("country-flag-code");
+    expect([appliedRules(fr!)["width"], appliedRules(fr!)["height"]]).toEqual(["36px", "24px"]);
+    expect([appliedRules(de!)["width"], appliedRules(de!)["height"]]).toEqual(["40px", "28px"]);
+  });
+
+  it("the spacer after the +/- is 12 px, 10 px when selected; 28 / 26 px with no +/-", () => {
+    const techFor = configuredCountryTechnologies(COST_TECHNOLOGIES);
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind }, { technologiesFor: techFor });
+    const spacer = (name: string) => appliedRules(rowOf(name).querySelector("span[aria-hidden]")!)["width"];
+    expect(spacer("France")).toBe("12px");
+    expect(spacer("Germany")).toBe("10px");
+    expect(spacer("Netherlands")).toBe("28px");
+    expect(rowOf("Netherlands").querySelector("button")).toBeNull();
+  });
+
+  it("the name box is 132 px wide with 8 px text padding: 14 px regular, 16 px semibold selected", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    const fr = appliedRules(within(nav()).getByText("France"));
+    const de = appliedRules(within(nav()).getByText("Germany"));
+    expect(fr["width"]).toBe("132px");
+    expect(fr["padding-left"]).toBe("8px");
+    expect(fr["font-size"]).toContain("fontSizeBase300");
+    expect(fr["font-weight"]).toContain("fontWeightRegular");
+    expect(de["font-size"]).toContain("fontSizeBase400");
+    expect(de["font-weight"]).toContain("fontWeightSemibold");
+  });
+
+  it("the grey band shows on a selected, COLLAPSED country only (highlightCollapsedSelection)", async () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind }, { highlightCollapsedSelection: true });
+    expect(norm(appliedRules(rowOf("Germany"))["background-color"])).toBeUndefined(); // expanded: transparent
+    await userEvent.click(screen.getByRole("button", { name: "Collapse Germany" }));
+    expect(norm(appliedRules(rowOf("Germany"))["background-color"])).toBe(GREY);
+    expect(appliedRules(rowOf("France"))["background-color"]).toBeUndefined();
+  });
+
+  it("technology rows are 35 px, text at x = 40, full width with NO margin (nothing overflows 200 px)", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    for (const name of ["Germany Wind", "Germany PV"]) {
+      const rules = appliedRules(screen.getByRole("button", { name }));
+      expect(rules["height"]).toBe("35px");
+      expect(rules["padding-left"]).toBe("40px");
+      expect(rules["width"]).toBe("100%");
+      expect(rules["box-sizing"]).toBe("border-box");
+      for (const side of ["left", "right"]) expect(parseFloat(rules[`margin-${side}`] ?? "0")).toBe(0);
+      expect(rules["border-left-style"]).toBe("none");
+    }
+  });
+
+  it("selected technology: grey fill, 16 px semibold, white tick; unselected: opaque white, regular, grey tick", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    const wind = screen.getByRole("button", { name: "Germany Wind" });
+    const pv = screen.getByRole("button", { name: "Germany PV" });
+    expect(norm(appliedRules(wind)["background-color"])).toBe(GREY);
+    expect(appliedRules(wind)["font-size"]).toContain("fontSizeBase400");
+    expect(appliedRules(wind)["font-weight"]).toContain("fontWeightSemibold");
+    expect(appliedPseudoRules(wind, "::after")["background-color"]).toBe("rgb(255, 255, 255)");
+    expect(appliedRules(pv)["background-color"]).toBe("rgb(255, 255, 255)");
+    expect(appliedRules(pv)["font-size"]).toContain("fontSizeBase300");
+    expect(appliedPseudoRules(pv, "::after")["background-color"]).toBe("rgb(191, 191, 191)");
+  });
+
+  it("a selected technology of a NON-selected country is not highlighted (child AND country)", async () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind });
+    await userEvent.click(screen.getByRole("button", { name: "Expand France" }));
+    const frWind = screen.getByRole("button", { name: "France Wind" });
+    expect(frWind).not.toHaveAttribute("aria-current");
+    expect(appliedRules(frWind)["background-color"]).toBe("rgb(255, 255, 255)");
+    expect(appliedRules(frWind)["font-size"]).toContain("fontSizeBase300");
+    expect(appliedPseudoRules(frWind, "::after")["background-color"]).toBe("rgb(191, 191, 191)");
+  });
+
+  it("tree connector: grey #BFBFBF (never blue), vertical at x = 16, tick 16 px at y = 17, last line ends at 19", () => {
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.pv });
+    const wind = screen.getByRole("button", { name: "Germany Wind" });
+    const pv = screen.getByRole("button", { name: "Germany PV" });
+    for (const row of [wind, pv]) {
+      const line = appliedPseudoRules(row, "::before");
+      expect(line["background-color"]).toBe("rgb(191, 191, 191)");
+      expect(line["left"]).toBe("16px");
+      expect(line["width"]).toBe("1px");
+      expect(line["top"]).toBe("0px");
+      const tick = appliedPseudoRules(row, "::after");
+      expect([tick["left"], tick["top"], tick["width"], tick["height"]]).toEqual(["16px", "17px", "16px", "1px"]);
+    }
+    expect(appliedPseudoRules(wind, "::before")["height"]).toBe("35px");
+    expect(appliedPseudoRules(pv, "::before")["height"]).toBe("19px");
+    expect(appliedPseudoRules(wind, "::after")["background-color"]).toBe("rgb(191, 191, 191)");
+    expect(appliedPseudoRules(pv, "::after")["background-color"]).toBe("rgb(255, 255, 255)");
+    expect(nav().innerHTML.toLowerCase()).not.toContain("0078d4");
+  });
+
+  it("the +/- only toggles expansion: it never changes the selected country", async () => {
+    const spy = vi.fn();
+    renderCosts({ countryId: "de", technology: TECHNOLOGY.wind }, { spy });
+    await userEvent.click(screen.getByRole("button", { name: "Expand France" }));
+    await userEvent.click(screen.getByRole("button", { name: "Collapse Germany" }));
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Expand Germany" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Collapse France" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("the name button (select / toggle) fills the row after the +/-, keeping its accessible name", () => {
+    render(<Harness countries={pickerCountries(ROWS, GATE_COUNTRY_RULE)} technologies={GATE_TECHNOLOGIES}
+      countryClick="select" initial={{ countryId: "de", technology: TECHNOLOGY.wind }} />);
+    const name = screen.getByRole("button", { name: "Germany" });
+    const toggle = screen.getByRole("button", { name: "Collapse Germany" });
+    expect(toggle.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(name.parentElement).toBe(toggle.parentElement);
+    expect(within(name).getByTestId("country-flag")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Rail-height parity (work order 13-reusable-components/09, Option 4).
+ *
+ * jsdom has no layout engine — `offsetHeight` / `getBoundingClientRect()` are always 0, so
+ * `expect(picker.offsetHeight).toBe(rail.offsetHeight)` would pass `0 === 0` both before and
+ * after the change. The rules are asserted instead: Griffel's DOM renderer injects real
+ * `<style>` elements in jsdom, so the declarations that apply to the nav can be read back off
+ * `document.styleSheets` by its own atomic class names.
+ */
+describe("CountryTechnologyPicker — rail-height parity", () => {
+  const column = () => appliedRules(screen.getByRole("navigation", { name: "Country and technology" }));
+
+  it("never scrolls inside itself — the PO's 'no scrollbar in the picker'", () => {
+    render(<Harness countries={pickerCountries(ROWS, CONTRACT_COUNTRY_RULE)} technologies={CONTRACT_TECHNOLOGIES} flag="code" />);
+    const overflowY = column()["overflow-y"];
+    expect(overflowY).not.toBe("auto");
+    expect(overflowY).not.toBe("scroll");
+  });
+
+  it("stretches to its row, which is what makes it the left navigation's height", () => {
+    render(<Harness countries={pickerCountries(ROWS, CONTRACT_COUNTRY_RULE)} technologies={CONTRACT_TECHNOLOGIES} flag="code" />);
+    expect(column()["align-self"]).toBe("stretch");
+  });
+
+  it("imposes no fixed height (a percentage height would clip or scroll instead)", () => {
+    render(<Harness countries={pickerCountries(ROWS, CONTRACT_COUNTRY_RULE)} technologies={CONTRACT_TECHNOLOGIES} flag="code" />);
+    const rules = column();
+    expect(rules["height"]).toBeUndefined();
+    expect(rules["max-height"]).toBeUndefined();
+  });
+
+  it("renders every row of a long Costs list — nothing is clipped or virtualised", () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({ id: `c${i}`, name: `Country ${String(i).padStart(2, "0")}` }));
+    const countries = pickerCountries(many, COST_COUNTRY_RULE);
+    expect(countries).toHaveLength(25);
+    render(<Harness countries={countries} technologies={COST_TECHNOLOGIES} />);
+    const nav = screen.getByRole("navigation", { name: "Country and technology" });
+    const rows = within(nav).getAllByRole("listitem").filter((li) => li.parentElement?.parentElement === nav);
+    expect(rows).toHaveLength(25);
+    for (const c of countries) expect(within(nav).getByText(c.name)).toBeInTheDocument();
+  });
+
+  it("leaves the compact dropdown pair without any stretch or overflow rule", () => {
+    render(<Harness countries={pickerCountries(ROWS, CONTRACT_COUNTRY_RULE)} technologies={CONTRACT_TECHNOLOGIES}
+      compact ariaLabel="Scope" />);
+    const rules = appliedRules(screen.getByRole("group", { name: "Scope" }));
+    expect(rules["align-self"]).toBeUndefined();
+    expect(rules["overflow-y"]).toBeUndefined();
   });
 });

@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 
 vi.mock("@microsoft/power-apps/data", () => ({
   getClient: () => ({
@@ -54,6 +54,7 @@ vi.mock("@/generated/services/Vsb_countriesService", () => ({
 }));
 
 import { vsbTheme } from "@/theme/fluent";
+import { appliedRules } from "@/test/appliedRules";
 import { AppToaster } from "@/components";
 import { ContractSaveError, DevCoTableUnavailableError, OwnershipConflictError } from "@/data/settings/contracts";
 import { DataError, RecordGoneError } from "@/platform/errors";
@@ -70,8 +71,9 @@ const WIND_PATH = `/settings/contracts?country=${GERMANY_ID}&tech=${TECHNOLOGY.W
 let navigate: NavigateFunction | undefined;
 function NavProbe() {
   const nav = useNavigate();
+  const location = useLocation();
   useEffect(() => { navigate = nav; }, [nav]);
-  return null;
+  return <span data-testid="search">{location.search}</span>;
 }
 
 function renderScreen(path = WIND_PATH) {
@@ -142,26 +144,68 @@ afterEach(() => {
 });
 
 describe("ContractsSettingsScreen", () => {
-  it("starts on an explicit empty state with the Add buttons disabled, offering only allow-list countries", async () => {
+  it("starts on the first country / first technology with no URL params, offering only allow-list countries", async () => {
     renderScreen("/settings/contracts");
-    expect(await screen.findByText("Select a country and technology")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add Development Contract" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Add Construction Contract" })).toBeDisabled();
+    // PO 2026-10-17 (supersedes D-29): the screen opens on Germany / Wind without a click.
+    expect(await screen.findByText("Contracts / Germany / Wind")).toBeInTheDocument();
+    expect(await screen.findByText("Development Contract - Turbine")).toBeInTheDocument();
+    expect(api.listStandardContracts).toHaveBeenCalledWith(GERMANY_ID, TECHNOLOGY.Wind);
+    expect(screen.getByRole("button", { name: "Add Development Contract" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add Construction Contract" })).toBeEnabled();
+    expect(screen.queryByText("Select a country and technology")).not.toBeInTheDocument();
+    // Display-only default: the URL stays clean until the user's first pick.
+    expect(screen.getByTestId("search").textContent).toBe("");
     // Same rail as Costs / Project Gates: the country name is text; its +/- button is the control.
-    expect(screen.getByRole("button", { name: "Expand Germany" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse Germany" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Spain/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Spain")).not.toBeInTheDocument();
+  });
+
+  it("shows the no-countries empty state, with Add disabled and no contract query, when the list is empty", async () => {
+    api.countriesGetAll.mockResolvedValue({ success: true, data: [] });
+    renderScreen("/settings/contracts");
+    expect(await screen.findByText("No countries available")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Development Contract" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add Construction Contract" })).toBeDisabled();
     expect(api.listStandardContracts).not.toHaveBeenCalled();
+  });
+
+  it("a pick pushes ?country&tech and Back returns to the default scope with a clean URL", async () => {
+    const user = userEvent.setup();
+    renderScreen("/settings/contracts");
+    await screen.findByText("Contracts / Germany / Wind");
+    await user.click(screen.getByRole("button", { name: "Expand France" }));
+    await user.click(screen.getByRole("button", { name: "France PV" }));
+    expect(await screen.findByText("Contracts / France / PV")).toBeInTheDocument();
+    expect(api.listStandardContracts).toHaveBeenCalledWith(FRANCE_ID, TECHNOLOGY.PV);
+    expect(screen.getByTestId("search").textContent).toBe(`?country=${FRANCE_ID}&tech=${TECHNOLOGY.PV}`);
+    act(() => navigate!(-1));
+    expect(await screen.findByText("Contracts / Germany / Wind")).toBeInTheDocument();
+    expect(screen.getByTestId("search").textContent).toBe("");
+    // No unsaved-changes prompt: nothing was open, and the clean URL resolves to the default.
+    expect(screen.queryByText("Discard changes?")).not.toBeInTheDocument();
+  });
+
+  it("B-2 still holds from the default scope: a URL change prompts and Keep editing restores it", async () => {
+    const user = userEvent.setup();
+    renderScreen("/settings/contracts");
+    await screen.findByText("Development Contract - Turbine");
+    await fillNewConstruction(user);
+    act(() => navigate!(`/settings/contracts?country=${FRANCE_ID}&tech=${TECHNOLOGY.PV}`));
+    expect(await screen.findByText(/The country or technology changed while this contract was open/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep editing", hidden: true }));
+    expect(await screen.findByText("Contracts / Germany / Wind")).toBeInTheDocument();
   });
 
   it("drives the list from the picker", async () => {
     const user = userEvent.setup();
     renderScreen("/settings/contracts");
-    await user.click(await screen.findByRole("button", { name: "Expand Germany" }));
-    await user.click(screen.getByRole("button", { name: "Germany Wind" }));
-    expect(await screen.findByText("Contracts / Germany / Wind")).toBeInTheDocument();
+    // The screen opens expanded on the default country, so the pick is one click.
+    await user.click(await screen.findByRole("button", { name: "Germany PV" }));
+    expect(await screen.findByText("Contracts / Germany / PV")).toBeInTheDocument();
     expect(await screen.findByText("Development Contract - Turbine")).toBeInTheDocument();
     expect(api.listStandardContracts).toHaveBeenCalledWith(GERMANY_ID, TECHNOLOGY.Wind);
+    expect(api.listStandardContracts).toHaveBeenCalledWith(GERMANY_ID, TECHNOLOGY.PV);
     // Development sorts before Construction.
     const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(titles).toEqual(["Development Contract - Turbine", "Construction Contract - Grid"]);
@@ -504,10 +548,12 @@ describe("gap closure (08-gap-analysis)", () => {
     expect(screen.getByRole("button", { name: "Expand Development Contract - Turbine" })).toBeInTheDocument();
   });
 
-  it("FR-2: an invalid country GUID in the URL falls back to the empty state", async () => {
+  it("FR-2: a stale/invalid country GUID in the URL falls back to the default scope, leaving the params", async () => {
     renderScreen(`/settings/contracts?country=not-a-guid&tech=${TECHNOLOGY.Wind}`);
-    expect(await screen.findByText("Select a country and technology")).toBeInTheDocument();
-    expect(api.listStandardContracts).not.toHaveBeenCalled();
+    expect(await screen.findByText("Contracts / Germany / Wind")).toBeInTheDocument();
+    expect(api.listStandardContracts).toHaveBeenCalledWith(GERMANY_ID, TECHNOLOGY.Wind);
+    // No cleanup effect: the bad params stay until the user's first pick.
+    expect(screen.getByTestId("search").textContent).toBe(`?country=not-a-guid&tech=${TECHNOLOGY.Wind}`);
   });
 
   it("FR-13: the range message is locale-formatted and switching Margin Type clears the input", async () => {
@@ -589,5 +635,24 @@ describe("gap closure (08-gap-analysis)", () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+});
+
+/**
+ * Rail-height parity (work order 13-reusable-components/09, Option 4). jsdom has no layout,
+ * so the applied RULES are asserted, not pixel heights.
+ */
+describe("ContractsSettingsScreen — picker/rail height parity", () => {
+  it("stretches the picker's row and gives the content column the screen's only scroller", async () => {
+    renderScreen();
+    const picker = await screen.findByRole("navigation", { name: "Country and technology" });
+    // The picker's parent (`styles.root`) stretches its children — 03-responsive-layout:12
+    // "Picker | Fixed 200, height = parent".
+    expect(appliedRules(picker.parentElement!)["align-items"]).toBe("stretch");
+    // …and the content column owns the scroll region — :47 "Keep one scroll container".
+    const content = picker.nextElementSibling!;
+    const rules = appliedRules(content);
+    expect(rules["overflow-y"]).toBe("auto");
+    expect(rules["min-height"]).toBe("0px"); // `minHeight: "0"`, normalised by cssstyle
   });
 });

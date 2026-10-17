@@ -59,7 +59,14 @@ import {
 
 const useStyles = makeStyles({
   root: { display: "flex", gap: "5px", minHeight: "100%", alignItems: "stretch" },
-  content: { flexGrow: 1, minWidth: "0", display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "10px" },
+  // The content column owns the screen's single scroll region (03-responsive-layout:47 "Keep
+  // one scroll container: the content area"), so a long contract list cannot drive the row
+  // taller than the viewport and drag the stretched picker past the rail.
+  content: {
+    flexGrow: 1, minWidth: "0", minHeight: "0",
+    display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "10px",
+    overflowY: "auto",
+  },
   addButton: { minWidth: "230px", justifyContent: "flex-start" },
   list: { display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "20px", paddingRight: "20px" },
 });
@@ -336,7 +343,9 @@ export default function ContractsSettingsScreen() {
   const capexError = capexQuery.isError ? loadErrorText(capexQuery.error) : undefined;
 
   const body = !selection
-    ? <EmptyState title="Select a country and technology" description="Choose a country and technology to see its standard contracts." />
+    // The screen defaults to the first country / first technology (PO, 2026-10-17), so this
+    // branch now means only "the picker list is empty" — no configured country is active.
+    ? <EmptyState title="No countries available" description="No configured country is available, so there are no standard contracts to show." />
     : (
       <QueryStates
         health={contractsHealth}

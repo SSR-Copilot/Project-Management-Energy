@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   CONTRACT_COUNTRY_RULE, CONTRACT_DEFAULT, COST_COUNTRY_RULE, COST_DEFAULT, GATE_COUNTRY_RULE, GATE_DEFAULT,
   PICKER_COUNTRIES, configuredCountryTechnologies, defaultSelection, isSelectable, parseSelectionParams,
-  pickerCountries, pickerCountryConfig, sameCountryTechnology, scopeBreadcrumb, type CountryRow,
+  pickerCountries, pickerCountryConfig, sameCountryTechnology, scopeBreadcrumb,
+  type CountryRow, type DefaultSelection,
 } from "./countryPicker";
 import { CONTRACT_TECHNOLOGIES, COST_TECHNOLOGIES, GATE_TECHNOLOGIES, TECHNOLOGY } from "./technology";
 
@@ -75,8 +76,25 @@ describe("defaultSelection", () => {
     const noGermany = pickerCountries(ROWS.filter((r) => r.id !== "de"), COST_COUNTRY_RULE);
     expect(defaultSelection(noGermany, COST_TECHNOLOGIES, COST_DEFAULT)).toEqual({ countryId: "pl", technology: TECHNOLOGY.wind });
   });
-  it("Contracts: none", () => {
-    expect(defaultSelection(gates, CONTRACT_TECHNOLOGIES, CONTRACT_DEFAULT)).toBeUndefined();
+  it("Costs: the retired `preferred Germany/Wind` policy agrees with the `first` constant", () => {
+    const preferred: DefaultSelection = { kind: "preferred", countryName: "Germany", technology: TECHNOLOGY.wind };
+    const techFor = configuredCountryTechnologies(COST_TECHNOLOGIES);
+    const costs = pickerCountries(ROWS, COST_COUNTRY_RULE);
+    const noGermany = pickerCountries(ROWS.filter((r) => r.id !== "de"), COST_COUNTRY_RULE);
+    expect(defaultSelection(costs, COST_TECHNOLOGIES, COST_DEFAULT, techFor)).toEqual({ countryId: "de", technology: TECHNOLOGY.wind });
+    expect(defaultSelection(noGermany, COST_TECHNOLOGIES, COST_DEFAULT, techFor)).toEqual({ countryId: "pl", technology: TECHNOLOGY.wind });
+    for (const list of [costs, noGermany]) {
+      expect(defaultSelection(list, COST_TECHNOLOGIES, COST_DEFAULT, techFor))
+        .toEqual(defaultSelection(list, COST_TECHNOLOGIES, preferred, techFor));
+    }
+  });
+  it("Contracts: first country, first technology (PO 2026-10-17, supersedes D-29)", () => {
+    const contracts = pickerCountries(ROWS, CONTRACT_COUNTRY_RULE);
+    expect(defaultSelection(contracts, CONTRACT_TECHNOLOGIES, CONTRACT_DEFAULT))
+      .toEqual({ countryId: "de", technology: TECHNOLOGY.wind });
+  });
+  it("the `none` policy is still supported, though no screen uses it", () => {
+    expect(defaultSelection(gates, CONTRACT_TECHNOLOGIES, { kind: "none" })).toBeUndefined();
   });
   it("nothing without countries", () => {
     expect(defaultSelection([], GATE_TECHNOLOGIES, GATE_DEFAULT)).toBeUndefined();

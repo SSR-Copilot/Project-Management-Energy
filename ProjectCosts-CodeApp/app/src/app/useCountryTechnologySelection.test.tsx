@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -59,10 +59,12 @@ describe("useCountryTechnologyUrlSelection", () => {
     <MemoryRouter initialEntries={["/start", path]} initialIndex={1}><Url {...(history ? { history } : {})} /></MemoryRouter>,
   );
 
-  it("Contracts: nothing selected without params (D-29)", () => {
+  it("Contracts: the default (first country / first technology) without params, and the URL stays clean", () => {
     mount("/settings/contracts");
-    expect(probe.current?.selection).toBeUndefined();
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
     expect(probe.current?.isDefault).toBe(true);
+    // The default is display-only: nothing writes `?country&tech` on load (PO, 2026-10-17).
+    expect(screen.getByTestId("search").textContent).toBe("");
   });
 
   it("reads a deep link ?country=<id>&tech=<code> (id case-insensitive)", () => {
@@ -71,9 +73,11 @@ describe("useCountryTechnologyUrlSelection", () => {
     expect(probe.current?.country?.name).toBe("Poland");
   });
 
-  it("ignores an unknown pair", () => {
+  it("falls back to the default on an unknown pair and leaves the bad params in the URL", () => {
     mount("/settings/contracts?country=xx&tech=1");
-    expect(probe.current?.selection).toBeUndefined();
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
+    expect(probe.current?.isDefault).toBe(true);
+    expect(screen.getByTestId("search").textContent).toBe("?country=xx&tech=1");
   });
 
   it("a pick writes the URL and pushes history, so Back restores the previous selection", () => {
@@ -88,7 +92,75 @@ describe("useCountryTechnologyUrlSelection", () => {
     mount(`/settings/contracts?country=DE-ID&tech=${TECHNOLOGY.wind}`, "replace");
     select({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
     act(() => probe.navigate?.(-1));
+    // Back left the screen's entry entirely (it was replaced, not pushed), so no params remain
+    // and the selection is the display default rather than either picked scope.
+    expect(screen.getByTestId("search").textContent).toBe("");
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
+    expect(probe.current?.isDefault).toBe(true);
+  });
+
+  it("Back after a pick from the clean URL returns to the default with no params", () => {
+    mount("/settings/contracts");
+    select({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
+    expect(screen.getByTestId("search").textContent).toBe(`?country=PL-ID&tech=${TECHNOLOGY.pv}`);
+    expect(probe.current?.isDefault).toBe(false);
+    act(() => probe.navigate?.(-1));
+    expect(screen.getByTestId("search").textContent).toBe("");
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
+    expect(probe.current?.isDefault).toBe(true);
+  });
+});
+
+describe("the default is derived, so late-arriving countries cannot overwrite a pick", () => {
+  function UrlRows({ rows }: { rows: typeof ROWS }) {
+    const countries = useMemo(() => pickerCountries(rows, CONTRACT_COUNTRY_RULE), [rows]);
+    const selection = useCountryTechnologyUrlSelection({
+      countries, technologies: CONTRACT_TECHNOLOGIES, defaultTo: CONTRACT_DEFAULT,
+    });
+    const location = useLocation();
+    useEffect(() => { probe.current = selection; }, [selection]);
+    return <span data-testid="search">{location.search}</span>;
+  }
+
+  function LocalRows({ rows }: { rows: typeof ROWS }) {
+    const countries = useMemo(() => pickerCountries(rows, GATE_COUNTRY_RULE), [rows]);
+    const selection = useCountryTechnologySelection({
+      countries, technologies: GATE_TECHNOLOGIES, defaultTo: GATE_DEFAULT,
+    });
+    useEffect(() => { probe.current = selection; }, [selection]);
+    return null;
+  }
+
+  it("URL hook: the default settles when the list arrives, without writing the URL", () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/settings/contracts"]}><UrlRows rows={[]} /></MemoryRouter>,
+    );
     expect(probe.current?.selection).toBeUndefined();
+    rerender(<MemoryRouter initialEntries={["/settings/contracts"]}><UrlRows rows={ROWS} /></MemoryRouter>);
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
+    expect(probe.current?.isDefault).toBe(true);
+    expect(screen.getByTestId("search").textContent).toBe("");
+  });
+
+  it("URL hook: a pick made before the full list arrives survives it", () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/settings/contracts"]}><UrlRows rows={ROWS} /></MemoryRouter>,
+    );
+    select({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
+    rerender(<MemoryRouter initialEntries={["/settings/contracts"]}><UrlRows rows={ROWS} /></MemoryRouter>);
+    expect(probe.current?.selection).toEqual({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
+    expect(probe.current?.isDefault).toBe(false);
+  });
+
+  it("local hook: a pick survives a later country list, and the default settles when it arrives", () => {
+    const { rerender } = render(<LocalRows rows={[]} />);
+    expect(probe.current?.selection).toBeUndefined();
+    rerender(<LocalRows rows={ROWS} />);
+    expect(probe.current?.selection).toEqual({ countryId: "DE-ID", technology: TECHNOLOGY.wind });
+    select({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
+    rerender(<LocalRows rows={[...ROWS]} />);
+    expect(probe.current?.selection).toEqual({ countryId: "PL-ID", technology: TECHNOLOGY.pv });
+    expect(probe.current?.isDefault).toBe(false);
   });
 });
 

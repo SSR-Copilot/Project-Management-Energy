@@ -39,6 +39,13 @@
 .canvas-shell > div { gap: 4px; }
 .canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }
 .canvas-overview-shell main { border: 0; border-radius: 0; }
+/* Application Settings only: the screen roots are `min-height: 100%` columns whose picker now
+   stretches to the rail's height. When a picker list is TALLER than the viewport it must grow
+   and let the page scroll — the alternative is the inner scrollbar the PO removed, or clipping
+   by the `overflow: hidden` on the `.canvas-shell main` rule above. Scoped to
+   `.canvas-settings-shell` so the cost and PM screens, which own their internal scrollers
+   (`.canvas-cost-screen`), are untouched. Specificity (0,2,1) beats that rule's (0,1,1). */
+.canvas-settings-shell main { overflow-y: auto; }
 .canvas-shell footer { min-height: 28px; height: 28px; background: #fff; border: 0; padding: 0 4px; }
 /* `con_Costs_LeftNavigationMenu` is `width: 200px`, white, `border-radius: 4px` and a SHADOW
    — `rgba(0,0,0,.14) 0 1px 2px, rgba(0,0,0,.12) 0 0 2px` — with no border at all. Its inner

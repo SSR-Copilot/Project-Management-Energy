@@ -57,15 +57,20 @@ const useStyles = makeStyles({
     paddingTop: "15px", paddingLeft: "10px", paddingRight: "10px", paddingBottom: tokens.spacingVerticalXL,
     backgroundColor: palette.white, minHeight: "100%", boxSizing: "border-box", minWidth: "0",
   },
+  // `alignItems: stretch` + `flexGrow: 1` so the row FILLS the column page instead of hugging
+  // its content — that is what lets the picker reach the left navigation's height.
   body: {
-    display: "flex", columnGap: "5px", rowGap: "5px", alignItems: "flex-start",
+    display: "flex", columnGap: "5px", rowGap: "5px", alignItems: "stretch",
+    flexGrow: 1, minHeight: "0",
     backgroundColor: palette.neutralLighter, paddingTop: "5px", paddingBottom: "5px", paddingLeft: "5px", paddingRight: "5px",
     minWidth: "0",
-    [media.belowMd]: { flexDirection: "column", alignItems: "stretch" },
+    [media.belowMd]: { flexDirection: "column", alignItems: "stretch", flexGrow: 0 },
   },
+  // This column scrolls, not the picker (one scroll container per screen).
   right: {
-    flexGrow: 1, minWidth: "0", backgroundColor: palette.white, paddingBottom: "10px",
+    flexGrow: 1, minWidth: "0", minHeight: "0", backgroundColor: palette.white, paddingBottom: "10px",
     display: "flex", flexDirection: "column",
+    overflowY: "auto",
   },
   sectionError: { marginTop: "8px", marginBottom: "8px" },
   applyBar: { paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px" },

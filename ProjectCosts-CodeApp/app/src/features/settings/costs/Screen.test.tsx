@@ -58,6 +58,7 @@ vi.mock("./hooks", async (importOriginal) => {
 });
 
 import { vsbTheme } from "@/theme/fluent";
+import { appliedRules } from "@/test/appliedRules";
 import { AppToaster } from "@/components";
 import { CONTRACT_TYPE, ContractDeleteError, OpexFollowUpError } from "@/data/settings/costs";
 import { DataError } from "@/platform/errors";
@@ -456,5 +457,38 @@ describe("CostsSettingsScreen", () => {
     useFixtures.on = false;
     render(<Harness><CostsSettingsScreen /></Harness>);
     expect(await screen.findByText("No countries found")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Rail-height parity (work order 13-reusable-components/09, Option 4). jsdom has no layout,
+ * so the applied RULES are asserted, not pixel heights.
+ */
+describe("CostsSettingsScreen — picker/rail height parity", () => {
+  beforeEach(() => { useFixtures.on = true; });
+
+  it("fills the body row instead of hugging it, and scrolls the right column, not the picker", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    const picker = screen.getByRole("navigation", { name: "Country and technology" });
+    // `styles.body` was `align-items: flex-start`, which made the picker unable to stretch.
+    const body = appliedRules(picker.parentElement!);
+    expect(body["align-items"]).toBe("stretch");
+    expect(body["flex-grow"]).toBe("1");
+    expect(body["min-height"]).toBe("0px"); // `minHeight: "0"`, normalised by cssstyle
+    // The right-hand card owns the scroll region.
+    const right = appliedRules(screen.getByRole("region", { name: "Standard cost assumptions" }));
+    expect(right["overflow-y"]).toBe("auto");
+    expect(right["min-height"]).toBe("0px");
+  });
+
+  it("keeps every country of a long list reachable in the DOM", () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    const picker = screen.getByRole("navigation", { name: "Country and technology" });
+    const rows = within(picker).getAllByRole("listitem").filter((li) => li.parentElement?.parentElement === picker);
+    expect(rows.length).toBeGreaterThan(0);
+    // Nothing is clipped away: the picker itself never scrolls and sets no height.
+    const column = appliedRules(picker);
+    expect(column["overflow-y"]).not.toBe("auto");
+    expect(column["height"]).toBeUndefined();
   });
 });

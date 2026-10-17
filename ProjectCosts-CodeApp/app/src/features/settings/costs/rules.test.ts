@@ -90,6 +90,14 @@ describe("picker and header (FR-2, FR-3, FR-5)", () => {
     expect(costDefault([{ id: "x", name: "Italy" }])?.countryName).toBe("Italy");
     expect(costDefault([])).toBeUndefined();
   });
+  it("unified default (PO 2026-10-17): without Germany it is still the first configured country + Wind", () => {
+    // `COST_DEFAULT` is now `{kind:"first"}`; the result is unchanged from the old
+    // `preferred Germany / Wind` spelling on every list, including one Germany is missing from.
+    const noGermany = FX_COUNTRIES.filter((c) => c.name !== "Germany");
+    expect(costDefault(noGermany)).toEqual({
+      countryId: noGermany.find((c) => c.name === "France")!.id, countryName: "France", technology: TECHNOLOGY.wind,
+    });
+  });
   it("resolves the shared selection with its country name", () => {
     expect(toCostSelection({ countryId: "p", technology: TECHNOLOGY.pv }, { name: "Poland" }))
       .toEqual({ countryId: "p", countryName: "Poland", technology: TECHNOLOGY.pv });
