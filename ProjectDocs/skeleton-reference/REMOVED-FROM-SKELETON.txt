@@ -1,0 +1,266 @@
+Removed from VSBCloud-Code-App-Skeleton/vsbcode on 2026-10-15 because a byte-identical copy
+exists in this folder (path mapping: removed-from-app/src/<x>/skeleton/<f> <- src/<x>/<f>).
+
+.github/workflows/ci.yml
+CHANGES-FROM-INPUT.md
+CONVENTIONS.md
+docs/G-A11Y.md
+docs/G-LABEL.md
+docs/guide-ui-notes-p06-p14.md
+docs/guide-ui-notes-p15-p24.md
+docs/guide2-ui-notes-q02-q16.md
+docs/guide2-ui-notes-q18-q26.md
+docs/guide3-ui-notes-cost-app.md
+docs/SECURITY.md
+eslint.config.js
+GUIDE-PARITY.md
+PowerFx.md
+reference/a11y-baseline.json
+reference/canvas-accessible-labels.json
+reference/canvas-labels.json
+reference/label-baseline.json
+reference/ownership-baseline.json
+src/a11y/canvasA11y.generated.ts
+src/a11y/index.ts
+src/app/buildPlan.ts
+src/components/cmp_NestedCountryPickerColumn.model.ts
+src/components/cmp_NestedCountryPickerColumn.tsx
+src/data/dataSources.ts
+src/data/entities.ts
+src/data/mock/autoFixture.test.ts
+src/data/queryKeys.ts
+src/data/repos.ts
+src/data/repository.ts
+src/domain/paging.test.ts
+src/platform/odata.ts
+src/platform/errors.ts   (reference copy now at removed-from-app/src/platform/errors.ts)
+src/security/matrix.json
+scripts/check-a11y.mjs
+scripts/check-labels.mjs
+scripts/check-matrix.mjs
+scripts/check-ownership.mjs
+scripts/check-test-ids.mjs
+scripts/extract-accessible-labels.mjs
+scripts/extract-canvas-labels.mjs
+scripts/gsec.mjs
+scripts/scenario.mjs
+scripts/walk.mjs
+solution/customapi/apply-customapis.mjs
+solution/customapi/vsb_AllocateProjectId.json
+solution/customapi/vsb_CancelCheckListApproval.json
+solution/customapi/vsb_CancelGateApproval.json
+solution/customapi/vsb_CancelModulePermission.json
+solution/customapi/vsb_CreateCapexStandardContract.json
+solution/lib/dataverse.mjs
+solution/plugins/AllocateProjectId.cs
+solution/plugins/CancelCheckListApproval.cs
+solution/plugins/CancelGateApproval.cs
+solution/plugins/CancelModulePermission.cs
+solution/plugins/CreateCapexStandardContract.cs
+solution/plugins/PluginArguments.cs
+solution/plugins/README.md
+solution/README.md
+solution/security/apply-columnsecurity.mjs
+solution/security/apply-roles.mjs
+VSBCloud.md
+
+Moved here from VSBCloud-Code-App-Skeleton/vsbcode on 2026-10-15 — the skeleton ORIGINAL now sits
+at removed-from-app/<same path>, replacing the copy that had been adapted during the merge:
+
+.env.example
+src/a11y/a11y.test.tsx
+src/app/buildPlan.test.ts
+src/components/Breadcrumb.tsx
+src/components/Card.tsx
+src/components/cmp_NestedCountryPickerColumn.test.tsx
+src/components/CountryRail.tsx
+src/components/DataGrid.test.tsx
+src/components/DataGrid.tsx
+src/components/GridPager.tsx
+src/components/NumericInput.tsx
+src/components/PageHeader.tsx
+src/components/RecordFooter.tsx
+src/components/ReportErrorPanel.tsx
+src/components/CommandBar.tsx
+src/components/ConfirmDialog.tsx
+src/components/EmptyState.tsx
+src/components/ErrorBoundary.tsx
+src/components/FormPanel.tsx
+src/components/index.ts
+src/components/LeftNav.tsx
+src/components/LoadingOverlay.tsx
+src/components/StateChip.tsx
+src/components/StatTile.tsx
+src/components/TextFieldWithCount.tsx
+src/components/useBreakpoint.ts
+src/components/UserBadge.tsx
+src/data/mock/autoFixture.ts
+src/data/mock/mockBackend.test.ts
+src/data/mock/mockBackend.ts
+src/data/mock/projectSeed.ts
+src/domain/locale.test.ts
+src/domain/navigation.test.ts
+src/domain/navigation.ts
+src/domain/paging.ts
+src/domain/locale.ts
+src/features/pm/app-loading/Screen.tsx
+src/features/pm/generators/hooks.ts
+src/features/pm/generators/replace.test.ts
+src/features/pm/generators/Screen.tsx
+src/features/shared/useProjectContext.ts
+src/flows/flowClient.test.ts
+src/flows/flowClient.ts
+src/platform/bootstrap.ts
+src/platform/dataClient.ts
+src/platform/privileges.test.ts
+src/platform/powerClient.ts
+src/platform/privileges.ts
+src/platform/telemetry.ts
+src/routes/AppRoutes.tsx
+src/security/index.ts
+src/security/matrix.test.ts
+src/store/appStore.ts
+src/theme/fluentTheme.ts
+src/theme/tokens.ts
+src/theme/tokens.test.ts
+
+2026-10-15 — VSBCloud-Code-App-Skeleton/vsbcode/src/features emptied.
+Moved to features/<same path> (skeleton originals, reference for connecting the Admin/PM screens
+and for 1.21.753 R2-R4):
+  admin/admin-capex-accounts/hooks.ts
+  admin/admin-capex-accounts/Screen.tsx
+  admin/admin-contract/hooks.ts
+  admin/admin-contract/Screen.tsx
+  admin/admin-cost/hooks.ts
+  admin/admin-cost/Screen.tsx
+  admin/admin-default-checklists/hooks.ts
+  admin/admin-default-checklists/Screen.tsx
+  admin/admin-gates-approvals/hooks.ts
+  admin/admin-gates-approvals/Screen.tsx
+  admin/admin-milestones/hooks.ts
+  admin/admin-milestones/Screen.tsx
+  cost/capex-costs/rules.ts
+  pm/checklist/hooks.ts
+  pm/checklist/Screen.tsx
+  pm/finance/hooks.ts
+  pm/finance/Screen.tsx
+  pm/general-data/hooks.ts
+  pm/general-data/Screen.tsx
+  pm/grid-operator/hooks.ts
+  pm/grid-operator/Screen.tsx
+  pm/milestones/hooks.ts
+  pm/milestones/Screen.tsx
+  pm/planning/hooks.ts
+  pm/planning/Screen.tsx
+  pm/production/hooks.ts
+  pm/production/Screen.tsx
+  pm/revenues/hooks.ts
+  pm/revenues/Screen.tsx
+  pm/team/hooks.ts
+  pm/team/Screen.tsx
+  pm/generators/hooks.ts   (from removed-from-app/)
+  pm/generators/Screen.tsx   (from removed-from-app/)
+  pm/generators/replace.test.ts   (from removed-from-app/)
+Deleted (the app holds the maintained version, or replaced it):
+  admin/admin-capex-accounts/rules.test.ts
+  admin/admin-capex-accounts/rules.ts
+  admin/admin-contract/rules.test.ts
+  admin/admin-contract/rules.ts
+  admin/admin-cost/devexRules.ts
+  admin/admin-cost/opexRules.ts
+  admin/admin-cost/plan.ts
+  admin/admin-cost/rules.test.ts
+  admin/admin-cost/rules.ts
+  admin/admin-default-checklists/rules.test.ts
+  admin/admin-default-checklists/rules.ts
+  admin/admin-gates-approvals/rules.test.ts
+  admin/admin-gates-approvals/rules.ts
+  admin/admin-milestones/rules.test.ts
+  admin/admin-milestones/rules.ts
+  cost/add-costs-from-table/rules.test.ts
+  cost/add-costs-from-table/rules.ts
+  cost/add-costs-from-table/Screen.tsx
+  cost/capex-costs/hooks.ts
+  cost/capex-costs/rules.test.ts
+  cost/capex-costs/Screen.tsx
+  cost/contracts/hooks.ts
+  cost/contracts/rules.test.ts
+  cost/contracts/rules.ts
+  cost/contracts/Screen.tsx
+  cost/land-lease/hooks.ts
+  cost/land-lease/rules.test.ts
+  cost/land-lease/rules.ts
+  cost/land-lease/Screen.tsx
+  cost/opex-costs/hooks.ts
+  cost/opex-costs/rules.test.ts
+  cost/opex-costs/rules.ts
+  cost/opex-costs/Screen.tsx
+  pm/checklist/rules.test.ts
+  pm/checklist/rules.ts
+  pm/finance/rules.test.ts
+  pm/finance/rules.ts
+  pm/general-data/rules.test.ts
+  pm/general-data/rules.ts
+  pm/generators/rules.test.ts
+  pm/generators/rules.ts
+  pm/grid-operator/rules.test.ts
+  pm/grid-operator/rules.ts
+  pm/milestones/rules.test.ts
+  pm/milestones/rules.ts
+  pm/planning/rules.test.ts
+  pm/planning/rules.ts
+  pm/production/rules.test.ts
+  pm/production/rules.ts
+  pm/project-main/hooks.ts
+  pm/project-main/rules.test.ts
+  pm/project-main/rules.ts
+  pm/project-main/Screen.test.tsx
+  pm/project-main/Screen.tsx
+  pm/revenues/rules.test.ts
+  pm/revenues/rules.ts
+  pm/team/rules.test.ts
+  pm/team/rules.ts
+  shared/useDebouncedValue.ts
+
+2026-10-15 — VSBCloud-Code-App-Skeleton/vsbcode removed entirely.
+Moved to skeleton-app/<same path> (no copy elsewhere):
+  CLAUDE.md
+  package.json
+  README.md
+  src/App.tsx
+  src/components/AppHeader.tsx
+  src/components/AppShell.tsx
+  src/components/VsbLogo.tsx
+  src/data/projectQueries.test.ts
+  src/data/projectQueries.ts
+  src/domain/approval.test.ts
+  src/domain/approval.ts
+  src/main.tsx
+  src/PowerProvider.tsx
+  src/styles/global.css
+Deleted (the app holds them, or config/assets not needed):
+  .gitignore
+  index.html
+  package-lock.json
+  power.config.json
+  public/favicon.png
+  scenario-last.png
+  src/assets/vsb-logo.svg
+  src/domain/dates.test.ts
+  src/domain/dates.ts
+  src/domain/numeric.test.ts
+  src/domain/numeric.ts
+  src/domain/session.test.ts
+  src/domain/session.ts
+  src/domain/technology.test.ts
+  src/domain/technology.ts
+  src/domain/yieldStats.test.ts
+  src/domain/yieldStats.ts
+  src/test/setup.ts
+  src/vite-env.d.ts
+  tsconfig.json
+  vite.config.ts
+
+2026-10-15: VSBCloud-Code-App-Skeleton/ removed entirely.
+  CHANGES-1.21.753.md moved to skeleton-reference/CHANGES-1.21.753.md
+  VSBCloud-Harness-Plan.md, VSBCloud-Test-Evidence-Report.md, CHANGES-FROM-INPUT.md deleted (byte-identical copies in ProjectCosts-CodeApp/docs/)

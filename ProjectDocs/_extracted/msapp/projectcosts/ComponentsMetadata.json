@@ -1,0 +1,81 @@
+{
+  "Components": [
+    {
+      "Name": "cmp_ReportErrorRightPanel",
+      "TemplateName": "d3a52ca0b01642b48f2328d08c536830",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Header",
+      "TemplateName": "6e36fc2dd31d4cd8aa9a9bdfd96dc5b2",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_PopUp_Loading",
+      "TemplateName": "1b8c67aa0f3748cda6186444e034b7cd",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_PopUp_Confirmation",
+      "TemplateName": "53c5a338d8a247edbc207132ced98945",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Left_Navigation",
+      "TemplateName": "Component1Template",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "fn_Numeric",
+      "TemplateName": "8f907fc7d18b41bc8eca827920c2ed1c",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "fn_Percentage",
+      "TemplateName": "f73bbf688a1a440eb722757d4e459f7a",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_PopUp_Loading_1",
+      "TemplateName": "13c57555d6ee476d899460e44fe0d2bc",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Information_Button_PCF",
+      "TemplateName": "3a62dc8fd24345509e1e8602fb00652b",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_PopUp_Confirmation_2",
+      "TemplateName": "bbfdd509bbb9424eb1dcb11d1882e6aa",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_PopUp_Confirmation_New",
+      "TemplateName": "61a38725e9214ef49aef5a30b8f5283c",
+      "Description": "",
+      "AllowCustomization": true,
+      "AllowAccessToGlobals": true
+    }
+  ]
+}

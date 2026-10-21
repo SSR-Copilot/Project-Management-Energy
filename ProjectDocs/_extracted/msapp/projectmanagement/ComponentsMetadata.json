@@ -1,0 +1,164 @@
+{
+  "Components": [
+    {
+      "Name": "cmp_PopUp_Information",
+      "TemplateName": "eab8aa784ca349acae9116d1f34f24fa",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_PopUp_Confirmation",
+      "TemplateName": "0fde4446c3d149ddb7eddb193007e202",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "Header",
+      "TemplateName": "d124bb71e69f49da951fc6432cc56feb",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_User_Badge",
+      "TemplateName": "12002b2aedee447692b29ab8bf7e5246",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "ExpandMenu",
+      "TemplateName": "f311eeb101d441d78432d731488ef839",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "Dialog",
+      "TemplateName": "84afd81de2c64daabbabd866cd9a3dd5",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "fn_Common",
+      "TemplateName": "7079554470d2408591f8e15381fde51e",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_PopUp_Loading",
+      "TemplateName": "bb7592a886ef426ba6dd35630c1c0857",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "fn_Numeric",
+      "TemplateName": "79d608430aeb414496a98124193d02a0",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Information_Button",
+      "TemplateName": "b45a0c28aa1f4aadb5c5f7d03e4847db",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_ReportErrorRightPanel",
+      "TemplateName": "a667ca8e831d45708a0b3bb322afa65d",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "Panel",
+      "TemplateName": "d1f2a5a18f8743cb9fb035930220473c",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_Header",
+      "TemplateName": "f7dc4007f5f34b65acbd2a066715e0ef",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Left_Navigation",
+      "TemplateName": "Component1Template",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_Spinner",
+      "TemplateName": "920d14d46ec7488cae8780b6129b93b1",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_Project_States",
+      "TemplateName": "139c54b9b4c040ccb95e78d484d6eeae",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "fn_Calculate_P75_P90",
+      "TemplateName": "9e545b5983764a6b84b473693d926e77",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": false
+    },
+    {
+      "Name": "cmp_PopUp_Confirmation_2",
+      "TemplateName": "cbc0338edd424f95939ee4b5f9c3f30d",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "cmp_NestedCountryPickerColumn",
+      "TemplateName": "fc1f9fea509d42d9a2be24c1bbbe6eb3",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    },
+    {
+      "Name": "fn_Numeric_With_Separtors",
+      "TemplateName": "788708297f104ac09c6a495e81c2991d",
+      "Description": "",
+      "AllowCustomization": true,
+      "IsWidget": false,
+      "AllowAccessToGlobals": true
+    }
+  ]
+}

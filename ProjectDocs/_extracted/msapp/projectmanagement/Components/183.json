@@ -1,0 +1,399 @@
+{
+  "TopParent": {
+    "Type": "ControlInfo",
+    "Name": "fn_Calculate_P75_P90",
+    "Template": {
+      "Id": "http://microsoft.com/appmagic/Component",
+      "Version": "1.0",
+      "LastModifiedTimestamp": "639244487785143018",
+      "Name": "9e545b5983764a6b84b473693d926e77",
+      "FirstParty": true,
+      "IsPremiumPcfControl": false,
+      "IsCustomGroupControlTemplate": false,
+      "CustomGroupControlTemplateName": "",
+      "IsComponentDefinition": true,
+      "CustomProperties": [
+        {
+          "Name": "p75",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "String",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "183",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "p75_p50",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "p50",
+                  "ParentPropertyName": "p75",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "p75_p50",
+                "Tooltip": "A parameter"
+              },
+              {
+                "Name": "p75_Uncertainty",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "Uncertainty",
+                  "ParentPropertyName": "p75",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "p75_Uncertainty",
+                "Tooltip": "A parameter"
+              }
+            ]
+          },
+          "DisplayName": "p75",
+          "Tooltip": "A custom property"
+        },
+        {
+          "Name": "p90",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "String",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "183",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "p90_p50",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "p50",
+                  "ParentPropertyName": "p90",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "p90_p50",
+                "Tooltip": "A parameter"
+              },
+              {
+                "Name": "p90_Uncertainty",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "Uncertainty",
+                  "ParentPropertyName": "p90",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "p90_Uncertainty",
+                "Tooltip": "A parameter"
+              }
+            ]
+          },
+          "DisplayName": "p90",
+          "Tooltip": "A custom property"
+        },
+        {
+          "Name": "calculateUncertainty",
+          "Category": 0,
+          "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+          "PropertyDataTypeKey": "String",
+          "Hidden": true,
+          "PropertyScopeKey": {
+            "PropertyScopeRuleNamespaceKey": "183",
+            "PropertyScopeRulesKey": [
+              {
+                "Name": "calculateUncertainty_p50",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "p50",
+                  "ParentPropertyName": "calculateUncertainty",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 1,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": true,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "calculateUncertainty_p50",
+                "Tooltip": "A parameter"
+              },
+              {
+                "Name": "calculateUncertainty_p90",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "p90",
+                  "ParentPropertyName": "calculateUncertainty",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 2,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": false,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "calculateUncertainty_p90",
+                "Tooltip": "A parameter"
+              },
+              {
+                "Name": "calculateUncertainty_p75",
+                "Type": "{\"Version\":\"1.349\",\"Type\":{\"Name\":\"Root\",\"Kind\":\"String\",\"EnumString\":\"\",\"Type\":[]}}",
+                "PropertyDataTypeKey": "String",
+                "ScopeVariableInfo": {
+                  "ScopeVariableName": "p75",
+                  "ParentPropertyName": "calculateUncertainty",
+                  "ResolveSelects": false,
+                  "ResolveExpands": false,
+                  "DefaultRule": "\"Text\"",
+                  "Description": "A parameter",
+                  "ParameterIndex": 3,
+                  "ScopePropertyDataType": 6,
+                  "IsRequired": false,
+                  "DependencyType": "New"
+                },
+                "DisplayName": "calculateUncertainty_p75",
+                "Tooltip": "A parameter"
+              }
+            ]
+          },
+          "DisplayName": "calculateUncertainty",
+          "Tooltip": "A custom property"
+        }
+      ],
+      "ComponentType": "CanvasComponent",
+      "OverridableProperties": {}
+    },
+    "Index": 36,
+    "PublishOrderIndex": 0,
+    "VariantName": "",
+    "LayoutName": "",
+    "MetaDataIDKey": "",
+    "PersistMetaDataIDKey": false,
+    "IsFromScreenLayout": false,
+    "StyleName": "",
+    "Parent": "",
+    "IsDataControl": false,
+    "AllowAccessToGlobals": false,
+    "OptimizeForDevices": "Off",
+    "IsGroupControl": false,
+    "IsAutoGenerated": false,
+    "Rules": [
+      {
+        "Property": "p75_p50",
+        "Category": "Data",
+        "InvariantScript": "\"0\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "p75_Uncertainty",
+        "Category": "Data",
+        "InvariantScript": "\"0\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "p75",
+        "Category": "Data",
+        "InvariantScript": "If(\n    And(\n        IsNumeric(p50),\n        IsNumeric(Uncertainty)\n    ),\n    Round(\n        Value(p50) + (-0.674490 * (Value(p50) * Value(Uncertainty))),\n        0\n    ),\n    -1\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "p90_p50",
+        "Category": "Data",
+        "InvariantScript": "\"0\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "p90_Uncertainty",
+        "Category": "Data",
+        "InvariantScript": "\"0\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "p90",
+        "Category": "Data",
+        "InvariantScript": "If(\n    And(\n        IsNumeric(p50),\n        IsNumeric(Uncertainty)\n    ),\n    Round(\n        Value(p50) + (-1.281551 * (Value(p50) * Value(Uncertainty))),\n        0\n    ),\n    -1\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "calculateUncertainty_p50",
+        "Category": "Data",
+        "InvariantScript": "\"1000\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "calculateUncertainty_p90",
+        "Category": "Data",
+        "InvariantScript": "\"500\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "calculateUncertainty_p75",
+        "Category": "Data",
+        "InvariantScript": "\"600\"",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "calculateUncertainty",
+        "Category": "Data",
+        "InvariantScript": "If(\n    Not(IsBlank(p75)),\n    Round(\n        (Value(p50) - Value(p75) / Value(p50)*Value(0.674490)),\n        1\n    ),\n    Not(IsBlank(p90)),\n    Round(\n        (Value(p50) - Value(p90) / Value(p50)*Value(1.281551)),\n        1\n    )\n)",
+        "RuleProviderType": "System"
+      },
+      {
+        "Property": "ZIndex",
+        "Category": "Design",
+        "InvariantScript": "1",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Y",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "X",
+        "Category": "Design",
+        "InvariantScript": "0",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Width",
+        "Category": "Design",
+        "InvariantScript": "640",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Height",
+        "Category": "Design",
+        "InvariantScript": "640",
+        "RuleProviderType": "Unknown"
+      },
+      {
+        "Property": "Fill",
+        "Category": "Design",
+        "InvariantScript": "RGBA(0, 0, 0, 0)",
+        "RuleProviderType": "System"
+      }
+    ],
+    "ControlPropertyState": [
+      "Fill",
+      "Height",
+      "Width",
+      "X",
+      "Y",
+      "ZIndex",
+      {
+        "InvariantPropertyName": "p75_p50",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "p75_Uncertainty",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "p75",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "p90_p50",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "p90_Uncertainty",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "p90",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "calculateUncertainty_p50",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "calculateUncertainty_p90",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "calculateUncertainty_p75",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      },
+      {
+        "InvariantPropertyName": "calculateUncertainty",
+        "AutoRuleBindingEnabled": false,
+        "AutoRuleBindingString": "\"Text\"",
+        "NameMapSourceSchema": "?",
+        "IsLockable": false,
+        "AFDDataSourceName": ""
+      }
+    ],
+    "IsLocked": false,
+    "ControlUniqueId": "183",
+    "Children": []
+  }
+}

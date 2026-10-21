@@ -1,0 +1,428 @@
+/* Visual baseline: ProjectDocs/Existing Solution/UI Screenshots, 1919 x ~1018.
+   Shared chrome and form styling is owned here; the PCF owns its own grid CSS. */
+.canvas-shell { background: #ebebeb; padding: 0 5px 4px; gap: 4px; color: #000; }
+/* Right padding clears the AVATAR, not the pill: the avatar is 48 px and hangs off the pill's
+   right edge, so an 8 px gutter left it flush against the window (and dragged a page-level
+   horizontal scrollbar with it). The canvas leaves a visible margin after it. */
+/* `con_cmp_Header` is `height: 74px`, white, `border-radius: 4px` and the same shadow the
+   rail carries — `padding: 0`, `gap: 0`. */
+.canvas-shell > header { height: 74px; min-height: 74px; padding: 0 20px 0 5px; gap: 0; border: 0; border-radius: 4px; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; flex-shrink: 0; }
+/* `con_cmp_Header_Logo` is 210 wide over a 60 x 66 image box. 204 here, not 210, so the
+   approval separator that follows it lands on the rail's right edge: the rail is 200 wide
+   inside the shell's 5 px padding with a 4 px gap after it, so the content below starts at
+   209 — and 5 + 204 is 209. */
+.canvas-brand { width: 204px; height: 74px; gap: 14px; }
+.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 1.2; }
+/* 8pt at `font-weight: lighter`, in pure black — not #111 at 10px semibold-ish. */
+.canvas-brand-version { color: #000; font-size: 10.67px; font-weight: 300; line-height: 1.2; }
+.canvas-project-suite { display: flex; align-items: center; gap: 6px; min-width: 250px; flex: 1; }
+/* `rec_cmp_Header_Project_State` — 4 x 70, filled from `gblTableApprovalStateColors` by the
+   project's approval state, with that state as its tooltip. White when it matches none. */
+.canvas-project-state { flex-shrink: 0; width: 4px; height: 70px; }
+.canvas-project-title { padding: 0 8px; max-width: none; font-size: 20px; line-height: 28px; }
+/* `overflow: visible` is load-bearing: Fluent's Button root clips to its own rounded box,
+   and the avatar is positioned to stand proud of the pill's right edge and above its top. */
+/* Size and padding are in `styles.userPill` (AppHeader.tsx), where they beat Fluent's Button
+   base. `margin-right` is the clearance the avatar needs: it ends 28 px past the pill, and the
+   canvas leaves 2 px between it and the right edge of `con_cmp_Header_UserImage`. */
+/* `.canvas-user-pill` moved into `AppHeader.tsx` `userPill` (Griffel drops this class on Fluent Button). */
+.canvas-user-name { display: block; box-sizing: content-box; width: 165px; margin-left: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+/* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
+   `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
+   `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */
+.canvas-user-avatar { position: absolute; right: -28px; top: -8px; height: 47px; width: 47px; border: 2px solid #0b0b0b; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
+.canvas-user-avatar svg { width: 40px; height: 40px; color: #a6a6a6; }
+/* `shp_cmp_In_Image_UserBorder`'s ellipse is filled WHITE and the photo is drawn over it, so
+   the grey only belongs to the silhouette fallback. `object-fit: contain` is the canvas'
+   own choice — it letterboxes a non-square photo rather than cropping it. */
+.canvas-user-avatar img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+.canvas-shell > div { gap: 4px; }
+.canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }
+/* PM and Admin screens are long forms: the content area scrolls vertically, or everything below
+   the fold is cut off (PO report, 20 Oct 2026). Cost screens keep `overflow: hidden` above
+   because they own their inner scroll regions. */
+.canvas-shell main.canvas-main-scroll { overflow-x: hidden; overflow-y: auto; }
+.canvas-overview-shell main { border: 0; border-radius: 0; }
+.canvas-shell footer { min-height: 28px; height: 28px; background: #fff; border: 0; padding: 0 4px; }
+/* `con_Costs_LeftNavigationMenu` is `width: 200px`, white, `border-radius: 4px` and a SHADOW
+   — `rgba(0,0,0,.14) 0 1px 2px, rgba(0,0,0,.12) 0 0 2px` — with no border at all. Its inner
+   `con_Left_Navigation` is a vertical autolayout with `padding: 4px 0` and `gap: 4px`. */
+.canvas-rail { border: 0; border-radius: 4px; padding: 4px 0; background: #fff; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
+/* Rail blue is the VSB brand #006eb9 (palette.themePrimary), not Fluent's #0078d4 —
+   sampled off the hamburger, the selected-item left border and the rail icons in
+   `UI Screenshots/Cost App Landing Screen - Devex Capex Screen.png`. */
+/* `con_Left_Navigation_Header` is 45 high and holds `icon_Left_Navigation_Expand`, a 28 box
+   with `padding: 0 6px` around a 16 x 28 hamburger in `rgba(0,110,185,1)`. */
+.canvas-rail-header { flex-shrink: 0; display: flex; align-items: center; height: 43px; padding: 0 6px; }
+.canvas-rail-header button { min-width: 28px; width: 28px; height: 28px; padding: 0; border-radius: 0; color: #006eb9; }
+/* `rec_Left_Navigation_Expanded_Delimiter` — its OWN 200 x 2 rectangle at `top: 42`, so it
+   spans the whole nav rather than just the hamburger, in `rgba(15,108,189,1)` = #0f6cbd,
+   Fluent's brand blue and NOT the VSB #006eb9 the glyph itself uses. */
+.canvas-rail-divider { flex-shrink: 0; display: block; height: 2px; background: #0f6cbd; margin-bottom: 6px; }
+.canvas-rail a { border-left-width: 2px; padding: 8px 6px; min-height: 44px; color: #111; font-size: 14px; }
+.canvas-rail a svg { color: #006eb9; flex-shrink: 0; }
+.canvas-rail a[aria-current="page"] { border-left-color: #006eb9; background: #edebe9; color: #111; font-weight: 600; }
+.canvas-rail a span { white-space: normal; line-height: 18px; }
+.canvas-rail > div a { padding-left: 20px; }
+.canvas-rail > div > button { height: 43px; padding-left: 8px; color: #111; font-size: 14px; font-weight: 400; }
+/* ── Shell parity, Project Management + admin routes (20 Oct 2026, D35) ────────────────────
+   The PM app's `cmp_Header` and `cmp_Left_Navigation`. Scoped to `.canvas-pm-header` (the
+   header when it carries the back arrow) and `.canvas-rail-pm`, so the Cost shell is untouched. */
+/* `Image3` — 35 x 35, then `con_cmp_Header_SuitBar`'s `LayoutGap: =25` before the project. */
+.canvas-header-back { flex-shrink: 0; width: 35px; height: 35px; padding: 0; margin: 0 25px 0 6px; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; }
+.canvas-header-back:hover svg rect:first-child { fill: #cce2f1; }
+.canvas-header-back:focus-visible { outline: 2px solid #006eb9; outline-offset: 2px; border-radius: 4px; }
+/* `Container7` — 4 wide, `Height: =Parent.Height/2` of the 70-high suite bar. */
+.canvas-pm-header .canvas-project-suite { gap: 0; }
+.canvas-pm-header .canvas-project-state { height: 35px; }
+/* `con_cmp_Header_HeaderText` at x 20 (16 after the 4 px bar); status line 4 px into its foot. */
+.canvas-project-heading { display: flex; flex-direction: column; min-width: 0; padding-left: 16px; }
+.canvas-pm-project-title { padding: 0; font-size: 24px; line-height: 32px; font-weight: 600; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-project-status { display: inline-flex; align-items: center; gap: 4px; margin-top: -2px; }
+.canvas-project-status-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
+.canvas-project-status-text { color: rgb(50, 49, 48); font-size: 13.33px; font-weight: 300; line-height: 18px; }
+/* `pcf_Left_Navigation_Menu` first, `con_Left_Navigation_Header` (45 high) pinned below it. */
+.canvas-rail-pm { overflow-x: hidden; }
+.canvas-rail-pm a { white-space: nowrap; }
+.canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
+.canvas-rail-collapse-delimiter { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #f3f2f1; }
+.canvas-rail-pm .canvas-rail-collapse > button { width: 100%; height: 45px; justify-content: flex-start; padding: 0 0 0 7px; border-radius: 0; gap: 0; min-width: 0; color: #2c2c2c; font-size: 14.67px; font-weight: 400; }
+.canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon { width: 28px; height: 28px; display: grid; place-items: center; }
+.canvas-rail-collapse-label { padding-left: 12px; white-space: nowrap; overflow: hidden; }
+/* Project Overview. Layout, column widths, row striping and the selected row are owned by the
+   screen's own styles (`features/pm/project-main/Screen.tsx`); only the control skin and the
+   grid's type sizes live here. The rules that used to sit here as well (a second, opposite
+   row stripe, `nth-child` column widths, a 90 % table width and a border on whichever child
+   came first) fought those styles and are gone. */
+.canvas-project-overview .fui-Input, .canvas-project-overview .fui-Dropdown { background: #f4f4f4; border: 0; border-radius: 3px; min-height: 32px; }
+.canvas-project-overview .fui-TableHeaderCell { font-size: 13px; font-weight: 600; height: 40px; border-bottom: 1px solid #eee; }
+/* `pcf_..._Filter_ProjectManager` is a PeoplePicker PCF: white with a dark 1 px outline, not
+   the filled grey of the other filter inputs (UI Screenshots/Main Overview Screen.png). */
+.canvas-project-overview .canvas-person .fui-Input { background: #fff; border: 1px solid #323130; border-radius: 0; }
+.canvas-project-overview .fui-TableCell { font-size: 12px; height: 38px; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Fluent's overlay drawer carries a 1-px transparent left border; the white surface showed
+   through it as a white strip down the left of the blue header (PO, 21 Oct 2026). */
+.canvas-panel.fui-OverlayDrawer { border-left-width: 0; }
+.canvas-panel .canvas-panel-header { padding: 10px 20px; height: 48px; background: #006eb9; color: white; flex-shrink: 0; }
+.canvas-panel-header h2 { font-size: 18px; line-height: 26px; color: white; }
+.canvas-panel-header button { color: white; }
+/* The ✕ on every right panel (`FormPanel`). Fluent's transparent button turns its icon brand-blue
+   on hover — the same blue as this header — so the ✕ vanished (PO, 20 Oct 2026). It stays white
+   and gets a translucent white highlight instead, on hover, press and keyboard focus. */
+.canvas-panel-header button:hover,
+.canvas-panel-header button:hover:active,
+.canvas-panel-header button:focus-visible { color: white; background-color: rgba(255, 255, 255, 0.2); }
+.canvas-panel-header button:hover .fui-Button__icon,
+.canvas-panel-header button:hover:active .fui-Button__icon,
+.canvas-panel-header button:focus-visible .fui-Button__icon { color: white; }
+.canvas-panel-header button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+.canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; container-type: inline-size; }
+/* A panel scrolls VERTICALLY. Anything wide enough to scroll it sideways is a layout bug in the
+   field that is too wide, not something the reader should have to drag — the comments card is
+   the one that kept doing it. Its own children may still scroll (tables opt in explicitly). */
+.canvas-panel .canvas-panel-body { overflow-x: hidden; }
+.canvas-panel .canvas-panel-body > * { min-width: 0; max-width: 100%; }
+/* `con_GeneratorData_RightPanel_Form_PvModuleType_Buttons_2` (`CapexScreenCode.txt:17323-17345`):
+   Height 50, LayoutGap 10, PaddingRight 20, LayoutJustifyContent.End. Measured on
+   `Cost App - Edit Panel - Popup Design…png`: the footer runs y 966-1016 (50 px) with its
+   32 px buttons 10 px apart and 20 px clear of the panel's right edge. */
+.canvas-panel-footer { flex-shrink: 0; display: flex; width: 100%; align-items: center; justify-content: flex-end; gap: 10px; height: 50px; padding: 9px 20px; border-top: 1px solid #f0f0f0; }
+/* Save is the first child; the auto margin carries it and everything after it to the right
+   even where the row itself has not stretched. */
+.canvas-panel-footer > *:first-child { margin-left: auto; }
+.canvas-panel-footer button { min-width: 96px; border-radius: 2px; }
+.canvas-panel :is(.fui-Input,.fui-Dropdown,.fui-Textarea) { background: #f4f4f4; border: 0; border-radius: 3px; }
+.canvas-panel .fui-Field label { font-weight: 400; }
+.canvas-panel .fui-Field { min-width: 0; }
+.canvas-panel .fui-RadioGroup { flex-direction: column; }
+.canvas-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; min-width: 0; }
+/* Every panel field label is a `Text@0.0.51` with `Weight: ='TextCanvas.Weight'.Semibold` and
+   no `Size` override, i.e. the modern Text control's 14 px default
+   (`lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_12`, CapexScreenCode.txt:10345).
+   Measured on the Edit-panel screenshot: labels, radio options and input text are all 14 px
+   #242424; the red `*` sits to the LEFT of the label. */
+.canvas-field > span:first-child,
+.canvas-radio-group legend > span { font-weight: 600; color: #242424; }
+/* The red `*` marker — `Color: =gblAppColors.Error`, and `gblAppColors.Error` is
+   `palette.akzent5` = #d20532 (OnStart.txt:455), NOT `palette.Error`. Sampled off the
+   screenshot at #d20532. `legend > span` is the radio-group form (Distribution Scheme, Equal
+   Distribution, Cost Paid By); `.canvas-field > span` is every boxed field. */
+.canvas-field > span[data-required="true"]::before,
+.canvas-radio-group legend > span[data-required="true"]::before { content: '* '; color: #d20532; }
+.canvas-field > input, .canvas-field > select, .canvas-field > textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
+.canvas-field > textarea { height: 64px; resize: vertical; }
+.canvas-field > input:focus, .canvas-field > select:focus, .canvas-field > textarea:focus { outline: 1px solid #0078d4; outline-offset: -1px; }
+/* A Fluent control dropped into a `.canvas-field` still has to fill it. `DatePicker` merges
+   `fui-DatePicker` onto an `Input` root, so it is that root — not a wrapper — that needs the
+   width; its calendar glyph is a `contentAfter` and lays itself out inside. */
+.canvas-field > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { width: 100%; min-width: 0; }
+/* A `DisplayMode.View` TextInput keeps the editable fill and text colour in the canvas —
+   `txt_…_CostsUntilClosingDate_Plan` and `…_TotalCosts_Calculated` in the Edit-panel
+   screenshot are the same #f4f4f4/#242424 as the fields above them. */
+.canvas-field > input:disabled, .canvas-field > textarea:disabled { background: #f4f4f4; color: #242424; -webkit-text-fill-color: #242424; opacity: 1; }
+.canvas-inline-fields { display: flex; gap: 20px; }
+.canvas-inline-fields > * { flex: 1; min-width: 0; }
+.canvas-radio-group { border: 0; margin: 0; padding: 0; font-size: 14px; }
+.canvas-radio-group legend { margin-bottom: 4px; }
+.canvas-radio-group label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; color: #242424; font-weight: 400; }
+.canvas-radio-group input { accent-color: #006eb9; width: 16px; height: 16px; }
+.canvas-cost-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.canvas-capex-tabs { display: flex; flex-shrink: 0; height: 50px; border-bottom: 1px solid #f1f1f1; overflow-x: auto; padding: 0 14px; gap: 26px; }
+/* Tab labels: 14px, #424242 idle / #242424 + semibold when selected — without an explicit
+   colour they inherited FluentProvider's `colorNeutralForeground1`, which vsbTheme pins to
+   the canvas palette's `neutralPrimary` (#000000), i.e. noticeably darker than the canvas.
+   The 3px indicator is Fluent's own brand stroke #0f6cbd in the canvas screenshots (the
+   canvas app used a stock Fluent TabList there), not the VSB #006eb9 used for chrome. */
+.canvas-capex-tabs button { position: relative; border: 0; background: white; font: inherit; font-size: 14px; color: #424242; white-space: nowrap; padding: 0 2px; cursor: pointer; }
+.canvas-capex-tabs button[aria-selected="true"] { font-weight: 600; color: #242424; }
+.canvas-capex-tabs button[aria-selected="true"]::after { content: ''; height: 3px; background: #0f6cbd; position: absolute; bottom: 1px; left: 0; right: 0; border-radius: 2px; }
+/* Left 15 px: "Add Cost from Table"'s `+` sits over the PCF grid's first column caption (the
+   host's 5 px margin + the grid's 10 px cell padding), with the first button's own inset
+   removed and its glyph pulled onto the edge (PO, 21 Oct 2026). Its right padding — the 32 px
+   to the first switch — is unchanged. */
+.canvas-cost-toolbar { display: flex; align-items: center; gap: 20px; flex-shrink: 0; min-height: 50px; padding: 0 18px 0 15px; overflow-x: auto; white-space: nowrap; }
+.canvas-cost-toolbar > button:first-child { padding-left: 0; min-width: 0; margin-left: -3px; }
+/* "Add Cost from Table" is semibold VSB blue in the canvas, not regular Fluent blue. */
+.canvas-cost-toolbar button { color: #006eb9; font-size: 14px; font-weight: 600; }
+/* The two FILTERS — "Show All Cost" and the year — are plain dark text, not commands. The blue
+   belongs to the toolbar's command buttons and the year arrows either side of the picker, so
+   the rule above must not reach the dropdown triggers. */
+.canvas-cost-toolbar .fui-Dropdown,
+.canvas-cost-toolbar .fui-Dropdown button { color: #242424; font-weight: 400; }
+/* Switch labels and the two selects are 14px/#242424 in the canvas, not 13px. */
+.canvas-cost-toolbar .fui-Switch label { font-size: 14px; color: #242424; }
+.canvas-cost-toolbar select { height: 30px; background: white; border: 1px solid #ccc; border-radius: 2px; font-size: 14px; color: #242424; padding: 0 12px; }
+.canvas-capex-summary { margin: 20px 10px; width: 360px; max-width: calc(100% - 20px); border-collapse: collapse; font-size: 13px; }
+/* Both columns are semibold in `Cost App Landing Screen - Devex Capex Screen.png` — the summary
+   reads as a block of headings, not as body text with a bold total. */
+.canvas-capex-summary td { padding: 9px 12px; border-bottom: 1px solid #eee; background: #fcfefe; font-weight: 600; color: #242424; }
+.canvas-capex-summary td:last-child { text-align: right; white-space: nowrap; border-right: 1px solid #eee; }
+.canvas-capex-summary tr:last-child { border: 1px solid #ddd; }
+.canvas-pcf-host { flex: 1; min-height: 300px; min-width: 0; margin: 0 5px; overflow: hidden; }
+
+/* ---------------------------------------------------------------------------
+   PCF host-cascade compensation.
+
+   `pcf/css/TableConnectedToDataversePCF.css` is a verbatim copy of the control's
+   stylesheet and must stay byte-identical to
+   `ProjectDocs/Existing Solution/PCF Git Repo Clones/DevexCapexSummaryPCF/.../TableConnectedToDataversePCF.css`
+   — so anything the control assumed its Power Apps host provided, but this app does not,
+   is corrected HERE rather than by editing that file.
+
+   Two such assumptions:
+
+   1. line-height. `.pcf-budget-grid` re-declares font-family, font-size and color but NOT
+      line-height, because in Power Apps it inherited `normal`. Under FluentProvider it
+      inherits `typographyStyles.body1` → `--lineHeightBase300` = 20px. That breaks the
+      contract rows: `.pcf-name-block` stacks the name (12px) over the sub-label (10px)
+      with a 1px gap, which is 30px at `normal` and sits centred inside the 40px
+      `.pcf-row-contract td`, but 41px at 20px line-height — so every contract row grew
+      past 40px, the two lines drifted ~4px apart, and the tree-connector elbows (tuned
+      against 38/40/30px rows, see the FRAGILE section of the control CSS) landed wrong.
+      Measured off `UI Screenshots/Cost App - DevexCapex Screen Tab Selected - Showcasing
+      dropdown for three dots clicked on contract.png`: 40px row pitch, name cap-top +9px
+      and sub-label cap-top +25px from the row top — i.e. `normal`.
+
+   2. font-family on the body-level menus. The control mounts its popups on document.body
+      to escape the scroll container. `.pcf-add-dropdown` and every `.pcf-month-dropdown-*`
+      rule names 'Segoe UI' explicitly, but `.pcf-dropdown` (the contract ••• menu) does
+      not and `.pcf-dropdown-item` says `font-family: inherit` — which resolved to Power
+      Apps' body font there and to the UA serif default here. That is the Edit / Comments /
+      Delete menu the screenshot shows in Segoe UI. `body` now carries the app stack (see
+      styles/global.css); this pins the menu to the same 'Segoe UI' its siblings use, so
+      the whole grid stays on one typeface.
+   --------------------------------------------------------------------------- */
+.canvas-pcf-host, .pcf-dropdown, .pcf-add-dropdown, .pcf-month-dropdown, .pcf-comment-tooltip-floating { line-height: normal; }
+.pcf-dropdown { font-family: 'Segoe UI', sans-serif; }
+.canvas-periods { overflow: auto; flex: 1; padding: 10px 8px 0 0; }
+.canvas-accordion { border: 1px solid #ddd; border-radius: 3px; box-shadow: 0 1px 1px #ddd; }
+.canvas-accordion > summary { list-style: none; display: flex; justify-content: space-between; padding: 12px 20px; min-height: 42px; cursor: pointer; background: #fcfefe; font-size: 16px; }
+.canvas-accordion > summary::after { content: '⌄'; color: #0078d4; }
+.canvas-accordion[open] > summary::after { content: '⌃'; }
+.canvas-period-body { min-height: 110px; }
+.canvas-period-table-wrap { overflow: auto; padding: 0 10px; }
+.canvas-period-table { border-collapse: collapse; min-width: 1800px; width: 100%; font-size: 12px; }
+.canvas-period-table th { font-weight: 600; text-align: left; height: 42px; white-space: nowrap; font-size: 13px; padding: 0 10px; }
+.canvas-period-table td { height: 30px; padding: 0 10px; white-space: nowrap; }
+.canvas-period-table td:nth-child(n+7) { text-align: right; }
+.canvas-period-table tr[aria-selected="true"] { background: #e1dfdd; }
+.canvas-period-table .standard { color: #006eb9; font-style: italic; }
+.canvas-sheet-dialog { width: 90vw !important; max-width: 90vw !important; height: 90vh; max-height: 90vh; padding: 0 !important; display: flex; flex-direction: column; border-radius: 3px; }
+.canvas-sheet-title { display: flex; align-items: center; justify-content: space-between; min-height: 42px; background: #006eb9; color: white; padding: 0 20px; font-size: 16px; font-weight: 600; }
+.canvas-sheet-title button { color: white; }
+.canvas-sheet-scroll { flex: 1; overflow: auto; margin: 24px 18px 12px; }
+.canvas-sheet { border-collapse: collapse; font-size: 13px; }
+.canvas-sheet th, .canvas-sheet td { border: 1px solid #e6e6e6; height: 28px; min-width: 84px; padding: 0 5px; white-space: nowrap; }
+.canvas-sheet thead tr:first-child th, .canvas-sheet .row-number { background: #f4f4f4; color: #8b949e; font-weight: 400; text-align: center; }
+.canvas-sheet th:nth-child(4) { min-width: 300px; }
+.canvas-sheet .account-row { background: #d3d3d3; }
+.canvas-sheet input, .canvas-sheet select { width: 100%; min-width: 74px; height: 26px; font: inherit; border: 0; background: transparent; }
+.canvas-sheet input:focus { outline: 2px solid #0078d4; background: white; }
+.canvas-sheet tr[aria-selected="true"] { outline: 1px solid #0078d4; }
+.canvas-sheet-footer { height: 68px; padding: 12px 20px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; }
+.canvas-sheet-footer span { margin-right: auto; font-size: 13px; }
+.canvas-error { color: #a4262c; padding: 8px 20px; font-size: 13px; }
+@media (max-width: 900px) { .canvas-panel-wide { min-width: min(660px, 100vw); } }
+
+/* Conditional validation message under a panel field (Add/Edit Period, Add/Edit Costs). */
+/* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
+.canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
+.canvas-field[data-invalid] > input, .canvas-field[data-invalid] > select,
+.canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; outline-offset: -1px; }
+
+/* ===========================================================================
+   Contracts screen — `Src/Contracts Screen.pa.yaml`.
+
+   Geometry is transcribed from the named controls and cross-checked against
+   `UI Screenshots/Cost App - Contracts Tab Selected - Expanded Contract.png`
+   (1919 x 1018) and `…Contract Edit Add Panel Open[ - Expanded Devex Capex
+   Account In panel].png`.
+   =========================================================================== */
+
+/* `con_Contracts_Content` — a vertical autolayout, `PaddingLeft: =20`, `PaddingRight: =10`.
+   Measured: the content area starts at x 211 and the first card's stripe at x 231. */
+.canvas-contract-screen { display: flex; flex-direction: column; min-width: 0; max-width: 100%; overflow-x: hidden; flex: 1; min-height: 0; padding: 0 10px 0 20px; gap: 4px; }
+/* `gal_Contracts_List` — `Width: =Parent.Width-20`, cards `Parent.Width-10`. */
+.canvas-contract-list { overflow: auto; flex: 1; padding: 0 10px 10px 0; }
+
+/* `con_Contracts_List_Card` — `Fill: =white`, `BorderStyle: =BorderStyle.None`. */
+.canvas-contract-card { background: #fff; }
+
+/* `con_Contracts_List_CardHeader` — `Height: =42`, `Fill: =ColorValue("#fdffff")`. */
+.canvas-contract-head { position: relative; display: flex; align-items: center; height: 42px; background: #fdffff; padding-left: 10px; }
+/* `rec_Contracts_List_CardHeader_Type` — `Width: =3`, `Height: =Parent.Height`, no X, so it
+   sits hard against the card's left edge rather than inside the content flow. */
+.canvas-contract-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--contract-type, transparent); }
+/* `shp_Contracts_List_CardHeader_BottomLine` — `Visible: =ThisItem.IsFolded`,
+   `Fill: =gblAppStyles.Divider.Color` = palette.Grayscale20. */
+.canvas-contract-card:not([data-open="true"]) .canvas-contract-head { border-bottom: 1px solid #e3e3e3; }
+/* `img_Contracts_List_CardHeaderRadioSelection` — 18 px at `X: =10`. */
+.canvas-contract-head > input[type="radio"] { accent-color: #006eb9; width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+/* `lbl_Contracts_List_CardHeader_Description` at `X: =36`; Semibold only while selected. */
+.canvas-contract-title { flex: 1; min-width: 0; height: 100%; margin-left: 8px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-contract-card[data-selected="true"] .canvas-contract-title { font-weight: 600; }
+/* `ico_…_CardHeader_Down` / `_Up` — 20 x 18, `X: =Parent.Width-Self.Width-6`. */
+.canvas-contract-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin-right: 6px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
+
+/* `con_Contracts_List_Card_Body` — `BorderThickness: =1`, `Fill: =white`, +20 of padding. */
+.canvas-contract-body { border: 1px solid #dedede; border-top: 0; padding: 10px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+/*
+ * `con_Contracts_List_Card_Body_Columns` — a horizontal autolayout of FOUR columns with
+ * `LayoutWrap: =true`, each column 320 wide with a 20 gap (measured: the first field box
+ * runs x 251-570, the second column's label starts at 591).
+ */
+.canvas-contract-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 320px)); gap: 10px 20px; }
+/* The card samples a hair lighter than the panel: #f5f5f5 against #f4f4f4 (measured at
+   x 251-570, y 203-234 on the expanded-contract screenshot). */
+.canvas-contract-body .canvas-field > input:disabled { background: #f5f5f5; }
+
+/* The Contracts command bar: `CommandBar` has no inset (21 Oct 2026), so its first icon is
+   placed over the cards' radio (`img_…_CardHeaderRadioSelection`, X 10) by this wrapper. */
+.canvas-contract-commandbar { padding-left: 10px; }
+.canvas-contract-targets-head { display: flex; flex-direction: column; gap: 4px; }
+.canvas-contract-targets-bar { display: flex; align-items: center; }
+.canvas-contract-targets-bar button { color: #006eb9; font-size: 14px; }
+
+/*
+ * `con_Contracts_List_Card_Body_PaymentTargetsHeader` — `Fill: =Grayscale40`, `Height: =34`,
+ * `Period` at `X: =40`; Payment Date 120, % of Total Costs 160 (right), Notes 340. Rows are
+ * `Height: =30`. Both header and gallery are only drawn when there is at least one period.
+ */
+.canvas-contract-targets { border-collapse: collapse; table-layout: fixed; width: min(835px, 100%); font-size: 14px; }
+.canvas-contract-targets th { background: #fafafa; height: 34px; padding: 0 6px; text-align: left; font-weight: 600; color: #242424; }
+.canvas-contract-targets td { height: 30px; padding: 0 6px; color: #242424; }
+/* No tint on a selected row: `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent` and
+   the Contracts screen has no `Fill: =If(...)` at all - the filled radio is the affordance.
+   The wash that was here was ours. */
+.canvas-contract-targets tbody tr { cursor: pointer; }
+.canvas-contract-targets :is(th, td):first-child { width: 40px; }
+.canvas-contract-targets :is(th, td):nth-child(2) { width: 175px; }
+.canvas-contract-targets :is(th, td):nth-child(3) { width: 120px; }
+.canvas-contract-targets :is(th, td):nth-child(4) { width: 160px; }
+.canvas-contract-targets .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.canvas-contract-targets input[type="radio"] { accent-color: #006eb9; width: 16px; height: 16px; margin: 0; }
+
+/* ---------------------------------------------------------------- the panel */
+
+/*
+ * `con_Contracts_RightPanel_NewEdit_Body_Content` — two columns, the right one
+ * `If(Parent.Width >= 800, Parent.Width/2, Parent.Width)`, i.e. an even split above 800 and
+ * stacked below it.
+ */
+.canvas-panel-columns { display: grid; grid-template-columns: max(400px, 33.333%) minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; }
+.canvas-panel-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* Only the form column scrolls; the DevCo tree and Comment stay put beside it. */
+.canvas-panel-column:first-child { overflow-y: auto; overflow-x: hidden; min-height: 0; padding-top: 10px; padding-right: 10px; }
+.canvas-panel-column:last-child { align-self: start; }
+@media (max-width: 899px) {
+  .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .canvas-panel-column:first-child { overflow-y: visible; overflow-x: visible; padding-right: 0; }
+}
+
+/*
+ * `con_Contracts_RightPanel_NewEdit_DevCoCosts.Width` is
+ * `If(Parent.Width >= 800, Parent.Width/2, Parent.Width)` — the split is decided by the
+ * PANEL's width, not the window's. A media query cannot see that (the panel is
+ * `min(960px, 50vw)`), so the body is a container and the columns stack on its inline size,
+ * at the same 800 the canvas uses.
+ */
+@container (max-width: 800px) {
+  .canvas-panel-columns { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .canvas-panel-column:first-child { overflow-y: visible; overflow-x: visible; padding-right: 0; }
+  .canvas-panel-column:last-child { align-self: stretch; }
+}
+
+/* The `{Len}/N` counter on the label line — `Align: =Align.Right`, `Size: =12`. */
+.canvas-field > span[data-counter] { display: flex; align-items: baseline; }
+.canvas-field-counter { margin-left: auto; padding-left: 10px; font-style: normal; font-size: 12px; font-weight: 400; color: #242424; }
+
+/*
+ * `but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_2` — `Icon: =Icon.Reload`,
+ * `Color: =RGBA(0, 120, 212, 1)`, 16 px, `X: =90`, i.e. just right of the `Margin` caption.
+ */
+.canvas-radio-group legend { display: flex; align-items: center; gap: 12px; }
+.canvas-field-reset { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; background: none; cursor: pointer; color: #0078d4; font-size: 16px; }
+.canvas-field-reset:hover:enabled { color: #106ebe; }
+.canvas-field-reset:disabled { color: #e1dfdd; cursor: default; }
+
+/* ------------------------------------------------- the DevCo account picker */
+
+/*
+ * `gal_Contracts_RightPanel_NewEdit_DevCoCosts` — level-1 cards, `TemplateSize: =32`. The
+ * whole list scrolls; the canvas grows the gallery instead, which a panel cannot do.
+ */
+.canvas-devco { background: #fff; }
+.canvas-devco-card { background: #fff; }
+/* `con_…_DevCoCosts_CardHeader` — `Height: =32`, description at `X: =20`. */
+.canvas-devco-head { position: relative; display: flex; align-items: center; height: 32px; padding-left: 20px; }
+/* `rec_…_DevCoCosts_Selected` — a 3 px akzent1 stripe on the row that is unfolded. */
+.canvas-devco-card[data-open="true"] .canvas-devco-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #469bd7; }
+/* `shp_…_DevCoCosts_BottomLine` — `Visible: =ThisItem.IsFolded`. */
+.canvas-devco-card:not([data-open="true"]) .canvas-devco-head { border-bottom: 1px solid #e3e3e3; }
+.canvas-devco-title { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* `img_Contracts_DevCoCosts_ParentCheckbox` — 32 wide at `X: =Parent.Width-Self.Width-40`,
+   so the checkbox column clears the 20 px chevron and its 6 px gutter. */
+.canvas-devco-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; }
+.canvas-devco-check:disabled { cursor: default; }
+/* `ico_…_DevCoCosts_Down` / `_Up` — 20 x 18 at `X: =Parent.Width-Self.Width-6`. The 14 on
+   its left is what puts the checkbox before it at `Parent.Width-32-40`. */
+.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin: 0 6px 0 14px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
+
+/* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, inset `X: =10`. It has no
+   height cap in the canvas; the panel column it sits in is what bounds it, so one is set
+   here rather than letting a 40-account group push Comment off the panel. */
+.canvas-devco-leaves { max-height: 330px; overflow-y: auto; padding-bottom: 10px; border-bottom: 1px solid #e3e3e3; }
+/* `con_…_CostssRow` — `Height: =30`; name at `X: =40` of the inset gallery, a 120-wide
+   right-aligned total, then the checkbox, and finally the 40 px the header spends on its
+   chevron so the two checkbox columns line up. */
+.canvas-devco-row { display: flex; align-items: center; height: 30px; padding-left: 28px; }
+.canvas-devco-name { flex: 1; min-width: 0; font-size: 14px; color: #242424; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-devco-total { flex-shrink: 0; width: 120px; margin-right: 22px; text-align: right; font-size: 14px; color: #242424; font-variant-numeric: tabular-nums; }
+.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; margin: 0 48px 0 8px; accent-color: #0078d4; }
+/* `chb_…_CostssRow.FontColor: =If(ThisItem.Used, gblAppColors.Warning, Blank())` — a leaf
+   another contract has claimed reads as taken, not as merely unavailable. */
+.canvas-devco-row[data-used="true"] input[type="checkbox"] { accent-color: #ee940c; opacity: 1; }
+.canvas-devco-row[data-used="true"] .canvas-devco-name { color: #6c6c6c; }
+/* `Choices horizontal` — a radio group with `Layout: Horizontal` (e.g. the Planning permit
+   Plan / Actual): the options on one line under the caption. */
+.canvas-radio-horizontal > label { display: inline-flex; margin-right: 24px; }

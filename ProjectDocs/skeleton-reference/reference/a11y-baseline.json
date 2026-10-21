@@ -1,0 +1,1106 @@
+{
+ "$schema": "a11y-baseline/v1",
+ "note": "Owed G-A11Y wiring: canvas controls with an AccessibleLabel and no a11y(...) reference yet. A to-do list, not a permission \u2014 see docs/G-A11Y.md.",
+ "entries": [
+  {
+   "key": "Admin Milestones Screen::but_Admin_MilestoneAssumption_Form_Buttons_Reset",
+   "owner": "admin/admin-milestones",
+   "reason": "hidden Reset button (Visible: false) that the panel's close/cancel Select()s; the code-app panel discards its draft on Cancel, no element"
+  },
+  {
+   "key": "Admin Project Default Checklists Screen::but_Admin_Checklist_Form_Buttons_Reset",
+   "owner": "admin/admin-default-checklists",
+   "reason": "hidden Reset button (Visible: false) that the panel's close/cancel Select()s; the code-app panel discards its draft on Cancel, no element"
+  },
+  {
+   "key": "Admin Project Gates Approvals Screen::but_Admin_ProjectGates_Approvals_Form_Buttons_Reset",
+   "owner": "admin/admin-gates-approvals",
+   "reason": "hidden Reset button (Visible: false) that the panel's close/cancel Select()s; the code-app panel discards its draft on Cancel, no element"
+  },
+  {
+   "key": "App Loading Screen::but_Main_Project_Overview_Header_Redirect_2",
+   "owner": "pm/app-loading",
+   "reason": "hidden dispatch button (Visible: false) for the ?screen=&projectId= deep link; the code app routes deep links in the router and renders no element"
+  },
+  {
+   "key": "Capex Costs Screen::drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster",
+   "owner": "cost/capex-costs",
+   "reason": "'Link to Milestone' dropdown not implemented in the code-app contract panel"
+  },
+  {
+   "key": "Capex Costs Screen::drp_Costs_ProjectCostbtn_ShowSelectedYear",
+   "owner": "cost/capex-costs",
+   "reason": "'Show Selected Year' dropdown not implemented \u2014 the code-app capex grid pages years with the Previous/Next Year buttons"
+  },
+  {
+   "key": "Capex Costs Screen::txt_AddContract_RightPanel_AverageAmountPerPayment_1",
+   "owner": "cost/capex-costs",
+   "reason": "'Average Amount Per Payment' read-out not rendered in the code-app contract panel"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_24",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_25",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_26",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_27",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_28",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_29",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_30",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_31",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_32",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_33",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_34",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Capex Costs Screen::txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_35",
+   "owner": "cost/capex-costs",
+   "reason": "month inputs of the canvas 'Edit costs in subaccount' panel; the code-app capex grid month cells are read-only and that panel is not implemented"
+  },
+  {
+   "key": "Grid Operator Screen::icon_milestones_lock_6",
+   "owner": "pm/grid-operator",
+   "reason": "decorative page-lock icon (no OnSelect); the code app's lock EmptyState icon is decorative and not focusable"
+  },
+  {
+   "key": "Project Finance Screen::btn_GeneralData_RightPanel_Decommissioning_Form_Button_Reset_1",
+   "owner": "pm/finance",
+   "reason": "hidden canvas Reset button (Visible=false, Select-ed by the panel's close icon); the code app discards panel state on close instead"
+  },
+  {
+   "key": "Project Finance Screen::btn_GeneralData_RightPanel_Equity_Form_Button_Reset",
+   "owner": "pm/finance",
+   "reason": "hidden canvas Reset button (Visible=false, Select-ed by the panel's close icon); the code app discards panel state on close instead"
+  },
+  {
+   "key": "Project Finance Screen::btn_GeneralData_RightPanel_Equity_Form_Button_Reset_1",
+   "owner": "pm/finance",
+   "reason": "hidden canvas Reset button (Visible=false, Select-ed by the panel's close icon); the code app discards panel state on close instead"
+  },
+  {
+   "key": "Project Finance Screen::btn_GeneralData_RightPanel_SeniorDebt_Form_Button_Reset_1",
+   "owner": "pm/finance",
+   "reason": "hidden canvas Reset button (Visible=false, Select-ed by the panel's close icon); the code app discards panel state on close instead"
+  },
+  {
+   "key": "Project Finance Screen::btn_GeneralData_RightPanel_VATFinancing_Form_Button_Reset",
+   "owner": "pm/finance",
+   "reason": "hidden canvas Reset button (Visible=false, Select-ed by the panel's close icon); the code app discards panel state on close instead"
+  },
+  {
+   "key": "Project Finance Screen::but_DSRA_DRSFData_End_of_debt_service_savings",
+   "owner": "pm/finance",
+   "reason": "recompute-default (CalendarAdd) button; the code app applies the default end-of-savings date when the panel opens and has no such button"
+  },
+  {
+   "key": "Project Finance Screen::but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_2",
+   "owner": "pm/finance",
+   "reason": "reset-free-equity-to-10% icon; the code-app equity panel has no reset (Cancel discards edits)"
+  },
+  {
+   "key": "Project Finance Screen::but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_3",
+   "owner": "pm/finance",
+   "reason": "VAT base-rate reset icon; the code-app VAT panel has no base-rate field"
+  },
+  {
+   "key": "Project Finance Screen::but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_4",
+   "owner": "pm/finance",
+   "reason": "VAT bank-margin reset-to-standard icon; the code-app VAT panel has no reset (Cancel discards edits)"
+  },
+  {
+   "key": "Project Finance Screen::cmb_DSRA_DRSFData_commitment_fee_free_period_MM",
+   "owner": "pm/finance",
+   "reason": "DSRF-only field (visible when Type = DSRF) not exposed in the code-app DSRA/DSRF panel"
+  },
+  {
+   "key": "Project Finance Screen::cmb_DSRA_DRSFData_commitment_fee_free_period_YY",
+   "owner": "pm/finance",
+   "reason": "DSRF-only field (visible when Type = DSRF) not exposed in the code-app DSRA/DSRF panel"
+  },
+  {
+   "key": "Project Finance Screen::cmb_VATFinancingData_BaseRate",
+   "owner": "pm/finance",
+   "reason": "VAT financing base-rate ComboBox not implemented in the code-app VAT panel"
+  },
+  {
+   "key": "Project Finance Screen::drp_DSRA_DRSFData_Base_Rate",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF base-rate dropdown not implemented in the code-app DSRA/DSRF panel"
+  },
+  {
+   "key": "Project Finance Screen::drp_SeniorDebt_Data_Bank",
+   "owner": "pm/finance",
+   "reason": "superseded canvas copy stacked under cmb_SeniorDebt_Data_Bank (the save and the Other gate read only the ComboBox); the code-app bank select is wired to the ComboBox"
+  },
+  {
+   "key": "Project Finance Screen::drp_SeniorDebt_Data_Frequency_Of_Repayment",
+   "owner": "pm/finance",
+   "reason": "Frequency of Repayment dropdown not rendered \u2014 the code app saves the stored or standard value with no control"
+  },
+  {
+   "key": "Project Finance Screen::dte_DecommissioningData_Date_of_Expiry_1",
+   "owner": "pm/finance",
+   "reason": "Date of Expiry picker not implemented in the code-app decommissioning panel"
+  },
+  {
+   "key": "Project Finance Screen::dte_DecommissioningData_Date_of_Issue_1",
+   "owner": "pm/finance",
+   "reason": "Date of Issue picker not implemented in the code-app decommissioning panel"
+  },
+  {
+   "key": "Project Finance Screen::dte_DecommissioningData_Start_Date_of_Saving_1",
+   "owner": "pm/finance",
+   "reason": "Start Date of Saving picker not implemented \u2014 the code app only reads the stored value (or COD) for the derived end date"
+  },
+  {
+   "key": "Project Finance Screen::ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down",
+   "owner": "pm/finance",
+   "reason": "tranche card fold chevron; the code app lists tranches as grid rows with nothing to fold"
+  },
+  {
+   "key": "Project Finance Screen::ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Up",
+   "owner": "pm/finance",
+   "reason": "tranche card fold chevron; the code app lists tranches as grid rows with nothing to fold"
+  },
+  {
+   "key": "Project Finance Screen::ico_Generators_DisplayProject_Body_Form_GeneratorType_Down_1",
+   "owner": "pm/finance",
+   "reason": "category card fold chevron; the code app shows categories as grid rows with nothing to fold"
+  },
+  {
+   "key": "Project Finance Screen::ico_Generators_DisplayProject_Body_Form_GeneratorType_Up_1",
+   "owner": "pm/finance",
+   "reason": "category card fold chevron; the code app shows categories as grid rows with nothing to fold"
+  },
+  {
+   "key": "Project Finance Screen::ico_SeniorDebt_Data_Financial_Close_Reset",
+   "owner": "pm/finance",
+   "reason": "reset-financial-close-to-standard icon; the code-app tranche panel has no reset (Cancel discards edits)"
+  },
+  {
+   "key": "Project Finance Screen::icon_milestones_lock_8",
+   "owner": "pm/finance",
+   "reason": "decorative lock glyph in the page-lock banner; the code app's LockClosedRegular icon is not focusable and carries no name"
+  },
+  {
+   "key": "Project Finance Screen::rad_SeniorDebt_Data_EnergyYield",
+   "owner": "pm/finance",
+   "reason": "Energy Yield (debt sizing) radio not implemented in the code-app tranche panel"
+  },
+  {
+   "key": "Project Finance Screen::rad_SeniorDebt_Data_SpotCurve",
+   "owner": "pm/finance",
+   "reason": "Spot Curve (debt sizing) radio not implemented in the code-app tranche panel"
+  },
+  {
+   "key": "Project Finance Screen::rad_SeniorDebt_Fixed_Amount_Options",
+   "owner": "pm/finance",
+   "reason": "Fixed Amount option radio (percent of CAPEX / absolute) not rendered \u2014 the code app keeps the option in state with no control"
+  },
+  {
+   "key": "Project Finance Screen::txt_DSRA_DRSFData_Commitment_Fee_Percentage",
+   "owner": "pm/finance",
+   "reason": "DSRF-only field (visible when Type = DSRF) not exposed in the code-app DSRA/DSRF panel"
+  },
+  {
+   "key": "Project Finance Screen::txt_DSRA_DRSFData_Upfront_Fee_Percentage",
+   "owner": "pm/finance",
+   "reason": "DSRF-only field (visible when Type = DSRF) not exposed in the code-app DSRA/DSRF panel"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Cost_of_Decommissioning_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Cost_of_Guarantee_1",
+   "owner": "pm/finance",
+   "reason": "decommissioning card detail not rendered \u2014 the code-app category grid shows only the total decommissioning cost in its summary cell"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Cost_of_Guarantee_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Date_of_Expiry_1",
+   "owner": "pm/finance",
+   "reason": "decommissioning card detail not rendered \u2014 the code-app category grid shows only the total decommissioning cost in its summary cell"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Date_of_Expiry_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card read-out; the code-app summary cell folds type, margin and duration into one line, so there is no single counterpart"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Date_of_Issue_1",
+   "owner": "pm/finance",
+   "reason": "decommissioning card detail not rendered \u2014 the code-app category grid shows only the total decommissioning cost in its summary cell"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Date_of_Issue_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Duration_of_Saving_1",
+   "owner": "pm/finance",
+   "reason": "decommissioning card detail not rendered \u2014 the code-app category grid shows only the total decommissioning cost in its summary cell"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Duration_of_Saving_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card read-out; the code-app summary cell folds type, margin and duration into one line, so there is no single counterpart"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Duration_of_Saving_4",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Duration_of_Saving_5",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card read-out; the code-app summary cell folds type, margin and duration into one line, so there is no single counterpart"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Duration_of_Saving_6",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Start_Date_of_Saving_1",
+   "owner": "pm/finance",
+   "reason": "decommissioning card detail not rendered \u2014 the code-app category grid shows only the total decommissioning cost in its summary cell"
+  },
+  {
+   "key": "Project Finance Screen::txt_Decommissioning_Data_Display_Card_Start_Date_of_Saving_3",
+   "owner": "pm/finance",
+   "reason": "DSRA/DSRF card detail not rendered \u2014 the code-app summary cell shows type, margin and duration only"
+  },
+  {
+   "key": "Project Finance Screen::txt_EquityData_FreeEquityEUR_1",
+   "owner": "pm/finance",
+   "reason": "equity card read-out; the code-app category grid folds free equity and shareholder loan into one summary cell, so neither has a single counterpart"
+  },
+  {
+   "key": "Project Finance Screen::txt_EquityData_ShareholderLoanEUR_1",
+   "owner": "pm/finance",
+   "reason": "equity card read-out; the code-app category grid folds free equity and shareholder loan into one summary cell, so neither has a single counterpart"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Amount",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Bank",
+   "owner": "pm/finance",
+   "reason": "tranche card read-out; the code-app tranche grid folds tranche status, bank and KfW tranche into one composite Tranche name column"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_BankMargin_ConstructionPhase",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_BankMargin_OperationalPhase",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_BaseRate",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_CommitmentFee",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_DSCRUncontracted",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Drawdown",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_EnergyYield_DebtSizing",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_FixedInterestRate",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Gearing",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Hedging",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_SpotCurve_DebtSizing",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_StartRepayment",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Status",
+   "owner": "pm/finance",
+   "reason": "tranche card read-out; the code-app tranche grid folds tranche status, bank and KfW tranche into one composite Tranche name column"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Status_1",
+   "owner": "pm/finance",
+   "reason": "tranche card read-out; the code-app tranche grid folds tranche status, bank and KfW tranche into one composite Tranche name column"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Status_2",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_Status_3",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_StepUp_Margin",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_SeniorDebt_Data_Display_Card_SwapMargin",
+   "owner": "pm/finance",
+   "reason": "tranche card detail field not rendered \u2014 the code-app tranche grid shows name, tenor, financial close, DSCR (contracted), upfront fee and status only"
+  },
+  {
+   "key": "Project Finance Screen::txt_VATFinancingData_BaseRate_2",
+   "owner": "pm/finance",
+   "reason": "VAT card base-rate read-out; the code app has no VAT base rate (the VAT summary cell shows the bank margin only)"
+  },
+  {
+   "key": "Project Finance Screen::txt_VATFinancingData_VATFacilityAmountEUR_1",
+   "owner": "pm/finance",
+   "reason": "VAT card facility-amount read-out not rendered \u2014 the VAT summary cell shows the bank margin only"
+  },
+  {
+   "key": "Project General CheckList Screen::btn_CheckList_BuildProjectStatesSequence",
+   "owner": "pm/checklist",
+   "reason": "hidden dispatch button (Visible: false); the code app builds the cluster sequence in a query hook (useClusterSequence), so there is no UI element"
+  },
+  {
+   "key": "Project General CheckList Screen::btn_CheckList_EnsureSkippedClusterStatesCompleted",
+   "owner": "pm/checklist",
+   "reason": "hidden dispatch button (Visible: false); the code app runs the skipped-cluster back-fill from an effect (useSkippedClusterBackfill), so there is no UI element"
+  },
+  {
+   "key": "Project General CheckList Screen::btn_CheckList_RightPanel_ChangeCluster_Form_Buttons_Refresh",
+   "owner": "pm/checklist",
+   "reason": "hidden dispatch button (Visible: false) that re-reads Project State Trackings; the code app's mutations invalidate the queries instead, so there is no UI element"
+  },
+  {
+   "key": "Project General CheckList Screen::btn_CheckList_RightPanel_ChangeCluster_Form_Buttons_Reset",
+   "owner": "pm/checklist",
+   "reason": "hidden dispatch button (Visible: false) that resets the panel inputs; in the code app closing the panel discards the panel state, so there is no UI element"
+  },
+  {
+   "key": "Project General CheckList Screen::but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel",
+   "owner": "pm/checklist",
+   "reason": "Cancel of the floating completion-date picker; the code app's inline date input has no popup to dismiss"
+  },
+  {
+   "key": "Project General CheckList Screen::but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate",
+   "owner": "pm/checklist",
+   "reason": "the code app edits the completion date inline with one date input per row (wired to the canvas date picker); there is no separate button that opens a floating picker"
+  },
+  {
+   "key": "Project General CheckList Screen::but_Project_States_CheckList_Refresh",
+   "owner": "pm/checklist",
+   "reason": "the page-level Refresh button was deleted as a workaround (it re-queried Project State Trackings on every visit); the code app's queries keep the data current and draw no refresh button"
+  },
+  {
+   "key": "Project General CheckList Screen::ico_Checklist_DisplayProject_Body_Content_ListRow_Comments",
+   "owner": "pm/checklist",
+   "reason": "row Note icon opens the checklist-note (Comments) panel, which the code app does not implement; the row has no notes affordance"
+  },
+  {
+   "key": "Project General Data Screen::btn_GeneralData_DisplayProject_Body_Buttons_Reset",
+   "owner": "pm/general-data",
+   "reason": "hidden dispatch button (Visible: false) that the visible Cancel Select()s; the code app's reset is the resetForm function behind the footer Cancel"
+  },
+  {
+   "key": "Project General Data Screen::btn_General_CancelActiveDraftGateApprovalForStartClusterChange",
+   "owner": "pm/general-data",
+   "reason": "hidden dispatch button (Visible: false) that other controls Select(); the code app runs this cleanup as a function inside the save (planSaveCleanup), so there is no UI element"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_Cluster2_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_Cluster3_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_Cluster4_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_Cluster5_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_Cluster6_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::but_Milestones_DisplayProject_Body_General_Content_FiD_1",
+   "owner": "pm/general-data",
+   "reason": "cluster-change panel's fill-from-assumptions button (previous date + average duration from Milestones Assumptions) is not implemented in the code app; only the date input is rendered"
+  },
+  {
+   "key": "Project General Data Screen::txt_GeneralData_DisplayProject_Body_General_Content_SPVCompanyCode",
+   "owner": "pm/general-data",
+   "reason": "SPV Company Code field not rendered in the code app (GUIDE p14 shows no such control; rules.ts keeps only the shape check)"
+  },
+  {
+   "key": "Project General Milestones Screen::btn_Milestones_DisplayProject_Body_Buttons_Recalculate",
+   "owner": "pm/milestones",
+   "reason": "Hidden (Visible: false) dispatch button that re-runs validation; deleted in the code app, which computes validation from form state."
+  },
+  {
+   "key": "Project General Milestones Screen::btn_Milestones_DisplayProject_Body_Buttons_Reset",
+   "owner": "pm/milestones",
+   "reason": "Hidden (Visible: false) dispatch button that resets the date pickers; deleted in the code app (RecordFooter Cancel discards edits)."
+  },
+  {
+   "key": "Project General Milestones Screen::btn_Milestones_DisplayProject_Body_Buttons_Reset_Validation",
+   "owner": "pm/milestones",
+   "reason": "Hidden (Visible: false) dispatch button used as a subroutine; deleted in the code app, which computes validation from form state."
+  },
+  {
+   "key": "Project General Milestones Screen::but_Milestones_DisplayProject_Body_General_Content_EndDate",
+   "owner": "pm/milestones",
+   "reason": "Project End Date recalculate button; the code app has no End Date recalculate (End Date is entered only)."
+  },
+  {
+   "key": "Project General Milestones Screen::but_Milestones_DisplayProject_Body_General_Content_Sales_Completion_Date",
+   "owner": "pm/milestones",
+   "reason": "Sales Completion Date recalculate button; the code app offers no recalculate for Sales Completion Date."
+  },
+  {
+   "key": "Project General Milestones Screen::but_Milestones_DisplayProject_Body_General_Content_Sales_Start_Date",
+   "owner": "pm/milestones",
+   "reason": "Sales Start Date recalculate button; the code app offers no recalculate for Sales Start Date."
+  },
+  {
+   "key": "Project General Milestones Screen::but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_1",
+   "owner": "pm/milestones",
+   "reason": "Hidden (Visible: false) duplicate of the farmdown reset; the visible reset icon (farmdown_Reset) is wired."
+  },
+  {
+   "key": "Project General Team Screen::icon_milestones_lock_4",
+   "owner": "pm/team",
+   "reason": "decorative lock glyph of the page-lock banner; the code app's EmptyState shows a Fluent lock icon (aria-hidden) beside the lock reasons"
+  },
+  {
+   "key": "Project General Team Screen::img_Contracts_List_Card_Body_PaymentTargetsRow_RadioSelection_1",
+   "owner": "pm/team",
+   "reason": "row-selection dot image; the code app selects rows through DataGrid's single-selection radio column, which has no per-row attribute hook"
+  },
+  {
+   "key": "Project General Team Screen::pcf_btn_Team_RightPanel_Member_Form_Buttons_Reset",
+   "owner": "pm/team",
+   "reason": "hidden Reset button (Visible: false) that the panel's close/cancel Select()s; the code-app panel discards its draft on Cancel, no element"
+  },
+  {
+   "key": "Project Generators Screen::btn_GeneratorData_RightPanel_Form_Generator_Buttons_Reset",
+   "owner": "pm/generators",
+   "reason": "hidden Reset button (Visible: false) that the panel's close/cancel Select()s; the code-app panel discards its draft on Cancel, no element"
+  },
+  {
+   "key": "Project Generators Screen::ibut_GeneralData_DisplayProject_Body_Checklist",
+   "owner": "pm/generators",
+   "reason": "checklist info button copied onto this screen in the canvas; the code app shows the checklist on its own screen, no info button here"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Hydrogen_Down",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Hydrogen_Up",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Invertors_Down",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Invertors_Up",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_PvModule_Down",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_PvModule_Up",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Storage_Down_1",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Storage_Up_1",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Substation_Down_1",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Substation_Up_1",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Substructure_Down",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::ico_Generators_DisplayProject_Body_Form_Substructure_Up",
+   "owner": "pm/generators",
+   "reason": "fold chevron of a single-row family card; the code-app family cards do not fold (only WTG type cards do, wired to \u2026_GeneratorType_Up/_Down)"
+  },
+  {
+   "key": "Project Generators Screen::info_Generators_DisplayProject_Body_Form_Substructure_CardDetails_SubstructureCost",
+   "owner": "pm/generators",
+   "reason": "substructure card detail grid not rendered \u2014 the code app shows a compact row (name, cost)"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Hydrogen_Separator",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Invertors_Separator",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_PvModule_Separator",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Separator",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Storage_Separator_1",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Substation_Separator_1",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::rec_Generators_DisplayProject_Body_Form_Substructure_Separator",
+   "owner": "pm/generators",
+   "reason": "decorative separator rectangle; the code app separates cards with Card borders, no element"
+  },
+  {
+   "key": "Project Generators Screen::tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_2",
+   "owner": "pm/generators",
+   "reason": "Replace WTG 'from' section country toggle / revised hub height read-outs; the code-app replace panel shows supplier, turbine type, hub height and count of the old type only"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Fields_HubHeight_3",
+   "owner": "pm/generators",
+   "reason": "Replace WTG 'from' section country toggle / revised hub height read-outs; the code-app replace panel shows supplier, turbine type, hub height and count of the old type only"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Hydrogen_Fields_HydrogenCapacityMW_2",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Hydrogen_Fields_HydrogenLabel",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1",
+   "owner": "pm/generators",
+   "reason": "Replace PV 'from' section degradation read-outs; the code-app replace panel shows label, capacity and supplier of the old type only"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1",
+   "owner": "pm/generators",
+   "reason": "Replace PV 'from' section degradation read-outs; the code-app replace panel shows label, capacity and supplier of the old type only"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageCapacityMW_5",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageCapacityMW_6",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageLabel",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Storage_Fields_StorageSupplier",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationCapacityMW_2",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationLabel",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_GeneratorData_RightPanel_Form_Substation_Fields_SubstationSupplier",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation panel fields not implemented \u2014 the code app's single-row family panel has no editable fields yet (rules 16\u201318)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_Cost",
+   "owner": "pm/generators",
+   "reason": "WTG type card cost read-outs; the code-app card shows the seven GUIDE q09 fields only (cost lives in the panel and the Plant WTG cost tile)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsCost",
+   "owner": "pm/generators",
+   "reason": "WTG type card cost read-outs; the code-app card shows the seven GUIDE q09 fields only (cost lives in the panel and the Plant WTG cost tile)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_CostPerInverter_1",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_InverterType",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_NominalPower",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_NumberOfInverters",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_Supplier",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Inverters_CardDetails_Warranty",
+   "owner": "pm/generators",
+   "reason": "inverter card detail grid not rendered \u2014 the code app shows a compact row (name, cost) per inverter"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_CostPerPower",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_DegradationFirstYear",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_DegradationRemainingYears",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_ModulePowerOutput",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_NumberOfModules",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_Size",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_Supplier",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_TotalModuleTypeCapacity_1",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_Type",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_PvModule_CardDetails_Warranty",
+   "owner": "pm/generators",
+   "reason": "PV module card detail grid not rendered \u2014 the code app shows a compact row (label, capacity, cost) per PV module type"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Storage_CardDetails_StorageCapacity_3",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation card detail fields (energy capacity, supplier) not rendered \u2014 the code app shows a compact row (name, capacity)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Storage_CardDetails_StorageSupplier",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation card detail fields (energy capacity, supplier) not rendered \u2014 the code app shows a compact row (name, capacity)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Storage_CardDetails_StorageSupplier_1",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation card detail fields (energy capacity, supplier) not rendered \u2014 the code app shows a compact row (name, capacity)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Storage_CardDetails_StorageSupplier_2",
+   "owner": "pm/generators",
+   "reason": "storage / hydrogen / substation card detail fields (energy capacity, supplier) not rendered \u2014 the code app shows a compact row (name, capacity)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Substructure_CardDetails_SubstructureType",
+   "owner": "pm/generators",
+   "reason": "substructure card detail grid not rendered \u2014 the code app shows a compact row (name, cost)"
+  },
+  {
+   "key": "Project Generators Screen::txt_Generators_DisplayProject_Body_Form_Substructure_CardDetails_Supplier",
+   "owner": "pm/generators",
+   "reason": "substructure card detail grid not rendered \u2014 the code app shows a compact row (name, cost)"
+  },
+  {
+   "key": "Project Main Screen::but_Main_Project_Overview_Context_Filter_Apply",
+   "owner": "pm/project-main",
+   "reason": "hidden Apply button (Visible: false) that the filter controls Select(); the code app applies filters as they change"
+  },
+  {
+   "key": "Project Main Screen::but_Main_Project_Overview_Header_Redirect_1",
+   "owner": "pm/project-main",
+   "reason": "hidden dispatch button (Visible: false) for the ?screen=&projectId= deep link; the code app routes deep links in the router and renders no element"
+  },
+  {
+   "key": "Project Main Screen::but_Main_Project_Overview_Header_Redirect_3",
+   "owner": "pm/project-main",
+   "reason": "hidden dispatch button (Visible: false) for the ?screen=&projectId= deep link; the code app routes deep links in the router and renders no element"
+  },
+  {
+   "key": "Project Planning Screen::drp_ProjectPlanning_RightPanel_AquisitionStatus_InpForm_Body_AquisitionStatusType",
+   "owner": "pm/planning",
+   "reason": "read-only LLA Type dropdown (DisplayMode.View) not rendered in the code-app acquisition panel; the LLA type is the card the row was opened from"
+  },
+  {
+   "key": "Project Planning Screen::icon_milestones_lock_5",
+   "owner": "pm/planning",
+   "reason": "decorative page-lock icon (no OnSelect); the code app's lock EmptyState icon is decorative and not focusable"
+  },
+  {
+   "key": "Project Planning Screen::img_ProjectPlanning_DisplayProjectBodyRightContent_PermitsRowSelectionDot",
+   "owner": "pm/planning",
+   "reason": "decorative permit-row selection dot; the code app selects a permit by row click on the shared DataGrid, which renders no dot and has no per-row attribute hook"
+  },
+  {
+   "key": "Project Production Screen::img_Production_CardHeader_RadioSelection",
+   "owner": "pm/production",
+   "reason": "decorative selection dot; the code app's radio icon is aria-hidden, and the row's one focusable header button carries the chevron (fold toggle) identity"
+  },
+  {
+   "key": "Project Production Screen::rad_ProductionDataPV_Assesment",
+   "owner": "pm/production",
+   "reason": "Energy Yield Assessment (Internal/External) radio not implemented in the code app; the panel always saves Internal"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDataWTG_Comment",
+   "owner": "pm/production",
+   "reason": "WTG Comment box sits in a container with Visible=false in the canvas and was not ported"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_Description",
+   "owner": "pm/production",
+   "reason": "record detail Description box not rendered; the code app shows the description only in the row header label (the canvas lbl_ header, no AccessibleLabel)"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_NegaticePricesPV",
+   "owner": "pm/production",
+   "reason": "record detail grid not fully rendered; the code app's compact row detail shows type, gross, p50, p75 and p90 only, no Consider Negative Prices value"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_Seasonality",
+   "owner": "pm/production",
+   "reason": "record detail grid not fully rendered; the code app's compact row detail shows type, gross, p50, p75 and p90 only, no Consider Seasonality value"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_TotalLosses",
+   "owner": "pm/production",
+   "reason": "record detail grid not fully rendered; the code app's compact row detail shows type, gross, p50, p75 and p90 only, no total losses value"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_Uncertainty",
+   "owner": "pm/production",
+   "reason": "record detail grid not fully rendered; the code app's compact row detail shows type, gross, p50, p75 and p90 only, no uncertainty value"
+  },
+  {
+   "key": "Project Production Screen::txt_ProductionDetails_WindSpeed",
+   "owner": "pm/production",
+   "reason": "record detail grid not fully rendered; the code app's compact row detail shows no wind speed / irradiation value (canvas caption is also a copy-paste defect: Net Yield p50 [MWh])"
+  },
+  {
+   "key": "Project Revenues Screen::Icon4",
+   "owner": "pm/revenues",
+   "reason": "Decorative lock icon of the canvas 'reached Cluster 4' Balancing Price banner; the code app renders no such banner."
+  },
+  {
+   "key": "Project Revenues Screen::drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_AreaInflationProfile_2",
+   "owner": "pm/revenues",
+   "reason": "Italy price-area dropdown (its Visible formula is commented out); the code app derives the region and renders no area picker."
+  },
+  {
+   "key": "Project Revenues Screen::drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_AreaInflationProfile_3",
+   "owner": "pm/revenues",
+   "reason": "Hidden (Visible: false) inflation-area dropdown; no code-app counterpart."
+  },
+  {
+   "key": "Project Revenues Screen::icn_Admin_Cost_Landlease_ApplyToLandlease_ApplyTag_InfoIcon_2",
+   "owner": "pm/revenues",
+   "reason": "Direct-marketer hint icon on the Balancing Price tab; the code app renders no such hint."
+  },
+  {
+   "key": "Project Revenues Screen::ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_1",
+   "owner": "pm/revenues",
+   "reason": "Card fold chevron (unfolded state); the code-app DataGrid rows do not fold."
+  },
+  {
+   "key": "Project Revenues Screen::ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_2",
+   "owner": "pm/revenues",
+   "reason": "Card fold chevron (folded state); the code-app DataGrid rows do not fold."
+  },
+  {
+   "key": "Project Revenues Screen::icon_milestones_lock_7",
+   "owner": "pm/revenues",
+   "reason": "Decorative lock icon in the page-lock banner; the code-app lock MessageBar icon is decorative, not focusable."
+  },
+  {
+   "key": "Project Revenues Screen::shp_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_BottomLine_1",
+   "owner": "pm/revenues",
+   "reason": "Decorative separator under the card header; the code app draws none."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_Area",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field (inflation country area) not rendered; the code-app grid has no area column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_BiddingPrice_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Bidding Price column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_ContractDurationMonths_1",
+   "owner": "pm/revenues",
+   "reason": "The code-app grid shows years and months in one Duration cell, which carries the years box identity (ContractDurationYears_1)."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_CorrectionFactor_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Correction Factor column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_CorrectionFactor_p90",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Correction Factor p90 column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_CountryInflationProfile_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no inflation-profile column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_Currency_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid row shows description, type, tariff, start, end, duration and hedging only."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_HedgedVolume_2",
+   "owner": "pm/revenues",
+   "reason": "Hedge-type box; the code-app Hedging cell folds the type into the hedged amount and carries the Hedged Volume identity (HedgedVolume_1)."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_InflationStartYear_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Inflation Start Year column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_SiteQuality_1",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Site Quality column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_SiteQuality_p90",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid has no Site Quality p90 column."
+  },
+  {
+   "key": "Project Revenues Screen::txt_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardBody_Fields_TarifPrice_p90",
+   "owner": "pm/revenues",
+   "reason": "Contract card detail field not rendered; the code-app grid shows the p50 tariff only (wired to TarifPrice_1)."
+  },
+  {
+   "key": "cmp_Header::but_Main_Project_Overview_Header_Redirect_4",
+   "owner": "components",
+   "reason": "hidden dispatch button (Visible: false) for the ?screen=&projectId= deep link; the code app routes deep links in the router and renders no element"
+  },
+  {
+   "key": "cmp_Information_Button::con_Information_ToolTip_Dismiss",
+   "owner": "components",
+   "reason": "dismiss (\u00d7) icon of the canvas information pop-up; the code app uses Fluent InfoLabel/Tooltip, which closes on Escape/blur and has no dismiss control"
+  },
+  {
+   "key": "cmp_Information_Button_PCF::con_Information_ToolTip_Dismiss",
+   "owner": "components",
+   "reason": "dismiss (\u00d7) icon of the canvas information pop-up; the code app uses Fluent InfoLabel/Tooltip, which closes on Escape/blur and has no dismiss control"
+  },
+  {
+   "key": "cmp_PopUp_Loading_1::spi_PopUpLoading_Spinner_1",
+   "owner": "components",
+   "reason": "the cost app's copy of cmp_PopUp_Loading; the code app has ONE LoadingOverlay, wired to cmp_PopUp_Loading.spi_PopUpLoading_Spinner"
+  },
+  {
+   "key": "cmp_Project_States::btn_Refresh",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::btn_clockAlarm_Icon",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::but_State_Card_Gate_Approval",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::circ_State_Card_Gate_Approval",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::circ_State_Card_Gate_Approval_ToolTip",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::circ_State_Card_Gate_Approval_ToolTip_1",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::ico_Check",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  },
+  {
+   "key": "cmp_Project_States::rec_State_Card_Gate_Approval",
+   "owner": "components",
+   "reason": "the code app has no cmp_Project_States cluster stepper; cluster states render as StateChip and approvals are driven from the CheckList screen"
+  }
+ ]
+}

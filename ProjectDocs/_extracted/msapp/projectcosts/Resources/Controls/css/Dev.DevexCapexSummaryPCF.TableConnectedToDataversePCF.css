@@ -1,0 +1,1416 @@
+/* ============================================================================
+   TableConnectedToDataversePCF.css
+   Stylesheet for the "DevexCapexSummaryPCF" Power Apps PCF control: a
+   DEVEX/CAPEX cost hierarchy table (Account -> Subaccount -> Contract rows)
+   rendered into a Canvas App by ui/GridRenderer.ts (table, rows, header,
+   month/Add dropdowns) and ui/ActionDropdown.ts (contract three-dot menu).
+   Every class below is assigned from those two files - nothing is styled
+   from static markup. Comments describe WHICH UI element a class hits,
+   WHEN the class is applied, and what changing the rule affects visually.
+   ========================================================================== */
+
+/* ============================================================================
+   SECTION: Root container, base font and scroll wrapper
+   The control root establishes the Segoe UI 12px baseline that everything
+   inherits. The scroll wrapper owns both scrollbars: the header rows stick
+   to its top, the Grand Total row (.pcf-row-grand) sticks to its bottom,
+   and only the rows in between scroll vertically. A horizontal scrollbar
+   appears when the Canvas-allocated width is below the table minimum
+   (fixed table layout + per-column <colgroup> widths from renderColGroup).
+   ========================================================================== */
+
+/* Control root <div> created in GridRenderer.init(). Changing font-size
+   here rescales nearly all grid text since cells inherit from it. */
+.pcf-budget-grid {
+    box-sizing: border-box;
+    width: 100%;
+    position: relative;
+    background: #fff;
+    color: #242424;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+}
+
+/* Scroll viewport wrapped around the <table>. max-height caps the control's
+   visible height; the sticky header rows and sticky Grand Total row position
+   themselves against this box. Removing overflow:auto breaks both sticky
+   behaviors and the horizontal scrollbar for narrow Canvas widths. */
+.pcf-table-scroll {
+    width: 100%;
+    max-height: 600px;
+    position: relative;
+    border: none;
+    overflow: auto;
+    background: #fff;
+}
+
+/* The grid <table> itself. table-layout:fixed makes columns obey the
+   <colgroup> widths computed in renderColGroup(); switching to auto layout
+   would let cell content stretch columns and misalign the cluster timeline
+   track (which is sized in month-column multiples). */
+.pcf-table {
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+/* ============================================================================
+   SECTION: Sticky column headers and base body cells
+   Two stacked sticky header rows: the cluster timeline row (top: 0, see the
+   timeline section) and the column-label header row pinned just below it
+   (top: 30px). Border conventions: cost columns (Total/Planned/Actual,
+   .pcf-col-cost) keep vertical cell borders, while month columns
+   intentionally have NO vertical separators (only row underlines).
+   ========================================================================== */
+
+/* Every header cell (Sl.No / Name / cost / month labels) built in
+   renderHeader(). position:sticky pins them while body rows scroll under;
+   the opaque white background hides scrolling content behind them. */
+.pcf-table th {
+    height: 34px;
+    padding: 0 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    border-right: 1px solid #E7E7E7;
+    border-bottom: 1px solid #DBDBDB;
+    color: #595959;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+}
+
+/* First column (the Sl.No / tree column): drops its right border so the
+   tree connector lines visually flow into the name column uninterrupted. */
+.pcf-table th:first-child,
+.pcf-table td:first-child {
+    border-right: none;
+}
+
+/* Column-label header row (second sticky row, added in renderHeader).
+   top:30px stacks it directly below the 30px-tall cluster timeline row -
+   if the timeline row height changes, this offset must change with it or
+   the two sticky rows overlap/gap while scrolling. */
+.pcf-header-row th {
+    top: 30px;
+    z-index: 11;
+    background: #fff !important;
+}
+
+/* Base body cell for every row. The fixed heights here and on the row
+   classes are what the tree connectors' 50% top/bottom offsets are tuned
+   against - changing row height shifts where the branch elbows land. */
+.pcf-table td {
+    box-sizing: border-box;
+    height: 38px;
+    padding: 0 10px;
+    border-right: 1px solid #E7E7E7;
+    border-bottom: 1px solid #E7E7E7;
+    color: #242424;
+    font-size: 12px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* Numeric cells/headers (cost and month value columns), added by
+   appendNumericCell()/renderHeader() in GridRenderer.ts. Right-aligned and
+   borderless - this is what removes vertical separators from month columns. */
+.pcf-col-num {
+    border-right: none !important;
+    text-align: right !important;
+}
+
+/* Cost columns (Total / Planned / Actual): re-adds the vertical border that
+   .pcf-col-num strips, so cost columns stay visually boxed while month
+   columns remain separator-free. Applied alongside .pcf-col-num. */
+.pcf-col-cost {
+    border-right: 1px solid #E7E7E7 !important;
+}
+
+/* Trailing actions column on contract rows; hosts the three-dot button
+   (.pcf-dots-btn), centered and borderless. */
+.pcf-col-actions {
+    border-right: none !important;
+    text-align: center !important;
+}
+
+/* ============================================================================
+   SECTION: Contract month cells - paid/unpaid states
+   appendContractMonthCell() in GridRenderer.ts puts these classes on month
+   cells of CONTRACT rows only. Clicking a cell opens the month paid/unpaid
+   dropdown (see its section near the bottom); while the dropdown is open
+   the cell also carries the "active" class. Paid = green #D6E7B3 family,
+   unpaid = white with a gray hover wash.
+   ========================================================================== */
+
+/* Every contract-row month cell: clickable, position:relative anchors the
+   red comment dot, and overflow:visible lets that dot's tooltip escape. */
+.pcf-contract-month-cell {
+    position: relative;
+    overflow: visible;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+}
+
+/* Suppress the browser focus ring on cell click; selection feedback comes
+   from the paid/unpaid + active background classes instead. */
+.pcf-contract-month-cell:focus {
+    outline: none;
+}
+
+/* Month marked as PAID (added by GridRenderer when the record's paid flag
+   is set). Changing this green re-tints every paid cell and should stay in
+   sync with .pcf-selected-cell further below. */
+.pcf-paid-cell {
+    background: #D6E7B3 !important;
+    color: #242424 !important;
+}
+
+/* Slightly darker green on hover so paid cells still signal clickability. */
+.pcf-paid-cell:hover {
+    background: #C6DD9A !important;
+}
+
+/* Darkest green while this paid cell's month dropdown is open ("active" is
+   added in openMonthDropdown and removed when the dropdown closes). */
+.pcf-paid-cell.active {
+    background: #A8C676 !important;
+}
+
+/* Bug 13453: Total Costs cell of a fully-paid CONTRACT row - added by
+   GridRenderer via isContractFullyPaid when Total Cost equals Total Paid. A
+   slightly darker green than the month paid cells (#D6E7B3) so the fully-settled
+   total stands out from the individual paid month cells. */
+.pcf-cell-total-paid {
+    background: #a3c068 !important;
+    color: #242424 !important;
+}
+
+/* UNPAID month cell hover: gray wash (no green until actually marked paid). */
+.pcf-unpaid-cell:hover {
+    background: #E7E7E7 !important;
+    color: #242424 !important;
+}
+
+/* Unpaid cell while its month dropdown is open. */
+.pcf-unpaid-cell.active {
+    background: #DCDCDC !important;
+}
+
+/* ============================================================================
+   SECTION: Paid-action hover button (legacy) + shared action icon wrapper
+   .pcf-paid-action-btn was an earlier inline hover button shown over a
+   month cell; current GridRenderer.ts no longer creates an element with
+   this class (the fixed-position month dropdown replaced it), so the three
+   .pcf-paid-action-btn rules appear dormant. .pcf-paid-action-icon IS still
+   used: it wraps the stroke-style SVG icons inside month-dropdown items.
+   ========================================================================== */
+
+/* Legacy floating "Mark as paid" button anchored under a month cell;
+   revealed by the cell :hover rule below. Currently not rendered by TS. */
+.pcf-paid-action-btn {
+    display: none;
+    min-width: 126px;
+    height: 34px;
+    padding: 0 12px;
+    position: absolute;
+    top: calc(100% - 2px);
+    left: 50%;
+    z-index: 50;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-start;
+    transform: translateX(-50%);
+    border: 1px solid #D0D0D0;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+    color: #333333;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.pcf-contract-month-cell:hover .pcf-paid-action-btn,
+.pcf-paid-action-btn:focus {
+    display: inline-flex;
+}
+
+.pcf-paid-action-btn:hover {
+    background: #F3F2F1;
+}
+
+/* Icon wrapper reused by the month dropdown items (openMonthDropdown builds
+   <span class="pcf-paid-action-icon">). The color here feeds the SVG stroke
+   via currentColor, so changing it recolors the dropdown action icons. */
+.pcf-paid-action-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #595959;
+}
+
+/* These icons are OUTLINE style: fill:none + stroke:currentColor. Do NOT
+   add fill:currentColor here or in the disabled-item rules - that was a
+   past bug that turned the stroke icons into solid blobs. */
+.pcf-paid-action-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* ============================================================================
+   SECTION: Cluster timeline header row
+   Topmost sticky header row, built in renderTimelineRow()/renderHeader():
+   a pill label per cluster, a 1px horizontal line spanning the month
+   columns, short vertical boundary ticks at the timeline start and at each
+   cluster's first month, and a small vertical connector dropping from each
+   pill onto the line. The whole assembly begins at the FIRST month column;
+   the leading name/cost header cells in this row stay empty.
+   ========================================================================== */
+
+/* Cells of the timeline row: sticky at the very top of the scroll wrapper
+   (the column header row sits 30px below). Borderless + bottom-aligned so
+   the pill/line/tick graphics read as one continuous drawing. */
+.pcf-timeline-row th {
+    height: 30px;
+    top: 0;
+    z-index: 12;
+    padding: 0;
+    border: none !important;
+    background: #fff !important;
+    vertical-align: bottom;
+}
+
+/* A timeline cell sitting over month columns; position:relative anchors the
+   absolutely-positioned track line and boundary ticks. */
+.pcf-timeline-cell {
+    position: relative;
+}
+
+/* Column flexbox that bottom-aligns the cluster pill so it hovers just
+   above the horizontal track line. */
+.pcf-cluster-pill-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: flex-end;
+    flex-direction: column;
+}
+
+/* Short vertical connector between the bottom of the pill and the track
+   line; its 4px height sets the pill-to-line gap. */
+.pcf-cluster-pill-container::after {
+    content: '';
+    width: 1px;
+    height: 4px;
+    flex-shrink: 0;
+    background: #5C5C5C;
+}
+
+/* The rounded gray pill showing the cluster label text. */
+.pcf-cluster-pill {
+    padding: 2px 7px;
+    border: 1px solid #d0d0d0;
+    border-radius: 3px;
+    background: #E7E7E7;
+    color: #595959;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 14px;
+}
+
+/* The 1px horizontal track line. Its width is 12x the --pcf-month-width
+   custom property that renderColGroup() sets on the table, so the line
+   stays exactly aligned with the month columns when widths recompute. */
+.pcf-timeline-track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    width: calc(var(--pcf-month-width, 65px) * 12);
+    height: 1px;
+    background: #5C5C5C;
+    pointer-events: none;
+}
+
+/* Short vertical boundary tick at the RIGHT end of the track line. */
+.pcf-timeline-track::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 8px;
+    border-left: 1px solid #5C5C5C;
+}
+
+/* First month column header (renderHeader adds this to the month <th> where
+   the timeline begins). Raised z-index + visible overflow let the start
+   tick (::before below) poke up out of the header cell. */
+.pcf-col-timeline-start {
+    z-index: 13 !important;
+    overflow: visible;
+}
+
+/* Short vertical boundary ticks: drawn at the timeline's first month and at
+   each new cluster's first month header (.pcf-col-month-cluster-start is
+   added per cluster boundary in renderHeader). */
+.pcf-col-timeline-start::before,
+.pcf-col-month-cluster-start::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    z-index: 2;
+    height: 8px;
+    border-left: 1px solid #5C5C5C;
+}
+
+/* Same selector group as above (kept as a separate rule): nudges each tick
+   1px left so it sits exactly on the column boundary line. */
+.pcf-col-timeline-start::before,
+.pcf-col-month-cluster-start::before {
+    left: -1px;
+}
+
+/* ============================================================================
+   SECTION: Row styling per hierarchy level
+   GridRenderer assigns exactly one row class per row kind: account rows
+   bold on medium gray, subaccount rows on light gray, contract rows white,
+   Add rows minimal/short, gap and footer-spacer rows are invisible padding.
+   (The sticky Grand Total row has its own section further down.)
+   ========================================================================== */
+
+/* Account (top-level) row background - the darkest of the hierarchy grays. */
+.pcf-row-account {
+    background: #DCDCDC;
+}
+
+/* Account row cells: bold text marks the level-1 summary rows. */
+.pcf-row-account td {
+    height: 38px;
+    color: #242424;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Subaccount (level-2) row background - lighter gray than account rows. */
+.pcf-row-sub {
+    background: #EDEBE9;
+}
+
+.pcf-row-sub td {
+    height: 38px;
+    color: #333;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* Contract (leaf) row: plain white; .pcf-row-standard (see standard
+   contract section) recolors its text blue when IsStandardContract. */
+.pcf-row-contract {
+    background: #fff;
+}
+
+.pcf-row-contract td {
+    height: 40px;
+    color: #242424;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* "Add" row under each subaccount (renderAddRow): shorter, borderless cells
+   holding only the blue "Add" button. Its 30px height is what the tree
+   connector elbow offsets in the Add row are tuned against. */
+.pcf-row-add td {
+    height: 30px;
+    background: #fff;
+    border-right: none;
+}
+
+/* Invisible spacer row inserted between account groups (renderGapRow);
+   pure vertical breathing room, no borders or content. */
+.pcf-row-gap td {
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: #fff;
+}
+
+/* Flexible spacer row kept just above the sticky Grand Total row so short
+   datasets still push the Grand Total to the bottom of the scroll area
+   (GridRenderer re-creates it on each render). */
+.pcf-row-footer-spacer td {
+    padding: 0;
+    border: none;
+    background: #fff;
+}
+
+/* ============================================================================
+   SECTION: Tree cell layout and connector lines   *** FRAGILE ***
+   Draws the Account -> Subaccount -> Contract -> Add-row connector tree in
+   the first column. GridRenderer stacks 30px .pcf-tree-spacer columns per
+   depth and picks a modifier class per row:
+     - pcf-tree-v          vertical pass-through (more siblings below)
+     - pcf-tree-t          tee: vertical line + horizontal elbow (contracts)
+     - pcf-tree-l          last child: line stops at mid-row + elbow
+     - pcf-tree-t-toggle / pcf-tree-l-toggle  same, for rows whose line
+       descends from the PARENT row's expand/collapse toggle button
+     - pcf-tree-from-toggle  added when the line starts under the toggle
+   This area has caused several regressions. Invariants to preserve:
+   (1) vertical lines must start at top:0, never above, or they intrude
+       into the row above; (2) "l"/"l-toggle" lines must stop at 50% so
+       they do not continue past the last child into the Add row;
+   (3) horizontal elbows must stop before the toggle button interior
+       (the elbow widths are tuned so lines avoid the 15px button).
+   All offsets assume 38-40px data rows, a 30px Add row, the 15px toggle,
+   and the line x-position at left:7px - change one, re-tune the rest.
+   ========================================================================== */
+
+/* Flex wrapper inside the first (Sl.No) cell of every row; lays the spacer
+   columns, toggle/leaf placeholder and row number out horizontally. */
+.pcf-cell-tree {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* Name cell: truncates long names with an ellipsis. NOTE: this
+   overflow:hidden is exactly why the contract-name comment tooltip must
+   float on document.body (.pcf-comment-tooltip-floating) - an inline
+   tooltip would be clipped by this cell. */
+.pcf-cell-name {
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* One 30px-wide indent column; subaccount rows get one, contract/Add rows
+   get two (renderSubaccountRow/renderContractRow/renderAddRow). The actual
+   lines are ::before/::after borders on the modifier classes below;
+   overflow:visible lets a line span the full row height. */
+.pcf-tree-spacer {
+    display: inline-block;
+    width: 30px;
+    height: 100%;
+    min-height: 30px;
+    position: relative;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+/* Full-height vertical line at x=7px. "v" = pass-through next to contract
+   rows while more contracts follow below; "t" additionally gets the
+   horizontal elbow from the shared ::after rule further down. */
+.pcf-tree-v::before,
+.pcf-tree-t::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 7px;
+    border-left: 1px solid #AAAAAA;
+}
+
+/* Vertical line for subaccount rows, descending from the ACCOUNT row's
+   toggle above (classes picked in renderSubaccountRow). top:0 is critical:
+   extending above 0 made the line intrude into the parent row (past bug). */
+.pcf-tree-t-toggle::before,
+.pcf-tree-l-toggle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 7px;
+    border-left: 1px solid #AAAAAA;
+}
+
+/* Tee variant: the line continues to the row bottom because more sibling
+   subaccounts (or the Add row) follow below. */
+.pcf-tree-t-toggle::before {
+    bottom: 0%;
+}
+
+/* Last-child variant: the line STOPS at mid-row (the elbow) so it does not
+   leak down into the Add row below - a past regression. */
+.pcf-tree-l-toggle::before {
+    bottom: 50%;
+}
+
+/* Horizontal elbow from the vertical line toward this row's own toggle.
+   width:50% deliberately stops the line BEFORE the toggle button interior
+   instead of crossing through it. */
+.pcf-tree-t-toggle::after,
+.pcf-tree-l-toggle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 7px;
+    width: 50%;
+    border-top: 1px solid #AAAAAA;
+}
+
+/* Last CONTRACT under a subaccount: vertical line stops at mid-row so it
+   ends at the elbow and does not continue toward the Add row. */
+.pcf-tree-l::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 50%;
+    left: 7px;
+    border-left: 1px solid #AAAAAA;
+}
+
+/* Horizontal elbow for contract rows: 50px reaches across the spacer to the
+   leaf content (contracts have no toggle button to avoid). */
+.pcf-tree-l::after,
+.pcf-tree-t::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 7px;
+    width: 50px;
+    border-top: 1px solid #AAAAAA;
+}
+
+/* Added when the connector starts directly under the parent row's toggle
+   (connectsFromAccountToggle / connectsFromSubaccountToggle flags in
+   GridRenderer). Kept as an explicit top:0 anchor; the commented-out bottom
+   below was disabled during a connector regression fix - leave it as is. */
+.pcf-tree-from-toggle::before {
+    top: 0;
+    /* bottom: 0%; */
+}
+
+/* The square +/- expand/collapse button on account and subaccount rows
+   (renderAccountRow/renderSubaccountRow). It is centered within the tree
+   column and the connector elbows are sized to stop OUTSIDE its border -
+   changing its 15px footprint requires re-tuning the elbow widths above. */
+.pcf-toggle {
+    display: inline-flex;
+    width: 15px;
+    height: 15px;
+    margin-right: 6px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid #AAAAAA;
+    border-radius: 2px;
+    background: #f7f7f7;
+    color: #595959;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+/* Per-row-kind variants of the tree cell; all currently just keep contents
+   vertically centered. */
+.pcf-cell-tree-account,
+.pcf-cell-tree-sub,
+.pcf-cell-tree-contract,
+.pcf-cell-tree-add {
+    align-items: center;
+}
+
+/* .pcf-toggle-expanded is added while a node is expanded. position:relative
+   only exists to anchor the (disabled) drop-line stub below. */
+.pcf-cell-tree-account .pcf-toggle-expanded,
+.pcf-cell-tree-sub .pcf-toggle-expanded {
+    position: relative;
+}
+
+/* DORMANT stub: a short line dropping from an expanded toggle to its first
+   child. The content line is intentionally commented out (the segment is
+   drawn by the child rows' *-toggle classes instead); without content the
+   pseudo-element never renders. Do not "fix" by re-enabling content. */
+.pcf-cell-tree-account .pcf-toggle-expanded::after,
+.pcf-cell-tree-sub .pcf-toggle-expanded::after {
+    /* content: ''; */
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    height: 12px;
+    border-left: 1px solid #AAAAAA;
+}
+
+/* Hover feedback on the expand/collapse button. */
+.pcf-toggle:hover {
+    background: #eee;
+    border-color: #777;
+}
+
+/* Invisible placeholder with the toggle's exact footprint, used on rows
+   without a toggle (contracts, Add rows, collapsed-leaf accounts) so the
+   row number / name stay column-aligned with toggle rows. */
+.pcf-leaf-spacer {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+/* ============================================================================
+   SECTION: Subaccount "Add" row button and Add dropdown (with submenu)
+   The Add row shows a blue "... Add" button (renderAddRow). Clicking it
+   builds .pcf-add-dropdown and appends it to document.body
+   (openAddDropdown) so it escapes the scroll container's clipping;
+   position:fixed coordinates come from the button's bounding rect.
+   "Standard Contract" is a parent item whose hover reveals the
+   .pcf-add-submenu flyout listing standard-contract templates.
+   ========================================================================== */
+
+/* Base style for the blue link-like Add button shown on Add rows. */
+.pcf-add-btn {
+    display: inline-flex;
+    padding: 2px 4px;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    background: transparent;
+    color: #006EB9;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* Modifier on the same button when it acts as the dropdown opener
+   ("••• Add" rendered in renderAddRow); strips button chrome. */
+.pcf-add-menu-btn {
+    min-width: 80px;
+    padding: 2px 8px;
+    justify-content: flex-start;
+    border-radius: 0;
+    background: transparent;
+    color: #006EB9;
+}
+
+/* Blue "active" highlight while the Add menu is open. GridRenderer adds
+   .pcf-add-menu-btn-active in showAddDropdown() and removes it in closeAddDropdown();
+   mirrors the three-dot button's active state and the design mock. */
+.pcf-add-menu-btn-active {
+    background: #cfe4f7;
+    border-radius: 4px;
+}
+
+/* The "•••" glyphs preceding the word "Add" inside the button. */
+.pcf-add-menu-dots {
+    color: #006EB9;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1;
+}
+
+/* The Add dropdown panel; appended to document.body with position:fixed so
+   the scroll wrapper cannot clip it. z-index keeps it above sticky rows. */
+.pcf-add-dropdown {
+    display: none;
+    min-width: 210px;
+    position: fixed;
+    z-index: 10000;
+    padding: 4px 0;
+    border: 1px solid #D0D0D0;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* "open" is toggled by openAddDropdown()/the outside-click handler. */
+.pcf-add-dropdown.open {
+    display: block;
+}
+
+/* Menu entries: plain items plus the "Standard Contract" parent item that
+   carries the submenu chevron. */
+.pcf-add-dropdown-item,
+.pcf-add-dropdown-parent {
+    display: flex;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 12px;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: #fff;
+    color: #333333;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: left;
+    white-space: nowrap;
+}
+
+/* Hover wash for enabled items; the parent item also highlights while the
+   pointer is anywhere over its wrapper (i.e. while the submenu is open). */
+.pcf-add-dropdown-item:hover:not(:disabled),
+.pcf-add-dropdown-item-wrap:hover > .pcf-add-dropdown-parent {
+    background: #F3F2F1;
+}
+
+/* Disabled Add option (e.g. action not allowed for this subaccount). */
+.pcf-add-dropdown-item:disabled {
+    color: #A6A6A6;
+    cursor: default;
+}
+
+/* Leading icon slot of each Add menu item (markup from getAddDropdownIcon). */
+.pcf-add-dropdown-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #595959;
+    text-align: center;
+}
+
+/* These Add-menu icons are FILL-style glyphs, so fill:currentColor is
+   correct HERE (unlike the stroke-style .pcf-paid-action-icon icons). */
+.pcf-add-dropdown-icon svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+/* Gray out the icon together with the disabled label. */
+.pcf-add-dropdown-item:disabled .pcf-add-dropdown-icon {
+    color: #A6A6A6;
+}
+
+/* Wrapper around the "Standard Contract" parent item; anchors the flyout
+   submenu (position:absolute children below). */
+.pcf-add-dropdown-item-wrap {
+    position: relative;
+}
+
+/* Right-aligned chevron on the parent item hinting at the flyout submenu. */
+.pcf-add-dropdown-parent::after {
+    content: '›';
+    margin-left: auto;
+    color: #595959;
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* Standard-contract flyout submenu; opens to the right of the parent item. */
+.pcf-add-submenu {
+    display: none;
+    min-width: 220px;
+    position: absolute;
+    top: 0;
+    left: 100%;
+    padding: 4px 0;
+    border: 1px solid #D0D0D0;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+/* Submenu reveal is pure CSS hover - no JS open/close state involved. */
+.pcf-add-dropdown-item-wrap:hover .pcf-add-submenu {
+    display: block;
+}
+
+/* Dont want hover underline on add button as it looks weird with the plus icon, so commenting out for now. Can revisit if needed in the future. */
+
+/* .pcf-add-btn:hover {
+    text-decoration: underline;
+} */
+    
+
+/* ============================================================================
+   SECTION: Contract name block and meta text
+   Built in renderContractRow(): a stacked block with the main name line
+   (plus optional red comment dot) above small gray sub-label / meta tags.
+   ========================================================================== */
+
+/* Two-line stack inside the contract name cell; overflow:hidden enables the
+   inner ellipsis on long names. */
+.pcf-name-block {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Top line: name text + comment dot. overflow:visible keeps the dot
+   hoverable even when the text beside it truncates. */
+.pcf-name-line {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    overflow: visible;
+}
+
+/* Contract display name; ellipsized. Turns blue on standard contracts via
+   the .pcf-row-standard override below. */
+.pcf-name-main {
+    min-width: 0;
+    color: #242424;
+    font-size: 12px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Small gray secondary label under the contract name. */
+.pcf-name-sub {
+    color: #777777;
+    font-size: 10px;
+    font-weight: 400;
+}
+
+/* Small meta tag text (e.g. SPV / DEVCO) appended after the name; the
+   per-tag class is generated as pcf-meta-tag-<tag> in renderContractRow. */
+.pcf-meta-tag {
+    color: #777777;
+    font-size: 10px;
+    font-weight: 400;
+}
+
+/* Per-tag color hooks (currently identical; kept separate so SPV and DEVCO
+   can be tinted independently later). */
+.pcf-meta-tag-spv {
+    color: #767676;
+}
+
+.pcf-meta-tag-devco {
+    color: #767676;
+}
+
+/* Italic blue link-style text on a contract's secondary line. */
+.pcf-contract-link {
+    color: #006EB9;
+    font-size: 10px;
+    font-style: italic;
+}
+
+/* Gray helper text following the contract link. */
+.pcf-contract-link-subtext {
+    color: #777777;
+    font-size: 10px;
+    font-weight: 400;
+}
+
+/* ============================================================================
+   SECTION: Standard contract highlight
+   Applied when DatasetParser detects IsStandardContract: GridRenderer adds
+   .pcf-row-standard to the contract <tr> and .pcf-contract-standard to the
+   name span, turning the whole row's text brand blue (#006EB9). Changing
+   this blue changes how standard contracts are distinguished everywhere.
+   ========================================================================== */
+
+/* Blue tint on the standard contract's name span itself. */
+.pcf-contract-standard {
+    color: #006EB9;
+}
+
+/* Row-wide override: every cell, name part and meta tag of a standard
+   contract row goes blue (the !important beats the per-element grays). */
+.pcf-row-contract.pcf-row-standard td,
+.pcf-row-contract.pcf-row-standard .pcf-name-main,
+.pcf-row-contract.pcf-row-standard .pcf-name-sub,
+.pcf-row-contract.pcf-row-standard .pcf-meta-tag {
+    color: #006EB9 !important;
+}
+
+/* Dash/empty-value cells also follow the standard-contract blue. */
+.pcf-row-contract.pcf-row-standard .pcf-val-dash {
+    color: #006EB9 !important;
+}
+
+/* ============================================================================
+   SECTION: Comment indicators (red dots) and their tooltips
+   createCommentDot() in GridRenderer adds .pcf-name-dot (after the contract
+   name) or .pcf-month-comment-dot (pinned top-right inside a month cell),
+   both combined with .pcf-comment-dot. Month-cell dots use the pure-CSS
+   [data-tooltip]::after dark tooltip below; the contract-NAME dot instead
+   gets .pcf-comment-tooltip-floating appended to document.body, because
+   .pcf-cell-name clips overflow for its ellipsis and would cut an inline
+   tooltip off - do NOT move that tooltip back inline.
+   ========================================================================== */
+
+/* Red "has comment" dot displayed right after the contract name. */
+.pcf-name-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: #E23636;
+    vertical-align: middle;
+}
+
+/* Wrapper span around the month amount text (appendContractMonthCell). */
+.pcf-month-value {
+    display: inline-block;
+}
+
+/* Red comment dot pinned to a month cell's top-right corner (absolute
+   against the .pcf-contract-month-cell). */
+.pcf-month-comment-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    border-radius: 50%;
+    background: #E23636;
+}
+
+/* Shared dot behavior. The hand cursor is INTENTIONAL (user requirement):
+   dots should invite hovering even though they are not buttons. */
+.pcf-comment-dot {
+    cursor: pointer;
+}
+
+/* The name dot anchors its (floating) tooltip positioning math. */
+.pcf-name-dot.pcf-comment-dot {
+    position: relative;
+}
+
+/* No focus ring on the dot; the tooltip itself is the focus feedback. */
+.pcf-comment-dot:focus {
+    outline: none;
+}
+
+/* Light (#ecebe9) pure-CSS tooltip shown above a dot that carries a
+   data-tooltip attribute - used by MONTH cell dots. Bug 13454: restyled to the
+   Figma off-white tooltip (was #2B2B2B). Changing this styling should be
+   mirrored in .pcf-comment-tooltip-floating and .pcf-info-icon::after to keep
+   all three tooltips visually identical. */
+.pcf-comment-dot[data-tooltip]::after {
+    content: attr(data-tooltip);
+    display: none;
+    width: max-content;
+    max-width: 260px;
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    z-index: 10002;
+    transform: translateX(-50%);
+    padding: 8px 12px;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    background: #ecebe9;
+    color: #242424;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+    text-align: left;
+    white-space: pre-line;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.14);
+    pointer-events: none;
+}
+
+/* Month-cell variant: right-aligns the tooltip to the dot so it does not
+   overflow the table's right edge on the last month columns. */
+.pcf-month-comment-dot[data-tooltip]::after {
+    left: auto;
+    right: -8px;
+    transform: none;
+}
+
+/* Tooltip is revealed on hover or keyboard focus of the dot. */
+.pcf-comment-dot[data-tooltip]:hover::after,
+.pcf-comment-dot[data-tooltip]:focus::after {
+    display: block;
+}
+
+/* document.body-floated tooltip for the CONTRACT-NAME dot (created in
+   GridRenderer's name-dot handler). Exists because the name cell clips
+   overflow for its ellipsis, which would truncate an inline ::after
+   tooltip. Mirrors the off-white tooltip style above - keep the two in sync,
+   and do not move this back inline. */
+.pcf-comment-tooltip-floating {
+    position: fixed;
+    z-index: 10002;
+    width: max-content;
+    max-width: 260px;
+    padding: 8px 12px;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    background: #ecebe9;
+    color: #242424;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+    text-align: left;
+    white-space: pre-line;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.14);
+    pointer-events: none;
+}
+
+/* ============================================================================
+   SECTION: Grand Total row (sticky bottom)
+   Single dark summary row built in renderGrandTotalRow(); position:sticky
+   pins it to the bottom of .pcf-table-scroll, so middle rows scroll between
+   it and the sticky headers. z-index 9 keeps it under the header rows
+   (10-13) but above scrolling body cells.
+   ========================================================================== */
+
+/* The sticky positioning itself lives on the <tr>. */
+.pcf-row-grand {
+    position: sticky;
+    bottom: 0;
+    z-index: 9;
+}
+
+/* Grand Total cells: opaque dark gray (must stay opaque or scrolling rows
+   show through), white bold figures. */
+.pcf-row-grand td {
+    height: 40px;
+    border-right-color: #8A8A8A;
+    border-bottom: none;
+    background: #7D7D7D;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* The darker "Grand Total" label cell at the left of the row. */
+.pcf-grand-label {
+    background: #595959 !important;
+    text-align: center;
+}
+
+/* ============================================================================
+   SECTION: Contract three-dot actions button and dropdown (ActionDropdown.ts)
+   .pcf-dots-btn is rendered per contract row by GridRenderer; clicking it
+   opens the shared .pcf-dropdown built once by ActionDropdown.ts
+   (Edit / Comment / Delete) and appended to document.body with
+   position:fixed so the scroll container cannot clip it. The
+   .pcf-dropdown-item* rules are ALSO reused by the month paid/unpaid
+   dropdown (next section), so changes here affect both menus.
+   ========================================================================== */
+
+/* The bordered three-dot button in a contract row's actions column; also
+   hosts the red unread-comment corner badge (.pcf-dot-badge). */
+.pcf-dots-btn {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #8ab6e8;
+    border-radius: 4px;
+    background: #f7fbff;
+    color: #006EB9;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+.pcf-dots-btn:hover {
+    background: #edf6ff;
+}
+
+/* Blue "active" highlight while this button's Edit/Comment/Delete menu is open.
+   ActionDropdown.ts adds .pcf-dots-btn-active in show() and removes it in
+   closeDropdown(); the stronger fill (vs the hover wash) mirrors the design mock. */
+.pcf-dots-btn-active,
+.pcf-dots-btn-active:hover {
+    background: #cfe4f7;
+    border-color: #006EB9;
+}
+
+/* The contract action menu panel; hidden until ActionDropdown adds "open".
+   position:fixed + document.body parent escape scroll-container clipping. */
+.pcf-dropdown {
+    display: none;
+    min-width: 170px;
+    position: fixed;
+    z-index: 10000;
+    padding: 6px 0;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* "open" toggled by ActionDropdown's show/hide + outside-click handling. */
+.pcf-dropdown.open {
+    display: block;
+}
+
+/* A menu entry (Edit/Comment/Delete); also the base class for month
+   dropdown items, which add .pcf-month-dropdown-item on top. */
+.pcf-dropdown-item {
+    display: flex;
+    width: 100%;
+    padding: 8px 14px;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    background: none;
+    color: #333;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    text-align: left;
+}
+
+/* Standard light-gray hover for enabled menu entries. */
+.pcf-dropdown-item:hover {
+    background: #f5f5f5;
+}
+
+/* Disabled menu entry (e.g. "Mark as paid" when the month cannot be paid,
+   added in openMonthDropdown). cursor:pointer is INTENTIONAL per user
+   requirement - the row still shows its info tooltip on hover. */
+.pcf-dropdown-item-disabled {
+    color: #A6A6A6;
+    cursor: pointer;
+}
+
+/* No hover wash on disabled entries - they should look inert. */
+.pcf-dropdown-item-disabled:hover {
+    background: none;
+}
+
+/* Disabled-state icons: lighter gray OUTLINE. Color only - do NOT re-add
+   fill:currentColor here; that past change turned the stroke-drawn icons
+   into solid blobs. */
+.pcf-dropdown-item-disabled .pcf-paid-action-icon,
+.pcf-dropdown-item-disabled svg {
+    color: #C8C8C8;
+}
+
+/* Default icon sizing inside the contract action menu entries. */
+.pcf-dropdown-item svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+/* Red badge on the three-dot button's corner indicating the contract has a
+   comment (added in renderContractRow when commentTooltip exists). */
+.pcf-dot-badge {
+    width: 7px;
+    height: 7px;
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    background: #E23636;
+}
+
+/* Small red dot inside the "Comment" menu entry (ActionDropdown toggles its
+   visibility depending on whether the contract already has a comment). */
+.pcf-dot-inline {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-left: 2px;
+    border-radius: 50%;
+    background: #E23636;
+    vertical-align: middle;
+}
+
+/* Numeric cell rendering a "-" (no value); appendNumericCell adds this so
+   dashes sit right-aligned like real figures. */
+.pcf-val-dash {
+    color: #777777;
+    text-align: right !important;
+    padding-right: 15px !important;
+}
+
+/* ============================================================================
+   SECTION: Month paid/unpaid dropdown
+   openMonthDropdown() in GridRenderer builds .pcf-month-dropdown on
+   document.body (position:fixed escapes scroll clipping) when a contract
+   month cell is clicked. Items reuse .pcf-dropdown-item from the previous
+   section plus the .pcf-month-dropdown-item size overrides. The disabled
+   "Mark as paid" entry carries .pcf-dropdown-item-disabled plus an
+   .pcf-info-icon whose ::after is the light tooltip explaining why.
+   ========================================================================== */
+
+/* Green highlight meant for the month cell while its dropdown is open;
+   mirrors the paid green. NOTE: GridRenderer currently toggles the
+   "active" class instead (see .pcf-paid-cell.active), so this class is
+   not applied anywhere at present. */
+.pcf-selected-cell {
+    background: #D6E7B3 !important;
+    color: #242424 !important;
+    border-radius: 3px;
+}
+
+/* The month dropdown panel; overflow:visible is required so the info
+   icon's tooltip can extend past the panel edge. */
+.pcf-month-dropdown {
+    display: none;
+    min-width: 170px;
+    position: fixed;
+    z-index: 10000;
+    padding: 6px 0;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #FFFFFF;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    overflow: visible;
+}
+
+/* "open" toggled by openMonthDropdown()/closeMonthDropdown(). */
+.pcf-month-dropdown.open {
+    display: block;
+}
+
+/* Info-message variant (equal-distributed cells): the whole bubble uses the
+   shared tooltip background (#ecebe9). Added by GridRenderer only when the
+   dropdown holds the message (not the white Set paid/unpaid menu). */
+.pcf-month-dropdown--info {
+    padding: 0;
+    background: #ecebe9;
+}
+
+/* Info-only message shown for equal-distributed month cells (no actions
+   available). Wraps to a few lines inside the dropdown panel. */
+.pcf-month-dropdown-message {
+    max-width: 260px;
+    padding: 10px 14px;
+    color: #242424;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 18px;
+    white-space: normal;
+}
+
+/* Size/typography overrides making month dropdown entries taller and larger
+   than the contract action menu entries they inherit from. */
+.pcf-month-dropdown-item {
+    padding: 8px 14px;
+    gap: 10px;
+    color: #333333;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* Deliberately keeps the background white on hover, overriding the gray
+   .pcf-dropdown-item:hover inherited from the action menu. */
+.pcf-month-dropdown-item:hover {
+    background: #FFFFFF;
+}
+
+/* Larger icon footprint inside month dropdown entries. */
+.pcf-month-dropdown-item .pcf-paid-action-icon {
+    width: 15px;
+    height: 15px;
+    color: #595959;
+}
+
+/* Scale the outline SVG with the larger wrapper (stroke only - no fill). */
+.pcf-month-dropdown-item .pcf-paid-action-icon svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 1.6;
+}
+
+/* Gray "i" info icon appended to the DISABLED "Mark as paid" entry
+   (openMonthDropdown); explains why the action is unavailable. The hand
+   cursor here is intentional per user requirement. */
+.pcf-info-icon {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    margin-left: 0;
+    color: #A6A6A6;
+    cursor: pointer;
+}
+
+/* No focus ring; the tooltip appearing is the focus feedback. */
+.pcf-info-icon:focus {
+    outline: none;
+}
+
+/* Light tooltip bubble above the info icon, fed by the data-tooltip
+   attribute (the disabledReason text from GridRenderer). Bug 13454: banner
+   restyled to match Figma - light (#ecebe9) background with dark text (was #2B2B2B). */
+.pcf-info-icon::after {
+    content: attr(data-tooltip);
+    display: none;
+    width: max-content;
+    max-width: 380px;
+    position: absolute;
+    right: -16px;
+    bottom: calc(100% + 14px);
+    z-index: 10001;
+    padding: 8px 12px;
+    border: 1px solid #D0D0D0;
+    border-radius: 6px;
+    background: #ecebe9;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.14);
+    color: #242424;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+    white-space: nowrap;
+}
+
+/* Tooltip reveal: hovering/focusing the icon itself OR hovering anywhere on
+   the disabled row (third selector) - the whole row acts as the hover
+   target by design. */
+.pcf-info-icon:hover::after,
+.pcf-info-icon:focus::after,
+.pcf-dropdown-item-disabled:hover .pcf-info-icon::after {
+    display: block;
+}
+
+/* Empty/loading state: centered spinner + caption shown when the grid has no
+   rows yet (renderEmptyState). */
+.pcf-loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+    color: #9ca3af;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 13px;
+}
+
+.pcf-spinner {
+    width: 28px;
+    height: 28px;
+    /* Brand blue (#006EB9, same as the Add button): light-blue track + solid arc. */
+    border: 3px solid rgba(0, 110, 185, 0.25);
+    border-top-color: #006EB9;
+    border-radius: 50%;
+    animation: pcf-spin 0.8s linear infinite;
+}
+
+@keyframes pcf-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

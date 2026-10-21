@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# pac / code app
+.power/tmp/
+dist/
+
+# Merged from the former workspace-root .gitignore (19 Oct 2026 restructure).
+# `.power/` is pac output: regenerate it with `pac code add-data-source`, never commit it.
+.power/
+build/
+out/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+Thumbs.db
+obj/
+bin/
+*.pcf.cache
+.vite/
+coverage/

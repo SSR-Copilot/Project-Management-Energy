@@ -1,0 +1,344 @@
+{
+  "version": "1.0",
+  "appId": "807a2fba-665c-40f3-b158-ffe822aa7da4",
+  "appDisplayName": "Project App",
+  "region": "prod",
+  "environmentId": "be41add6-6f60-ebb0-9c73-2480d6bc615d",
+  "description": "VSBCloud Project Costs, rebuilt as a Power Apps code app",
+  "buildPath": "dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "bopprojectscontracts": {
+          "entitySetName": "vsb_bopprojectscontractses",
+          "logicalName": "vsb_bopprojectscontracts"
+        },
+        "bopcontractspaymenttargets": {
+          "entitySetName": "vsb_bopcontractspaymenttargetses",
+          "logicalName": "vsb_bopcontractspaymenttargets"
+        },
+        "bopcontractsdevcocosts": {
+          "entitySetName": "vsb_bopcontractsdevcocostses",
+          "logicalName": "vsb_bopcontractsdevcocosts"
+        },
+        "bopcontractsstandardassumptions": {
+          "entitySetName": "vsb_bopcontractsstandardassumptionses",
+          "logicalName": "vsb_bopcontractsstandardassumptions"
+        },
+        "capexaccountlists": {
+          "entitySetName": "vsb_capexaccountlists",
+          "logicalName": "vsb_capexaccountlist"
+        },
+        "capexprojectcontracts": {
+          "entitySetName": "vsb_capexprojectcontracts",
+          "logicalName": "vsb_capexprojectcontract"
+        },
+        "projects": {
+          "entitySetName": "vsb_projects",
+          "logicalName": "vsb_project"
+        },
+        "users": {
+          "entitySetName": "systemusers",
+          "logicalName": "systemuser"
+        },
+        "teams": {
+          "entitySetName": "teams",
+          "logicalName": "team"
+        },
+        "securityroles": {
+          "entitySetName": "roles",
+          "logicalName": "role"
+        },
+        "environmentvariablevalues": {
+          "entitySetName": "environmentvariablevalues",
+          "logicalName": "environmentvariablevalue"
+        },
+        "environmentvariabledefinitions": {
+          "entitySetName": "environmentvariabledefinitions",
+          "logicalName": "environmentvariabledefinition"
+        },
+        "businessunits": {
+          "entitySetName": "businessunits",
+          "logicalName": "businessunit"
+        },
+        "currencies": {
+          "entitySetName": "transactioncurrencies",
+          "logicalName": "transactioncurrency"
+        },
+        "countries": {
+          "entitySetName": "vsb_countries",
+          "logicalName": "vsb_country"
+        },
+        "projectstates": {
+          "entitySetName": "vsb_projectstates",
+          "logicalName": "vsb_projectstate"
+        },
+        "countryareas": {
+          "entitySetName": "vsb_countryareas",
+          "logicalName": "vsb_countryarea"
+        },
+        "microsoftentraids": {
+          "entitySetName": "aadusers",
+          "logicalName": "aaduser"
+        },
+        "capexcosts": {
+          "entitySetName": "vsb_capexcosts",
+          "logicalName": "vsb_capexcost"
+        },
+        "capexcomments": {
+          "entitySetName": "vsb_capexcommentses",
+          "logicalName": "vsb_capexcomments"
+        },
+        "devex_capexstandardassumptions": {
+          "entitySetName": "vsb_devexcapexstandardassumptionses",
+          "logicalName": "vsb_devexcapexstandardassumptions"
+        },
+        "spvdevcomappingcapexdevexes": {
+          "entitySetName": "vsb_spvdevcomappingcapexdevexes",
+          "logicalName": "vsb_spvdevcomappingcapexdevex"
+        },
+        "opexaccounts": {
+          "entitySetName": "vsb_opexaccounts",
+          "logicalName": "vsb_opexaccount"
+        },
+        "opexsubaccounts": {
+          "entitySetName": "vsb_opexsubaccounts",
+          "logicalName": "vsb_opexsubaccount"
+        },
+        "opexprojectcosts": {
+          "entitySetName": "vsb_opexprojectcosts",
+          "logicalName": "vsb_opexprojectcost"
+        },
+        "opex_landleasestandardassumptions": {
+          "entitySetName": "vsb_opexlandleasestandardassumptionses",
+          "logicalName": "vsb_opexlandleasestandardassumptions"
+        },
+        "landleasesubaccounts": {
+          "entitySetName": "vsb_landleasesubaccounts",
+          "logicalName": "vsb_landleasesubaccount"
+        },
+        "landleaseprojectcosts": {
+          "entitySetName": "vsb_landleaseprojectcosts",
+          "logicalName": "vsb_landleaseprojectcost"
+        },
+        "landleaseperiods": {
+          "entitySetName": "vsb_landleaseperiods",
+          "logicalName": "vsb_landleaseperiod"
+        },
+        "landleaseallocationwtgs": {
+          "entitySetName": "vsb_landleaseallocationwtgs",
+          "logicalName": "vsb_landleaseallocationwtg"
+        },
+        "countryinflationprofiles": {
+          "entitySetName": "vsb_countryinflationprofiles",
+          "logicalName": "vsb_countryinflationprofile"
+        },
+        "generators": {
+          "entitySetName": "vsb_generators",
+          "logicalName": "vsb_generator"
+        },
+        "generatorinprojects": {
+          "entitySetName": "vsb_generatorinprojects",
+          "logicalName": "vsb_generatorinproject"
+        },
+        "generatortypeinprojects": {
+          "entitySetName": "vsb_generatortypeinprojects",
+          "logicalName": "vsb_generatortypeinproject"
+        },
+        "pvmoduletypeinprojects": {
+          "entitySetName": "vsb_pvmoduletypeinprojects",
+          "logicalName": "vsb_pvmoduletypeinproject"
+        },
+        "devicetypesinprojects": {
+          "entitySetName": "vsb_devicetypesinprojects",
+          "logicalName": "vsb_devicetypesinproject"
+        },
+        "milestonesstandardassumptions": {
+          "entitySetName": "vsb_milestonesstandardassumptionses",
+          "logicalName": "vsb_milestonesstandardassumptions"
+        },
+        "basecases": {
+          "entitySetName": "vsb_basecases",
+          "logicalName": "vsb_basecase"
+        },
+        "checklistcountryandtechnologies": {
+          "entitySetName": "vsb_checklistcountryandtechnologies",
+          "logicalName": "vsb_checklistcountryandtechnology"
+        },
+        "projectdefaultchecklists": {
+          "entitySetName": "vsb_projectdefaultchecklistses",
+          "logicalName": "vsb_projectdefaultchecklists"
+        },
+        "checklistdefaultapprovals": {
+          "entitySetName": "vsb_checklistdefaultapprovalses",
+          "logicalName": "vsb_checklistdefaultapprovals"
+        },
+        "projectdefaultapprovals": {
+          "entitySetName": "vsb_projectdefaultapprovalses",
+          "logicalName": "vsb_projectdefaultapprovals"
+        },
+        "bopcontractsstandardassumptiondevcocosts": {
+          "entitySetName": "vsb_bopcontractsstandardassumptiondevcocostses",
+          "logicalName": "vsb_bopcontractsstandardassumptiondevcocosts"
+        },
+        "projectstatetrackings": {
+          "entitySetName": "vsb_projectstatetrackings",
+          "logicalName": "vsb_projectstatetracking"
+        },
+        "shareholderentityinprojects": {
+          "entitySetName": "vsb_shareholderentitiies",
+          "logicalName": "vsb_shareholderentitiy"
+        },
+        "customchoicevalues": {
+          "entitySetName": "vsb_customchoicevalues",
+          "logicalName": "vsb_customchoicevalue"
+        },
+        "assumptionslocaltaxgermanies": {
+          "entitySetName": "vsb_assumptionslocaltaxgermanies",
+          "logicalName": "vsb_assumptionslocaltaxgermany"
+        },
+        "assumptionslocaltaxfrances": {
+          "entitySetName": "vsb_assumptionslocaltaxfrances",
+          "logicalName": "vsb_assumptionslocaltaxfrance"
+        },
+        "projectrevenues": {
+          "entitySetName": "vsb_projectrevenues",
+          "logicalName": "vsb_projectrevenue"
+        },
+        "estimationpriceinflations": {
+          "entitySetName": "vsb_estimationpriceinflations",
+          "logicalName": "vsb_estimationpriceinflation"
+        },
+        "fabricsyncjobs": {
+          "entitySetName": "vsb_fabricsyncjobs",
+          "logicalName": "vsb_fabricsyncjob"
+        },
+        "fabricjobtypes": {
+          "entitySetName": "vsb_fabricjobtypes",
+          "logicalName": "vsb_fabricjobtype"
+        },
+        "projectplannings": {
+          "entitySetName": "vsb_projectplannings",
+          "logicalName": "vsb_projectplanning"
+        },
+        "invertertypeinprojects": {
+          "entitySetName": "vsb_invertertypeinprojects",
+          "logicalName": "vsb_invertertypeinproject"
+        },
+        "substructuretypeinprojects": {
+          "entitySetName": "vsb_substructuretypeinprojects",
+          "logicalName": "vsb_substructuretypeinproject"
+        },
+        "storagetypeinprojects": {
+          "entitySetName": "vsb_storagetypeinprojects",
+          "logicalName": "vsb_storagetypeinproject"
+        },
+        "hydrogentypeinprojects": {
+          "entitySetName": "vsb_hydrogentypeinprojects",
+          "logicalName": "vsb_hydrogentypeinproject"
+        },
+        "substationtypeinprojects": {
+          "entitySetName": "vsb_substationtypeinprojects",
+          "logicalName": "vsb_substationtypeinproject"
+        },
+        "devicecosts": {
+          "entitySetName": "vsb_devicecosts",
+          "logicalName": "vsb_devicecost"
+        },
+        "pvmodules": {
+          "entitySetName": "vsb_pvmodules",
+          "logicalName": "vsb_pvmodule"
+        },
+        "inverters": {
+          "entitySetName": "vsb_inverters",
+          "logicalName": "vsb_inverter"
+        },
+        "substructures": {
+          "entitySetName": "vsb_substructures",
+          "logicalName": "vsb_substructure"
+        },
+        "energyyields": {
+          "entitySetName": "vsb_energyyields",
+          "logicalName": "vsb_energyyield"
+        },
+        "pvseasonalityvalues": {
+          "entitySetName": "vsb_pvseasonalityvalueses",
+          "logicalName": "vsb_pvseasonalityvalues"
+        },
+        "pvnegativeprices": {
+          "entitySetName": "vsb_pvnegativepriceses",
+          "logicalName": "vsb_pvnegativeprices"
+        },
+        "projectchecklists": {
+          "entitySetName": "vsb_projectchecklists",
+          "logicalName": "vsb_projectchecklist"
+        },
+        "projectstatetrackingnotes": {
+          "entitySetName": "vsb_projectstatetrackingnotes",
+          "logicalName": "vsb_projectstatetrackingnote"
+        },
+        "projectchecklisttrackingnote": {
+          "entitySetName": "vsb_projectchecklisttrackingnotes",
+          "logicalName": "vsb_projectchecklisttrackingnote"
+        },
+        "projectmembers": {
+          "entitySetName": "vsb_projectmemberses",
+          "logicalName": "vsb_projectmembers"
+        },
+        "projectmemberdescriptions": {
+          "entitySetName": "vsb_projectmemberdescriptionses",
+          "logicalName": "vsb_projectmemberdescriptions"
+        },
+        "permits": {
+          "entitySetName": "vsb_permits",
+          "logicalName": "vsb_permit"
+        },
+        "aquisitionstatuses": {
+          "entitySetName": "vsb_aquisitionstatuses",
+          "logicalName": "vsb_aquisitionstatus"
+        },
+        "aquisitiontypes": {
+          "entitySetName": "vsb_aquisitiontypes",
+          "logicalName": "vsb_aquisitiontype"
+        },
+        "gridoperators": {
+          "entitySetName": "vsb_gridoperators",
+          "logicalName": "vsb_gridoperator"
+        },
+        "balancingprices": {
+          "entitySetName": "vsb_balancingprices",
+          "logicalName": "vsb_balancingprice"
+        },
+        "revenueindividualhedgevolumes": {
+          "entitySetName": "vsb_revenueindividualhedgevolumes",
+          "logicalName": "vsb_revenueindividualhedgevolume"
+        },
+        "revenuesubaccounts": {
+          "entitySetName": "vsb_revenuesubaccounts",
+          "logicalName": "vsb_revenuesubaccount"
+        },
+        "financingcategories": {
+          "entitySetName": "vsb_financingcategories",
+          "logicalName": "vsb_financingcategory"
+        },
+        "financinginputs": {
+          "entitySetName": "vsb_financinginputs",
+          "logicalName": "vsb_financinginput"
+        },
+        "financinginputsrepaymentamounts": {
+          "entitySetName": "vsb_financinginputsrepaymentamounts",
+          "logicalName": "vsb_financinginputsrepaymentamount"
+        },
+        "financinginputstepupmargins": {
+          "entitySetName": "vsb_financinginputstepupmarginses",
+          "logicalName": "vsb_financinginputstepupmargins"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}
