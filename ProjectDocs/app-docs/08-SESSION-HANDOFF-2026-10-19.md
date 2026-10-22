@@ -1,5 +1,7 @@
 # Session handoff — 19 Oct 2026: restructure, then Admin/PM redevelopment
 
+> **Superseded for current state by `10-SESSION-HANDOFF-2026-10-22.md`.** This file is the history up to 22 Oct.
+
 Start a new chat by reading this file, then `gap-analysis/README.md` (the status table) and `gap-analysis/IMPLEMENTATION-BRIEF.md` (the binding rules for each screen). Re-check the code before you trust any line here.
 
 ## Layout (since 19 Oct)

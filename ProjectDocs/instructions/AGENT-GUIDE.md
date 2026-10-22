@@ -25,10 +25,11 @@ folder in the workspace.
 
 ## Quick orientation
 
-- **Start here in a new chat:** `ProjectDocs/app-docs/08-SESSION-HANDOFF-2026-10-19.md`
-  (newest section last) and `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`
-  (the 22 Oct admin-screen replacement, D36). Older context: `07-SESSION-HANDOFF-2026-10-15.md`
-  and `RESTRUCTURE-2026-10-19.md` (the folder move).
+- **Start here in a new chat:** `ProjectDocs/app-docs/10-SESSION-HANDOFF-2026-10-22.md` (the
+  latest state, what is deployed, and what waits on the product owner), then
+  `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` (the admin-screen
+  replacement, D36). Older context: `08-SESSION-HANDOFF-2026-10-19.md`,
+  `07-SESSION-HANDOFF-2026-10-15.md` and `RESTRUCTURE-2026-10-19.md` (the folder move).
 
 - @PROJECT-MAP.md — what every folder is, and which one is ground truth
 - @CONVENTIONS.md — the real app's coding rules (OData, privileges, labels, tests)
