@@ -84,6 +84,21 @@ const GATE_TEMPLATES = "vsb_projectdefaultapprovalses";
 const describedText = (el: HTMLElement) => (el.getAttribute("aria-describedby") ?? "")
   .split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
 
+/*
+ * The grid's controls carry their canvas control names as `data-testid` (CONVENTIONS rule 16),
+ * suffixed with the row's stable id: a gate row's `Project States` id, a task row's approval id.
+ * Their aria-labels are the bare canvas captions ("Edit", "Delete", "Add Task", "-" / "+"), so a
+ * row's control is found by its test id.
+ */
+const stateIdOf = (order: number) => FIXTURE_STATES.find((s) => s.order === order)!.id;
+const TASK_ID = FIXTURE_APPROVALS[0]!.id;
+const gateRow = (order: number) => screen.getByTestId(`con_Admin_ProjectGates_DefaultClusterApproval_Item-${stateIdOf(order)}`);
+const gateEdit = (order: number) => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_Edit-${stateIdOf(order)}`);
+const gateCollapse = (order: number) => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_Collapse-${stateIdOf(order)}`);
+const addTask = (order: number) => screen.getByTestId(`but_Admin_ProjectGatest_Approvals_Row_Edit_3-${stateIdOf(order)}`);
+const taskEdit = () => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Edit-${TASK_ID}`);
+const taskDelete = () => screen.getByTestId(`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Delete-${TASK_ID}`);
+
 beforeEach(() => {
   vi.clearAllMocks();
   access.admin = true;
@@ -107,8 +122,8 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     renderScreen();
     expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
     expect(await screen.findByText("Draft to Cluster 1")).toBeInTheDocument();
-    for (let o = 0; o < 6; o += 1) expect(screen.getByTestId(`gate-row-${o}`)).toBeInTheDocument();
-    expect(screen.queryByTestId("gate-row-6")).not.toBeInTheDocument();
+    for (let o = 0; o < 6; o += 1) expect(gateRow(o)).toBeInTheDocument();
+    expect(screen.queryByTestId(`con_Admin_ProjectGates_DefaultClusterApproval_Item-${stateIdOf(6)}`)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Spain" })).not.toBeInTheDocument();
     expect(screen.getByText("4 Approvers")).toBeInTheDocument();
     expect(screen.getByText("Grid connection request")).toBeInTheDocument();
@@ -127,7 +142,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-903 opening a placeholder gate and cancelling writes nothing", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 2 to Cluster 3" }));
+    fireEvent.click(gateEdit(2));
     expect(await screen.findByText("Add Approvers")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(); // Notifications required
     expect(screen.getByRole("button", { name: "Reset Gate" })).toBeDisabled();
@@ -139,24 +154,24 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-904 Add Task opens a fresh form for THAT gate and Cancel writes nothing", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" }));
+    fireEvent.click(addTask(1));
     expect(await screen.findByText("Add Approvers")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Check List" })).toHaveTextContent("Land lease signed");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument());
     noWrites();
     // Cluster 3 has no check list task without an approval. Disabled-focusable (aria-disabled).
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 3 to Cluster 4" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 2 to Cluster 3" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 2 to Cluster 3" })).not.toHaveAttribute("aria-disabled");
+    expect(addTask(3)).toHaveAttribute("aria-disabled", "true");
+    expect(addTask(2)).toBeEnabled();
+    expect(addTask(2)).not.toHaveAttribute("aria-disabled");
   });
 
   it("UT-ADGATE-905 no stale state: gate editor, cancel, then a task editor shows only the task's data", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Gate" })).toHaveValue("Cluster 1 to Cluster 2");
+    expect(screen.getByRole("textbox", { name: "Project Status" })).toHaveValue("Cluster 1 to Cluster 2");
     expect(within(screen.getByLabelText("Selected Portfolio Manager")).getByText(person(1).name)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     // Wait until the gate editor is fully gone before opening the next one.
@@ -166,7 +181,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
       expect(screen.queryByLabelText("Selected Portfolio Manager")).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" }));
+    fireEvent.click(taskEdit());
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
     /*
      * `hidden: true`: in jsdom, Fluent's modalizer from the drawer that just closed can leave the
@@ -177,7 +192,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     const local = await screen.findByRole("radio", { name: "Local Approval", ...all });
     expect(local).toBeChecked();
     expect(screen.queryByRole("button", { name: "Reset Gate", ...all })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Search Portfolio Manager", ...all })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Portfolio Manager", ...all })).not.toBeInTheDocument();
     expect(within(screen.getByLabelText("Selected Approvers")).getByText(person(8).name)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Gate active", ...all })).not.toBeChecked();
     expect(screen.getByRole("combobox", { name: "Check List", ...all })).toBeDisabled();
@@ -187,7 +202,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-906 the delete confirmation names the clicked row, and Delete issues one delete", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Delete approval of task Grid connection request" }));
+    fireEvent.click(taskDelete());
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Delete Check List Approval Item?")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Germany - Wind");
@@ -222,7 +237,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     exec.mockRejectedValue(new PlanError(0, 1, "gate approval updated", new DataError("update gate approval template", "Server busy", 500)));
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     fireEvent.click(screen.getByRole("radio", { name: "Local Approval" }));
     // Local requires Approvers — Save disabled until satisfied, so go back to a valid mode.
@@ -243,7 +258,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-910 Reset Gate asks for confirmation first, then issues one reset", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     fireEvent.click(await screen.findByRole("button", { name: "Reset Gate" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("Remove all cluster gate participants");
@@ -262,9 +277,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     }));
     renderScreen();
     expect(await screen.findByText("Check list task approvals are unavailable")).toBeInTheDocument();
-    expect(screen.getByTestId("gate-row-1")).toBeInTheDocument();
+    expect(gateRow(1)).toBeInTheDocument();
     // Disabled-focusable (aria-disabled) with the reason as a tooltip.
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" })).toHaveAttribute("aria-disabled", "true");
+    expect(addTask(1)).toHaveAttribute("aria-disabled", "true");
   });
 
   /* ─────────────────────────────────────────── shared components binding ── */
@@ -272,7 +287,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-912 a disabled Add Task is keyboard-reachable, explains why in a tooltip (no native title) and does nothing", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    const add = screen.getByRole("button", { name: "Add task approval to Cluster 3 to Cluster 4" });
+    const add = addTask(3);
     expect(add).toHaveAttribute("aria-disabled", "true");
     expect(add).not.toBeDisabled(); // focusable: no native `disabled`
     expect(add).not.toHaveAttribute("title");
@@ -288,7 +303,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     repo.loadDataset.mockResolvedValue(fixtureDataset({ checklists: [], approvals: [], checklistError: "Unreadable." }));
     renderScreen();
     await screen.findByText("Check list task approvals are unavailable");
-    const add = screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" });
+    const add = addTask(1);
     add.focus();
     await waitFor(() => expect(describedText(add)).toBe("Check list tasks are not available."));
   });
@@ -298,7 +313,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     exec.mockReturnValue(new Promise((resolve) => { finish = () => resolve({ done: 1, createdIds: [] }); }));
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Delete approval of task Grid connection request" }));
+    fireEvent.click(taskDelete());
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     const label = await screen.findByText(/being deleted, please wait/);
@@ -318,10 +333,10 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    await user.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    await user.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    const input = await screen.findByRole("combobox", { name: "Search Notifications", ...all });
+    const input = await screen.findByRole("combobox", { name: "Notifications", ...all });
     await user.click(input);
     await user.keyboard("mü");
     await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
@@ -349,7 +364,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await screen.findByText("Grid connection request");
     expect(screen.queryByText("Inactive task")).not.toBeInTheDocument();
     expect(screen.queryByText("Soft-deleted task")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" }));
+    fireEvent.click(addTask(1));
     await screen.findByText("Add Approvers");
     const all = { hidden: true } as const;
     fireEvent.click(screen.getByRole("combobox", { name: "Check List", ...all }));
@@ -363,10 +378,10 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     );
     renderScreen();
     await screen.findByText("Grid connection request");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" }));
+    fireEvent.click(taskEdit());
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    expect(screen.getByRole("textbox", { name: "Gate", ...all })).toHaveValue("Cluster 1 to Cluster 2");
+    expect(screen.getByRole("textbox", { name: "Project Status", ...all })).toHaveValue("Cluster 1 to Cluster 2");
     expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
     const save = screen.getByRole("button", { name: "Save", ...all });
     expect(save).toBeEnabled();
@@ -375,7 +390,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(sentWrites()[0]).toMatchObject({ op: "update", entitySet: TASK_APPROVALS });
     await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     await screen.findByText("Edit Approvers");
     expect(await screen.findByText(GATE_BLANK_MESSAGE)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save", ...all })).toBeDisabled();
@@ -384,7 +399,8 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-918 collapse is per country × technology and survives a refetch", async () => {
     renderScreen();
     await screen.findByText("Grid connection request");
-    fireEvent.click(screen.getByRole("button", { name: "Collapse tasks of Cluster 1 to Cluster 2" }));
+    expect(gateCollapse(1)).toHaveAttribute("aria-label", "-");
+    fireEvent.click(gateCollapse(1));
     expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand France technologies" }));
@@ -394,27 +410,27 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Germany Wind" }));
     expect(await screen.findByText("Project Gates | Germany | Wind")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Expand tasks of Cluster 1 to Cluster 2" })).toBeInTheDocument());
+    await waitFor(() => expect(gateCollapse(1)).toHaveAttribute("aria-label", "+"));
     expect(screen.queryByText("Grid connection request")).not.toBeInTheDocument();
 
     // A refetch (here: after a task toggle elsewhere would invalidate) keeps the collapsed gate.
     const calls = repo.loadDataset.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Gate Cluster 1 to Cluster 2: Active\. Click/ }));
     await waitFor(() => expect(repo.loadDataset.mock.calls.length).toBeGreaterThan(calls));
-    expect(screen.getByRole("button", { name: "Expand tasks of Cluster 1 to Cluster 2" })).toBeInTheDocument();
+    expect(gateCollapse(1)).toHaveAttribute("aria-label", "+");
   });
 
   it("UT-ADGATE-919 a successful gate create is one POST, closes the panel and confirms", async () => {
     exec.mockResolvedValue({ done: 1, createdIds: ["40000000-0000-0000-0000-000000000099"] });
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 2 to Cluster 3" }));
+    fireEvent.click(gateEdit(2));
     await screen.findByText("Add Approvers");
     // Satisfy "Notifications required" with the picker.
     repo.searchPeople.mockResolvedValue([person(5)]);
     const user = userEvent.setup();
     const all = { hidden: true } as const;
-    await user.click(screen.getByRole("combobox", { name: "Search Notifications", ...all }));
+    await user.click(screen.getByRole("combobox", { name: "Notifications", ...all }));
     await user.keyboard("pe");
     await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
     await user.keyboard("{ArrowDown}{Enter}");
@@ -435,10 +451,10 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-920 the mode switch shows / hides the people fields", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    const searchBox = (label: string) => screen.queryByRole("combobox", { name: `Search ${label}`, ...all });
+    const searchBox = (label: string) => screen.queryByRole("combobox", { name: label, ...all });
     expect(searchBox("Portfolio Manager")).not.toBeInTheDocument();
     expect(searchBox("Approvers")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
@@ -456,7 +472,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-921 Cancel after an edit asks 'Discard changes?'; Discard closes without writing", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
     fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
@@ -472,7 +488,7 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     exec.mockRejectedValue(new PlanError(0, 1, "gate approval updated", new DataError("update gate approval template", "denied", 403)));
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     fireEvent.click(screen.getByRole("button", { name: "Save", hidden: true }));
     expect(await screen.findByText(/do not have permission to save the approvals/)).toBeInTheDocument();
@@ -500,17 +516,17 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     await screen.findByText("Grid connection request");
 
     // "(mail);" after every listed notification but the last (PGAS:1398-1402).
-    const taskRow = screen.getByTestId(`task-row-${FIXTURE_APPROVALS[0]!.id}`);
+    const taskRow = screen.getByTestId(`cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-${TASK_ID}`);
     expect(within(taskRow).getByText(`(${person(9).mail});`)).toBeInTheDocument();
     expect(within(taskRow).getByText(`(${person(10).mail})`)).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: /Gate Cluster 4 to Cluster 5: Inactive\. Click/ })).toBeEnabled();
 
     // The last visible gate: no label, no blank-gate message, Save enabled, vsb_name " ".
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 5 to Cluster 6" }));
+    fireEvent.click(gateEdit(5));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
-    expect(screen.getByRole("textbox", { name: "Gate", ...all })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Project Status", ...all })).toHaveValue("");
     expect(screen.queryByText(GATE_BLANK_MESSAGE)).not.toBeInTheDocument();
     const save = screen.getByRole("button", { name: "Save", ...all });
     expect(save).toBeEnabled();
@@ -523,11 +539,11 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   it("UT-ADGATE-924 the Portfolio Manager picker shows the canvas hint 'Select Portfolio Manager' (PGAS:3085)", async () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Draft to Cluster 1" }));
+    fireEvent.click(gateEdit(0));
     await screen.findByText("Edit Approvers");
     const all = { hidden: true } as const;
     fireEvent.click(screen.getByRole("radio", { name: "Formal Approval", ...all }));
-    expect(screen.getByRole("combobox", { name: "Search Portfolio Manager", ...all })).toHaveAttribute("placeholder", "Select Portfolio Manager");
+    expect(screen.getByRole("combobox", { name: "Portfolio Manager", ...all })).toHaveAttribute("placeholder", "Select Portfolio Manager");
     noWrites();
   });
 
@@ -562,12 +578,12 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
 
     renderScreen();
     await screen.findByText("Grid connection request");
-    const taskEdit = screen.getByRole("button", { name: "Edit approvers of task Grid connection request" });
-    expect(taskEdit.parentElement!.className).toBe(gap4Class);
+    const taskEditButton = taskEdit();
+    expect(taskEditButton.parentElement!.className).toBe(gap4Class);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     await screen.findByText("Edit Approvers");
-    const gate = screen.getByRole("textbox", { name: "Gate", hidden: true });
+    const gate = screen.getByRole("textbox", { name: "Project Status", hidden: true });
     expect(gate).toBeDisabled();
     expect(gate).toHaveAttribute("readonly");
     expect(gate).toHaveAttribute("aria-invalid", "true");
@@ -602,11 +618,11 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
   it("UT-ADGATE-929 an administrator has every write control enabled", async () => {
     renderScreen();
     await screen.findByText("Grid connection request");
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Delete approval of task Grid connection request" })).toBeEnabled();
+    expect(addTask(1)).toBeEnabled();
+    expect(taskDelete()).toBeEnabled();
     expect(screen.getByRole("button", { name: /Gate Cluster 1 to Cluster 2: Active\. Click/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Task Grid connection request: Inactive\. Click/ })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     await screen.findByText("Edit Approvers");
     expect(screen.getByRole("button", { name: "Reset Gate", ...all })).toBeEnabled();
     expect(screen.getByRole("radio", { name: "Local Approval", ...all })).toBeEnabled();
@@ -617,15 +633,15 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     access.admin = false;
     renderScreen();
     await screen.findByText("Grid connection request");
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Add task approval to Cluster 2 to Cluster 3" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Delete approval of task Grid connection request" })).toBeDisabled();
+    expect(addTask(1)).toHaveAttribute("aria-disabled", "true");
+    expect(addTask(2)).toHaveAttribute("aria-disabled", "true");
+    expect(taskDelete()).toBeDisabled();
     expect(screen.getByRole("button", { name: /Gate Cluster 1 to Cluster 2: Active \(cannot be changed here\)/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Task Grid connection request: Inactive \(cannot be changed here\)/ })).toBeDisabled();
     // Reading stays possible: the Edit buttons still open the panel.
-    expect(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" }));
+    expect(gateEdit(1)).toBeEnabled();
+    expect(taskEdit()).toBeEnabled();
+    fireEvent.click(addTask(1));
     fireEvent.click(screen.getByRole("button", { name: /Task Grid connection request: Inactive/ }));
     expect(screen.queryByText("Add Approvers")).not.toBeInTheDocument();
     noWrites();
@@ -635,7 +651,7 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     access.admin = false;
     renderScreen();
     await screen.findByText("Grid connection request");
-    const add = screen.getByRole("button", { name: "Add task approval to Cluster 1 to Cluster 2" });
+    const add = addTask(1);
     add.focus();
     await waitFor(() => expect(describedText(add)).toBe("You do not have permission to change the default approvals."));
   });
@@ -644,7 +660,7 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     access.admin = false;
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of Cluster 1 to Cluster 2" }));
+    fireEvent.click(gateEdit(1));
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Selected Portfolio Manager")).getByText(person(1).name)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save", ...all })).toBeDisabled();
@@ -652,7 +668,7 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     expect(screen.getByRole("radio", { name: "Formal Approval", ...all })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Gate active", ...all })).toBeDisabled();
     for (const label of ["Contributors", "Approvers", "Notifications"]) {
-      expect(screen.getByRole("combobox", { name: `Search ${label}`, ...all })).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: label, ...all })).toBeDisabled();
     }
     fireEvent.click(screen.getByRole("button", { name: "Cancel", ...all }));
     await waitFor(() => expect(screen.queryByText("Edit Approvers")).not.toBeInTheDocument());
@@ -663,7 +679,7 @@ describe("ProjectGatesSettingsScreen — admin access", { timeout: TEST_TIMEOUT 
     access.admin = false;
     renderScreen();
     await screen.findByText("Grid connection request");
-    fireEvent.click(screen.getByRole("button", { name: "Edit approvers of task Grid connection request" }));
+    fireEvent.click(taskEdit());
     expect(await screen.findByText("Edit Approvers")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Check List", ...all })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "Local Approval", ...all })).toBeDisabled();

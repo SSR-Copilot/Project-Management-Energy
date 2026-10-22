@@ -11,6 +11,8 @@ The reports were written as of 19 Oct 2026, **before** any redevelopment. Re-che
 - Server-side flows and plugins: `ProjectDocs/migration-plans/04-flow-inventory.md`, verified section. Re-run with `node ProjectDocs/tools/canvas-flow-map.js ProjectDocs/_extracted/VSBCloud/Workflows`.
 - Hidden controls and components: `node ProjectDocs/tools/canvas-hidden-controls.js ProjectDocs/_extracted/msapp/projectmanagement/Src`, or point it at the `Src/Components` folder.
 
+> **22 Oct 2026:** the six Admin rows below describe the screens built on 19 Oct. Commit `864056b` replaced them with the RounakDev1 versions (D36, `../09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`); canvas traceability was restored the same day (D36 §6).
+
 ## Status (order agreed with the product owner: Admin 001–006, then PM)
 
 | Screen | Report | Status |

@@ -1,7 +1,15 @@
 /**
  * Milestones settings — every business rule, as pure functions.
  *
- * Canvas: `Admin Milestones Screen.pa.yaml` (AMS).
+ * Canvas: `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Milestones Screen.pa.yaml`
+ * (AMS:<line>). The visible strings live in `./constants.ts`.
+ *
+ * NO SERVER AUTOMATION: no flow and no plugin step fires on `vsb_milestonesstandardassumptions`
+ * (`ProjectDocs/migration-plans/04-flow-inventory.md`).
+ * WHAT REPLACED A CANVAS WORKAROUND: `col_MilestoneAssumtionsUpdates` and its sentinel strings
+ * (`"invalid duration"` / `"invalid success rate"` written into the journal) → the typed `Draft`
+ * plus `evaluateCell`; `fn_Numeric_MS`, referenced here but declared on another screen →
+ * `@/domain/numberInput`.
  */
 import { numberFormat } from "@/domain/locale";
 import { checkDecimalInput } from "@/domain/numberInput";
@@ -22,14 +30,21 @@ function numericKey(key: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** The shared countries read (`useActiveCountries`) as this screen's section model. */
+/**
+ * The shared countries read (`useActiveCountries`) as this screen's section model; `key` is the
+ * canvas `Key` column (`vsb_title`).
+ * DIVERGENCE: the canvas reads every country (`ClearCollect(colMilestoneStandardAssumptions,
+ * AddColumns(Countries, …))`, AMS:30-44); the shared read is active countries only.
+ */
 export function toMilestoneCountries(rows: readonly CountryRecord[]): MilestoneCountry[] {
   return rows.map((r) => ({ id: r.id, name: r.name, key: r.title }));
 }
 
 /**
  * `SortByColumns(AddColumns(Countries, Order, Value(Key)), "Order")` (AMS:30-44). Numeric keys
- * first, ascending; blank or non-numeric keys last, by name (default).
+ * first, ascending; blank or non-numeric keys last, by name.
+ * DIVERGENCE: the canvas sorts on `Value(Key)` alone, which puts blank (and non-numeric) keys
+ * first and leaves their order unspecified; here they sort last, by name.
  */
 export function sortCountries(countries: readonly MilestoneCountry[]): MilestoneCountry[] {
   return [...countries].sort((a, b) => {
@@ -68,11 +83,14 @@ function compareTechnology(a: number | undefined, b: number | undefined): number
 
 /**
  * Country → technology groups, technologies ascending by option value (AMS:466). Rows are
- * classified by the EXACT kind name; other names (e.g. "average duration [years]") are ignored.
+ * classified by the EXACT kind name (`vsb_name` = "average duration [months]" / "success rate
+ * [-]" — the row's name is its type); other names (e.g. "average duration [years]") are ignored.
  * Input order decides "first" — the data module reads ordered by `createdon`, id.
  *
  * A blank Technology is its own group, as `GroupBy(…, Technology, Techs)` keeps it (AMS:458-465):
  * it is shown and edited like any other technology.
+ * DIVERGENCE: a second row of the same kind is kept as a `duplicates` entry and reported
+ * (`duplicatesWarning`); the canvas `LookUp` silently takes the first.
  */
 export function groupAssumptions(
   rows: readonly MilestoneAssumption[],
@@ -97,7 +115,7 @@ export function groupAssumptions(
   return out;
 }
 
-/** Human description of duplicate rows for a warning, or undefined when there are none. */
+/** NEW — no canvas equivalent: the duplicate-row warning, or undefined when there are none. */
 export function duplicatesWarning(groups: readonly TechnologyGroup[]): string | undefined {
   const parts = groups.flatMap((g) => g.duplicates.map((d) =>
     `${technologyName(g.technology)} (${d.name === MSA_KIND.months ? KIND_LABEL.durations : KIND_LABEL.successRates})`));
@@ -112,6 +130,8 @@ export function duplicatesWarning(groups: readonly TechnologyGroup[]): string | 
  * Display a stored number: user locale, up to 2 decimals, no grouping; blank → "-".
  * Always Latin digits: the locale picks only the decimal separator, so native-digit
  * locales such as `ar-EG` show "12", matching what the user types and what validation accepts.
+ * DIVERGENCE: the canvas cells interpolate the raw number (`$"{record.Duration}"`), and a blank
+ * Cluster 1–5 value renders as empty; here it is locale-formatted and a blank shows "-".
  */
 export function formatValue(value: number | undefined, locale?: string): string {
   if (value === undefined) return "-";
@@ -125,12 +145,16 @@ export interface MatrixCell {
 }
 
 /**
- * The nine two-line cells of a read-only matrix row (AMS:553-796):
- *  - Cluster 1–4: duration / success rate of the same column.
- *  - FID: duration (blank → "-", by product decision instead of the canvas 0.75) / literal 1.
- *  - Cluster 5: duration / literal 1 (as the canvas; the stored success value is ignored).
- *  - Operational Lifetime: duration / success value, "-" when blank.
- *  - Sales Start, Sales End (`vsb_salesduration`): duration / "-".
+ * The nine two-line cells of a read-only matrix row (AMS:553-796), one per canvas value label:
+ *  - Cluster 1–4 (`lbl_Cluster<n>Value_…`): `$"{record.Duration}\n{record.SuccessRate}"`.
+ *  - FID (`lbl_FidValue_…`): duration / literal 1. DIVERGENCE (product decision): a blank FID
+ *    shows "-"; the canvas shows `Coalesce(record.Duration, 0.75)`.
+ *  - Cluster 5 (`lbl_Cluster5Value_…`): `$"{record.Duration}\n1"` — the stored success value is
+ *    ignored, as in the canvas.
+ *  - Operational Lifetime (`lbl_OperationalLifetimeValue_…`): `Coalesce(Text(Duration), "-")` /
+ *    `Coalesce(Text(SuccessRate), "-")`.
+ *  - Sales Start (`lbl_SalesStartDateValue_…`), Sales End (`lbl_SalesCompletionDateValue_…`,
+ *    canvas label "Sales Duration", column `vsb_salesduration`): `Coalesce(Text(Duration), "-")` / "-".
  */
 export function matrixCells(group: TechnologyGroup, locale?: string): MatrixCell[] {
   const d = group.durations?.values;
@@ -155,9 +179,12 @@ export function matrixCells(group: TechnologyGroup, locale?: string): MatrixCell
 export type ValidationResult = { ok: true; value: number } | { ok: false; message: string };
 
 /**
- * Durations: `^\d+$` (AMS:1360) — a whole number ≥ 0, no sign or separator — AND the Dataverse
- * column maximum (100 for clusters, 1000 for the others) so the server never rejects
- * a save. Surrounding whitespace is ignored (the canvas rejected " 6").
+ * Durations: `IsMatch(Self.Value, "^\d+$")` (`txt_…_Durations_<field>_Input.OnChange`, AMS:1360) —
+ * a whole number ≥ 0, no sign or separator. The canvas message says "positive" but 0 is accepted
+ * (canvas parity, D21).
+ * DIVERGENCE: also the Dataverse column maximum (100 for clusters, 1000 for the others), with its
+ * own message (no canvas text), so the server never rejects a save.
+ * DIVERGENCE: surrounding whitespace is ignored (the canvas rejected " 6").
  */
 export function validateDuration(text: string, max: number): ValidationResult {
   // With 0 decimals the separator rule is irrelevant (digits only).
@@ -168,11 +195,13 @@ export function validateDuration(text: string, max: number): ValidationResult {
 }
 
 /**
- * Success rates: non-blank, at most 2 decimals, in [0, 1] (AMS:2068-2110).
+ * Success rates: `And(Not(IsBlank(v)), fn_Numeric_MS.IsTwoDecimal(v), fn_Numeric_MS.InRange(v, 0, 1))`
+ * (`txt_…_SuccessRates_<field>_Input.OnChange`, AMS:2068-2110) — non-blank, at most 2 decimals,
+ * in [0, 1]. No sign; a trailing separator ("1.") is accepted as the canvas did.
  *
- * Locale-safe: "." and "," are both accepted as the decimal separator whatever the browser
- * language. The canvas accepted only the separator of the browser language, so "0.5" failed for
- * a German user. No sign; a trailing separator ("1.") is accepted as the canvas did.
+ * DIVERGENCE: "." and "," are both accepted as the decimal separator whatever the browser
+ * language. The canvas `IsTwoDecimal` accepted only the separator of `Language()`, so "0.5"
+ * failed for a German user.
  */
 export function validateSuccessRate(text: string): ValidationResult {
   const check = checkDecimalInput(text, {
@@ -194,12 +223,13 @@ function editText(value: number, locale?: string): string {
 }
 
 /**
- * What an input starts with: the stored value as text, or empty when blank.
+ * What an input starts with: the stored value as text, or empty when blank (`txt_…_Input.Value =
+ * ThisItem.'<column>'`).
  *
- * A blank Cluster 5 / Operational Lifetime / Sales Start / Sales End duration still SHOWS "0"
- * (canvas `Coalesce(…, "0")`), but as a placeholder (`placeholderText`), not as the value
- * with "0" as the value, a typed "0" equalled the initial text, was never
- * dirty, and a blank could not be turned into a stored 0.
+ * DIVERGENCE: a blank Cluster 5 / Operational Lifetime / Sales Start / Sales End duration still
+ * SHOWS "0" (canvas `Coalesce(…, "0")`), but as a placeholder (`placeholderText`), not as the
+ * value. With "0" as the value, a typed "0" equalled the initial text, was never dirty, and a
+ * blank could not be turned into a stored 0.
  */
 export function initialText(
   _kind: MatrixKind, _field: MilestoneField, stored: number | undefined, locale?: string,
@@ -231,7 +261,12 @@ export interface CellState {
   value?: number;
 }
 
-/** Validation and dirtiness for one input. */
+/**
+ * Validation and dirtiness for one input — the canvas `BasePaletteColor` / `BorderThickness`
+ * error state plus the journal upsert of `txt_…_Input.OnChange`.
+ * DIVERGENCE: only a changed cell is validated; the canvas paints a blank stored Cluster 1–4
+ * value red on open.
+ */
 export function evaluateCell(
   kind: MatrixKind,
   field: MilestoneField,
@@ -268,6 +303,8 @@ export function kindOf(row: MilestoneAssumption): MatrixKind | undefined {
  * `{ id, changes }` per row with at least one DIRTY field; only those columns are written.
  * Invalid and untouched cells contribute nothing (the Save gate keeps invalid ones from ever
  * reaching here). "Sales End" maps to `vsb_salesduration`.
+ * DIVERGENCE: the canvas Save `ForAll(Patch)`es every row of the country (mostly with empty
+ * bodies, ~18 `LookUp`s per row into the journal); here only changed rows and columns.
  */
 export function buildPatches(
   draft: Draft,
@@ -314,7 +351,10 @@ export interface PanelState {
 
 /**
  * Everything the edit panel renders and gates on, from the country's groups and the draft.
- * A technology with only a duration row appears in the durations matrix only.
+ * A technology with only a duration row appears in the durations matrix only (the canvas
+ * galleries filter the same rows by `Name`). `canSave` is the
+ * `pcf_but_Admin_MilestoneAssumption_Form_Buttons_Save.DisplayMode` gate: disabled while either
+ * invalid message shows or nothing was changed; one bad cell blocks the whole country's save.
  */
 export function evaluatePanel(
   groups: readonly TechnologyGroup[], draft: Draft, locale?: string,
@@ -347,7 +387,7 @@ export function evaluatePanel(
 
   return {
     durationColumns, rateColumns, cells,
-    // The canvas section message first, then any bound message.
+    // The canvas section message first, then any column-maximum message.
     durationErrors: [
       ...[...durationErrors].filter((m) => m === MSG.durationInvalid),
       ...[...durationErrors].filter((m) => m !== MSG.durationInvalid),
@@ -361,9 +401,11 @@ export function evaluatePanel(
 /* ═══════════════════════════════════════════════════════ save message ══ */
 
 /**
- * The persistent error text for a save with failed rows: canvas prefix, the server (or
- * permission) message, then which rows were and were not saved — the writes are not
- * transactional.
+ * The persistent error text for a save with failed rows: the canvas prefix (`MSG.saveFailed`),
+ * the user-safe reason (permission or hint, never raw server text), then which rows were and
+ * were not saved — the writes are not transactional.
+ * DIVERGENCE: the canvas shows `Internal error: originated on {FirstError.Source}. Message: …`
+ * and closes the panel; see `MSG.saveFailed`.
  */
 export function saveFailureMessage(
   saved: readonly MilestonePatch[],

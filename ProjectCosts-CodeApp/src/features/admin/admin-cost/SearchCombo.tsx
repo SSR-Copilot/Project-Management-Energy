@@ -1,6 +1,7 @@
 /**
- * A searchable single-select (the canvas "Find Category" / "Find Sub-Account" ComboBoxes).
- * Typing filters the options by label; choosing one commits it; closing restores the label.
+ * A searchable single-select: the canvas `cmb_AdminCost_RightPanel_Form_AddCost_Fields_Category` /
+ * `…_Subaccount` ComboBoxes ("Find Category" / "Find supplier"). Typing filters the options by
+ * label; choosing one commits it; closing restores the label.
  */
 import { useMemo, useState } from "react";
 import { Combobox, Option } from "@fluentui/react-components";
@@ -13,7 +14,7 @@ export interface SearchComboProps {
   placeholder: string;
   disabled?: boolean;
   ariaLabel: string;
-  /** `data-testid` of the combobox input. */
+  /** `data-testid` of the combobox input: the canvas ComboBox name. */
   testId: string;
   invalid?: boolean;
   onChange: (value: string | null) => void;
@@ -45,6 +46,7 @@ export function SearchCombo({ id, options, value, placeholder, disabled, ariaLab
       }}
       onOpenChange={(_, data) => { if (!data.open) setQuery(undefined); }}
     >
+      {/* NEW — no canvas equivalent: the canvas ComboBox shows an empty list. */}
       {filtered.length === 0 ? <Option disabled value="" text="No matches">No matches</Option> : null}
       {filtered.map((o) => (
         <Option key={o.value} value={o.value} text={o.label}>{o.label}</Option>

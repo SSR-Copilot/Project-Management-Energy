@@ -50,7 +50,7 @@ describe("Choice constants", () => {
   });
 
   it("UT-ADCONTR-002 display labels are the Dataverse display labels, for values present in the generated model", () => {
-    // Master's generated maps (pac 1.3.1) carry pac identifiers ("Cluster4", "DevelopmentContract"),
+    // The generated option-set maps (pac 1.3.1) carry pac identifiers ("Cluster4", "DevelopmentContract"),
     // not display labels, so only the VALUES are checked against them; the labels are transcribed.
     const closing = ClosingRefMap as Record<number, string>;
     const types = ContractTypeMap as Record<number, string>;

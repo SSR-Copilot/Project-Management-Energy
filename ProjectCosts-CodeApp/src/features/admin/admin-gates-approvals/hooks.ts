@@ -2,10 +2,10 @@
  * Project Gates — TanStack Query wiring over `projectGatesRepository`.
  *
  * Reads go through `projectGatesRepository`; every write is a one-write `WritePlan` from `./rules`
- * run by `@/data/runPlan` (only the `mutationFn` is a plan: the optimistic flip, the invalidation and
- * the `RecordGoneError` handling below are unchanged, and `runPlan` rethrows the failed write's
- * own error so those `instanceof` checks and `userErrorText` still see it). `canEdit` is
- * `useAdminAccess()`, passed by the screen; a plan built without it refuses.
+ * run by `@/data/runPlan`. Only the `mutationFn` runs the plan; the optimistic flip, the
+ * invalidation and the `RecordGoneError` handling stay in the hooks below, and `runPlan` rethrows
+ * the failed write's own error so those `instanceof` checks and `userErrorText` still see it.
+ * `canEdit` is `useAdminAccess()`, passed by the screen; a plan built without it refuses.
  *
  * Keys are the shared `qk.adminGate*`. After any write the shared
  * `invalidateAfterGatesWrite` refreshes this (country, technology) dataset and Check List
@@ -39,7 +39,12 @@ export function useGatesDataset(countryId: string | undefined, technology: numbe
   });
 }
 
-/** At least 2 characters, debounced. */
+/**
+ * The pickers' `OnSearch`: `Search(Filter('Microsoft Entra IDs', 'Microsoft Entra ID Account
+ * Enabled' = …Yes), Trim(Self.SearchText), 'Display Name', 'Given Name', Surname, Mail)`.
+ * DIVERGENCE: at least 2 characters and debounced 300 ms; the canvas searches on every non-blank
+ * trimmed text (`IsBlankOrError(Trim(Self.SearchText))`) (doc 09 §2).
+ */
 export function usePeopleSearch(term: string) {
   const debounced = useDebouncedValue(term.trim(), 300);
   return useQuery({
@@ -51,7 +56,8 @@ export function usePeopleSearch(term: string) {
 }
 
 /**
- * Inline Active toggles: optimistic flip, revert on failure, refetch after.
+ * Inline Active toggles (the grid's status pills): optimistic flip, revert on failure, refetch after.
+ * DIVERGENCE: optimistic; the canvas `Patch` updates the pill only after the server answers (doc 09 §2).
  */
 export function useToggleActive(countryId: string, technology: number, canEdit: boolean) {
   const qc = useQueryClient();
@@ -92,11 +98,11 @@ export type SaveRequest =
   | { kind: "gate"; id: string | undefined; payload: Payload }
   | { kind: "task"; id: string | undefined; payload: Payload };
 
-/** One POST or PATCH. */
+/** Save (`pcf_but_…_Save.OnChange`): one POST or PATCH. */
 export function useSaveTemplate(countryId: string, technology: number, canEdit: boolean) {
   const qc = useQueryClient();
   return useMutation({
-    /** Resolves to the saved row's id ("" when a create answered without one, as it always has). */
+    /** Resolves to the saved row's id ("" when a create answered without one). */
     mutationFn: async (r: SaveRequest): Promise<string> => {
       const plan = r.kind === "gate"
         ? planSaveGate(r.id, r.payload, { canEdit })
@@ -115,7 +121,7 @@ export function useSaveTemplate(countryId: string, technology: number, canEdit: 
   });
 }
 
-/** One PATCH. */
+/** Reset Gate (`btn_…_ResetGateApproval.OnSelect`): one PATCH. */
 export function useResetGate(countryId: string, technology: number, canEdit: boolean) {
   const qc = useQueryClient();
   return useMutation({
@@ -125,7 +131,7 @@ export function useResetGate(countryId: string, technology: number, canEdit: boo
   });
 }
 
-/** One DELETE; the grid refetches whatever the outcome. */
+/** Delete a task approval (`cmp_DeleteChecklistApprovalItem_AdminScreen.OnConfirm`): one DELETE; the grid refetches whatever the outcome. */
 export function useDeleteTask(countryId: string, technology: number, canEdit: boolean) {
   const qc = useQueryClient();
   return useMutation({

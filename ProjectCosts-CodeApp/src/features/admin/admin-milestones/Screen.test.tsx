@@ -165,8 +165,8 @@ describe("MilestonesSettingsScreen", () => {
     const rows = within(table).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("Wind");
     expect(rows[2]).toHaveTextContent("PV");
-    expect(screen.getByTestId("cell-952850001-fid")).toHaveTextContent("-1");
-    expect(screen.getByTestId("cell-952850000-salesEnd")).toHaveTextContent("24-");
+    expect(screen.getByTestId("lbl_FidValue_MilestonesStandardAssumptions_AdminScreen-952850001")).toHaveTextContent("-1");
+    expect(screen.getByTestId("lbl_SalesCompletionDateValue_MilestonesStandardAssumptions_AdminScreen-952850000")).toHaveTextContent("24-");
   });
 
   it("UT-ADMILE-904 AC-5a / AC-7a / AC-7b: Edit opens the panel; Save follows the dirty and validity gate", async () => {
@@ -215,7 +215,7 @@ describe("MilestonesSettingsScreen", () => {
     await waitFor(() => expect(screen.queryByText("Edit Milestones for Germany")).not.toBeInTheDocument(), { timeout: 3000 });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["adminMilestoneAssumptions"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["capex-milestone-durations"] });
-    expect(screen.getByTestId("cell-952850000-cluster1")).toHaveTextContent("130.55");
+    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-952850000")).toHaveTextContent("130.55");
   });
 
   it("UT-ADMILE-906 AC-8b: editing Sales End writes vsb_salesduration", async () => {
@@ -256,7 +256,7 @@ describe("MilestonesSettingsScreen", () => {
     expect(message.textContent).not.toContain("Value out of range");
     expect(screen.getByText("Edit Milestones for Germany")).toBeInTheDocument();
     expect(windCluster1()).toHaveValue("13");
-    expect(screen.getByTestId("cell-952850001-cluster1")).toHaveTextContent("60.5");
+    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-952850001")).toHaveTextContent("60.5");
   });
 
   it("UT-ADMILE-908 V-1 (S5): a row deleted meanwhile shows the 'no longer exists' hint and refreshes the grid", async () => {
@@ -394,7 +394,7 @@ describe("MilestonesSettingsScreen — gap closure (08-gap-analysis)", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry", hidden: true }));
     await waitFor(() => expect(screen.queryByText(new RegExp(MSG.staleData))).not.toBeInTheDocument());
-    expect(screen.getByTestId("cell-952850000-cluster1")).toHaveTextContent("13");
+    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-952850000")).toHaveTextContent("13");
   });
 
   it("UT-ADMILE-914 T3 / DR-5: Edit refetches before the panel opens, behind a loading overlay", async () => {
@@ -654,7 +654,7 @@ describe("MilestonesSettingsScreen — canvas parity", () => {
     // Header, then the blank-Technology row first (Power Fx sorts blanks first), then Wind, PV.
     expect(rows).toHaveLength(4);
     expect(within(rows[1]!).getAllByRole("cell")[0]).toHaveTextContent(/^$/);
-    expect(screen.getByTestId("cell-none-cluster1")).toHaveTextContent("5-");
+    expect(screen.getByTestId("lbl_Cluster1Value_MilestonesStandardAssumptions_AdminScreen-none")).toHaveTextContent("5-");
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await screen.findByText("Edit Milestones for Germany");

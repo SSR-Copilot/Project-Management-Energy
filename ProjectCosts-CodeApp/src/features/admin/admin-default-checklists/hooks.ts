@@ -17,19 +17,19 @@ import { FRESH_ON_ENTRY_ONCE } from "@/data/adminQueryPresets";
 import { qk } from "@/data/keys";
 import { useTablePrivileges } from "@/platform/privileges";
 
-/** The country/technology tabs. */
+/** The country/technology tabs (`'Checklist Country And Technologies'`, the tab strip's `Items`). */
 export function useChecklistTabs() {
   return useQuery({ queryKey: qk.adminChecklistTabs, queryFn: () => loadTabs(), staleTime: 5 * 60_000 });
 }
 
-/** Not tab-scoped, cached for the visit. */
+/** The clusters (`colChecklistClusters`, `OnVisible`): not tab-scoped, cached for the visit. */
 export function useChecklistClusters(enabled: boolean) {
   return useQuery({
     queryKey: qk.adminChecklistClusters, queryFn: () => loadClusters(), enabled, staleTime: 5 * 60_000,
   });
 }
 
-/** One query per tab. */
+/** The tab's tasks, one query per tab (the canvas filtered each cluster's gallery separately). */
 export function useChecklistTasks(tabId: string | null) {
   return useQuery({
     queryKey: qk.adminChecklistTasks(tabId),
@@ -40,9 +40,11 @@ export function useChecklistTasks(tabId: string | null) {
 }
 
 /**
- * Exactly one CLDA query per mount. The shared preset `FRESH_ON_ENTRY_ONCE` gives "refetch on every mount", "no focus refetch" and an INFINITE `staleTime`, so a
- * reconnect or a second observer never starts another CLDA query during the visit. Project Gates
- * invalidates this key.
+ * The lock set: the tasks a 'Check List Default Approvals' (CLDA) row blocks. Exactly one CLDA
+ * query per mount — the canvas ran a `LookUp` per row and per icon property instead. The shared
+ * preset `FRESH_ON_ENTRY_ONCE` gives "refetch on every mount", "no focus refetch" and an INFINITE
+ * `staleTime`, so a reconnect or a second observer never starts another CLDA query during the
+ * visit. Project Gates invalidates this key.
  */
 export function useChecklistLocks(enabled: boolean) {
   return useQuery({
@@ -74,7 +76,8 @@ export type SaveTaskArgs =
 /**
  * Create or edit one task. The EDIT branch is a `WritePlan` (`planUpdateTask`) run by `runPlan`,
  * which rethrows the failed write's own error, so the screen's `instanceof` branches and error
- * texts are unchanged. The create branch keeps the data layer's create-then-update flow.
+ * texts are unchanged. The create branch keeps the data layer's create-then-update flow (the
+ * canvas pair; the sync flow copies status only on update, D18).
  */
 export function useSaveTask(tabId: string | null, canEdit: boolean) {
   const invalidate = useInvalidateTasks(tabId);
@@ -116,7 +119,10 @@ export function useSetActive(tabId: string | null, canEdit: boolean) {
   });
 }
 
-/** Soft delete: invalidates on failure too — step 1 may have landed before step 2 failed. */
+/**
+ * Soft delete (`To Delete` = true) then the renumber: invalidates on failure too — step 1 may
+ * have landed before step 2 failed.
+ */
 export function useSoftDelete(tabId: string | null) {
   const invalidate = useInvalidateTasks(tabId);
   return useMutation({

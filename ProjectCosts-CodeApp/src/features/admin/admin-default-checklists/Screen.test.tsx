@@ -172,7 +172,7 @@ describe("CheckListSettingsScreen", () => {
     expect(await screen.findByRole("button", { name: "Criteria After Cluster 6 Entry" })).toBeInTheDocument();
     expect(screen.queryByText("Site identified")).not.toBeInTheDocument();
     await expandDraft(u);
-    const rows = await screen.findAllByTestId(/^task-row-/);
+    const rows = await screen.findAllByTestId(/^con_Details_TasksInClusterDefaultChecklist_AdminScreen-/);
     expect(rows.map((r) => within(r).getAllByRole("cell")[0]?.textContent)).toEqual([
       "Site identified", "Land lease secured", "Grid request filed",
     ]);
@@ -201,14 +201,14 @@ describe("CheckListSettingsScreen", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId("task-row-dddddddd-0000-0000-0000-000000000002");
+    const row = await screen.findByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000002");
     await waitFor(() => expect(within(row).getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true"));
-    for (const name of ["Delete", "Completion Date No", "Status Active"]) {
+    for (const name of ["Delete", "No", "Active"]) {
       expect(within(row).getByRole("button", { name })).toHaveAttribute("aria-disabled", "true");
     }
     await u.hover(within(row).getByRole("button", { name: "Edit" }));
     expect((await screen.findAllByText(LOCK_TOOLTIP)).length).toBeGreaterThan(0);
-    const free = screen.getByTestId("task-row-dddddddd-0000-0000-0000-000000000001");
+    const free = screen.getByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
     expect(within(free).getByRole("button", { name: "Edit" })).not.toBeDisabled();
     expect(within(free).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true");
   });
@@ -263,9 +263,9 @@ describe("CheckListSettingsScreen", () => {
     exec.mockRejectedValue(new PlanError(0, 1, "completion date changed", new DataError("Update checklist item", "denied", 403)));
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId("task-row-dddddddd-0000-0000-0000-000000000001");
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Completion Date No" })).not.toBeDisabled());
-    await u.click(within(row).getByRole("button", { name: "Completion Date No" }));
+    const row = await screen.findByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
+    await waitFor(() => expect(within(row).getByRole("button", { name: "No" })).not.toBeDisabled());
+    await u.click(within(row).getByRole("button", { name: "No" }));
     expect(await screen.findByText(/You do not have permission to change checklist items/)).toBeInTheDocument();
     // The clicked row's Completion Date is null, so the plan flips it to true.
     expect(sentWrites()).toEqual([expect.objectContaining({
@@ -277,9 +277,9 @@ describe("CheckListSettingsScreen", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId("task-row-dddddddd-0000-0000-0000-000000000001");
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Status Active" })).not.toBeDisabled());
-    await u.click(within(row).getByRole("button", { name: "Status Active" }));
+    const row = await screen.findByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
+    await waitFor(() => expect(within(row).getByRole("button", { name: "Active" })).not.toBeDisabled());
+    await u.click(within(row).getByRole("button", { name: "Active" }));
     expect(await screen.findByText('Are you sure that you want to change status of task "Site identified"?')).toBeInTheDocument();
     await u.click(await screen.findByRole("button", { name: "Deactivate", ...PORTAL }));
     await waitFor(() => expect(sentWrites()).toEqual([expect.objectContaining({
@@ -292,7 +292,7 @@ describe("CheckListSettingsScreen", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId("task-row-dddddddd-0000-0000-0000-000000000001");
+    const row = await screen.findByTestId("con_Details_TasksInClusterDefaultChecklist_AdminScreen-dddddddd-0000-0000-0000-000000000001");
     await waitFor(() => expect(within(row).getByRole("button", { name: "Delete" })).not.toBeDisabled());
     await u.click(within(row).getByRole("button", { name: "Delete" }));
     expect(await screen.findByText(/synchronisation process then removes it/)).toBeInTheDocument();
@@ -309,7 +309,7 @@ describe("CheckListSettingsScreen", () => {
     await expandDraft(u);
     await screen.findByText("Site identified");
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
-    expect(await screen.findByText("Reorder checklist", { selector: "h2" })).toBeInTheDocument();
+    expect(await screen.findByText("Reoder checklist", { selector: "h2" })).toBeInTheDocument();
     const save = await screen.findByRole("button", { name: "Save", ...PORTAL });
     expect(save).toBeDisabled();
     const last = screen.getByTestId("reorder-item-dddddddd-0000-0000-0000-000000000003");
@@ -333,9 +333,9 @@ describe("CheckListSettingsScreen — gap closure", () => {
     api.loadLockedTaskIds.mockReturnValue(locks.promise);
     renderScreen();
     await expandDraft(u);
-    const free = await screen.findByTestId(`task-row-${T1}`);
+    const free = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
     expect(screen.getByText("Checking which items are in use by a Project Gate…")).toBeInTheDocument();
-    for (const name of ["Edit", "Delete", "Completion Date No", "Status Active"]) {
+    for (const name of ["Edit", "Delete", "No", "Active"]) {
       expect(within(free).getByRole("button", { name })).toHaveAttribute("aria-disabled", "true");
     }
     await u.hover(within(free).getByRole("button", { name: "Edit" }));
@@ -345,7 +345,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
 
     locks.resolve(FIXTURE_LOCKED);
     await waitFor(() => expect(within(free).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
-    expect(within(screen.getByTestId(`task-row-${T2}`)).getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T2}`)).getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByText("Checking which items are in use by a Project Gate…")).not.toBeInTheDocument();
   });
 
@@ -356,12 +356,12 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await expandDraft(u);
     const retry = await screen.findByRole("button", { name: "Retry loading Project Gate usage" });
     for (const id of [T1, T2, T3]) {
-      expect(within(screen.getByTestId(`task-row-${id}`)).getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
+      expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${id}`)).getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
     }
-    await u.hover(within(screen.getByTestId(`task-row-${T1}`)).getByRole("button", { name: "Edit" }));
+    await u.hover(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`)).getByRole("button", { name: "Edit" }));
     expect((await screen.findAllByText(LOCK_UNKNOWN_TOOLTIP)).length).toBeGreaterThan(0);
     await u.click(retry);
-    await waitFor(() => expect(within(screen.getByTestId(`task-row-${T1}`)).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`)).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
   });
 
   it("UT-ADCHK-916 switching tab does not re-query the locks", async () => {
@@ -442,7 +442,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
     await waitFor(() => expect(within(row).getByRole("button", { name: "Edit" })).not.toHaveAttribute("aria-disabled", "true"));
     await u.click(within(row).getByRole("button", { name: "Edit" }));
     const box = await screen.findByRole("textbox", { name: "Description", ...PORTAL });
@@ -457,7 +457,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await u.click(await screen.findByRole("button", { name: "Discard", ...PORTAL }));
     await waitFor(() => expect(screen.queryByText("Edit Task", { selector: "h2" })).not.toBeInTheDocument());
     // PORTAL: the drawer's modalizer can leave the page marked aria-hidden in jsdom (see above).
-    await u.click(within(screen.getByTestId(`task-row-${T1}`)).getByRole("button", { name: "Edit", ...PORTAL }));
+    await u.click(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`)).getByRole("button", { name: "Edit", ...PORTAL }));
     expect(await screen.findByRole("textbox", { name: "Description", ...PORTAL })).toHaveValue("Site identified");
     expect(exec).not.toHaveBeenCalled();
   });
@@ -468,11 +468,11 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await expandDraft(u);
     await screen.findByText("Site identified");
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
-    expect(await screen.findByText("Reorder checklist", { selector: "h2" })).toBeInTheDocument();
+    expect(await screen.findByText("Reoder checklist", { selector: "h2" })).toBeInTheDocument();
     first.unmount();
     renderScreen();
     expect(await screen.findByRole("button", { name: "Draft to Cluster 1" })).toBeInTheDocument();
-    expect(screen.queryByText("Reorder checklist", { selector: "h2" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Reoder checklist", { selector: "h2" })).not.toBeInTheDocument();
     expect(screen.queryByText("Site identified")).not.toBeInTheDocument(); // clusters collapsed again
   });
 
@@ -481,7 +481,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     api.softDeleteTask.mockRejectedValue(new RenumberAfterDeleteError(new Error("order write failed")));
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
     await waitFor(() => expect(within(row).getByRole("button", { name: "Delete" })).not.toHaveAttribute("aria-disabled", "true"));
     await u.click(within(row).getByRole("button", { name: "Delete" }));
     await u.click(within(await screen.findByRole("alertdialog", PORTAL)).getByRole("button", { name: "Delete", ...PORTAL }));
@@ -490,7 +490,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     const toast = warning.closest(".fui-Toast") as HTMLElement;
     expect(toast).not.toBeNull();
     await u.click(within(toast).getByRole("button", { name: "Reorder", ...PORTAL }));
-    expect(await screen.findByText("Reorder checklist", { selector: "h2" })).toBeInTheDocument();
+    expect(await screen.findByText("Reoder checklist", { selector: "h2" })).toBeInTheDocument();
     expect(screen.getByTestId(`reorder-item-${T2}`)).toBeInTheDocument();
   });
 
@@ -500,7 +500,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await expandDraft(u);
     await screen.findByText("Site identified");
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
-    await screen.findByText("Reorder checklist", { selector: "h2" });
+    await screen.findByText("Reoder checklist", { selector: "h2" });
     // Another user deleted task 3; the list refetches while the panel is open.
     api.loadTasks.mockImplementation(async (tabId: string) =>
       FIXTURE_TASKS.filter((t) => t.tabId === tabId && t.id !== T3));
@@ -520,18 +520,18 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await expandDraft(u);
     await screen.findByText("Site identified");
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
-    await screen.findByText("Reorder checklist", { selector: "h2" });
+    await screen.findByText("Reoder checklist", { selector: "h2" });
     await u.click(within(screen.getByTestId(`reorder-item-${T3}`)).getByRole("button", { name: "Move up", ...PORTAL }));
     expect(screen.getByTestId("reorder-announcement")).toHaveTextContent("Grid request filed moved to position 2 of 3.");
     await u.click(screen.getByRole("button", { name: "Cancel", ...PORTAL }));
     await u.click(await screen.findByRole("button", { name: "Discard", ...PORTAL }));
-    await waitFor(() => expect(screen.queryByText("Reorder checklist", { selector: "h2" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Reoder checklist", { selector: "h2" })).not.toBeInTheDocument());
     expect(api.writeOrders).not.toHaveBeenCalled();
 
     await u.click(screen.getAllByRole("button", { name: "Reorder", ...PORTAL })[0] as HTMLElement);
-    await screen.findByText("Reorder checklist", { selector: "h2" });
+    await screen.findByText("Reoder checklist", { selector: "h2" });
     await u.click(screen.getByRole("button", { name: "Cancel", ...PORTAL }));
-    await waitFor(() => expect(screen.queryByText("Reorder checklist", { selector: "h2" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Reoder checklist", { selector: "h2" })).not.toBeInTheDocument());
     expect(screen.queryByText("Discard changes?")).not.toBeInTheDocument();
   });
 
@@ -556,17 +556,17 @@ describe("CheckListSettingsScreen — gap closure", () => {
     exec.mockReturnValue(write.promise);
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Completion Date No" })).not.toBeDisabled());
-    await u.click(within(row).getByRole("button", { name: "Completion Date No" }));
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
+    await waitFor(() => expect(within(row).getByRole("button", { name: "No" })).not.toBeDisabled());
+    await u.click(within(row).getByRole("button", { name: "No" }));
     expect(await within(row).findByText("Saving…")).toBeInTheDocument();
-    expect(within(screen.getByTestId(`task-row-${T3}`)).queryByText("Saving…")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T3}`)).queryByText("Saving…")).not.toBeInTheDocument();
     // The rest of the screen stays visible but read-only while the write runs.
-    expect(within(screen.getByTestId(`task-row-${T3}`)).getByRole("button", { name: "Edit" })).toBeDisabled();
+    expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T3}`)).getByRole("button", { name: "Edit" })).toBeDisabled();
     expect(screen.queryByRole("dialog", PORTAL)).not.toBeInTheDocument();
     write.resolve(PLAN_OK);
     expect(await screen.findByText("Completion Date was successfully changed.")).toBeInTheDocument();
-    expect(within(screen.getByTestId(`task-row-${T1}`)).queryByText("Saving…")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`)).queryByText("Saving…")).not.toBeInTheDocument();
   });
 
   it("UT-ADCHK-928 the inline write's live region announces useBusyRunner's inlineLabel and goes away after", async () => {
@@ -575,9 +575,9 @@ describe("CheckListSettingsScreen — gap closure", () => {
     exec.mockReturnValue(write.promise);
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Completion Date No" })).not.toBeDisabled());
-    await u.click(within(row).getByRole("button", { name: "Completion Date No" }));
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
+    await waitFor(() => expect(within(row).getByRole("button", { name: "No" })).not.toBeDisabled());
+    await u.click(within(row).getByRole("button", { name: "No" }));
     const live = await screen.findByText(/^Completion Date for '.+' will be changed, please wait\.\.\.$/);
     expect(live).toHaveAttribute("role", "status");
     expect(live).toHaveAttribute("aria-live", "polite");
@@ -593,7 +593,7 @@ describe("CheckListSettingsScreen — gap closure", () => {
     await u.click(screen.getByRole("button", { name: "Cluster 1 to Cluster 2" }));
     expect(await screen.findByRole("table", { name: "Draft to Cluster 1 tasks" })).toBeInTheDocument();
     expect(await screen.findByRole("table", { name: "Cluster 1 to Cluster 2 tasks" })).toBeInTheDocument();
-    const cut = within(screen.getByTestId(`task-row-${T2}`)).getByText(/ \.\.\.$/);
+    const cut = within(screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T2}`)).getByText(/ \.\.\.$/);
     expect(cut).toHaveAttribute("tabindex", "0");
     expect(cut).not.toHaveAttribute("title");
   });
@@ -609,20 +609,20 @@ describe("CheckListSettingsScreen — parity round 1", () => {
       [...FIXTURE_TASKS.filter((t) => t.tabId === tabId), ...(tabId === base.tabId ? [blank] : [])]);
     renderScreen();
     await expandDraft(u);
-    const rows = await screen.findAllByTestId(/^task-row-/);
+    const rows = await screen.findAllByTestId(/^con_Details_TasksInClusterDefaultChecklist_AdminScreen-/);
     expect(rows.map((r) => within(r).getAllByRole("cell")[0]?.textContent)).toEqual([
       "Unnumbered", "Site identified", "Land lease secured", "Grid request filed",
     ]);
 
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement);
-    await screen.findByText("Reorder checklist", { selector: "h2" });
+    await screen.findByText("Reoder checklist", { selector: "h2" });
     expect(screen.getAllByTestId(/^reorder-item-/).map((el) => el.getAttribute("data-testid"))).toEqual([
       `reorder-item-${blank.id}`, `reorder-item-${T1}`, `reorder-item-${T2}`, `reorder-item-${T3}`,
     ]);
     await u.click(screen.getByRole("button", { name: "Cancel", ...PORTAL }));
-    await waitFor(() => expect(screen.queryByText("Reorder checklist", { selector: "h2" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Reoder checklist", { selector: "h2" })).not.toBeInTheDocument());
 
-    const row = screen.getByTestId(`task-row-${blank.id}`);
+    const row = screen.getByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${blank.id}`);
     await waitFor(() => expect(within(row).getByRole("button", { name: "Delete", ...PORTAL })).not.toHaveAttribute("aria-disabled", "true"));
     await u.click(within(row).getByRole("button", { name: "Delete", ...PORTAL }));
     await u.click(within(await screen.findByRole("alertdialog", PORTAL)).getByRole("button", { name: "Delete", ...PORTAL }));
@@ -645,7 +645,7 @@ describe("CheckListSettingsScreen — parity round 1", () => {
     expect(draftBefore).not.toBe(cluster1Before); // only the selected one is semibold
 
     await u.click(screen.getAllByRole("button", { name: "Reorder" })[0] as HTMLElement); // Draft's Reorder
-    expect(await screen.findByText("Reorder checklist", { selector: "h2" })).toBeInTheDocument();
+    expect(await screen.findByText("Reoder checklist", { selector: "h2" })).toBeInTheDocument();
     expect(screen.getByText("Draft to Cluster 1").className).toBe(draftBefore);
     expect(screen.getByText("Cluster 1 to Cluster 2").className).toBe(cluster1Before);
   });
@@ -738,10 +738,10 @@ describe("CheckListSettingsScreen — parity round 3", () => {
     ));
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Status Active" })).not.toBeDisabled());
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
+    await waitFor(() => expect(within(row).getByRole("button", { name: "Active" })).not.toBeDisabled());
     const loadsBefore = api.loadTasks.mock.calls.length;
-    await u.click(within(row).getByRole("button", { name: "Status Active" }));
+    await u.click(within(row).getByRole("button", { name: "Active" }));
     await u.click(await screen.findByRole("button", { name: "Deactivate", ...PORTAL }));
     const toast = await screen.findByText(/The status could not be changed\. This item no longer exists/);
     expect(toast).toHaveTextContent("the list has been refreshed");
@@ -754,10 +754,10 @@ describe("CheckListSettingsScreen — parity round 3", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
-    await waitFor(() => expect(within(row).getByRole("button", { name: "Completion Date No" })).not.toBeDisabled());
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
+    await waitFor(() => expect(within(row).getByRole("button", { name: "No" })).not.toBeDisabled());
     expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(1);
-    await u.click(within(row).getByRole("button", { name: "Completion Date No" }));
+    await u.click(within(row).getByRole("button", { name: "No" }));
     expect(await screen.findByText("Completion Date was successfully changed.")).toBeInTheDocument();
     await waitFor(() => expect(api.loadLockedTaskIds).toHaveBeenCalledTimes(2));
   });
@@ -769,12 +769,12 @@ describe("CheckListSettingsScreen — admin access", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
     // The rows are not locked, so only the admin rule can be what disables them.
     await waitFor(() => expect(api.loadLockedTaskIds).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: "Add Task" })[0]).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Reorder" })[0]).toBeDisabled();
-    for (const name of ["Edit", "Delete", "Completion Date No", "Status Active"]) {
+    for (const name of ["Edit", "Delete", "No", "Active"]) {
       expect(within(row).getByRole("button", { name })).toBeDisabled();
     }
     expect(api.createTask).not.toHaveBeenCalled();
@@ -785,11 +785,11 @@ describe("CheckListSettingsScreen — admin access", () => {
     const u = user();
     renderScreen();
     await expandDraft(u);
-    const row = await screen.findByTestId(`task-row-${T1}`);
+    const row = await screen.findByTestId(`con_Details_TasksInClusterDefaultChecklist_AdminScreen-${T1}`);
     await waitFor(() => expect(within(row).getByRole("button", { name: "Edit" })).not.toBeDisabled());
     expect(screen.getAllByRole("button", { name: "Add Task" })[0]).not.toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Reorder" })[0]).not.toBeDisabled();
-    for (const name of ["Delete", "Completion Date No", "Status Active"]) {
+    for (const name of ["Delete", "No", "Active"]) {
       expect(within(row).getByRole("button", { name })).not.toBeDisabled();
     }
   });

@@ -168,18 +168,18 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-902 lists the category's accounts collapsed, and drives the command bar from the selection", async () => {
     const user = await openDevelopmentTab();
     expect(screen.queryByTestId("subaccount-row-80000_1")).not.toBeInTheDocument();
-    expect(screen.getByTestId("command-edit")).toBeDisabled();
-    expect(screen.queryByTestId("command-deactivate")).not.toBeInTheDocument();
-    expect(screen.getByTestId("command-reorder")).toBeEnabled();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeDisabled();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts")).toBeEnabled();
 
     const land = screen.getByRole("button", { name: "Select account 80000 - Land" });
     await user.click(land);
     expect(land).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("command-edit")).toBeEnabled();
-    expect(screen.getByTestId("command-deactivate")).toBeInTheDocument();
-    expect(screen.queryByTestId("command-activate")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeEnabled();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount")).toBeInTheDocument();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-activateAccount")).not.toBeInTheDocument();
     // Land has subaccounts → no Delete.
-    expect(screen.queryByTestId("command-delete")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount")).not.toBeInTheDocument();
 
     await user.click(land);
     expect(land).toHaveAttribute("aria-pressed", "false");
@@ -190,9 +190,9 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
     const row = await screen.findByTestId("subaccount-row-80000_2");
     expect(within(row).getByText("Inactive")).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Activate subaccount 80000_2 - Cable" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Activate" })).toBeInTheDocument();
     // Delete appears once the server-side contract check answers "none".
-    expect(await within(row).findByRole("button", { name: "Delete subaccount 80000_2 - Cable" })).toBeInTheDocument();
+    expect(await within(row).findByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select account 80000 - Land" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -204,26 +204,26 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await waitFor(() => expect(client.retrieveMultipleRecordsAsync).toHaveBeenCalledWith(
       "vsb_capexprojectcontracts", expect.anything(),
     ));
-    expect(within(row).queryByRole("button", { name: /Delete subaccount/ })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("UT-ADCAPEX-905 opens New Account with Save disabled and the digits-only message", async () => {
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
     expect(await screen.findByText("New Account")).toBeInTheDocument();
     // Fluent's drawer motion never finishes in jsdom, so its content stays visibility-hidden to
     // the role query; `hidden: true` reaches it (same workaround as checklist-settings' tests).
     expect(screen.getByRole("button", { name: "Save", hidden: true })).toBeDisabled();
-    await user.type(screen.getByTestId("account-number"), "12a");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "12a");
     expect(await screen.findByText("Account number must contain numbers only.")).toBeInTheDocument();
-    expect(screen.getByTestId("account-number")).toHaveValue("12a");
+    expect(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number")).toHaveValue("12a");
     expect(screen.getByDisplayValue("Development Expenses")).toBeDisabled();
   });
 
   it("UT-ADCAPEX-906 deletes a free account after confirmation, re-checking the guards first", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(await screen.findByTestId("command-delete"));
+    await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
     expect(await screen.findByText('Are you sure that you want to permanently delete "Permits" account?')).toBeInTheDocument();
     // Dialog motion: see the drawer note above.
     await user.click(screen.getByRole("button", { name: "Confirm", hidden: true }));
@@ -248,7 +248,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-909 a failed refetch after a write keeps the screen and the notice, shows a warning and Retry refetches", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(await screen.findByTestId("command-delete"));
+    await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
     client.failTreeLoad = true; // the post-write invalidation refetch fails
     await user.click(hiddenButton("Confirm"));
 
@@ -268,22 +268,22 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-910 a failed background refetch does not unmount an open panel", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
-    await user.click(screen.getByTestId("command-edit"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount"));
     expect(await screen.findByText("Edit Account")).toBeInTheDocument();
     client.failTreeLoad = true;
     await act(async () => { await queryClient.refetchQueries({ queryKey: qk.adminCapexAccountsTree }); });
     expect(await screen.findByText(/could not be refreshed/)).toBeInTheDocument();
     expect(screen.getByText("Edit Account")).toBeInTheDocument();
-    expect(screen.getByTestId("account-name")).toHaveValue("Land");
+    expect(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name")).toHaveValue("Land");
   });
 
   it("UT-ADCAPEX-911 close and Escape are ignored while a save runs, and a later failure is shown in the panel", async () => {
     const pending = deferred<unknown>();
     client.createRecordAsync.mockReturnValue(pending.promise);
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(screen.getByTestId("account-number"), "12345");
-    await user.type(screen.getByTestId("account-name"), "Test");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "12345");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Test");
     await user.click(hiddenButton("Save"));
     await waitFor(() => expect(client.createRecordAsync).toHaveBeenCalled());
     // Busy overlay label while the write runs.
@@ -306,25 +306,25 @@ describe("CAPEXAccountsSettingsScreen", () => {
 
   it("UT-ADCAPEX-912 Cancel on a dirty panel asks before discarding; Keep editing keeps the input; a clean panel closes at once", async () => {
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
     expect(await screen.findByText("New Account")).toBeInTheDocument();
     await user.click(hiddenButton("Cancel"));
     await waitFor(() => expect(screen.queryByText("New Account")).not.toBeInTheDocument());
 
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(await screen.findByTestId("account-name"), "Draft");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Draft");
     await user.click(hiddenButton("Cancel"));
     expect(await screen.findByText("Discard changes?")).toBeInTheDocument();
     await user.click(hiddenButton("Keep editing"));
     await waitFor(() => expect(screen.queryByText("Discard changes?")).not.toBeInTheDocument());
-    expect(screen.getByTestId("account-name")).toHaveValue("Draft");
+    expect(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name")).toHaveValue("Draft");
     expect(client.createRecordAsync).not.toHaveBeenCalled();
   });
 
   it("UT-ADCAPEX-913 Edit stays Edit when the row vanishes in a refetch; Save is blocked and nothing is created", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(screen.getByTestId("command-edit"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount"));
     expect(await screen.findByText("Edit Account")).toBeInTheDocument();
 
     client.rows = toRaw(FIXTURE_ROWS.filter((r) => r.id !== IDS.permits));
@@ -333,7 +333,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(await screen.findByText(GONE.account)).toBeInTheDocument();
     expect(screen.getByText("Edit Account")).toBeInTheDocument();
     expect(screen.queryByText("New Account")).not.toBeInTheDocument();
-    expect(screen.getByTestId("account-number")).toBeDisabled();
+    expect(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number")).toBeDisabled();
     expect(hiddenButton("Save")).toBeDisabled();
     expect(client.createRecordAsync).not.toHaveBeenCalled();
     expect(client.updateRecordAsync).not.toHaveBeenCalled();
@@ -342,8 +342,8 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-914 an Edit save updates the frozen record by id", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(screen.getByTestId("command-edit"));
-    const name = await screen.findByTestId("account-name");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount"));
+    const name = await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name");
     await user.clear(name);
     await user.type(name, "Permits 2");
     await user.click(hiddenButton("Save"));
@@ -362,9 +362,9 @@ describe("CAPEXAccountsSettingsScreen", () => {
       return { success: true, data: [] };
     });
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(screen.getByTestId("account-number"), "80000");
-    await user.type(screen.getByTestId("account-name"), "Land again");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "80000");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Land again");
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText(MSG.accountExists)).toBeInTheDocument();
     expect(client.createRecordAsync).not.toHaveBeenCalled();
@@ -374,11 +374,11 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-916 New Subaccount shows the account prefix and POSTs the composed, trimmed number", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByTestId("command-add-subaccount"));
+    await user.click(await screen.findByTestId(`pcf_Account_AccountCardBody_SubAccountsCommandBar-${IDS.land}-newSubaccount`));
     expect(await screen.findByText("New Subaccount")).toBeInTheDocument();
     expect(screen.getByText("80000_")).toBeInTheDocument();
-    await user.type(screen.getByTestId("subaccount-number"), " 4 ");
-    await user.type(screen.getByTestId("subaccount-name"), "Extra");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"), " 4 ");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name"), "Extra");
     await user.click(hiddenButton("Save"));
     await waitFor(() => expect(client.createRecordAsync).toHaveBeenCalledWith(
       "vsb_capexaccountlists",
@@ -391,9 +391,9 @@ describe("CAPEXAccountsSettingsScreen", () => {
     client.updateRecordAsync.mockResolvedValue({ success: false, error: { message: "denied", status: 500 } });
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByTestId("command-add-subaccount"));
-    await user.type(await screen.findByTestId("subaccount-number"), "4");
-    await user.type(screen.getByTestId("subaccount-name"), "Extra");
+    await user.click(await screen.findByTestId(`pcf_Account_AccountCardBody_SubAccountsCommandBar-${IDS.land}-newSubaccount`));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"), "4");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name"), "Extra");
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText(/was created but is still Active/)).toBeInTheDocument();
   });
@@ -401,10 +401,10 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-918 Edit subaccount: the panel shows the full number read-only and renames by id", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByRole("button", { name: "Edit subaccount 80000_1 - Substation" }));
+    await user.click(await within(await screen.findByTestId("subaccount-row-80000_1")).findByRole("button", { name: "Edit" }));
     expect(await screen.findByText("Edit Subaccount")).toBeInTheDocument();
     expect(screen.getByDisplayValue("80000_1")).toBeDisabled();
-    const name = screen.getByTestId("subaccount-name");
+    const name = screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name");
     await user.clear(name);
     await user.type(name, "Substation B");
     await user.click(hiddenButton("Save"));
@@ -414,7 +414,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-919 keyboard reorder keeps focus, announces, saves only moved rows and clears the selection", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
-    await user.click(screen.getByTestId("command-reorder"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
 
     await user.click(hiddenButton("Move 80010 - Permits up"));
@@ -424,7 +424,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(hiddenButton("Move 80010 - Permits up")).toBeDisabled();
 
     await user.click(hiddenButton("Save"));
-    // Master has no bulk services: each changed row is one guarded PATCH (existence read by
+    // No bulk services (doc 09 §1): each changed row is one guarded PATCH (existence read by
     // primary key, then `updateRecordAsync`), never an `UpdateMultiple` execute.
     await waitFor(() => {
       expectPatched(IDS.permits, { vsb_order: 1 });
@@ -448,7 +448,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
-    await user.click(screen.getByTestId("command-deactivate"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
     expect(await screen.findByText("Deactivate Account?")).toBeInTheDocument();
     await user.click(dialogButton("Deactivate"));
 
@@ -478,7 +478,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
       : { success: true, data: {} }));
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
-    await user.click(screen.getByTestId("command-deactivate"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
     await user.click(dialogButton("Deactivate"));
     const alert = await screen.findByRole("alert", { hidden: true });
     expect(alert).toHaveTextContent("Failed step: Subaccounts set to Inactive.");
@@ -498,7 +498,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
       statecode: 0, _vsb_parentaccount_value: IDS.land,
     }];
     await user.click(screen.getByRole("button", { name: "Select account 80000 - Land" }));
-    await user.click(screen.getByTestId("command-deactivate"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount"));
     await user.click(dialogButton("Deactivate"));
     expect(await screen.findByText("Account and its subaccounts deactivated; forecast costs cleaned up.")).toBeInTheDocument();
     expect(client.retrieveMultipleRecordsAsync).toHaveBeenCalledWith(
@@ -514,11 +514,11 @@ describe("CAPEXAccountsSettingsScreen", () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
     expect(await screen.findByText(CONTRACT_CHECK_FAILED.account)).toBeInTheDocument();
-    expect(screen.getByTestId("command-delete")).toBeDisabled();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount")).toBeDisabled();
 
     client.failContracts = false;
     await user.click(screen.getByRole("button", { name: "Retry check" }));
-    await waitFor(() => expect(screen.getByTestId("command-delete")).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount")).toBeEnabled());
     expect(screen.queryByText(CONTRACT_CHECK_FAILED.account)).not.toBeInTheDocument();
   });
 
@@ -540,7 +540,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-925 subaccount status dialogs are keyed on the subaccount; activate changes status only", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByRole("button", { name: "Activate subaccount 80000_2 - Cable" }));
+    await user.click(await within(await screen.findByTestId("subaccount-row-80000_2")).findByRole("button", { name: "Activate" }));
     expect(await screen.findByText("Activate Subaccount?")).toBeInTheDocument();
     await user.click(dialogButton("Activate"));
     await waitFor(() => expectPatched(IDS.land2, { statecode: 0, statuscode: 1 }));
@@ -551,8 +551,9 @@ describe("CAPEXAccountsSettingsScreen", () => {
     // then wait for the row action; `hidden`: the closing dialog's modalizer may still mark the
     // page aria-hidden for a tick in jsdom.
     await waitFor(() => expect(screen.queryByText("Activate Subaccount?")).not.toBeInTheDocument(), { timeout: 5000 });
-    await user.click(await screen.findByRole(
-      "button", { name: "Deactivate subaccount 80000_1 - Substation", hidden: true }, { timeout: 5000 },
+    const substation = await screen.findByTestId("subaccount-row-80000_1", {}, { timeout: 5000 });
+    await user.click(await within(substation).findByRole(
+      "button", { name: "Deactivate", hidden: true }, { timeout: 5000 },
     ));
     expect(await screen.findByText("Deactivate Subaccount?")).toBeInTheDocument();
     await user.click(dialogButton("Deactivate"));
@@ -564,7 +565,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
     await screen.findByTestId("subaccount-row-80000_1");
-    await user.click(await screen.findByRole("button", { name: "Activate subaccount 80000_2 - Cable" }));
+    await user.click(await within(await screen.findByTestId("subaccount-row-80000_2")).findByRole("button", { name: "Activate" }));
     await user.click(dialogButton("Activate"));
     expect(await screen.findByText("Subaccount activated.")).toBeInTheDocument();
     await waitFor(() => expect(treeLoads()).toBeGreaterThanOrEqual(2));
@@ -577,7 +578,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     await user.click(screen.getByRole("tab", { name: /Wind Turbine/ }));
     await user.click(screen.getByRole("tab", { name: /Development Expenses/ }));
     expect(screen.getByRole("button", { name: "Select account 80000 - Land" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByTestId("command-edit")).toBeDisabled();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeDisabled();
   });
 
   /* ── selection, create and record-gone behaviour ── */
@@ -586,24 +587,24 @@ describe("CAPEXAccountsSettingsScreen", () => {
     const user = await openDevelopmentTab();
     const permits = screen.getByRole("button", { name: "Select account 80010 - Permits" });
     await user.click(permits);
-    expect(screen.getByTestId("command-edit")).toBeEnabled();
-    await user.click(screen.getByTestId("command-new"));
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeEnabled();
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
     expect(await screen.findByText("New Account")).toBeInTheDocument();
     await user.click(hiddenButton("Cancel"));
     await waitFor(() => expect(screen.queryByText("New Account")).not.toBeInTheDocument());
     expect(hiddenButton("Select account 80010 - Permits")).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByTestId("command-edit")).toBeDisabled();
-    expect(screen.queryByTestId("command-activate")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("command-deactivate")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("command-delete")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeDisabled();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-activateAccount")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deactivateAccount")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount")).not.toBeInTheDocument();
   });
 
   it("UT-ADCAPEX-928 create after New trims only the typed number and PATCHes the new row Inactive after its existence check", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(await screen.findByTestId("account-number"), " 80020 ");
-    await user.type(screen.getByTestId("account-name"), "Roads");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), " 80020 ");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Roads");
     await user.click(hiddenButton("Save"));
     // CA:1436 trims the typed number.
     await waitFor(() => expect(client.createRecordAsync).toHaveBeenCalledWith(
@@ -616,8 +617,8 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-929 renaming a row deleted on the server after the last refetch shows GONE and sends no PATCH (no upsert)", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(screen.getByTestId("command-edit"));
-    const name = await screen.findByTestId("account-name");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount"));
+    const name = await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name");
     await user.clear(name);
     await user.type(name, "Permits 2");
     client.gone.add(IDS.permits); // deleted by another admin; the cached tree still has it
@@ -631,7 +632,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-930 activating a subaccount deleted on the server shows the gone text in the dialog and sends no PATCH", async () => {
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByRole("button", { name: "Activate subaccount 80000_2 - Cable" }));
+    await user.click(await within(await screen.findByTestId("subaccount-row-80000_2")).findByRole("button", { name: "Activate" }));
     client.gone.add(IDS.land2);
     await user.click(dialogButton("Activate"));
     const alert = await screen.findByRole("alert", { hidden: true });
@@ -644,25 +645,25 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-931 a new account deleted before its Inactive step is reported as gone, not 'still Active', and is not selected", async () => {
     client.gone.add(NEW_ID); // deleted by someone else between the POST and the Inactive PATCH
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(await screen.findByTestId("account-number"), "80020");
-    await user.type(screen.getByTestId("account-name"), "Roads");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "80020");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Roads");
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText('Account "Roads" was created but has since been deleted by someone else.')).toBeInTheDocument();
     expect(screen.queryByText(/still Active/)).not.toBeInTheDocument();
     expect(client.createRecordAsync).toHaveBeenCalledTimes(1);
     expect(client.updateRecordAsync).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByText("New Account")).not.toBeInTheDocument());
-    expect(screen.getByTestId("command-edit")).toBeDisabled();
+    expect(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-editAccount")).toBeDisabled();
   });
 
   it("UT-ADCAPEX-932 a new subaccount deleted before its Inactive step is reported as gone, not 'still Active'", async () => {
     client.gone.add(NEW_ID);
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Expand account 80000 - Land" }));
-    await user.click(await screen.findByTestId("command-add-subaccount"));
-    await user.type(await screen.findByTestId("subaccount-number"), "4");
-    await user.type(screen.getByTestId("subaccount-name"), "Extra");
+    await user.click(await screen.findByTestId(`pcf_Account_AccountCardBody_SubAccountsCommandBar-${IDS.land}-newSubaccount`));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Number"), "4");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditSubaccount_BodyContent_Name"), "Extra");
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText('Subaccount "Extra" was created but has since been deleted by someone else.')).toBeInTheDocument();
     expect(screen.queryByText(/still Active/)).not.toBeInTheDocument();
@@ -702,20 +703,20 @@ describe("CAPEXAccountsSettingsScreen", () => {
       expect(cancel.className).toBe(gap20.cancel);
     };
 
-    await user.click(screen.getByTestId("command-new"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
     expect(await screen.findByText("New Account")).toBeInTheDocument();
     checkFooter();
     await user.click(hiddenButton("Cancel"));
     await waitFor(() => expect(screen.queryByText("New Account")).not.toBeInTheDocument());
 
-    await user.click(screen.getByTestId("command-reorder"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
     checkFooter();
   });
 
   it("UT-ADCAPEX-934 the reorder panel is the shared ReorderPanel (Save always on, hint, inline list, clean Cancel closes)", async () => {
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-reorder"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
     // CA:2245-2246: Save is enabled before any move.
     expect(hiddenButton("Save")).not.toBeDisabled();
@@ -732,7 +733,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     client.deleteRecordAsync.mockReturnValue(pending.promise);
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(await screen.findByTestId("command-delete"));
+    await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
     const description = 'Are you sure that you want to permanently delete "Permits" account?';
     expect(await screen.findByText(description)).toBeInTheDocument();
     await user.click(dialogButton("Confirm"));
@@ -748,14 +749,14 @@ describe("CAPEXAccountsSettingsScreen", () => {
     expect(dialogButton("Close")).toBeEnabled();
   });
 
-  /* ── the admin rule (master's `useAdminAccess`): a non-admin's writes are refused ── */
+  /* ── the admin rule (`useAdminAccess`): a non-admin's writes are refused ── */
 
   it("UT-ADCAPEX-936 non-admin: saving a new account is refused with the scope message, nothing is sent and the panel stays open", async () => {
     access.admin = false;
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(await screen.findByTestId("account-number"), "80020");
-    await user.type(screen.getByTestId("account-name"), "Roads");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "80020");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Roads");
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText(OUT_OF_SCOPE)).toBeInTheDocument();
     expect(screen.getByText("New Account")).toBeInTheDocument();
@@ -767,7 +768,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
     access.admin = false;
     const user = await openDevelopmentTab();
     await user.click(screen.getByRole("button", { name: "Select account 80010 - Permits" }));
-    await user.click(await screen.findByTestId("command-delete"));
+    await user.click(await screen.findByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-deleteAccount"));
     await user.click(dialogButton("Confirm"));
     const dialog = screen.getByRole("alertdialog", { hidden: true });
     expect(await within(dialog).findByRole("alert", { hidden: true })).toHaveTextContent(OUT_OF_SCOPE);
@@ -778,7 +779,7 @@ describe("CAPEXAccountsSettingsScreen", () => {
   it("UT-ADCAPEX-938 non-admin: saving a reorder is refused even when nothing moved, and nothing is sent", async () => {
     access.admin = false;
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-reorder"));
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-orderAccounts"));
     expect(await screen.findByText("'Capex Accounts' order")).toBeInTheDocument();
     await user.click(hiddenButton("Save"));
     expect(await screen.findByText(OUT_OF_SCOPE)).toBeInTheDocument();
@@ -788,9 +789,9 @@ describe("CAPEXAccountsSettingsScreen", () => {
 
   it("UT-ADCAPEX-939 admin: the same save is sent as usual", async () => {
     const user = await openDevelopmentTab();
-    await user.click(screen.getByTestId("command-new"));
-    await user.type(await screen.findByTestId("account-number"), "80020");
-    await user.type(screen.getByTestId("account-name"), "Roads");
+    await user.click(screen.getByTestId("pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar-newAccount"));
+    await user.type(await screen.findByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Number"), "80020");
+    await user.type(screen.getByTestId("txt_Account_RightPanel_NewEditAccount_BodyContent_Name"), "Roads");
     await user.click(hiddenButton("Save"));
     await waitFor(() => expect(client.createRecordAsync).toHaveBeenCalled());
     expect(screen.queryByText(OUT_OF_SCOPE)).not.toBeInTheDocument();

@@ -54,7 +54,7 @@ export function useCapexAccounts() {
   });
 }
 
-/** the fresh row the edit panel opens on. */
+/** The fresh row the edit panel opens on (the canvas `Refresh` in `btn_Edit_AdminContracts.OnSelect`). */
 export function useFetchContract() {
   const queryClient = useQueryClient();
   return (id: string) => queryClient.fetchQuery({

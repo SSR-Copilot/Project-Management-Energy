@@ -103,7 +103,7 @@ type User = ReturnType<typeof userEvent.setup>;
 /** Opens Edit on "Development Contract - Turbine" (owns 10101) and focuses into the drawer. */
 async function openTurbineEdit(user: User) {
   await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
-  await user.click(screen.getByRole("button", { name: "Edit Development Contract - Turbine" }));
+  await user.click(screen.getByTestId("btn_Edit_AdminContracts-c-dev"));
   expect(await screen.findByText("Edit Development Contract")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("Loading contract...")).not.toBeInTheDocument());
   await user.click(screen.getByRole("textbox", { name: /^Description/, hidden: true }));
@@ -123,7 +123,7 @@ async function fillNewConstruction(user: User) {
   expect(await screen.findByText("New Construction Contract")).toBeInTheDocument();
   await focusDrawer(user);
   await user.type(screen.getByRole("textbox", { name: /^Description/ }), "Cabling");
-  await user.type(screen.getByLabelText("Months"), "4");
+  await user.type(screen.getByRole("textbox", { name: "Month Difference" }), "4");
   await user.click(screen.getByRole("button", { name: "Expand 10000 Development Expenses" }));
   await user.click(screen.getByRole("checkbox", { name: "10102 Environmental study" }));
 }
@@ -237,7 +237,7 @@ describe("ContractsSettingsScreen", () => {
     const comment = screen.getByRole("textbox", { name: /^Comment/, hidden: true });
     expect(comment.tagName).toBe("TEXTAREA");
     expect(comment).not.toHaveAttribute("rows");
-    // Master's label gate requires an explicit aria-label; it repeats the caption, so the name is unchanged.
+    // The control-label gate (CONVENTIONS rule 16) requires an explicit aria-label; it repeats the caption, so the name is unchanged.
     expect(comment).toHaveAttribute("aria-label", "Comment");
   });
 
@@ -270,7 +270,7 @@ describe("ContractsSettingsScreen", () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
-    await user.click(screen.getByRole("button", { name: "Edit Development Contract - Turbine" }));
+    await user.click(screen.getByTestId("btn_Edit_AdminContracts-c-dev"));
     expect(await screen.findByText("Edit Development Contract")).toBeInTheDocument();
     // jsdom: focus lands on the drawer surface, and tabster keeps the drawer aria-hidden until
     // focus enters a tabbable element inside it (a browser focuses the first one on open).
@@ -308,7 +308,7 @@ describe("ContractsSettingsScreen", () => {
     await user.click(description);
     await user.type(description, "Cabling");
     await waitFor(() => expect(description).toHaveValue("Cabling"), T);
-    const months = screen.getByRole("textbox", { name: "Months", ...H });
+    const months = screen.getByRole("textbox", { name: "Month Difference", ...H });
     await user.type(months, "123");
     expect(await screen.findByText("Only whole numbers with up to two digits are allowed.", undefined, T)).toBeInTheDocument();
     await user.clear(months);
@@ -329,7 +329,7 @@ describe("ContractsSettingsScreen", () => {
     expect((await screen.findAllByText(/some DevCo accounts were not linked/, undefined, T)).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.queryByText("Please wait, saving...")).not.toBeInTheDocument(), T);
     expect(screen.getByRole("textbox", { name: /^Description/, ...H })).toHaveValue("Cabling");
-    // the title stays "New …" until a save fully succeeds; the created parent is
+    // The title stays "New …" until a save fully succeeds; the created parent is
     // remembered, so the retry updates it.
     expect(screen.getByText("New Construction Contract")).toBeInTheDocument();
     expect(api.saveStandardContract.mock.calls[0]![0]).toMatchObject({
@@ -362,7 +362,7 @@ describe("ContractsSettingsScreen", () => {
     api.deleteStandardContract.mockRejectedValue(new DataError("delete BoP standard contract", "plugin refused", 400));
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
-    await user.click(screen.getByRole("button", { name: "Delete Development Contract - Turbine" }));
+    await user.click(screen.getByTestId("btn_Delete_AdminContracts-c-dev"));
     expect(await screen.findByText('Are you sure that you want to permanently delete "Development Contract - Turbine" contract?')).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Confirm", hidden: true }));
     expect(await screen.findByText(/The contract could not be deleted/)).toBeInTheDocument();
@@ -378,7 +378,7 @@ describe("ContractsSettingsScreen", () => {
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
     const reads = api.listStandardContracts.mock.calls.length;
-    await user.click(screen.getByRole("button", { name: "Delete Development Contract - Turbine" }));
+    await user.click(screen.getByTestId("btn_Delete_AdminContracts-c-dev"));
     await user.click(await screen.findByRole("button", { name: "Confirm", hidden: true }));
     expect(await screen.findByText(CONTRACT_ALREADY_DELETED_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText(/may still be in use/)).not.toBeInTheDocument();
@@ -502,7 +502,7 @@ describe("Gap closure", () => {
       .mockRejectedValue(new DevCoTableUnavailableError("list"));
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
-    await user.click(screen.getByRole("button", { name: "Edit Development Contract - Turbine" }));
+    await user.click(screen.getByTestId("btn_Edit_AdminContracts-c-dev"));
     expect(await screen.findByText("The contract cannot be edited: DevCo account links are not available in this app yet."))
       .toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Edit Development Contract")).not.toBeInTheDocument());
@@ -645,7 +645,7 @@ describe("Gap closure", () => {
 });
 
 /**
- * Rail-height parity (work order 13-reusable-components/09, Option 4). jsdom has no layout,
+ * Rail-height parity: the picker rail stretches to the row, the content column scrolls. jsdom has no layout,
  * so the applied RULES are asserted, not pixel heights.
  */
 describe("ContractsSettingsScreen — picker/rail height parity", () => {
@@ -758,8 +758,9 @@ describe("Canvas parity pass: list view", () => {
     expect(screen.getByText(
       "Apply standard contracts to all relevant projects, this will override existing standard assumption contracts",
     )).toBeInTheDocument();
-    expect(screen.getByTestId("contracts-apply-all")).toHaveStyle({ backgroundColor: "rgba(204, 226, 241, 0.5)" });
-    const one = screen.getByRole("button", { name: "Apply Construction Contract - Grid" });
+    expect(screen.getByTestId("con_AdminContract_ApplyAll_Inner_Warning_Button")).toHaveStyle({ backgroundColor: "rgba(204, 226, 241, 0.5)" });
+    const one = screen.getByTestId("btn_Apply_Individual_AdminContracts-c-con");
+    expect(one).toHaveAccessibleName("Apply");
     expect(one).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(
       "Apply standard cost to relevant projects, this will override existing standard assumption contracts",
@@ -824,11 +825,11 @@ describe("Canvas parity pass: panel", () => {
     await screen.findByText("Development Contract - Turbine");
     await user.click(screen.getByRole("button", { name: "Add Development Contract" }));
     await focusDrawer(user);
-    const sign = screen.getByRole("combobox", { name: "Month difference sign" });
+    const sign = screen.getByRole("combobox", { name: "Month Difference" });
     const row = sign.parentElement!.parentElement!;
     expect(declared(row, "column-gap", "gap")).toContain("20px");
     expect(declared(sign.parentElement!, "width")).toContain("100px");
-    expect(declared(screen.getByLabelText("Months").parentElement!, "width")).toContain("160px");
+    expect(declared(screen.getByRole("textbox", { name: "Month Difference" }).parentElement!, "width")).toContain("160px");
   });
 
   it("UT-ADCONTR-940 the Comment counter sits right-aligned in the label row and stays the textbox description", async () => {
@@ -935,8 +936,8 @@ describe("Admin access", () => {
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
     expect(screen.getByRole("button", { name: "Add Development Contract" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Add Construction Contract" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Edit Development Contract - Turbine" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Delete Development Contract - Turbine" })).toBeEnabled();
+    expect(screen.getByTestId("btn_Edit_AdminContracts-c-dev")).toBeEnabled();
+    expect(screen.getByTestId("btn_Delete_AdminContracts-c-dev")).toBeEnabled();
   });
 
   it("UT-ADCONTR-946 a non-administrator sees the contracts but every write command is disabled", async () => {
@@ -946,8 +947,8 @@ describe("Admin access", () => {
     await user.click(await screen.findByRole("button", { name: "Expand Development Contract - Turbine" }));
     expect(screen.getByRole("button", { name: "Add Development Contract" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Add Construction Contract" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Edit Development Contract - Turbine" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Delete Development Contract - Turbine" })).toBeDisabled();
+    expect(screen.getByTestId("btn_Edit_AdminContracts-c-dev")).toBeDisabled();
+    expect(screen.getByTestId("btn_Delete_AdminContracts-c-dev")).toBeDisabled();
     expect(api.saveStandardContract).not.toHaveBeenCalled();
     expect(api.deleteStandardContract).not.toHaveBeenCalled();
   });

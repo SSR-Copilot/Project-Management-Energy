@@ -51,8 +51,8 @@ ProjectCosts-CodeApp/     the code repo (code only — all docs are in ProjectDo
                           entity sets + option sets for the admin/pm rules)
   src/domain/             pure logic with no Dataverse in it (numeric, locale)
   src/features/{admin,pm,cost}/<screen>/  Screen.tsx (composition) · rules.ts (pure) · rules.test.ts · hooks.ts
-                          admin/ + pm/ (except pm/project-main) are UI-first, not connected yet: their
-                          hooks.ts return data/notConnected.ts — see ProjectDocs/app-docs/02-OPEN-DECISIONS.md D14
+                          every admin/ and pm/ screen is connected (D18–D34); the six admin
+                          "Application Settings" screens were replaced on 22 Oct 2026 (D36)
   src/generated/          pac-generated models and services — DO NOT EDIT
   src/platform/           SDK binding, error unwrapping, telemetry, the privileges seam
   src/theme/              the canvas AppTheme palette, transcribed, as a Fluent v9 theme
@@ -61,7 +61,7 @@ ProjectCosts-CodeApp/     the code repo (code only — all docs are in ProjectDo
 
 ProjectDocs/app-docs/00-ANALYSIS.md       what the canvas app is, measured; what the skeleton contains
 ProjectDocs/app-docs/01-BUGS-FOUND.md     23 defects — 18 in the canvas app, 5 in the skeleton. None fixed silently.
-ProjectDocs/app-docs/02-OPEN-DECISIONS.md 13 positions taken that need sign-off
+ProjectDocs/app-docs/02-OPEN-DECISIONS.md D1–D36: positions taken that need sign-off
 ProjectDocs/app-docs/03-STATUS.md         what is built, what is verified, what is next
 
 ProjectDocs/reference/dataverse-entities.json    83 entities: logical name, entity set, primary key

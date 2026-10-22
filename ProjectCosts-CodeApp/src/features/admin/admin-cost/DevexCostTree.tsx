@@ -1,16 +1,22 @@
 /**
- * Module H — the DEVEX/CAPEX standard cost tree (ACS:3624-4455).
+ * Module H — the DEVEX/CAPEX standard cost tree (ACS:3624-4455,
+ * `con_DevexCapex_Content_StandardCosts_Card_Body_Costs` holding the gallery
+ * `gal_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Gallery`).
  *
- * One header row per category with costs (`+`/`-` fold, neutralLighter fill), its cost rows
- * indented under a tree connector: Category/Account (parent account), Sub-Account
+ * One header row per category with costs (`+`/`-` fold `Button2_2`, neutralLighter fill), its cost
+ * rows indented under a tree connector: Category/Account (parent account), Sub-Account
  * (`name - number`), Description, Cost (`1,234,567 EUR/MW(p)`), Cluster (`1,3,5`), comment icon
  * (opens the editor, tooltip "Comment: …" / "Add Comment"), Edit, Delete.
+ *
+ * Repeating rows carry the canvas control name plus the row's stable id (CONVENTIONS rule 16):
+ * the category id on `Button2_2`, the cost id on the comment / Edit / Delete buttons.
  */
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { CommentAddRegular, CommentRegular, DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import type { DevexCost } from "@/data/adminCost";
 import { ExpandToggle, InlineEmpty, RowActions } from "@/components";
 import { fontFamily, palette } from "@/theme/tokens";
+import { MSG } from "./constants";
 import type { DevexGroup } from "./rules";
 import { useTreeStyles } from "./treeStyles";
 
@@ -55,14 +61,19 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
   const tree = useTreeStyles();
   if (groups.length === 0) {
     return (
+      // NEW — no canvas equivalent: the canvas shows an empty gallery.
       <InlineEmpty padding={12} size={13}>
         No DEVEX/CAPEX standard costs for this country and technology yet. Use "Add Cost" to create one.
       </InlineEmpty>
     );
   }
   return (
-    <div className={styles.scroller}>
-      <table className={styles.table} aria-label="DEVEX/CAPEX standard costs">
+    <div className={styles.scroller} data-testid="con_DevexCapex_Content_StandardCosts_Card_Body_Costs">
+      <table
+        className={styles.table}
+        aria-label="DEVEX/CAPEX standard costs"
+        data-testid="gal_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Gallery"
+      >
         <colgroup>
           <col style={{ width: 250 }} />
           <col style={{ width: 300 }} />
@@ -73,6 +84,11 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
           <col style={{ width: 120 }} />
         </colgroup>
         <thead>
+          {/*
+            `lbl_DevexCapex_Content_StandardCosts_CardBody_CostsTableHeader_*.Text`, verbatim, in X
+            order: Category, Subaccount, Description_2, Cost, Cluster, Comment (`""`), Action. The
+            canvas `…_Account` header has `Width: 0` (hidden), so it has no column here.
+          */}
           <tr>
             <th scope="col" className={styles.th}>Category / Account</th>
             <th scope="col" className={styles.th}>Sub-Account</th>
@@ -89,12 +105,16 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
             return [
               <tr key={group.categoryId} className={styles.parent}>
                 <td className={mergeClasses(styles.td, styles.parentLabel)} colSpan={7}>
+                  {/*
+                    `Button2_2.Text` — `If(ThisItem.IsFolded, "+", "-")`, verbatim, as the name
+                    (no AccessibleLabel); the fold state is `aria-expanded`.
+                  */}
                   <ExpandToggle
                     variant="text18"
                     className={styles.fold}
                     expanded={open}
-                    label={`${open ? "Hide" : "Show"} the ${group.categoryName} costs`}
-                    testId={`cost-devex-category-toggle-${group.categoryId}`}
+                    label={open ? "-" : "+"}
+                    testId={`Button2_2-${group.categoryId}`}
                     onToggle={() => onToggle(group.categoryId)}
                   />
                   {group.categoryName}
@@ -116,25 +136,34 @@ export function DevexCostTree({ groups, openCategories, canEdit, canDelete, onTo
                   <td className={styles.td} />
                   <td className={mergeClasses(styles.td, styles.center)}>
                     <div className={styles.actionCell}>
-                      {/* The comment button stays its own first element, with its tooltip (tooltip). */}
+                      {/*
+                        `img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment` — its own
+                        element before Edit / Delete, with the canvas `Tooltip` (the comment text).
+                        DIVERGENCE: the canvas image sets no `DisplayMode`, so everyone can open the
+                        panel from it; here it follows Edit and is disabled without edit rights.
+                      */}
                       <Tooltip content={row.commentTooltip} relationship="description">
                         <Button
                           appearance="transparent"
                           size="small"
                           icon={row.hasComment ? <CommentRegular className={styles.icon} /> : <CommentAddRegular className={styles.icon} />}
                           disabled={!canEdit(row.cost)}
-                          aria-label={row.hasComment ? `Comment on ${row.description}` : `Add comment to ${row.description}`}
-                          data-testid={`cost-devex-comment-${row.cost.id}`}
+                          aria-label={MSG.commentLabel(row.hasComment)}
+                          data-testid={`img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment-${row.cost.id}`}
                           onClick={() => onEdit(row.cost)}
                         />
                       </Tooltip>
+                      {/*
+                        `btn_DevexCapex_…_Action_Edit` / `_Action_delete` are icon-only (`Icon: "Edit"` /
+                        `"Delete"`, no Text or AccessibleLabel): the icon names are the names.
+                      */}
                       <RowActions
                         size="small"
                         tone="brand"
                         toneWhenLocked
                         actions={[
-                          { key: "edit", icon: <EditRegular />, label: `Edit ${row.description}`, disabled: !canEdit(row.cost), onClick: () => onEdit(row.cost), testId: `cost-devex-edit-${row.cost.id}` },
-                          { key: "delete", icon: <DeleteRegular />, label: `Delete ${row.description}`, disabled: !canDelete(row.cost), onClick: () => onDelete(row.cost), testId: `cost-devex-delete-${row.cost.id}` },
+                          { key: "edit", icon: <EditRegular />, label: "Edit", disabled: !canEdit(row.cost), onClick: () => onEdit(row.cost), testId: `btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_Edit-${row.cost.id}` },
+                          { key: "delete", icon: <DeleteRegular />, label: "Delete", disabled: !canDelete(row.cost), onClick: () => onDelete(row.cost), testId: `btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_delete-${row.cost.id}` },
                         ]}
                       />
                     </div>

@@ -1,7 +1,7 @@
 /**
- * Accessible reorder list for the Application Settings reorder panels (named so it never shadows
- * `components/ReorderList.tsx`) — what CAPEX Accounts (`Panels.tsx` ReorderPanel) and Check List
- * Settings (`ReorderDrawer.tsx`) each built: Move up / Move down buttons, focus that follows the
+ * Accessible reorder list for the Application Settings reorder panels, the code-app replacement for
+ * the canvas `pdd_CustomControl.PowerDragDrop` control. What CAPEX Accounts (`Panels.tsx` ReorderPanel)
+ * and Check List Settings (`ReorderDrawer.tsx`) each built: Move up / Move down buttons, focus that follows the
  * moved item (or the other arrow once it reaches an edge), a polite live-region announcement per
  * move, and optional native drag-and-drop (CAPEX).
  *

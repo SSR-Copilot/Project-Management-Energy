@@ -1,21 +1,42 @@
 /**
- * Application Settings — Milestones. Replaces the canvas 'Admin Milestones Screen'.
+ * Application Settings — Milestones. Replaces the canvas `Admin Milestones Screen` (PM app,
+ * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Milestones Screen.pa.yaml`).
  *
  * Standard milestone assumptions per Country × Technology: average cluster durations (months)
  * and cluster success rates, used by project screens as default milestone timings.
  *
  * Composition only: rules in `./rules.ts`, queries in `./hooks.ts`, Dataverse I/O in
- * `@/data/adminMilestones.ts`.
+ * `@/data/adminMilestones.ts`. Canvas map (each `data-testid` is the canvas control name):
  *
- * Route `/admin/milestones`: rendered inside the shell and admin nav, with the in-page h1;
- * writes are per-row (`saveMilestonePatches`, no bulk services).
+ *   cmp_Admin_Milestones_Header                    the in-page h1 (`Project.Name`)
+ *   gal_CountriesMilestonesStandardAssumptions     the country accordion (`SettingsAccordion`)
+ *     con_Main_MilestonesStandardAssumptions       one section (`-<country id>`)
+ *     lbl_ClusterName_…                            its title
+ *     cmd_MilestoneStandardAssumptionsDetails_Country_CommandBar   Edit
+ *     gal_MilestonesStandardAssumptions_AdminScreen                the read-only matrix
+ *   con_Admin_MilestoneAssumtion_Form              the edit panel (`EditMilestonesPanel`)
+ *   cmp_Admin_MilestoneAssumptions_Loading         the "will be saved, please wait..." overlay
  *
- * Admin gate: `useAdminAccess` (canvas `Or(IsApplicationAdministrator, IsControllerOwnData)`,
- * with the local-run bypass). A non-admin sees the grid, but Edit is disabled and a save is
- * refused. Client-side only; Dataverse privileges are the real control.
+ * Route `/admin/milestones`, inside the shell and admin nav. Admin gate: `useAdminAccess` (canvas
+ * nav items `Or(IsApplicationAdministrator, IsControllerOwnData)`, with the local-run bypass).
+ * A non-admin sees the grid, but Edit is disabled and a save is refused. Client-side only;
+ * Dataverse privileges are the real control.
+ * SOURCE DEFECT (kept documented): the canvas screen has no permission check of its own — entry
+ * is gated only by hiding the nav item; this app adds the client-side gate above.
  *
- * Not built, by decision: Apply, Apply All and the "currently recalculating" indicator —
- * disabled/dead in the canvas, and their tables have no generated service.
+ * Not built, by decision (D20): `CommandBar1` (Apply All, `DisplayMode.Disabled`), the
+ * per-country Apply item (`ItemEnabled: false`), both Apply confirmations
+ * (`cmp_Admin_MilestoneAssumptions_ApplyAll_Confirmation`, `…_Apply_Confirmation`) and the
+ * "Currently recalculating …" badge (`Icon3_1`) — disabled/dead in the canvas, and their tables
+ * have no generated service.
+ * HIDDEN CONTROLS: `but_Admin_MilestoneAssumption_Form_Buttons_Reset` (`Select()`-ed by Close,
+ * Cancel and Save) = `closePanel`, which drops the draft; `lbl_CountryGuid_MilestoneStandardAssumptions_AdminScreen`
+ * (each card's country id) = the section already has the id.
+ *
+ * DIVERGENCE: the canvas lists every country (`ClearCollect(…, Countries)`, AMS:30-44); here only
+ * ACTIVE countries are shown (`useActiveCountries`).
+ * DIVERGENCE: the loading, empty, stale-data and Edit-refetch states, the duplicate-row warning
+ * and the save toasts have no canvas equivalent (CONVENTIONS rule 19).
  */
 import { useCallback, useMemo, useState } from "react";
 import { Text, makeStyles, tokens } from "@fluentui/react-components";
@@ -44,7 +65,7 @@ const useStyles = makeStyles({
     paddingTop: "15px", paddingLeft: "10px", paddingRight: "10px", paddingBottom: tokens.spacingVerticalXL,
     backgroundColor: palette.white, minHeight: "100%", boxSizing: "border-box",
   },
-  /** Master's admin page heading (as the other master admin screens). */
+  /** The in-page admin heading, as on the other admin screens. */
   title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold, margin: 0 },
   /** Canvas Medium, `FontWeight.Normal`, black (AMS:814, 822-824, 833). */
   countryName: { ...TYPOGRAPHY.countryName },
@@ -117,6 +138,7 @@ export default function MilestonesSettingsScreen() {
   useBeforeUnload(panelOpen && panel.touched);
 
   /**
+   * `cmd_MilestoneStandardAssumptionsDetails_Country_CommandBar` → `editCountryMilestoneAssumtions`.
    * Refetch so the editor starts from current values, then open. If the refetch fails the
    * panel is NOT opened on the stale cache; the page says why instead.
    * Cancel / ✕ / Escape on a dirty draft confirm first (`FormPanel`), then `closePanel`
@@ -141,6 +163,14 @@ export default function MilestonesSettingsScreen() {
     openPanel({ country, draft: {} });
   }, [assumptionsQuery, openPanel]);
 
+  /**
+   * `pcf_but_Admin_MilestoneAssumption_Form_Buttons_Save.OnChange`.
+   * DIVERGENCE: the canvas `ForAll(Patch)`es every row of the country and then always closes the
+   * panel, success or not. Here only changed rows and columns are written, each row as its own
+   * guarded update (`saveMilestonePatches`: a row deleted meanwhile is reported, never recreated);
+   * on any failure the panel and the draft stay, and the message lists the rows that were and
+   * were not saved.
+   */
   const onSave = useCallback(async () => {
     if (!canEdit) {
       setPanelError(MSG.noPermission);
@@ -174,8 +204,8 @@ export default function MilestonesSettingsScreen() {
   return (
     <div className={styles.page}>
       {/*
-        Master port: master's shell header is not a heading, and every master admin screen names
-        itself with an in-page h1 (canvas `cmp_Admin_Milestones_Header`, `Project.Name`).
+        The app shell's header is not a heading, so every admin screen names itself with an
+        in-page h1 (canvas `cmp_Admin_Milestones_Header`, `Project.Name`).
       */}
       <Text as="h1" className={styles.title}>{MSG.title}</Text>
       {editError ? (
@@ -197,6 +227,11 @@ export default function MilestonesSettingsScreen() {
         }}
       >
         {() => (
+          /*
+            `gal_CountriesMilestonesStandardAssumptions`. The shared accordion takes no root id, and
+            its header button (canvas `btn_Select_MilestonesStandardAssumptions_AdminScreen` with
+            `ico_Down_…` / `ico_Up_…`) takes no canvas id either.
+          */
           <SettingsAccordion
             variant="light"
             border="always"
@@ -209,13 +244,25 @@ export default function MilestonesSettingsScreen() {
               return {
                 id: country.id,
                 testId: `con_Main_MilestonesStandardAssumptions-${country.id}`,
-                title: <Text className={styles.countryName}>{country.name}</Text>,
+                title: (
+                  <Text className={styles.countryName} data-testid={`lbl_ClusterName_MilestonesStandardAssumptions_AdminScreen-${country.id}`}>
+                    {country.name}
+                  </Text>
+                ),
                 content: (
-                  <div className={styles.details}>
+                  <div className={styles.details} data-testid={`con_MilestonesStandardAssumptionsDetails_MilestonesStandardAssumptions_AdminScreen-${country.id}`}>
+                    {/*
+                      DIVERGENCE: the canvas Edit item is always enabled (`ItemEnabled: true`) and
+                      the bar also shows a disabled Apply item; here Edit needs the admin rule and
+                      at least one stored row, and Apply is not rendered (D20).
+                    */}
                     <CommandBar
                       ariaLabel={`${country.name} actions`}
-                      testIdPrefix={`milestones-command-${country.id}`}
-                      commands={[{ key: "edit", label: "Edit", icon: "Edit", enabled: canEdit && groups.length > 0 && !preparing }]}
+                      testIdPrefix={`cmd_MilestoneStandardAssumptionsDetails_Country_CommandBar-${country.id}`}
+                      commands={[{
+                        key: "editCountryMilestoneAssumtions", label: MSG.edit, icon: "Edit",
+                        enabled: canEdit && groups.length > 0 && !preparing,
+                      }]}
                       onCommand={() => { if (canEdit) void openEdit(country); }}
                     />
                     {duplicates ? <NoticeBar intent="warning">{duplicates}</NoticeBar> : null}
@@ -246,8 +293,9 @@ export default function MilestonesSettingsScreen() {
       />
 
       {/*
-        Portalled (`portal`) so the fixed scrim joins the body-level stacking
-        order AFTER the Drawer's own portal and covers it, whatever stacking contexts the shell creates.
+        `cmp_Admin_MilestoneAssumptions_Loading`. Portalled (`portal`) so the fixed scrim joins the
+        body-level stacking order AFTER the Drawer's own portal and covers it, whatever stacking
+        contexts the shell creates. "Loading current values…" has no canvas equivalent.
       */}
       {save.isPending && editCountry ? (
         <LoadingOverlay portal label={MSG.saving(editCountry.name)} />

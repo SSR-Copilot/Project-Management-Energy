@@ -2,6 +2,13 @@
 
 Read this before changing anything under `src/features/admin/`. Re-check the code before you trust any line here.
 
+## Progress (22 Oct 2026, later) — not committed
+
+- **§1 done:** recorded as `02-OPEN-DECISIONS.md` **D36** (§1–§5), with pointers from D14, D18–D24 and D20. The behaviours that differ from the canvas still need the product owner's keep / revert.
+- **§2 done for the six screens:** canvas-named ids 3 → 177, all verified by the gate. Verbatim citations and `DIVERGENCE` / `SOURCE DEFECT` markers restored. Results, the contradictions with D19 / D22 / D24 and the remaining id gaps (shared-component props) are in D36 §6.
+- **§3 partly done:** `PROJECT-MAP.md`, `CONVENTIONS.md`, `TESTING-AND-HARNESS.md`, `APP-README.md`, `AGENT-GUIDE.md` updated; `03-STATUS.md` / `05-SCREEN-TRACKER.md` marked historical. The rest of the "about 22 docs" list needs the porting developer's alignment audit.
+- **§4:** `ReorderList` unexported from `@/components` (the files `components/ReorderList.tsx` and `components/reorder.ts` are still on disk, awaiting deletion). The three test-only checklist-approval repository methods were removed. The admin-folder comments were read through. Hard-coded colours are listed in D36 §6. The `messages.ts` imports are not changed.
+
 ## What landed
 
 Commit `864056b` on `master`, fast-forward from `9eb9e4d`. It replaces the six `/admin` screens with the versions developed on branch `RounakDev1`. The routes, left navigation, shell and header are unchanged.

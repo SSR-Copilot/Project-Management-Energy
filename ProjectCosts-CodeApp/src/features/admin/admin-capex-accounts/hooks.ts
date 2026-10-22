@@ -3,9 +3,14 @@
  * one write mutation that invalidates everything the screen and the CAPEX cost screens read.
  *
  * Keys: `qk.adminCapexAccounts*` (shared with the invalidation helpers).
- * The admin tree is NOT cached under the shared `qk.capexAccounts`, whose consumer
- * (`features/contracts/hooks.ts`) expects active-only cost accounts; that key is invalidated after
- * every write instead by `invalidateAfterCapexAccountsWrite`.
+ * The admin tree is NOT cached under the shared `qk.capexAccounts`, whose consumers
+ * (`features/cost/contracts/hooks.ts`, `features/admin/admin-contract/hooks.ts`) expect active-only
+ * cost accounts; that key is invalidated after every write instead by
+ * `invalidateAfterCapexAccountsWrite`.
+ *
+ * Replaces the canvas collections `colCapexAccounts`, `colCapexAccountCategories` and
+ * `colCapexProjectContracts`, which `App.OnStart` built once and the screen patched by hand after
+ * each write (`Collect` / `UpdateIf` / `Remove` on the collection next to every Dataverse write).
  */
 import { useMemo } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -35,7 +40,8 @@ export interface ContractChecks {
 }
 
 /**
- * Server-side contract check per id (never a cached, truncated list). Only the ids
+ * Server-side contract check per id (never a cached list — the canvas looked in
+ * `colCapexProjectContracts`, a collection built once at app start). Only the ids
  * actually on screen are asked about. A failed check is reported as `"failed"` rather than
  * dropped, so the screen can explain why Delete is unavailable.
  */

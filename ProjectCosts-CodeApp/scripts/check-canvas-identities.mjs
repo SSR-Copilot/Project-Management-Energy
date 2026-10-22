@@ -20,7 +20,9 @@
  *                  review, not failed.
  *
  * Kebab-case ids (`contracts-add-target-…`, no underscore) are derived ids, not canvas names, and
- * are only counted. Repeating-row suffixes (`` `${name}-${row.id}` ``) are stripped before lookup.
+ * are only counted. Repeating-row suffixes (`` `${name}-${row.id}` ``) and a literal `-<ItemKey>`
+ * suffix are stripped before lookup. Ids read from: `data-testid`, `testId`, `saveTestId`,
+ * `cancelTestId`, `closeTestId`, `toggleTestId`, and `name` on the NAME_PRIMITIVES.
  * Exempt an element with `// canvas-identity-ignore: <reason>` on its line or up to two above.
  *
  * Usage (from app/): node scripts/check-canvas-identities.mjs [--json] [--module <path-fragment>]
@@ -75,8 +77,9 @@ const TYPE_FAMILY = {
   Classic_CheckBox: ["Checkbox", "input"],
   ModernDropdown: ["Dropdown", "select", "CostSelect", "Combobox", "ChoiceField"],
   Classic_DropDown: ["Dropdown", "select", "CostSelect", "Combobox", "ChoiceField"],
-  ComboBox: ["SelectChoice", "Combobox", "Dropdown", "Input", "input", "CostSelect"],
-  Classic_ComboBox: ["Combobox", "Dropdown", "Input", "input"],
+  // SearchCombo: Admin Cost's wrapper around Fluent <Combobox>.
+  ComboBox: ["SelectChoice", "Combobox", "Dropdown", "Input", "input", "CostSelect", "SearchCombo"],
+  Classic_ComboBox: ["Combobox", "Dropdown", "Input", "input", "SearchCombo"],
   ModernTextInput: ["ReadOnlyField", "Input", "input", "textarea", "Textarea", "CostField", "TextField", "TextAreaField", "NumericField", "SpinButton"],
   Classic_TextInput: ["ReadOnlyField", "Input", "input", "textarea", "Textarea", "CostField", "TextField", "TextAreaField", "NumericField"],
   TextInput: ["ReadOnlyField", "Input", "input", "textarea", "Textarea", "CostField", "TextField", "TextAreaField", "NumericField"],
@@ -88,8 +91,9 @@ const TYPE_FAMILY = {
   ModernRadio: ["RadioChoice", "Choices", "Radio", "input", "RadioGroup"],
   Classic_Radio: ["RadioChoice", "Choices", "Radio", "input", "RadioGroup"],
   Radio: ["RadioChoice", "Choices", "Radio", "input", "RadioGroup"],
-  ModernTabList: ["Tab", "TabList", "Button", "button"],
-  TabList: ["Tab", "TabList", "Button", "button"],
+  // SettingsTabStrip: the shared Application Settings wrapper around Fluent <TabList>.
+  ModernTabList: ["Tab", "TabList", "Button", "button", "SettingsTabStrip"],
+  TabList: ["Tab", "TabList", "Button", "button", "SettingsTabStrip"],
   Slider: ["Slider", "input"],
   Rectangle: ["button", "tr", "div", "Button"],
   Label: ["Text", "button", "Button", "tr", "div", "span"],
@@ -153,7 +157,9 @@ function canvasIndex(app) {
 
 // ---------------------------------------------------------------- JSX side
 const CANVAS_NAME = /^(btn|but|txt|lbl|drp|cmb|cbx|rad|tgl|chk|chb|ico|img|dte|dtp|tab|pcf|gal|con|cnt|icon|icn|tog|sld|spn|num|htm|InfoButton|Label|Button|Checkbox|Toggle|Image|Icon|modern|Text)[A-Za-z0-9]*_?/;
-const TESTID_PROPS = ["data-testid", "name", "testId", "saveTestId", "cancelTestId"];
+const TESTID_PROPS = ["data-testid", "name", "testId", "saveTestId", "cancelTestId", "closeTestId", "toggleTestId"];
+/** Props a wrapper renders on an inner <Button> (PanelButtons Save/Cancel, the FormPanel ✕, a CollapsibleCard chevron). */
+const BUTTON_PROPS = ["saveTestId", "cancelTestId", "closeTestId", "toggleTestId"];
 /**
  * Primitives that put their `name` prop on BOTH `data-testid` and `aria-label`
  * (`aria-label={name ?? label}` in CostField/Choices, `aria-label={name}` in TaggedDateField),
@@ -226,24 +232,27 @@ export function validate({ only } = {}) {
           if (!CANVAS_NAME.test(id) || !id.includes("_")) { st.derived++; continue; }
           st.canvas++;
           if (ignored) continue;
-          const findIn = (m) => m.get(id) ?? (composed ? [...m.values()].find((c) => c.name.startsWith(id)) : undefined);
+          // A literal `<canvasName>-<key>` (the CommandBar `${prefix}-${ItemKey}` form) is looked up
+          // by its canvas part when the whole string is not a control name.
+          const base = id.includes("-") ? id.slice(0, id.indexOf("-")) : undefined;
+          const findIn = (m) => m.get(id) ?? (base ? m.get(base) : undefined) ?? (composed ? [...m.values()].find((c) => c.name.startsWith(id)) : undefined);
           const local = own.map(findIn).find(Boolean) ?? shared.map(findIn).find(Boolean);
-          const anywhere = all.get(id) ?? (composed ? [...all.entries()].filter(([k]) => k.startsWith(id)).map(([, v]) => v[0]) : undefined);
+          const anywhere = all.get(id) ?? (base ? all.get(base) : undefined) ?? (composed ? [...all.entries()].filter(([k]) => k.startsWith(id)).map(([, v]) => v[0]) : undefined);
           if (composed && local) { st.verified++; continue; }   // a composed name: existence of the family is what can be proven
           const at = `${rel}:${line}`;
           if (!local && (!anywhere || anywhere.length === 0)) { findings.push({ code: "C1", at, tag, id, msg: `no canvas control named "${id}" (typo or invented)` }); continue; }
           if (!local) { findings.push({ code: "C2", at, tag, id, msg: `"${id}" exists only on ${anywhere.map((c) => c.screen).join(", ")}` }); continue; }
           st.verified++;
           const fam = TYPE_FAMILY[local.type.replace(/_?\d.*$/, "")] ?? TYPE_FAMILY[local.type];
-          // the panel Save/Cancel props are rendered as <Button> inside PanelButtons
-          const jsxTag = ["saveTestId", "cancelTestId"].includes(prop) ? "Button" : tag;
+          // these props are rendered as an inner <Button> (PanelButtons, FormPanel, CollapsibleCard)
+          const jsxTag = BUTTON_PROPS.includes(prop) ? "Button" : tag;
           if (CONTAINER.test(local.type)) {
             if (INTERACTIVE_TAGS.has(jsxTag) && !["button", "Button"].includes(jsxTag)) findings.push({ code: "C3", at, tag: jsxTag, id, msg: `canvas "${id}" is a ${local.type}, rendered as <${jsxTag}>` });
           } else if (fam && !fam.includes(jsxTag)) {
             findings.push({ code: "C3", at, tag: jsxTag, id, msg: `canvas "${id}" is a ${local.type}, rendered as <${jsxTag}>` });
           }
           const canvasAl = local.accessibleLabel;
-          if (typeof canvasAl === "string" && canvasAl.trim() && !["saveTestId", "cancelTestId"].includes(prop)) {
+          if (typeof canvasAl === "string" && canvasAl.trim() && !BUTTON_PROPS.includes(prop)) {
             st.labelChecked++;
             const ariaProp = ARIA_PROP_PRIMITIVES.includes(tag) && !attrs.has("aria-label") && attrs.has("ariaLabel");
             const alInit = ariaProp ? attrs.get("ariaLabel") : attrs.get("aria-label");

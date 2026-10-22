@@ -82,7 +82,6 @@ const repo = createChecklistTablesRepository();
 const H = "33333333-3333-3333-3333-333333333333";
 const C = "44444444-4444-4444-4444-444444444444";
 const T1 = "55555555-0000-0000-0000-000000000001";
-const A1 = "66666666-0000-0000-0000-000000000001";
 const reads = (table: string) => calls.filter((c) => c.op === "read" && c.table === table);
 
 beforeEach(() => {
@@ -111,10 +110,10 @@ describe("Shared reads and writes", () => {
   });
   it("UT-ADCHKTBL-003 Turns success:false into a DataError with the status", async () => {
     fail = { op: "update", status: 403 };
-    const error = await repo.updateChecklistApproval(A1, {}).catch((e: unknown) => e);
+    const error = await repo.updateDefaultChecklist(T1, {}).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(DataError);
     expect((error as DataError).status).toBe(403);
-    expect((error as DataError).operation).toBe(`update ${CHECKLIST_ENTITY_SETS.approvals}`);
+    expect((error as DataError).operation).toBe("update checklist item");
   });
 });
 
@@ -213,34 +212,22 @@ describe("Writes", () => {
     expect(calls.filter((c) => c.op === "create").every((c) => c.table === CHECKLIST_ENTITY_SETS.tasks)).toBe(true);
   });
 
-  it("UT-ADCHKTBL-012 Updates tasks and approvals, deletes approvals, surfacing a refusal", async () => {
+  // Approval writes moved to WritePlans (`admin-gates-approvals/writes.test.ts`); UT-ADCHKTBL-014
+  // (create an approval) was retired with the repository method. Ids are not renumbered.
+  it("UT-ADCHKTBL-012 Updates a task by read-before-write", async () => {
     await repo.updateDefaultChecklist(T1, { vsb_order: 2 });
-    await repo.updateChecklistApproval(A1, { vsb_gateisactive: false });
-    await repo.deleteChecklistApproval(A1);
     expect(calls.map((c) => [c.op, c.table, c.id])).toEqual([
       ["exists", CHECKLIST_ENTITY_SETS.tasks, T1],
       ["update", CHECKLIST_ENTITY_SETS.tasks, T1],
-      ["exists", CHECKLIST_ENTITY_SETS.approvals, A1],
-      ["update", CHECKLIST_ENTITY_SETS.approvals, A1],
-      ["delete", CHECKLIST_ENTITY_SETS.approvals, A1],
     ]);
-    fail = { op: "delete", status: 403 };
-    await expect(repo.deleteChecklistApproval("a1")).rejects.toBeInstanceOf(DataError);
   });
 
-  it("UT-ADCHKTBL-013 Upsert guard: updating a deleted task or approval is refused with RecordGoneError and sends no PATCH", async () => {
+  it("UT-ADCHKTBL-013 Upsert guard: updating a deleted task is refused with RecordGoneError and sends no PATCH", async () => {
     gone.add(T1);
-    gone.add(A1);
     await expect(repo.updateDefaultChecklist(T1, { vsb_order: 2 })).rejects.toBeInstanceOf(RecordGoneError);
-    await expect(repo.updateChecklistApproval(A1, { vsb_gateisactive: false })).rejects.toBeInstanceOf(RecordGoneError);
     expect(calls.filter((c) => c.op === "update")).toEqual([]);
-    // Each table is checked by its own primary key.
-    expect(calls.map((c) => c.table)).toEqual([CHECKLIST_ENTITY_SETS.tasks, CHECKLIST_ENTITY_SETS.approvals]);
-  });
-
-  it("UT-ADCHKTBL-014 Creates an approval and returns its id", async () => {
-    createResult = { vsb_checklistdefaultapprovalsid: "ap-1" };
-    expect(await repo.createChecklistApproval({ vsb_name: "x" })).toBe("ap-1");
+    // The task table is checked by its own primary key.
+    expect(calls.map((c) => c.table)).toEqual([CHECKLIST_ENTITY_SETS.tasks]);
   });
 });
 

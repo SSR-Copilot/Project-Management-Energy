@@ -33,6 +33,7 @@ no `security/matrix.json`, no nine-gate script, no mock backend, no skeleton dat
 store — it reads and writes **real Dataverse** in `VSBCloud_Dev` (environment
 `be41add6-6f60-ebb0-9c73-2480d6bc615d`, app id `807a2fba-665c-40f3-b158-ffe822aa7da4`). The one
 skeleton idea it adopted (15 Oct 2026) is the folder split, `src/features/{admin,pm,cost}/<slug>/`.
+The whole workspace (code repo and `ProjectDocs/`) is one git repository, branch `master`.
 Everything taken out of `ProjectCosts-CodeApp/` in that change is kept, reversibly, under
 `ProjectDocs/skeleton-reference/` — reference only, never imported.
 
@@ -43,12 +44,15 @@ real screens):
 - **Built, with live Dataverse writes**: Project Overview (`features/pm/project-main`, ported
   from PM's "Project Main Screen") and all five Project Costs screens (`features/cost/*`):
   CAPEX/DEVEX, Add Cost from Table, OPEX, Land Lease, Contracts.
-- **UI built, not connected to Dataverse yet** (`ProjectDocs/app-docs/02-OPEN-DECISIONS.md` D14): the six admin
-  screens (`features/admin/*`, routed `/admin/<screen>`) and ten PM screens (`features/pm/*`,
-  routed `/project/<screen>?projectId=`): General Data (also New Project), Milestones,
-  Generators, Production, Cluster Check List, Team, Planning, Grid Operator, Revenues, Finance.
-  Layout, captions and pure rules are in place; each `hooks.ts` returns `data/notConnected.ts`
-  and lists its tables in `TABLES`. Connecting one is MIGRATION-STRATEGY steps 4 and 6.
+- **Also built and connected (reads and writes)**: the ten PM screens (`features/pm/*`, routed
+  `/project/<screen>?projectId=`, D25–D34): General Data (also New Project), Milestones,
+  Generators, Production, Cluster Check List, Team, Planning, Grid Operator, Revenues, Finance;
+  and the six admin "Application Settings" screens (`features/admin/*`, routed
+  `/admin/<screen>`). The admin screens were first connected under D18–D24, then replaced on
+  22 Oct 2026 by the RounakDev1 versions (D36; open points in
+  `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`). Still left out: creating
+  a project's Teams/SharePoint flow, approval flows that send mail or Teams cards, and the Fabric
+  SQL sources (D2). Status per screen: `ProjectDocs/app-docs/gap-analysis/README.md`.
 - **Not ported**: PM's "App Loading Screen" — its job (launch parameters, deep-link routing) is
   done by `app/SessionContext.tsx` and the `Landing` route.
 

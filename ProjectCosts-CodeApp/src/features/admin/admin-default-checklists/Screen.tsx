@@ -1,14 +1,34 @@
 /**
  * Application Settings — Check List Settings. Replaces the canvas
- * 'Admin Project Default Checklists Screen'.
+ * 'Admin Project Default Checklists Screen' (PM app),
+ * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Project Default Checklists Screen.pa.yaml`.
+ *
+ * Canvas controls → this screen (`data-testid` = the canvas name; per-row ids add `-${row.id}`):
+ *   cmp_Admin_Project_Checklist_Header            the page title (`PAGE_TITLE`)
+ *   tab_Admin_Project_Checklist_Association       the tab strip (`SettingsTabStrip`)
+ *   gal_DefaultChecklist_AdminScreen              the cluster accordion; each item is
+ *     con_Main_DefaultChecklist_AdminScreen         `${name}-${cluster.id}`
+ *     btn_Select / ico_Down / ico_Up                the accordion header (one button, see below)
+ *     pcf_CommandBar_Cluster_…                      Add Task · Reorder (canvas `ItemKey`s)
+ *     gal_TasksInClusterDefaultChecklist_…          the task table (`TaskTable`)
+ *   con_Admin_Checklist_Form                      the Add/Edit drawer (`TaskEditorDrawer`)
+ *   con_Admin_Checklist_Reorder                   the Reorder drawer (the shared `ReorderPanel`)
+ *   cmp_DeleteChecklistItem_AdminScreen           delete confirmation
+ *   cmp_ActivateDeactiveChecklistItem_AdminScreen activate / deactivate confirmation
+ *
+ * HIDDEN CONTROLS: `but_Admin_Checklist_Form_Buttons_Reset` (Visible false, AccessibleLabel
+ * "Reset") is `Select()`ed by the panel's ✕, Save and Cancel to reset all five fields — here the
+ * drawer is reseeded on every open (`editor.open`). `lbl_ClusterName_Checklist_AdminScreen`
+ * (Visible false) is referenced nowhere and is not ported.
  *
  * Blocks: tab strip · cluster accordion · cluster command bar · task table (`TaskTable`) ·
  * Add/Edit drawer (`TaskEditorDrawer`) · Reorder drawer (the shared `ReorderPanel`) ·
  * confirmation dialogs · busy + result feedback (missing in the canvas). The header and
- * navigation come from master's app shell and admin left nav (route
+ * navigation come from the app shell and its admin left nav (route
  * `/admin/default-checklists`); this screen renders the content only. Outcomes of completed
  * actions are app toasts (`useNotify`); load failures and in-panel save errors stay
- * `MessageBar`s.
+ * `MessageBar`s. The loading, empty and load-error texts below are NEW (no canvas equivalent,
+ * CONVENTIONS rule 19).
  *
  * Shared building blocks: tab strip `SettingsTabStrip`, page / section states `useQueryHealth`
  * + `QueryStates`, load bars `NoticeBar` (small Retry), accordion `SettingsAccordion`, cluster
@@ -46,7 +66,7 @@ import {
 } from "./hooks";
 import { OUT_OF_SCOPE_MESSAGE, errorText, loadErrorText } from "./messages";
 import {
-  REORDER_HELP, REORDER_STALE_MESSAGE, busyText, clusterCaption, deleteDialog, emptyTaskForm, findGroup,
+  REORDER_HELP, REORDER_STALE_MESSAGE, REORDER_TITLE, busyText, clusterCaption, deleteDialog, emptyTaskForm, findGroup,
   formFromTask, groupTasksByCluster, isTaskFormValid, lockState, lockTooltipFor, nextOrder,
   renumberAfterDelete, reorderPatch, reorderSnapshotStale, resolveTabId, snapshotGroup,
   sortTabs, statusDialog, successText, taskFormChanged, type ReorderSnapshotRow,
@@ -67,14 +87,18 @@ const useStyles = makeStyles({
   captionSelected: { fontWeight: tokens.fontWeightSemibold },
   commands: { paddingLeft: "0" },
   /**
-   * `cmp_Admin_Project_Checklist_Header` page title. Master's admin shell does not show it, so
-   * the screen renders it (as master's admin screens do).
+   * `cmp_Admin_Project_Checklist_Header` page title. The app shell has no per-page title, so
+   * the screen renders it (as the other admin screens do).
    */
   title: { margin: "0", fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold, color: palette.black },
 });
 
-/** The page title (canvas header component). */
-const PAGE_TITLE ="Checklist settings";
+/** `cmp_Admin_Project_Checklist_Header.Project` → `Name: "Checklist settings"` — verbatim (L90). */
+const PAGE_TITLE = "Checklist settings";
+
+/** `pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Items` `ItemKey`s (L327, L333). */
+const ADD_TASK = "addNewChecklistEntity";
+const REORDER = "reorderChecklist";
 
 type Editor = {
   mode: "create" | "edit";
@@ -163,11 +187,19 @@ export default function CheckListSettingsScreen() {
     setParams((p) => { const next = new URLSearchParams(p); next.set("tab", id); return next; }, { replace: true });
   };
 
+  /**
+   * DIVERGENCE: the canvas header has three controls — `btn_Select_DefaultChecklist_AdminScreen`
+   * (the full-width button: `UpdateContext({locSelectedCluster: ThisItem})`, selects only) and
+   * `ico_Down_…` / `ico_Up_…` (fold or unfold AND select, L808-810). Here the whole accordion
+   * header is one button that folds/unfolds and selects, so a click on the caption also folds.
+   * `locSelectedCluster` only drives the caption's Semibold weight (`lbl_ClusterName_….FontWeight`).
+   */
   const onToggleCluster = (id: string) => {
     setOpenClusters((open) => (open.includes(id) ? open.filter((c) => c !== id) : [...open, id]));
     setSelectedClusterId(id);
   };
 
+  /** `pcf_CommandBar_Cluster_….OnSelect` "addNewChecklistEntity": opens the panel and sets `locSelectedCluster` (L345-358). */
   const openAdd = (clusterId: string) => {
     setSelectedClusterId(clusterId);
     touched.reset();
@@ -183,12 +215,23 @@ export default function CheckListSettingsScreen() {
     });
   };
 
+  /**
+   * Save — `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` (L1283-1361). A create is the
+   * canvas create-then-update pair (`createTask`, kept for the sync flow, D18); an edit is one
+   * PATCH (`planUpdateTask`).
+   *
+   * DIVERGENCE: the canvas runs the write and then resets and closes the panel whatever the
+   * outcome (`Select(but_…_Reset)` + `locIsVisibleChecklistRightPanel: false`, L1354-1361), so a
+   * failed save lost the input silently. Here the panel closes only on success; on failure it stays
+   * open with the user's input and the error.
+   */
   const saveEditor = async () => {
     const current = editor.panel;
     if (!current) return;
     if (!canEdit) { editor.setError(OUT_OF_SCOPE_MESSAGE); return; }
     if (!isTaskFormValid(current.form)) { touched.touch("name"); return; }
     const tab = sortedTabs.find((t) => t.id === (current.tabId ?? tabId));
+    // NEW — no canvas equivalent.
     if (!tab) { editor.setError("The selected country/technology no longer exists. Reload the page."); return; }
     try {
       await runner.run(busyText.save(current.form.name), () =>
@@ -202,8 +245,9 @@ export default function CheckListSettingsScreen() {
       notify.success(successText.save);
     } catch (error) {
       if (error instanceof TaskStatusNotSetError) {
-        // The row exists: a retry must UPDATE it, not create a second one. A
-        // refused status write (403) shows the permission text, not "Save again to retry".
+        // The create landed but its status write failed. The row exists, so the panel switches
+        // to edit mode: a retry must UPDATE it, not create a second one. A refused status write
+        // (403) shows the permission text, not "Save again to retry".
         editor.patch({ mode: "edit", taskId: error.createdId });
         editor.setError(errorText(error, "change checklist items", "Checklist item could not be saved."));
       } else if (error instanceof TaskCreatedIdUnknownError) {
@@ -217,6 +261,7 @@ export default function CheckListSettingsScreen() {
     }
   };
 
+  /** `ico_EnablelCompletionDate_….OnChange` (L600-629): saves at once, no confirmation. */
   const onToggleCompletion = async (task: ChecklistTask) => {
     if (rowLocked(task) || busy) return;
     if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
@@ -230,6 +275,11 @@ export default function CheckListSettingsScreen() {
     }
   };
 
+  /**
+   * `cmp_ActivateDeactiveChecklistItem_AdminScreen.OnConfirm` (L1769-1788): the dialog closes
+   * first, then the write runs (`closeFirst`, as the canvas). Writes Status AND Status Reason
+   * (`planSetActive`, SOURCE DEFECT D18 k).
+   */
   const confirmStatus = () => dialog.confirm(async ({ payload: task }) => {
     if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
     const next = !task.isActive;
@@ -241,6 +291,13 @@ export default function CheckListSettingsScreen() {
     }
   }, { closeFirst: true });
 
+  /**
+   * `cmp_DeleteChecklistItem_AdminScreen.OnConfirm` (L1712-1753): the dialog closes first, then a
+   * SOFT delete (`{'To Delete': true}`; the real `Remove` is commented out in the canvas) and the
+   * renumber of the later rows. The sync flow deletes the row and its project copies.
+   * DIVERGENCE: a failed renumber is reported as a warning with a "Reorder" action (NEW); the
+   * canvas reported nothing.
+   */
   const confirmDelete = () => dialog.confirm(async ({ payload: task }) => {
     if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
     // Case-insensitive lookup, so a GUID case mismatch never skips the renumber.
@@ -267,8 +324,8 @@ export default function CheckListSettingsScreen() {
   const liveGroup = (clusterId: string) => findGroup(groups, clusterId)?.tasks ?? [];
 
   const openReorder = (clusterId: string) => {
-    // The canvas "reorderChecklist" branch (L359-373) never sets
-    // `locSelectedCluster`, so opening Reorder leaves the caption's font weight unchanged.
+    // The canvas "reorderChecklist" branch (L359-373) never sets `locSelectedCluster`, so
+    // opening Reorder leaves the caption's font weight unchanged (UT-ADCHK-931).
     reorder.open({ clusterId, snapshot: snapshotGroup(liveGroup(clusterId)) });
   };
   // A toast action outlives the render that created it; it must call the CURRENT `openReorder`
@@ -281,6 +338,11 @@ export default function CheckListSettingsScreen() {
   const reorderStale = reorder.panel !== null && tasksQuery.isSuccess
     && reorderSnapshotStale(reorder.panel.snapshot, liveGroup(reorder.panel.clusterId));
 
+  /**
+   * `pcf_but_Admin_Checklist_Reorder_Buttons_Save.OnChange` (L1644-1661) writes each row's new
+   * 1-based position. DIVERGENCE: the canvas hides the panel FIRST and then writes; here the panel
+   * stays open while saving and on failure (with the error), and closes on success.
+   */
   const saveReorder = async (ordered: readonly ReorderSnapshotRow[]) => {
     const current = reorder.panel;
     if (!current || reorderStale) return;
@@ -326,13 +388,14 @@ export default function CheckListSettingsScreen() {
     <div className={styles.root}>
       {heading}
 
-      {/* Tab strip */}
+      {/* Tab strip — `tab_Admin_Project_Checklist_Association`; one tab per country/technology. */}
       <SettingsTabStrip
         tabs={sortedTabs.map((t) => ({ id: t.id, label: t.name }))}
         selected={tabId ?? undefined}
         onSelect={selectTab}
         ariaLabel="Country and technology"
-        tabTestIdPrefix="checklist-tab"
+        testId="tab_Admin_Project_Checklist_Association"
+        tabTestIdPrefix="tab_Admin_Project_Checklist_Association"
         size="small"
         bandHeight={52}
         layout="block"
@@ -358,7 +421,7 @@ export default function CheckListSettingsScreen() {
         </NoticeBar>
       ) : null}
 
-      {/* Cluster accordion */}
+      {/* Cluster accordion — `gal_DefaultChecklist_AdminScreen`, all folded on entry (`IsFolded: true`). */}
       <QueryStates
         health={clustersHealth}
         loadingLabel="Loading clusters…"
@@ -385,7 +448,7 @@ export default function CheckListSettingsScreen() {
               const caption = clusterCaption(cluster.name);
               return {
                 id: cluster.id,
-                testId: `checklist-cluster-${cluster.id}`,
+                testId: `con_Main_DefaultChecklist_AdminScreen-${cluster.id}`,
                 title: (
                   <span className={mergeClasses(styles.caption, selectedClusterId === cluster.id && styles.captionSelected)}>
                     {caption}
@@ -393,16 +456,23 @@ export default function CheckListSettingsScreen() {
                 ),
                 content: (
                   <>
-                    {/* Cluster command bar */}
+                    {/*
+                      * Cluster command bar — `pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen.Items`
+                      * (L324-338): `ItemDisplayName` "Add Task" / "Reorder" verbatim, the canvas
+                      * `ItemKey`s. Canvas `ItemEnabled: true`; here disabled while a write runs, the
+                      * tasks have not loaded or the user is not an admin (NEW).
+                      * DIVERGENCE: Reorder shows the "Reorder" icon; the canvas `ItemIconName` is
+                      * "NumberedList" (D18 had restored it before the port).
+                      */}
                     <CommandBar
                       className={styles.commands}
                       ariaLabel={`${caption} commands`}
-                      testIdPrefix={`checklist-command-${cluster.id}`}
+                      testIdPrefix={`pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen-${cluster.id}`}
                       commands={[
-                        { key: "add-task", label: "Add Task", icon: "Add", enabled: commandsEnabled },
-                        { key: "reorder", label: "Reorder", icon: "Reorder", enabled: commandsEnabled },
+                        { key: ADD_TASK, label: "Add Task", icon: "Add", enabled: commandsEnabled },
+                        { key: REORDER, label: "Reorder", icon: "Reorder", enabled: commandsEnabled },
                       ]}
-                      onCommand={(key) => (key === "add-task" ? openAdd(cluster.id) : openReorder(cluster.id))}
+                      onCommand={(key) => (key === ADD_TASK ? openAdd(cluster.id) : openReorder(cluster.id))}
                     />
                     {/* Task table */}
                     {tasksQuery.isLoading ? (
@@ -446,11 +516,16 @@ export default function CheckListSettingsScreen() {
         onCancel={editor.close}
       />
 
-      {/* Reorder drawer (remounted per open, so it starts from the new snapshot) */}
+      {/*
+        * Reorder drawer — `con_Admin_Checklist_Reorder` (remounted per open, so it starts from the
+        * new snapshot). `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list; here Move up /
+        * Move down buttons (see `REORDER_HELP`). The ✕ (`pcf_Cancel_Reorder_CommandBar`) and the
+        * list itself carry no canvas id: the shared `ReorderPanel` has no prop for them yet.
+        */}
       <ReorderPanel
         key={reorder.key}
         open={reorder.panel !== null}
-        title="Reorder checklist"
+        title={REORDER_TITLE}
         items={reorder.panel?.snapshot ?? []}
         getId={(t) => t.id}
         getLabel={(t) => t.name}
@@ -465,8 +540,8 @@ export default function CheckListSettingsScreen() {
         canSave={(changed) => changed && !reorderStale && canEdit}
         onSave={(ordered) => void saveReorder(ordered)}
         onCancel={reorder.close}
-        saveTestId="checklist-reorder-save"
-        cancelTestId="checklist-reorder-cancel"
+        saveTestId="pcf_but_Admin_Checklist_Reorder_Buttons_Save"
+        cancelTestId="pcf_but_Admin_Admin_Checklist_Reorder_Buttons_Cancel"
         listProps={{
           showPosition: true,
           buttonLabels: "describedby",
@@ -476,7 +551,11 @@ export default function CheckListSettingsScreen() {
         }}
       />
 
-      {/* Confirmation dialogs */}
+      {/*
+        * Confirmation dialogs — `cmp_ActivateDeactiveChecklistItem_AdminScreen` and
+        * `cmp_DeleteChecklistItem_AdminScreen` (texts in `statusDialog` / `deleteDialog`). The
+        * shared `ConfirmDialog` has no prop for the dialog's or its buttons' canvas ids.
+        */}
       {dialog.state?.kind === "status" ? (
         <ConfirmDialog
           open
@@ -496,7 +575,7 @@ export default function CheckListSettingsScreen() {
         />
       ) : null}
 
-      {/* Busy overlay (the canvas set the text but rendered nothing) */}
+      {/* Busy overlay — SOURCE DEFECT (D18 h): the canvas set `locAdminLoadingDialogText` but rendered nothing. */}
       {/* `portal`: a save started from a drawer shows the scrim above that drawer. */}
       {runner.busy !== undefined ? <LoadingOverlay portal label={runner.busy} /> : null}
       {runner.inline !== undefined ? (

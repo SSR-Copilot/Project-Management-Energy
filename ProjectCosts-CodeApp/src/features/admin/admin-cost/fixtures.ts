@@ -1,6 +1,6 @@
 /**
- * Static fixture data — Phase 1 (UI blocks without Dataverse) and the render / rule tests.
- * Shapes are exactly the data-module models, so the UI is driven the same way live.
+ * Static fixture data for the render and rule tests (`Screen.test.tsx`, `rules.test.ts`).
+ * Shapes are exactly the data-module models, so the UI is driven the same way as live.
  */
 import {
   buildCapexHierarchy, type CapexHierarchy, type CostCurrency, type DevexCost, type LandLeaseSubaccount,

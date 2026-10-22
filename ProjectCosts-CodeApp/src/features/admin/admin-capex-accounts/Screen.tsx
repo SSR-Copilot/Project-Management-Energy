@@ -1,19 +1,35 @@
 /**
- * Application Settings — CAPEX Accounts. Replaces the canvas `Admin CAPEX Accounts`.
+ * Application Settings — CAPEX Accounts. Replaces the canvas `Admin CAPEX Accounts` (PM app),
+ * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin CAPEX Accounts.pa.yaml`.
  *
  * Composition only: rules live in `./rules.ts`, Dataverse I/O in `@/data/adminCapexAccounts.ts`,
  * queries/mutation in `./hooks.ts`.
  *
- * On master the screen renders inside master's AppShell / admin navigation (`/admin/capex-accounts`,
- * gated by master's admin route). That shell has no per-page title, so the screen renders its own
- * `h1`, as master's admin screens do.
+ * Canvas controls → this screen (`data-testid` = the canvas name; per-row ids add `-${row.id}`):
+ *   cmp_Admin_CAPEX_Accounts_Header                          the page title ("CAPEX Accounts")
+ *   tab_Admin_CAPEX_Accounts_RightContent_Parents            the category tabs
+ *   pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar the account command bar (canvas `ItemKey`s)
+ *   gal_Account_Accounts → con_Account_AccountCard           one `AccountCard` per account
+ *   con_Account_RightPanel_NewEditAccount                    `AccountPanel`
+ *   con_Account_RightPanel_NewEditSubaccount                 `SubaccountPanel`
+ *   con_Account_RightPanel_Ordering                          `ReorderPanel` (PowerDragDrop → drag + Move up/down)
+ *   cmp_Account_PopUpConfirmation_*                          the one `ConfirmDialog` (four canvas pop-ups)
+ *
+ * The screen renders inside the app shell's admin navigation (`/admin/capex-accounts`). There is
+ * no route guard (as in the canvas, a deep link opens the screen); the admin rail entry is hidden
+ * for non-admins. The shell has no per-page title, so the screen renders its own `h1`
+ * (`cmp_Admin_CAPEX_Accounts_Header.Project` → `Name: "CAPEX Accounts"`, CA:82 — verbatim).
  *
  * Shared pieces: load states `useQueryHealth` + `QueryStates`, page bars
  * `NoticeBar`, tabs `SettingsTabStrip`, expand set `useToggleSet`, panel state `usePanelState`,
  * dialog `useConfirmDialog` + `ConfirmDialog error lockWhileBusy`, writes `useBusyRunner`.
  *
- * Access: every write is gated by master's admin rule (`useAdminAccess`); a non-admin's save,
- * delete or status change is refused with `OUT_OF_SCOPE` and nothing is sent.
+ * Access: every write is gated by the admin rule (`useAdminAccess`); a non-admin's save,
+ * delete or status change is refused with `OUT_OF_SCOPE` and nothing is sent. The commands stay
+ * enabled for a non-admin (doc 09 §5).
+ *
+ * DIVERGENCE: the success toasts, warnings, loading / empty / load-error states and the inline
+ * errors are NEW — the canvas showed nothing after a write (no `IfError`, no message control).
  */
 import { useMemo, useState } from "react";
 import { Text, makeStyles, tokens } from "@fluentui/react-components";
@@ -80,14 +96,15 @@ const READ_ACTION = "read CAPEX accounts";
 
 /**
  * `executePlan` operation names of the three single-request writes that are `WritePlan`s
- * (`rules.ts`, D36). Each write carries its own verbatim `label`, so these names never reach a
- * user-facing message; they are what telemetry and a refusal are logged under.
+ * (`rules.ts`). Each write carries its own `label` (the data layer's operation text, word for
+ * word), so these names never reach a user-facing message; they are what telemetry and a refusal
+ * are logged under.
  */
 const RENAME = "rename CAPEX account";
 const ACTIVATE_ACCOUNT = "activate CAPEX account";
 const ACTIVATE_SUBACCOUNT = "activate CAPEX subaccount";
 
-/** The user-facing action of a dialog, for its failure text. */
+/** The user-facing action of a dialog, for its failure text (NEW, see `describeWriteError`). */
 function dialogAction({ kind, payload }: ConfirmState<DialogKind, DialogPayload>): string {
   return {
     deleteSubaccount: "delete the subaccount",
@@ -109,7 +126,8 @@ export default function CAPEXAccountsSettingsScreen() {
 
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
-  // Component state, not data: survives every refetch; all collapsed on entry (CA:34-38).
+  // Component state, not data: survives every refetch; all collapsed on entry
+  // (`OnVisible: UpdateIf(colCapexAccounts, Not(IsFolded), {IsFolded: true})`, CA:34-38).
   const expanded = useToggleSet();
   const panels = usePanelState<Panel>();
   const panel = panels.panel;
@@ -148,29 +166,36 @@ export default function CAPEXAccountsSettingsScreen() {
 
   const node = (id: string | undefined): CapexNode | undefined => (id ? tree?.byId.get(id) : undefined);
 
-  /** The account command bar (CA:184-368); hidden commands are not rendered. */
+  /**
+   * The account command bar — `pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar`
+   * (CA:184-368): the canvas `ItemKey`s and `ItemDisplayName`s, verbatim; hidden commands are not
+   * rendered.
+   * DIVERGENCE (icons): the canvas `ItemIconName`s are "NumberedList" (Reorder), "ActivateOrders"
+   * and "DeactivateOrders"; this bar shows the "Reorder", "Activate" and "Deactivate" icons (D19 had
+   * restored the canvas icons before the port).
+   */
   const accountBar: (Command & CommandState & { run: () => void })[] = [
     {
-      key: "reorder", label: "Reorder", icon: "Reorder", ...commands.reorder,
+      key: "orderAccounts", label: "Reorder", icon: "Reorder", ...commands.reorder,
       run: () => { if (category) openPanel({ kind: "reorder", parentId: category.id, subaccounts: false }); },
     },
     {
-      key: "new", label: "New", icon: "Add", ...commands.create,
+      key: "newAccount", label: "New", icon: "Add", ...commands.create,
       // Canvas New sets `locSelectedAccount: Blank()` (CA:334-340), so after Cancel no
       // account is selected; a successful create selects the new row (saveAccount).
       run: () => { setSelectedAccountId(undefined); openPanel({ kind: "account", editing: undefined }); },
     },
-    { key: "edit", label: "Edit", icon: "Edit", ...commands.edit, run: () => { if (selected) openPanel({ kind: "account", editing: selected }); } },
+    { key: "editAccount", label: "Edit", icon: "Edit", ...commands.edit, run: () => { if (selected) openPanel({ kind: "account", editing: selected }); } },
     {
-      key: "activate", label: "Activate", icon: "Activate", ...commands.activate,
+      key: "activateAccount", label: "Activate", icon: "Activate", ...commands.activate,
       run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
     },
     {
-      key: "deactivate", label: "Deactivate", icon: "Deactivate", ...commands.deactivate,
+      key: "deactivateAccount", label: "Deactivate", icon: "Deactivate", ...commands.deactivate,
       run: () => { if (selected) openDialog("accountStatus", selected, accountStatusDialog(selected)); },
     },
     {
-      key: "delete", label: "Delete", icon: "Delete", ...commands.delete,
+      key: "deleteAccount", label: "Delete", icon: "Delete", ...commands.delete,
       run: () => { if (selected) openDialog("deleteAccount", selected, deleteAccountDialog(selected.name)); },
     },
   ];
@@ -199,6 +224,19 @@ export default function CAPEXAccountsSettingsScreen() {
   }
 
   /* ── account panel ── */
+  /**
+   * Save — `pcf_Account_RightPanel_NewEditAccount_BodyButtons_Save.OnChange` (CA:1436). New: the
+   * number is checked against the whole table, then created and set Inactive (the canvas two-write
+   * create, kept: D19) and selected; Edit: the name only.
+   *
+   * DIVERGENCE: the canvas hides the panel BEFORE writing (`locIsVisibleRightPanelNewEditAccount:
+   * false`) and shows nothing on failure. Here the panel stays open while saving and on failure,
+   * with the error, and closes on success.
+   *
+   * SOURCE DEFECT (D19): the canvas finds a duplicate number only when Save is clicked, and then
+   * silently does nothing but reveal the "already in use" label. Here it is re-checked on the
+   * server just before the create (`DuplicateNumberError`) and shown inline.
+   */
   async function saveAccount(form: { number: string; name: string }) {
     if (!panel || panel.kind !== "account" || !category) return;
     const editing = panel.editing;
@@ -239,6 +277,11 @@ export default function CAPEXAccountsSettingsScreen() {
   }
 
   /* ── subaccount panel ── */
+  /**
+   * Save — `pcf_Account_RightPanel_NewEditSubaccount_BodyButtons_Save.OnChange` (CA:1980): the same
+   * shape as `saveAccount` (same DIVERGENCE and SOURCE DEFECT notes), with the composed number
+   * `<account>_<suffix>`. As the canvas, a saved subaccount is not selected.
+   */
   async function saveSubaccount(form: { suffix: string; name: string }) {
     if (!panel || panel.kind !== "subaccount") return;
     const parent = panel.parent;
@@ -276,6 +319,12 @@ export default function CAPEXAccountsSettingsScreen() {
   }
 
   /* ── reorder panel ── */
+  /**
+   * Save — `pcf_Account_RightPanel_Ordering_BodyButtons_Save.OnChange` (CA:2261-2296). An account
+   * reorder clears the selection (`locSelectedAccount: Blank()`), a subaccount reorder does not.
+   * DIVERGENCE: the canvas hides the panel before writing; here it stays open while saving and on
+   * failure. Only changed rows are written (see `rules.ts`, Reorder).
+   */
   async function saveOrder(list: CapexNode[]) {
     if (!panel || panel.kind !== "reorder") return;
     if (!canEdit) { panels.setError(describeWriteError(new OutOfScopeError(), "save the new order")); return; }
@@ -297,6 +346,25 @@ export default function CAPEXAccountsSettingsScreen() {
   /**
    * Default `useConfirmDialog` flow: busy while the write runs, closes on success, stays open with
    * the error (shown by `ConfirmDialog error`, `role="alert"`) on failure.
+   * DIVERGENCE: every canvas pop-up closes itself FIRST and then writes, silently on failure.
+   *
+   * What each confirmation does (the data layer, `@/data/adminCapexAccounts.ts`):
+   *   - Delete subaccount / account: `Remove` (CA:2345-2363, CA:2379-2397), after re-checking the
+   *     contracts (and, for an account, the subaccounts) on the server. An account delete clears the
+   *     selection, as the canvas.
+   *   - Deactivate account (CA:2423): the account Inactive, its subaccounts (read live) Inactive,
+   *     then the forecast clean-up (this year's later months set to 0, later years deleted).
+   *     SOURCE DEFECT (D19): the canvas sets every subaccount to ACTIVE, although the dialog
+   *     promises they are deactivated. The pre-port twin `childStatusOnDeactivateCanvasParity`
+   *     (UT-ADCAPEX-019b) was not carried over.
+   *     DIVERGENCE: the clean-up covers contracts on the subaccounts AND on the account itself;
+   *     the canvas cleans only the subaccounts' contracts (`locSubaccounts`).
+   *   - Deactivate subaccount (CA:2454): the subaccount Inactive and the same clean-up of its
+   *     contracts.
+   *   - DIVERGENCE (both deactivates): cost rows marked paid (`vsb_costpaid = true`) are skipped by
+   *     the clean-up (`PAID_EXCLUSION`); the canvas zeroes and deletes them too.
+   *   - Activate: status only (`planActivateAccount` / `planActivateSubaccount`); deleted costs
+   *     are not restored.
    */
   async function confirmDialog() {
     const current = dialog.state;
@@ -347,7 +415,8 @@ export default function CAPEXAccountsSettingsScreen() {
   /* ── render ── */
   // Full-page error only when there is NOTHING to show: `useQueryHealth` treats a
   // failed background refetch with cached data as `staleError` (a warning bar), never as fatal,
-  // so open panels/dialogs and the outcome of the write just made stay on screen.
+  // so open panels/dialogs and the outcome of the write just made stay on screen. The empty and
+  // error texts are NEW (CONVENTIONS rule 19).
   const empty = !tree?.root
     ? {
       when: true,
@@ -385,18 +454,21 @@ export default function CAPEXAccountsSettingsScreen() {
       >
         {() => (
           <div className={styles.page}>
-            {/* Category tabs (CA:156-183). */}
+            {/* Category tabs — `tab_Admin_CAPEX_Accounts_RightContent_Parents` (CA:156-183); a tab change clears the selection (`OnSelect`). */}
             <SettingsTabStrip
               size="medium" bandHeight={50} ariaLabel="CAPEX account categories"
               tabs={categories.map((c) => ({ id: c.id, label: c.name }))}
               selected={category?.id}
               onSelect={(id) => { setCategoryId(id); setSelectedAccountId(undefined); }}
+              testId="tab_Admin_CAPEX_Accounts_RightContent_Parents"
+              tabTestIdPrefix="tab_Admin_CAPEX_Accounts_RightContent_Parents"
             />
 
             {/* Account command bar (CA:184-368). */}
             <div className={styles.commands}>
               <CommandBar
                 ariaLabel="Account commands"
+                testIdPrefix="pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar"
                 commands={accountBar.map(({ key, label, icon, enabled, visible }) => ({ key, label, icon, enabled, visible }))}
                 onCommand={(key) => accountBar.find((c) => c.key === key)?.run()}
               />
@@ -418,11 +490,14 @@ export default function CAPEXAccountsSettingsScreen() {
               </NoticeBar>
             ) : null}
 
-            {/* Account cards (CA:369-941). */}
+            {/* Account cards — `gal_Account_Accounts` (CA:369-941); the empty state is NEW (the canvas gallery is just hidden). */}
             {accounts.length === 0 ? (
               <EmptyState title="No accounts in this category" description="Use New to add the first account." />
             ) : (
-              <div className={styles.cards} role="list" aria-label={`Accounts of ${category?.name ?? ""}`}>
+              <div
+                className={styles.cards} role="list" aria-label={`Accounts of ${category?.name ?? ""}`}
+                data-testid="gal_Account_Accounts"
+              >
                 {accounts.map((account) => (
                   <div role="listitem" key={account.id}>
                     <AccountCard
@@ -431,9 +506,10 @@ export default function CAPEXAccountsSettingsScreen() {
                       expanded={expanded.has(account.id)}
                       privileges={privileges}
                       contractsBySubaccount={contracts}
-                      // Click toggles selection.
+                      // `btn_Account_AccountCardHeader.OnSelect` (CA:849-856): a second click deselects.
                       onSelect={() => setSelectedAccountId((cur) => (cur === account.id ? undefined : account.id))}
-                      // Chevron selects (never deselects) and toggles expansion.
+                      // `ico_Account_AccountCard_Down/_Up.OnSelect` (CA:885-896): select (never
+                      // deselect) and toggle the fold.
                       onToggleExpand={() => {
                         setSelectedAccountId(account.id);
                         expanded.toggle(account.id);
@@ -446,7 +522,8 @@ export default function CAPEXAccountsSettingsScreen() {
                         setSelectedAccountId(account.id);
                         openPanel({ kind: "reorder", parentId: account.id, subaccounts: true });
                       }}
-                      // Every row action selects the parent account.
+                      // Every subaccount command and row action selects the parent account
+                      // (`locSelectedAccount: gal_Account_Accounts.Selected`, CA:501, 509, 605-627).
                       onEditSubaccount={(sub) => {
                         setSelectedAccountId(account.id);
                         openPanel({ kind: "subaccount", parent: account, editing: sub });
@@ -490,8 +567,10 @@ export default function CAPEXAccountsSettingsScreen() {
               />
             ) : null}
 
-            {/* Confirmation dialogs (one at a time). The failure is a `role="alert"`
-                MessageBar inside the dialog; ✕ and Escape are locked while it runs. */}
+            {/* Confirmation dialogs — the four `cmp_Account_PopUpConfirmation_*` (one at a time; texts
+                in `rules.ts`). The failure is a `role="alert"` MessageBar inside the dialog; ✕ and
+                Escape are locked while it runs. `destructive` (red Confirm) is NEW. The shared
+                `ConfirmDialog` has no prop for the pop-up's or its buttons' canvas ids. */}
             <ConfirmDialog
               open={Boolean(dialog.state)}
               title={dialog.state?.payload.text.title ?? ""}
@@ -506,7 +585,7 @@ export default function CAPEXAccountsSettingsScreen() {
               onCancel={dialog.cancel}
             />
 
-            {/* The progress overlay the canvas declared but never rendered. */}
+            {/* SOURCE DEFECT (D19): the progress overlay the canvas declared (`locIsVisiblePopUpSpinner`) but never rendered. */}
             {/* Portalled so it stacks above an open drawer/dialog (both are Fluent portals). */}
             {busy ? <LoadingOverlay portal label={busy} /> : null}
           </div>

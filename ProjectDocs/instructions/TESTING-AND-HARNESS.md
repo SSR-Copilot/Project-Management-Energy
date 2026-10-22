@@ -3,8 +3,8 @@
 ## What actually runs today, in `ProjectCosts-CodeApp/`
 
 ```bash
-cd ProjectCosts-CodeApp/app
-npm install
+cd ProjectCosts-CodeApp
+npm ci
 npm run dev          # http://localhost:3000 — no Power context, no data (see below)
 npx vitest run       # the whole suite
 npm run typecheck    # tsc --noEmit
@@ -34,8 +34,8 @@ The label gate does not cover controls created through the DOM API in the vendor
 (`features/cost/capex-costs/pcf/ui/GridRenderer.js`). That file's identities are documented in
 `ProjectDocs/migration-plans/09-tosca-automation-conventions.md`; check them by hand when it changes.
 
-As of the last verified run in this app: **1,312 tests passing, 41 files**; `typecheck`,
-`build`, and `lint` all clean. (`ProjectDocs/app-docs/APP-README.md` still says "247 tests" and
+As of the last verified run in this app (22 Oct 2026): **3,859 tests passing, 145 files**,
+81 data sources; `typecheck`, `build`, and `lint` (warnings only) all clean. (`ProjectDocs/app-docs/APP-README.md` still says "247 tests" and
 `appId: null` — both stale; see `ProjectDocs/instructions/PROJECT-MAP.md` on doc drift. Prefer a fresh run over
 any number quoted in a doc, including this one, if it matters to the task at hand.)
 
@@ -75,8 +75,8 @@ links follow this automatically in dev mode rather than opening a bare, context-
 ### Deploying for a smoke test
 
 ```bash
-cd ProjectCosts-CodeApp/app
-npm run typecheck && npx vitest run && npm run build
+cd ProjectCosts-CodeApp
+npm run verify
 pac code push          # deploys the dist/ build to whichever environment the active
                         # `pac auth` profile points at — check with `pac auth list` first
 ```

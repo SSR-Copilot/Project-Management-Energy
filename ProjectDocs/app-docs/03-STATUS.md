@@ -1,5 +1,11 @@
 # Status — Project Costs code app
 
+> **Historical (September 2026).** The current state is in `08-SESSION-HANDOFF-2026-10-19.md`,
+> `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` and `gap-analysis/README.md`. Every Admin and PM
+> screen is now connected (D18–D36). The "Running locally" section below still describes the
+> two-process setup correctly, but run it from `ProjectCosts-CodeApp/` (there is no `app/` folder
+> any more), and all five Cost screens are migrated now, not only Contracts.
+
 For the 14 September single-app navigation changes and current remaining scope, see
 [Single-app implementation progress](04-SINGLE-APP-IMPLEMENTATION.md). The verification
 snapshot below predates that change set.

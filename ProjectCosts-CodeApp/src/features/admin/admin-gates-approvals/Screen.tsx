@@ -1,8 +1,21 @@
 /**
- * Application Settings — Project Gates. Replaces the canvas 'Admin Project Gates Approvals Screen'.
+ * Application Settings — Project Gates. Replaces the canvas 'Admin Project Gates Approvals Screen'
+ * (`ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Project Gates Approvals Screen.pa.yaml`).
  *
  * Gate-level and checklist-task-level approval templates per country × technology: who must
  * contribute, approve and be notified when a project moves through a cluster gate.
+ *
+ * Canvas controls → code app (a control with a canvas counterpart carries its name as
+ * `data-testid`, repeating rows with `-<row id>`; CONVENTIONS rule 16):
+ *   cmp_Admin_ProjectGatest_Approvals_Header              the shell header (page title "Project Gates")
+ *   cmp_Admin_ProjectGates_NestedCountryTechnologyPicker  `CountryTechnologyPicker` (its `testIdPrefix`)
+ *   lbl_Admin_ProjectGates_Approvals_Headline             the h2 headline
+ *   gal_Admin_ProjectGates_DefaultApprovals_Clusters      `GateTable` (gate rows, task rows, Add Task)
+ *   con_Admin_ProjectGates_Approvals_Form                 `ApprovalsPanel`
+ *   cmp_Admin_Loading                                     the shared `LoadingOverlay`
+ *   cmp_DeleteChecklistApprovalItem_AdminScreen           the delete `ConfirmDialog`
+ * The hidden `but_Admin_ProjectGates_Approvals_Form_Buttons_Reset` (`Select()`-ed by Save, Cancel,
+ * Close and Reset Gate to reset the panel) is the panel's remount on every open (`editor.key`).
  *
  * Rules (and the write plans) live in `./rules.ts`, Dataverse reads in `@/data/adminGatesApprovals.ts`,
  * query and write wiring in `./hooks.ts` (writes run through `@/data/runPlan`).
@@ -40,12 +53,15 @@ import {
 } from "./hooks";
 import {
   buildGateRows, collapseScope, deleteConfirmationText, deletingText, emptyTaskForm,
-  gateEditorTarget, gateLabel, hasGateConflict, headline, NO_PERMISSION_MESSAGE, resetConfirmationText, savingGateText,
-  savingTaskText, seedGateForm, seedTaskForm, taskCandidates, toChecklistPayload, toGatePayload,
-  type ApprovalForm, type EditorTarget, type GateContext, type GateRow, type TaskRow,
+  gateEditorTarget, gateLabel, hasGateConflict, headline, LABELS, NO_PERMISSION_MESSAGE, resetConfirmationText,
+  resettingGateText, savingGateText, savingTaskText, seedGateForm, seedTaskForm, taskCandidates, toChecklistPayload,
+  toGatePayload, type ApprovalForm, type EditorTarget, type GateContext, type GateRow, type TaskRow,
 } from "./rules";
 
-/** The +/- expander's accessible name on this screen ("Expand Germany technologies"). */
+/**
+ * The picker's +/- expander's accessible name on this screen ("Expand Germany technologies"). The
+ * canvas `cmp_NestedCountryPickerColumn` rows have no caption or `AccessibleLabel` to transcribe.
+ */
 const toggleLabel = (open: boolean, c: { name: string }) => `${open ? "Collapse" : "Expand"} ${c.name} technologies`;
 
 const useStyles = makeStyles({
@@ -82,7 +98,8 @@ export default function ProjectGatesSettingsScreen() {
   const notify = useNotify();
   const canEdit = useAdminAccess();
 
-  // Project Gates reads every country, active and inactive (unfiltered).
+  // Project Gates reads every country, active and inactive (`col_cmpCountryPickerItems`, then the
+  // `Countries` input drops Spain, Greece and Romania — `GATE_COUNTRY_RULE`).
   const countries = useCountries({ includeInactive: true });
   const states = useProjectStates();
   const rail = useMemo(() => pickerCountries(countries.data ?? [], GATE_COUNTRY_RULE), [countries.data]);
@@ -144,7 +161,16 @@ export default function ProjectGatesSettingsScreen() {
 
   /*
    * Every write below runs its success toast / close and its catch INSIDE `runner.run`, so the
-   * overlay clears last — the order the screen has always had.
+   * overlay (`cmp_Admin_Loading`) clears last.
+   */
+  /*
+   * Save — `pcf_but_Admin_ProjectGates_Approvals_Form_Buttons_Save.OnChange`.
+   * DIVERGENCE: the canvas closes and resets the panel whatever the outcome and reports a failure
+   * with `Notify("Error: Approvals type could not be saved. Internal error: originated on
+   * {FirstError.Source}. …")`. Here a failure keeps the panel open with the form intact and shows
+   * the shared `userErrorText` (the raw detail is traced, not shown) (doc 09 §2). The success toasts
+   * are NEW: the canvas only set "Approvals was successfully saved." on the loading pop-up and
+   * closed it at once.
    */
   const handleSave = async (form: ApprovalForm) => {
     if (!editor.panel || !ctx) return;
@@ -154,7 +180,6 @@ export default function ProjectGatesSettingsScreen() {
       return;
     }
     editor.setError(undefined);
-    // On failure the panel stays open with the form intact; the raw detail is traced, not shown.
     const failed = (error: unknown) => editor.setError(userErrorText(error, "save the approvals"));
     if (t.kind === "gate") {
       const id = t.row.template?.id;
@@ -190,6 +215,14 @@ export default function ProjectGatesSettingsScreen() {
     });
   };
 
+  /*
+   * Reset Gate — `btn_Admin_ProjectGates_Approvals_Form_Fields_ResetGateApproval.OnSelect`, run after
+   * the confirmation below.
+   * DIVERGENCE: the canvas patches at once, with no confirmation and no progress text, and closes
+   * the panel; here the user confirms first ("Reset Gate?"), a progress text and a success toast are
+   * shown, and a failure keeps the panel open (doc 09 §2). D22 recorded "keep Reset Gate as the
+   * canvas has it" for its payload; the confirmation still needs a product decision.
+   */
   const runReset = async () => {
     const t = editor.panel?.target;
     if (!t || t.kind !== "gate" || !t.row.template || !ctx) return;
@@ -200,7 +233,7 @@ export default function ProjectGatesSettingsScreen() {
     const id = t.row.template.id;
     editor.setError(undefined);
     await runner.run(
-      `Approvals data for ${headline(ctx)}\nGate: '${t.label ?? t.row.description}' will be reset, please wait...`,
+      resettingGateText(ctx, t.label ?? t.row.description),
       async () => {
         try {
           await reset.mutateAsync(id);
@@ -213,6 +246,12 @@ export default function ProjectGatesSettingsScreen() {
     );
   };
 
+  /*
+   * Delete — `cmp_DeleteChecklistApprovalItem_AdminScreen.OnConfirm`: the dialog closes first, the
+   * progress text shows, one `Remove`.
+   * DIVERGENCE: the success and failure toasts are NEW; the canvas shows neither and ignores a
+   * refused `Remove` (CONVENTIONS rule 14).
+   */
   const runDelete = async (s: ConfirmState<ConfirmKind, ConfirmPayload>) => {
     if (s.kind !== "delete" || !s.payload || !ctx) return;
     if (!canEdit) {
@@ -230,6 +269,12 @@ export default function ProjectGatesSettingsScreen() {
     });
   };
 
+  /*
+   * The status pills — `btn_…_Item_ToggleStauts.OnSelect` / `btn_…_ChecklistDefaultApproval_Item_ToggleStatus.OnSelect`.
+   * DIVERGENCE: the pill flips at once (optimistic) with a per-row spinner and flips back on a
+   * failure, which is reported in a toast; the canvas `Patch` waits for the server and ignores a
+   * failure (doc 09 §2).
+   */
   const handleToggle = (kind: "gate" | "task", id: string, current: boolean, subject: string) => {
     if (!canEdit) {
       notify.error(NO_PERMISSION_MESSAGE);
@@ -248,10 +293,11 @@ export default function ProjectGatesSettingsScreen() {
   /* ───────────────────────────────────────────────────────────── render ── */
 
   const queries = ctx ? [countries, states, dataset] : [countries, states];
-  // The page has always treated ANY failed query as the error state (a failed refetch included),
-  // with the first failing query's error in countries → states → dataset order.
+  // ANY failed query is the error state (a failed refetch included), with the first failing
+  // query's error in countries → states → dataset order (CONVENTIONS rule 19).
   const health = useQueryHealth(queries, { fatalWhen: "any-error" });
 
+  // NEW — no canvas equivalent: the empty, loading and load-error texts (rule 19).
   const empty = !ctx
     ? {
       when: true,
@@ -267,6 +313,8 @@ export default function ProjectGatesSettingsScreen() {
   const renderGates = () => {
     if (!dataset.data || !ctx) return null;
     const duplicates = rows.filter((r) => r.templateCount > 1);
+    // DIVERGENCE: NEW — the three notices below have no canvas equivalent (the canvas fails or
+    // shows the first duplicate silently).
     return (
       <>
         {dataset.data.checklistError ? (
@@ -320,11 +368,13 @@ export default function ProjectGatesSettingsScreen() {
           toggleLabel={toggleLabel}
           highlightCollapsedSelection
           emptyText="No configured countries were found."
+          testIdPrefix="cmp_Admin_ProjectGates_NestedCountryTechnologyPicker"
         />
       ) : null}
-      <section className={styles.content} aria-label="Project gate approvals">
+      {/* `con_Admin_ProjectGatest_Approvals_RightContent`; its `aria-label` is NEW (the container has no caption). */}
+      <section className={styles.content} aria-label="Project gate approvals" data-testid="con_Admin_ProjectGatest_Approvals_RightContent">
         {/* The shell header carries the page title (h1); this is the section headline. */}
-        <Text as="h2" className={styles.headline}>{headline(ctx)}</Text>
+        <Text as="h2" className={styles.headline} data-testid="lbl_Admin_ProjectGates_Approvals_Headline">{headline(ctx)}</Text>
         <QueryStates
           health={health}
           loadingLabel="Loading gate approvals…"
@@ -355,16 +405,18 @@ export default function ProjectGatesSettingsScreen() {
         />
       ) : null}
 
+      {/* `cmp_DeleteChecklistApprovalItem_AdminScreen` (`cmp_PopUp_Confirmation`); Cancel is the dialog's default "Cancel" (`CancelButtonText`). */}
       {confirmState?.kind === "delete" && confirmState.payload && ctx ? (
         <ConfirmDialog
           open
-          title="Delete Check List Approval Item?"
+          title={LABELS.deleteTitle}
           description={deleteConfirmationText(ctx, confirmState.payload.row.description, confirmState.payload.task.checklist.name)}
-          confirmText="Delete" confirmIcon="delete" destructive
+          confirmText={LABELS.deleteConfirm} confirmIcon="delete" destructive
           onConfirm={() => void dialog.confirm(runDelete, { closeFirst: true })}
           onCancel={dialog.cancel}
         />
       ) : null}
+      {/* DIVERGENCE: NEW — the canvas has no Reset Gate confirmation (see `runReset`); its texts have no canvas source. */}
       {confirmState?.kind === "reset" && ctx && editorTarget?.kind === "gate" ? (
         <ConfirmDialog
           open
@@ -376,7 +428,7 @@ export default function ProjectGatesSettingsScreen() {
         />
       ) : null}
 
-      {/* The multi-line canvas texts keep their line breaks (shared overlay, pre-line). */}
+      {/* `cmp_Admin_Loading` (`InformationText: locAdminLoadingDialogText`): the multi-line canvas texts keep their line breaks (shared overlay, pre-line). */}
       {runner.busy !== undefined ? <LoadingOverlay portal label={runner.busy} /> : null}
     </div>
   );

@@ -1,6 +1,7 @@
 /**
- * Static fixture rows — the Phase 1 data the UI blocks were laid out against, kept as the shared
- * test data for `rules.test.ts` and `Screen.test.tsx`. Not imported by the screen itself.
+ * Static fixture rows — the shared test data for `rules.test.ts` and `Screen.test.tsx` (the UI
+ * was first laid out against them before the screen was connected). Not imported by the screen
+ * itself.
  */
 import type { CapexAccountRow } from "@/data/adminCapexAccounts";
 

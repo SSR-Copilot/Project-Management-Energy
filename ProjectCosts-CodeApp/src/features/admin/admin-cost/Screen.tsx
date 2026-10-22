@@ -1,14 +1,31 @@
 /**
- * Application Settings — Costs. Replaces the canvas 'Admin Cost Screen'.
+ * Application Settings — Costs. Replaces the canvas 'Admin Cost Screen' (PM app,
+ * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Cost Screen.pa.yaml`, D24 / D36).
  *
  * Standard cost assumptions per Country × Technology: DEVEX/CAPEX standard costs (T1) and the
  * O&M / Land Lease / Other OPEX standard contracts with their periods (T2).
  *
+ *   cmp_Admin_ProjectGatest_Approvals_Header_1            page title "Costs"
+ *   cmp_Admin_Costs_Assumption_NestedCountryPickerColumn  the country rail (Wind / PV)
+ *   con_Admin_Costs_Assumptions_RightContent              the right-hand column
+ *     Label1                                              "Standard Assumptions / Costs / …"
+ *     con_…_CommandBar_ApplyButton_1                      "Apply to All" (`ApplyStrip`, disabled)
+ *     Gallery1 over colAdminCostCategories                four sections (`SettingsAccordion`), all folded
+ *       DEVEX/CAPEX                                       `DevexCostTree` + `DevexCostDrawer`
+ *       Operation & Maintenance / Land Lease / Other      `OpexContractTable` + `ContractPeriodDrawer`
+ *   cmp_PopUp_Confirmation_Delete_Contract_Or_Period      `ConfirmDialog`
+ *   cmp_PopUp_Loading_Admin_Cost                          the `LoadingOverlay` while deleting
+ *
  * Composition only: rules in `./rules.ts`, queries in `./hooks.ts`, Dataverse I/O in
- * `@/data/adminCost.ts`. *
+ * `@/data/adminCost.ts`.
+ *
  * Apply / Apply to All are drawn disabled with their info text, as in the canvas
  * (`ApplyStrip`); they make no data calls. Not built: the `vsb_applyandapplyalltracking` history
  * tag (no generated service).
+ *
+ * DIVERGENCE (outcomes): the canvas shows nothing on success and a raw `Notify` on failure; this
+ * screen shows short toasts (`useNotify`) for every save / delete outcome — see `MSG` in
+ * `./constants.ts`.
  */
 import { useMemo } from "react";
 import { Text, makeStyles, tokens } from "@fluentui/react-components";
@@ -77,7 +94,7 @@ const useStyles = makeStyles({
   applyBar: { paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px", paddingBottom: "15px" },
 });
 
-/** The canvas page title (`cmp_Admin_ProjectGatest_Approvals_Header_1`). */
+/** `cmp_Admin_ProjectGatest_Approvals_Header_1.Project` — `Name: "Costs"`, verbatim. */
 const PAGE_TITLE = "Costs";
 
 type DeleteKind = "devex" | "contract" | "period";
@@ -88,8 +105,10 @@ export default function CostsSettingsScreen() {
   const notify = useNotify();
   const locale = useMemo(() => localeInfo().tag, []);
   const decimalSeparator = useMemo(() => localeInfo().decimalSeparator, []);
-  /* The admin gate (master's `useAdminAccess`): a non-admin sees the data but every add / edit /
-     delete is disabled. Table privileges are the second seam (a 403 becomes `permissionMessage`). */
+  /* The admin gate (`useAdminAccess`): a non-admin sees the data but every add / edit / delete is
+     disabled. Table privileges (`useTablePrivileges`) are the second seam, standing in for the
+     canvas `DataSourceInfo` / `RecordInfo` checks (D1); a 403 from the server becomes the
+     permission message (`errorText`). */
   const isAdmin = useAdminAccess();
   const devexTable = useTablePrivileges(DEVEX_ENTITY_SET);
   const opexTable = useTablePrivileges(OPEX_ENTITY_SET);
@@ -101,8 +120,8 @@ export default function CostsSettingsScreen() {
   const currenciesQ = useCostCurrencies();
   const payerQ = useCostPayerDefaults();
 
-  // The canvas deny-list; only the six configured countries get Wind / PV
-  // (ACS:650-733). Any other listed country has no technologies and can never be selected.
+  // The canvas deny-list (Spain / Greece / Romania dropped); only the six configured countries get
+  // Wind / PV (ACS:650-733). Any other listed country has no technologies and can never be selected.
   const countries = useMemo(() => pickerCountries(countriesQ.data ?? [], COST_COUNTRY_RULE), [countriesQ.data]);
   const picked = useCountryTechnologySelection({
     countries, technologies: COST_TECHNOLOGIES, defaultTo: COST_DEFAULT, technologiesFor: COST_TECHNOLOGIES_FOR,
@@ -112,30 +131,32 @@ export default function CostsSettingsScreen() {
 
   const devexQ = useDevexCosts(scope);
   const opexQ = useOpexPeriods(scope);
-  // Best effort: if this read fails the screen behaves as before (server checks still apply).
+  // Best effort: if this read fails, no period action is blocked by hidden rows (the server checks
+  // in `@/data/adminCost` still apply). DIVERGENCE: see `inactiveRowsReason` in `./rules.ts`.
   const inactiveQ = useInactiveOpexRows(scope);
   const areasQ = useInflationAreas(selection?.countryId, selection?.countryName === "Italy");
 
-  // The two DEVEX writes are `WritePlan`s (D36); the plan refuses without `isAdmin` too, so a
+  // The two DEVEX writes are `WritePlan`s (D36); the plan also refuses without `isAdmin`, so a
   // write can never be sent without it — the screen's own refusals below still fire first.
   const saveDevex = useSaveDevexCost(scope, isAdmin);
   const deleteDevex = useDeleteDevexCost(scope, isAdmin);
+  // The three contract writes stay multi-step data-layer flows in `@/data/adminCost.ts` (D36 §3).
   const saveOpex = useSaveOpexPeriod(scope);
   const deleteContract = useDeleteOpexContract(scope);
   const deletePeriod = useDeleteOpexPeriod(scope);
 
-  /** All four sections collapsed on entry, each toggles independently. */
+  /** `colAdminCostCategories.IsFolded: true` — all four sections collapsed on entry, each toggles independently. */
   const sections = useToggleSet();
-  /** DEVEX categories folded by default. */
+  /** `locSelectedDevexCapexCategory` / `IsFolded` — DEVEX categories folded by default. */
   const openDevex = useToggleSet();
-  /** Contracts expanded by default; fold state is UI state only. */
+  /** `'IsCollapsed?'` — contracts expanded by default; fold state is UI state only. */
   const collapsed = useToggleSet();
   const devexPanel = usePanelState<{ editing?: DevexCost }>();
   const opexPanel = usePanelState<{ ctx: OpexPanelContext }>();
   const dialog = useConfirmDialog<DeleteKind, DeleteTarget>();
   /**
-   * Outcomes are toasts. Where the page notice used to be cleared (scope change, opening a
-   * panel, starting a delete), the toasts are dismissed, so a stale outcome never lingers.
+   * Outcomes are toasts. A scope change, opening a panel and starting a delete dismiss the open
+   * toasts, so a stale outcome never lingers.
    */
   const clearNotice = () => notify.dismissAll();
 
@@ -162,7 +183,8 @@ export default function CostsSettingsScreen() {
   /* ─────────────────────────────────────────────────────── selection ── */
   const onSelect = (next: CountryTechnology) => {
     picked.select(next);
-    // A scope change folds every DEVEX category.
+    // A scope change folds every DEVEX category (the picker's `Select(btn_Filter_Devex_Capex_Assumptions)`)
+    // and re-expands every contract.
     openDevex.clear();
     collapsed.clear();
     clearNotice();
@@ -187,11 +209,18 @@ export default function CostsSettingsScreen() {
       });
       await saveDevex.mutateAsync(write);
     } catch (error) {
+      /*
+       * DIVERGENCE: the panel stays open with the input and the error. The canvas closes it
+       * BEFORE the `Patch` (`pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save.OnChange`:
+       * `locIsVisibleAddCostPanel: false`) and has no `IfError` (SOURCE DEFECT: a failed save is
+       * silent).
+       */
       devexPanel.setError(errorText(error, MSG.devexSaveFailed, "save standard costs"));
       return;
     }
     devexPanel.close();
-    // After a save only the saved category is unfolded.
+    // After a save only the saved category is unfolded (`locSelectedDevexCapexCategory` +
+    // `Select(btn_Filter_Devex_Capex_Assumptions)`).
     openDevex.replace([write.categoryId]);
     notify.success(MSG.devexSaved);
   };
@@ -225,6 +254,15 @@ export default function CostsSettingsScreen() {
     opexPanel.setError(undefined);
     const write = opexWriteFromForm(form, { panel: current.ctx, selection, currencies, hidden, locale });
     try {
+      /*
+       * DIVERGENCE (OPEX period save): the canvas `pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Save_1.OnChange`
+       * Patches the row, then copies Period 1's contract values to the later periods, against the
+       * screen's cached collection. `saveOpexPeriod` (`@/data/adminCost.ts`, a multi-step data-layer
+       * flow, D36 §3) first re-checks the contract on the SERVER (one contract per sub-account;
+       * next period = highest + 1, never past 10), then writes the row, re-flags `vsb_islastperiod`
+       * and propagates Period 1 one guarded PATCH per period; a failure after the row write is an
+       * `OpexFollowUpError`.
+       */
       await saveOpex.mutateAsync(write);
     } catch (error) {
       if (error instanceof OpexFollowUpError) {
@@ -233,6 +271,11 @@ export default function CostsSettingsScreen() {
         notify.error(error.message);
         return;
       }
+      /*
+       * DIVERGENCE: the panel stays open with the input and the error. The canvas closes it before
+       * the write (`locIsVisibleLandLeaseStandardContract: false`) and only `Notify`s "Error: Land
+       * Lease Standard Contract could not be saved correctly. Internal error: …".
+       */
       opexPanel.setError(errorText(error, MSG.contractSaveFailed, "save standard contracts"));
       return;
     }
@@ -244,13 +287,19 @@ export default function CostsSettingsScreen() {
   };
 
   /* ───────────────────────────────────────────────────────── deletes ── */
-  /** `closeFirst`: the dialog closes at once, the delete runs under the page overlay. */
+  /**
+   * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period.OnConfirm`. `closeFirst`: the dialog closes
+   * at once and the delete runs under the page overlay (`locIsVisibleDeleteConfirmation: false` +
+   * the "Please wait, deleting..." spinner), as in the canvas.
+   */
   const runDelete = async ({ kind, payload }: ConfirmState<DeleteKind, DeleteTarget>) => {
     if (!selection) return;
     clearNotice();
     if (!isAdmin) { notify.error(MSG.noPermission); return; }
     try {
       if ("cost" in payload) {
+        // `Select(btn_AdminCost_DevexCapex_Delete_StandardCost_Confirm)`: one DELETE (`planDeleteDevexCost`).
+        // DIVERGENCE (D20): no `Apply and Apply All Trackings` row is written after it.
         await deleteDevex.mutateAsync(payload.cost.id);
         if (payload.cost.categoryId) openDevex.replace([payload.cost.categoryId]);
         notify.success(MSG.devexDeleted);
@@ -261,9 +310,26 @@ export default function CostsSettingsScreen() {
         type: payload.contract.type, subaccountId: payload.contract.subaccountId ?? "",
       };
       if (kind === "contract") {
+        /*
+         * SOURCE DEFECT (fixed): the canvas deletes a contract with one `RemoveIf` over the table
+         * (and one over the cached collection, in `Concurrent`) whose filter is not delegable
+         * (`Text(Technology) = …`), so rows beyond the row limit are never seen. `deleteOpexContract`
+         * (`@/data/adminCost.ts`, D36 §3) reads every row of the contract from the server and deletes
+         * them by id, later periods first and Period 1 last, one at a time; after a partial failure
+         * it repairs the last-period flags and reports the counts (`ContractDeleteError`).
+         */
         await deleteContract.mutateAsync(contractScope);
         notify.success(MSG.contractDeleted);
       } else {
+        /*
+         * SOURCE DEFECT (fixed): the canvas picks the new tail as `First(LastN(Sort(rows,
+         * Description), 2))` — by DESCRIPTION, so "X - 10" sorts before "X - 2" — and Patches it
+         * `'IsLastPeriod?' = Yes` concurrently with the delete. `deleteOpexPeriod`
+         * (`@/data/adminCost.ts`, D36 §3) re-checks on the server that the row is still the last
+         * period, deletes it, then marks the highest remaining NUMERIC period as last (repaired
+         * once from the server on failure). No `newTailCanvasParity` twin exists any more (the
+         * port dropped it).
+         */
         await deletePeriod.mutateAsync({ id: payload.row.id, contract: contractScope });
         notify.success(MSG.periodDeleted);
       }
@@ -287,10 +353,15 @@ export default function CostsSettingsScreen() {
   const deleting = deleteDevex.isPending || deleteContract.isPending || deletePeriod.isPending;
   const cur = selection ? currencyCode(selection.countryName) : "EUR";
 
+  /*
+   * The load / error / empty texts below are NEW — no canvas equivalent (rule 19: a failed read
+   * must never look like "no rows"; the canvas showed an empty gallery).
+   */
   const sectionBody = (cat: CostCategoryDef) => {
     if (cat.contractType === undefined) {
       return (
         <>
+          {/* `btn_Admin_Cost_DevexCapex_AddCost.DisplayMode` — `DataSourceInfo(…, CreatePermission)`. */}
           <CategoryCommandRow title={cat.title} sectionKey={cat.key} kind="devex" canCreate={isAdmin && devexTable.canCreate} onAddCost={() => openDevexPanel()} />
           {devexQ.error ? (
             <NoticeBar intent="error" className={styles.sectionError} action={{ label: "Retry", onClick: () => void devexQ.refetch() }}>
@@ -340,8 +411,9 @@ export default function CostsSettingsScreen() {
             currencyNames={currencyNames}
             collapsed={collapsed.values}
             canCreate={isAdmin && opexTable.canCreate}
+            // DIVERGENCE: a row without a sub-account cannot be addressed as a contract, so Edit and
+            // Delete are disabled on it (the canvas offers both on every row).
             canEdit={(r) => canEditOpex(r) && Boolean(contracts.find((c) => c.periods.includes(r))?.subaccountId)}
-            // Like Edit: a row without a sub-account cannot be addressed as a contract.
             canDelete={(r) => canDeleteOpex(r) && Boolean(contracts.find((c) => c.periods.includes(r))?.subaccountId)}
             onToggle={collapsed.toggle}
             onEdit={onEditRow}
@@ -355,10 +427,10 @@ export default function CostsSettingsScreen() {
 
   return (
     <div className={styles.page}>
-      {/* Master's shell header carries no admin page title, so the screen renders the canvas
-          page title "Costs" (`cmp_Admin_ProjectGatest_Approvals_Header_1`) itself, as master's
-          other admin screens do. Outcomes are toasts. */}
-      <Text as="h1" className={styles.title}>{PAGE_TITLE}</Text>
+      {/* The app shell's header carries no admin page title, so the screen renders the canvas
+          page title "Costs" (`cmp_Admin_ProjectGatest_Approvals_Header_1`) itself, as the other
+          admin screens do. Outcomes are toasts. */}
+      <Text as="h1" className={styles.title} data-testid="cmp_Admin_ProjectGatest_Approvals_Header_1">{PAGE_TITLE}</Text>
       {health.staleError !== undefined && health.phase === "ready" ? (
         <NoticeBar intent="warning" action={{ label: "Retry", onClick: health.retryFailed }}>
           {errorText(health.staleError, "The standard assumptions could not be refreshed.", "read standard assumptions")}
@@ -376,24 +448,36 @@ export default function CostsSettingsScreen() {
       >
         {() => (selection ? (
           <div className={styles.body}>
-            {/* Costs defaults: SVG flags, the country name as plain text, +/- toggles only. */}
+            {/*
+              `cmp_Admin_Costs_Assumption_NestedCountryPickerColumn` (its name is the stem of every
+              picker control's `data-testid`). Costs defaults: SVG flags, the country name as plain
+              text, +/- toggles only.
+            */}
             <CountryTechnologyPicker
               countries={countries}
               technologies={COST_TECHNOLOGIES}
               technologiesFor={COST_TECHNOLOGIES_FOR}
               value={picked.selection}
               onChange={onSelect}
+              testIdPrefix="cmp_Admin_Costs_Assumption_NestedCountryPickerColumn"
             />
-            <section className={styles.right} aria-label="Standard cost assumptions">
-              <ScopeHeaderBand live title={breadcrumbText(selection.countryName, selection.technology)} />
+            {/* NEW — no canvas equivalent: the region's accessible name (the canvas container has none). */}
+            <section className={styles.right} aria-label="Standard cost assumptions" data-testid="con_Admin_Costs_Assumptions_RightContent">
+              {/* `Label1.Text` — `$"Standard Assumptions / Costs / {Country} / {Technology}"` (`breadcrumbText`). */}
+              <ScopeHeaderBand live title={breadcrumbText(selection.countryName, selection.technology)} testId="Label1" />
               <div className={styles.applyBar}>
                 <ApplyStrip scope="all" />
               </div>
+              {/*
+                `Gallery1` over `colAdminCostCategories`: one `Container5` per category, its header
+                `Container6` (`Label1_2` + the `ico_…_GeneratorType_Up_2` / `_Down_2` chevrons).
+                The accordion header button cannot carry the chevrons' canvas names (no prop).
+              */}
               <SettingsAccordion
                 variant="grey"
                 openItems={[...sections.values]}
                 onToggle={sections.toggle}
-                items={COST_CATEGORIES.map((cat) => ({ id: cat.key, title: cat.title, content: sectionBody(cat) }))}
+                items={COST_CATEGORIES.map((cat) => ({ id: cat.key, title: cat.title, content: sectionBody(cat), testId: `Container5-${cat.key}` }))}
               />
             </section>
           </div>

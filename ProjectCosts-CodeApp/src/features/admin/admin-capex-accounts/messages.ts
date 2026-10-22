@@ -1,5 +1,8 @@
 /**
- * User-facing text for a failed write: readable, never raw Dataverse detail.
+ * User-facing text for a failed write: readable, never raw Dataverse detail. Every text here is
+ * NEW: the canvas writes have no `IfError` and the screen no message control, so a failed write
+ * was silent (and the spinner it opened was never shown either, see `BUSY`).
+ *
  * The raw error is traced (shared `userErrorText`) so a failure stays diagnosable and
  * pre-fills "Report a problem".
  *
@@ -14,7 +17,7 @@ import { RowWriteError } from "@/data/adminRowWrites";
 import { DeleteBlockedError, PartialStepError } from "@/data/adminCapexAccounts";
 import { OUT_OF_SCOPE } from "./rules";
 
-/** A write refused because the user fails master's admin rule (`useAdminAccess`); nothing was sent. */
+/** NEW: a write refused because the user fails the admin rule (`useAdminAccess`); nothing was sent. */
 export class OutOfScopeError extends Error {
   constructor() {
     super(OUT_OF_SCOPE);

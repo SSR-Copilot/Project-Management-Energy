@@ -19,10 +19,10 @@
  * Writes use the LOWER-CASE `owningbusinessunit@odata.bind` (PG audit PascalCase was
  * rejected live on a sibling table; every working project write is lower case).
  *
- * Reads and creates go through the generated services (`Vsb_projectdefaultchecklistsesService`,
- * `Vsb_checklistcountryandtechnologiesService`, `Vsb_checklistdefaultapprovalsesService`). Updates
- * use `updateRecordIfExists` (read-before-write, upsert guard) and deletes `deleteRecord`: the generated
- * `update` is an upsert-prone PATCH and the generated `delete` discards its result.
+ * Reads and task creates go through the generated services (`Vsb_projectdefaultchecklistsesService`,
+ * `Vsb_checklistcountryandtechnologiesService`, `Vsb_checklistdefaultapprovalsesService`). Task updates
+ * use `updateRecordIfExists` (read-before-write, upsert guard): the generated `update` is an
+ * upsert-prone PATCH. Approval writes are WritePlans (`data/runPlan.ts`), not repository methods.
  */
 import type { IOperationOptions, IOperationResult } from "@microsoft/power-apps/data";
 import type { Vsb_checklistcountryandtechnologies as ChecklistHeaderRow } from "@/generated/models/Vsb_checklistcountryandtechnologiesModel";
@@ -31,7 +31,7 @@ import type { Vsb_projectdefaultchecklistses as DefaultChecklistRow } from "@/ge
 import { Vsb_checklistcountryandtechnologiesService } from "@/generated/services/Vsb_checklistcountryandtechnologiesService";
 import { Vsb_checklistdefaultapprovalsesService } from "@/generated/services/Vsb_checklistdefaultapprovalsesService";
 import { Vsb_projectdefaultchecklistsesService } from "@/generated/services/Vsb_projectdefaultchecklistsesService";
-import { deleteRecord, fetchAll, guardedCall, guardedResult, updateRecordIfExists, type FetchAllOptions } from "./client";
+import { fetchAll, guardedCall, guardedResult, updateRecordIfExists, type FetchAllOptions } from "./client";
 import { CHECKLIST_ENTITY_SETS } from "./dataverseNames";
 import { and, bindPath, chunk, eq, isNull, lookupEq, lookupIn, ne, or } from "./odata";
 
@@ -205,13 +205,11 @@ export interface ChecklistTablesRepository {
   createDefaultChecklist(payload: ChecklistPayload, operation?: string): Promise<string | undefined>;
   /** E9: `operation` names the write in a `DataError` (default "update checklist item"). */
   updateDefaultChecklist(id: string, changed: ChecklistPayload, operation?: string): Promise<void>;
-  createChecklistApproval(payload: ChecklistPayload): Promise<string | undefined>;
-  updateChecklistApproval(id: string, changed: ChecklistPayload): Promise<void>;
-  deleteChecklistApproval(id: string): Promise<void>;
+  // Approval writes (create / update / delete) run as WritePlans through `data/runPlan.ts`
+  // (`admin-gates-approvals/writes.test.ts`), so the repository only reads that table.
 }
 
 type TaskCreate = Parameters<typeof Vsb_projectdefaultchecklistsesService.create>[0];
-type ApprovalCreate = Parameters<typeof Vsb_checklistdefaultapprovalsesService.create>[0];
 
 /**
  * Every page of a table, `operation` defaulting to `read <entitySet>`. A THROWN SDK error becomes
@@ -298,19 +296,6 @@ export function createChecklistTablesRepository(): ChecklistTablesRepository {
     async updateDefaultChecklist(id, changed, operation = "update checklist item") {
       await updateRecordIfExists(operation, CHECKLIST_ENTITY_SETS.tasks, id, changed);
     },
-
-    async createChecklistApproval(payload) {
-      const created = await guardedCall(`create ${CHECKLIST_ENTITY_SETS.approvals}`, () =>
-        Vsb_checklistdefaultapprovalsesService.create(payload as unknown as ApprovalCreate));
-      return created?.vsb_checklistdefaultapprovalsid || undefined;
-    },
-
-    async updateChecklistApproval(id, changed) {
-      await updateRecordIfExists(`update ${CHECKLIST_ENTITY_SETS.approvals}`, CHECKLIST_ENTITY_SETS.approvals, id, changed);
-    },
-
-    deleteChecklistApproval: (id) =>
-      deleteRecord(`delete ${CHECKLIST_ENTITY_SETS.approvals}`, CHECKLIST_ENTITY_SETS.approvals, id),
   };
 }
 

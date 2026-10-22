@@ -215,3 +215,17 @@ Gates: typecheck, lint, label and canvas gates clean; `project-main` + `ScreenRo
 **Known flakiness:** on the OneDrive checkout, a full verify sometimes times out on 1–2 test files, for example UT-ADCHK-908 and UT-GEN-903. Re-run those files alone (`npx vitest run <file> --maxWorkers=2`). They pass.
 
 **Next:** apply the PO's answers to Z1 and the open questions as they arrive. After the PO smoke test and approval: `git init`, then commit, then the "Before pushing to DEV" checklist. Also update CONVENTIONS: its `check:power` count still says 38; it is 81.
+
+## 22 Oct 2026: admin screens replaced, then canvas traceability restored
+
+- **The workspace is now a git repo** (`master`), so the "nothing is committed / no git repo" lines above are history. Commit `864056b` replaced the six admin screens from branch RounakDev1; open points are in `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`, and the decisions are in D36.
+- **Uncommitted, awaiting approval:**
+  - D36 written;
+  - canvas ids, verbatim citations and markers restored on all six admin screens (D36 §6);
+  - `check-canvas-identities.mjs` tightened (it now reads `closeTestId` / `toggleTestId`);
+  - the test-only checklist-approval repository methods removed;
+  - `ReorderList` unexported;
+  - the stale instruction docs updated (`check:power` is now 81 in CONVENTIONS).
+- **Product owner:** decide the D36 §4 behaviours, the D36 §5 Apply bars, and the six contradictions in D36 §6.
+- **Next:** shared-component test-id props (D36 §6), restore the dropped `…CanvasParity` twins, the admin live smoke test, then approval and commit.
+- **Note:** "Application Insights" does not exist in this app. The canvas apps ship with `appinsightserrortracing: false` and no instrumentation key, so there is nothing to port.

@@ -1,7 +1,24 @@
 /**
  * Costs settings — every business rule as a pure function (tested in `rules.test.ts`).
  *
- * Canvas citations ACS:<line> = `Admin Cost Screen.pa.yaml`.
+ * Canvas citations ACS:<line> = `Admin Cost Screen.pa.yaml`
+ * (`ProjectDocs/_extracted/msapp/projectmanagement/Src/`). Decision log: D24 (the canvas
+ * analysis) and D36 (this implementation).
+ *
+ * SOURCE DEFECTs fixed here (each marked below): `locEditSaveButtonEnabled` never reset
+ * (`canSaveDevex`); the Cost Paid By default tested by account number but read by sub-account
+ * (`withDevexSubaccount`); a stored 0 opened blank (`inputText`); the grid's ×100 percent
+ * (`PERCENT_DISPLAY`); an 11th Add Period (`canAddPeriod`); the External Contract default flipping
+ * a stored "No" and its case-sensitive TCMA test (`opexStandardDefaults`,
+ * `defaultExternalContract`). The port dropped the `…CanvasParity` twins of all of them except
+ * `fmtCanvasPercent` — a gap against CONVENTIONS rule 8, recorded under D36.
+ *
+ * HIDDEN CONTROLS: `btn_Filter_Devex_Capex_Assumptions` (Select()-ed by OnVisible, the picker,
+ * Save and Delete) → `buildDevexTree` + the open-category set in `Screen.tsx`;
+ * `btn_AdminCost_DevexCapex_Delete_StandardCost_Confirm` → `planDeleteDevexCost`;
+ * `btn_LandLease_NewEditPeriod_ResetButton` / `btn_AdminCost_RightPanel_Form_AddStandardCost_
+ * Button_Reset` → each panel's form is rebuilt from `opexStandardDefaults` / `emptyDevexForm` on
+ * open; `fn_Numeric_CC` → `@/domain/numeric` (`isTwoDecimalCanvasParity` …).
  */
 import { inRange, isInteger, isOneDecimalCanvasParity, isTwoDecimalCanvasParity, parseNumber } from "@/domain/numeric";
 import { numberFormat } from "@/domain/locale";
@@ -68,12 +85,15 @@ export function toScope(selection: CostSelection): CostScope {
   return { countryId: selection.countryId, technology: selection.technology };
 }
 
-/** PLN for Poland, otherwise EUR. */
+/**
+ * `If(cmp_Admin_Costs_Assumption_NestedCountryPickerColumn.SelectedCountry.Name = "Poland", "PLN",
+ * "EUR")` — the currency every OPEX caption, header and the unit error repeat.
+ */
 export function currencyCode(countryName: string): "PLN" | "EUR" {
   return countryName === "Poland" ? "PLN" : "EUR";
 }
 
-/** Exact breadcrumb text (ACS:779). */
+/** `Label1.Text` — `$"Standard Assumptions / Costs / {Country} / {Technology}"` (ACS:779), verbatim. */
 export function breadcrumbText(countryName: string, technology: CostTechnology): string {
   return scopeBreadcrumb("Standard Assumptions / Costs", countryName, TECHNOLOGY_LABEL[technology]);
 }
@@ -91,10 +111,13 @@ export const fmtOneOrTwo = (n: number | undefined) =>
 /**
  * Which percent display the grid uses. The stored `vsb_ofrevenues` /
  * `vsb_inflationprofile` are ALREADY percents: the panel inputs (0..10,000 / 0..100), every
- * project screen (`features/periods/opexRules.ts` `formatRevenuePercent` /
- * `formatOneDecimalPercent`) and the project import read them that way. The canvas grid's ×100
- * (`fmtCanvasPercent`) is treated as a canvas defect: stored 2 shows "2.0 %", not "200.0 %".
- * Pending product confirmation; flip this one constant to restore the canvas scaling.
+ * project screen (`features/cost/periods/opexRules.ts` `formatRevenuePercent` /
+ * `formatOneDecimalPercent`) and the project import read them that way.
+ *
+ * SOURCE DEFECT (fixed, pending product confirmation): the canvas grid's `Text(n, "… %")`
+ * multiplies by 100 (`lbl_OpexCosts_…_CostsTableRow_ProcentOfRevenues_2` / `_InflationProfile_2`),
+ * so stored 2 shows "200.0 %". Here it shows "2.0 %". `fmtCanvasPercent` is the canvas-parity twin;
+ * flip this one constant to restore the canvas scaling.
  */
 export const PERCENT_DISPLAY: "stored" | "canvasScaled" = "stored";
 
@@ -127,9 +150,13 @@ export function fmtCanvasPercent(n: number | undefined, pattern: "revenue" | "in
 
 /**
  * Panel prefill in the browser's decimal separator, so the culture-aware validation accepts it:
- * `"#0.00"` (Fix Costs), integer-or-`"#0.0#"` (the others). Custom inflation uses `keep2`: the
- * canvas `"0.0"` silently rounded a stored 0.02 to 0.0 on re-save, so the stored precision
- * (Dataverse decimal default, 2 dp) is kept instead.
+ * `"#0.00"` (Fix Costs), integer-or-`"#0.0#"` (the others).
+ *
+ * SOURCE DEFECT (fixed): the canvas prefills a whole rate with `Text(n, "#")`
+ * (`txt_LandLease_…_EuroMW_1.Value` and its siblings), which prints nothing for 0, so a stored 0
+ * opens blank and is saved back as blank. Here 0 shows "0".
+ * SOURCE DEFECT (fixed): custom inflation uses `keep2` — the canvas `"0.0"` silently rounded a
+ * stored 0.02 to 0.0 on re-save, so the stored precision (Dataverse decimal default, 2 dp) is kept.
  */
 export function inputText(n: number | undefined, style: "fixed2" | "intOr2" | "fixed1" | "keep2", decimalSeparator: "." | ","): string {
   if (n === undefined) return "";
@@ -151,7 +178,7 @@ export function inputText(n: number | undefined, style: "fixed2" | "intOr2" | "f
 
 /* ════════════════════════════════════════════════════════════ DEVEX/CAPEX ══ */
 
-/** Sub-accounts with this many costs in scope are no longer offered (ACS:10235). */
+/** Sub-accounts with this many costs in scope are no longer offered (`cmb_…_Subaccount.Items`, `CountRows(…) < 50`). */
 export const DEVEX_SUBACCOUNT_LIMIT = 50;
 export const UNKNOWN_CATEGORY_ID = "__unknown__";
 
@@ -173,16 +200,21 @@ export function unitLabel(unit: number | undefined): string {
   return unit === undefined ? "" : COST_UNIT_LABEL[unit] ?? "";
 }
 
-/** `"1,3,5"` for the true cluster flags. */
+/** `lbl_DevexCapex_…_CostsTableHeader_Cluster_1.Text` — `"1,3,5"` for the true cluster flags. */
 export function clusterText(clusters: readonly boolean[]): string {
   return clusters.map((on, i) => (on ? String(i + 1) : "")).filter(Boolean).join(",");
 }
 
-/** `"{amount ###,###} {unit}"`. */
+/** `lbl_DevexCapex_…_CostsTableHeader_Cost_1.Text` — `$"{Text(vsb_costamount, "###,###,###,###")} {vsb_unit}"`. */
 export function costText(amount: number | undefined, unit: number | undefined): string {
   return `${fmtInteger(amount)} ${unitLabel(unit)}`.trim();
 }
 
+/**
+ * `img_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Comment.Tooltip` —
+ * `$"{If(Len(comment) > 0, "Comment:")}⏎{If(Len(comment) > 0, comment, "Add Comment")}"`. The canvas
+ * text keeps a leading line break when there is no comment; it is not reproduced.
+ */
 export function commentTooltip(comment: string): string {
   return comment.length > 0 ? `Comment:\n${comment}` : "Add Comment";
 }
@@ -201,9 +233,10 @@ export function toDevexRowView(cost: DevexCost, sub: CapexSubaccount | undefined
 }
 
 /**
- * One header per category that has costs (category order), its costs ordered by
- * account order then sub-account order. Costs under a category outside the hierarchy (e.g.
- * deactivated) are listed last rather than silently dropped.
+ * `btn_Filter_Devex_Capex_Assumptions.OnSelect` (hidden, Select()-ed): one header per category
+ * that has costs (category order), its costs ordered by account order then sub-account order.
+ * DIVERGENCE: costs under a category outside the active hierarchy (e.g. deactivated) are listed
+ * last under "(Unknown category)" rather than dropped, as the canvas grouping by category does.
  */
 export function buildDevexTree(costs: readonly DevexCost[], hierarchy: CapexHierarchy): DevexGroup[] {
   const subById = new Map(hierarchy.subaccounts.map((s) => [s.id, s]));
@@ -225,6 +258,7 @@ export function buildDevexTree(costs: readonly DevexCost[], hierarchy: CapexHier
     if (rows.length > 0) groups.push({ categoryId: category.id, categoryName: category.name, rows });
   }
   const orphans = sorted.filter((c) => !c.categoryId || !known.has(c.categoryId)).map(view);
+  // "(Unknown category)" is NEW — no canvas equivalent (see the DIVERGENCE above).
   if (orphans.length > 0) groups.push({ categoryId: UNKNOWN_CATEGORY_ID, categoryName: "(Unknown category)", rows: orphans });
   return groups;
 }
@@ -238,8 +272,9 @@ export function costCountBySubaccount(costs: readonly DevexCost[]): Map<string, 
 export interface Option { value: string; label: string }
 
 /**
- * Sub-Account options — sub-accounts of the chosen category (all when none) with fewer
- * than 50 costs in scope; the row being edited keeps its own sub-account (ACS:10352-10378).
+ * `cmb_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount.Items` (ACS:10352-10378): sub-accounts
+ * of the chosen category (all when none) with fewer than 50 costs in scope. DIVERGENCE: the row
+ * being edited keeps its own sub-account even at the limit.
  */
 export function devexSubaccountOptions(
   hierarchy: CapexHierarchy, costs: readonly DevexCost[], categoryId: string | null, keepId?: string | null,
@@ -262,9 +297,9 @@ export function devexCategoryOptions(
 }
 
 /**
- * Unit options (ACS:10567-10579): non-Poland Wind EUR, EUR/MW(p), EUR/WTG; non-Poland PV
- * EUR, EUR/MW(p); Poland the PLN equivalents. A stored unit outside the list stays selectable so
- * its error can show.
+ * `cmb_AdminCost_RightPanel_Form_AddCost_Fields_Unit.Items` (ACS:10567-10579): non-Poland Wind
+ * EUR, EUR/MW(p), EUR/WTG; non-Poland PV EUR, EUR/MW(p); Poland the PLN equivalents.
+ * DIVERGENCE: a stored unit outside the list stays selectable so its error can show.
  */
 export function unitOptions(countryName: string, technology: CostTechnology, keep?: number | null): number[] {
   const poland = countryName === "Poland";
@@ -317,14 +352,20 @@ export function devexFormFromCost(cost: DevexCost, countryName: string): DevexFo
   };
 }
 
-/** Category change clears Sub-account and Cost Paid By (ACS:10240-10251). */
+/** `cmb_…_Category.OnChange` — a category change clears Sub-account and Cost Paid By (ACS:10240-10251). */
 export function withDevexCategory(form: DevexForm, categoryId: string | null): DevexForm {
   return { ...form, categoryId, subaccountId: null, costPaidBy: null };
 }
 
 /**
- * Sub-account change sets Category to the sub-account's category and resets Cost Paid By to the
- * SPV/DevCo mapping default for it (ACS:10379-10398: keyed by sub-account id).
+ * `cmb_…_Subaccount.OnChange` (ACS:10379-10398): a sub-account change sets Category to the
+ * sub-account's category and resets Cost Paid By to the SPV/DevCo mapping default for it.
+ *
+ * SOURCE DEFECT (fixed): the canvas default (`rad_…_Cost_Paid_By.DefaultSelectedItems`) TESTS the
+ * mapping by `'Account Number' = Subaccount.Number` but READS it by
+ * `'Name (Sub-Account)' = Subaccount`, so a mapping row matched by only one of the two keys gives
+ * no default. Here the default is read by sub-account id only (`payerDefaults`, built by
+ * `loadCostPayerDefaults`). The `mappedCostPaidByCanvasParity` twin was dropped by the port.
  */
 export function withDevexSubaccount(
   form: DevexForm, subaccountId: string | null, hierarchy: CapexHierarchy, payerDefaults: ReadonlyMap<string, number>,
@@ -338,7 +379,7 @@ export function withDevexSubaccount(
   };
 }
 
-/** Unit change clears Cost (ACS:10580). */
+/** `cmb_…_Unit.OnChange` — a unit change clears Cost (ACS:10580). */
 export function withDevexUnit(form: DevexForm, unit: number | null): DevexForm {
   return { ...form, unit, cost: "" };
 }
@@ -351,8 +392,11 @@ export function isInactiveSubaccount(form: Pick<DevexForm, "subaccountId">, hier
 }
 
 /**
- * Cost (integer, 0..100,000,000) and Unit-vs-technology messages; an inactive
- * sub-account (when the hierarchy is given) blocks Save with a message under Sub-Account.
+ * `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Cost_ErrorMessage` (integer, 0..100,000,000) and
+ * `…_Unit_ErrorMessage` (a WTG unit only for Wind). The canvas `…_Subaccount_ErrorMessage` is
+ * `Visible: false` (its duplicate check is commented out), so it is not ported.
+ * DIVERGENCE: an inactive sub-account (when the hierarchy is given) blocks Save with a message
+ * under Sub-Account; the canvas has no such check.
  */
 export function validateDevexForm(
   form: DevexForm, ctx: { countryName: string; technology: CostTechnology; locale?: string; hierarchy?: CapexHierarchy },
@@ -372,7 +416,14 @@ export function validateDevexForm(
 /** Dirty = deep difference from the snapshot taken on open — the shared dirty-check helper. */
 export { isDirty };
 
-/** The DEVEX Save gate. */
+/**
+ * `pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save.DisplayMode` — the DEVEX Save gate
+ * (Distribution Frequency is fixed, so its non-blank check always holds).
+ *
+ * SOURCE DEFECT (fixed): the canvas gate starts with `locEditSaveButtonEnabled`, which only Cancel
+ * / Close reset, so after a save the next panel opened with Save already enabled. Here "dirty" is
+ * a deep difference from the snapshot taken on every open. No `…CanvasParity` twin.
+ */
 export function canSaveDevex(form: DevexForm, pristine: DevexForm, errors: DevexErrors): boolean {
   return isDirty(form, pristine)
     && form.description.trim() !== ""
@@ -413,10 +464,15 @@ export function devexWriteFromForm(
   };
 }
 
+/**
+ * `lbl_AdminCost_RightPanel_Form_AddStandardCost_Header_title.Text` —
+ * `If(IsBlank(locSelectedStandardCost), "Add Cost", "Edit Cost : " & Subaccount.Name)`, verbatim.
+ */
 export function devexPanelTitle(editing: DevexCost | undefined, hierarchy: CapexHierarchy): string {
   if (!editing) return "Add Cost";
   const sub = hierarchy.subaccounts.find((s) => s.id === editing.subaccountId);
-  // An inactive sub-account is not in the hierarchy: fall back to the stored description.
+  // DIVERGENCE: an inactive sub-account is not in the hierarchy, so the title falls back to the
+  // stored description (the canvas reads the lookup's name, which it always has).
   return `Edit Cost : ${sub?.name ?? editing.description}`;
 }
 
@@ -432,7 +488,8 @@ export function devexPanelTitle(editing: DevexCost | undefined, hierarchy: Capex
  *
  * The CONTRACT flows (period save, contract delete, period delete) stay in `@/data/adminCost.ts`:
  * they read at save time, repair the `vsb_islastperiod` flags after a partial failure and report
- * per-step counts, which a static, sequential, fail-stop plan cannot express (D36).
+ * per-step counts, which a static, sequential, fail-stop plan cannot express (D36 §3). Their
+ * divergences from the canvas are marked at the call sites in `Screen.tsx`.
  *
  * Two refusals, both carrying a sentence written for the user, and both already shown by the screen
  * before a plan is ever built (`MSG.noPermission` on the panel, `DevexRuleError` from
@@ -452,8 +509,12 @@ export const DEVEX_DISTRIBUTION_FREQUENCY = 3;
 export interface PlanOptions { canEdit: boolean }
 
 /**
- * Field map. Apply VAT / Depreciation / Distribution Frequency are the canvas
- * fixed values. Description and comment are trimmed. Key order is the wire order.
+ * `pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save.OnChange` `Patch` field map. Apply
+ * VAT / Depreciation / Distribution Frequency are the canvas fixed values. No Owning Business Unit
+ * (the canvas writes none). Key order is the wire order.
+ *
+ * DIVERGENCE: Description Input, the Description suffix and Comment are trimmed; the canvas writes
+ * `txt_…_Description.Value` / `txt_…_Comment.Value` untrimmed (D24 recorded "untrimmed").
  */
 export function devexPayload(w: DevexWrite): Record<string, unknown> {
   const description = w.descriptionInput.trim();
@@ -489,8 +550,9 @@ function singleWrite(write: PlannedWrite): WritePlan {
 /**
  * Save a standard cost: `w.id` absent creates the row, otherwise one guarded PATCH.
  *
- * Refuses a write without a sub-account name exactly as the data layer did: it would store
- * `"Standard Cost : Germany-Wind-"` / `"Standard  - X"`, which the project screens match on.
+ * DIVERGENCE: refuses a write without a sub-account name (the canvas would store
+ * `"Standard Cost : Germany-Wind-"` / `"Standard  - X"`, which the project screens match on); and
+ * the update is guarded — it writes nothing when another user deleted the row meanwhile (D36 §3).
  */
 export function planSaveDevexCost(w: DevexWrite, opts: PlanOptions): WritePlan {
   if (!opts.canEdit) return refusePlan(MSG.noPermission);
@@ -504,9 +566,12 @@ export function planSaveDevexCost(w: DevexWrite, opts: PlanOptions): WritePlan {
 }
 
 /**
- * Delete a standard cost: one DELETE whose result is read, so the synchronous
- * `VSB_CapexAssumptionDeletion` plug-in's refusal surfaces (what `deleteRecord` was for). No
- * `vsb_applyandapplyalltracking` row is written.
+ * `btn_AdminCost_DevexCapex_Delete_StandardCost_Confirm.OnSelect` (hidden, Select()-ed by the
+ * delete dialog): one DELETE whose result is read, so a refusal by the synchronous
+ * `VSB_CapexAssumptionDeletion` plug-in (which deletes the project CAPEX contracts and costs built
+ * from the row) surfaces, as CONVENTIONS rule 14 requires.
+ * DIVERGENCE (D20): the `Apply and Apply All Trackings` row the canvas appends after the delete
+ * is not written.
  */
 export function planDeleteDevexCost(id: string, opts: PlanOptions): WritePlan {
   if (!opts.canEdit) return refusePlan(MSG.noPermission);
@@ -563,7 +628,12 @@ export function contractDisplayName(
   return subaccountNames.get(subaccountId) || head.subaccountLabel || head.description;
 }
 
-/** One group per sub-account (by id, not name/order), periods in numeric order. */
+/**
+ * `gal_LandLease_Content_Subaccounts_CardBody_Costs_1.Items`: one group per sub-account, periods
+ * in numeric order. DIVERGENCE: grouped by sub-account ID; the canvas matches a contract's periods
+ * by sub-account `Name` (e.g. `lbl_OpexCosts_…_EndDate_2.Text`, `txt_…_StartDate.Value`), so two
+ * sub-accounts sharing a name would merge there.
+ */
 export function groupContracts(
   periods: readonly OpexPeriod[], type: OpexContractType, subaccountNames: ReadonlyMap<string, string>,
   inactiveRows: readonly InactiveRowRef[] = [],
@@ -609,12 +679,15 @@ export function groupContracts(
 
 export const monthsOf = (p: Pick<OpexPeriod, "years" | "months">): number => (p.years ?? 0) * 12 + (p.months ?? 0);
 
-/** `"COD + {Y} Years {M} Months"`. */
+/**
+ * `$"COD + {RoundDown(months / 12, 0)} Years {Mod(months, 12)} Months"` — verbatim, from
+ * `lbl_OpexCosts_…_CostsTableRow_EndDate_2.Text` and `txt_…_StartDate.Value`.
+ */
 export function codText(totalMonths: number): string {
   return `COD + ${Math.floor(totalMonths / 12)} Years ${totalMonths % 12} Months`;
 }
 
-/** Cumulative duration of this contract's periods up to and including `row`. */
+/** `lbl_OpexCosts_…_CostsTableRow_EndDate_2.Text`: cumulative duration of this contract's periods up to and including `row`. */
 export function endDateText(contract: ContractView, row: OpexPeriod): string {
   const upTo = row.period ?? Number.MAX_SAFE_INTEGER;
   const total = contract.periods
@@ -623,7 +696,7 @@ export function endDateText(contract: ContractView, row: OpexPeriod): string {
   return codText(total);
 }
 
-/** A new period starts after ALL existing periods (ACS:5322-5364). */
+/** `txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate.Value` (ACS:5322-5364): a new period starts after ALL existing periods. */
 export function nextStartDateText(contract: ContractView): string {
   return codText(contract.periods.reduce((s, p) => s + monthsOf(p), 0));
 }
@@ -648,14 +721,18 @@ export interface OpexRowView {
   otp: string;
 }
 
+/** `lbl_OpexCosts_…_CostsTableRow_Aggregation_2.Text` — `ThisItem.Aggregation`, the option labels. */
 const AGGREGATION_LABEL: Record<number, string> = {
   [AGGREGATION.sum]: "SUM", [AGGREGATION.max]: "MAX", [AGGREGATION.min]: "MIN",
 };
 
 /**
- * The cell texts of one period row. `% of Revenues` / inflation show the STORED percent
- * with the canvas decimals (`fmtGridPercent`): the same number the panel input shows and
- * saving writes back, and the same text the project screens show (pending product confirmation).
+ * The cell texts of one period row — `lbl_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_*.Text`:
+ * `"{n} years"` / `"{n} months"` (DurationYears_1 / DurationMonths_1), inflation `"No"` /
+ * `"Country Inflation"` / percent (InflationProfile_2), OTP `"Yes"` / `"No"`, Secured / Allocation /
+ * External Contract as `Text(<boolean>)`, the numbers in the canvas `Text(…)` formats.
+ * `% of Revenues` / inflation show the STORED percent with the canvas decimals (`fmtGridPercent`,
+ * SOURCE DEFECT at `PERCENT_DISPLAY`).
  */
 export function toStandardOpexRow(
   row: OpexPeriod, contract: ContractView, currencyNames: ReadonlyMap<string, string>,
@@ -688,22 +765,31 @@ export function toStandardOpexRow(
   };
 }
 
-/** Delete is offered on the head (Period 1) and the last period only. */
+/**
+ * `ico_OpexCosts_…_CostsTableRow_Delete_1.Visible` — `Or(Period = Period 1, ThisItem.'IsLastPeriod?')`:
+ * Delete is offered on the head (Period 1) and the last period only.
+ * DIVERGENCE: "last" is the row with the highest period number, not the stored `'IsLastPeriod?'`
+ * flag, so a stale flag on a middle period never offers a gap-making delete.
+ */
 export function canDeleteRow(contract: ContractView, row: OpexPeriod): boolean {
   return row.id === contract.head.id || row.id === contract.last.id;
 }
 
-/** Deleting the head deletes the whole contract; the tail alone is a period. */
+/**
+ * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period.OnConfirm`: deleting the head deletes the whole
+ * contract; the tail alone is a period.
+ */
 export function deleteKind(contract: ContractView, row: OpexPeriod): "contract" | "period" {
   return row.id === contract.head.id ? "contract" : "period";
 }
 
 /**
- * A contract with hidden (not active) rows: the server integrity checks count
- * them, so Add Period / Delete Period would always fail with "changed since it was loaded".
- * The canvas showed inactive rows (unfiltered T2) so it had no such dead end; until the
- * inactive-row policy is decided, these actions are disabled with this reason.
- * Deleting the whole contract (Period 1) still works — it removes rows in any state.
+ * DIVERGENCE: the grid shows active rows only, while the canvas shows inactive rows too
+ * (its collection is the unfiltered table). A contract with hidden (not active) rows: the server
+ * integrity checks count them, so Add Period / Delete Period would always fail with "changed
+ * since it was loaded"; until the inactive-row policy is decided, these actions are disabled
+ * with this reason. Deleting the whole contract (Period 1) still works — it removes rows in any
+ * state.
  */
 export function inactiveRowsReason(contract: ContractView): string | undefined {
   const periods = contract.inactivePeriods ?? [];
@@ -711,7 +797,13 @@ export function inactiveRowsReason(contract: ContractView): string | undefined {
   return MSG.inactivePeriods(periods);
 }
 
-/** No Period 11; not while the contract has hidden inactive rows. */
+/**
+ * SOURCE DEFECT (fixed): the canvas Add Period is always enabled, and Period 10 has no successor
+ * in the canvas period `Switch`, which falls through to its default, so an 11th "Add Period"
+ * silently creates a SECOND Period 1. Here there is no Period 11 (`MSG.maxPeriods`), and no Add
+ * Period while the contract has hidden inactive rows (DIVERGENCE above). The
+ * `nextPeriodCanvasParity` twin was dropped by the port.
+ */
 export function canAddPeriod(contract: ContractView): boolean {
   return contract.highestPeriod < MAX_PERIOD && inactiveRowsReason(contract) === undefined;
 }
@@ -721,7 +813,11 @@ export function canDeletePeriodRow(contract: ContractView, row: OpexPeriod): boo
   return deleteKind(contract, row) === "contract" || inactiveRowsReason(contract) === undefined;
 }
 
-/** Next period = highest existing + 1 (never "Period 1" after Period 10). */
+/**
+ * Next period = highest existing + 1 (never "Period 1" after Period 10). DIVERGENCE: the canvas
+ * numbers from the clicked reference row (`Switch(locNextPeriodReferenceCost.Period, …)`); here it
+ * is the contract's highest period, re-checked on the server by `saveOpexPeriod`.
+ */
 export function nextPeriodNumber(contract: ContractView): number {
   return contract.highestPeriod + 1;
 }
@@ -730,7 +826,12 @@ export function nextPeriodNumber(contract: ContractView): number {
 
 export interface MenuItemView { id: string; name: string; label: string; disabled: boolean; order: number }
 
-/** Other-OPEX labels: "TCMA" / "E&CM" (ACS:1052-1071). */
+/**
+ * `cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar.Items` → `ItemDisplayName` of the
+ * Other OPEX children (ACS:1052-1071): "TCMA" / "E&CM", verbatim, else the sub-account name.
+ * DIVERGENCE: matched case-insensitively; the canvas `Find("TCMA", …)` / `Find("Environmental", …)`
+ * are case-sensitive.
+ */
 export function otherOpexLabel(name: string): string {
   if (/tcma/i.test(name)) return "TCMA";
   if (/environmental/i.test(name)) return "E&CM";
@@ -738,8 +839,10 @@ export function otherOpexLabel(name: string): string {
 }
 
 /**
- * One item per sub-account of the section's category; disabled when a contract (any
- * period) already exists for it in the current scope and type: one contract per sub-account.
+ * `cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar.Items`: one item per sub-account of
+ * the section's category (`colLandLeaseSubaccounts` / `colOAndMSubaccounts` /
+ * `colOtherOpexSubaccounts`); disabled (`ItemEnabled: CountIf(…) = 0`) when a contract (any period)
+ * already exists for it in the current scope and type: one contract per sub-account.
  */
 export function contractMenu(
   type: OpexContractType,
@@ -768,7 +871,10 @@ export function contractMenu(
 
 export type OpexPanelMode = "newContract" | "editContract" | "editPeriod" | "addPeriod";
 
-/** Panel titles (ACS:4913-4934). */
+/**
+ * `lbl_LandLease_RightPanel_NewEditPeriod_BodyHeader_1.Text` (ACS:4913-4934) — "Add Contract Type : ",
+ * "Edit Contract : ", "Edit Period : ", "Add Period : " + the sub-account name, verbatim.
+ */
 export function opexPanelTitle(mode: OpexPanelMode, subaccountName: string): string {
   switch (mode) {
     case "newContract": return `Add Contract Type : ${subaccountName}`;
@@ -782,7 +888,11 @@ export function editModeFor(row: OpexPeriod): OpexPanelMode {
   return row.period === 1 ? "editContract" : "editPeriod";
 }
 
-/** The canvas `CanEditContract`: new contract or Period 1. */
+/**
+ * The canvas `DisplayMode` of the inflation / External Contract fields
+ * (`Or(locSelectedLandLeaseCost.Period = Period 1, And(IsBlank(…), IsBlank(locNextPeriodReferenceCost)))`):
+ * a new contract or Period 1.
+ */
 export function isContractLevelEditable(mode: OpexPanelMode): boolean {
   return mode === "newContract" || mode === "editContract";
 }
@@ -817,26 +927,44 @@ export interface OpexPanelContext {
   decimalSeparator: "." | ",";
 }
 
-/** The add-period reference = the current last period (ACS:3571-3620). */
+/** `btn_OpexCosts_Content_Subaccounts_CardBody_AddPeriod.OnSelect` (ACS:3571-3620): the add-period reference = the current last period. */
 export function referenceOf(ctx: OpexPanelContext): OpexPeriod | undefined {
   return ctx.mode === "addPeriod" ? ctx.contract?.last : undefined;
 }
 
+/** `txt_LandLease_RightPanel_NewEditCost_BodyContent_StartDate.Value` — `Coalesce(…, "Cluster 6: Operation")`, verbatim. */
 export const DEFAULT_START_DATE = "Cluster 6: Operation";
 
-/** Description for a NEW contract by category (ACS:5126-5130). */
+/**
+ * `txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1.Value` (ACS:5126-5130) —
+ * `$"Standard{"" | " Opex" | " LL"} {sub-account}"`, verbatim: the description of a NEW contract.
+ */
 export function newContractDescription(type: OpexContractType, subaccountName: string): string {
   if (type === CONTRACT_TYPE.landLease) return `Standard LL ${subaccountName}`;
   if (type === CONTRACT_TYPE.other) return `Standard Opex ${subaccountName}`;
   return `Standard ${subaccountName}`;
 }
 
-/** The TCMA rule, matched case-insensitively (the canvas `Find("tcma", …)` never fired). */
+/**
+ * `tgl_OpexCosts_RightPanel_NewEditCost_BodyContent_ExternalContract.Checked` — the TCMA rule for
+ * a new contract: Other OPEX, order 1 and a TCMA sub-account → off, else on.
+ * SOURCE DEFECT (fixed): the canvas `Find("tcma", Name)` is case-sensitive, so the "TCMA"
+ * sub-account never matched; here it is matched case-insensitively. No `…CanvasParity` twin.
+ */
 export function defaultExternalContract(type: OpexContractType, subaccount: { name: string; order: number }): boolean {
   return !(type === CONTRACT_TYPE.other && subaccount.order === 1 && /tcma/i.test(subaccount.name));
 }
 
-/** Field defaults per panel mode. */
+/**
+ * Field defaults per panel mode (the canvas field `Default` / `Value` / `Checked` formulas, rebuilt
+ * on every open as the hidden `btn_LandLease_NewEditPeriod_ResetButton` did): inflation on for
+ * O&M / Other, Aggregation SUM, months 0 once a year is set.
+ *
+ * SOURCE DEFECT (fixed): the canvas External Contract tests only `= Yes` on the edited row and the
+ * reference, then falls through to `true`, so a contract stored as "No" opens (and saves) "Yes".
+ * Here the stored value is kept (`source.externalContract ?? true`). The
+ * `externalContractDefaultCanvasParity` twin was dropped by the port.
+ */
 export function opexStandardDefaults(ctx: OpexPanelContext): OpexForm {
   const { mode, type, row, decimalSeparator: sep } = ctx;
   const editing = mode === "editContract" || mode === "editPeriod" ? row : undefined;
@@ -876,14 +1004,15 @@ export function opexStandardDefaults(ctx: OpexPanelContext): OpexForm {
   };
 }
 
-/**
- * Hidden values written as the canvas does: carried from the edited / reference row.
- * `storedInflationProfile` / `pristineCustomInflation` let an untouched inflation value be written
- * back exactly (or not at all), never re-parsed from rounded text.
- */
 export type FigureKey = "fixCosts" | "ofRevenues" | "eurMwh" | "eurMw" | "eurWtg";
 const FIGURE_KEYS: readonly FigureKey[] = ["fixCosts", "ofRevenues", "eurMwh", "eurMw", "eurWtg"];
 
+/**
+ * Hidden values written as the canvas does: carried from the edited / reference row (threshold,
+ * one-time payments — fields the panel locks or hides).
+ * `storedInflationProfile` / `pristineCustomInflation` let an untouched inflation value be written
+ * back exactly (or not at all), never re-parsed from rounded text.
+ */
 export interface HiddenValues {
   thresholdType: number | null;
   thresholdIndividual: number | null;
@@ -917,15 +1046,19 @@ export function hiddenValues(ctx: OpexPanelContext): HiddenValues {
   };
 }
 
-/** The contract currency (EUR / PLN) must exist, or the contract would be saved without one. */
+/**
+ * DIVERGENCE: the contract currency (EUR / PLN) must exist, or the contract would be saved without
+ * one; the canvas has no such check.
+ */
 export function currencyIssue(currencies: readonly CostCurrency[], countryName: string): string | undefined {
   const code = currencyCode(countryName);
   return currencies.some((c) => c.code === code) ? undefined : MSG.currencyMissing(code);
 }
 
 /**
- * Inflation profile switched off: the canvas resets the country toggle, area and custom value to
- * their defaults (ACS:7074-7080); switching the country toggle resets custom value and area (7015).
+ * `tgl_…_InflationProfile_1.OnChange` — inflation profile switched off: the canvas resets the
+ * country toggle, area and custom value to their defaults (ACS:7074-7080);
+ * `tgl_…_CountryInflationProfile_1.OnChange` resets custom value and area (ACS:7015).
  */
 export function withInflation(form: OpexForm, on: boolean, defaults: OpexForm): OpexForm {
   if (on) return { ...form, useInflation: true };
@@ -937,7 +1070,7 @@ export function withInflation(form: OpexForm, on: boolean, defaults: OpexForm): 
 export function withCountryInflation(form: OpexForm, on: boolean, defaults: OpexForm): OpexForm {
   return { ...form, useCountryInflation: on, area: defaults.area, customInflation: defaults.customInflation };
 }
-/** Months defaults to 0 once a year is chosen (ACS:5430-5441). */
+/** `drp_…_DurationMonths_1` (ACS:5430-5441): months defaults to 0 once a year is chosen. */
 export function withYears(form: OpexForm, years: number | null): OpexForm {
   return { ...form, years, months: form.months ?? (years !== null ? 0 : null) };
 }
@@ -957,7 +1090,12 @@ function decimalError(
 
 export interface OpexValidation { errors: OpexErrors; hint: boolean }
 
-/** Exact messages, plus the commercial-figure hint. */
+/**
+ * The panel's `lbl_…_ErrorMessage_1.Text` formulas (exact messages: `MSG` in `./constants.ts`),
+ * using `fn_Numeric_CC`'s decimal checks (`is…CanvasParity`), plus the commercial-figure hint
+ * (`lbl_LandLease_RightPanel_NewEditPeriod_BodyButtons_Hint_1.Visible`).
+ * DIVERGENCE: an untouched stored custom inflation is not re-validated (it may carry 2 dp).
+ */
 export function validateOpexForm(
   form: OpexForm, ctx: { mode: OpexPanelMode; hidden: HiddenValues; locale?: string },
 ): OpexValidation {
@@ -982,7 +1120,7 @@ export function validateOpexForm(
   return { errors, hint };
 }
 
-/** The contract/period Save gate. */
+/** `pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Save_1.DisplayMode` — the contract/period Save gate. */
 export function canSaveOpex(
   form: OpexForm, pristine: OpexForm, validation: OpexValidation,
   ctx: { countryName: string; mode: OpexPanelMode; contract?: ContractView; currencies?: readonly CostCurrency[] },
@@ -999,7 +1137,10 @@ export function canSaveOpex(
   return true;
 }
 
-/** The canvas' locked values, written as the canvas writes them. */
+/**
+ * The canvas' locked values, written as the canvas writes them: `tgl_…_Secured` off,
+ * `tgl_…_AllocationToAllWTGs` on, `tgl_…_AlignWithProjectDuration` off, `togl_…_Threshold` off.
+ */
 export const FIXED_CONTRACT_VALUES = {
   secured: false,
   allWtgAllocated: true,
@@ -1007,7 +1148,11 @@ export const FIXED_CONTRACT_VALUES = {
   threshold: false,
 } as const;
 
-/** The data-layer write for a valid form. */
+/**
+ * The data-layer write for a valid form (the canvas Save `Patch` payload; no Owning Business Unit —
+ * its write is commented out in the canvas). DIVERGENCE: an untouched figure or inflation value is
+ * written back exactly as stored (or not at all), never re-parsed from its rounded prefill text.
+ */
 export function opexWriteFromForm(
   form: OpexForm,
   ctx: {
@@ -1069,7 +1214,7 @@ export function opexWriteFromForm(
     return { ...base, mode: "addPeriod", period: panel.contract ? nextPeriodNumber(panel.contract) : 1, isLastPeriod: true };
   }
   const row = panel.row as OpexPeriod;
-  // The flag follows the computed tail, never a stale stored `true` on a middle
+  // DIVERGENCE: the flag follows the computed tail, never a stale stored `true` on a middle
   // period (the data layer re-normalises from the server after the write).
   return {
     ...base, mode: "edit", id: row.id, period: row.period ?? 1,
@@ -1081,7 +1226,12 @@ export function opexWriteFromForm(
 
 export interface DeleteDialogText { title: string; description: string }
 
-/** Exact dialog texts (ACS:4723-4733, 4860). */
+/**
+ * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period.Title` (ACS:4860) —
+ * `Switch(cat, 'DEVEX/CAPEX', "Delete Cost", $"Delete {If(Period 1, "Contract", "Period")}")` — and
+ * `.Description` (ACS:4723-4733) — `$"Are you sure you want to delete the ""{Description}"" cost?"` /
+ * `… contract and all related periods?` / `… period?`, verbatim.
+ */
 export function deleteDialogText(kind: "devex" | "contract" | "period", description: string): DeleteDialogText {
   if (kind === "devex") return { title: "Delete Cost", description: `Are you sure you want to delete the "${description}" cost?` };
   if (kind === "contract") {
@@ -1099,6 +1249,10 @@ const BUSINESS_ERRORS = [OpexRuleError, OpexFollowUpError, DevexRuleError] as co
  * A short, clean sentence via the shared `userErrorText`: 401/403 → the
  * permission message; 404 / 412 / 429 / 5xx / network / partial row write (`RowWriteError`) → the shared hint after `prefix`;
  * otherwise a plug-in's own short message (`serverReason`). Never raw JSON or HTTP bodies.
+ *
+ * DIVERGENCE: the canvas `Notify`s `FirstError.Source`, `.Message` and `.Details.HttpResponse`
+ * verbatim ("Error: Standard Contract could not be deleted correctly. Internal error: originated
+ * on …"); see `MSG` in `./constants.ts`.
  *
  * Kept local in front of it: the partial contract delete (counts + flag issue), and the business
  * errors, which are checked BEFORE the permission rule exactly as before (the shared helper would

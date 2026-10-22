@@ -265,6 +265,8 @@ should both be environment variables before go-live. Only one is.
 
 ## D14 · Administration and Project Management screens are built UI-first, not connected
 
+> **Superseded.** Every Admin and PM screen is now connected (D18–D34). The six admin screens were then replaced on 22 Oct 2026 (D36).
+
 **Decided (15 Oct 2026): their UI and pure rules are in the app now, and their data comes later.**
 `src/features/admin/*`, `src/features/pm/*` (except `project-main`), `src/data/notConnected.ts`
 
@@ -362,6 +364,8 @@ The open gaps below need a decision or a hand fix:
 
 ## D18 · Admin Default Checklists (screen 001) redeveloped from the canvas YAML (19 Oct 2026)
 
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version.
+
 Scope approved by the product owner: business rules, UI and docs. **No data connection yet**: the screen is still D14 "not connected", and the four tables below are not registered. Gap report: 69 requirements (37 covered, 20 partial, 3 missing, 9 wrong before this change). Flow and plugin effects come from `ProjectDocs/migration-plans/04-flow-inventory.md` (verified section).
 
 **Decided with the product owner (19 Oct 2026):**
@@ -430,6 +434,8 @@ UT-ADCHK-012c and 012d test this.
 
 ## D19 · Admin CAPEX Accounts (screen 002) redeveloped and connected (19 Oct 2026)
 
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version.
+
 **Scope:** rules, UI, data and docs. All three tables (`vsb_capexaccountlists`, `vsb_capexprojectcontracts`, `vsb_capexcosts`) were already registered.
 - No flow and no plugin step fires on them (04-flow-inventory.md, verified section).
 - The screen has no hidden controls.
@@ -473,6 +479,8 @@ UT-ADCHK-012c and 012d test this.
 
 ## D20 · Apply / Apply All is out of scope for the whole migration (19 Oct 2026)
 
+> **Contradicted by the code since 22 Oct 2026:** Admin Contract and Admin Cost show the Apply bars disabled. Decision needed: D36 §5.
+
 Product-owner decision: no Apply or Apply All button, label or function is migrated. On the canvas screens these are:
 - the hard-disabled Apply buttons on **Admin Milestones**, **Admin Contract** and **Admin Cost**;
 - their commented-out flow calls (`SynchronizeStandardAssumptionCosts`, `ForCountriestriggerFabricrecalculationsforProjects`, the Fabric Sync Jobs patches);
@@ -482,6 +490,8 @@ Product-owner decision: no Apply or Apply All button, label or function is migra
 Each screen's requirement doc notes the exclusion when that screen is redeveloped.
 
 ## D21 · Admin Milestones (screen 003) redeveloped and connected (19 Oct 2026)
+
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version.
 
 **Scope:** rules, UI, data and docs.
 - Both tables, `vsb_countries` and `vsb_milestonesstandardassumptionses`, were already registered.
@@ -518,6 +528,8 @@ Each screen's requirement doc notes the exclusion when that screen is redevelope
 **Tests:** UT-ADMILE-006, 007, 032 and 034–038, and screen tests 901–904.
 
 ## D22 · Admin Project Gates Approvals (screen 004) redeveloped and connected (19 Oct 2026)
+
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version. `src/components/PeoplePicker.tsx` is still used by PM; this screen now uses its own `PeoplePickerField`.
 
 **Scope:** rules, UI, data and docs (`src/features/admin/admin-gates-approvals/`, `src/data/adminGatesApprovals.ts`, new kit control `src/components/PeoplePicker.tsx`).
 - **Tables:** none registered. All seven were already in `power.config.json`: `vsb_countries`, `vsb_projectstates`, `vsb_projectdefaultapprovalses`, `vsb_checklistdefaultapprovalses`, `vsb_projectdefaultchecklistses`, `vsb_checklistcountryandtechnologies`, and `'Microsoft Entra IDs'` = the virtual table `aadusers` (key `microsoftentraids`). `ES.aadUsers = "aadusers"` was added to `dataverseNames.ts`; the unverified `ES.microsoftEntraIds` (`vsb_microsoftentraids`) is left for the not-yet-connected General Data and Team screens.
@@ -567,6 +579,8 @@ Each screen's requirement doc notes the exclusion when that screen is redevelope
 4. Dataverse privilege on the two default-approval tables: **same as today**. Only the client-side admin rule (`useAdminAccess`) guards them; no Dataverse privilege is planned.
 
 ## D23 · Admin Contract (screen 005) redeveloped and connected (19 Oct 2026)
+
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version.
 
 **Scope:** rules, UI, data and docs.
 - **Code:** `src/features/admin/admin-contract/` and `src/data/adminContract.ts`.
@@ -633,6 +647,8 @@ Each screen's requirement doc notes the exclusion when that screen is redevelope
 2. Technologies on each admin rail: **follow each screen's own canvas, as today.** Contract offers Wind, PV and BESS; Gates offers Wind and PV; Admin Cost (006) takes its list from its own YAML.
 
 ## D24 · Admin Cost (screen 006) redeveloped and connected (19 Oct 2026)
+
+> **Implementation replaced on 22 Oct 2026 (D36).** The decisions below still record the canvas analysis; the code is the RounakDev1 version.
 
 **Scope:** rules, UI, data and docs.
 - **Code:** `src/features/admin/admin-cost/` and `src/data/adminCost.ts`. The screen is now split into `Screen.tsx` (rail, breadcrumb, the four cards), `DevexSection.tsx`, `OpexSection.tsx` and a shared `styles.ts`.
@@ -1797,3 +1813,163 @@ UI-only pass after the product owner compared the Milestones screen with the can
 7. **Revenues card italics (corrected from D33):** confirm the canvas look. Tariff, Tariff p90, Area, Inflation Profile and Hedged Volume Type are blue + italic when standard, and Currency is always blue + italic.
 8. Not yet clicked through against VSBCloud_Dev (`pac code run`). The router change especially needs a smoke test: deep links, Edit Costs tabs, the rail and the logo, and the browser back button.
 9. **Add Costs from Table toolbar (21 Oct 2026):** its spreadsheet starts flush on the panel edge. Align the Add Row icon to that edge, to the header title (20 px), or keep it at 10 px?
+
+## D36 · Application Settings port: the six admin screens replaced from RounakDev1 (22 Oct 2026)
+
+**Decided (owner, 22 Oct 2026): replace, not graft.** Commit `864056b` replaced the six `/admin`
+screens (D18, D19, D21–D24) with the versions developed on branch `RounakDev1`. Routes, left
+navigation, shell and header are unchanged. Open points: `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`.
+Rollback: `git revert 864056b`.
+
+D14, D18, D19 and D21–D24 still describe the screens they built. Where they disagree with the
+code, this entry and the code win; each of them now carries a pointer here.
+
+### 1. No bulk Dataverse services
+
+`CreateMultiple`, `UpdateMultiple` and `UpsertMultiple` are deliberately not used. Every bulk path
+in the ported code is a per-row write (`src/data/adminRowWrites.ts`). Same reason as
+KNOWN-RISKS: there is no changeset, so a bulk call gains speed but not atomicity, and a
+per-row write reports which row failed. Revisit only with a Custom API (D6).
+
+### 2. Component merge
+
+`FormPanel`, the field components and `PanelButtons` gained optional props for the settings
+screens. The defaults reproduce the previous behaviour and are pinned by `UT-FORMPANEL-*`,
+`UT-PANELBTN-*` and `UT-SETFIELDS-*`. Kept separate on purpose (CONVENTIONS rule 17, "deliberate
+variant"):
+- `ReorderPanel` / `ReorderItems`: a different contract from the old `ReorderList`. `ReorderList`
+  had no callers after the port and is no longer exported from `@/components` (22 Oct 2026).
+- The gates `PeoplePickerField`: it owns the Entra search.
+- `useNotify` / `AppToaster`: toasts, where the other screens use inline `WriteFeedback`.
+
+### 3. Write-path exception (CONVENTIONS rule 17)
+
+`executePlan` has an opt-in `guarded` update step: a PATCH to a row deleted meanwhile reports
+"record deleted" instead of recreating it (an upsert). 14 single-request admin writes run as
+`WritePlan`s through `src/data/runPlan.ts`, each with a wire-equivalence test (`writes.test.ts`
+in the CAPEX accounts, default checklists, gates and cost folders). These multi-request flows stay
+in the data layer as a documented exception to "write plans live in `data/writePlan.ts`":
+- **CAPEX:** create, reorder, delete, deactivate account and subaccount (cascade and forecast clean-up).
+- **Checklists:** create-then-set-status, soft delete with renumber, reorder.
+- **Milestones:** save.
+- **Contracts:** save (ownership re-check, partial-save retry), delete.
+- **Costs:** OPEX period save, OPEX contract delete, period delete with last-period flag repair.
+
+The checklist-approval repository methods (`createChecklistApproval`, `updateChecklistApproval`,
+`deleteChecklistApproval` in `src/data/adminChecklistTables.ts`) were only called by their own
+tests once the Gates writes moved onto WritePlans. They were removed on 22 Oct 2026
+(UT-ADCHKTBL-003/012/013 now pin the task table; UT-ADCHKTBL-014 is retired, not renumbered).
+
+### 4. Behaviours that differ from the canvas — product decision needed (keep, or revert)
+
+Each is marked `DIVERGENCE:` at its code site. None has been reverted.
+
+| Screen | Behaviour in the code app |
+|---|---|
+| Checklists, Gates, Contracts | The panel stays open on a failed save, with the error in it (the canvas closes it first) |
+| Gates | Reset Gate asks for confirmation. **Check against D22** ("keep both Reset Gate and Save as the canvas has them") |
+| Gates | Inactive and "To Delete" tasks are hidden |
+| Gates | People search starts at 2 characters |
+| Gates | Status toggles are optimistic |
+| CAPEX | Paid costs are skipped on deactivate |
+| CAPEX | Activate only when the parent account is active |
+| CAPEX | Subaccount reorder needs 2 or more rows |
+| Milestones | Only active countries are shown |
+| Milestones | Durations have a column maximum; blanks show a "0" placeholder; a duplicate-row warning |
+| Checklists | The default tab is the left-most by order, not the first by name |
+| Checklists | The whole cluster header toggles, not only the chevron |
+
+What the canvas does for each, verified against the YAML, is in the per-screen results in §6.
+
+Per-screen marker lists from the 22 Oct traceability pass: see §6.
+
+### 5. Apply / Apply to All — contradicts D20
+
+D20 says no Apply or Apply All button, label or function is migrated. The ported screens render
+them **disabled**, with their canvas info text: `admin-contract/ApplyBar.tsx` (screen bar and
+per-contract bar) and `admin-cost/ApplyStrip.tsx` (screen bar and per-section strip). No data
+calls, no writes, no tracking row. **Decide:** remove them (D20 as written), or amend D20 to
+"shown disabled, as the canvas ships them".
+
+### 6. Canvas traceability restored (22 Oct 2026)
+
+The port dropped most canvas-named `data-testid`s, verbatim citations and divergence markers on
+the admin screens (09 §2). `check-canvas-identities` stayed green only because it exempts
+kebab-case ids. Restored screen by screen from `ProjectDocs/_extracted/msapp/projectmanagement/Src/`;
+results below.
+
+**Ids changed on purpose.** CONVENTIONS rule 16 says never change an existing test id. Here the
+port had already replaced the canvas names that Tosca recorded with kebab-case ids, so the canvas
+names were put back. Where a control has no canvas counterpart, its id was kept. Each screen's
+tests were updated; no `UT-` id was renumbered and no behaviour assertion changed. **Any Tosca
+module or test recorded against the port's kebab ids (22 Oct only) must be re-pointed.**
+
+| Screen | Canvas-named ids verified by the gate (before → after) | Literal AccessibleLabels compared | Divergence / defect markers |
+|---|---|---|---|
+| CAPEX Accounts | 1 → 18 | 0 (canvas sets none) | about 24 DIVERGENCE, 12 SOURCE DEFECT |
+| Default Checklists | 0 → 15 | 0 (canvas sets none) | about 23 / 15 |
+| Gates Approvals | 0 → 33 | 1 ("Project Status") | about 35 / 8 |
+| Contract | 0 → 39 | 0 (canvas sets none) | about 43 lines |
+| Milestones | 2 → 12 | 0 (canvas sets none) | about 32 lines |
+| Cost | 0 → 60 | 3 (Year, Month, Month) | about 43 / 16 |
+
+The full per-control lists (old → new ids, changed aria-labels, each marker) are in the code at
+each site. `check-canvas-identities.mjs` was tightened the same day: it now also reads
+`closeTestId` and `toggleTestId`, resolves a literal `<canvasName>-<ItemKey>` id, and knows
+`SettingsTabStrip` (TabList) and `SearchCombo` (ComboBox), so the four `canvas-identity-ignore`
+exemptions on the admin screens are gone. Whole app after the change: C1–C5 all 0.
+
+**Aria-labels with record data removed** (rule 16): row Edit / Delete / Apply / Add Task / Add
+Period buttons now read the canvas caption ("Edit", "Delete", …) instead of "Edit <name>";
+CAPEX row icons add `aria-describedby` to the number and name cells. **Still containing data,
+for lack of any canvas caption** (decide): CAPEX "Select account …" and its chevron; Contract
+card chevron "Expand / Collapse …" and the DevCo "Select all accounts in …" / "Expand …";
+Milestones inputs "<Technology> <Cluster n> duration in months"; the Checklists Completion Date
+spinner. Panel ✕ buttons keep "Close panel": the canvas tooltip is "Cancel" (clashes with the
+footer Cancel) and the command-bar item's display name is "Home".
+
+**Visible strings restored to the canvas wording** (rule 7; the port had reworded them):
+- Gates `DUPLICATE_GATE_MESSAGE`: "Default Approval for the selected Gate allready exists." (canvas typo kept).
+- Checklists reorder panel title: "Reoder checklist" (canvas typo kept, as D18 had it).
+- Cost Sub-Account placeholder: "Find supplier" (`cmb_…_Subaccount.InputTextPlaceholder`).
+
+**Contradictions with earlier decisions — product owner to decide (not changed):**
+1. **Gates Reset Gate** asks "Reset Gate?" first; the canvas writes at once, and D22 said keep it as the canvas.
+2. **Gates non-Wind/PV banner**: D22 answer 3 kept it; the port removed it (unreachable from the Wind/PV picker today).
+3. **Gates `CHECKLIST_BLANK_MESSAGE`**: "The check list item cannot be blank." vs the canvas "The cluster cannot be blank."; D22 kept the canvas wording, and `rules.test.ts` now pins the reworded text.
+4. **CAPEX subaccount reorder** needs 2 or more rows; D19 had kept the canvas "always enabled".
+5. **Cost DEVEX description and comment are trimmed**; D24 recorded "untrimmed", as the canvas writes them.
+6. **Apply bars** (§5).
+
+**Rule 8 gap: `…CanvasParity` twins dropped by the port, not restored** (marked at each site):
+Checklists `sortScopesCanvasParity`, `defaultScopeCanvasParity`, `toggleActiveCanvasParity`;
+CAPEX `canReorderAccountsCanvasParity`, `subaccountActivateIconCanvasParity`,
+`childStatusOnDeactivateCanvasParity`; Cost `mappedCostPaidByCanvasParity`,
+`externalContractDefaultCanvasParity`, `nextPeriodCanvasParity`, `newTailCanvasParity`. Only Cost
+`fmtCanvasPercent` remains.
+
+**Canvas controls that still have no id** because a shared component cannot carry one yet. Next
+step, additive optional props with today's defaults:
+- `ConfirmDialog`: root, Confirm and Cancel ids (fixed `confirm-dialog-*` today); used for the `cmp_*PopUp*` confirmations.
+- `LoadingOverlay`: `testId` (`cmp_Admin_Loading`, `cmp_PopUp_Loading_*`).
+- `FormPanel`: `titleTestId`.
+- `ScopeHeaderBand`: title id.
+- `SettingsAccordion`: root and header-button ids.
+- `ReorderPanel`: `closeTestId` and `listTestId`.
+- `StatusPill`: an `ariaLabel` override (the canvas caption is "Active" / "Inactive").
+- `CollapsibleCard`: header and body ids.
+- Field validation messages: an id for the `lbl_*_ErrorMessage` labels.
+
+**Hard-coded colours with no theme token** (09 §4), per file: Gates `GateTable.tsx`
+(`rgba(0,0,0,0.1)`, `rgba(255,255,255,0.5)`, `#B0B0B0`, `#B3B5B5`) and `ApprovalsPanel.tsx`
+(`rgba(180,214,250,0.35)`); Cost `ApplyStrip.tsx` (`rgba(204,226,241,0.5)`, `#323130`),
+`OpexContractTable.tsx` (`rgba(0,0,0,0.04)`, `#F5F5F5`, `rgba(0,0,0,0.06)`), `treeStyles.ts`
+(`#0078D4`); Contract (`#0078D4`, `#323130`, `rgba(204,226,241,0.5)`, `#EDF4F8`, `#f4f4f4`,
+`rgba(238,148,12,0.125)`); Checklists `TaskTable.tsx` (`#F5F5F5`); shared `RowActions`
+(`#0078D4`), `ExpandToggle` (`#353D3F`, `#EDEDED`), `SettingsAccordion` (`#323130`, `#fdffff`,
+`#E3E3E322`).
+
+**Comments.** The script-reworded comments in the six admin folders were read through, and the
+wrong ones fixed: references to the porting branch, to docs not in this repo, to code that no
+longer exists (a route guard, `ReorderList`, old paths), and two that stated the canvas behaviour
+backwards. Comments outside the admin folders were not part of this pass.

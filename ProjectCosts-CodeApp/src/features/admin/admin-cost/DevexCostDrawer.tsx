@@ -1,9 +1,15 @@
 /**
- * The 450 px DEVEX/CAPEX cost panel (ACS:9712-10977).
+ * The 450 px DEVEX/CAPEX cost panel (ACS:9712-10977, `con_AdminCost_RightPanel_Form_AddStandardCost`).
  *
- * The Save gate is dirty-against-the-snapshot-taken-on-open; a
- * failed save keeps the panel open with the input. The locked fields (Distribution
- * Frequency 3 Months, Apply VAT, Depreciation) are shown read-only, as in the canvas.
+ * The Save gate is dirty-against-the-snapshot-taken-on-open (`canSaveDevex`). The locked fields
+ * (Distribution Frequency 3 Months, Apply VAT, Depreciation) are shown read-only, as in the canvas.
+ *
+ * DIVERGENCE: a failed save keeps the panel open with the input and the error in it; the canvas
+ * closes the panel first (`locIsVisibleAddCostPanel: false` at the start of the Save `OnChange`)
+ * and has no `IfError` (D36 §4).
+ *
+ * Every control's `data-testid` is its canvas name; none of them sets a literal `AccessibleLabel`,
+ * so each `aria-label` is its visible caption (CONVENTIONS rule 16).
  */
 import { useMemo, useState } from "react";
 import {
@@ -59,20 +65,27 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
   return (
     <FormPanel
       open={open}
+      // `lbl_AdminCost_RightPanel_Form_AddStandardCost_Header_title.Text` (`devexPanelTitle`).
       title={devexPanelTitle(editing, hierarchy)}
       width="narrow"
+      closeTestId="ico_btn_AdminCost_RightPanel_Form_AddStandardCost_Header_Cancel"
       // The shared footer's Cancel goes through the panel's discard guard; a save in
       // flight disables both buttons and locks the panel (brand-outline Cancel).
-      actions={{ onSave: () => props.onSave(form), canSave, saving }}
+      actions={{
+        onSave: () => props.onSave(form), canSave, saving,
+        saveTestId: "pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save",
+        cancelTestId: "pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Cancel",
+      }}
       messages={{ error: error ?? null }}
       onDismiss={props.onDismiss}
       dirty={isDirty(form, pristine)}
       {...(saving ? { busyLabel: MSG.saving } : {})}
     >
       <div className={styles.form}>
+        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Description.Text` — "Description"; MaxLength 30. */}
         <TextField skin="plain"
           label="Description"
-          testId="cost-devex-description"
+          testId="txt_AdminCost_RightPanel_Form_AddCost_Fields_Description"
           required
           value={form.description}
           maxLength={30}
@@ -80,15 +93,16 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           onChange={(v) => setForm((f) => ({ ...f, description: v }))}
         />
 
+        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_SelectCluster.Text` — "Select Cluster". */}
         <Field label="Select Cluster" required>
-          <div role="group" aria-label="Select Cluster">
+          <div role="group" aria-label="Select Cluster" data-testid="chk_AdminCost_RightPanel_SelectClusters">
             {CLUSTER_LABELS.map((label, i) => (
               <Checkbox
                 key={label}
                 label={label}
                 value={String(i + 1)}
                 aria-label={label}
-                data-testid={`cost-devex-cluster-${i + 1}`}
+                data-testid={`chk_AdminCost_RightPanel_SelectCluster${i + 1}`}
                 checked={form.clusters[i]}
                 onChange={(_, d) => setCluster(i, d.checked === true)}
               />
@@ -96,19 +110,30 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           </div>
         </Field>
 
+        {/*
+          `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency.Text` — "Distribution
+          Frequency". The canvas ComboBox is disabled with 3 Months; shown as its fixed value.
+        */}
         <Field label="Distribution Frequency" required>
-          <Input value="3 Months" disabled aria-label="Distribution Frequency (fixed)" data-testid="cost-devex-frequency" />
+          <Input
+            value="3 Months"
+            disabled
+            aria-label="Distribution Frequency"
+            data-testid="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Distribution_Frequency"
+          />
         </Field>
 
         <div className={styles.inline}>
-          <Checkbox label="Apply VAT" value="applyVat" aria-label="Apply VAT" data-testid="cost-devex-apply-vat" checked disabled />
-          <Checkbox label="Depreciation" value="depreciation" aria-label="Depreciation" data-testid="cost-devex-depreciation" checked disabled />
+          {/* `chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat.Label` / `_Depreciation.Label` — verbatim; locked on. */}
+          <Checkbox label="Apply VAT" value="applyVat" aria-label="Apply VAT" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_ApplyVat" checked disabled />
+          <Checkbox label="Depreciation" value="depreciation" aria-label="Depreciation" data-testid="chk_AdminCost_RightPanel_Form_AddCost_Fields_Depreciation" checked disabled />
         </div>
 
+        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Category.Text` — "Category"; `InputTextPlaceholder` "Find Category". */}
         <Field label="Category" required>
           <SearchCombo
             ariaLabel="Category"
-            testId="cost-devex-category"
+            testId="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Category"
             placeholder="Find Category"
             options={categoryOptions}
             value={form.categoryId}
@@ -116,6 +141,11 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           />
         </Field>
 
+        {/*
+          `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount.Text` — "Sub-Account";
+          `cmb_…_Subaccount.InputTextPlaceholder` — "Find supplier", verbatim (the port had
+          reworded it to "Find Sub-Account").
+        */}
         <Field
           label="Sub-Account"
           required
@@ -125,27 +155,38 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
         >
           <SearchCombo
             ariaLabel="Sub-Account"
-            testId="cost-devex-subaccount"
-            placeholder="Find Sub-Account"
+            testId="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Subaccount"
+            placeholder="Find supplier"
             options={subaccountOptions}
             value={form.subaccountId}
             onChange={(v) => setForm((f) => withDevexSubaccount(f, v, hierarchy, payerDefaults))}
           />
         </Field>
 
+        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost_Paid_By.Text` — "Cost Paid By". */}
         <Field label="Cost Paid By" required>
           {/* Opt-in horizontal row (the panel CSS otherwise stacks radio groups). */}
           <RadioGroup
             layout="horizontal"
             className={PANEL_RADIO_ROW}
             aria-label="Cost Paid By"
+            data-testid="rad_AdminCost_RightPanel_Form_AddCost_Fields_Cost_Paid_By"
             value={form.costPaidBy === null ? "" : String(form.costPaidBy)}
             onChange={(_, d) => setForm((f) => ({ ...f, costPaidBy: Number(d.value) }))}
           >
-            {COST_PAID_BY_OPTIONS.map((o) => <Radio key={o.value} value={String(o.value)} label={o.label} aria-label={o.label} data-testid={`cost-devex-paid-by-${o.value}`} />)}
+            {COST_PAID_BY_OPTIONS.map((o) => (
+              <Radio
+                key={o.value}
+                value={String(o.value)}
+                label={o.label}
+                aria-label={o.label}
+                data-testid={`rad_AdminCost_RightPanel_Form_AddCost_Fields_Cost_Paid_By-${o.value}`}
+              />
+            ))}
           </RadioGroup>
         </Field>
 
+        {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Unit.Text` — "Unit"; `InputTextPlaceholder` "Find Cost Unit". */}
         <Field
           label="Unit"
           required
@@ -155,7 +196,7 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
         >
           <Dropdown
             aria-label="Unit"
-            data-testid="cost-devex-unit"
+            data-testid="cmb_AdminCost_RightPanel_Form_AddCost_Fields_Unit"
             placeholder="Find Cost Unit"
             value={form.unit === null ? "" : unitLabel(form.unit)}
             selectedOptions={form.unit === null ? [] : [String(form.unit)]}
@@ -165,9 +206,10 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
           </Dropdown>
         </Field>
 
+        {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Cost.Text` — `$"Cost [{Coalesce(Unit & "", "EUR")}]"`; MaxLength 10. */}
         <TextField skin="plain"
           label={`Cost [${unitText}]`}
-          testId="cost-devex-cost"
+          testId="txt_AdminCost_RightPanel_Form_AddCost_Fields_Cost"
           required
           value={form.cost}
           maxLength={10}
@@ -181,17 +223,25 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
 
         {/* ACS:10787-10806 — the `n/55` counter sits at the right end of the label line. */}
         <div className={styles.commentBlock}>
+          {/* `lbl_AdminCost_RightPanel_Form_Fields_AddCost_Fields_Comment.Text` — "Comment"; MaxLength 55. */}
           <Field label="Comment">
             <Textarea
               value={form.comment}
               maxLength={55}
               resize="vertical"
               aria-label="Comment"
-              data-testid="cost-devex-comment"
+              data-testid="txt_AdminCost_RightPanel_Form_AddCost_Fields_Comment"
               onChange={(_, d) => setForm((f) => ({ ...f, comment: d.value }))}
             />
           </Field>
-          <Text className={styles.counter} aria-live="polite">{`${form.comment.length}/55`}</Text>
+          {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_Comment_Char_Limit.Text` — `$"{Len(…)}/55"`. */}
+          <Text
+            className={styles.counter}
+            aria-live="polite"
+            data-testid="lbl_AdminCost_RightPanel_Form_AddCost_Fields_Comment_Char_Limit"
+          >
+            {`${form.comment.length}/55`}
+          </Text>
         </div>
       </div>
     </FormPanel>

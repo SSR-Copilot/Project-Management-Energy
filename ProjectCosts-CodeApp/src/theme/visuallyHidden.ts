@@ -1,7 +1,7 @@
 /**
  * T1 — content that screen readers announce but nobody sees (live regions, extra labels).
  *
- * The settings screens and `ReorderList` each defined this block; it is the classic
+ * The settings screens and `ReorderItems` each defined this block; it is the classic
  * clip pattern: absolute, 1 × 1 px, overflow hidden, `clip: rect(0 0 0 0)`, no wrapping.
  */
 import type { CSSProperties } from "react";

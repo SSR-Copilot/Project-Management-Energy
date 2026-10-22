@@ -1,6 +1,6 @@
 /**
- * Static fixture data — the Phase 1 UI was built against these before any Dataverse call
- * existed, and the render tests still use them. Never imported by the screen at runtime.
+ * Static fixture data for the tests (rules and screen render tests). The UI was first laid out
+ * against these before the screen was connected. Never imported by the screen at runtime.
  */
 import type {
   ChecklistCluster, ChecklistTab, ChecklistTask,

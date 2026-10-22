@@ -1,6 +1,13 @@
 /**
- * The gate matrix: column header, gate rows, nested checklist-task rows and the "Add Task" row.
- * Presentation only; every rule comes from `./rules`.
+ * The gate matrix — canvas `gal_Admin_ProjectGates_DefaultApprovals_Clusters`: the column header
+ * (`con_Admin_ProjectGatest_Approvals_Gallery_Header`), gate rows
+ * (`con_Admin_ProjectGates_DefaultClusterApproval_Item`), nested checklist-task rows
+ * (`gal_…_ChecklistDefaultApprovals` → `cnt_…_ChecklistDefaultApproval_Item`) and the "Add Task" row
+ * (`con_AddChecklistApproval`). Presentation only; every rule comes from `./rules`.
+ *
+ * Test ids (CONVENTIONS rule 16): each element carries its canvas control name; repeating rows
+ * append the row's stable id — the gate's `Project States` id, the task approval's id. Captions
+ * and aria-labels are the canvas captions (`LABELS`), never row data.
  *
  * No `aria-level` on rows of a plain table (invalid ARIA); the expanded state is exposed by
  * the collapse button's `aria-expanded` instead.
@@ -22,24 +29,31 @@ import { DisabledReason, ExpandToggle, ExpandToggleSpacer, RowActions, StatusPil
 import { palette, space } from "@/theme/tokens";
 import type { GatesDataset } from "@/data/adminGatesApprovals";
 import {
-  canAddTask, isGateToggleLocked, NO_PERMISSION_MESSAGE, parsePeople, participantCell, pmCell,
+  canAddTask, isGateToggleLocked, LABELS, NO_PERMISSION_MESSAGE, parsePeople, participantCell, pmCell,
   taskNotificationsCell, tasksOfGate, type GateRow, type ParticipantCell, type TaskRow,
 } from "./rules";
 
-/** Column widths from the canvas header labels (PGAS:447-672); Status/Action widened to fit. */
+/**
+ * The column headers, `lbl_Admin_ProjectGatest_Approvals_Header_*.Text` — each label verbatim
+ * (PGAS:447-672); `control` is the header label's canvas name. Widths from the canvas header
+ * labels; Status/Action widened to fit.
+ */
 const COLUMNS = [
-  { key: "description", label: "Description", width: 250 },
-  { key: "pm", label: "Portfolio Manager", width: 200 },
-  { key: "contributors", label: "Contributors", width: 180 },
-  { key: "approvers", label: "Approvers", width: 180 },
-  { key: "notifications", label: "Notifications", width: 180 },
-  { key: "status", label: "Status", width: 90 },
-  { key: "action", label: "Action", width: 96 },
+  { key: "description", label: "Description", width: 250, control: "lbl_Admin_ProjectGatest_Approvals_Header_Description" },
+  { key: "pm", label: "Portfolio Manager", width: 200, control: "lbl_Admin_ProjectGatest_Approvals_Header_PortfolioManager" },
+  { key: "contributors", label: "Contributors", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Contributors" },
+  { key: "approvers", label: "Approvers", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Approvers" },
+  { key: "notifications", label: "Notifications", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Notifications" },
+  { key: "status", label: "Status", width: 90, control: "lbl_Admin_ProjectGatest_Approvals_Header_Status" },
+  { key: "action", label: "Action", width: 96, control: "lbl_Admin_ProjectGatest_Approvals_Header_Actions" },
 ] as const;
 
 const TABLE_WIDTH = COLUMNS.reduce((sum, c) => sum + c.width, 0);
 
-/** Why "Add Task" is disabled (the texts of the former native `title`, unchanged). */
+/**
+ * Why "Add Task" is disabled, shown as its tooltip.
+ * DIVERGENCE: NEW — the canvas button (`but_…_Row_Edit_3.DisplayMode`) is just disabled, with no reason.
+ */
 const addTaskDisabledReason = (tasksAvailable: boolean) => (tasksAvailable
   ? "Every check list task of this gate already has an approval."
   : "Check list tasks are not available.");
@@ -161,19 +175,26 @@ export function GateTable(props: GateTableProps) {
     const notifications = parsePeople(t?.notifications);
     const addEnabled = tasksAvailable && canAddTask(dataset, row.state);
 
+    /** The gate row's stable id: its `Project States` row (a placeholder has no template id). */
+    const gid = row.state.id;
     body.push(
-      <TableRow key={`gate-${row.order}`} className={styles.gateRow} data-testid={`gate-row-${row.order}`}>
+      <TableRow key={`gate-${row.order}`} className={styles.gateRow} data-testid={`con_Admin_ProjectGates_DefaultClusterApproval_Item-${gid}`}>
         <TableCell className={styles.cell}>
           <div className={styles.descriptionCell}>
+            {/* `btn_…_Item_Collapse.Visible`: only while the gate has task rows. */}
             {tasks.length > 0 ? (
               <ExpandToggle
                 variant="icon24"
                 expanded={!isCollapsed}
-                label={`${isCollapsed ? "Expand" : "Collapse"} tasks of ${row.description}`}
+                label={isCollapsed ? LABELS.expand : LABELS.collapse}
+                testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_Collapse-${gid}`}
                 onToggle={() => props.onToggleCollapse(row.order)}
               />
             ) : <ExpandToggleSpacer variant="icon24" />}
-            <Text className={styles.gateName}>{row.description}</Text>
+            <Text className={styles.gateName} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ApprovalDescription-${gid}`}>
+              {row.description}
+            </Text>
+            {/* DIVERGENCE: NEW — the duplicate warning (see `buildGateRows`). */}
             {row.templateCount > 1 ? (
               <Tooltip
                 relationship="description"
@@ -184,17 +205,27 @@ export function GateTable(props: GateTableProps) {
             ) : null}
           </div>
         </TableCell>
-        <TableCell className={styles.cell}><PmCellView pmId={t?.pmId ?? null} people={dataset.people} showMail={false} /></TableCell>
-        <TableCell className={styles.cell}><PeopleCell cell={participantCell(contributors, "Contributors")} /></TableCell>
-        <TableCell className={styles.cell}><PeopleCell cell={participantCell(approvers, "Approvers")} /></TableCell>
-        <TableCell className={styles.cell}><PeopleCell cell={participantCell(notifications, "Notifications")} /></TableCell>
+        <TableCell className={styles.cell} data-testid={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_PortfolioManager-${gid}`}>
+          <PmCellView pmId={t?.pmId ?? null} people={dataset.people} showMail={false} />
+        </TableCell>
+        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ControllingApprovals-${gid}`}>
+          <PeopleCell cell={participantCell(contributors, "Contributors")} />
+        </TableCell>
+        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Approvers-${gid}`}>
+          <PeopleCell cell={participantCell(approvers, "Approvers")} />
+        </TableCell>
+        <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_Notifications-${gid}`}>
+          <PeopleCell cell={participantCell(notifications, "Notifications")} />
+        </TableCell>
         <TableCell className={styles.cell}>
+          {/* Caption "Active" / "Inactive" (`.Text`). The shared pill builds its own aria-label from `subject`. */}
           <StatusPill
             variant="toggle"
             active={t?.gateActive ?? false}
             locked={!canEdit || isGateToggleLocked(row)}
             pending={t ? isPending(t.id) : false}
             subject={`Gate ${row.description}`}
+            testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ToggleStauts-${gid}`}
             onToggle={() => props.onToggleGate(row)}
           />
         </TableCell>
@@ -202,14 +233,16 @@ export function GateTable(props: GateTableProps) {
           <RowActions
             tooltip="always" tone="brand"
             actions={[{
-              key: "edit", icon: <EditRegular />, tooltipText: "Edit",
-              label: `Edit approvers of ${row.description}`, onClick: () => props.onEditGate(row),
+              key: "edit", icon: <EditRegular />, label: LABELS.edit,
+              testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_Edit-${gid}`,
+              onClick: () => props.onEditGate(row),
             }]}
           />
         </TableCell>
       </TableRow>,
     );
 
+    // `gal_…_ChecklistDefaultApprovals.Visible`: hidden while the gate is collapsed.
     if (!isCollapsed) {
       for (const task of tasks) {
         const a = task.approval;
@@ -217,22 +250,37 @@ export function GateTable(props: GateTableProps) {
         const ta = parsePeople(a.approvers);
         const tn = parsePeople(a.notifications);
         body.push(
-          <TableRow key={`task-${a.id}`} data-testid={`task-row-${a.id}`}>
+          <TableRow key={`task-${a.id}`} data-testid={`cnt_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item-${a.id}`}>
             <TableCell className={mergeClasses(styles.cell, styles.taskCell)}>
               <span className={styles.treeLine} aria-hidden="true" />
-              <Text className={styles.taskName}>{task.checklist.name}</Text>
+              <Text
+                className={styles.taskName}
+                data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ApprovalDescription-${a.id}`}
+              >
+                {task.checklist.name}
+              </Text>
             </TableCell>
-            <TableCell className={styles.cell}><PmCellView pmId={a.pmId} people={dataset.people} showMail /></TableCell>
-            <TableCell className={styles.cell}><PeopleCell task cell={participantCell(tc, "Contributors")} /></TableCell>
-            <TableCell className={styles.cell}><PeopleCell task cell={participantCell(ta, "Approvers")} /></TableCell>
-            <TableCell className={styles.cell}><PeopleCell task cell={taskNotificationsCell(tc, ta, tn)} /></TableCell>
+            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_PortfolioManager-${a.id}`}>
+              <PmCellView pmId={a.pmId} people={dataset.people} showMail />
+            </TableCell>
+            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Contributors-${a.id}`}>
+              <PeopleCell task cell={participantCell(tc, "Contributors")} />
+            </TableCell>
+            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Approvers-${a.id}`}>
+              <PeopleCell task cell={participantCell(ta, "Approvers")} />
+            </TableCell>
+            <TableCell className={styles.cell} data-testid={`lbl_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Notifications-${a.id}`}>
+              <PeopleCell task cell={taskNotificationsCell(tc, ta, tn)} />
+            </TableCell>
             <TableCell className={styles.cell}>
+              {/* The canvas task pill has no `DisplayMode` (always enabled); here it needs admin access. */}
               <StatusPill
                 variant="toggle"
                 active={a.gateActive}
                 locked={!canEdit}
                 pending={isPending(a.id)}
                 subject={`Task ${task.checklist.name}`}
+                testId={`btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_ToggleStatus-${a.id}`}
                 onToggle={() => props.onToggleTask(task)}
               />
             </TableCell>
@@ -241,12 +289,14 @@ export function GateTable(props: GateTableProps) {
                 tooltip="always" tone="brand" gap={4}
                 actions={[
                   {
-                    key: "edit", icon: <EditRegular />, tooltipText: "Edit",
-                    label: `Edit approvers of task ${task.checklist.name}`, onClick: () => props.onEditTask(row, task),
+                    key: "edit", icon: <EditRegular />, label: LABELS.edit,
+                    testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Edit-${a.id}`,
+                    onClick: () => props.onEditTask(row, task),
                   },
                   {
-                    key: "delete", icon: <DeleteRegular />, tooltipText: "Delete", disabled: !canEdit,
-                    label: `Delete approval of task ${task.checklist.name}`, onClick: () => props.onDeleteTask(row, task),
+                    key: "delete", icon: <DeleteRegular />, label: LABELS.delete, disabled: !canEdit,
+                    testId: `btn_Admin_ProjectGates_DefaultClusterApproval_Item_ChecklistDefaultApproval_Item_Delete-${a.id}`,
+                    onClick: () => props.onDeleteTask(row, task),
                   },
                 ]}
               />
@@ -256,19 +306,20 @@ export function GateTable(props: GateTableProps) {
       }
     }
 
+    // `con_AddChecklistApproval` has no `Visible`, so Add Task stays while the gate is collapsed.
     body.push(
-      <TableRow key={`add-${row.order}`} className={styles.addTaskRow}>
+      <TableRow key={`add-${row.order}`} className={styles.addTaskRow} data-testid={`con_AddChecklistApproval-${gid}`}>
         <TableCell colSpan={COLUMNS.length}>
           {/* The disabled reason is a keyboard-reachable tooltip, not a native `title`. */}
           <DisabledReason reason={!canEdit ? NO_PERMISSION_MESSAGE : addEnabled ? null : addTaskDisabledReason(tasksAvailable)}>
             <Button
               className={styles.addTask} appearance="transparent" icon={<AddRegular />}
               disabled={!canEdit || !addEnabled}
-              aria-label={`Add task approval to ${row.description}`}
-              data-testid={`gates-add-task-${row.order}`}
+              aria-label={LABELS.addTask}
+              data-testid={`but_Admin_ProjectGatest_Approvals_Row_Edit_3-${gid}`}
               onClick={() => props.onAddTask(row)}
             >
-              Add Task
+              {LABELS.addTask}
             </Button>
           </DisabledReason>
         </TableCell>
@@ -278,11 +329,12 @@ export function GateTable(props: GateTableProps) {
 
   return (
     <div className={styles.scroller}>
-      <Table className={styles.table} aria-label="Gate approvals" size="small">
-        <TableHeader>
+      {/* The table's `aria-label` is NEW (the canvas gallery has no caption). */}
+      <Table className={styles.table} aria-label="Gate approvals" size="small" data-testid="gal_Admin_ProjectGates_DefaultApprovals_Clusters">
+        <TableHeader data-testid="con_Admin_ProjectGatest_Approvals_Gallery_Header">
           <TableRow>
             {COLUMNS.map((c) => (
-              <TableHeaderCell key={c.key} className={styles.headerCell} style={{ width: `${c.width}px` }}>
+              <TableHeaderCell key={c.key} className={styles.headerCell} style={{ width: `${c.width}px` }} data-testid={c.control}>
                 {c.label}
               </TableHeaderCell>
             ))}

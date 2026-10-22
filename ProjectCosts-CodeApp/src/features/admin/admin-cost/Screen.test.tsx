@@ -87,6 +87,29 @@ function Harness({ children }: { children: ReactNode }) {
 const isDisabled = (el: HTMLElement) => el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true";
 const openSection = (title: string) => fireEvent.click(screen.getByRole("button", { name: title }));
 
+/*
+ * Row controls are named by their canvas caption ("Edit", "+", "Add Period" …, CONVENTIONS rule
+ * 16), so a specific row's control is found by its canvas `data-testid` + the row's stable id.
+ */
+/** The fixture Land Lease contract's key (its sub-account id), its Period 1 and Period 2 row ids. */
+const LL_CONTRACT = fx.FX_LAND_LEASE_SUBACCOUNTS[0]?.id as string;
+const LL_P1 = fx.FX_OPEX_PERIODS[0]?.id as string;
+const LL_P2 = fx.FX_OPEX_PERIODS[1]?.id as string;
+/** The fixture DEVEX category "Development Expenses". */
+const DEVEX_CATEGORY = fx.fxDevexCost().categoryId as string;
+const T = {
+  addPeriod: (contract: string) => `btn_OpexCosts_Content_Subaccounts_CardBody_AddPeriod-${contract}`,
+  contractFold: (contract: string) => `Button2_1-${contract}`,
+  editContract: (row: string) => `btn_ICON_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Edit-${row}`,
+  editPeriod: (row: string) => `btn_ICON_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Edit_1-${row}`,
+  deleteContract: (row: string) => `ico_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Delete-${row}`,
+  deletePeriod: (row: string) => `ico_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_Delete_1-${row}`,
+  devexFold: (category: string) => `Button2_2-${category}`,
+  devexEdit: (cost: string) => `btn_DevexCapex_Content_StandardCosts_CardBody_CostsTable_Action_Edit-${cost}`,
+  addContractType: (section: string) => `cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar-${section}`,
+  sectionApply: (section: string) => `btn_Admin_Cost_Landlease_ApplyToLandlease-${section}`,
+};
+
 describe("CostsSettingsScreen", () => {
   beforeEach(() => {
     useFixtures.on = true; access.admin = true; mutateAsync.mockReset();
@@ -119,7 +142,7 @@ describe("CostsSettingsScreen", () => {
     openSection("Land Lease");
     const table = screen.getByRole("table", { name: "Land Lease standard contracts" });
     expect(within(table).getByText("COD + 7 Years 6 Months")).toBeInTheDocument();
-    expect(within(table).getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(within(table).getByTestId(T.addPeriod(LL_CONTRACT))).not.toHaveAttribute("aria-disabled", "true");
     // Delete on Period 1 and on the last period only.
     expect(within(table).getAllByRole("button", { name: /^Delete / })).toHaveLength(2);
   });
@@ -128,7 +151,7 @@ describe("CostsSettingsScreen", () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
     const table = screen.getByRole("table", { name: "Land Lease standard contracts" });
-    const add = within(table).getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" });
+    const add = within(table).getByTestId(T.addPeriod(LL_CONTRACT));
     expect(add).not.toBeDisabled();
     expect(add).not.toHaveAttribute("aria-disabled", "true");
     add.focus();
@@ -141,7 +164,7 @@ describe("CostsSettingsScreen", () => {
     openSection("DEVEX/CAPEX");
     expect(screen.getByText("Wind Turbine / Panels")).toBeInTheDocument();
     expect(screen.queryByText("1,234,567 EUR/MW(p)")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show the Development Expenses costs" }));
+    fireEvent.click(screen.getByTestId(T.devexFold(DEVEX_CATEGORY)));
     expect(screen.getByText("1,234,567 EUR/MW(p)")).toBeInTheDocument();
     expect(screen.getAllByText("1,3,5").length).toBeGreaterThan(0);
 
@@ -154,7 +177,7 @@ describe("CostsSettingsScreen", () => {
   it("UT-ADCOST-906 opens Edit Period with the inflation block read-only", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period : Land Lease WTG/ });
     expect(within(dialog).getByRole("switch", { name: "Inflation Profile" })).toBeDisabled();
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
@@ -163,7 +186,7 @@ describe("CostsSettingsScreen", () => {
   it("UT-ADCOST-907 asks before deleting a contract with the exact text", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Standard LL Land Lease WTG" }));
+    fireEvent.click(screen.getByTestId(T.deleteContract(LL_P1)));
     expect(await screen.findByText('Are you sure you want to delete the "Standard LL Land Lease WTG" contract and all related periods?')).toBeInTheDocument();
   });
 
@@ -171,7 +194,7 @@ describe("CostsSettingsScreen", () => {
     mutateAsync.mockRejectedValueOnce(new Error("Server busy"));
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]" }), { target: { value: "99" } });
     const save = within(dialog).getByRole("button", { name: "Save" });
@@ -184,13 +207,13 @@ describe("CostsSettingsScreen", () => {
   it("UT-ADCOST-909 asks before discarding edits on Cancel; an untouched panel closes directly", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     let dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /Edit Period/ })).not.toBeInTheDocument());
 
     // jsdom: tabster can leave a stale `aria-hidden` after the first drawer closes (06 §5.3).
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2", hidden: true }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     dialog = await screen.findByRole("dialog", { name: /Edit Period/, hidden: true });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]", hidden: true }), { target: { value: "99" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel", hidden: true }));
@@ -207,10 +230,15 @@ describe("CostsSettingsScreen", () => {
     const all = screen.getByRole("button", { name: "Apply to All" });
     expect(all).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(all);
-    const titles = ["DEVEX/CAPEX", "Operation & Maintenance", "Land Lease", "Other OPEX Costs"];
-    for (const t of titles) openSection(t);
-    for (const t of titles) {
-      const apply = screen.getByRole("button", { name: `Apply (${t})` });
+    const sections = [
+      { title: "DEVEX/CAPEX", key: "devex" }, { title: "Operation & Maintenance", key: "oAndM" },
+      { title: "Land Lease", key: "landLease" }, { title: "Other OPEX Costs", key: "other" },
+    ];
+    for (const s of sections) openSection(s.title);
+    for (const s of sections) {
+      const apply = screen.getByTestId(T.sectionApply(s.key));
+      // `btn_Admin_Cost_Landlease_ApplyToLandlease.AccessibleLabel`, verbatim.
+      expect(apply).toHaveAccessibleName("Apply standard costs to all relevant projects, this will override existing standard assumption cost");
       expect(apply).toHaveAttribute("aria-disabled", "true");
       fireEvent.click(apply);
     }
@@ -222,7 +250,7 @@ describe("CostsSettingsScreen", () => {
     mutateAsync.mockRejectedValueOnce(new OpexFollowUpError("Period 1 was saved, but its contract-level values could not be copied to the later periods.", "id", null));
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG" }));
+    fireEvent.click(screen.getByTestId(T.editContract(LL_P1)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Contract/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]" }), { target: { value: "99" } });
     const save = within(dialog).getByRole("button", { name: "Save" });
@@ -236,7 +264,7 @@ describe("CostsSettingsScreen", () => {
     mutateAsync.mockRejectedValueOnce(new ContractDeleteError(1, 2, new Error("x"), "No period is marked as last; Period 1 should be."));
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Standard LL Land Lease WTG" }));
+    fireEvent.click(screen.getByTestId(T.deleteContract(LL_P1)));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
     expect(await screen.findByText(
       "The contract could not be deleted. 1 of 2 row(s) were deleted before the failure; the remaining rows were not deleted. Reload and try again. The last-period flags are inconsistent: No period is marked as last; Period 1 should be.",
@@ -247,7 +275,7 @@ describe("CostsSettingsScreen", () => {
     mutateAsync.mockRejectedValueOnce(new DataError("update", { message: "denied" }, 403));
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]" }), { target: { value: "99" } });
     const save = within(dialog).getByRole("button", { name: "Save" });
@@ -260,9 +288,9 @@ describe("CostsSettingsScreen", () => {
     mutateAsync.mockResolvedValueOnce({ id: "x", propagated: 0 });
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Hide the periods of Standard LL Land Lease WTG" }));
+    fireEvent.click(screen.getByTestId(T.contractFold(LL_CONTRACT)));
     expect(screen.queryByText("Standard LL Land Lease WTG - 2")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG" }));
+    fireEvent.click(screen.getByTestId(T.editContract(LL_P1)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Contract/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]" }), { target: { value: "99" } });
     const save = within(dialog).getByRole("button", { name: "Save" });
@@ -278,7 +306,7 @@ describe("CostsSettingsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand Italy" }));
     fireEvent.click(screen.getByRole("button", { name: "Italy Wind" }));
     openSection("Operation & Maintenance");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard O&M Italy" }));
+    fireEvent.click(screen.getByTestId(T.editContract("it-om")));
     const dialog = await screen.findByRole("dialog", { name: /Edit Contract/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [EUR]" }), { target: { value: "99" } });
     const save = within(dialog).getByRole("button", { name: "Save" });
@@ -293,7 +321,7 @@ describe("CostsSettingsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand Poland" }));
     fireEvent.click(screen.getByRole("button", { name: "Poland Wind" }));
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     expect(within(dialog).getByRole("textbox", { name: "Fix Costs p.a. [PLN]" })).toBeInTheDocument();
     expect(within(dialog).getByRole("textbox", { name: "PLN/MWh p.a." })).toBeInTheDocument();
@@ -314,8 +342,8 @@ describe("CostsSettingsScreen", () => {
     overrides.devex = [fx.fxDevexCost({ id: "inactive", descriptionInput: "Old fee", description: "Standard Old permit - Old fee", subaccountId: "deactivated-sub" })];
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("DEVEX/CAPEX");
-    fireEvent.click(screen.getByRole("button", { name: "Show the Development Expenses costs" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit Old fee" }));
+    fireEvent.click(screen.getByTestId(T.devexFold(DEVEX_CATEGORY)));
+    fireEvent.click(screen.getByTestId(T.devexEdit("inactive")));
     const dialog = await screen.findByRole("dialog", { name: "Edit Cost : Standard Old permit - Old fee" });
     expect(within(dialog).getByText(MSG.subaccountInactive)).toBeInTheDocument();
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Description" }), { target: { value: "New fee" } });
@@ -327,7 +355,7 @@ describe("CostsSettingsScreen", () => {
     overrides.opex = [fx.fxPeriod({ id: "orphan", description: "Orphan row", landLeaseSubaccountId: undefined })];
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    const del = screen.getByRole("button", { name: "Delete Orphan row" });
+    const del = screen.getByTestId(T.deleteContract("orphan"));
     expect(del).toBeDisabled();
   });
 
@@ -360,19 +388,22 @@ describe("CostsSettingsScreen", () => {
     overrides.opex = [fx.fxPeriod({ id: "single", description: "Single period contract", isLastPeriodFlag: true })];
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    const toggle = screen.getByRole("button", { name: "Hide the periods of Single period contract" });
+    // The single-period contract's key is its (default) Land Lease sub-account.
+    const toggle = screen.getByTestId(T.contractFold(LL_CONTRACT));
     expect(toggle).toHaveTextContent("-");
-    expect(screen.getByRole("button", { name: "Add Period to Single period contract" })).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId(T.addPeriod(LL_CONTRACT))).toBeInTheDocument();
     fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: "Show the periods of Single period contract" })).toHaveTextContent("+");
-    expect(screen.queryByRole("button", { name: "Add Period to Single period contract" })).not.toBeInTheDocument();
+    expect(screen.getByTestId(T.contractFold(LL_CONTRACT))).toHaveTextContent("+");
+    expect(screen.getByTestId(T.contractFold(LL_CONTRACT))).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId(T.addPeriod(LL_CONTRACT))).not.toBeInTheDocument();
   });
 
   it("UT-ADCOST-923 a contract whose sub-account was deactivated opens with the stored sub-account name in the title", async () => {
     overrides.opex = [fx.fxPeriod({ id: "old", description: "Standard LL Old lease", landLeaseSubaccountId: "deactivated-ll", subaccountLabel: "Old lease", isLastPeriodFlag: true })];
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Old lease" }));
+    fireEvent.click(screen.getByTestId(T.editContract("old")));
     expect(await screen.findByRole("dialog", { name: "Edit Contract : Old lease" })).toBeInTheDocument();
   });
 
@@ -382,16 +413,16 @@ describe("CostsSettingsScreen", () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
     const table = screen.getByRole("table", { name: "Land Lease standard contracts" });
-    const add = within(table).getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" });
+    const add = within(table).getByTestId(T.addPeriod(LL_CONTRACT));
     expect(add).toHaveAttribute("aria-disabled", "true");
-    const delTail = within(table).getByRole("button", { name: "Delete Standard LL Land Lease WTG - 2" });
+    const delTail = within(table).getByTestId(T.deletePeriod(LL_P2));
     expect(delTail).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(delTail);
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     // The reason is shown as the button's tooltip (never a dead-end error after a click).
     fireEvent.pointerEnter(delTail);
     expect((await screen.findAllByText(MSG.inactivePeriods([3]))).length).toBeGreaterThan(0);
-    const delHead = within(table).getByRole("button", { name: "Delete Standard LL Land Lease WTG" });
+    const delHead = within(table).getByTestId(T.deleteContract(LL_P1));
     expect(delHead).not.toHaveAttribute("aria-disabled", "true");
     expect(delHead).not.toBeDisabled();
   });
@@ -400,8 +431,8 @@ describe("CostsSettingsScreen", () => {
     overrides.inactive = [{ id: "x", type: CONTRACT_TYPE.landLease, period: 2, landLeaseSubaccountId: "other-sub", opexSubaccountId: undefined }];
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    expect(screen.getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" })).not.toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Delete Standard LL Land Lease WTG - 2" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByTestId(T.addPeriod(LL_CONTRACT))).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByTestId(T.deletePeriod(LL_P2))).not.toHaveAttribute("aria-disabled", "true");
   });
 
   /* ── Shared components binding — the visual unifications ── */
@@ -420,7 +451,7 @@ describe("CostsSettingsScreen", () => {
   it("UT-ADCOST-927 the period drawer footer has no hint while the commercial figures are valid", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     const band = dialog.querySelector(".canvas-panel-footer");
     expect(band?.querySelectorAll("button")).toHaveLength(2);
@@ -443,7 +474,7 @@ describe("CostsSettingsScreen", () => {
   it("UT-ADCOST-930 the period drawer's computed values are read-only, not disabled", async () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     openSection("Land Lease");
-    fireEvent.click(screen.getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" }));
+    fireEvent.click(screen.getByTestId(T.editPeriod(LL_P2)));
     const dialog = await screen.findByRole("dialog", { name: /Edit Period/ });
     for (const name of ["Description", "Start Date", "Currency"]) {
       const box = within(dialog).getByRole("textbox", { name });
@@ -467,9 +498,9 @@ describe("CostsSettingsScreen", () => {
     openSection("Land Lease");
     expect(screen.getByRole("button", { name: "Add Cost" })).not.toHaveAttribute("aria-disabled", "true");
     const table = screen.getByRole("table", { name: "Land Lease standard contracts" });
-    expect(within(table).getByRole("button", { name: "Edit Standard LL Land Lease WTG - 2" })).not.toBeDisabled();
-    expect(within(table).getByRole("button", { name: "Delete Standard LL Land Lease WTG" })).not.toBeDisabled();
-    expect(within(table).getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(within(table).getByTestId(T.editPeriod(LL_P2))).not.toBeDisabled();
+    expect(within(table).getByTestId(T.deleteContract(LL_P1))).not.toBeDisabled();
+    expect(within(table).getByTestId(T.addPeriod(LL_CONTRACT))).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("UT-ADCOST-936 non-admin: the data shows but Add Cost, Add Contract Type, Edit, Delete and Add Period are disabled", async () => {
@@ -478,16 +509,16 @@ describe("CostsSettingsScreen", () => {
     openSection("DEVEX/CAPEX");
     openSection("Land Lease");
     expect(isDisabled(screen.getByRole("button", { name: "Add Cost" }))).toBe(true);
-    expect(screen.getByRole("button", { name: "Show the Development Expenses costs" })).toBeInTheDocument();
+    expect(screen.getByTestId(T.devexFold(DEVEX_CATEGORY))).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Land Lease standard contracts" });
     expect(within(table).getByText("COD + 7 Years 6 Months")).toBeInTheDocument();
-    for (const name of ["Edit Standard LL Land Lease WTG - 2", "Delete Standard LL Land Lease WTG", "Delete Standard LL Land Lease WTG - 2"]) {
-      const button = within(table).getByRole("button", { name });
+    for (const testId of [T.editPeriod(LL_P2), T.deleteContract(LL_P1), T.deletePeriod(LL_P2)]) {
+      const button = within(table).getByTestId(testId);
       expect(isDisabled(button)).toBe(true);
     }
-    expect(isDisabled(within(table).getByRole("button", { name: "Add Period to Standard LL Land Lease WTG" }))).toBe(true);
+    expect(isDisabled(within(table).getByTestId(T.addPeriod(LL_CONTRACT)))).toBe(true);
     // The Add Contract Type menu opens, but every sub-account item is disabled.
-    fireEvent.click(screen.getByRole("button", { name: "Add Contract Type (Land Lease)" }));
+    fireEvent.click(screen.getByTestId(T.addContractType("landLease")));
     const items = await screen.findAllByRole("menuitem");
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) expect(isDisabled(item)).toBe(true);

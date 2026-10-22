@@ -1,6 +1,18 @@
 /**
- * Check List Settings — pure business rules (no I/O). `L<n>` = line in the canvas
- * `Admin Project Default Checklists Screen.pa.yaml`.
+ * Check List Settings — pure business rules (no I/O). Canvas screen: `Admin Project Default
+ * Checklists Screen` (PM app), `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Project
+ * Default Checklists Screen.pa.yaml`. `L<n>` / `DCS:<n>` = a line in that file.
+ *
+ * Visible strings are the canvas's, verbatim (CONVENTIONS rule 7); each cites its
+ * `Control.Property`. Strings with no canvas counterpart say `NEW`. Behaviour that differs from
+ * the canvas is marked `SOURCE DEFECT:` (a canvas bug, fixed) or `DIVERGENCE:` (a deliberate new
+ * behaviour) — rule 8; see `ProjectDocs/app-docs/02-OPEN-DECISIONS.md` D18 and
+ * `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` §1.
+ *
+ * SOURCE DEFECT: the canvas screen has no permission check of its own (`OnVisible` never reads
+ * `gblCurrentUser`); entry is client-side hiding only (`ItemVisible: Or(IsApplicationAdministrator,
+ * IsControllerOwnData)` on the nav items). Here every write plan takes `canEdit` (`useAdminAccess`)
+ * and refuses without it. That is still not security: Dataverse must refuse the write too (D1).
  */
 import type {
   ChecklistCluster, ChecklistTab, ChecklistTask, OrderPatch, TaskForm,
@@ -14,40 +26,67 @@ import { OUT_OF_SCOPE_MESSAGE } from "./messages";
 
 /* ═══════════════════════════════════════════════════════════════ texts ══ */
 
-/** Lock tooltip, verbatim from the canvas (L518, L552, L578, L635). */
+/**
+ * `ico_Delete_…` / `ico_Edit_…` / `ico_ActivateDeactivate_…` /
+ * `ico_EnablelCompletionDate_TasksInClusterDefaultChecklist_AdminScreen.Tooltip` — verbatim
+ * (L518, L552, L578, L635).
+ */
 export const LOCK_TOOLTIP =
   "This Check List item is in use by a Project Gate. Delete the Project Gate to edit the Check List item.";
 
-/** Shown instead when the lock query itself failed: the rows fail CLOSED. */
+/**
+ * NEW — no canvas equivalent. DIVERGENCE: the canvas ran a `LookUp('Check List Default
+ * Approvals', …)` per row and property, so it had no "lock query failed" state. Here the lock set
+ * is one query; when it fails the rows fail CLOSED with this tooltip.
+ */
 export const LOCK_UNKNOWN_TOOLTIP =
   "It could not be checked whether this Check List item is in use by a Project Gate, so it cannot be changed right now.";
 
 /**
- * Shown while the lock query is still loading. Rows stay disabled (fail closed), but
- * they must not claim "in use by a Project Gate" before that is known.
+ * NEW — no canvas equivalent. Shown while the lock query is still loading. Rows stay disabled
+ * (fail closed), but they must not claim "in use by a Project Gate" before that is known.
  */
 export const LOCK_LOADING_TOOLTIP =
   "Checking whether this Check List item is in use by a Project Gate…";
 
-/** The list changed while the Reorder panel was open. */
+/** NEW — no canvas equivalent: the list changed while the Reorder panel was open. */
 export const REORDER_STALE_MESSAGE =
   "The items in this cluster changed while the panel was open. Cancel and open Reorder again to see the current list.";
 
-/** Blank-name validation text (L1051). */
+/** `lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage.Text` — verbatim (L1051-1055). */
 export const BLANK_NAME_MESSAGE = "Value cannot be blank.";
 
-/** `gblAppConstants.DefaultDefMaxLength`. */
+/**
+ * `gblAppConstants.DefaultDefMaxLength` (App.pa.yaml) — `txt_Admin_Checklist_Form_Fields_Name` /
+ * `…_HoldingDescription.MaxLength` and the denominator of both counters. 256, not
+ * `DefaultMiddleMaxLength` (100).
+ */
 export const MAX_TEXT_LENGTH = 256;
 
-/** Holding description cut (L659). */
+/** `lbl_HoldingDescriptionValue_TasksInClusterDefaultChecklist_AdminScreen.Text` — the 110-character cut (L659). */
 export const HOLDING_CUT = 110;
 
-/** Reorder help text. The canvas said "drag and drop"; this screen reorders with buttons. */
+/**
+ * DIVERGENCE: `TextCanvas1.Text` reads "To reorder drag and drop listed items" (L1542), because
+ * `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list. This panel is the shared
+ * `ReorderPanel` without dragging (Move up / Move down buttons only), so the hint says that
+ * instead. Restore the canvas text if dragging is enabled here (`listProps.draggable`).
+ */
 export const REORDER_HELP = "Use Move up and Move down to change the order of the listed items.";
+
+/**
+ * `lblAdmin_Reorder_Title.Text` — verbatim, INCLUDING the canvas misspelling "Reoder" (L1463).
+ * D18 corrected only "Decativate" and "Deleteing" on this screen; this typo stays as the canvas
+ * has it until the product owner decides otherwise (CONVENTIONS rule 7).
+ */
+export const REORDER_TITLE = "Reoder checklist";
 
 /* ════════════════════════════════════════════════════════════ captions ══ */
 
-/** Cluster caption mapping (L719-736). */
+/**
+ * `lbl_ClusterName_DefaultChecklist_AdminScreen.Text` — verbatim (L719-736). The canvas maps the
+ * stored `Project States` name through a `Switch`; any other name shows as stored.
+ */
 const CLUSTER_CAPTIONS: Readonly<Record<string, string>> = {
   "Draft": "Draft to Cluster 1",
   "Cluster 1": "Cluster 1 to Cluster 2",
@@ -62,13 +101,23 @@ export function clusterCaption(name: string): string {
   return CLUSTER_CAPTIONS[name] ?? name;
 }
 
-/** First 110 characters + " ..." when longer than 110. */
+/**
+ * `lbl_HoldingDescriptionValue_….Text: If(Len(x) > 110, $"{Left(x, 110)} ...", x)` — the first
+ * 110 characters + " ..." (note the space) when longer than 110 (L659).
+ */
 export function truncateHolding(text: string | null | undefined): string {
   const value = text ?? "";
   return value.length > HOLDING_CUT ? `${value.slice(0, HOLDING_CUT)} ...` : value;
 }
 
-/** Gate Relevance and Completion Date both read Yes/No; null → No. */
+/**
+ * `ico_EnablelCompletionDate_….Text: If(ThisItem.'Is Completion Date', "Yes", "No")` — verbatim
+ * (L630); a blank reads "No", as in the canvas.
+ *
+ * DIVERGENCE: the Gate Relevance cell uses this too. The canvas
+ * `lbl_GateRelevanceValue_….Text: =ThisItem.'Gate Relevance'` (L646) prints the Yes/No column's
+ * raw boolean text ("true" / "false"); this app shows "Yes" / "No" in both columns.
+ */
 export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
   return value === true ? "Yes" : "No";
 }
@@ -76,9 +125,13 @@ export function yesNo(value: boolean | null | undefined): "Yes" | "No" {
 /* ════════════════════════════════════════════════════════════════ tabs ══ */
 
 /**
- * `vsb_order` on the tab table is TEXT, so "10" sorted before "2" in the canvas.
- * Sort by the numeric value when the text is a number, non-numeric or blank Orders last, then
- * by the raw text, then by name.
+ * `tab_Admin_Project_Checklist_Association.Items: Sort('Checklist Country And Technologies',
+ * Order, SortOrder.Ascending)` (L231-236).
+ *
+ * SOURCE DEFECT (D18 e): `vsb_order` on this table is TEXT, so the canvas sorts "10" before "2".
+ * Here the numeric value is compared when the text is a number; non-numeric or blank Orders sort
+ * last, then by the raw text, then by name. The pre-port parity twin (`sortScopesCanvasParity`,
+ * UT-ADCHK-003c) was not carried over by the port.
  */
 export function tabSortKey(order: string | null | undefined): number {
   const text = (order ?? "").trim();
@@ -99,8 +152,17 @@ export function sortTabs<T extends Pick<ChecklistTab, "order" | "name">>(tabs: r
 }
 
 /**
- * The `?tab=` param when it names a known tab, otherwise the FIRST tab in
- * display order (the canvas picked the first by name, which may not be the left-most).
+ * The tab shown: the `?tab=` param when it names a known tab, otherwise the FIRST tab in display
+ * order.
+ *
+ * SOURCE DEFECT (D18 f): the canvas `OnVisible` sets `locSelectedCountryAndTechnology:
+ * First(SortByColumns('Checklist Country And Technologies', "vsb_name"))` (L23-28) — the first BY
+ * NAME — while the strip is sorted BY ORDER, so the pre-selected tab need not be the left-most.
+ * Here it is the left-most. The pre-port twin `defaultScopeCanvasParity` (UT-ADCHK-003b) was not
+ * carried over by the port.
+ *
+ * DIVERGENCE: the selected tab lives in the URL (`?tab=`); the canvas kept it in a context
+ * variable, so it did not survive a reload or a deep link.
  */
 export function resolveTabId(sortedTabs: readonly Pick<ChecklistTab, "id">[], requested: string | null): string | null {
   if (requested) {
@@ -121,8 +183,9 @@ export function resolveTabId(sortedTabs: readonly Pick<ChecklistTab, "id">[], re
 const orderOf = (t: Pick<ChecklistTask, "order">) => t.order ?? Number.NEGATIVE_INFINITY;
 
 /**
- * By Order ascending (blank Orders first, as in the canvas; ties, blanks
- * included, by name for a stable view). Used by the grid and the Reorder snapshot.
+ * By Order ascending (blank Orders first, as in the canvas). Used by the grid and the Reorder
+ * snapshot. Ties, blanks included, are broken by name for a stable view; the canvas left their
+ * order to Dataverse.
  */
 export function sortTasks<T extends Pick<ChecklistTask, "order" | "name">>(tasks: readonly T[]): T[] {
   return [...tasks].sort((a, b) => {
@@ -135,8 +198,10 @@ export function sortTasks<T extends Pick<ChecklistTask, "order" | "name">>(tasks
 }
 
 /**
- * Group a tab's tasks by cluster. Rows waiting for deletion are dropped (`null` To Delete
- * stays). Tasks whose cluster is not a visible cluster are not shown.
+ * Group a tab's tasks by cluster — `gal_TasksInClusterDefaultChecklist_AdminScreen.Items`
+ * (L454-466): same tab, same cluster, `Not('To Delete' = true)`, so a blank To Delete stays.
+ * The clusters are `Filter('Project States', 'Is Visible On Checklist')` (`OnVisible`, L32-46);
+ * a task whose cluster is not one of them is not shown.
  */
 export function groupTasksByCluster(
   tasks: readonly ChecklistTask[], clusters: readonly Pick<ChecklistCluster, "id">[],
@@ -157,15 +222,27 @@ export function groupTasksByCluster(
 }
 
 /**
- * `max(Order of the VISIBLE tasks in the cluster, default 0) + 1`. The canvas
- * counted every row, rows waiting for deletion included.
+ * The Order of a new task: `max(Order of the VISIBLE tasks in the cluster, default 0) + 1`.
+ *
+ * SOURCE DEFECT: the canvas captures `locTotalRows: CountRows(Filter('Project Default
+ * Checklists', <tab>, <cluster>))` when Add Task is CLICKED (L350-356) and writes
+ * `Order: locTotalRows + 1` (L1300). That count includes rows waiting for deletion, and a count is
+ * not a maximum, so after a delete or a renumber gap the new Order can collide with an existing
+ * one. Here the highest visible Order is used, read from the loaded group at save time.
  */
 export function nextOrder(visibleClusterTasks: readonly Pick<ChecklistTask, "order" | "toDelete">[]): number {
   // The shared `max(0, …orders) + 1` once rows waiting for deletion are dropped.
   return sharedNextOrder(visibleClusterTasks.filter((t) => !t.toDelete).map((t) => t.order));
 }
 
-/** Locked when a non-"Only Notifications" gate approval points at the task. */
+/**
+ * Locked when a gate approval that is not "Only Notifications" points at the task — the
+ * `DisplayMode` of all four row icons: `If(!IsBlank(LookUp('Check List Default Approvals',
+ * 'Project Default Check List'.'Project Default Checklist' = GUID(ThisItem.…) && 'Approval Mode'
+ * <> [@'Approval Mode'].'Only Notifications')), View/Disabled, Edit)` (L493-498). The id set is
+ * built by the data layer (`loadLockedTaskIds`), lower-cased; a blank Approval Mode locks, as
+ * Power Fx `Blank() <> X` is true.
+ */
 export function isLocked(taskId: string, lockedIds: ReadonlySet<string>): boolean {
   return lockedIds.has(taskId.toLowerCase());
 }
@@ -173,6 +250,7 @@ export function isLocked(taskId: string, lockedIds: ReadonlySet<string>): boolea
 /**
  * The lock state, with the lock query's own state. Only `free` enables the row's actions;
  * `loading` and `unknown` (query failed) both fail CLOSED, but with their own tooltip.
+ * DIVERGENCE: the canvas has neither state (see `LOCK_UNKNOWN_TOOLTIP`).
  */
 export type LockState = "free" | "locked" | "loading" | "unknown";
 
@@ -216,13 +294,24 @@ export function findGroup(
  * `reorderPatch(current, newIds)` — 1-based positions for the new id order, only
  * for rows whose Order changed; ids not in `current` are ignored. `moveItem(items, index, ±1)` —
  * out-of-range moves return the input. Both are the shared `domain/reorder` helpers.
+ *
+ * DIVERGENCE: `pcf_but_Admin_Checklist_Reorder_Buttons_Save.OnChange` writes
+ * `{Order: RecordItem.Position}` for EVERY listed row (`ForAll(… UpdateIf(…))`, L1652-1659). Here
+ * only the rows whose Order changed are written; each write starts one run of the sync flow, so
+ * the result is the same with fewer runs.
+ *
+ * SOURCE DEFECT (D18 j): the canvas reorder list (`colTasksToReorder`, L366-373) has no
+ * `To Delete` filter, so it lists and renumbers rows waiting for deletion. The snapshot here comes
+ * from the grid's groups, which exclude them.
  */
 export { moveBy as moveItem, reorderPatch } from "@/domain/reorder";
 
 /**
- * After deleting `deleted`, every OTHER visible row of the same group with a
- * greater Order moves up by one. Rows waiting for deletion are skipped (the canvas renumbered
- * them too).
+ * After deleting `deleted`, every OTHER visible row of the same group with a greater Order moves
+ * up by one — `cmp_DeleteChecklistItem_AdminScreen.OnConfirm` (L1736-1752).
+ *
+ * SOURCE DEFECT (D18 j): the canvas renumber filter has no `To Delete` test, so it also
+ * renumbers rows already waiting for deletion. Those rows are skipped here.
  *
  * A deleted row with a BLANK Order renumbers NOTHING. The canvas filter
  * `Order > locSelectedChecklistEntity.Order` (DCS:1742) is delegated to Dataverse, where a
@@ -249,9 +338,10 @@ export function snapshotGroup(tasks: readonly ChecklistTask[]): ReorderSnapshotR
 }
 
 /**
- * True when the live group no longer matches the snapshot the panel opened with — a
- * row was added or removed, or a row's Order changed (another user, a refetch after a partial
- * write). Saving a patch computed against the snapshot would then leave gaps or duplicates.
+ * NEW — no canvas equivalent (the canvas list was a one-off `ClearCollect`). True when the live
+ * group no longer matches the snapshot the panel opened with — a row was added or removed, or a
+ * row's Order changed (another user, a refetch after a partial write). Saving a patch computed
+ * against the snapshot would then leave gaps or duplicates.
  */
 export function reorderSnapshotStale(
   snapshot: readonly Pick<ChecklistTask, "id" | "order">[],
@@ -265,6 +355,8 @@ export function reorderSnapshotStale(
 /**
  * Save is enabled only when the order differs from the opening order. The shared
  * `orderChanged` accepts id strings (the `ReorderPanel` uses it for its dirty state).
+ * DIVERGENCE: `pcf_but_Admin_Checklist_Reorder_Buttons_Save` has no `DisplayMode`, so the canvas
+ * Save is always enabled.
  */
 export { orderChanged } from "@/domain/reorder";
 
@@ -274,7 +366,12 @@ export interface TaskFormErrors {
   name?: string;
 }
 
-/** `trim(name)` must not be empty. Lengths are capped by the inputs. */
+/**
+ * The whole save gate: `pcf_but_Admin_Checklist_Form_Buttons_Save.DisplayMode` is Disabled while
+ * `lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage.Visible = IsBlank(Trim(txt_…_Name.Value))`
+ * (L1260-1265). Lengths are capped by the inputs' `MaxLength`, so the length message is NEW and
+ * only a pasted-over-limit guard.
+ */
 export function validateTask(form: Pick<TaskForm, "name" | "holdingDescription">): TaskFormErrors {
   const errors: TaskFormErrors = {};
   if (form.name.trim() === "") errors.name = BLANK_NAME_MESSAGE;
@@ -285,7 +382,11 @@ export function validateTask(form: Pick<TaskForm, "name" | "holdingDescription">
 export const isTaskFormValid = (form: Pick<TaskForm, "name" | "holdingDescription">): boolean =>
   Object.keys(validateTask(form)).length === 0;
 
-/** New tasks default to INACTIVE, as in the canvas (L1208). */
+/**
+ * New tasks default to INACTIVE, as in the canvas: `tgl_Active_ChecklistForm.Checked:
+ * If(locSelectedChecklistEntity.Status = …Active, true, false)` is false with no selection
+ * (L1208). Kept by product decision (D18 a).
+ */
 export const NEW_TASK_DEFAULT_ACTIVE = false;
 
 export function emptyTaskForm(): TaskForm {
@@ -298,11 +399,14 @@ export function emptyTaskForm(): TaskForm {
 /**
  * The Add/Edit panel is dirty when its form differs from the values it opened with (shared
  * `isDirty`): both forms come from `emptyTaskForm` / `formFromTask` (same keys, same order).
+ * DIVERGENCE: drives the "Discard changes?" prompt; the canvas Cancel and ✕ just reset and close
+ * (`Select(but_Admin_Checklist_Form_Buttons_Reset)`, L972, L1392-1399).
  */
 export function taskFormChanged(seed: TaskForm, form: TaskForm): boolean {
   return isDirty(form, seed);
 }
 
+/** The Edit panel's seed: each field's `Default`/`Value`/`Checked` from `locSelectedChecklistEntity` (L1077, L1156, L1188, L1198, L1208). */
 export function formFromTask(task: ChecklistTask): TaskForm {
   return {
     name: task.name,
@@ -313,20 +417,25 @@ export function formFromTask(task: ChecklistTask): TaskForm {
   };
 }
 
-/** `n/256` counter. */
+/** `lbl_Admin_Checklist_Form_Fields_Name_Details.Text: $"{Len(…)}/{gblAppConstants.DefaultDefMaxLength}"` — the `n/256` counter (L1121, L1174). */
 export const counter = (value: string): string => `${value.length}/${MAX_TEXT_LENGTH}`;
 
 /* ═══════════════════════════════════════════════════════════ write plans ══ */
 
 /**
  * The single-request writes of this screen, built here as `WritePlan`s and run by
- * `data/runPlan.ts` → `data/executePlan.ts` (CONVENTIONS rule 17 / D36). Each is ONE guarded
- * update of the task table — the same request the data layer's `updateTask` /
- * `toggleCompletionDate` / `setTaskActive` sent, including the upsert guard's existence read; the
- * `label` keeps the V9 operation text (`OPERATION.update`) verbatim, so failure texts are unchanged.
+ * `data/runPlan.ts` → `data/executePlan.ts` (CONVENTIONS rule 17, documented exception in
+ * 09-APPLICATION-SETTINGS-PORT-OPEN-POINTS §1). Each is ONE guarded update of the task table —
+ * the same request the data layer's former `updateTask` / `toggleCompletionDate` / `setTaskActive`
+ * sent, including the guard's existence read; the `label` keeps the data layer's operation text
+ * (`OPERATION.update`) word for word, so failure texts are unchanged.
  *
- * The create flow (create-then-update, `createTask`) and the multi-step KEEP flows (soft delete +
- * renumber, reorder) stay in `data/adminDefaultChecklists.ts`.
+ * DIVERGENCE (guard): a row deleted meanwhile is refused ("record deleted") instead of being
+ * written; the canvas `Patch(…, LookUp(…), …)` simply failed or wrote nothing.
+ *
+ * NOT plans (doc 09 §1 says otherwise — this is the code): the create flow (create-then-set-
+ * status, `createTask`), the soft delete + renumber (`softDeleteTask`) and the reorder
+ * (`writeOrders`) stay per-row writes in `data/adminDefaultChecklists.ts`.
  *
  * A plan refuses itself when the user is not an admin. The screen already refuses first (it puts
  * the message on the right surface — panel vs toast), so this is the second line of defence.
@@ -342,7 +451,12 @@ function singleWrite(opts: PlanOptions, write: PlannedWrite): WritePlan {
   return plan;
 }
 
-/** Edit mode: one guarded PATCH of the edit payload (texts, flags, status and the tab's BU). */
+/**
+ * Edit mode: one guarded PATCH of the edit payload — the second `Patch` of
+ * `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` (L1323-1346): trimmed Name and Holding Task
+ * Description, Gate Relevance, Is Completion Date, Status AND Status Reason, and the tab's Owning
+ * Business Unit.
+ */
 export function planUpdateTask(
   id: string, form: TaskForm, tab: ChecklistTab | undefined, opts: PlanOptions,
 ): WritePlan {
@@ -353,7 +467,12 @@ export function planUpdateTask(
   ));
 }
 
-/** Completion Date toggle: one guarded PATCH; `null` becomes `true` (Power Fx `Not(blank)`). */
+/**
+ * Completion Date toggle — `ico_EnablelCompletionDate_….OnChange: Patch(…, {'Is Completion Date':
+ * Not(ThisItem.'Is Completion Date')})` (L610-617): one guarded PATCH, no confirmation; `null`
+ * becomes `true` (Power Fx `Not(blank)`). The canvas then runs `Refresh('Project Default
+ * Approvals')`; `useToggleCompletion` refetches the locks for that.
+ */
 export function planToggleCompletion(
   task: Pick<ChecklistTask, "id" | "isCompletionDate">, opts: PlanOptions,
 ): WritePlan {
@@ -363,7 +482,15 @@ export function planToggleCompletion(
   ));
 }
 
-/** Activate / deactivate: one guarded PATCH of statecode AND statuscode, as the form save sends. */
+/**
+ * Activate / deactivate from the row: one guarded PATCH of statecode AND statuscode, as the form
+ * save sends.
+ *
+ * SOURCE DEFECT (D18 k): `cmp_ActivateDeactiveChecklistItem_AdminScreen.OnConfirm` patches
+ * `Status` only (L1777-1787), while the panel save writes `Status` and `Status Reason`, so a row
+ * deactivated from the grid kept an Active Status Reason. Both paths write both here. The pre-port
+ * twin `toggleActiveCanvasParity` (UT-ADCHK-017b) was not carried over by the port.
+ */
 export function planSetActive(id: string, isActive: boolean, opts: PlanOptions): WritePlan {
   return singleWrite(opts, guardedUpdate(
     TASK_SET, id, statusPayload(isActive),
@@ -373,7 +500,15 @@ export function planSetActive(id: string, isActive: boolean, opts: PlanOptions):
 
 /* ═══════════════════════════════════════════════════ dialogs and busy ══ */
 
-/** Status dialog (typo "Decativate" fixed); it names the ROW. */
+/**
+ * `cmp_ActivateDeactiveChecklistItem_AdminScreen` (L1757-1791):
+ *   - `Title: $"{If(…Active, "Decativate", "Activate")} checklist item?"`
+ *   - `ConfirmButtonText: If(…Active, "Decativate", "Activate")`
+ *   - `Description: "Are you sure that you want to change status of task """ & Name & """?"` — verbatim.
+ *
+ * SOURCE DEFECT (D18 g): "Decativate" is misspelt in the title and the confirm button; both read
+ * "Deactivate" here (original spelling kept in this comment, rule 7).
+ */
 export function statusDialog(task: Pick<ChecklistTask, "name" | "isActive">) {
   const verb = task.isActive ? "Deactivate" : "Activate";
   return {
@@ -384,8 +519,13 @@ export function statusDialog(task: Pick<ChecklistTask, "name" | "isActive">) {
 }
 
 /**
- * Delete dialog. The canvas said "permanently delete", which is not what happens: the row is
- * flagged and the sync flow does the deleting. The text says so.
+ * `cmp_DeleteChecklistItem_AdminScreen` (L1700-1756): `Title` "Delete checklist item?" and
+ * `ConfirmButtonText` "Delete" — verbatim.
+ *
+ * DIVERGENCE: the canvas `Description` reads `"Are you sure that you want to permanently delete
+ * task """ & Name & """?"`. Nothing is deleted permanently by the click: the row is flagged
+ * `To Delete` and the sync flow `SynchroniseProjectTaskList-Add_Update` does the deleting. The
+ * text here says what really happens (UT-ADCHK-048).
  */
 export function deleteDialog(task: Pick<ChecklistTask, "name">) {
   return {
@@ -398,19 +538,46 @@ export function deleteDialog(task: Pick<ChecklistTask, "name">) {
   };
 }
 
-/** Busy texts (the canvas built them but never showed them; "Deleteing" fixed). */
+/**
+ * The progress texts (`locAdminLoadingDialogText`).
+ *
+ * SOURCE DEFECT (D18 h): the canvas sets `locAdminLoadingDialog` / `locAdminLoadingDialogText`
+ * but the screen has NO loading pop-up control, so none of these texts was ever shown. Here they
+ * are the busy overlay / row spinner label.
+ */
 export const busyText = {
+  /**
+   * `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` — `$"Checklist item
+   * '{txt_Admin_Checklist_Form_Fields_Name.Value}' will be saved, please wait..."` (L1287),
+   * verbatim; the name is trimmed here. Also the row Activate/Deactivate text
+   * (`cmp_ActivateDeactiveChecklistItem_AdminScreen.OnConfirm`, L1773). SOURCE DEFECT there: the
+   * canvas names the Add/Edit panel's text box, which is empty or stale for a row action; the
+   * screen passes the row's name.
+   */
   save: (name: string) => `Checklist item '${name.trim()}' will be saved, please wait...`,
+  /** `ico_EnablelCompletionDate_….OnChange` — verbatim (L604). */
   completion: (name: string) => `Completion Date for '${name}' will be changed, please wait...`,
+  /** `pcf_but_Admin_Checklist_Reorder_Buttons_Save.OnChange` — verbatim (L1649). */
   reorder: () => "New order will be saved, please wait...",
+  /**
+   * `cmp_DeleteChecklistItem_AdminScreen.OnConfirm` — `$"Deleteing item
+   * '{txt_Admin_Checklist_Form_Fields_Name.Value}', please wait..."` (L1717). SOURCE DEFECT (D18 i):
+   * misspelt ("Deleteing", original kept here) and it names the panel's text box, not the row.
+   * Here: "Deleting" and the row's name.
+   */
   remove: (name: string) => `Deleting item '${name}', please wait...`,
 };
 
-/** Success texts (the canvas' own, L620/L1351, plus the ones it never wrote). */
+/** The success toasts. */
 export const successText = {
+  /** `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange` — verbatim (L1351). */
   save: "Checklist item was successfully saved.",
+  /** `ico_EnablelCompletionDate_….OnChange` — verbatim (L620). */
   completion: "Completion Date was successfully changed.",
+  /** NEW — no canvas equivalent: the canvas row status change sets no result text. */
   status: (isActive: boolean) => `Checklist item was successfully ${isActive ? "activated" : "deactivated"}.`,
+  /** NEW — no canvas equivalent: the canvas reorder save sets no result text. */
   reorder: "New order was successfully saved.",
+  /** NEW — no canvas equivalent: the canvas delete sets no result text (see `deleteDialog`). */
   remove: "Checklist item was deleted. It disappears from project checklists once synchronisation has finished.",
 };

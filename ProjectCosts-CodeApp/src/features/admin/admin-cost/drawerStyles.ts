@@ -1,8 +1,12 @@
 /**
  * Styles shared by the two side panels.
  *
- * ONE error colour for both panels (`palette.Error`, #B22727): the canvas used #B22727 in the
- * contract panel and #d20532 in the DEVEX panel (a canvas defect).
+ * DIVERGENCE: ONE error colour for both panels (`palette.Error`, #B22727). The canvas uses #B22727
+ * in the contract panel and #d20532 in the DEVEX panel (a canvas inconsistency).
+ *
+ * The inputs are italic `themePrimary`, as the canvas inputs are (e.g.
+ * `txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1`: `FontColor: themePrimary`,
+ * `FontItalic: true`).
  */
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { palette } from "@/theme/tokens";
@@ -23,4 +27,5 @@ export const useDrawerStyles = makeStyles({
   inline: { display: "flex", columnGap: "12px", alignItems: "flex-end", flexWrap: "wrap" },
   commentBlock: { position: "relative" },
   counter: { position: "absolute", top: "0", right: "0", fontSize: "12px", color: palette.black },
-  readOnlyNote: { color: tokens.colorNeutralForeground3, fontSize: "12px" },});
+  readOnlyNote: { color: tokens.colorNeutralForeground3, fontSize: "12px" },
+});

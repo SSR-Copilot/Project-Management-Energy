@@ -54,11 +54,12 @@ afterEach(() => {
 });
 
 describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
+  // The combobox is named by the field caption (CONVENTIONS rule 16).
   it("UT-ADGATE-701 is a named combobox; type 'mü' → ArrowDown → Enter adds the person, keyboard only", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<Harness><Controlled onChange={onChange} /></Harness>);
-    const input = screen.getByRole("combobox", { name: "Search Approvers" });
+    const input = screen.getByRole("combobox", { name: "Approvers" });
     expect(input).toHaveAttribute("aria-expanded", "false");
 
     await user.click(input);
@@ -85,7 +86,7 @@ describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<Harness><Controlled onChange={onChange} /></Harness>);
-    const input = screen.getByRole("combobox", { name: "Search Approvers" });
+    const input = screen.getByRole("combobox", { name: "Approvers" });
     await user.click(input);
     await user.keyboard("mü");
     await screen.findByRole("listbox", { name: "Suggested Approvers" });
@@ -109,7 +110,7 @@ describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
         </div>
       </Harness>,
     );
-    const input = screen.getByRole("combobox", { name: "Search Approvers" });
+    const input = screen.getByRole("combobox", { name: "Approvers" });
     await user.click(input);
     await user.keyboard("mü");
     await screen.findByRole("listbox", { name: "Suggested Approvers" });
@@ -123,7 +124,7 @@ describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
   it("UT-ADGATE-704 already-selected people are not suggested", async () => {
     const user = userEvent.setup();
     render(<Harness><Controlled initial={[anna]} /></Harness>);
-    await user.click(screen.getByRole("combobox", { name: "Search Approvers" }));
+    await user.click(screen.getByRole("combobox", { name: "Approvers" }));
     await user.keyboard("mü");
     const listbox = await screen.findByRole("listbox", { name: "Suggested Approvers" });
     expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual([expect.stringContaining("Max Müller")]);
@@ -134,11 +135,11 @@ describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
     repo.searchPeople.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<Harness><Controlled /></Harness>);
-    await user.click(screen.getByRole("combobox", { name: "Search Approvers" }));
+    await user.click(screen.getByRole("combobox", { name: "Approvers" }));
     await user.keyboard("zz");
     const status = await screen.findByText("No matches");
     expect(status).toHaveAttribute("role", "status");
-    const input = screen.getByRole("combobox", { name: "Search Approvers" });
+    const input = screen.getByRole("combobox", { name: "Approvers" });
     expect(input.getAttribute("aria-describedby")).toContain(status.id);
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
@@ -146,7 +147,7 @@ describe("PeoplePickerField (keyboard)", { timeout: 20_000 }, () => {
   it("UT-ADGATE-706 the maximum hides the search box and shows the hint (Portfolio Manager = 1)", async () => {
     const user = userEvent.setup();
     render(<Harness><Controlled limit={1} /></Harness>);
-    await user.click(screen.getByRole("combobox", { name: "Search Approvers" }));
+    await user.click(screen.getByRole("combobox", { name: "Approvers" }));
     await user.keyboard("mü");
     await screen.findByRole("listbox", { name: "Suggested Approvers" });
     await user.keyboard("{ArrowDown}{Enter}");

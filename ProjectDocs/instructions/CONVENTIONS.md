@@ -136,6 +136,11 @@ development sessions and is recorded here because the README doesn't carry it ye
     - **Exceptions:** a deliberate per-screen variant (different canvas formula, message or
       signature) stays local but cites its canvas source. Re-check `npx -y knip@5` and the
       duplicate audit before a release (see below).
+    - **Admin write-path exception (D36 §3):** the Application Settings screens run their
+      single-request writes as `WritePlan`s through `data/runPlan.ts`, and keep their
+      multi-request flows (ownership re-check, partial-save retry, cascade deactivate,
+      multi-phase deletes) in the `data/admin*.ts` modules. No bulk Dataverse services
+      (`CreateMultiple` / `UpdateMultiple` / `UpsertMultiple`).
 18. **Date-only values are formatted from LOCAL parts, never `toISOString()`.** Use `dateOnly`
     from `data/odata.ts`. `toISOString().slice(0, 10)` stores the previous day for any user
     east of UTC, which includes India and the Netherlands.
@@ -213,7 +218,8 @@ it. Lint warnings do not fail the gate, but do not add new ones.
 Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failure.
 
 1. **Clean install.** `npm ci`, so the build uses exactly the lockfile.
-2. **Data sources present.** `npm run check:power` must report 38 registered and 0 problems.
+2. **Data sources present.** `npm run check:power` must report 81 registered and 0 problems
+   (count as of 22 Oct 2026; it grows as screens register tables).
    `.power/` is git-ignored, so on a fresh checkout regenerate it first: re-add each table in
    `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, then
    re-run the check.
@@ -229,7 +235,8 @@ Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failur
    - Open Project Overview and each of the five Cost screens (Capex, Contracts, Opex, Land Lease,
      Add Costs from Table) on a test project. On each, add, edit and delete a record, then
      reload to confirm the change persisted.
-   - The Admin and PM screens show their not-connected notice.
+   - Do the same on the six Admin screens and the ten PM screens: all are connected (D18–D36).
+     Creating a project and anything that starts an approval flow stay disabled.
 6. **Right environment.** `pac auth list` and `pac org who` must both show VSBCloud_Dev
    (environment `be41add6-6f60-ebb0-9c73-2480d6bc615d`, the one in `power.config.json`).
    `pac code push` deploys to the ACTIVE profile.

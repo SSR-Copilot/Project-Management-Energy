@@ -1,10 +1,15 @@
 /**
- * F2 command row (ACS:993-1251): "Add Contract Type" menu (O&M / Land Lease / Other) or
- * "Add Cost" (DEVEX/CAPEX).
+ * F2 command row (ACS:993-1251, `con_LandLease_Content_Subaccounts_CardBody_Costs_Command_Buttons`):
+ * the "Add Contract Type" menu (`cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar`,
+ * O&M / Land Lease / Other) or "Add Cost" (`btn_Admin_Cost_DevexCapex_AddCost`, DEVEX/CAPEX).
  *
  * The parent menu item only opens the menu. Each child is disabled when that
- * sub-account already has a contract in the scope or when creating is not permitted.
+ * sub-account already has a contract in the scope (the canvas `ItemEnabled: CountIf(…) = 0`)
+ * or when creating is not permitted.
  * "Apply" is drawn disabled with its info text, as in the canvas (`ApplyStrip`).
+ *
+ * The row is repeated per accordion section (canvas `Gallery1`), so each canvas name carries the
+ * section key as a suffix (CONVENTIONS rule 16).
  */
 import {
   Button, Menu, MenuButton, MenuItem, MenuList, MenuPopover, MenuTrigger, Toolbar, makeStyles,
@@ -28,7 +33,7 @@ const useStyles = makeStyles({
 
 export interface CategoryCommandRowProps {
   title: string;
-  /** `CostCategoryDef.key` — the stem of this row's test ids. */
+  /** `CostCategoryDef.key` — the suffix of this row's repeated canvas test ids. */
   sectionKey: string;
   /** DEVEX: Add Cost; otherwise the contract menu. */
   kind: "devex" | "contract";
@@ -42,16 +47,21 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
   const styles = useStyles();
   const brand = useBrandButtonStyles();
   return (
-    <Toolbar className={styles.row} aria-label={`${title} actions`}>
+    <Toolbar
+      className={styles.row}
+      aria-label={`${title} actions`}
+      data-testid={`con_LandLease_Content_Subaccounts_CardBody_Costs_Command_Buttons-${sectionKey}`}
+    >
       {kind === "devex" ? (
         <div className={styles.leadDevex}>
+          {/* `btn_Admin_Cost_DevexCapex_AddCost.Text` — "Add Cost", verbatim; no AccessibleLabel. Only on the DEVEX/CAPEX row. */}
           <Button
             appearance="outline"
             className={brand.brandOutline}
             icon={<AddFilled />}
             disabled={!canCreate}
             aria-label="Add Cost"
-            data-testid="cost-devex-add"
+            data-testid="btn_Admin_Cost_DevexCapex_AddCost"
             onClick={onAddCost}
           >
             Add Cost
@@ -61,11 +71,16 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
         <div className={styles.leadContract}>
         <Menu>
           <MenuTrigger disableButtonEnhancement>
+            {/*
+              `cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar.Items` root item —
+              `ItemDisplayName: "Add Contract Type"`, verbatim. The menu button stays enabled for
+              a non-admin (the canvas root is `ItemEnabled: true`); its items are disabled.
+            */}
             <MenuButton
               appearance="transparent"
               icon={<MoreHorizontalRegular />}
-              aria-label={`Add Contract Type (${title})`}
-              data-testid={`cost-add-contract-${sectionKey}`}
+              aria-label="Add Contract Type"
+              data-testid={`cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar-${sectionKey}`}
             >
               Add Contract Type
             </MenuButton>
@@ -73,6 +88,7 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
           <MenuPopover>
             <MenuList>
               {menuItems.length === 0 ? (
+                // NEW — no canvas equivalent: the canvas menu simply has no children here.
                 <MenuItem
                   disabled
                   aria-label="No sub-accounts available"
@@ -82,11 +98,13 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
                 </MenuItem>
               ) : null}
               {menuItems.map((item) => (
+                // One child per sub-account: `ItemDisplayName` (the sub-account name, or the
+                // "TCMA" / "E&CM" relabel) is the visible caption and the name; keyed by `ItemGUID`.
                 <MenuItem
                   key={item.id}
                   disabled={item.disabled || !canCreate}
-                  aria-label={item.disabled ? `${item.label} (contract already exists)` : item.label}
-                  data-testid={`cost-add-contract-${sectionKey}-${item.id}`}
+                  aria-label={item.label}
+                  data-testid={`cmp_Admin_Cost_LandLease_AddStandardContractType_CommandBar-${sectionKey}-${item.id}`}
                   onClick={() => onAddContract?.(item)}
                 >
                   {item.label}
@@ -97,7 +115,7 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
         </Menu>
         </div>
       )}
-      <ApplyStrip scope="section" title={title} sectionKey={sectionKey} />
+      <ApplyStrip scope="section" sectionKey={sectionKey} />
     </Toolbar>
   );
 }

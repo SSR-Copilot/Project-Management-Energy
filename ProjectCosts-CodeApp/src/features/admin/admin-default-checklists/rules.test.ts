@@ -1,6 +1,6 @@
 /**
- * Check List Settings — business rules. Each `it` names the FR/DR/AC it covers in
- * `06-code-app-requirements/01-build-requirements.md`.
+ * Check List Settings — business rules (`./rules.ts`). Each `it` carries a stable `UT-ADCHK-NNN`
+ * id (CONVENTIONS rule 13); the canvas formula each rule ports is cited in `rules.ts`.
  */
 import { describe, expect, it } from "vitest";
 import type { ChecklistTab, ChecklistTask, TaskForm } from "@/data/adminDefaultChecklists";

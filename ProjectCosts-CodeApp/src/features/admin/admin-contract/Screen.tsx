@@ -1,12 +1,23 @@
 /**
  * Application Settings — Contracts (BoP standard-assumption contracts). Replaces the canvas
- * `Admin Contract Screen`. Composition only: rules in `./rules.ts`, Dataverse in
- * `@/data/adminContract.ts`, query wiring in `./hooks.ts`.
+ * `Admin Contract Screen` (PM app,
+ * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Contract Screen.pa.yaml`).
+ * Composition only: rules in `./rules.ts`, Dataverse in `@/data/adminContract.ts`, query wiring in
+ * `./hooks.ts`. Canvas map (each `data-testid` is the canvas control name):
  *
- * Rendered at master's `/admin/contract` inside the app shell, which gates `/admin/*`. Within the
- * screen `useAdminAccess` (Application Administrator / Controller Own Data) gates every write
- * command: Add, Edit, Delete and Save are disabled for anyone else, as before the port. Writes are
- * server-enforced (`serverEnforcedProvider`); a 403 shows `permissionMessage`.
+ *   cmp_AdminContraacts_NestedCountryPickerColumn  country rail (`testIdPrefix`)
+ *   con_AdminContract_Selected_Country_Technology  scope heading + the two Add buttons
+ *   con_AdminContract_ApplyAll_Apply_Tracking      the disabled "Apply to All" bar
+ *   gal_AdminContracts_StandardAssumptions_Updated contract cards (`ContractCard`)
+ *   con_AdminContracrt_RightPanel_NewEditContract  the New / Edit panel (`ContractPanel`)
+ *   cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1  delete confirmation
+ *   cmp_PopUp_Loading_AdminBoPContracts            the "Please wait, …" overlays
+ *
+ * The app shell gates `/admin/*`. Within the screen `useAdminAccess` (Application Administrator /
+ * Controller Own Data) gates every write command: Add, Edit, Delete and Save are disabled for
+ * anyone else. Writes are server-enforced (`serverEnforcedProvider`); a 403 shows
+ * `permissionMessage`.
+ * DIVERGENCE: the canvas screen has no permission signal at all; every command is enabled.
  *
  * Shared modules: the Country / Technology picker (`CountryTechnologyPicker` +
  * `useCountryTechnologyUrlSelection`, `?country&tech`, push history), the active-countries read,
@@ -14,6 +25,10 @@
  * Reusable components: `QueryStates` / `useQueryHealth`, `ScopeHeaderBand`,
  * `DisabledReason`, `NoticeBar`, `usePanelState`, `useToggleSet`, `useConfirmDialog`,
  * `useTablePrivileges`, and the three-way close prompt through `FormPanel closePrompt`.
+ *
+ * DIVERGENCE: the success / failure toasts ("Contract saved", "Contract deleted", the
+ * `messages.ts` texts), the loading and empty states and the DevCo Retry bar have no canvas
+ * equivalent (CONVENTIONS rule 19).
  */
 import { useEffect, useMemo, useRef } from "react";
 import { Button, makeStyles, mergeClasses } from "@fluentui/react-components";
@@ -39,7 +54,7 @@ import { CONTRACT_TECHNOLOGIES, technologyOptionLabel } from "@/domain/technolog
 import { useActiveCountries } from "@/data/countries";
 import { ContractSaveError, ENTITY, OwnershipConflictError, type SaveContractInput } from "@/data/adminContract";
 import {
-  CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, breadcrumbText, buildAccountTree,
+  CARD_TEXT, CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, breadcrumbText, buildAccountTree,
   canSave, classifyAccounts, closeDialogText, closePrompt, currencyOf, deleteDescription, groupDevCoTags, initialForm,
   isDirty, limitFlags, limitMessage, panelTitle, sortContracts, validateForm,
   withoutAccounts,
@@ -171,9 +186,9 @@ export default function ContractsSettingsScreen() {
     [devCoRows, panel?.contractId],
   );
   const linksAvailable = devCoQuery.isSuccess && capexQuery.isSuccess;
-  /** the live URL no longer names the scope the open panel is bound to. */
+  /** The live URL no longer names the scope the open panel is bound to. */
   const scopeChanged = panel !== null && !sameCountryTechnology(selection, panel.scope);
-  // only accounts shown in the tree count toward "at least one account"; links to inactive
+  // Only accounts shown in the tree count toward "at least one account"; links to inactive
   // CAPEX accounts stay in the selection (never deleted on save) but do not satisfy the rule.
   const errors = panel ? validateForm(panel.form, lang, undefined, tree.leaves) : {};
   const dirty = panel ? isDirty(panel.form, panel.initial) : false;
@@ -197,11 +212,11 @@ export default function ContractsSettingsScreen() {
   }
 
   /**
-   * the panel opens at once on the listed row, blocked by "Loading contract...", and is
-   * re-seeded from a fresh read of the row and of the DevCo scope (the canvas `Refresh`,
-   * ACS:1057). If EITHER fresh read fails the panel closes with an error toast rather than edit
-   * possibly stale data (`refetch()` resolves on error in TanStack v5, so its `isError` is
-   * checked explicitly).
+   * `btn_Edit_AdminContracts.OnSelect`: the panel opens at once on the listed row, blocked by
+   * "Loading contract...", and is re-seeded from a fresh read of the row and of the DevCo scope
+   * (the canvas `Refresh`, ACS:1057). If EITHER fresh read fails the panel closes with an error
+   * toast rather than edit possibly stale data (`refetch()` resolves on error in TanStack v5, so
+   * its `isError` is checked explicitly).
    */
   function openEdit(contract: StandardContract) {
     if (!selection) return;
@@ -246,6 +261,14 @@ export default function ContractsSettingsScreen() {
     return kind === "none" ? null : closeDialogText(kind, reason === "scope");
   }
 
+  /**
+   * `ico_AdminContracts_Save.OnChange`: the parent `Patch`, then the released links' `RemoveIf`,
+   * then the new links' `Patch` — run by `saveStandardContract` (`@/data/adminContract`).
+   * DIVERGENCE: the canvas hides the panel before writing and reports a failure only by toast.
+   * Here the panel stays open on a failed save with its input; accounts another contract claimed
+   * meanwhile leave the selection (ownership re-check), and a parent created by a partial save is
+   * remembered so the retry updates it instead of creating a second contract.
+   */
   async function save() {
     if (!panel || !saveEnabled) return;
     const input: SaveContractInput = {
@@ -265,10 +288,10 @@ export default function ContractsSettingsScreen() {
     } catch (error) {
       const message = saveErrorMessage(error, (id) => tree.accounts.get(id)?.number);
       const saveError = error instanceof ContractSaveError ? error : undefined;
-      // accounts another contract now owns leave the selection, so a retry can succeed. The
+      // Accounts another contract now owns leave the selection, so a retry can succeed. The
       // scope was refetched in `onSettled`, so the tree now shows them locked ("Used").
       const conflicts = saveError?.cause instanceof OwnershipConflictError ? saveError.cause.accountIds : [];
-      // the contract was deleted meanwhile — nothing was written and a retry can only fail
+      // The contract was deleted meanwhile — nothing was written and a retry can only fail
       // again, so the panel closes without an unsaved-changes prompt (the record is gone); the
       // list refetched in `onSettled`, so its card disappears.
       if (saveError?.phase === "parent" && saveError.cause instanceof RecordGoneError) {
@@ -276,7 +299,7 @@ export default function ContractsSettingsScreen() {
         notify.error(message);
         return;
       }
-      // the panel stays open with the input; a created parent is remembered for the retry.
+      // The panel stays open with the input; a created parent is remembered for the retry.
       panelState.patch((prev) => ({
         ...prev,
         form: conflicts.length > 0 ? withoutAccounts(prev.form, conflicts) : prev.form,
@@ -289,6 +312,12 @@ export default function ContractsSettingsScreen() {
   }
 
   /* ─────────────────────────────────────────────────────────────── delete */
+  /**
+   * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.OnConfirm`: `Remove` of the PARENT only —
+   * the DevCo costs cascade and the deletion plugin clears the project rows built from it.
+   * DIVERGENCE: a 404 (another user deleted it first) is reported as done with a notice; the
+   * canvas has no such case. The failure path is the SOURCE DEFECT fix in `messages.ts`.
+   */
   async function confirmDelete() {
     if (!deleteTarget || !selection || !privileges.canDelete) return;
     const scope = selection;
@@ -297,7 +326,7 @@ export default function ContractsSettingsScreen() {
       try {
         const { alreadyDeleted } = await deleteMutation.mutateAsync({ id: target.id, selection: scope });
         expanded.remove(target.id);
-        // a 404 means another user deleted it first — done, not "may still be in use". The
+        // A 404 means another user deleted it first — done, not "may still be in use". The
         // list refetches in `onSettled` either way.
         if (alreadyDeleted) notify.info(CONTRACT_ALREADY_DELETED_MESSAGE);
         else notify.success("Contract deleted");
@@ -321,9 +350,13 @@ export default function ContractsSettingsScreen() {
   }
 
   const technologyLabel = selection ? breadcrumbText(selectedCountry?.name, selection.technology) : "Contracts";
-  const addButton = (contractType: number, label: string, full: boolean) => {
+  /**
+   * `btn_AdminContract_Add_Development_Contract` / `btn_AdminContract_Add_Construction_Contract`
+   * (`testId`). At the limit the button stays focusable and says why (DIVERGENCE, see
+   * `limitMessage`); a disabled one stays disabled.
+   */
+  const addButton = (contractType: number, label: string, full: boolean, testId: string) => {
     const disabled = !selection || !privileges.canCreate;
-    // At the limit the button stays focusable and says why; a disabled one stays disabled.
     const reason = full && !disabled && selection && selectedCountry
       ? limitMessage(contractType, selectedCountry.name, selection.technology)
       : null;
@@ -332,7 +365,7 @@ export default function ContractsSettingsScreen() {
         <Button
           appearance="secondary" className={mergeClasses(styles.addButton, brand.brandOutline)} icon={<AddFilled />}
           disabled={disabled} disabledFocusable={!disabled && full}
-          aria-label={label} data-testid={`contracts-add-${contractType}`}
+          aria-label={label} data-testid={testId}
           onClick={() => { if (!full) openNew(contractType); }}
         >
           {label}
@@ -341,13 +374,19 @@ export default function ContractsSettingsScreen() {
     );
   };
 
-  /** Same presentation as Costs and Project Gates: the side-column rail with SVG flags at every width. */
+  /**
+   * `cmp_AdminContraacts_NestedCountryPickerColumn`. Same presentation as Costs and Project Gates:
+   * the side-column rail with SVG flags at every width. The shared picker composes its control ids
+   * from `testIdPrefix`; it has no prop for the component's own inner names (`Button2`,
+   * `ButtonCanvas5`, `cbx_CountrySelected`).
+   */
   const picker = (
     <CountryTechnologyPicker
       countries={countries}
       technologies={CONTRACT_TECHNOLOGIES}
       value={selection}
       onChange={select}
+      testIdPrefix="cmp_AdminContraacts_NestedCountryPickerColumn"
     />
   );
 
@@ -369,7 +408,7 @@ export default function ContractsSettingsScreen() {
         }}
       >
         {() => (
-          <div className={styles.list}>
+          <div className={styles.list} data-testid="gal_AdminContracts_StandardAssumptions_Updated">
             {contracts.map((contract) => {
               const own = devCoRows?.filter((r) => r.contractId === contract.id);
               const tagGroups = devCoQuery.isError ? "error" as const
@@ -405,20 +444,22 @@ export default function ContractsSettingsScreen() {
           titleAs="h2"
           ariaLabel="Contracts"
           actionsAlign="start"
+          testId="con_AdminContract_Selected_Country_Technology"
           actions={(
             <>
-              {addButton(CONTRACT_TYPE.Development, "Add Development Contract", limits.developmentFull)}
-              {addButton(CONTRACT_TYPE.Construction, "Add Construction Contract", limits.constructionFull)}
+              {addButton(CONTRACT_TYPE.Development, CARD_TEXT.addDevelopment, limits.developmentFull, "btn_AdminContract_Add_Development_Contract")}
+              {addButton(CONTRACT_TYPE.Construction, CARD_TEXT.addConstruction, limits.constructionFull, "btn_AdminContract_Add_Construction_Contract")}
             </>
           )}
         />
 
-        {/* Canvas ACS:612-724, drawn disabled: no calls, no writes. */}
+        {/* `con_AdminContract_ApplyAll_Apply_Tracking` (ACS:612-724), drawn disabled: no calls, no writes. */}
         {selection ? (
-          <div className={styles.applyAll}>
+          <div className={styles.applyAll} data-testid="con_AdminContract_ApplyAll_Apply_Tracking">
             <ApplyBar
               fill={APPLY_ALL_FILL} label={APPLY_ALL_LABEL} accessibleName={APPLY_ALL_LABEL}
-              infoText={APPLY_ALL_INFO} buttonWidth={140} filledIcon testId="contracts-apply-all"
+              infoText={APPLY_ALL_INFO} buttonWidth={140} filledIcon testId="con_AdminContract_ApplyAll_Inner_Warning_Button"
+              buttonTestId="btn_AdminContract_ApplyAll"
             />
           </div>
         ) : null}
@@ -478,18 +519,24 @@ export default function ContractsSettingsScreen() {
         />
       ) : null}
 
+      {/*
+        `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1` (`IconRightButton: "Delete"`).
+        DIVERGENCE: `destructive` gives Confirm the danger look; the canvas relied on the label.
+        The shared dialog has no props for the popup's canvas control names.
+      */}
       <ConfirmDialog
         open={deleteTarget !== null}
-        title="Delete BoP Standard Contract"
+        title={CARD_TEXT.deleteTitle}
         description={deleteTarget ? deleteDescription(deleteTarget.name) : ""}
-        confirmText="Confirm"
+        confirmText={CARD_TEXT.deleteConfirm}
         confirmIcon="delete"
         destructive
         onConfirm={() => void confirmDelete()}
         onCancel={deleteDialog.cancel}
       />
 
-      {deleteMutation.isPending ? <LoadingOverlay mode="blocking" label="Please wait, deleting..." /> : null}
+      {/* `cmp_PopUp_Loading_AdminBoPContracts` while the delete runs. */}
+      {deleteMutation.isPending ? <LoadingOverlay mode="blocking" label={CARD_TEXT.deleting} /> : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 /**
- * Static fixture data — Phase 1 drove the UI blocks from these before any Dataverse call
- * existed; the tests keep using them. Shapes are exactly what `projectGatesRepository` returns.
+ * Static fixture data for this folder's tests. Shapes are exactly what `projectGatesRepository`
+ * returns.
  */
 import type {
   DefaultChecklist, GateTaskApproval, GateTemplate, GatesDataset, PersonRef, ProjectState,

@@ -1,9 +1,26 @@
 /**
- * The DevCo Cost Form (ACS:3016-3765): Level-1 CAPEX roots as a single-open accordion,
- * each with a native tri-state checkbox (replaces the canvas SVG + overlay button), and its
- * Level-3 descendants as checkbox rows `<number> <name>`. Accounts another contract of
- * the selection owns are checked, disabled and marked "Used". Level-2 accounts are not
- * rows (canvas parity).
+ * The DevCo Cost Form (`con_Add_Edit_AdminContracts_Right_Panel_BodyContent_DeCostsvCo`,
+ * ACS:3016-3765): the Level-1 CAPEX roots (`gal_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm`)
+ * as a single-open accordion (`btn_Add_Edit_AdminContract_Right_Panel_DevCoCostForm_Transparent`,
+ * chevrons `ico_Add_Edit_AdminContracts_DevCoCosts_Down` / `_Up`), each with a tri-state
+ * checkbox (`img_Parent_TriState_Checkbox`), and its Level-3 descendants
+ * (`gal_Contracts_RightPanel_NewEdit_Costs`) as checkbox rows
+ * (`chb_Contracts_RightPanel_NewEdit_CostssRow`) labelled `<number> <name>`
+ * (`lbl_Contracts_RightPanel_NewEdit_CostssRow_Name`). Accounts another contract of the selection
+ * owns are checked, disabled and marked "Used". Level-2 accounts are not rows (canvas parity).
+ * Every row `data-testid` is the canvas name plus the account id.
+ *
+ * DIVERGENCE: the canvas tri-state is an SVG image (`img_Parent_TriState_Checkbox`) under a
+ * transparent overlay button (`btn_Parent_TriState_Overlay`); here it is one native tri-state
+ * checkbox. Its accessible name "Select all accounts in <root>" has no canvas equivalent (the
+ * image has no caption or AccessibleLabel).
+ * DIVERGENCE: an account another contract claimed while this panel was open, but that is still
+ * selected here (`isStaleSelection`), can be unchecked; the canvas rows are fixed at open.
+ * DIVERGENCE: "No sub-accounts", "Loading accounts…", the Retry bar and the
+ * `validationMessage` line have no canvas equivalent.
+ *
+ * Hard-coded colours with no theme token: `#323130` (the canvas label colour) and
+ * `rgba(238, 148, 12, 0.125)` (the USED box fill, `rec_Contracts_RightPanel_NewEdit_CostssRow_Used`).
  */
 import { useId, useState } from "react";
 import {
@@ -13,7 +30,7 @@ import { ChevronDownRegular, ChevronUpRegular, SubtractRegular } from "@fluentui
 import { NoticeBar, VisuallyHidden } from "@/components";
 import { palette } from "@/theme/tokens";
 import {
-  isStaleSelection, rootState, toggleLeaf, toggleRoot,
+  CARD_TEXT, isStaleSelection, rootState, toggleLeaf, toggleRoot,
   type AccountClass, type TreeRoot,
 } from "./rules";
 
@@ -98,9 +115,12 @@ export function DevCoCostForm({
   const [openRoot, setOpenRoot] = useState<string | undefined>();
 
   return (
-    <section className={styles.root} aria-label="DevCo Cost Form">
-      <Text className={styles.label}>
-        DevCo Cost Form<span className={styles.required} aria-hidden="true">*</span>
+    <section
+      className={styles.root} aria-label={CARD_TEXT.devCoCostForm}
+      data-testid="con_Add_Edit_AdminContracts_Right_Panel_BodyContent_DeCostsvCo"
+    >
+      <Text className={styles.label} data-testid="lbl_Add_Edit_AdminContracts_DevCoCostForm">
+        {CARD_TEXT.devCoCostForm}<span className={styles.required} aria-hidden="true">*</span>
       </Text>
       <VisuallyHidden id={usedDescriptionId}>Used by another standard contract</VisuallyHidden>
 
@@ -114,19 +134,20 @@ export function DevCoCostForm({
       ) : loading ? (
         <Spinner size="small" label="Loading accounts…" />
       ) : (
-        <ul className={styles.list}>
+        <ul className={styles.list} data-testid="gal_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm">
           {roots.map((root) => {
             const open = openRoot === root.id;
             const state = rootState(root, selected, classes);
             const childrenId = `devco-root-${root.id}`;
             const label = `${root.number} ${root.name}`;
             return (
-              <li key={root.id}>
+              <li key={root.id} data-testid={`con_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm_Card-${root.id}`}>
                 <div className={mergeClasses(styles.rootRow, open && styles.rootRowOpen)}>
+                  {/* `lbl_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm_Card_Category` under its transparent button. */}
                   <Button
                     appearance="transparent" className={styles.rootToggle}
                     aria-expanded={open} aria-controls={childrenId}
-                    aria-label={label} data-testid={`devco-root-toggle-${root.id}`}
+                    aria-label={label} data-testid={`btn_Add_Edit_AdminContract_Right_Panel_DevCoCostForm_Transparent-${root.id}`}
                     onClick={() => setOpenRoot(open ? undefined : root.id)}
                   >
                     {label}
@@ -137,32 +158,34 @@ export function DevCoCostForm({
                     checked={state.checked}
                     disabled={disabled || state.disabled}
                     {...(state.checked === "mixed" ? { indicator: { children: <SubtractRegular /> } } : {})}
-                    value={root.id} aria-label={`Select all accounts in ${label}`} data-testid={`devco-root-select-${root.id}`}
+                    value={root.id} aria-label={`Select all accounts in ${label}`} data-testid={`img_Parent_TriState_Checkbox-${root.id}`}
                     onChange={() => onChange(toggleRoot(root, selected, classes))}
                   />
+                  {/* The canvas swaps two icons by `Visible`; the id follows the one showing. */}
                   <Button
                     appearance="transparent" size="small" className={styles.chevron}
                     icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-                    aria-label={`${open ? "Collapse" : "Expand"} ${label}`} data-testid={`devco-root-chevron-${root.id}`}
+                    aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
+                    data-testid={`ico_Add_Edit_AdminContracts_DevCoCosts_${open ? "Up" : "Down"}-${root.id}`}
                     aria-expanded={open} aria-controls={childrenId}
                     onClick={() => setOpenRoot(open ? undefined : root.id)}
                   />
                 </div>
                 {open ? (
-                  <ul id={childrenId} className={styles.children}>
+                  <ul id={childrenId} className={styles.children} data-testid={`gal_Contracts_RightPanel_NewEdit_Costs-${root.id}`}>
                     {root.children.length === 0 ? (
                       <li className={styles.empty}>No sub-accounts</li>
                     ) : root.children.map((leaf) => {
                       const cls = classes.get(leaf.id);
                       const used = cls?.used === true;
-                      // used elsewhere but still selected here — may be unchecked, never re-checked.
+                      // Used elsewhere but still selected here — may be unchecked, never re-checked.
                       const stale = isStaleSelection(leaf.id, selected, classes);
                       const leafLabel = `${leaf.number} ${leaf.name}`;
                       return (
-                        <li key={leaf.id} className={styles.childRow}>
+                        <li key={leaf.id} className={styles.childRow} data-testid={`con_Contracts_RightPanel_NewEdit_CostssRow-${leaf.id}`}>
                           <Checkbox
                             className={mergeClasses(styles.childBox, used && styles.childUsed)}
-                            labelPosition="before" value={leaf.id} aria-label={leafLabel} data-testid={`devco-account-${leaf.id}`}
+                            labelPosition="before" value={leaf.id} aria-label={leafLabel} data-testid={`chb_Contracts_RightPanel_NewEdit_CostssRow-${leaf.id}`}
                             label={{
                               children: leafLabel, className: styles.childLabel,
                               title: used ? `${leafLabel} (Used by another standard contract)` : leafLabel,

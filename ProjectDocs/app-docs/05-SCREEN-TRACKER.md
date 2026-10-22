@@ -1,5 +1,9 @@
 # Screen tracker — what is done, what is in progress, what is next
 
+> **Historical (September 2026), Cost screens and Overview only.** For the current state of every
+> screen, use `gap-analysis/README.md` (the 16 Admin/PM screens) and
+> `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` (the six admin screens, replaced 22 Oct 2026, D36).
+
 > Active execution plan: [`06-DEMO-COMPLETION-PLAN.md`](06-DEMO-COMPLETION-PLAN.md).
 > `03-STATUS.md` and `04-SINGLE-APP-IMPLEMENTATION.md` are historical checkpoints.
 

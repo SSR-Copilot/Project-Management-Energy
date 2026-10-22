@@ -1,8 +1,18 @@
 /**
  * The Add/Edit Task side panel (`con_Admin_Checklist_Form`, L885-1403). 450 px, blue
- * header via the shared `FormPanel`. A failed save keeps the panel open with the user's input
- * and shows the error (the canvas swallowed it). While a save runs the panel cannot be dismissed
- * (`busy`); with unsaved input, Cancel / ✕ / Escape ask "Discard changes?" first (`dirty`).
+ * header via the shared `FormPanel`. `data-testid`s are the canvas control names; the labels are
+ * the canvas captions, verbatim (`lbl_Admin_Checklist_Form_Fields_Name.Text` "Description",
+ * `lbl_Admin_Checklist_Form_Fields_HoldingDescription.Text` "Holding Description", the three
+ * toggles' `Label`s — note the lower-case "Gate relevance").
+ *
+ * DIVERGENCE: a failed save keeps the panel open with the user's input and shows the error (the
+ * canvas closed the panel after the write whatever the outcome and showed nothing). While a save
+ * runs the panel cannot be dismissed (`busy`); with unsaved input, Cancel / ✕ / Escape ask
+ * "Discard changes?" first (`dirty`) — the canvas reset and closed at once.
+ *
+ * DIVERGENCE: the blank-name message shows only after the field was touched or Save was tried;
+ * the canvas label `lbl_Admin_Checklist_Form_Fields_Name_ErrorMessage` is visible from the start
+ * while the name is blank (L1056).
  *
  * Shared building blocks: the footer is the shared `PanelButtons look="brand"` (brand-outline
  * Cancel; Save keeps `aria-label="Save"` while it shows "Saving…"), the error bar is
@@ -49,6 +59,7 @@ export function TaskEditorDrawer({
   const styles = useStyles();
   const errors = validateTask(form);
   const valid = !errors.name;
+  /** `lblAdmin_ProjectGates_Approvals_Form_Title_1.Text: If(IsBlank(locSelectedChecklistEntity), "Add Task", "Edit Task")` — verbatim. */
   const title = mode === "create" ? "Add Task" : "Edit Task";
 
   return (
@@ -59,8 +70,12 @@ export function TaskEditorDrawer({
       onDismiss={onCancel}
       busy={saving}
       dirty={dirty}
+      // The ✕ is the canvas `closeKey` item of this command bar (its `ItemDisplayName` "Home" is
+      // never shown, so the shared default label stays).
+      closeTestId="pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1"
       footer={<PanelButtons look="brand" disabled={!(valid && !readOnly)} saving={saving} onSave={onSave} savingLabel="Saving…"
-        saveTestId="checklist-task-save" cancelTestId="checklist-task-cancel" />}
+        saveTestId="pcf_but_Admin_Checklist_Form_Buttons_Save"
+        cancelTestId="pcf_but_Admin_Admin_Checklist_Form_Buttons_Cancel" />}
     >
       <form
         className={styles.body}
@@ -71,7 +86,7 @@ export function TaskEditorDrawer({
 
         <TextField skin="plain"
           label="Description"
-          testId="checklist-task-description"
+          testId="txt_Admin_Checklist_Form_Fields_Name"
           labelWeight="semibold"
           required
           value={form.name}
@@ -84,7 +99,7 @@ export function TaskEditorDrawer({
 
         <TextField skin="plain"
           label="Holding Description"
-          testId="checklist-task-holding-description"
+          testId="txt_Admin_Checklist_Form_Fields_HoldingDescription"
           labelWeight="semibold"
           value={form.holdingDescription}
           maxLength={MAX_TEXT_LENGTH}
@@ -95,19 +110,19 @@ export function TaskEditorDrawer({
         <div className={styles.toggles}>
           <Switch
             className={styles.toggle} labelPosition="before" label="Gate relevance"
-            aria-label="Gate relevance" data-testid="checklist-task-gate-relevance"
+            aria-label="Gate relevance" data-testid="tgl_GateRelevance_ChecklistForm"
             checked={form.gateRelevance}
             onChange={(_, d) => onChange({ ...form, gateRelevance: d.checked })}
           />
           <Switch
             className={styles.toggle} labelPosition="before" label="Completion Date"
-            aria-label="Completion Date" data-testid="checklist-task-completion-date"
+            aria-label="Completion Date" data-testid="tgl_CompletionDate_ChecklistForm"
             checked={form.isCompletionDate}
             onChange={(_, d) => onChange({ ...form, isCompletionDate: d.checked })}
           />
           <Switch
             className={styles.toggle} labelPosition="before" label="Active"
-            aria-label="Active" data-testid="checklist-task-active"
+            aria-label="Active" data-testid="tgl_Active_ChecklistForm"
             checked={form.isActive}
             onChange={(_, d) => onChange({ ...form, isActive: d.checked })}
           />

@@ -1,6 +1,6 @@
 /**
  * The "reorder these items" side panel CAPEX Accounts (`Panels.tsx:203-239`) and Check
- * List Settings (`ReorderDrawer.tsx`) each built around the shared `ReorderList`.
+ * List Settings (`ReorderDrawer.tsx`) each built around the shared `ReorderItems`.
  *
  * It owns the WORKING order: `items` is the order at open (the screen remounts the panel with a
  * `key` on every open, as both do today), moves apply `moveItem`, and `dirty` is
@@ -64,7 +64,7 @@ export interface ReorderPanelProps<T> {
   /** `data-testid` of the footer Save / Cancel buttons (`PanelButtons`); kebab defaults. */
   saveTestId?: string;
   cancelTestId?: string;
-  /** Passed through to `ReorderList` (`showPosition`, `draggable`, `buttonLabels`, …). */
+  /** Passed through to `ReorderItems` (`showPosition`, `draggable`, `buttonLabels`, …). */
   listProps?: Partial<Omit<ReorderItemsProps<T>, "items" | "getId" | "getLabel" | "onMove" | "ariaLabel">>;
   /** The working order changed (CL keeps its own `changed` flag in step). */
   onOrderChange?: (ordered: T[]) => void;

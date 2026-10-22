@@ -1,12 +1,32 @@
 /**
- * One contract card (canvas `con_Card_Root`, ACS:837-1814): a header with the title and a
- * chevron that toggles only this card, and, when expanded, Edit / Delete with the disabled
- * "Apply" bar, the two info grids, the DevCo tag groups and the comment. Height is
- * intrinsic — the canvas hand-computed it and clipped long text.
+ * One contract card (canvas `gal_AdminContracts_StandardAssumptions_Updated` row
+ * `con_Card_Root`, ACS:837-1814): a header (`con_Header`) with the title (`lbl_Title`) and a
+ * chevron (`ico_Chevron_Expand_Collapse_AdminContracrs`) that toggles only this card, and, when
+ * expanded (`con_Body_Expanded`), Edit / Delete with the disabled "Apply" bar (`con_Action_Bar`),
+ * the two info grids (`con_Info_Grid1` / `con_Info_Grid2`), the DevCo tag groups
+ * (`con_DevCoCost_Section`, `htmlDevCoCostTagList`) and the comment
+ * (`con_Footer_Comment_Section`). Every `data-testid` is the canvas name plus the contract id
+ * (repeating rows, CONVENTIONS rule 16).
  *
- * Canvas parity: 0 px left inset, blue chevron and `#0078D4`
- * rule, 16 px headings over 15 px semibold values in 30 px rows, the DevCo tags as a header plus a
- * WRAPPING tag container (ACS:1723-1726). The per-card Apply bar is drawn disabled; the "Apply was made by" tracking line stays unrendered.
+ * Canvas parity: 0 px left inset, blue chevron and `#0078D4` rule, 16 px headings over 15 px
+ * semibold values in 30 px rows, the DevCo tags as a header plus a WRAPPING tag container
+ * (ACS:1723-1726). The per-card Apply bar is drawn disabled; the "Apply was made by" tracking line
+ * (`con_Tracking_ApplySyncIndividual_AdminContract`) is not rendered.
+ *
+ * DIVERGENCE: the canvas card has a hand-computed height and clips long text; here the height is
+ * intrinsic and long values wrap.
+ * DIVERGENCE: `lbl_Description_Value.Text = ThisItem.Description` and
+ * `lbl_MarginType_Value.Text = Text(ThisItem.'Margin Type')` render a blank value as empty; here
+ * both show "-".
+ * DIVERGENCE: `lbl_MarginFixedValuePercentage_Value.Text` is `Value(…)` (the raw number); here it
+ * is `marginValue` — locale-formatted with grouping and at most two decimals.
+ * DIVERGENCE: an inactive contract shows an "Inactive" badge (no canvas equivalent; the canvas
+ * lists inactive rows unmarked).
+ * DIVERGENCE: the DevCo section shows "Loading…" / "DevCo cost links could not be loaded." (no
+ * canvas text; CONVENTIONS rule 19).
+ *
+ * Hard-coded colours with no theme token: `#0078D4` (the canvas rule and chevron, not
+ * `palette.themePrimary` #006eb9) and `#323130` (the canvas label colour).
  */
 import {
   Badge, Body1, Button, Subtitle2, Tag, TagGroup, Text, makeStyles, mergeClasses, tokens,
@@ -19,7 +39,7 @@ import {
   APPLY_CONTRACT_FILL, APPLY_CONTRACT_INFO, APPLY_LABEL, ApplyBar,
 } from "./ApplyBar";
 import {
-  MARGIN_TYPE_LABEL, commentText, formatClosingRef, isInactive, marginValue, marginValueHeading,
+  CARD_TEXT, MARGIN_LABEL, MARGIN_TYPE_LABEL, commentText, formatClosingRef, isInactive, marginValue, marginValueHeading,
   type StandardContract, type TagGroup as TagGroupData,
 } from "./rules";
 
@@ -98,11 +118,11 @@ export function ContractCard({
       idPrefix="contract-card-body-"
       as="article"
       ariaLabel={contract.name}
-      testId="contract-card"
+      testId={`con_Card_Root-${contract.id}`}
       headerClassName={styles.header}
       bodyClassName={styles.body}
       chevronClassName={styles.chevron}
-      title={<Subtitle2 as="h3" className={styles.title}>{contract.name}</Subtitle2>}
+      title={<Subtitle2 as="h3" className={styles.title} data-testid={`lbl_Title-${contract.id}`}>{contract.name}</Subtitle2>}
       trailing={isInactive(contract) ? (
         <Badge
           appearance="tint" color="subtle" size="medium"
@@ -113,51 +133,55 @@ export function ContractCard({
       ) : null}
       expanded={expanded}
       onToggle={onToggle}
+      // The canvas chevron is an icon with no caption and no AccessibleLabel; the port's name
+      // ("Expand <contract>") is kept so each card's toggle stays distinguishable.
       toggleLabel={`${expanded ? "Collapse" : "Expand"} ${contract.name}`}
+      toggleTestId={`ico_Chevron_Expand_Collapse_AdminContracrs-${contract.id}`}
     >
-      <div className={styles.actions}>
+      <div className={styles.actions} data-testid={`con_Action_Bar-${contract.id}`}>
         <Button
           appearance="secondary" className={buttonClass} icon={<EditRegular />}
-          aria-label={`Edit ${contract.name}`} data-testid={`contract-edit-${contract.id}`} disabled={!canEdit} onClick={onEdit}
+          aria-label={CARD_TEXT.edit} data-testid={`btn_Edit_AdminContracts-${contract.id}`} disabled={!canEdit} onClick={onEdit}
         >
-          Edit
+          {CARD_TEXT.edit}
         </Button>
         <Button
           appearance="secondary" className={buttonClass} icon={<DeleteRegular />}
-          aria-label={`Delete ${contract.name}`} data-testid={`contract-delete-${contract.id}`} disabled={!canDelete} onClick={onDelete}
+          aria-label={CARD_TEXT.delete} data-testid={`btn_Delete_AdminContracts-${contract.id}`} disabled={!canDelete} onClick={onDelete}
         >
-          Delete
+          {CARD_TEXT.delete}
         </Button>
         <ApplyBar
           className={styles.applyBar}
-          fill={APPLY_CONTRACT_FILL} label={APPLY_LABEL} accessibleName={`${APPLY_LABEL} ${contract.name}`}
+          fill={APPLY_CONTRACT_FILL} label={APPLY_LABEL} accessibleName={APPLY_LABEL}
           infoText={APPLY_CONTRACT_INFO} buttonWidth={115} height={50}
-          buttonTestId={`contract-apply-${contract.id}`}
+          testId={`con_Apply_Individual_AdminContract-${contract.id}`}
+          buttonTestId={`btn_Apply_Individual_AdminContracts-${contract.id}`}
         />
       </div>
 
-      <div className={styles.grid1}>
+      <div className={styles.grid1} data-testid={`con_Info_Grid1-${contract.id}`}>
         <div className={styles.field}>
-          <Text className={styles.heading}>Description</Text>
+          <Text className={styles.heading}>{CARD_TEXT.description}</Text>
           <Text className={styles.value}>{contract.description || "-"}</Text>
         </div>
         <div className={styles.field}>
-          <Text className={styles.heading}>Closing Date Reference</Text>
+          <Text className={styles.heading}>{CARD_TEXT.closingDateReference}</Text>
           <Text className={styles.value}>
             {formatClosingRef(contract.closingRef, contract.monthDifference, contract.closingRefText)}
           </Text>
         </div>
       </div>
 
-      <div className={styles.grid2}>
+      <div className={styles.grid2} data-testid={`con_Info_Grid2-${contract.id}`}>
         <div className={styles.field}>
-          <Text className={styles.heading}>Margin</Text>
-          <Text className={styles.value}>{contract.margin ? "Yes" : "No"}</Text>
+          <Text className={styles.heading}>{CARD_TEXT.margin}</Text>
+          <Text className={styles.value}>{contract.margin ? MARGIN_LABEL.yes : MARGIN_LABEL.no}</Text>
         </div>
         {contract.margin ? (
           <>
             <div className={styles.field}>
-              <Text className={styles.heading}>Margin Type</Text>
+              <Text className={styles.heading}>{CARD_TEXT.marginType}</Text>
               <Text className={styles.value}>
                 {contract.marginType !== undefined ? MARGIN_TYPE_LABEL[contract.marginType] ?? "-" : "-"}
               </Text>
@@ -170,8 +194,8 @@ export function ContractCard({
         ) : null}
       </div>
 
-      <div className={styles.field}>
-        <Text className={styles.heading}>DevCo Costs From</Text>
+      <div className={styles.field} data-testid={`con_DevCoCost_Section-${contract.id}`}>
+        <Text className={styles.heading}>{CARD_TEXT.devCoCostsFrom}</Text>
         <div className={styles.tags}>
           {tagGroups === "error" ? (
             <Body1 className={styles.error}>DevCo cost links could not be loaded.</Body1>
@@ -197,8 +221,8 @@ export function ContractCard({
         </div>
       </div>
 
-      <div className={styles.field}>
-        <Text className={styles.heading}>Comments</Text>
+      <div className={styles.field} data-testid={`con_Footer_Comment_Section-${contract.id}`}>
+        <Text className={styles.heading}>{CARD_TEXT.comments}</Text>
         <Text className={styles.value}>{commentText(contract.comment)}</Text>
       </div>
     </CollapsibleCard>
