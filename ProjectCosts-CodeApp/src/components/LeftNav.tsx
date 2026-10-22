@@ -194,7 +194,20 @@ export function LeftNav({ adminVisible = true }: { adminVisible?: boolean } = {}
       <span className="canvas-rail-divider" aria-hidden="true" />
       </>}
 
-      {roots.map((item) => {
+      {pmRail && !expanded ? visible.map((item) =>
+        /*
+         * Collapsed PM/admin rail — `pcf_Left_Navigation_Menu.Items` (cmp_Left_Navigation:100-119,
+         * the live formula; the one below it is commented out): `If(Not(IsExpanded), ForAll(Items,
+         * {ItemKey, ItemDisplayName: "", ItemIconName, ItemEnabled, TargetScreen}), Items)`. The
+         * records drop `ItemParentKey`, so the Nav gets a FLAT list: every screen link at the root
+         * as its icon alone (no group chevron, no child indent, every group's links shown), and
+         * each group header, which has no `ItemIconName`, as an empty row of the same height.
+         * Rendering the grouped tree at 32 px clipped the indented icons and left the chevrons.
+         */
+        item.path
+          ? <NavItemLink key={item.key} item={item} expanded={false} />
+          : <span key={item.key} className="canvas-rail-blank" aria-hidden="true" />,
+      ) : roots.map((item) => {
         const children = visible.filter((c) => c.parentKey === item.key);
         const isGroup = children.length > 0 && !item.path;
         const open = openGroups.has(item.key);

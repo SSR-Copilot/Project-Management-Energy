@@ -84,6 +84,8 @@
 /* `pcf_Left_Navigation_Menu` first, `con_Left_Navigation_Header` (45 high) pinned below it. */
 .canvas-rail-pm { overflow-x: hidden; }
 .canvas-rail-pm a { white-space: nowrap; }
+/* A collapsed rail's group header: an empty Nav row, as tall as a link (`LeftNav.tsx`). */
+.canvas-rail-blank { display: block; flex-shrink: 0; min-height: 44px; }
 .canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
 .canvas-rail-collapse-delimiter { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #f3f2f1; }
 .canvas-rail-pm .canvas-rail-collapse > button { width: 100%; height: 45px; justify-content: flex-start; padding: 0 0 0 7px; border-radius: 0; gap: 0; min-width: 0; color: #2c2c2c; font-size: 14.67px; font-weight: 400; }

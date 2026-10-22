@@ -615,6 +615,26 @@ there later. The other 14 are on PM screens and out of scope for this phase.
 
 ---
 
+## Part 3 — In this code app
+
+### CA-1 · Collapsed admin rail clipped its icons and kept the group chevrons (fixed 22 Oct 2026)
+
+On the Application Settings screens, "Collapse Menu" narrowed the rail to 32 px
+(`gblAppSizes.LeftNavigation.DecreasedWidth`) but kept the expanded tree. Every admin link is a child
+of the "Project Gate" or "Standard Assumptions" group, so it kept the child indent
+(`.canvas-rail > div a { padding-left: 20px }`), and its icon was cut off at the rail's edge. Both
+group headers still showed their chevrons. Reported by the product owner with a screenshot of
+Checklist settings. The PM rail was unaffected because its items are not grouped.
+
+**Fix (`components/LeftNav.tsx`):** follow the live `pcf_Left_Navigation_Menu.Items` formula of
+`cmp_Left_Navigation` (lines 100–119). When collapsed, it rebuilds each item without
+`ItemParentKey` and with an empty `ItemDisplayName`, so the Nav renders a flat list. The collapsed
+PM/admin rail is now that flat list: every screen link at the root as its icon alone, both groups'
+links shown, and each group header (no `ItemIconName`) as an empty row of the same height. The
+expanded rail and the Cost rail are unchanged. Test: `UT-RAIL-003`. Checked rendered in headless Edge.
+
+---
+
 ## Verification notes
 
 Everything in Part 1 was read out of the unpacked `.msapp` at

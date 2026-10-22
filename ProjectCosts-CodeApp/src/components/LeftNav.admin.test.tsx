@@ -58,6 +58,32 @@ describe("LeftNav collapse row (cmp_Left_Navigation, 20 Oct 2026)", () => {
     expect(screen.queryByText("Production")).toBeNull();
   });
 
+  it("UT-RAIL-003 collapsed admin rail is a flat icon list (pcf_Left_Navigation_Menu.Items drops ItemParentKey)", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const { container } = renderAt("/admin/default-checklists", true);
+    const nav = container.querySelector("nav") as HTMLElement;
+    const adminLinks = ["GatesSettingKey", "GatesApprovalsKey", "CAPEX AccountsKey",
+      "MilestonesSettingsKey", "CostSettingKey", "ContractSettingKey"];
+    await userEvent.click(screen.getByTestId("icon_Left_Navigation_Expand"));
+    expect(nav.style.width).toBe("32px");
+    // No group header button (and so no chevron) is left.
+    expect(nav.querySelector('[data-testid^="rail-group-"]')).toBeNull();
+    // Every admin link is shown — both groups' — at the root of the nav, not indented in a group.
+    for (const key of adminLinks) {
+      const link = screen.getByTestId(`rail-${key}`);
+      expect(link.parentElement).toBe(nav);
+      expect(link).toHaveAccessibleName();
+    }
+    // The two group headers (no ItemIconName) are empty rows, in canvas order.
+    expect(nav.querySelectorAll(".canvas-rail-blank")).toHaveLength(2);
+    expect(screen.queryByText("Check List Settings")).toBeNull();
+    // Expanding again restores the grouped tree with its labels.
+    await userEvent.click(screen.getByTestId("icon_Left_Navigation_Expand"));
+    expect(nav.querySelector('[data-testid="rail-group-GatesKey"]')).not.toBeNull();
+    expect(nav.querySelectorAll(".canvas-rail-blank")).toHaveLength(0);
+    expect(screen.getByText("Check List Settings")).toBeInTheDocument();
+  });
+
   it("UT-RAIL-002 the cost rail keeps its hamburger header row", () => {
     const { container } = renderAt("/costs/capex", true);
     expect(container.querySelector(".canvas-rail-header")).not.toBeNull();
