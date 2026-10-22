@@ -1973,3 +1973,19 @@ step, additive optional props with today's defaults:
 wrong ones fixed: references to the porting branch, to docs not in this repo, to code that no
 longer exists (a route guard, `ReorderList`, old paths), and two that stated the canvas behaviour
 backwards. Comments outside the admin folders were not part of this pass.
+
+## D37 · DEV push of 22 Oct 2026 (master `6a73ffa`): checklist step 5 waived
+
+`pac code push` to VSBCloud_Dev, app `807a2fba-665c-40f3-b158-ffe822aa7da4` ("Project App"), from
+master `6a73ffa`, on the owner's instruction. Profile `ServiceAccount_DEV`
+(flow.serviceuser.vsbcloud@vsb.energy); `pac org who` confirmed environment
+`be41add6-6f60-ebb0-9c73-2480d6bc615d`.
+
+- Steps 1–4 and 6 ran: `npm ci`; `check:power` 81 / 0; `npm run verify` exit 0 (145 files, 3,859
+  tests, build OK); knip shows no new unused files or dependencies (the 8 unused files are pac
+  output, declaration files and `read-pcf-port.mjs`); no byte-identical files in `src/`.
+- **Step 5 (local smoke test with `pac code run`) was not run by the agent**: it needs an
+  interactive, signed-in browser session. The step 7 smoke test on the deployed app is owed by the
+  owner, and should cover the six admin screens (D36) and the collapsed admin rail (CA-1).
+- 09 §6 still applies: the Dev app is shared by every branch, so this push replaces whatever was
+  deployed before it.
