@@ -1,395 +1,363 @@
 /**
- * Admin Milestones Screen — unit tests.
- *
- * IDs are the spec's (UT-ADMILE-nnn). Pure functions only. 021–025 (the recalculating badge and
- * Apply / Apply All) and 031/033 (a non-canvas summary layout) were removed on 19 Oct 2026:
- * Apply is out of scope (D20) and the grid now follows the canvas cells (`summaryCellText`).
+ * Milestones settings rules.
+ * Ids: UT-ADMILE-nnn.
  */
-import { describe, it, expect } from "vitest";
-import { canSeeAdminSection, type CurrentUser } from "@/domain/session";
-import { MILESTONE_ROW_NAME, CHOICE_ADMIN } from "@/data/dataverseNames";
+import { describe, expect, it } from "vitest";
 import {
-  MSG, MILESTONE_COL, MILESTONE_ENTITY_SET, MILESTONE_FIELD_COLUMN, DURATION_FIELDS,
-  SUCCESS_RATE_FIELDS, INPUT_MAX_LENGTH,
-  summaryCellText, initialInputValue, countryOrder, savingText, saveErrorText, milestoneInputTestId,
-  sortCountries, pivotByTechnology, durationRows, successRateRows,
-  isValidDuration, isValidSuccessRate, validateEdit, upsertEdit, editKey,
-  canSave, invalidEdits, saveErrorMessages, canEditScope, planSaveMilestones,
-  milestoneFieldDisplayLabel, editMilestonesTitle, technologyDisplayName,
-  type AssumptionRow, type CountryRow, type MilestoneEdit, type EditMap,
+  buildPatches, cellKey, duplicatesWarning, evaluateCell, evaluatePanel, formatValue,
+  groupAssumptions, initialText, matrixCells, placeholderText, saveFailureMessage, sortCountries,
+  toMilestoneCountries, validateDuration, validateSuccessRate,
 } from "./rules";
+import { tokens } from "@fluentui/react-components";
+import { palette } from "@/theme/tokens";
+import {
+  DURATION_FIELDS, HEADING, KIND_LABEL, MATRIX_COLUMNS, MSG, RATE_FIELDS, TYPOGRAPHY,
+  technologyLabel, technologyName,
+} from "./constants";
+import {
+  BESS, FIXTURE_ASSUMPTIONS, FIXTURE_COUNTRIES, FRANCE, GERMANY, PV, WIND, row,
+} from "./fixtures";
+import type { MilestoneAssumption } from "@/data/adminMilestones";
 
-/* ─────────────────────────────────────────────────────────────────── fixtures */
+const byId = (rows: MilestoneAssumption[]) => new Map(rows.map((r) => [r.id, r]));
 
-const user = (o: Partial<CurrentUser> = {}): CurrentUser => ({
-  id: "u-1", displayName: "A", mail: "a@vsb.energy", language: "en-US", lang: "en",
-  roles: [], isApplicationAdministrator: false, isControllerOwnData: false,
-  isProjectDataAllCountries: false, isProjectManagerOwnProjects: false, isDeveloper: false,
-  canEditSelectedProject: false, editableCountries: [], editableCountriesAsString: "",
-  ...o,
-});
-
-const durationRow = (o: Partial<AssumptionRow> = {}): AssumptionRow => ({
-  id: "d-wind", name: MILESTONE_ROW_NAME.duration,
-  technology: CHOICE_ADMIN.technology.wind, countryId: "de",
-  values: {
-    [MILESTONE_COL.cluster1]: 6, [MILESTONE_COL.cluster2]: 9, [MILESTONE_COL.cluster3]: 12,
-    [MILESTONE_COL.cluster4]: 15, [MILESTONE_COL.cluster5]: 18,
-    [MILESTONE_COL.finalInvestmentDecision]: 24,
-    [MILESTONE_COL.operationalLifetime]: 300,
-    [MILESTONE_COL.salesStart]: 3, [MILESTONE_COL.salesEnd]: 18,
-  },
-  ...o,
-});
-
-const successRow = (o: Partial<AssumptionRow> = {}): AssumptionRow => ({
-  id: "s-wind", name: MILESTONE_ROW_NAME.successRate,
-  technology: CHOICE_ADMIN.technology.wind, countryId: "de",
-  values: {
-    [MILESTONE_COL.cluster1]: 0.8, [MILESTONE_COL.cluster2]: 0.7,
-    [MILESTONE_COL.cluster3]: 0.6, [MILESTONE_COL.cluster4]: 0.5,
-    [MILESTONE_COL.finalInvestmentDecision]: 0.42,
-  },
-  ...o,
-});
-
-const country = (o: Partial<CountryRow> = {}): CountryRow => ({
-  id: "de", name: "Germany", order: 1, key: 1, ...o,
-});
-
-const edit = (o: Partial<MilestoneEdit> = {}): MilestoneEdit => ({
-  rowId: "d-wind", field: "Cluster 1", kind: "duration", raw: "12", valid: true, ...o,
-});
-
-const mapOf = (...list: MilestoneEdit[]): EditMap => {
-  let m: EditMap = new Map();
-  for (const e of list) m = upsertEdit(m, e);
-  return m;
-};
-
-/* ═══════════════════════════════════════════════════════════════ permission ════ */
-
-describe("permission", () => {
-  it("UT-ADMILE-001 a non-admin is blocked", () => {
-    expect(canSeeAdminSection(user())).toBe(false);
-    expect(canSeeAdminSection(user({ isApplicationAdministrator: true }))).toBe(true);
+describe("SortCountries", () => {
+  it("UT-ADMILE-001 orders numeric keys ascending and blank keys last (AC-2a)", () => {
+    expect(sortCountries(FIXTURE_COUNTRIES).map((c) => c.name))
+      .toEqual(["France", "Germany", "Poland", "Spain"]);
   });
 
-  it("UT-ADMILE-001b country scope gates the writes (new, absent from the canvas)", () => {
-    const controller = user({
-      isControllerOwnData: true, editableCountries: [{ id: "de", name: "Germany" }],
-    });
-    expect(canEditScope(controller, "de")).toBe(true);
-    expect(canEditScope(controller, "fr")).toBe(false);
-    const plan = planSaveMilestones({ edits: mapOf(edit()), canEdit: false });
-    expect(plan.writes).toHaveLength(0);
-    expect(plan.refusedReason).toBe(MSG.outOfScope);
+  it("UT-ADMILE-002 sorts non-numeric keys last, by name, and does not mutate its input", () => {
+    const input = [
+      { id: "a", name: "Zeta", key: "x" },
+      { id: "b", name: "Alpha", key: undefined },
+      { id: "c", name: "Mid", key: " 3 " },
+    ];
+    expect(sortCountries(input).map((c) => c.name)).toEqual(["Mid", "Alpha", "Zeta"]);
+    expect(input[0]?.name).toBe("Zeta");
   });
-});
 
-/* ═════════════════════════════════════════════════════════════════ the pivot ════ */
-
-describe("the pivot", () => {
-  it("UT-ADMILE-002 countries are listed by Order", () => {
-    const list = sortCountries([
-      country({ id: "c", order: 3 }), country({ id: "a", order: 1 }),
-      country({ id: "d", order: 4 }), country({ id: "b", order: 2 }),
+  it("UT-ADMILE-003 maps the shared country rows to sections: id, name, key = vsb_title (DR-1)", () => {
+    expect(toMilestoneCountries([
+      { id: "c1", name: "Germany", title: "2", isoCurrencyCode: "EUR", active: true },
+      { id: "c2", name: "Spain", title: undefined, isoCurrencyCode: undefined, active: true },
+    ])).toEqual([
+      { id: "c1", name: "Germany", key: "2" },
+      { id: "c2", name: "Spain", key: undefined },
     ]);
-    expect(list.map((c) => c.id)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("GroupAssumptions", () => {
+  it("UT-ADMILE-010 groups by country and orders technologies by option value (AC-3a)", () => {
+    const groups = groupAssumptions(FIXTURE_ASSUMPTIONS).get(GERMANY) ?? [];
+    expect(groups.map((g) => g.technology)).toEqual([WIND, PV]);
+    expect(groups[0]?.durations?.id).toBe("de-wind-m");
+    expect(groups[0]?.successRates?.id).toBe("de-wind-s");
   });
 
-  it("UT-ADMILE-003 the pivot pairs the duration and success-rate rows per technology", () => {
-    const out = pivotByTechnology([
-      durationRow(), successRow(),
-      durationRow({ id: "d-pv", technology: CHOICE_ADMIN.technology.pv }),
-      successRow({ id: "s-pv", technology: CHOICE_ADMIN.technology.pv }),
+  it("UT-ADMILE-011 keeps a technology whose success row is missing", () => {
+    const groups = groupAssumptions(FIXTURE_ASSUMPTIONS).get(FRANCE) ?? [];
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.technology).toBe(BESS);
+    expect(groups[0]?.successRates).toBeUndefined();
+  });
+
+  it("UT-ADMILE-012 uses the first row of a duplicated kind and lists the rest", () => {
+    const rows = [
+      row("first", GERMANY, WIND, "months", { cluster1: 1 }),
+      row("second", GERMANY, WIND, "months", { cluster1: 2 }),
+    ];
+    const g = groupAssumptions(rows).get(GERMANY)?.[0];
+    expect(g?.durations?.id).toBe("first");
+    expect(g?.duplicates.map((d) => d.id)).toEqual(["second"]);
+    expect(duplicatesWarning(groupAssumptions(rows).get(GERMANY) ?? [])).toContain("Wind (Cluster Durations)");
+  });
+
+  it("UT-ADMILE-013 ignores unknown kind names and rows without a country", () => {
+    const rows: MilestoneAssumption[] = [
+      { ...row("y", GERMANY, WIND, "months", {}), name: "average duration [years]" },
+      { ...row("n", GERMANY, WIND, "months", {}), countryId: undefined },
+    ];
+    expect(groupAssumptions(rows).size).toBe(0);
+    expect(duplicatesWarning([])).toBeUndefined();
+  });
+
+  it("UT-ADMILE-014 (R1 GAP-3) a blank Technology is its own group, sorted first, as GroupBy keeps it (AMS:458-467)", () => {
+    const rows = [
+      row("w", GERMANY, WIND, "months", { cluster1: 1 }),
+      row("bm", GERMANY, undefined, "months", { cluster1: 2 }),
+      row("bs", GERMANY, undefined, "successRate", { cluster1: 0.5 }),
+      row("bm2", GERMANY, undefined, "months", { cluster1: 3 }),
+    ];
+    const groups = groupAssumptions(rows).get(GERMANY) ?? [];
+    expect(groups.map((g) => g.technology)).toEqual([undefined, WIND]);
+    expect(groups[0]?.durations?.id).toBe("bm");
+    expect(groups[0]?.successRates?.id).toBe("bs");
+    expect(duplicatesWarning(groups)).toContain("No technology (Cluster Durations)");
+  });
+
+  it("UT-ADMILE-015 (R1 GAP-3) a blank Technology's label is empty, as the canvas Text(Blank()) (AMS:767, 1900)", () => {
+    expect(technologyLabel(undefined)).toBe("");
+    expect(technologyName(undefined)).toBe("No technology");
+    expect(technologyName(WIND)).toBe("Wind");
+  });
+
+  it("UT-ADMILE-016 (R1 GAP-3) blank-Technology rows are editable: panel columns and patches", () => {
+    const rows = [
+      row("bm", GERMANY, undefined, "months", { cluster1: 2 }),
+      row("bs", GERMANY, undefined, "successRate", { cluster1: 0.5 }),
+    ];
+    const groups = groupAssumptions(rows).get(GERMANY) ?? [];
+    const panel = evaluatePanel(groups, { [cellKey("bm", "cluster1")]: "4" }, "en-US");
+    expect(panel.durationColumns.map((c) => c.row.id)).toEqual(["bm"]);
+    expect(panel.rateColumns.map((c) => c.row.id)).toEqual(["bs"]);
+    expect(panel.canSave).toBe(true);
+    expect(panel.patches).toEqual([
+      { id: "bm", changes: { vsb_cluster1: 4 }, label: "No technology – Cluster Durations" },
     ]);
-    expect(out).toHaveLength(2);
-    expect(out[0]!.technology).toBe(CHOICE_ADMIN.technology.wind);
-    expect(out[0]!.durationRowId).toBe("d-wind");
-    expect(out[0]!.successRateRowId).toBe("s-wind");
-    expect(out[0]!.entries).toHaveLength(9);
-    expect(out[0]!.entries.map((e) => e.label)).toEqual([...DURATION_FIELDS]);
-  });
-
-  it("UT-ADMILE-004 a missing success-rate row yields undefined, not a crash", () => {
-    const out = pivotByTechnology([durationRow()]);
-    expect(out).toHaveLength(1);
-    expect(out[0]!.successRateRowId).toBeNull();
-    const c1 = out[0]!.entries.find((e) => e.label === "Cluster 1")!;
-    expect(c1.duration).toBe(6);
-    expect(c1.successRate).toBeUndefined();
-    // …except FID, which is a literal 1 whatever happens.
-    expect(out[0]!.entries.find((e) => e.label === "FID")!.successRate).toBe(1);
-  });
-
-  it("UT-ADMILE-005 the FID success rate is ALWAYS the literal 1", () => {
-    const out = pivotByTechnology([
-      durationRow(),
-      successRow({ values: { [MILESTONE_COL.finalInvestmentDecision]: 0.42 } }),
-    ]);
-    const fid = out[0]!.entries.find((e) => e.label === "FID")!;
-    expect(fid.successRate).toBe(1);
-    expect(fid.duration).toBe(24);
-    // The stored 0.42 is ignored — the canvas hard-codes 1.
-  });
-
-  it("UT-ADMILE-006 'Sales End' is the column logically named vsb_salesduration; the key is plural", () => {
-    expect(MILESTONE_FIELD_COLUMN["Sales Duration"]).toBe(MILESTONE_COL.salesEnd);
-    expect(MILESTONE_COL.salesEnd).toBe("vsb_salesduration");
-    expect(MILESTONE_COL.id).toBe("vsb_milestonesstandardassumptionsid");
-    const out = pivotByTechnology([durationRow()]);
-    expect(out[0]!.entries.find((e) => e.label === "Sales Duration")!.duration).toBe(18);
-    // The map is declared in ONE place, so the mismatch cannot be half-fixed.
-    expect(MILESTONE_FIELD_COLUMN["Sales Start"]).toBe(MILESTONE_COL.salesStart);
-  });
-
-  it("UT-ADMILE-006b only Cluster 1–4 carry an editable success rate", () => {
-    expect(SUCCESS_RATE_FIELDS).toEqual(["Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"]);
-    expect(DURATION_FIELDS).toHaveLength(9);
-  });
-
-  it("UT-ADMILE-006c the two row families split on the magic Name strings", () => {
-    const rows = [durationRow(), successRow()];
-    expect(durationRows(rows).map((r) => r.id)).toEqual(["d-wind"]);
-    expect(successRateRows(rows).map((r) => r.id)).toEqual(["s-wind"]);
-    expect(MILESTONE_ROW_NAME.duration).toBe("average duration [months]");
-    expect(MILESTONE_ROW_NAME.successRate).toBe("success rate [-]");
   });
 });
 
-/* ══════════════════════════════════════════════════════════════ validation ════ */
-
-describe("cell validation", () => {
-  it("UT-ADMILE-007 a duration accepts digits only", () => {
-    expect(isValidDuration("12")).toBe(true);
-    expect(isValidDuration("12.5")).toBe(false);
-    expect(isValidDuration("")).toBe(false);
-    expect(isValidDuration("1 2")).toBe(false);
-    // `IsMatch(Self.Value, "^\d+$")` has no trim: surrounding spaces fail, as in the canvas.
-    expect(isValidDuration(" 5")).toBe(false);
-    // DIVERGENCE kept from the canvas: "positive" in the message, but 0 is accepted.
-    expect(isValidDuration("0")).toBe(true);
+describe("Canvas text and typography", () => {
+  it("UT-ADMILE-017 panel headings are the canvas strings verbatim, plain hyphen (AMS:1141, 1928)", () => {
+    expect(HEADING.durations).toBe("Cluster Durations [months]");
+    expect(HEADING.successRates).toBe("Cluster Probabilities - Success Rate [-]");
   });
 
-  it("UT-ADMILE-008 a negative duration is rejected", () => {
-    expect(isValidDuration("-3")).toBe(false);
-    expect(isValidDuration("+3")).toBe(false);
+  it("UT-ADMILE-018 every visible label of the screen is ASCII, like the canvas", () => {
+    const labels = [
+      ...Object.values(HEADING), ...Object.values(KIND_LABEL),
+      ...DURATION_FIELDS.map((d) => d.label), ...RATE_FIELDS.map((r) => r.label),
+      ...MATRIX_COLUMNS.map((c) => c.label), MSG.durationInvalid, MSG.rateInvalid,
+      MSG.saving("X"), MSG.saved, MSG.saveFailed,
+    ];
+    // eslint-disable-next-line no-control-regex
+    for (const l of labels) expect(l).toMatch(/^[\x00-\x7F]*$/);
   });
 
-  it("UT-ADMILE-009 a success rate of 0–1 with two decimals is accepted", () => {
-    expect(isValidSuccessRate("0.85")).toBe(true);
-    expect(isValidSuccessRate("1")).toBe(true);
-    expect(isValidSuccessRate("0")).toBe(true);
-  });
-
-  it("UT-ADMILE-010 a success rate above 1 is rejected", () => {
-    expect(isValidSuccessRate("1.20")).toBe(false);
-    expect(isValidSuccessRate("2")).toBe(false);
-  });
-
-  it("UT-ADMILE-011 a success rate with three decimals is rejected", () => {
-    expect(isValidSuccessRate("0.855")).toBe(false);
-  });
-
-  it("UT-ADMILE-012 a blank success rate is rejected", () => {
-    expect(isValidSuccessRate("")).toBe(false);
-    expect(isValidSuccessRate("   ")).toBe(false);
-    expect(validateEdit("successRate", "")).toBe(false);
-    expect(validateEdit("duration", "7")).toBe(true);
+  it("UT-ADMILE-019 typography: country Medium/Normal/black; values and sub-labels Large; technology ExtraLarge", () => {
+    expect(TYPOGRAPHY.countryName).toEqual({ fontSize: tokens.fontSizeBase300, fontWeight: tokens.fontWeightRegular, color: palette.black });
+    expect(TYPOGRAPHY.value).toEqual({ fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightRegular });
+    expect(TYPOGRAPHY.subLabel).toEqual({ fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightRegular, color: tokens.colorNeutralForeground1 });
+    expect(TYPOGRAPHY.technology).toEqual({ fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightRegular });
   });
 });
 
-/* ═══════════════════════════════════════════════════════════════ the edit map ════ */
+describe("MatrixCells", () => {
+  const de = groupAssumptions(FIXTURE_ASSUMPTIONS).get(GERMANY) ?? [];
+  const cell = (cells: ReturnType<typeof matrixCells>, key: string) => cells.find((c) => c.key === key);
 
-describe("the edit map (replacing the sentinel-string journal)", () => {
-  it("UT-ADMILE-013 Save is disabled with no edits", () => {
-    expect(canSave(new Map())).toBe(false);
-    expect(planSaveMilestones({ edits: new Map(), canEdit: true }).refusedReason)
-      .toBe(MSG.noEdits);
+  it("UT-ADMILE-020 shows duration and success rate for Cluster 1–4", () => {
+    const wind = matrixCells(de[0]!, "en-US");
+    expect(cell(wind, "cluster3")).toMatchObject({ duration: "24", rate: "0.75" });
   });
 
-  it("UT-ADMILE-014 one invalid cell disables Save and names itself", () => {
-    const edits = mapOf(
-      edit({ field: "Cluster 1", raw: "12" }),
-      edit({ field: "Cluster 2", raw: "14" }),
-      edit({ field: "Cluster 3", raw: "9" }),
-      edit({ field: "Cluster 4", raw: "1.5", valid: false }),
-    );
-    expect(canSave(edits)).toBe(false);
-    expect(invalidEdits(edits).map((e) => e.field)).toEqual(["Cluster 4"]);
-    expect(saveErrorMessages(edits)).toEqual([MSG.invalidDuration]);
-    // The canvas could not do this: validity lived as the STRING "invalid duration"
-    // inside the collection, so only one message for the whole country was possible.
+  it("UT-ADMILE-021 FID success is always 1; a blank FID duration shows '-' (decision, not 0.75)", () => {
+    const pv = matrixCells(de[1]!, "en-US");
+    expect(cell(pv, "fid")).toMatchObject({ duration: "-", rate: "1" });
+    const wind = matrixCells(de[0]!, "en-US");
+    expect(cell(wind, "fid")).toMatchObject({ duration: "3", rate: "1" });
   });
 
-  it("UT-ADMILE-014b a bad success rate reports the success-rate message", () => {
-    const edits = mapOf(edit({ kind: "successRate", field: "Cluster 1", raw: "1.2", valid: false }));
-    expect(saveErrorMessages(edits)).toEqual([MSG.invalidSuccessRate]);
+  it("UT-ADMILE-022 Cluster 5 success is literal 1 even when a success value is stored", () => {
+    const g = groupAssumptions([
+      row("m", GERMANY, WIND, "months", { cluster5: 6 }),
+      row("s", GERMANY, WIND, "successRate", { cluster5: 0.4 }),
+    ]).get(GERMANY)![0]!;
+    expect(cell(matrixCells(g, "en-US"), "cluster5")).toMatchObject({ duration: "6", rate: "1" });
   });
 
-  it("UT-ADMILE-015 the map upserts per (row, field)", () => {
-    let edits = mapOf(edit({ raw: "12" }));
-    edits = upsertEdit(edits, edit({ raw: "14" }));
-    expect(edits.size).toBe(1);
-    expect(edits.get(editKey("d-wind", "Cluster 1"))!.raw).toBe("14");
-    // A different field is a different entry.
-    edits = upsertEdit(edits, edit({ field: "Cluster 2", raw: "3" }));
-    expect(edits.size).toBe(2);
+  it("UT-ADMILE-023 Sales Start/End success is '-'; Sales End reads vsb_salesduration", () => {
+    const wind = matrixCells(de[0]!, "en-US");
+    expect(cell(wind, "salesStart")).toMatchObject({ duration: "6", rate: "-" });
+    expect(cell(wind, "salesEnd")).toMatchObject({ duration: "24", rate: "-" });
   });
 
-  it("UT-ADMILE-020 cancelling discards the map (the caller replaces it wholesale)", () => {
-    const edits = mapOf(edit(), edit({ field: "Cluster 2" }));
-    expect(edits.size).toBe(2);
-    const afterCancel: EditMap = new Map();
-    expect(canSave(afterCancel)).toBe(false);
-  });
-});
-
-/* ═════════════════════════════════════════════════════════════════════ the save ════ */
-
-describe("the save", () => {
-  it("UT-ADMILE-016 the batch patches only the changed columns", () => {
-    const plan = planSaveMilestones({
-      edits: mapOf(edit({ field: "Cluster 2", raw: "14" })), canEdit: true,
-    });
-    expect(plan.writes).toHaveLength(1);
-    expect(plan.writes[0]).toMatchObject({
-      op: "update", entitySet: MILESTONE_ENTITY_SET, id: "d-wind",
-      data: { [MILESTONE_COL.cluster2]: 14 },
-    });
-    expect(Object.keys(plan.writes[0]!.data ?? {})).toEqual([MILESTONE_COL.cluster2]);
+  it("UT-ADMILE-024 blanks render '-' including Cluster 1–4 when the success row is missing (AC-3b)", () => {
+    const fr = groupAssumptions(FIXTURE_ASSUMPTIONS).get(FRANCE)![0]!;
+    const cells = matrixCells(fr, "en-US");
+    expect(cell(cells, "cluster1")).toMatchObject({ duration: "3", rate: "-" });
+    expect(cell(cells, "cluster2")).toMatchObject({ duration: "-", rate: "-" });
+    expect(cell(cells, "operationalLifetime")).toMatchObject({ duration: "-", rate: "-" });
   });
 
-  it("UT-ADMILE-017 edits across three technologies become ONE batch of three PATCHes", () => {
-    const plan = planSaveMilestones({
-      edits: mapOf(
-        edit({ rowId: "d-wind", field: "Cluster 1", raw: "6" }),
-        edit({ rowId: "d-pv", field: "Cluster 1", raw: "7" }),
-        edit({ rowId: "d-bess", field: "Cluster 1", raw: "8" }),
-      ),
-      canEdit: true,
-    });
-    expect(plan.writes).toHaveLength(3);
-    expect(plan.writes.map((w) => w.id)).toEqual(["d-wind", "d-pv", "d-bess"]);
-  });
-
-  it("UT-ADMILE-017b several cells on one row collapse into one PATCH", () => {
-    const plan = planSaveMilestones({
-      edits: mapOf(
-        edit({ field: "Cluster 1", raw: "6" }),
-        edit({ field: "Sales Duration", raw: "20" }),
-      ),
-      canEdit: true,
-    });
-    expect(plan.writes).toHaveLength(1);
-    expect(plan.writes[0]!.data).toEqual({
-      [MILESTONE_COL.cluster1]: 6,
-      [MILESTONE_COL.salesEnd]: 20,
-    });
-  });
-
-  it("UT-ADMILE-018 a successful save clears the map (the caller resets it)", () => {
-    const plan = planSaveMilestones({ edits: mapOf(edit()), canEdit: true });
-    expect(plan.writes).toHaveLength(1);
-    // The canvas Save never `Clear`ed `col_MilestoneAssumtionsUpdates`; it only `Select`ed
-    // a hidden reset button, so stale journal rows survived into the next session.
-    const cleared: EditMap = new Map();
-    expect(canSave(cleared)).toBe(false);
-  });
-
-  it("UT-ADMILE-026 a batch that would carry an invalid column is refused outright", () => {
-    const plan = planSaveMilestones({
-      edits: mapOf(edit({ raw: "12" }), edit({ field: "Cluster 2", raw: "x", valid: false })),
-      canEdit: true,
-    });
-    expect(plan.writes).toHaveLength(0);
-    expect(plan.refusedReason).toBe(MSG.invalidDuration);
-    // The canvas relied on ONE global disable; this is the second belt the spec asks for.
-  });
-
-  it("UT-ADMILE-027 a country with no assumptions pivots to nothing and cannot save", () => {
-    expect(pivotByTechnology([])).toEqual([]);
-    expect(planSaveMilestones({ edits: new Map(), canEdit: true }).refusedReason)
-      .toBe(MSG.noEdits);
-    expect(MSG.emptyCountry.length).toBeGreaterThan(0);
+  it("UT-ADMILE-025 formats in the user's locale with at most 2 decimals and no grouping", () => {
+    expect(formatValue(0.755, "de-DE")).toBe("0,76");
+    expect(formatValue(1000, "en-US")).toBe("1000");
+    expect(formatValue(undefined)).toBe("-");
   });
 });
 
-/* ═══════════════════════════════════════════════════════ the screenshot-driven UI (p22) */
-
-describe("the drawer title, field labels and the summary grid", () => {
-  it("UT-ADMILE-028 the drawer title interpolates the country name", () => {
-    expect(editMilestonesTitle("Germany")).toBe("Edit Milestones for Germany");
-    expect(editMilestonesTitle("France")).toBe("Edit Milestones for France");
-  });
-
-  it("UT-ADMILE-029 the two section titles are verbatim", () => {
-    expect(MSG.durationsSectionTitle).toBe("Cluster Durations [months]");
-    expect(MSG.successRateSectionTitle).toBe("Cluster Probabilities - Success Rate [-]");
-  });
-
-  it("UT-ADMILE-030 the panel spells FID and Sales Duration differently from the grid", () => {
-    expect(milestoneFieldDisplayLabel("FID")).toBe("Final Investment Decision");
-    expect(milestoneFieldDisplayLabel("Sales Duration")).toBe("Sales End");
-    // Every other field's panel label is its own key, unchanged.
-    expect(milestoneFieldDisplayLabel("Cluster 1")).toBe("Cluster 1");
-    expect(milestoneFieldDisplayLabel("Operational Lifetime")).toBe("Operational Lifetime");
-  });
-
-  it("UT-ADMILE-032 technology names match the choice set, with PV capitalised", () => {
-    expect(technologyDisplayName(CHOICE_ADMIN.technology.wind)).toBe("Wind");
-    expect(technologyDisplayName(CHOICE_ADMIN.technology.pv)).toBe("PV");
-    // The generated label, not a re-cased key: "BESS", not "Bess".
-    expect(technologyDisplayName(952850003)).toBe("BESS");
-    expect(technologyDisplayName(null)).toBe("—");
-    expect(technologyDisplayName(999999)).toBe("—");
-  });
-
-  it("UT-ADMILE-034 the grid cells follow each canvas cell formula", () => {
-    const [wind] = pivotByTechnology([
-      durationRow({ values: { [MILESTONE_COL.cluster1]: 6, [MILESTONE_COL.cluster5]: 18, [MILESTONE_COL.salesStart]: 3 } }),
-      successRow({ values: { [MILESTONE_COL.cluster1]: 0.8, [MILESTONE_COL.cluster5]: 0.4 } }),
-    ]);
-    const cell = (label: string) => summaryCellText(wind!.entries.find((e) => e.label === label));
-    expect(cell("Cluster 1")).toEqual(["6", "0.8"]);
-    expect(cell("FID")).toEqual(["0.75", "1"]);              // Coalesce(Duration, 0.75) / literal 1
-    expect(cell("Cluster 5")).toEqual(["18", "1"]);           // literal 1, not the stored 0.4
-    expect(cell("Operational Lifetime")).toEqual(["-", "-"]); // Coalesce(Text(…), "-")
-    expect(cell("Sales Start")).toEqual(["3", "-"]);
-    expect(cell("Sales Duration")).toEqual(["-", "-"]);
-  });
-
-  it("UT-ADMILE-035 the editor pre-fills 0 where the canvas Coalesces to \"0\"", () => {
-    const row = durationRow({ values: { [MILESTONE_COL.cluster1]: 6 } });
-    expect(initialInputValue(row, "Cluster 1", "duration")).toBe("6");
-    expect(initialInputValue(row, "Cluster 2", "duration")).toBe("");
-    for (const f of ["FID", "Cluster 5", "Operational Lifetime", "Sales Start", "Sales Duration"] as const) {
-      expect(initialInputValue(row, f, "duration")).toBe("0");
+describe("ValidateDuration", () => {
+  it("UT-ADMILE-030 accepts whole numbers ≥ 0 only (AC-6a)", () => {
+    expect(validateDuration("12", 100)).toEqual({ ok: true, value: 12 });
+    expect(validateDuration("0", 100)).toEqual({ ok: true, value: 0 });
+    expect(validateDuration(" 6 ", 100)).toEqual({ ok: true, value: 6 });
+    for (const bad of ["12.5", "12,5", "-1", "+3", "", "abc", "1e2"]) {
+      expect(validateDuration(bad, 100)).toEqual({ ok: false, message: MSG.durationInvalid });
     }
-    expect(initialInputValue(successRow({ values: {} }), "Cluster 1", "successRate")).toBe("");
   });
 
-  it("UT-ADMILE-036 the country order is Value(Key) — numeric, blanks first", () => {
-    expect(countryOrder("10")).toBe(10);
-    expect(countryOrder(" ")).toBeNull();
-    expect(countryOrder("x")).toBeNull();
-    const list = sortCountries([
-      country({ id: "ten", order: 10 }), country({ id: "two", order: 2 }), country({ id: "none", order: null }),
+  it("UT-ADMILE-031 enforces the Dataverse maxima: 100 clusters, 1000 others (AC-6c)", () => {
+    expect(validateDuration("100", 100).ok).toBe(true);
+    expect(validateDuration("101", 100).ok).toBe(false);
+    expect(validateDuration("101", 1000).ok).toBe(true);
+    expect(validateDuration("1001", 1000).ok).toBe(false);
+  });
+});
+
+describe("ValidateSuccessRate", () => {
+  it("UT-ADMILE-040 accepts 0–1 with up to 2 decimals, with either separator (AC-6b)", () => {
+    expect(validateSuccessRate("0,85")).toEqual({ ok: true, value: 0.85 });
+    expect(validateSuccessRate("0.85")).toEqual({ ok: true, value: 0.85 });
+    expect(validateSuccessRate("1")).toEqual({ ok: true, value: 1 });
+    expect(validateSuccessRate("0")).toEqual({ ok: true, value: 0 });
+    expect(validateSuccessRate("1.")).toEqual({ ok: true, value: 1 });
+  });
+
+  it("UT-ADMILE-041 rejects more than 2 decimals, out of range, signs and blanks", () => {
+    for (const bad of ["0.855", "0,855", "1.2", "-0.1", "+0.5", "", " ", ".5", "abc"]) {
+      expect(validateSuccessRate(bad)).toEqual({ ok: false, message: MSG.rateInvalid });
+    }
+  });
+});
+
+describe("InitialText / evaluateCell", () => {
+  it("UT-ADMILE-050 prefills blanks: C5/OL/Sales durations show a '0' placeholder, others nothing (C-5)", () => {
+    expect(initialText("durations", "cluster5", undefined)).toBe("");
+    expect(placeholderText("durations", "cluster5", undefined)).toBe("0");
+    expect(placeholderText("durations", "salesEnd", undefined)).toBe("0");
+    expect(placeholderText("durations", "operationalLifetime", undefined)).toBe("0");
+    expect(placeholderText("durations", "salesEnd", 4)).toBeUndefined();
+    expect(placeholderText("durations", "fid", undefined)).toBeUndefined();
+    expect(placeholderText("durations", "cluster1", undefined)).toBeUndefined();
+    expect(placeholderText("successRates", "cluster1", undefined)).toBeUndefined();
+    expect(initialText("durations", "fid", undefined)).toBe("");
+    expect(initialText("successRates", "cluster1", undefined)).toBe("");
+    expect(initialText("successRates", "cluster1", 0.9, "de-DE")).toBe("0,9");
+  });
+
+  it("UT-ADMILE-054 an explicit 0 over a blank blank-as-zero field is dirty; untouched writes nothing (C-5 / B4)", () => {
+    expect(evaluateCell("durations", "cluster5", undefined, "0")).toMatchObject({ touched: true, dirty: true, value: 0, placeholder: "0" });
+    expect(evaluateCell("durations", "cluster5", undefined, undefined)).toMatchObject({ text: "", touched: false, dirty: false });
+    const rows = byId([row("m", GERMANY, WIND, "months", {})]);
+    expect(buildPatches({ [cellKey("m", "cluster5")]: "0" }, rows)[0]?.changes).toEqual({ vsb_cluster5: 0 });
+    expect(buildPatches({}, rows)).toEqual([]);
+    expect(evaluatePanel(groupAssumptions([row("m", GERMANY, WIND, "months", {})]).get(GERMANY) ?? [], {}).canSave).toBe(false);
+  });
+
+  it("UT-ADMILE-055 native-digit locales still prefill and display Latin digits (C-6 / B5)", () => {
+    expect(initialText("durations", "cluster1", 12, "ar-EG")).toBe("12");
+    expect(formatValue(12, "ar-EG")).toBe("12");
+    expect(formatValue(36, "fa-IR")).toBe("36");
+    // The prefill round-trips through validation untouched-then-retyped.
+    expect(evaluateCell("durations", "cluster1", 12, "13", "ar-EG")).toMatchObject({ dirty: true, value: 13 });
+    expect(evaluateCell("durations", "cluster1", 12, "12", "ar-EG")).toMatchObject({ touched: false });
+  });
+
+  it("UT-ADMILE-051 a value typed and reverted is not dirty (AC-7a)", () => {
+    expect(evaluateCell("durations", "cluster1", 12, "13")).toMatchObject({ touched: true, dirty: true, value: 13 });
+    expect(evaluateCell("durations", "cluster1", 12, "12")).toMatchObject({ touched: false, dirty: false });
+    expect(evaluateCell("durations", "cluster1", 12, "012")).toMatchObject({ touched: true, dirty: false });
+  });
+
+  it("UT-ADMILE-052 an untouched invalid stored value is not validated (FID 0.75)", () => {
+    expect(evaluateCell("durations", "fid", 0.75, undefined, "en-US")).toEqual({ text: "0.75", touched: false, dirty: false });
+  });
+
+  it("UT-ADMILE-053 a touched invalid value carries its message", () => {
+    expect(evaluateCell("durations", "cluster2", 5, "101").error).toBe("Enter a value of at most 100 months");
+    expect(evaluateCell("successRates", "cluster1", 0.5, "0.555").error).toBe(MSG.rateInvalid);
+  });
+});
+
+describe("BuildPatches", () => {
+  const rows = byId(FIXTURE_ASSUMPTIONS);
+
+  it("UT-ADMILE-060 excludes unchanged values and rows", () => {
+    expect(buildPatches({ [cellKey("de-wind-m", "cluster1")]: "12" }, rows)).toEqual([]);
+  });
+
+  it("UT-ADMILE-061 maps Sales End to vsb_salesduration", () => {
+    const patches = buildPatches({ [cellKey("de-wind-m", "salesEnd")]: "30" }, rows);
+    expect(patches).toEqual([{ id: "de-wind-m", changes: { vsb_salesduration: 30 }, label: "Wind – Cluster Durations" }]);
+  });
+
+  it("UT-ADMILE-062 parses a comma decimal ('0,6' → 0.6) for de-DE", () => {
+    const patches = buildPatches({ [cellKey("de-wind-s", "cluster1")]: "0,6" }, rows, "de-DE");
+    expect(patches[0]?.changes).toEqual({ vsb_cluster1: 0.6 });
+  });
+
+  it("UT-ADMILE-063 duration and success rows produce separate targets with only their column (AC-8a)", () => {
+    const patches = buildPatches({
+      [cellKey("de-wind-m", "cluster1")]: "13",
+      [cellKey("de-wind-s", "cluster1")]: "0.55",
+    }, rows);
+    expect(patches).toEqual([
+      { id: "de-wind-m", changes: { vsb_cluster1: 13 }, label: "Wind – Cluster Durations" },
+      { id: "de-wind-s", changes: { vsb_cluster1: 0.55 }, label: "Wind – Success Rates" },
     ]);
-    expect(list.map((c) => c.id)).toEqual(["none", "two", "ten"]);
   });
 
-  it("UT-ADMILE-037 save texts are the canvas texts, with the 'Standart' typo corrected", () => {
-    expect(savingText("Germany")).toBe("Milestone Standard Assumptions for 'Germany' will be saved, please wait...");
-    expect(MSG.saved).toBe("Milestone Standard Assumptions were successfully saved.");
-    expect(saveErrorText("boom")).toBe("Error: Milestone Standard Assumptions could not be saved. Internal error: boom");
+  it("UT-ADMILE-064 ignores invalid values and success-row fields that are not editable", () => {
+    expect(buildPatches({
+      [cellKey("de-wind-m", "cluster1")]: "12.5",
+      [cellKey("de-wind-s", "cluster5")]: "0.3",
+    }, rows)).toEqual([]);
   });
 
-  it("UT-ADMILE-038 inputs use the canvas control names and the 256 limit", () => {
-    expect(milestoneInputTestId("duration", "FID")).toBe("txt_Admin_MilestoneAssumption_Form_Fields_Durations_FID_Input");
-    expect(milestoneInputTestId("duration", "Sales Duration")).toBe("txt_Admin_MilestoneAssumption_Form_Fields_Durations_SalesEnd_Input");
-    expect(milestoneInputTestId("successRate", "Cluster 2")).toBe("txt_Admin_MilestoneAssumption_Form_Fields_SuccessRates_Cluster2_Input");
-    expect(INPUT_MAX_LENGTH).toBe(256);
+  it("UT-ADMILE-065 typing over a blank-as-0 prefill writes the typed value", () => {
+    const patches = buildPatches({ [cellKey("de-pv-m", "salesStart")]: "4" }, rows);
+    expect(patches[0]?.changes).toEqual({ vsb_salesstart: 4 });
+  });
+});
+
+describe("EvaluatePanel", () => {
+  const de = groupAssumptions(FIXTURE_ASSUMPTIONS).get(GERMANY) ?? [];
+
+  it("UT-ADMILE-070 one column per technology, a duration-only technology in matrix 1 only (AC-5b)", () => {
+    const fr = evaluatePanel(groupAssumptions(FIXTURE_ASSUMPTIONS).get(FRANCE) ?? [], {});
+    expect(fr.durationColumns.map((c) => c.technology)).toEqual([BESS]);
+    expect(fr.rateColumns).toEqual([]);
+    expect(evaluatePanel(de, {}).durationColumns.map((c) => c.technology)).toEqual([WIND, PV]);
+  });
+
+  it("UT-ADMILE-071 Save gate: nothing changed → disabled; change → enabled; revert → disabled (AC-7a)", () => {
+    expect(evaluatePanel(de, {}).canSave).toBe(false);
+    expect(evaluatePanel(de, { [cellKey("de-wind-m", "cluster1")]: "13" }).canSave).toBe(true);
+    const reverted = evaluatePanel(de, { [cellKey("de-wind-m", "cluster1")]: "12" });
+    expect(reverted.canSave).toBe(false);
+    expect(reverted.touched).toBe(false);
+  });
+
+  it("UT-ADMILE-072 a valid change plus an invalid change keeps Save disabled (AC-7b)", () => {
+    const state = evaluatePanel(de, {
+      [cellKey("de-wind-m", "cluster1")]: "13",
+      [cellKey("de-wind-m", "cluster2")]: "12.5",
+      [cellKey("de-pv-s", "cluster1")]: "2",
+    });
+    expect(state.canSave).toBe(false);
+    expect(state.durationErrors).toEqual([MSG.durationInvalid]);
+    expect(state.rateErrors).toEqual([MSG.rateInvalid]);
+  });
+
+  it("UT-ADMILE-073 lists the canvas message before a bound message", () => {
+    const state = evaluatePanel(de, {
+      [cellKey("de-wind-m", "cluster2")]: "101",
+      [cellKey("de-wind-m", "cluster3")]: "x",
+    });
+    expect(state.durationErrors).toEqual([MSG.durationInvalid, "Enter a value of at most 100 months"]);
+  });
+});
+
+describe("SaveFailureMessage", () => {
+  it("UT-ADMILE-080 names failed and saved rows after the canvas prefix", () => {
+    const a = { id: "a", changes: {}, label: "Wind – Cluster Durations" };
+    const b = { id: "b", changes: {}, label: "Wind – Success Rates" };
+    expect(saveFailureMessage([b], [{ patch: a, reason: "Boom." }])).toBe(
+      `${MSG.saveFailed} Boom. Not saved: Wind – Cluster Durations. Saved: Wind – Success Rates.`,
+    );
+    expect(saveFailureMessage([], [{ patch: a, reason: "Boom." }])).toContain("Nothing was saved.");
   });
 });

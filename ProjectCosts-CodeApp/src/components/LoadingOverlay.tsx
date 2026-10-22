@@ -25,7 +25,7 @@
  * `CapexScreenCode.txt:17413`), which is what the reference filename spells out. That ordering
  * is the caller's job — see `capex-costs/Screen.tsx`'s `persist()`.
  */
-import { makeStyles, Spinner, Text, tokens } from "@fluentui/react-components";
+import { makeStyles, Portal, Spinner, Text, tokens } from "@fluentui/react-components";
 import { palette, space } from "@/theme/tokens";
 
 const useStyles = makeStyles({
@@ -61,6 +61,8 @@ const useStyles = makeStyles({
     fontSize: "14.7px",
     fontWeight: tokens.fontWeightSemibold,
     lineHeight: "20px",
+    // Multi-line labels (`\n`, the Application Settings spinner texts). No effect on one-line labels.
+    whiteSpace: "pre-line",
   },
   /*
    * `mode="inline"` stands in for a whole content area while it loads, so it fills that area
@@ -78,9 +80,22 @@ export interface LoadingOverlayProps {
   /** `"blocking"` is the modal save spinner; `"inline"` fills a content area. */
   mode?: "blocking" | "inline";
   label?: string;
+  /**
+   * Blocking mode only: render through a Fluent `Portal` into `document.body`, so the scrim covers
+   * an open drawer whatever stacking contexts the shell creates (Application Settings). Off by
+   * default, so every existing caller renders exactly where it did.
+   */
+  portal?: boolean;
 }
 
-export function LoadingOverlay({ mode = "blocking", label }: LoadingOverlayProps) {
+export function LoadingOverlay({ mode = "blocking", label, portal = false }: LoadingOverlayProps) {
+  if (mode === "blocking" && portal) {
+    return <Portal><LoadingOverlayBody mode="blocking" label={label} /></Portal>;
+  }
+  return <LoadingOverlayBody mode={mode} label={label} />;
+}
+
+function LoadingOverlayBody({ mode = "blocking", label }: Omit<LoadingOverlayProps, "portal">) {
   const styles = useStyles();
 
   if (mode === "inline") {

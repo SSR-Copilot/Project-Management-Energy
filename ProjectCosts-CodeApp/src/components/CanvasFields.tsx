@@ -8,9 +8,11 @@
  * match, so `CostSelect` renders one.
  */
 import type { ReactNode } from "react";
-import { Button, Dropdown, Option, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { Button, Dropdown, Option, Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { CheckmarkRegular, DismissRegular } from "@fluentui/react-icons";
+import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
+import { useFormPanel } from "./formPanelContext";
 import { useStandardValueClass, type StandardProp } from "./standardValue";
 
 const useStyles = makeStyles({
@@ -30,6 +32,16 @@ const useStyles = makeStyles({
    */
   /** `btn_…_Buttons_Save` — `Icon: ="Checkmark"`, `Text: ="Save"`, `FontSize: =15` (`:17409-17414`). */
   save: { height: "32px", minWidth: "96px", fontSize: "15px" },
+  /** `look="brand"` (the Application Settings pair): the buttons keep canvas.css's 96 px band chrome. */
+  brandButton: { minWidth: "96px" },
+  /** `gap={20}`: CAPEX Accounts places Save at `Cancel.X - Self.Width - 20` (CAX:1440); the extra 10 px is a left margin on Cancel. */
+  wideGap: { marginLeft: "10px" },
+  /** `hint`: left-aligned, grows, overrides the footer's `> *:first-child { margin-left: auto }` (Costs period drawer). */
+  hint: {
+    flexGrow: 1, flexShrink: 1, flexBasis: "auto",
+    marginLeft: "0 !important",
+    color: palette.Error, fontSize: "12px",
+  },
   /**
    * A disabled PowerCAT `IconType: ActionButton` Save (e.g. the PM Finance panels): no fill, the
    * label in the disabled grey and `IconColor: If(Self.DisplayMode = Disabled, palette.black, …)`.
@@ -199,9 +211,16 @@ export function Choices({ label, name, value, options, onChange, required, disab
  * `:17537`, `:17994`) and lays them out left-to-right in that order, so the extra action sits
  * BETWEEN Save and Cancel — which is also what the client's screenshot shows. Every other
  * panel passes nothing and keeps the two-button footer it had.
+ *
+ * The Application Settings panels use the same pair through the optional props below (`look="brand"` etc., or
+ * `FormPanel actions`); left out, the output is exactly the canvas pair above.
  */
-export function PanelButtons({ onSave, onCancel, disabled, extra, saveTestId = "panel-save", cancelTestId = "panel-cancel", saveLabel = "Save", cancelLabel = "Cancel", saveTooltip, subtleWhenDisabled }: {
-  onSave: () => void; onCancel: () => void; disabled?: boolean; extra?: ReactNode;
+export interface PanelButtonsProps {
+  onSave: () => void;
+  /** Default: the enclosing `FormPanel`'s guard (`useFormPanel().requestClose("cancel")`). Pass it outside a panel. */
+  onCancel?: () => void;
+  /** Disables Save. */
+  disabled?: boolean; extra?: ReactNode;
   /** Tosca identities — the canvas `btn_…_Save` / `btn_…_Cancel` names where known. */
   saveTestId?: string; cancelTestId?: string;
   /** The buttons' `aria-label` — the canvas `AccessibleLabel` where it sets one; the caption otherwise. */
@@ -210,18 +229,46 @@ export function PanelButtons({ onSave, onCancel, disabled, extra, saveTestId = "
   saveTooltip?: string;
   /**
    * A disabled Save renders as a transparent text button with a black ✓ (the PowerCAT
-   * `ActionButton` look) instead of Fluent's grey primary. Enabled, it stays primary.
+   * `ActionButton` look) instead of Fluent's grey primary. Enabled, it stays primary. `look="canvas"` only.
    */
   subtleWhenDisabled?: boolean;
-}) {
+  /**
+   * `"canvas"` (default): the cost / PM panel pair (32 px, 15 px text, the caption is always "Save").
+   * `"brand"`: the Application Settings pair — primary Save whose caption is `saveLabel`, and Cancel as the
+   * canvas brand outline (white fill, `themePrimary` text and border; hover is Fluent's own outline hover).
+   */
+  look?: "canvas" | "brand";
+  /** A save is running: disables Save and Cancel. Default false. */
+  saving?: boolean;
+  /** Shown on Save while `saving`. The aria-label stays `saveLabel` (a11y invariant 4). */
+  savingLabel?: string;
+  /** Left-aligned, `aria-live="polite"`, before the buttons (Costs period drawer). */
+  hint?: ReactNode;
+  /** `look="brand"`: space between Save and Cancel; default 10 (canvas.css). CAPEX Accounts: 20 (CAX:1440). */
+  gap?: 10 | 20;
+}
+
+export function PanelButtons({
+  onSave, onCancel, disabled, extra, saveTestId = "panel-save", cancelTestId = "panel-cancel", saveLabel = "Save",
+  cancelLabel = "Cancel", saveTooltip, subtleWhenDisabled, look = "canvas", saving = false, savingLabel, hint, gap = 10,
+}: PanelButtonsProps) {
   const styles = useStyles();
-  const subtle = Boolean(subtleWhenDisabled && disabled);
+  const brand = useBrandButtonStyles();
+  const { requestClose } = useFormPanel();
+  const isBrand = look === "brand";
+  const subtle = Boolean(!isBrand && subtleWhenDisabled && disabled);
+  const saveCaption = saving && savingLabel ? savingLabel : isBrand ? saveLabel : "Save";
+  const cancel = onCancel ?? (() => requestClose("cancel"));
   return <>
-    <Button className={mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
+    {hint ? <Text className={styles.hint} aria-live="polite">{hint}</Text> : null}
+    <Button className={isBrand ? styles.brandButton : mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
       appearance={subtle ? "subtle" : "primary"} icon={<CheckmarkRegular />}
-      onClick={onSave} disabled={disabled} title={saveTooltip} aria-label={saveLabel} data-testid={saveTestId}>Save</Button>
+      onClick={onSave} disabled={saving ? true : disabled} title={saveTooltip} aria-label={saveLabel} data-testid={saveTestId}>{saveCaption}</Button>
     {extra}
-    <PanelCancelButton onCancel={onCancel} testId={cancelTestId} label={cancelLabel} />
+    {isBrand
+      ? <Button appearance="outline" className={mergeClasses(styles.brandButton, brand.brandOutline, gap === 20 && styles.wideGap)}
+        icon={<DismissRegular />} disabled={saving} onClick={() => cancel()} aria-label={cancelLabel} data-testid={cancelTestId}>{cancelLabel}</Button>
+      : <PanelCancelButton onCancel={cancel} testId={cancelTestId} label={cancelLabel} {...(saving ? { disabled: true } : {})} />}
   </>;
 }
 
@@ -229,15 +276,17 @@ export function PanelButtons({ onSave, onCancel, disabled, extra, saveTestId = "
  * The footer's Cancel on its own, for a panel whose canvas footer has no Save (e.g. the PM
  * checklist's cluster history panel). The same control as `PanelButtons`' Cancel.
  */
-export function PanelCancelButton({ onCancel, testId = "panel-cancel", label = "Cancel" }: {
+export function PanelCancelButton({ onCancel, testId = "panel-cancel", label = "Cancel", disabled }: {
   onCancel: () => void;
   /** Tosca identity — the canvas `…_Cancel` name where known. */
   testId?: string;
   /** The canvas `AccessibleLabel` where it sets one; the caption otherwise. */
   label?: string;
+  /** Disabled while a save runs (`PanelButtons saving`). Default enabled. */
+  disabled?: boolean;
 }) {
   const styles = useStyles();
-  return <Button className={styles.cancel} icon={<DismissRegular />} onClick={onCancel}
+  return <Button className={styles.cancel} icon={<DismissRegular />} onClick={onCancel} disabled={disabled}
     aria-label={label} data-testid={testId}>Cancel</Button>;
 }
 

@@ -42,7 +42,7 @@ import {
   searchFrenchMunicipalities, searchGermanMunicipalities,
   type AreaOption, type MunicipalityRow, type UtilizationOption,
 } from "@/data/generalData";
-import type { Persona } from "@/features/admin/admin-gates-approvals/rules";
+import type { Persona } from "@/data/adminGatesApprovals";
 import {
   franceSearchIsSuppressed, projectSaveErrorText,
   type CountryRef, type MunicipalityMode, type ProjectRow, type ProjectStateRef,

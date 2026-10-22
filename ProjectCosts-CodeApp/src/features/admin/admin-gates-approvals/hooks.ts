@@ -1,165 +1,135 @@
 /**
- * Admin Project Gates Approvals Screen — the data layer (connected 19 Oct 2026, D22).
+ * Project Gates — TanStack Query wiring over `projectGatesRepository`.
  *
- * Canvas screen: `Admin Project Gates Approvals Screen` (PM app). Every table was already
- * registered (`power.config.json`); none was added. The reads live in `data/adminGatesApprovals.ts`:
+ * Reads go through `projectGatesRepository`; every write is a one-write `WritePlan` from `./rules`
+ * run by `@/data/runPlan` (only the `mutationFn` is a plan: the optimistic flip, the invalidation and
+ * the `RecordGoneError` handling below are unchanged, and `runPlan` rethrows the failed write's
+ * own error so those `instanceof` checks and `userErrorText` still see it). `canEdit` is
+ * `useAdminAccess()`, passed by the screen; a plan built without it refuses.
  *
- *   useGateCountries()             `vsb_countries` — the rail (`col_cmpCountryPickerItems`).
- *   useGateStates()                `vsb_projectstates` — every state (gate list + dropdown labels).
- *   useGateApprovals(scope)        `vsb_projectdefaultapprovalses` for the country × technology.
- *   useScopeCountryTechId(scope)   `vsb_checklistcountryandtechnologies` — the scope row.
- *   useChecklistItems(id)          `vsb_projectdefaultchecklistses` of that scope row.
- *   useChecklistApprovals(ids)     `vsb_checklistdefaultapprovalses` of those templates.
- *   usePeopleSearch(term)          `aadusers` (`'Microsoft Entra IDs'`), enabled accounts only.
- *   usePortfolioManagerPersonas()  `aadusers` by key, for the two Portfolio Manager lookups.
+ * Keys are the shared `qk.adminGate*`. After any write the shared
+ * `invalidateAfterGatesWrite` refreshes this (country, technology) dataset and Check List
+ * Settings' locks query; states and countries stay cached. Countries come from the shared
+ * `useCountries({ includeInactive: true })` (`@/data/countries`), called by the screen.
  *
- * WRITES — each `WritePlan` from `rules.ts` runs through `usePlanWrite` (one write each: save,
- * the two status chips, delete, Reset Gate). FLOWS AND PLUGINS: none fires on
- * `vsb_projectdefaultapprovals` or `vsb_checklistdefaultapprovals` (04-flow-inventory.md,
- * verified 19 Oct 2026). The approval request flows only read these rows later from the PM
- * Checklist screen; this screen starts no flow and sends no mail.
- *
- * After a write: this screen's approvals and Portfolio Manager lookups are refreshed, and so are
- * Admin Default Checklists' task locks (`checklistTaskLocksAll`), which read the check-list
- * approvals' mode.
+ * Technologies are the `vsb_technology` choice CODE everywhere.
  */
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ES, ES_PROCESS } from "@/data/dataverseNames";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
-import type { ScreenData } from "@/data/notConnected";
-import { usePlanWrite } from "@/data/usePlanWrite";
+import { invalidateAfterGatesWrite } from "@/data/adminInvalidation";
+import { projectGatesRepository as repo, type GatesDataset, type Payload } from "@/data/adminGatesApprovals";
+import { CreatedIdMissingError } from "@/data/executePlan";
+import { runPlan } from "@/data/runPlan";
+import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
+import { RecordGoneError } from "@/platform/errors";
 import {
-  findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals,
-  listGateCountries, listGateStates, listScopeChecklistItems, searchEntraPeople,
-} from "@/data/adminGatesApprovals";
-import {
-  saveErrorText, shouldSearchPeople, technologyValue,
-  type ChecklistApproval, type ChecklistItem, type CountryRef, type GateApproval, type GateState,
-  type Persona, type Scope,
+  planDeleteTaskApproval, planResetGate, planSaveGate, planSaveTaskApproval, planSetGateActive,
+  planSetTaskApprovalActive,
 } from "./rules";
 
-/** Entity sets this screen reads and writes. */
-export const TABLES: readonly string[] = [
-  ES.countries,
-  ES.projectStates,
-  ES_PROCESS.projectDefaultApprovals,
-  ES.checklistCountryAndTechnologies,
-  ES_PROCESS.projectDefaultChecklists,
-  ES_PROCESS.checkListDefaultApprovals,
-  ES.aadUsers,
-];
-
-/** Reference data — edited rarely. */
-const STALE_MS = 5 * 60 * 1000;
-const NO_COUNTRIES: CountryRef[] = [];
-const NO_STATES: GateState[] = [];
-const NO_APPROVALS: GateApproval[] = [];
-const NO_ITEMS: ChecklistItem[] = [];
-const NO_CHECKLIST_APPROVALS: ChecklistApproval[] = [];
-const NO_PEOPLE: Persona[] = [];
-const NOBODY = (): Persona | null => null;
-
-function asScreenData<T>(
-  q: { data: T | undefined; isLoading: boolean; error: unknown }, empty: T,
-): ScreenData<T> {
-  return { data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
+export function useProjectStates() {
+  return useQuery({ queryKey: qk.adminGateStates, queryFn: () => repo.listProjectStates(), staleTime: Infinity });
 }
 
-const scopeArgs = (scope: Scope): { countryId: string; tech: number } | null => {
-  const tech = technologyValue(scope.technology);
-  return scope.country && tech !== null ? { countryId: scope.country.id, tech } : null;
-};
-
-export function useGateCountries(): ScreenData<CountryRef[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.gateCountries, queryFn: listGateCountries, staleTime: 30 * 60 * 1000 }),
-    NO_COUNTRIES,
-  );
-}
-
-export function useGateStates(): ScreenData<GateState[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.gateStates, queryFn: listGateStates, staleTime: STALE_MS }),
-    NO_STATES,
-  );
-}
-
-/** The gate gallery's rows for the scope. */
-export function useGateApprovals(scope: Scope): ScreenData<GateApproval[]> {
-  const a = scopeArgs(scope);
-  return asScreenData(useQuery({
-    queryKey: qk.gateApprovals(a?.countryId ?? "", a?.tech ?? -1),
-    queryFn: () => listGateApprovals(a!.countryId, a!.tech),
-    enabled: a !== null,
-  }), NO_APPROVALS);
-}
-
-/** The scope's `Checklist Country And Technologies` row id. */
-export function useScopeCountryTechId(scope: Scope): ScreenData<string | null> {
-  const a = scopeArgs(scope);
-  const q = useQuery({
-    queryKey: qk.gateScopeCountryTech(a?.countryId ?? "", a?.tech ?? -1),
-    queryFn: () => findScopeCountryTechId(a!.countryId, a!.tech),
-    enabled: a !== null,
-    staleTime: STALE_MS,
+export function useGatesDataset(countryId: string | undefined, technology: number | undefined) {
+  return useQuery({
+    queryKey: countryId && technology !== undefined ? qk.adminGateDataset(countryId, technology) : qk.adminGateDatasetNone,
+    queryFn: () => repo.loadDataset(countryId as string, technology as number),
+    enabled: Boolean(countryId && technology !== undefined),
   });
-  return asScreenData<string | null>(q, null);
 }
 
-/** The scope's check-list templates. */
-export function useChecklistItems(countryTechId: string | null): ScreenData<ChecklistItem[]> {
-  return asScreenData(useQuery({
-    queryKey: qk.gateChecklistItems(countryTechId ?? ""),
-    queryFn: () => listScopeChecklistItems(countryTechId!),
-    enabled: Boolean(countryTechId),
-  }), NO_ITEMS);
-}
-
-/** The check-list approvals of those templates. */
-export function useChecklistApprovals(itemIds: readonly string[]): ScreenData<ChecklistApproval[]> {
-  return asScreenData(useQuery({
-    queryKey: qk.gateChecklistApprovals(itemIds),
-    queryFn: () => listChecklistApprovals(itemIds),
-    enabled: itemIds.length > 0,
-  }), NO_CHECKLIST_APPROVALS);
-}
-
-/** The pickers' `OnSearch` — enabled Entra accounts matching the term; nothing for a blank term. */
-export function usePeopleSearch(term: string): ScreenData<Persona[]> {
-  const t = term.trim();
-  return asScreenData(useQuery({
-    queryKey: qk.entraPeopleSearch(t),
-    queryFn: () => searchEntraPeople(t),
-    enabled: shouldSearchPeople(t),
-    staleTime: 60 * 1000,
-  }), NO_PEOPLE);
-}
-
-/** Resolves Portfolio Manager lookup ids (`aaduserid`) to directory entries. */
-export function usePortfolioManagerPersonas(
-  ids: readonly (string | null)[],
-): ScreenData<(id: string | null) => Persona | null> {
-  const unique = [...new Set(ids.filter((x): x is string => Boolean(x)))].sort();
-  const q = useQuery({
-    queryKey: qk.entraPeople(unique),
-    queryFn: () => getEntraPeople(unique),
-    enabled: unique.length > 0,
-    staleTime: STALE_MS,
+/** At least 2 characters, debounced. */
+export function usePeopleSearch(term: string) {
+  const debounced = useDebouncedValue(term.trim(), 300);
+  return useQuery({
+    queryKey: qk.adminGatePeople(debounced),
+    queryFn: () => repo.searchPeople(debounced),
+    enabled: debounced.length >= 2,
+    staleTime: 60_000,
   });
-  const map = q.data;
-  const resolve = useMemo(
-    () => (map ? (id: string | null): Persona | null => (id ? map.get(id) ?? null : null) : NOBODY),
-    [map],
-  );
-  return { data: resolve, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
 }
 
-/** Runs this screen's write plans and refreshes what they change. */
-export function useGateWrites() {
-  return usePlanWrite({
-    invalidate: [qk.gateApprovalsAll, qk.gateChecklistApprovalsAll, qk.entraPeopleAll, qk.checklistTaskLocksAll],
-    action: "change the default approvals",
-    errorText: saveErrorText,
+/**
+ * Inline Active toggles: optimistic flip, revert on failure, refetch after.
+ */
+export function useToggleActive(countryId: string, technology: number, canEdit: boolean) {
+  const qc = useQueryClient();
+  const key = qk.adminGateDataset(countryId, technology);
+  return useMutation({
+    mutationFn: async (v: { kind: "gate" | "task"; id: string; active: boolean }) => {
+      await runPlan(
+        v.kind === "gate"
+          ? planSetGateActive(v.id, v.active, { canEdit })
+          : planSetTaskApprovalActive(v.id, v.active, { canEdit }),
+        "change the Active status",
+      );
+    },
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<GatesDataset>(key);
+      if (previous) {
+        qc.setQueryData<GatesDataset>(key, {
+          ...previous,
+          templates: v.kind === "gate"
+            ? previous.templates.map((t) => (t.id === v.id ? { ...t, gateActive: v.active } : t))
+            : previous.templates,
+          approvals: v.kind === "task"
+            ? previous.approvals.map((a) => (a.id === v.id ? { ...a, gateActive: v.active } : a))
+            : previous.approvals,
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _v, context) => {
+      if (context?.previous) qc.setQueryData(key, context.previous);
+    },
+    onSettled: () => invalidateAfterGatesWrite(qc, { countryId, technology }),
+  });
+}
+
+export type SaveRequest =
+  | { kind: "gate"; id: string | undefined; payload: Payload }
+  | { kind: "task"; id: string | undefined; payload: Payload };
+
+/** One POST or PATCH. */
+export function useSaveTemplate(countryId: string, technology: number, canEdit: boolean) {
+  const qc = useQueryClient();
+  return useMutation({
+    /** Resolves to the saved row's id ("" when a create answered without one, as it always has). */
+    mutationFn: async (r: SaveRequest): Promise<string> => {
+      const plan = r.kind === "gate"
+        ? planSaveGate(r.id, r.payload, { canEdit })
+        : planSaveTaskApproval(r.id, r.payload, { canEdit });
+      try {
+        const { createdIds } = await runPlan(plan, "save the approvals");
+        return r.id ?? createdIds[0] ?? "";
+      } catch (error) {
+        if (error instanceof CreatedIdMissingError) return r.id ?? "";
+        throw error;
+      }
+    },
+    onSuccess: () => invalidateAfterGatesWrite(qc, { countryId, technology }),
+    // The row was deleted meanwhile (nothing written) — refresh so the grid drops it.
+    onError: (error) => { if (error instanceof RecordGoneError) void invalidateAfterGatesWrite(qc, { countryId, technology }); },
+  });
+}
+
+/** One PATCH. */
+export function useResetGate(countryId: string, technology: number, canEdit: boolean) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await runPlan(planResetGate(id, { canEdit }), "reset the gate"); },
+    onSuccess: () => invalidateAfterGatesWrite(qc, { countryId, technology }),
+    onError: (error) => { if (error instanceof RecordGoneError) void invalidateAfterGatesWrite(qc, { countryId, technology }); }, // the row was deleted meanwhile
+  });
+}
+
+/** One DELETE; the grid refetches whatever the outcome. */
+export function useDeleteTask(countryId: string, technology: number, canEdit: boolean) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await runPlan(planDeleteTaskApproval(id, { canEdit }), "delete the check list approval"); },
+    onSettled: () => invalidateAfterGatesWrite(qc, { countryId, technology }),
   });
 }

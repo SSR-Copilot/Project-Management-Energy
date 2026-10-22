@@ -135,6 +135,11 @@
 .canvas-panel .fui-Field label { font-weight: 400; }
 .canvas-panel .fui-Field { min-width: 0; }
 .canvas-panel .fui-RadioGroup { flex-direction: column; }
+/* Opt-in horizontal radio row (`PANEL_RADIO_ROW` in `components/SettingsFormPanel.tsx`, the
+   Application Settings panels). Fluent exposes no class for `layout="horizontal"`, and other
+   panels keep the vertical rule above, so a panel that needs the canvas `Layout: Horizontal`
+   (Contract, Cost "Cost Paid By") adds the class. */
+.canvas-panel .fui-RadioGroup.canvas-radio-row { flex-direction: row; flex-wrap: wrap; }
 .canvas-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; min-width: 0; }
 /* Every panel field label is a `Text@0.0.51` with `Weight: ='TextCanvas.Weight'.Semibold` and
    no `Size` override, i.e. the modern Text control's 14 px default

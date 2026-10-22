@@ -74,32 +74,28 @@ vi.mock("@/data/finance", () => ({
   listRepaymentAmounts: async () => [], listStepUpMargins: async () => [], loadTotalDevexCapex: async () => 0,
   countActiveTurbines: async () => 0, findFinancingInputsByKey: async () => [],
 }));
-vi.mock("@/data/adminDefaultChecklists", () => ({
-  listChecklistScopes: async () => [], listChecklistGates: async () => [], listScopeTasks: async () => [],
-  listTaskApprovals: async () => [], highestTaskOrder: async () => null,
-}));
-vi.mock("@/data/adminMilestones", () => ({
-  listMilestoneCountries: async () => [], listCountryAssumptions: async () => [],
-}));
-vi.mock("@/data/adminGatesApprovals", () => ({
+/*
+ * `@/data/adminGatesApprovals` is both the PM read side (mocked below, as before) and the Project
+ * Gates repository. The real module is kept (`importOriginal`) and only the PM reads are
+ * overridden, so the Gates screen still has its `projectGatesRepository`.
+ */
+vi.mock("@/data/adminGatesApprovals", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/adminGatesApprovals")>()),
   listGateCountries: async () => [], listGateStates: async () => [], listGateApprovals: async () => [],
   findScopeCountryTechId: async () => null, listScopeChecklistItems: async () => [],
   listChecklistApprovals: async () => [], searchEntraPeople: async () => [],
   getEntraPeople: async () => new Map(), PEOPLE_SEARCH_TOP: 25,
 }));
-vi.mock("@/data/adminCapexAccounts", () => ({
-  listAllCapexAccounts: async () => [], listCapexContractRefs: async () => [],
-  listCascadeCosts: async () => [], capexNumberExists: async () => false,
+/*
+ * The Application Settings screens (Default Checklists, Gates, CAPEX Accounts, Milestones, Cost,
+ * Contract) read through the `data/admin*.ts` modules and the shared `@/data/countries` query.
+ * Contract waits on the country list before rendering its heading, so the generated countries
+ * service answers an empty list here; the other settings reads fail harmlessly into their error
+ * states.
+ */
+vi.mock("@/generated/services/Vsb_countriesService", () => ({
+  Vsb_countriesService: { getAll: async () => ({ success: true, data: [] }) },
 }));
-vi.mock("@/data/adminCost", () => ({
-  listCostCountries: async () => [], listOpexSubaccounts: async () => [], listLandLeaseSubaccounts: async () => [],
-  listOpexAssumptions: async () => [], listDevexCosts: async () => [], listSpvDevCoMapping: async () => [],
-  listInflationAreas: async () => [], listCostCurrencies: async () => [],
-}));
-vi.mock("@/data/adminContract", () => ({
-  listContractCountries: async () => [], listBopContracts: async () => [], listDevCoCosts: async () => [],
-}));
-
 /** The heading each CONNECTED admin screen renders; the others still show the notice. */
 const CONNECTED_HEADING: Record<string, string> = {
   "default-checklists": "Checklist settings",

@@ -1,645 +1,528 @@
-/**
- * Admin Contract Screen — unit tests (UT-ADCONTR-nnn).
- *
- * Rewritten 19 Oct 2026 (D23) for the connected screen. Removed with the code they tested:
- * 001b (the invented country scope), 026 (the client-side RootCapexAccount write — a plugin sets
- * it), 032/033 (Apply, out of scope, D20). 035 now pins the parent-only delete.
- */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  CHOICE_ADMIN, CAPEX_ROOT_NUMBER, CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER,
-  CAPEX_SECOND_ROOT_NUMBER,
-} from "@/data/dataverseNames";
-import { createdRowRef } from "@/data/writePlan";
+  CONTRACT_COUNTRY_RULE, CONTRACT_DEFAULT, defaultSelection, parseSelectionParams, pickerCountries,
+  sameCountryTechnology,
+} from "@/domain/countryPicker";
+import { CONTRACT_TECHNOLOGIES } from "@/domain/technology";
 import {
-  MSG, CONTRACT_CAP, CONTRACT_COSTS_MAX, CONTRACT_TYPE_VALUE, CONTRACT_TYPE_LABELS,
-  CONTRACT_PICKER_TECHNOLOGIES, CLOSING_DATE_CLUSTER_4, CONTRACT_SCREEN_TEXT as T,
-  BOP_CONTRACT_COL, BOP_CONTRACT_ENTITY_SET, DEVCO_COST_COL, DEVCO_COST_ENTITY_SET,
-  BOP_LOOKUP, ROOT_ACCOUNT_RANK, UNRANKED_ROOT_ACCOUNT, CLOSING_DATE_RULE_NOTE,
-  buildContractAccountTree, selectableNodes, classifyAccounts, devCoFormGroups, leafChecked,
-  parentTriState, parentTriStateAvailableSemantics, parentToggleEnabled, toggleParent,
-  toggleAccount, nextExpandedId, countContracts, contractCapReached, toggleCard, openCardAfterSave,
-  sortContracts, signedMonthDifference, isValidMonthDifference, monthDifferenceErrorVisible,
-  monthDifferenceSaveTerm, monthDifferenceSaveTermCanvasParity, marginPercentageError,
-  marginFixedValueError, marginFields, closingDateLabelVisible, validateContract,
-  canSaveContract, duplicateDescriptionCheckExists, changeMargin, changeMarginType,
-  reconcileDevCoCosts, composeContractName, buildContractPayload, buildDevCoCostPayload,
-  planSaveContract, planDeleteContract, groupCostsForCard, rootAccountRank,
-  cardMarginHeading, cardMarginValue, cardShowsMarginDetails, cardMarginText, marginCurrency,
-  emptyContractForm, toContractForm, monthPrefillCanvasParity, buildContractPicker,
-  defaultContractScope, scopeFor, selectedAccountCount, contractTypeLabel,
-  type CapexAccount, type BopContract, type DevCoCost, type ContractScope,
-  type ContractForm, type AccountSelection, type ContractCountry,
+  Vsb_bopcontractsstandardassumptionsesvsb_closingdatereference as ClosingRefMap,
+  Vsb_bopcontractsstandardassumptionsesvsb_contracttypes as ContractTypeMap,
+  Vsb_bopcontractsstandardassumptionsesvsb_margintype as MarginTypeMap,
+} from "@/generated/models/Vsb_bopcontractsstandardassumptionsesModel";
+import {
+  CLOSING_REF, CLOSING_REF_OPTIONS, CONTRACT_LIMIT, CONTRACT_TYPE, CONTRACT_TYPE_LABEL, MARGIN_TYPE,
+  MARGIN_TYPE_LABEL, MSG, OTHER_RANK, TECHNOLOGY,
+  breadcrumbText, buildAccountTree, buildParentPayload, canSave, classifyAccounts,
+  commentCounter, commentText, currencyOf, deleteDescription, findOwnershipConflicts, formatClosingRef, formatMax,
+  groupDevCoTags, inRange, initialForm, isDirty, isNDecimal, limitFlags, limitMessage, marginValueHeading,
+  panelTitle, parseLocaleNumber, planDevCoDiff, rootState, sortContracts, toggleLeaf,
+  toggleRoot, validateForm, withMargin, withMarginType,
+  INCLUDE_INACTIVE_STANDARD_CONTRACTS, closeDialogText, closePrompt, isInactive, isStaleSelection,
+  visibleSelectionCount, withoutAccounts,
+  type ContractForm, type DevCoRow,
 } from "./rules";
 
-/* ─────────────────────────────────────────────────────────────────── fixtures */
+/** The screen's picker configuration on the shared model (was `buildPickerCountries` / `parseSelection`). */
+const buildPickerCountries = (rows: Parameters<typeof pickerCountries>[0]) => pickerCountries(rows, CONTRACT_COUNTRY_RULE);
+const parseSelection = (country: string | null, tech: string | null, countries: ReturnType<typeof buildPickerCountries>) =>
+  parseSelectionParams(country, tech, countries, CONTRACT_TECHNOLOGIES);
+import {
+  FRANCE_ID, GERMANY_ID, contract, fixtureAccounts, fixtureContracts, fixtureCountries, fixtureDevCo,
+} from "./fixtures";
 
-const acc = (o: Partial<CapexAccount> = {}): CapexAccount => ({
-  id: "a", name: "Account", number: "10000", order: 1, parentId: null, status: 0,
-  owningBusinessUnitId: null, ...o,
-});
+const EN = "en-US";
+const DE = "de-DE";
 
-/** root 00001 → 2 categories → 1 account each → 3 subaccounts under the first. */
-const accounts: CapexAccount[] = [
-  acc({ id: "root", number: CAPEX_ROOT_NUMBER, name: "Root" }),
-  acc({ id: "root2", number: CAPEX_SECOND_ROOT_NUMBER, name: "Second root" }),
-  acc({ id: "cat1", number: "10000", name: "Development Expenses", parentId: "root", order: 1 }),
-  acc({ id: "cat2", number: "20000", name: "Other CAPEX", parentId: "root", order: 2 }),
-  acc({
-    id: "excluded", number: CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER, name: "Excluded",
-    parentId: "root", order: 3,
-  }),
-  acc({ id: "ac1", number: "10001", name: "Grid", parentId: "cat1", order: 1 }),
-  acc({ id: "ac1b", number: "10002", name: "Roads", parentId: "cat1", order: 2 }),
-  acc({ id: "s1", number: "10001_01", name: "Cabling", parentId: "ac1", order: 1 }),
-  acc({ id: "s2", number: "10001_02", name: "Transformer", parentId: "ac1", order: 2 }),
-  acc({ id: "s3", number: "10001_03", name: "Substation", parentId: "ac1", order: 3 }),
-  acc({ id: "s5", number: "10002_01", name: "Access road", parentId: "ac1b", order: 1 }),
-  acc({ id: "ac2", number: "20001", name: "Misc", parentId: "cat2", order: 1 }),
-  acc({ id: "s4", number: "20001_01", name: "Other", parentId: "ac2", order: 1 }),
-  acc({ id: "underSecondRoot", number: "99999", name: "Elsewhere", parentId: "root2", order: 1 }),
-];
+function validForm(overrides: Partial<ContractForm> = {}): ContractForm {
+  return {
+    ...initialForm(undefined, [], EN),
+    description: "Turbine", monthText: "3", selectedAccountIds: ["l3-a"],
+    ...overrides,
+  };
+}
 
-const tree = buildContractAccountTree(accounts);
-const names = new Map(accounts.map((a) => [a.id, a.name]));
-const nameOf = (id: string | null) => (id ? names.get(id) ?? "" : "");
-
-const scope = (o: Partial<ContractScope> = {}): ContractScope => ({
-  countryId: "de", countryName: "Germany", technology: "Wind",
-  technologyValue: CHOICE_ADMIN.technology.wind, isoCurrencyCode: "EUR", ...o,
-});
-
-const DEV = CHOICE_ADMIN.bopContractTypes.development;
-const CON = CHOICE_ADMIN.bopContractTypes.construction;
-
-const contract = (o: Partial<BopContract> = {}): BopContract => ({
-  id: "c1", name: "Development Contract - BoP 2026", description: "BoP 2026",
-  countryId: "de", technology: CHOICE_ADMIN.technology.wind,
-  contractType: DEV,
-  closingDateReference: 952850000, monthDifference: 6,
-  margin: false, marginType: null, marginPercentage: null, marginFixedValue: null,
-  comment: null,
-  ...o,
-});
-
-const cost = (o: Partial<DevCoCost> = {}): DevCoCost => ({
-  id: "dc1", contractId: "c1", capexAccountId: "s1", rootAccountId: "cat1", ...o,
-});
-
-const form = (o: Partial<ContractForm> = {}): ContractForm => ({
-  ...emptyContractForm(),
-  description: "BoP 2026",
-  closingDateReference: 952850000,
-  monthSign: "+", months: "6",
-  dirty: true,
-  ...o,
-});
-
-const sel = (o: Partial<AccountSelection> = {}): AccountSelection => ({
-  accountId: "s1", selected: false, used: false, usedByContractId: null,
-  devCoCostId: null, ...o,
-});
-
-const countries: ContractCountry[] = [
-  { id: "fr", name: "France", isoCurrencyCode: "EUR" },
-  { id: "es", name: "Spain", isoCurrencyCode: "EUR" },
-  { id: "pl", name: "Poland", isoCurrencyCode: "PLN" },
-  { id: "de", name: "Germany", isoCurrencyCode: null },
-];
-
-/* ═══════════════════════════════════════════════════════════ permission, scope ════ */
-
-describe("permission and scope", () => {
-  it("UT-ADCONTR-001 without the admin rule no plan writes anything", () => {
-    const plan = planSaveContract({
-      form: form(), contractType: DEV, scope: scope(), existing: null,
-      before: new Map(), after: new Map([["s1", sel({ selected: true })]]), tree, canEdit: false,
-    });
-    expect(plan.writes).toHaveLength(0);
-    expect(plan.refusedReason).toBe(MSG.noPermission);
-    expect(planDeleteContract({ contract: contract(), canEdit: false }).refusedReason).toBe(MSG.noPermission);
+describe("Choice constants", () => {
+  it("UT-ADCONTR-001 come from the generated model", () => {
+    expect(TECHNOLOGY).toEqual({ Wind: 952850000, PV: 952850001, BESS: 952850003 });
+    expect(CONTRACT_TYPE).toEqual({ Development: 952850001, Construction: 952850002 });
+    expect(CLOSING_REF).toEqual({ Cluster4: 952850000, FID: 952850001, Cluster5: 952850002 });
+    expect(MARGIN_TYPE).toEqual({ Percentage: 952850000, FixedValue: 952850001 });
   });
 
-  it("UT-ADCONTR-002 contracts are scoped by country and technology", () => {
-    const rows = [
-      contract({ id: "in" }),
-      contract({ id: "otherCountry", countryId: "fr" }),
-      contract({ id: "otherTech", technology: CHOICE_ADMIN.technology.pv }),
+  it("UT-ADCONTR-002 display labels are the Dataverse display labels, for values present in the generated model", () => {
+    // Master's generated maps (pac 1.3.1) carry pac identifiers ("Cluster4", "DevelopmentContract"),
+    // not display labels, so only the VALUES are checked against them; the labels are transcribed.
+    const closing = ClosingRefMap as Record<number, string>;
+    const types = ContractTypeMap as Record<number, string>;
+    const margins = MarginTypeMap as Record<number, string>;
+    for (const o of CLOSING_REF_OPTIONS) expect(o.value in closing).toBe(true);
+    expect(CLOSING_REF_OPTIONS.map((o) => o.label)).toEqual(["Cluster 4", "FID", "Cluster 5"]);
+    for (const code of Object.values(CONTRACT_TYPE)) expect(code in types).toBe(true);
+    expect(CONTRACT_TYPE_LABEL[CONTRACT_TYPE.Development]).toBe("Development Contract");
+    expect(CONTRACT_TYPE_LABEL[CONTRACT_TYPE.Construction]).toBe("Construction Contract");
+    for (const code of Object.values(MARGIN_TYPE)) expect(code in margins).toBe(true);
+    expect(MARGIN_TYPE_LABEL[MARGIN_TYPE.Percentage]).toBe("Percentage");
+    expect(MARGIN_TYPE_LABEL[MARGIN_TYPE.FixedValue]).toBe("Fixed Value");
+  });
+});
+
+describe("Picker", () => {
+  it("UT-ADCONTR-003 keeps only the allow-list countries, in canvas order", () => {
+    const list = buildPickerCountries(fixtureCountries);
+    expect(list.map((c) => c.name)).toEqual(["Germany", "France", "Poland"]);
+    expect(list.find((c) => c.name === "Spain")).toBeUndefined();
+  });
+
+  it("UT-ADCONTR-004 parses the URL selection and rejects anything not offered", () => {
+    const countries = buildPickerCountries(fixtureCountries);
+    expect(parseSelection(GERMANY_ID, "952850001", countries)).toEqual({ countryId: GERMANY_ID, technology: TECHNOLOGY.PV });
+    expect(parseSelection(GERMANY_ID, "952850005", countries)).toBeUndefined(); // Hydro
+    expect(parseSelection("33333333-3333-3333-3333-333333333333", "952850000", countries)).toBeUndefined();
+    expect(parseSelection(null, null, countries)).toBeUndefined();
+    // The default is the first listed country with the first technology (PO 2026-10-17,
+    // replaces the earlier no-selection start); the badge is the ISO-2 code.
+    expect(defaultSelection(countries, CONTRACT_TECHNOLOGIES, CONTRACT_DEFAULT))
+      .toEqual({ countryId: GERMANY_ID, technology: TECHNOLOGY.Wind });
+    expect(countries.map((c) => c.code)).toEqual(["DE", "FR", "PL"]);
+    expect(CONTRACT_TECHNOLOGIES.map((t) => t.code)).toEqual([TECHNOLOGY.Wind, TECHNOLOGY.PV, TECHNOLOGY.BESS]);
+  });
+
+  it("UT-ADCONTR-005 builds the breadcrumb", () => {
+    expect(breadcrumbText("Germany", TECHNOLOGY.PV)).toBe("Contracts / Germany / PV");
+    expect(breadcrumbText(undefined, undefined)).toBe("Contracts");
+  });
+});
+
+describe("List", () => {
+  it("UT-ADCONTR-006 sorts Development before Construction, then by name", () => {
+    const sorted = sortContracts([
+      contract({ id: "b", name: "B", contractType: CONTRACT_TYPE.Construction }),
+      contract({ id: "z", name: "Z", contractType: CONTRACT_TYPE.Development }),
+    ]);
+    expect(sorted.map((c) => c.name)).toEqual(["Z", "B"]);
+  });
+
+  it("UT-ADCONTR-007 formats the closing date reference with sign", () => {
+    expect(formatClosingRef(CLOSING_REF.FID, -3)).toBe("FID - 3 months");
+    expect(formatClosingRef(CLOSING_REF.FID, 0)).toBe("FID + 0 months");
+    expect(formatClosingRef(CLOSING_REF.Cluster4, 2)).toBe("Cluster 4 + 2 months");
+  });
+
+  it("UT-ADCONTR-008 renders a missing closing reference as the canvas does: blank & \" \"", () => {
+    expect(formatClosingRef(undefined, 0)).toBe(" + 0 months");
+    expect(formatClosingRef(null, -2)).toBe(" - 2 months");
+    expect(formatClosingRef(undefined, undefined)).toBe(" + 0 months");
+    expect(formatClosingRef(undefined, 0)).not.toContain("- +");
+  });
+
+  it("UT-ADCONTR-009 counts the trimmed comment length, Len(Trim(v))/50", () => {
+    expect(commentCounter("")).toBe("0/50");
+    expect(commentCounter("  ab  ")).toBe("2/50");
+    expect(commentCounter("   ")).toBe("0/50");
+    expect(commentCounter("a b")).toBe("3/50");
+  });
+
+  it("UT-ADCONTR-010 counts with Power Fx Trim: inner runs of spaces collapse to one", () => {
+    expect(commentCounter("a  b")).toBe("3/50");
+    expect(commentCounter("  a   b  c  ")).toBe("5/50");
+    // Only spaces are affected, as in Power Fx: a newline still counts.
+    expect(commentCounter("a\nb")).toBe("3/50");
+  });
+
+  it("UT-ADCONTR-011 renders an unknown closing-reference code with its choice label, as the canvas does", () => {
+    const UNKNOWN = 952850009;
+    // Canvas: ThisItem.'Closing Date Reference' & " " & ... — the choice's own label, never "-".
+    expect(formatClosingRef(UNKNOWN, 2, "Cluster 6")).toBe("Cluster 6 + 2 months");
+    expect(formatClosingRef(UNKNOWN, -4, "Cluster 6")).toBe("Cluster 6 - 4 months");
+    // No label sent: concatenates as blank, never "- + n months".
+    expect(formatClosingRef(UNKNOWN, 2)).toBe(" + 2 months");
+    expect(formatClosingRef(UNKNOWN, 2)).not.toContain("- +");
+    // A known code keeps its option label.
+    expect(formatClosingRef(CLOSING_REF.FID, 1, "FID")).toBe("FID + 1 months");
+  });
+
+  it("UT-ADCONTR-012 uses the ISO currency and the margin heading by type", () => {
+    expect(currencyOf("PLN")).toBe("PLN");
+    expect(currencyOf(undefined)).toBe("EUR");
+    expect(marginValueHeading(MARGIN_TYPE.FixedValue, "PLN")).toBe("Margin Fixed Value [PLN]");
+    expect(marginValueHeading(MARGIN_TYPE.Percentage, "PLN")).toBe("Margin [%]");
+    expect(commentText("")).toBe("-");
+    expect(commentText("x")).toBe("x");
+  });
+
+  it("UT-ADCONTR-013 flags a type at the limit of 10 and leaves the other enabled", () => {
+    const rows = Array.from({ length: CONTRACT_LIMIT }, (_, i) => contract({ id: `d${i}` }));
+    const flags = limitFlags([...rows, contract({ id: "c", contractType: CONTRACT_TYPE.Construction })]);
+    expect(flags.developmentFull).toBe(true);
+    expect(flags.constructionFull).toBe(false);
+    expect(limitFlags(rows.slice(0, 9)).developmentFull).toBe(false);
+    expect(limitMessage(CONTRACT_TYPE.Development, "Germany", TECHNOLOGY.Wind))
+      .toBe("Maximum 10 development contracts allowed for Germany - Wind");
+  });
+
+  it("UT-ADCONTR-014 titles the panel and the delete dialog", () => {
+    expect(panelTitle(false, CONTRACT_TYPE.Construction)).toBe("Edit Construction Contract");
+    expect(panelTitle(true, CONTRACT_TYPE.Development)).toBe("New Development Contract");
+    expect(deleteDescription("X")).toBe('Are you sure that you want to permanently delete "X" contract?');
+  });
+});
+
+describe("BuildAccountTree", () => {
+  const tree = buildAccountTree(fixtureAccounts);
+
+  it("UT-ADCONTR-015 excludes 10006 and sorts roots by order", () => {
+    expect(tree.roots.map((r) => r.number)).toEqual(["10000", "20000", "30000"]);
+  });
+
+  it("UT-ADCONTR-016 lists Level-3 descendants under the root, ignoring deeper accounts and Level 2", () => {
+    const dev = tree.roots[0]!;
+    expect(dev.children.map((c) => c.number)).toEqual(["10101", "10102"]);
+    expect(tree.leaves.has("l4-deep")).toBe(false);
+    expect(tree.leaves.has("l2-dev")).toBe(false);
+    expect(dev.childCount).toBe(2);
+  });
+
+  it("UT-ADCONTR-017 keeps a root with no Level-3 descendants, which renders disabled", () => {
+    const empty = tree.roots.find((r) => r.number === "30000")!;
+    expect(empty.childCount).toBe(0);
+    expect(rootState(empty, new Set(), new Map()).disabled).toBe(true);
+  });
+});
+
+describe("ClassifyAccounts", () => {
+  it("UT-ADCONTR-018 marks every linked account used for a new contract", () => {
+    const classes = classifyAccounts(fixtureDevCo);
+    expect(classes.get("l3-a")).toMatchObject({ used: true, selected: false, usedBy: "c-dev" });
+  });
+
+  it("UT-ADCONTR-019 selects this contract's links and locks the others", () => {
+    const classes = classifyAccounts(fixtureDevCo, "c-dev");
+    expect(classes.get("l3-a")).toMatchObject({ selected: true, used: false, existingChildId: "child-1" });
+    expect(classes.get("l3-c")).toMatchObject({ selected: false, used: true });
+  });
+
+  it("UT-ADCONTR-020 lets this contract's own link win over a duplicate elsewhere", () => {
+    const rows: DevCoRow[] = [
+      { id: "x1", contractId: "other", accountId: "l3-a" },
+      { id: "x2", contractId: "me", accountId: "l3-a" },
     ];
-    expect(countContracts(rows, scope(), "development")).toBe(1);
-    expect(countContracts(rows, scope({ countryId: "fr" }), "development")).toBe(1);
-  });
-
-  it("UT-ADCONTR-002b the picker excludes Spain/Greece/Romania and nests Wind, PV and BESS", () => {
-    expect(CONTRACT_PICKER_TECHNOLOGIES).toEqual(["Wind", "PV", "BESS"]);
-    const picker = buildContractPicker(countries);
-    expect(picker.countries.map((c) => c.name)).toEqual(["Germany", "France", "Poland"]);
-    expect(picker.nestings[0]!.childs.map((c) => c.value)).toEqual(["Wind", "PV", "BESS"]);
-  });
-
-  it("UT-ADCONTR-002c the initial scope is the first rail row and its first technology", () => {
-    expect(defaultContractScope(countries)).toEqual({
-      countryId: "de", countryName: "Germany", technology: "Wind",
-      technologyValue: CHOICE_ADMIN.technology.wind, isoCurrencyCode: null,
-    });
-    expect(defaultContractScope([]).countryId).toBeNull();
-    expect(scopeFor(countries[2]!, "BESS")).toMatchObject({
-      countryName: "Poland", technologyValue: CHOICE_ADMIN.technology.bess, isoCurrencyCode: "PLN",
-    });
+    expect(classifyAccounts(rows, "me").get("l3-a")).toMatchObject({ selected: true, used: false });
   });
 });
 
-/* ═════════════════════════════════════════════════════════════════ the tree ════ */
+describe("Tri-state", () => {
+  const tree = buildAccountTree(fixtureAccounts);
+  const dev = tree.roots[0]!;
 
-describe("the CAPEX account tree", () => {
-  it("UT-ADCONTR-003 account 10006 is excluded", () => {
-    expect(selectableNodes(tree).some((n) => n.number === CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER))
-      .toBe(false);
-    expect(tree.some((n) => n.number === CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER)).toBe(false);
+  it("UT-ADCONTR-021 is unchecked, mixed, then checked", () => {
+    const none = new Map();
+    expect(rootState(dev, new Set(), none).checked).toBe(false);
+    expect(rootState(dev, new Set(["l3-a"]), none).checked).toBe("mixed");
+    expect(rootState(dev, new Set(["l3-a", "l3-b"]), none).checked).toBe(true);
   });
 
-  it("UT-ADCONTR-004 only the 00001 subtree is returned", () => {
-    expect(tree.map((n) => n.id)).toEqual(["cat1", "cat2"]);
-    expect(selectableNodes(tree).map((n) => n.id)).not.toContain("underSecondRoot");
+  it("UT-ADCONTR-022 is mixed when all available are selected but one is used elsewhere", () => {
+    const classes = classifyAccounts([{ id: "o", contractId: "other", accountId: "l3-a" }], "me");
+    expect(rootState(dev, new Set(["l3-b"]), classes).checked).toBe("mixed");
   });
 
-  it("UT-ADCONTR-005 only level-3 nodes are selectable", () => {
-    expect(selectableNodes(tree).map((n) => n.id)).toEqual(["s1", "s2", "s3", "s5", "s4"]);
-    expect(selectableNodes(tree).every((n) => n.level === 3)).toBe(true);
-  });
-
-  it("UT-ADCONTR-005b the DevCo form groups by LEVEL-1 category, listing all its level-3 rows flat", () => {
-    const groups = devCoFormGroups(tree);
-    expect(groups.map((g) => g.category.id)).toEqual(["cat1", "cat2"]);
-    expect(groups[0]!.leaves.map((l) => l.id)).toEqual(["s1", "s2", "s3", "s5"]);
-    expect(groups[1]!.leaves.map((l) => l.id)).toEqual(["s4"]);
-  });
-
-  it("UT-ADCONTR-005c a category with no level-3 rows is still listed", () => {
-    const t = buildContractAccountTree([
-      ...accounts, acc({ id: "cat3", number: "30000", name: "Empty", parentId: "root", order: 4 }),
+  it("UT-ADCONTR-023 is disabled when every child is used", () => {
+    const classes = classifyAccounts([
+      { id: "o1", contractId: "other", accountId: "l3-a" },
+      { id: "o2", contractId: "other", accountId: "l3-b" },
     ]);
-    const g = devCoFormGroups(t).find((x) => x.category.id === "cat3");
-    expect(g?.leaves).toEqual([]);
+    expect(rootState(dev, new Set(), classes)).toMatchObject({ disabled: true, checked: true });
+  });
+
+  it("UT-ADCONTR-024 selects all available when none is selected, clears otherwise, never touching used", () => {
+    const classes = classifyAccounts([{ id: "o", contractId: "other", accountId: "l3-a" }]);
+    const on = toggleRoot(dev, new Set(), classes);
+    expect([...on]).toEqual(["l3-b"]);
+    expect([...toggleRoot(dev, on, classes)]).toEqual([]);
+    expect(toggleLeaf("l3-a", new Set(), classes).has("l3-a")).toBe(false);
+    expect(toggleLeaf("l3-b", new Set(), classes).has("l3-b")).toBe(true);
   });
 });
 
-/* ══════════════════════════════════════════════════════════════ classification ════ */
+describe("GroupDevCoTags", () => {
+  const { accounts } = buildAccountTree(fixtureAccounts);
 
-describe("classifying the accounts", () => {
-  it("UT-ADCONTR-006 editing marks this contract's own accounts Selected", () => {
-    const map = classifyAccounts(
-      tree,
-      [
-        cost({ id: "dc1", capexAccountId: "s1", contractId: "c1" }),
-        cost({ id: "dc2", capexAccountId: "s2", contractId: "c1" }),
-        cost({ id: "dc3", capexAccountId: "s3", contractId: "c2" }),
-      ],
-      "c1",
-    );
-    expect([...map.values()].filter((x) => x.selected).map((x) => x.accountId)).toEqual(["s1", "s2"]);
-    expect([...map.values()].filter((x) => x.used).map((x) => x.accountId)).toEqual(["s3"]);
-    expect(map.get("s3")?.usedByContractId).toBe("c2");
-    expect(map.get("s1")?.devCoCostId).toBe("dc1");
+  it("UT-ADCONTR-025 ranks Development Expenses before Other CAPEX", () => {
+    const groups = groupDevCoTags([
+      { id: "1", contractId: "c", accountId: "l3-c", rootAccountId: "root-oth" },
+      { id: "2", contractId: "c", accountId: "l3-b", rootAccountId: "root-dev" },
+      { id: "3", contractId: "c", accountId: "l3-a", rootAccountId: "root-dev" },
+    ], accounts);
+    expect(groups.map((g) => g.rootName)).toEqual(["Development Expenses", "Other CAPEX"]);
+    expect(groups[0]!.tags.map((t) => t.label)).toEqual(["Grid connection", "Environmental study"]);
   });
 
-  it("UT-ADCONTR-007 a NEW contract owns nothing — every claimed account is Used", () => {
-    const map = classifyAccounts(
-      tree,
-      [
-        cost({ id: "dc1", capexAccountId: "s1", contractId: "c1" }),
-        cost({ id: "dc3", capexAccountId: "s3", contractId: "c2" }),
-      ],
-      null,
-    );
-    expect([...map.values()].filter((x) => x.selected)).toHaveLength(0);
-    expect([...map.values()].filter((x) => x.used)).toHaveLength(2);
-    expect(map.get("s4")?.used).toBe(false);
+  it("UT-ADCONTR-026 puts a row with no root under Other, rank 99", () => {
+    const groups = groupDevCoTags([{ id: "1", contractId: "c", accountId: "l3-a" }], accounts);
+    expect(groups).toEqual([{ rootId: "", rootName: "Other", rank: OTHER_RANK, tags: [{ id: "1", label: "Grid connection" }] }]);
   });
 
-  it("UT-ADCONTR-007b a used row reads ticked (Checked = Or(Selected, Used))", () => {
-    expect(leafChecked(sel({ used: true }))).toBe(true);
-    expect(leafChecked(sel({ selected: true }))).toBe(true);
-    expect(leafChecked(sel())).toBe(false);
-    expect(leafChecked(undefined)).toBe(false);
+  it("UT-ADCONTR-027 returns no groups for a contract with no children", () => {
+    expect(groupDevCoTags([], accounts)).toEqual([]);
   });
 });
 
-/* ══════════════════════════════════════════════════════════════ the tri-state ════ */
-
-describe("the tri-state parent checkbox", () => {
-  const children = (o: Partial<AccountSelection>[]) =>
-    o.map((x, i) => sel({ accountId: `s${i}`, ...x }));
-
-  it("UT-ADCONTR-008 LOCKED when every child is used", () => {
-    expect(parentTriState(children([{ used: true }, { used: true }]))).toBe("LOCKED");
+describe("Numbers (fn_Numeric)", () => {
+  it("UT-ADCONTR-028 checks decimals with the language separator", () => {
+    expect(isNDecimal("12.3", 1, EN)).toBe(true);
+    expect(isNDecimal("12.34", 1, EN)).toBe(false);
+    expect(isNDecimal("12,3", 1, EN)).toBe(false);
+    expect(isNDecimal("12,3", 1, DE)).toBe(true);
+    expect(isNDecimal("12.34", 2, EN)).toBe(true);
   });
 
-  it("UT-ADCONTR-009 UNCHECKED when none is selected", () => {
-    expect(parentTriState(children([{}, {}, { used: true }]))).toBe("UNCHECKED");
+  it("UT-ADCONTR-029 parses and range-checks", () => {
+    expect(parseLocaleNumber("12,5", DE)).toBe(12.5);
+    expect(parseLocaleNumber("12.5", EN)).toBe(12.5);
+    expect(parseLocaleNumber("ab", EN)).toBeUndefined();
+    expect(inRange("100", 0, 100, EN)).toBe(true);
+    expect(inRange("100.1", 0, 100, EN)).toBe(false);
+    expect(inRange("-1", 0, 100, EN)).toBe(false);
   });
 
-  it("UT-ADCONTR-010 PARTIAL with a mix", () => {
-    expect(parentTriState(children([{ selected: true }, {}, { used: true }]))).toBe("PARTIAL");
-  });
-
-  it("UT-ADCONTR-011 CHECKED needs EVERY child, used ones included (canvas semantics)", () => {
-    expect(parentTriState(children([{ selected: true }, { selected: true }]))).toBe("CHECKED");
-    const mixed = children([{ selected: true }, { selected: true }, { used: true }]);
-    expect(parentTriState(mixed)).toBe("PARTIAL");
-    expect(parentTriStateAvailableSemantics(mixed)).toBe("CHECKED");
-  });
-
-  it("UT-ADCONTR-012 the parent toggle never selects a used child", () => {
-    const after = toggleParent(children([{}, {}, { used: true }]));
-    expect(after.map((c) => c.selected)).toEqual([true, true, false]);
-  });
-
-  it("UT-ADCONTR-013 toggling a partly selected header clears only the free children", () => {
-    const after = toggleParent(children([{ selected: true }, {}, { used: true, selected: true }]));
-    expect(after.map((c) => c.selected)).toEqual([false, false, true]);
-  });
-
-  it("UT-ADCONTR-014 the parent control is disabled when nothing is available", () => {
-    expect(parentToggleEnabled(children([{ used: true }, { used: true }]))).toBe(false);
-    expect(parentToggleEnabled(children([{ used: true }, {}]))).toBe(true);
-  });
-
-  it("UT-ADCONTR-014b a single toggle never flips a used node", () => {
-    const map = new Map([
-      ["s1", sel({ accountId: "s1" })],
-      ["s2", sel({ accountId: "s2", used: true })],
-    ]);
-    expect(toggleAccount(map, "s1").get("s1")?.selected).toBe(true);
-    expect(toggleAccount(map, "s2").get("s2")?.selected).toBe(false);
-  });
-
-  it("UT-ADCONTR-038 the DevCo form headers are an accordion", () => {
-    expect(nextExpandedId(null, "cat1")).toBe("cat1");
-    expect(nextExpandedId("cat1", "cat2")).toBe("cat2");
-    expect(nextExpandedId("cat1", "cat1")).toBeNull();
+  it("UT-ADCONTR-030 formats the maximum with the field's decimals", () => {
+    expect(formatMax(100, 1, "en-US")).toBe("100.0");
+    expect(formatMax(1_000_000_000, 2, "en-US")).toBe("1,000,000,000.00");
   });
 });
 
-/* ══════════════════════════════════════════════════════════════════ validation ════ */
-
-describe("validation", () => {
-  it("UT-ADCONTR-015 Save is disabled with no account selected", () => {
-    expect(validateContract(form(), { selectedCount: 0, isEdit: false })).toContain(MSG.noAccountSelected);
-    expect(canSaveContract(form(), { selectedCount: 0, isEdit: false, canEdit: true })).toBe(false);
-    expect(canSaveContract(form(), { selectedCount: 1, isEdit: false, canEdit: true })).toBe(true);
-    expect(canSaveContract(form(), { selectedCount: 1, isEdit: false, canEdit: false })).toBe(false);
+describe("ValidateForm", () => {
+  it("UT-ADCONTR-031 accepts a valid form", () => {
+    expect(validateForm(validForm(), EN, "en-US")).toEqual({});
   });
 
-  it("UT-ADCONTR-016 Save is disabled when the panel is not dirty", () => {
-    expect(validateContract(form({ dirty: false }), { selectedCount: 1, isEdit: false })).toContain(MSG.notDirty);
+  it("UT-ADCONTR-032 requires a non-blank description", () => {
+    expect(validateForm(validForm({ description: "   " }), EN).description).toBe(MSG.inputBlank);
   });
 
-  it("UT-ADCONTR-016b SOURCE DEFECT fixed: the panel opens clean every time", () => {
-    // The canvas `locContractDevCoCostsCahnged` is never reset, so Save stayed enabled.
-    expect(toContractForm(contract()).dirty).toBe(false);
-    expect(toContractForm(null).dirty).toBe(false);
+  it("UT-ADCONTR-033 requires a closing date reference", () => {
+    expect(validateForm(validForm({ closingRef: null }), EN).closingRef).toBe(MSG.closingRefBlank);
   });
 
-  it("UT-ADCONTR-017 the trimmed description is required", () => {
-    expect(validateContract(form({ description: "  " }), { selectedCount: 1, isEdit: false })).toContain(MSG.inputBlank);
+  it("UT-ADCONTR-034 blocks an invalid month", () => {
+    expect(validateForm(validForm({ monthText: "123" }), EN).month).toBe(MSG.monthFormat);
+    expect(validateForm(validForm({ monthText: "ab" }), EN).month).toBe(MSG.monthFormat);
+    expect(validateForm(validForm({ monthText: "" }), EN).month).toBe(MSG.inputBlank);
+    expect(validateForm(validForm({ monthText: "99" }), EN).month).toBeUndefined();
   });
 
-  it("UT-ADCONTR-017b there is NO duplicate-description check, by design", () => {
-    expect(duplicateDescriptionCheckExists()).toBe(false);
-    expect(CLOSING_DATE_RULE_NOTE).toContain("no duplicate-description check");
-    expect(validateContract(form(), { selectedCount: 1, isEdit: false })).toEqual([]);
+  it("UT-ADCONTR-035 validates the percentage margin", () => {
+    const pct = (t: string) => validateForm(validForm({ margin: true, marginType: MARGIN_TYPE.Percentage, marginPercentageText: t }), EN, "en-US").marginPercentage;
+    expect(pct("")).toBe(MSG.inputBlank);
+    expect(pct("12.34")).toBe(MSG.oneDecimal);
+    expect(pct("100.1")).toBe("Please select a value between 0 and 100.0");
+    expect(pct("12.3")).toBeUndefined();
   });
 
-  it("UT-ADCONTR-018 the margin percentage label: canvas texts, hidden when blank", () => {
-    expect(marginPercentageError("12.34")).toBe("Numeric value with maximum of one decimals");
-    expect(marginPercentageError("150.0")).toBe("Please select a value between 0 and 100.0");
-    expect(marginPercentageError("12.3")).toBeNull();
-    expect(marginPercentageError("")).toBeNull();
-    const pct = { margin: true, marginType: CHOICE_ADMIN.contractMarginType.percentage };
-    expect(validateContract(form({ ...pct, marginPercentage: "150.0" }), { selectedCount: 1, isEdit: false }))
-      .toContain(MSG.outOfRange("100.0"));
-    expect(validateContract(form({ ...pct, marginPercentage: " " }), { selectedCount: 1, isEdit: false }))
-      .toContain(MSG.inputBlank);
+  it("UT-ADCONTR-036 validates the fixed-value margin", () => {
+    const fixed = (t: string) => validateForm(validForm({ margin: true, marginType: MARGIN_TYPE.FixedValue, marginFixedText: t }), EN, "en-US").marginFixed;
+    expect(fixed("")).toBe(MSG.inputBlank);
+    expect(fixed("1.234")).toBe(MSG.twoDecimals);
+    expect(fixed("1000000000.01")).toBe("Please select a value between 0 and 1,000,000,000.00");
+    expect(fixed("1000.50")).toBeUndefined();
   });
 
-  it("UT-ADCONTR-019 the fixed value: two decimals within 0 – 1,000,000,000", () => {
-    expect(CONTRACT_COSTS_MAX).toBe(1_000_000_000);
-    expect(marginFixedValueError("1000000000.01")).toBe("Please select a value between 0 and 1,000,000,000");
-    expect(marginFixedValueError("1000.00")).toBeNull();
-    expect(marginFixedValueError("1000.001")).toBe("Numeric value with maximum of two decimals");
-    expect(MSG.inputBlank).toBe("Input must not be blank");
-  });
-
-  it("UT-ADCONTR-019b a Margin Type other than Percentage takes the Fixed branch", () => {
-    const f = form({ margin: true, marginType: null, marginFixedValue: "" });
-    expect(validateContract(f, { selectedCount: 1, isEdit: false })).toContain(MSG.inputBlank);
-    expect(validateContract({ ...f, marginFixedValue: "10.00" }, { selectedCount: 1, isEdit: false })).toEqual([]);
-  });
-
-  it("UT-ADCONTR-020 Margin = No clears the type and both values", () => {
-    expect(marginFields(false, CHOICE_ADMIN.contractMarginType.percentage, "12.3", "500.00"))
-      .toEqual({ margin: false, marginType: null, marginPercentage: null, marginFixedValue: null });
-    const payload = buildContractPayload(
-      form({ margin: false, marginType: CHOICE_ADMIN.contractMarginType.percentage, marginPercentage: "12.3" }),
-      { contractType: DEV, scope: scope() },
-    );
-    expect(payload[BOP_CONTRACT_COL.marginType]).toBeNull();
-    expect(payload[BOP_CONTRACT_COL.marginPercentage]).toBeNull();
-    expect(payload[BOP_CONTRACT_COL.marginFixedValue]).toBeNull();
-  });
-
-  it("UT-ADCONTR-020b the two margin values are mutually exclusive", () => {
-    const pct = marginFields(true, CHOICE_ADMIN.contractMarginType.percentage, "12.3", "500.00");
-    expect(pct).toEqual({
-      margin: true, marginType: CHOICE_ADMIN.contractMarginType.percentage,
-      marginPercentage: 12.3, marginFixedValue: null,
-    });
-    const fixed = marginFields(true, CHOICE_ADMIN.contractMarginType.fixedValue, "12.3", "500.00");
-    expect(fixed.marginPercentage).toBeNull();
-    expect(fixed.marginFixedValue).toBe(500);
-  });
-
-  it("UT-ADCONTR-020c changing Margin or Margin Type resets both values to 0 and marks dirty", () => {
-    const f = form({ dirty: false, marginPercentage: "12.3", marginFixedValue: "99" });
-    expect(changeMargin(f, true)).toMatchObject({ margin: true, marginPercentage: "0", marginFixedValue: "0", dirty: true });
-    expect(changeMarginType(f, CHOICE_ADMIN.contractMarginType.fixedValue)).toMatchObject({
-      marginType: CHOICE_ADMIN.contractMarginType.fixedValue, marginPercentage: "0", marginFixedValue: "0", dirty: true,
-    });
-  });
-
-  it("UT-ADCONTR-021 the month difference must be one or two digits", () => {
-    expect(isValidMonthDifference("123")).toBe(false);
-    expect(isValidMonthDifference("6")).toBe(true);
-    expect(isValidMonthDifference("12")).toBe(true);
-    expect(isValidMonthDifference("-6")).toBe(false);
-    expect(monthDifferenceErrorVisible("123")).toBe(true);
-    expect(monthDifferenceErrorVisible("")).toBe(false);
-  });
-
-  it("UT-ADCONTR-021b SOURCE DEFECT fixed: Save requires a valid month, the canvas only non-blank", () => {
-    expect(monthDifferenceSaveTermCanvasParity("abc")).toBe(true);
-    expect(monthDifferenceSaveTerm("abc")).toBe(false);
-    expect(monthDifferenceSaveTerm("12")).toBe(true);
-    expect(monthDifferenceSaveTerm("")).toBe(false);
-    expect(validateContract(form({ months: "123" }), { selectedCount: 1, isEdit: false })).toContain(MSG.monthDifference);
-  });
-
-  it("UT-ADCONTR-022 the minus sign negates the month difference", () => {
-    expect(signedMonthDifference("−", "6")).toBe(-6);
-    expect(signedMonthDifference("+", "6")).toBe(6);
-    const payload = buildContractPayload(form({ monthSign: "−", months: "6" }), { contractType: DEV, scope: scope() });
-    expect(payload[BOP_CONTRACT_COL.monthDifference]).toBe(-6);
-  });
-
-  it("UT-ADCONTR-039 the closing-date label is edit-only; the date itself is always required", () => {
-    expect(closingDateLabelVisible(true, null)).toBe(true);
-    expect(closingDateLabelVisible(false, null)).toBe(false);
-    expect(validateContract(form({ closingDateReference: null }), { selectedCount: 1, isEdit: true }))
-      .toContain(MSG.closingDateEmpty);
-  });
-
-  it("UT-ADCONTR-040 a NEW contract defaults to Cluster 4, Margin No and Percentage", () => {
-    const f = emptyContractForm();
-    expect(f.closingDateReference).toBe(CLOSING_DATE_CLUSTER_4);
-    expect(f.margin).toBe(false);
-    expect(f.marginType).toBe(CHOICE_ADMIN.contractMarginType.percentage);
-    expect(f.monthSign).toBe("+");
-    expect(validateContract(form({ closingDateReference: null }), { selectedCount: 1, isEdit: false }))
-      .toContain(MSG.closingDateEmpty);
-  });
-
-  it("UT-ADCONTR-040b the form round-trips a stored contract, sign included", () => {
-    expect(toContractForm(contract({ monthDifference: -6 }))).toMatchObject({ monthSign: "−", months: "6" });
-    expect(toContractForm(contract({ monthDifference: 6 }))).toMatchObject({ monthSign: "+", months: "6" });
-    // `Value(n) > 0` → "+", otherwise "-": zero shows "-" (it saves 0 either way).
-    expect(toContractForm(contract({ monthDifference: 0 }))).toMatchObject({ monthSign: "−", months: "0" });
-    expect(toContractForm(contract({ closingDateReference: null })).closingDateReference).toBe(CLOSING_DATE_CLUSTER_4);
-    expect(toContractForm(null)).toEqual(emptyContractForm());
-  });
-
-  it("UT-ADCONTR-040c SOURCE DEFECT fixed: the stored month is always prefilled", () => {
-    expect(toContractForm(contract({ monthDifference: -3 })).months).toBe("3");
-    expect(monthPrefillCanvasParity(contract({ monthDifference: -3 }), false)).toBe("");
-    expect(monthPrefillCanvasParity(contract({ monthDifference: -3 }), true)).toBe("3");
+  it("UT-ADCONTR-037 requires a margin type when margin is Yes, and at least one account", () => {
+    expect(validateForm(validForm({ margin: true, marginType: null }), EN).marginType).toBe(MSG.marginTypeBlank);
+    expect(validateForm(validForm({ selectedAccountIds: [] }), EN).accounts).toBe(MSG.accountsNone);
+    expect(validateForm(validForm({ margin: null }), EN).margin).toBe(MSG.marginBlank);
   });
 });
 
-/* ═══════════════════════════════════════════════════════════════════ the caps ════ */
-
-describe("the ten-contract caps", () => {
-  const ten = (type: "development" | "construction") =>
-    Array.from({ length: CONTRACT_CAP }, (_, i) => contract({ id: `c${i}`, contractType: CONTRACT_TYPE_VALUE[type] }));
-
-  it("UT-ADCONTR-027 Add is disabled at ten development contracts", () => {
-    expect(contractCapReached(ten("development"), scope(), "development")).toBe(true);
-    expect(contractCapReached(ten("development").slice(1), scope(), "development")).toBe(false);
-    expect(MSG.capReached("development", "Germany", "Wind")).toBe("Maximum 10 development contracts allowed for Germany - Wind");
+describe("Form state", () => {
+  it("UT-ADCONTR-038 has the new-contract defaults", () => {
+    expect(initialForm(undefined, [], EN)).toEqual({
+      description: "", closingRef: CLOSING_REF.Cluster4, monthSign: "+", monthText: "",
+      margin: false, marginType: MARGIN_TYPE.Percentage, marginPercentageText: "", marginFixedText: "",
+      comment: "", selectedAccountIds: [],
+    });
   });
 
-  it("UT-ADCONTR-028 the cap is per contract type, with the corrected option values", () => {
-    expect(CONTRACT_TYPE_VALUE).toEqual({ development: 952850001, construction: 952850002 });
-    const rows = [...ten("development"), contract({ id: "x1", contractType: CON })];
-    expect(contractCapReached(rows, scope(), "development")).toBe(true);
-    expect(contractCapReached(rows, scope(), "construction")).toBe(false);
-    // A None (952850000) row counts as neither.
-    expect(countContracts([contract({ contractType: CHOICE_ADMIN.bopContractTypes.none })], scope(), "development")).toBe(0);
+  it("UT-ADCONTR-039 pre-fills an edit, showing a stored 0 as +", () => {
+    const con = fixtureContracts[0]!;
+    const f = initialForm(con, ["l3-c"], DE);
+    expect(f).toMatchObject({ description: "Grid", monthSign: "-", monthText: "3", margin: true, marginPercentageText: "5,5" });
+    expect(initialForm(fixtureContracts[1], [], EN)).toMatchObject({ monthSign: "+", monthText: "0" });
   });
 
-  it("UT-ADCONTR-029 the cap recomputes from the live list", () => {
-    const nine = ten("development").slice(1);
-    expect(contractCapReached([...nine, contract({ id: "new" })], scope(), "development")).toBe(true);
-    expect(contractCapReached([...nine, contract({ id: "fr", countryId: "fr" })], scope(), "development")).toBe(false);
+  it("UT-ADCONTR-040 is dirty only on a real difference, and clean again after reverting", () => {
+    const initial = initialForm(fixtureContracts[1], ["l3-a"], EN);
+    expect(isDirty(initial, initial)).toBe(false);
+    const changed = { ...initial, description: "Other" };
+    expect(isDirty(changed, initial)).toBe(true);
+    expect(isDirty({ ...changed, description: initial.description }, initial)).toBe(false);
+    expect(isDirty({ ...initial, selectedAccountIds: ["l3-a", "l3-b"] }, initial)).toBe(true);
   });
 
-  it("UT-ADCONTR-037 a scope with no contracts allows both Adds", () => {
-    expect(contractCapReached([], scope(), "development")).toBe(false);
-    expect(contractCapReached([], scope(), "construction")).toBe(false);
+  it("UT-ADCONTR-041 clears both margin inputs when Margin or Margin Type changes, each input in its own field", () => {
+    const f = validForm({ margin: true, marginPercentageText: "5", marginFixedText: "7" });
+    expect(withMargin(f, false)).toMatchObject({ marginPercentageText: "", marginFixedText: "" });
+    expect(withMarginType(f, MARGIN_TYPE.FixedValue)).toMatchObject({ marginType: MARGIN_TYPE.FixedValue, marginPercentageText: "", marginFixedText: "" });
+  });
+
+  it("UT-ADCONTR-042 gates Save on dirty, selection, validity and link availability", () => {
+    const initial = initialForm(undefined, [], EN);
+    const form = validForm();
+    const ok = { form, initial, errors: validateForm(form, EN), linksAvailable: true };
+    expect(canSave(ok)).toBe(true);
+    expect(canSave({ ...ok, linksAvailable: false })).toBe(false);
+    expect(canSave({ ...ok, form: initial, errors: validateForm(initial, EN) })).toBe(false);
+    const bad = { ...form, monthText: "123" };
+    expect(canSave({ ...ok, form: bad, errors: validateForm(bad, EN) })).toBe(false);
+    const edit = initialForm(fixtureContracts[1], ["l3-a"], EN);
+    expect(canSave({ form: edit, initial: edit, errors: validateForm(edit, EN), linksAvailable: true })).toBe(false);
+  });
+
+  it("UT-ADCONTR-043 counts only accounts shown in the tree toward ≥ 1 account; hidden inactive links are kept", () => {
+    const tree = buildAccountTree(fixtureAccounts);
+    const visibleId = [...tree.leaves.keys()][0]!;
+    const HIDDEN = "inactive-capex"; // linked to this contract, but not in the active-only tree
+    expect(tree.leaves.has(HIDDEN)).toBe(false);
+    expect(visibleSelectionCount([HIDDEN, visibleId], tree.leaves)).toBe(1);
+    expect(visibleSelectionCount([HIDDEN], undefined)).toBe(1);
+
+    const initial = initialForm(fixtureContracts[1], [HIDDEN, visibleId], EN);
+    // Only the hidden link left: the rule is NOT met, and Save is blocked.
+    const onlyHidden = { ...initial, description: "Changed", selectedAccountIds: [HIDDEN] };
+    const errors = validateForm(onlyHidden, EN, undefined, tree.leaves);
+    expect(errors.accounts).toBe(MSG.accountsNone);
+    expect(canSave({ form: onlyHidden, initial, errors, linksAvailable: true, visible: tree.leaves })).toBe(false);
+
+    // With a visible account the form saves, and the hidden link stays in the selection, so the
+    // save diff never deletes it.
+    const withVisible = { ...initial, description: "Changed" };
+    const okErrors = validateForm(withVisible, EN, undefined, tree.leaves);
+    expect(okErrors.accounts).toBeUndefined();
+    expect(canSave({ form: withVisible, initial, errors: okErrors, linksAvailable: true, visible: tree.leaves })).toBe(true);
+    const own: DevCoRow[] = [
+      { id: "k-hidden", contractId: "me", accountId: HIDDEN },
+      { id: "k-visible", contractId: "me", accountId: visibleId },
+    ];
+    expect(planDevCoDiff(own, withVisible.selectedAccountIds)).toEqual({ toDelete: [], toCreate: [] });
   });
 });
 
-/* ═════════════════════════════════════════════════════════════════════ the save ════ */
-
-describe("the save", () => {
-  it("UT-ADCONTR-023 the name is Text(type) & \" - \" & description, untrimmed; every column on every save", () => {
-    expect(CONTRACT_TYPE_LABELS[DEV]).toBe("Development Contract");
-    expect(CONTRACT_TYPE_LABELS[CON]).toBe("Construction Contract");
-    expect(contractTypeLabel(null)).toBe("");
-    expect(composeContractName(DEV, "BoP 2026 ")).toBe("Development Contract - BoP 2026 ");
-    const payload = buildContractPayload(form({ comment: "" }), { contractType: CON, scope: scope() });
-    expect(payload).toMatchObject({
-      [BOP_CONTRACT_COL.name]: "Construction Contract - BoP 2026",
-      [BOP_CONTRACT_COL.description]: "BoP 2026",
-      [BOP_CONTRACT_COL.contractTypes]: CON,
-      [BOP_CONTRACT_COL.technology]: CHOICE_ADMIN.technology.wind,
-      [BOP_CONTRACT_COL.comment]: null,
-      [`${BOP_LOOKUP.contractCountry}@odata.bind`]: "/vsb_countries(de)",
+describe("Save planning", () => {
+  it("UT-ADCONTR-044 builds the parent payload with null margins when Margin = No", () => {
+    const p = buildParentPayload(validForm({ monthSign: "-", monthText: "5", comment: "" }), {
+      contractType: CONTRACT_TYPE.Development, countryId: GERMANY_ID, technology: TECHNOLOGY.PV, lang: EN,
     });
-    expect(Object.keys(payload).some((k) => k.startsWith("owningbusinessunit"))).toBe(false);
-  });
-
-  it("UT-ADCONTR-024 reconcile computes the deletes and the creates", () => {
-    const before = new Map([
-      ["A", sel({ accountId: "A", selected: true, devCoCostId: "dcA" })],
-      ["B", sel({ accountId: "B", selected: true, devCoCostId: "dcB" })],
-      ["C", sel({ accountId: "C" })],
-    ]);
-    const after = new Map([
-      ["A", sel({ accountId: "A", selected: false, devCoCostId: "dcA" })],
-      ["B", sel({ accountId: "B", selected: true, devCoCostId: "dcB" })],
-      ["C", sel({ accountId: "C", selected: true })],
-    ]);
-    expect(reconcileDevCoCosts(before, after)).toEqual({ toDelete: ["dcA"], toCreate: ["C"] });
-  });
-
-  it("UT-ADCONTR-024b reconcile never touches another contract's rows", () => {
-    const before = new Map([["X", sel({ accountId: "X", used: true, usedByContractId: "c9" })]]);
-    const after = new Map([["X", sel({ accountId: "X", used: true, selected: true })]]);
-    expect(reconcileDevCoCosts(before, after)).toEqual({ toDelete: [], toCreate: [] });
-  });
-
-  it("UT-ADCONTR-025 an edit is update → deletes → creates, children bound to the contract", () => {
-    const before = classifyAccounts(tree, [cost({ id: "dcA", capexAccountId: "s1" })], "c1");
-    const after = new Map(before);
-    after.set("s1", { ...after.get("s1")!, selected: false });
-    after.set("s2", { ...after.get("s2")!, selected: true });
-    const plan = planSaveContract({
-      form: form(), contractType: DEV, scope: scope(), existing: contract(), before, after, tree, canEdit: true,
+    expect(p).toEqual({
+      vsb_name: "Development Contract - Turbine",
+      vsb_description: "Turbine",
+      "vsb_Country@odata.bind": `/vsb_countries(${GERMANY_ID})`,
+      vsb_technology: TECHNOLOGY.PV,
+      vsb_closingdatereference: CLOSING_REF.Cluster4,
+      vsb_monthdifference: -5,
+      vsb_margin: false,
+      vsb_margintype: null,
+      vsb_marginpercentage: null,
+      vsb_marginfixedvalue: null,
+      vsb_comment: null,
+      vsb_contracttypes: CONTRACT_TYPE.Development,
     });
-    expect(plan.writes.map((w) => `${w.op} ${w.entitySet}`)).toEqual([
-      `update ${BOP_CONTRACT_ENTITY_SET}`, `delete ${DEVCO_COST_ENTITY_SET}`, `create ${DEVCO_COST_ENTITY_SET}`,
-    ]);
-    expect(plan.writes[0]!.id).toBe("c1");
-    expect(plan.writes[1]!.id).toBe("dcA");
-    expect(plan.writes[2]!.data![`${BOP_LOOKUP.contract}@odata.bind`]).toBe(`/${BOP_CONTRACT_ENTITY_SET}(c1)`);
   });
 
-  it("UT-ADCONTR-025b a create binds every child to the contract created first in the plan", () => {
-    const after = classifyAccounts(tree, [], null);
-    after.set("s1", { ...after.get("s1")!, selected: true });
-    after.set("s4", { ...after.get("s4")!, selected: true });
-    const plan = planSaveContract({
-      form: form(), contractType: DEV, scope: scope(), existing: null, before: new Map(after), after, tree, canEdit: true,
+  it("UT-ADCONTR-045 writes only the margin value matching the type, and 0 without a sign", () => {
+    const p = buildParentPayload(validForm({ monthSign: "-", monthText: "0", margin: true, marginType: MARGIN_TYPE.FixedValue, marginFixedText: "1234,5" }), {
+      contractType: CONTRACT_TYPE.Construction, countryId: FRANCE_ID, technology: TECHNOLOGY.BESS, lang: DE,
     });
-    expect(plan.writes.map((w) => w.op)).toEqual(["create", "create", "create"]);
-    expect(plan.writes[0]!.entitySet).toBe(BOP_CONTRACT_ENTITY_SET);
-    for (const w of plan.writes.slice(1)) {
-      expect(w.data![`${BOP_LOOKUP.contract}@odata.bind`]).toBe(`/${BOP_CONTRACT_ENTITY_SET}(${createdRowRef(0)})`);
-    }
+    expect(p.vsb_monthdifference).toBe(0);
+    expect(Object.is(p.vsb_monthdifference, -0)).toBe(false);
+    expect(p.vsb_marginfixedvalue).toBe(1234.5);
+    expect(p.vsb_marginpercentage).toBeNull();
+    expect(p.vsb_margintype).toBe(MARGIN_TYPE.FixedValue);
   });
 
-  it("UT-ADCONTR-026 a child is {Name, contract, CAPEX account, crc36 Country, crc36 Technology} — no RootCapexAccount", () => {
-    const payload = buildDevCoCostPayload({
-      node: selectableNodes(tree).find((n) => n.id === "s1")!, contractRef: "c1", scope: scope(),
-    });
-    expect(payload).toEqual({
-      [DEVCO_COST_COL.name]: "10001_01-Cabling",
-      [`${BOP_LOOKUP.contract}@odata.bind`]: `/${BOP_CONTRACT_ENTITY_SET}(c1)`,
-      [`${BOP_LOOKUP.capexAccount}@odata.bind`]: "/vsb_capexaccountlists(s1)",
-      [DEVCO_COST_COL.technology]: CHOICE_ADMIN.technology.wind,
-      "crc36_Country@odata.bind": "/vsb_countries(de)",
-    });
-    expect(DEVCO_COST_COL.technology).toBe("crc36_technology");
-    expect(DEVCO_COST_COL.country).toBe("_crc36_country_value");
-    expect(DEVCO_COST_COL.id).toBe("vsb_bopcontractsstandardassumptiondevcocostsid");
-    expect(BOP_CONTRACT_COL.id).toBe("vsb_bopcontractsstandardassumptionsid");
+  it("UT-ADCONTR-046 diffs links: removed children go, new selections come", () => {
+    const own: DevCoRow[] = [
+      { id: "k1", contractId: "me", accountId: "a" },
+      { id: "k2", contractId: "me", accountId: "b" },
+    ];
+    expect(planDevCoDiff(own, ["b", "c"])).toEqual({ toDelete: ["k1"], toCreate: ["c"] });
+    expect(planDevCoDiff([], ["a"])).toEqual({ toDelete: [], toCreate: ["a"] });
   });
 
-  it("UT-ADCONTR-035 delete removes the contract only (cascade + plugin do the rest)", () => {
-    const plan = planDeleteContract({ contract: contract(), canEdit: true });
-    expect(plan.writes).toEqual([
-      expect.objectContaining({ op: "delete", entitySet: BOP_CONTRACT_ENTITY_SET, id: "c1" }),
-    ]);
-  });
-
-  it("UT-ADCONTR-036 a refused save sends nothing and leaves the selection untouched", () => {
-    const after = new Map([["s1", sel({ selected: true })]]);
-    const plan = planSaveContract({
-      form: form({ description: "" }), contractType: DEV, scope: scope(), existing: null,
-      before: new Map(), after, tree, canEdit: true,
-    });
-    expect(plan.writes).toHaveLength(0);
-    expect(plan.refusedReason).toBe(MSG.inputBlank);
-    expect(after.get("s1")?.selected).toBe(true);
-    expect(selectedAccountCount(after)).toBe(1);
-  });
-
-  it("UT-ADCONTR-036b the canvas progress and error texts", () => {
-    expect(MSG.saving).toBe("Please wait, saving...");
-    expect(MSG.deleting).toBe("Please wait, deleting...");
-    expect(MSG.saveError("boom")).toBe("Error saving Contract: boom");
+  it("UT-ADCONTR-047 detects accounts just linked to another contract", () => {
+    const scope: DevCoRow[] = [{ id: "1", contractId: "other", accountId: "a" }, { id: "2", contractId: "me", accountId: "b" }];
+    expect(findOwnershipConflicts(scope, "me", ["a", "b"])).toEqual(["a"]);
+    expect(findOwnershipConflicts(scope, undefined, ["b"])).toEqual(["b"]);
+    expect(findOwnershipConflicts(scope, "me", ["b", "c"])).toEqual([]);
   });
 });
 
-/* ═══════════════════════════════════════════════════════════════════ the cards ════ */
+describe("Gap closure", () => {
+  const tree = buildAccountTree(fixtureAccounts);
+  const dev = tree.roots[0]!;
+  const usedA = classifyAccounts([{ id: "o", contractId: "other", accountId: "l3-a" }], "me");
 
-describe("the contract cards", () => {
-  it("UT-ADCONTR-030 accounts are grouped by root account in rank order", () => {
-    const groups = groupCostsForCard(
-      [
-        cost({ id: "a", rootAccountId: "cat2", capexAccountId: "s4" }),
-        cost({ id: "b", rootAccountId: "cat1", capexAccountId: "s1" }),
-      ],
-      "c1", nameOf,
-    );
-    expect(groups.map((g) => g.rootAccountName)).toEqual(["Development Expenses", "Other CAPEX"]);
-    expect(groups[0]!.subaccounts.map((x) => x.label)).toEqual(["Cabling"]);
-    expect(ROOT_ACCOUNT_RANK["Other CAPEX"]).toBe(5);
-    expect(T.devCoGroupHeading("Other CAPEX")).toBe("Other CAPEX :");
+  it("UT-ADCONTR-048 a used account still in the selection can be unchecked but never re-checked", () => {
+    expect(isStaleSelection("l3-a", new Set(["l3-a"]), usedA)).toBe(true);
+    expect(toggleLeaf("l3-a", new Set(["l3-a"]), usedA).has("l3-a")).toBe(false);
+    expect(toggleLeaf("l3-a", new Set(), usedA).has("l3-a")).toBe(false);
   });
 
-  it("UT-ADCONTR-031 an unranked root account sorts last", () => {
-    expect(rootAccountRank("Something new")).toBe(UNRANKED_ROOT_ACCOUNT);
-    expect(rootAccountRank(null)).toBe(UNRANKED_ROOT_ACCOUNT);
-    const groups = groupCostsForCard(
-      [cost({ id: "a", rootAccountId: "ac1" }), cost({ id: "b", rootAccountId: "cat1" })], "c1", nameOf,
-    );
-    expect(groups.map((g) => g.rootAccountName)).toEqual(["Development Expenses", "Grid"]);
+  it("UT-ADCONTR-049 the root clears stale selections and stays enabled while one remains", () => {
+    const allUsed = classifyAccounts([
+      { id: "o1", contractId: "other", accountId: "l3-a" },
+      { id: "o2", contractId: "other", accountId: "l3-b" },
+    ], "me");
+    expect(rootState(dev, new Set(["l3-a"]), allUsed)).toMatchObject({ disabled: false, stale: ["l3-a"] });
+    expect([...toggleRoot(dev, new Set(["l3-a"]), allUsed)]).toEqual([]);
+    expect(rootState(dev, new Set(), allUsed).disabled).toBe(true);
+    // A stale-only selection reads as partially selected, and clearing it never adds anything.
+    expect(rootState(dev, new Set(["l3-a"]), usedA).checked).toBe("mixed");
+    expect([...toggleRoot(dev, new Set(["l3-a"]), usedA)]).toEqual([]);
   });
 
-  it("UT-ADCONTR-031b the card shows only this contract's accounts", () => {
-    const groups = groupCostsForCard([cost({ id: "a", contractId: "c1" }), cost({ id: "b", contractId: "c2" })], "c1", nameOf);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]!.subaccounts).toHaveLength(1);
+  it("UT-ADCONTR-050 withoutAccounts prunes conflicting ids from the form", () => {
+    expect(withoutAccounts(validForm({ selectedAccountIds: ["l3-a", "l3-b"] }), ["l3-a"]).selectedAccountIds)
+      .toEqual(["l3-b"]);
   });
 
-  it("UT-ADCONTR-041 cards fold independently; a saved card opens", () => {
-    const one = toggleCard(new Set(), "c1");
-    const two = toggleCard(one, "c2");
-    expect([...two]).toEqual(["c1", "c2"]);
-    expect([...toggleCard(two, "c1")]).toEqual(["c2"]);
-    expect([...openCardAfterSave(new Set(["c2"]), "c9")]).toEqual(["c2", "c9"]);
+  it("UT-ADCONTR-051 sameCountryTechnology compares country (case-insensitive) and technology", () => {
+    const sameSelection = sameCountryTechnology;
+    const de = { countryId: GERMANY_ID, technology: TECHNOLOGY.Wind };
+    expect(sameSelection(de, { countryId: GERMANY_ID.toUpperCase(), technology: TECHNOLOGY.Wind })).toBe(true);
+    expect(sameSelection(de, { countryId: FRANCE_ID, technology: TECHNOLOGY.Wind })).toBe(false);
+    expect(sameSelection(de, { countryId: GERMANY_ID, technology: TECHNOLOGY.PV })).toBe(false);
+    expect(sameSelection(de, undefined)).toBe(false);
   });
 
-  it("UT-ADCONTR-042 the cards sort by contract type, then name", () => {
-    const rows = sortContracts([
-      contract({ id: "b", contractType: CON, name: "A" }),
-      contract({ id: "c", contractType: DEV, name: "Z" }),
-      contract({ id: "a", contractType: DEV, name: "B" }),
-    ]);
-    expect(rows.map((r) => r.id)).toEqual(["a", "c", "b"]);
+  it("UT-ADCONTR-052 closing after a partial save warns about incomplete links before anything else", () => {
+    expect(closePrompt({ dirty: false, linksIncomplete: false })).toBe("none");
+    expect(closePrompt({ dirty: true, linksIncomplete: false })).toBe("discard");
+    expect(closePrompt({ dirty: false, linksIncomplete: true })).toBe("incomplete");
+    expect(closePrompt({ dirty: true, linksIncomplete: true })).toBe("incomplete");
+    const text = closeDialogText("incomplete", false);
+    expect(text.description).toContain("The contract was saved, but its DevCo accounts are incomplete.");
+    expect(text).toMatchObject({ confirmText: "Close anyway", cancelText: "Keep editing" });
+    expect(closeDialogText("discard", true).description).toContain("country or technology changed");
+    expect(panelTitle(true, CONTRACT_TYPE.Construction)).toBe("New Construction Contract");
   });
 
-  it("UT-ADCONTR-043 the margin details show only for Margin = Yes; the heading uses the ISO code", () => {
-    expect(cardShowsMarginDetails(contract({ margin: false }))).toBe(false);
-    expect(cardMarginText(contract({ margin: false }))).toBe("No");
-    const fixed = contract({ margin: true, marginType: CHOICE_ADMIN.contractMarginType.fixedValue, marginFixedValue: 1500 });
-    expect(cardShowsMarginDetails(fixed)).toBe(true);
-    expect(cardMarginHeading(fixed, "PLN")).toBe("Margin Fixed Value [PLN]");
-    expect(cardMarginHeading(fixed, null)).toBe("Margin Fixed Value [EUR]");
-    expect(cardMarginValue(fixed)).toBe("1500");
-    const pct = contract({ margin: true, marginType: CHOICE_ADMIN.contractMarginType.percentage, marginPercentage: 7.5 });
-    expect(cardMarginHeading(pct, "PLN")).toBe("Margin [%]");
-    expect(cardMarginValue(pct)).toBe("7.5");
-    // The PANEL caption keeps its own Poland test.
-    expect(marginCurrency("Poland")).toBe("PLN");
-    expect(marginCurrency("Germany")).toBe("EUR");
+  it("UT-ADCONTR-053 decimals take no sign and no trailing separator; -0 is normalised", () => {
+    expect(isNDecimal("12.", 1, EN)).toBe(false);
+    expect(isNDecimal("+5", 1, EN)).toBe(false);
+    expect(isNDecimal("-0", 1, EN)).toBe(false);
+    expect(isNDecimal("12,", 2, DE)).toBe(false);
+    expect(isNDecimal("5", 1, EN)).toBe(true);
+    expect(Object.is(parseLocaleNumber("-0", EN), 0)).toBe(true);
+    const pct = (t: string) => validateForm(validForm({ margin: true, marginType: MARGIN_TYPE.Percentage, marginPercentageText: t }), EN, "en-US").marginPercentage;
+    expect(pct("-5")).toBe(MSG.oneDecimal);
+    expect(pct("12.")).toBe(MSG.oneDecimal);
   });
 
-  it("UT-ADCONTR-044 the closing-date value and the panel title", () => {
-    expect(T.closingDateValue("FID", -3)).toBe("FID - 3 months");
-    expect(T.closingDateValue("Cluster 4", 0)).toBe("Cluster 4 + 0 months");
-    expect(T.panelTitle(false, contractTypeLabel(DEV))).toBe("New Development Contract");
-    expect(T.panelTitle(true, contractTypeLabel(CON))).toBe("Edit Construction Contract");
+  it("UT-ADCONTR-054 inactive standard contracts are kept, flagged, and still count toward the limit", () => {
+    expect(INCLUDE_INACTIVE_STANDARD_CONTRACTS).toBe(true);
+    expect(isInactive(contract({ id: "x", stateCode: 1 }))).toBe(true);
+    expect(isInactive(contract({ id: "y", stateCode: 0 }))).toBe(false);
+    const rows = Array.from({ length: CONTRACT_LIMIT }, (_, i) => contract({ id: `d${i}`, stateCode: i === 0 ? 1 : 0 }));
+    expect(limitFlags(rows).developmentFull).toBe(true);
   });
 });

@@ -11,6 +11,7 @@
  * Everything here escapes its inputs. A contract description is user-typed and goes into a
  * `$filter` string; an unescaped apostrophe in "O'Brien Wind Farm" produces a 400 at best.
  */
+import { CHECKLIST_ENTITY_SETS } from "./dataverseNames";
 
 /** OData string literals are single-quoted, and a literal quote is doubled. */
 export function quote(value: string): string {
@@ -187,6 +188,17 @@ export const f = {
 
 /** `/<entityset>(<guid>)` — the value of a `<NavProperty>@odata.bind` key. */
 export const bind = (entitySet: string, id: string): string => `/${entitySet}(${id})`;
+
+/** `/<entityset>(<guid>)` with the id validated by `guid` (so an id that is not a GUID throws instead of being bound). */
+export const bindPath = (entitySet: string, id: string): string => `/${entitySet}(${guid(id)})`;
+
+/** The owning-BU bind key. LOWER CASE. */
+export const OWNING_BU_BIND = "owningbusinessunit@odata.bind";
+
+/** `{ "owningbusinessunit@odata.bind": "/businessunits(<id>)" }`, or `{}` without an id. */
+export function owningBusinessUnitBind(businessUnitId: string | null | undefined): Record<string, string> {
+  return businessUnitId ? { [OWNING_BU_BIND]: bindPath(CHECKLIST_ENTITY_SETS.businessUnits, businessUnitId) } : {};
+}
 
 /** `column eq <id1> or column eq <id2> …`; undefined for no ids. */
 export function idIn(column: string, ids: readonly string[]): string | undefined {

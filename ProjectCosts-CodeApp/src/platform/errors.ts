@@ -86,3 +86,47 @@ export function isRetryable(error: unknown): boolean {
   if (error.status === undefined) return true; // network-shaped
   return error.status >= 500 || error.status === 429;
 }
+
+/**
+ * Upsert guard: the row a single-row update targeted no longer exists, so nothing was changed.
+ *
+ * Raised by `updateRecordIfExists` (`@/data/client`) when the pre-PATCH existence read finds no
+ * row, or when the PATCH itself is refused with 404. It is a `DataError` with status 404, so
+ * `isRetryable` says no and generic messages keep working; screens that want their own wording
+ * test `instanceof RecordGoneError`. (Ported from the Application Settings branch.)
+ */
+export class RecordGoneError extends DataError {
+  readonly table: string;
+  readonly id: string;
+
+  constructor(operation: string, table: string, id: string) {
+    super(operation, `${table} row ${id} no longer exists`, 404);
+    this.name = "RecordGoneError";
+    this.table = table;
+    this.id = id;
+  }
+}
+
+/** The plain sentence every screen shows for a `RecordGoneError` (shared by `usePlanWrite` and the admin screens). */
+export const RECORD_GONE_TEXT =
+  "This record was deleted by someone else, so your change was not saved. Refresh the screen and try again.";
+
+/** True when `error`, or anything in its `cause` chain (depth 4), is a `RecordGoneError`. */
+export function isRecordGone(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    if (current instanceof RecordGoneError) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * A PATCH refused with 404 means the row was deleted after the existence read. Returns the
+ * `RecordGoneError` to throw for such an error, otherwise the error unchanged.
+ */
+export function asRecordGone(error: unknown, operation: string, table: string, id: string): unknown {
+  if (error instanceof RecordGoneError) return error;
+  if (error instanceof DataError && error.status === 404) return new RecordGoneError(operation, table, id);
+  return error;
+}

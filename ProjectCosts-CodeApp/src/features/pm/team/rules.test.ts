@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { ES } from "@/data/dataverseNames";
 import { Vsb_projectmembersesvsb_position } from "@/generated/models/Vsb_projectmembersesModel";
-import { entraSearchFilter } from "@/features/admin/admin-gates-approvals/rules";
+import { entraSearchFilter } from "@/data/adminGatesApprovals";
 import {
   pageLock, pageLockCanvasHeightParity, isPageLocked, commandState, managerRows,
   memberDescription, sortMembers, toggleSelection, canSaveMember, memberPanelErrors,

@@ -21,11 +21,12 @@ import {
   AddRegular, EditRegular, DeleteRegular, ArrowSyncRegular, SaveRegular,
   DocumentRegular, MoreHorizontalRegular, PlayRegular, DataBarVerticalRegular,
   GlassesRegular, OpenRegular, TextNumberListLtrRegular,
-  ChevronDownRegular, DocumentCheckmarkRegular, DocumentDismissRegular,
+  ChevronDownRegular, DocumentCheckmarkRegular, DocumentDismissRegular, PauseRegular, CheckmarkRegular,
 } from "@fluentui/react-icons";
 import type { ReactElement } from "react";
 import { palette, space } from "@/theme/tokens";
 import { useCommandRowStyles } from "./commandRow";
+import { DisabledReason } from "./DisabledReason";
 
 /**
  * The PowerCAT `ItemIconName` values both apps actually use, mapped to their Fluent v9
@@ -38,7 +39,9 @@ import { useCommandRowStyles } from "./commandRow";
 export type CommandIcon =
   | "Add" | "Edit" | "Delete" | "Refresh" | "Save" | "Document" | "More"
   | "Play" | "BIDashboard" | "ReadingMode" | "View" | "NumberedList"
-  | "ActivateOrders" | "DeactivateOrders";
+  | "ActivateOrders" | "DeactivateOrders"
+  // The Application Settings commands (CAPEX Accounts / Default Checklists toolbars).
+  | "Reorder" | "Activate" | "Deactivate" | "Apply";
 
 const ICONS: Record<CommandIcon, ReactElement> = {
   Add: <AddRegular />,
@@ -56,6 +59,10 @@ const ICONS: Record<CommandIcon, ReactElement> = {
   // MDL2 `ActivateOrders` / `DeactivateOrders` are a document with a tick / a cross.
   ActivateOrders: <DocumentCheckmarkRegular />,
   DeactivateOrders: <DocumentDismissRegular />,
+  Reorder: <TextNumberListLtrRegular />,
+  Activate: <PlayRegular />,
+  Deactivate: <PauseRegular />,
+  Apply: <CheckmarkRegular />,
 };
 
 export interface Command {
@@ -72,6 +79,13 @@ export interface Command {
    * under "Add Others" until a BESS row is selected), so pass `undefined` for top level.
    */
   parentKey?: string;
+  /** `false` = not rendered (Application Settings screens). Default true. */
+  visible?: boolean;
+  /**
+   * A disabled command that says why in a focusable tooltip (`DisabledReason`), used by the
+   * Application Settings screens. Only applies while the command is disabled; top-level only.
+   */
+  disabledReason?: string;
 }
 
 const useStyles = makeStyles({
@@ -108,15 +122,22 @@ export interface CommandBarProps {
    * card's commands stay unique (CONVENTIONS rule 16).
    */
   testIdPrefix?: string;
+  /** The Fluent `Toolbar` size (Application Settings). Omitted = Fluent's default. */
+  size?: "small" | "medium";
+  /** An extra class on the bar (Application Settings). */
+  className?: string;
 }
 
-export function CommandBar({ commands, onCommand, children, ariaLabel, testIdPrefix = "command" }: CommandBarProps) {
+export function CommandBar({
+  commands, onCommand, children, ariaLabel, testIdPrefix = "command", size, className,
+}: CommandBarProps) {
   const styles = useStyles();
   const row = useCommandRowStyles();
-  const childrenOf = (key: string) => commands.filter((c) => c.parentKey === key);
+  const shown = commands.filter((c) => c.visible !== false);
+  const childrenOf = (key: string) => shown.filter((c) => c.parentKey === key);
   return (
-    <Toolbar className={mergeClasses(styles.bar, row.row)} aria-label={ariaLabel}>
-      {commands.filter((c) => !c.parentKey).map((c) => {
+    <Toolbar className={mergeClasses(styles.bar, row.row, className)} aria-label={ariaLabel} {...(size ? { size } : {})}>
+      {shown.filter((c) => !c.parentKey).map((c) => {
         const enabled = c.enabled !== false;
         const subItems = childrenOf(c.key);
         if (subItems.length > 0) {
@@ -156,7 +177,7 @@ export function CommandBar({ commands, onCommand, children, ariaLabel, testIdPre
             </Menu>
           );
         }
-        return (
+        const button = (
           <Button
             key={c.key}
             appearance="transparent"
@@ -177,6 +198,9 @@ export function CommandBar({ commands, onCommand, children, ariaLabel, testIdPre
             {c.label}
           </Button>
         );
+        return !enabled && c.disabledReason
+          ? <DisabledReason key={c.key} reason={c.disabledReason}>{button}</DisabledReason>
+          : button;
       })}
       {children}
     </Toolbar>

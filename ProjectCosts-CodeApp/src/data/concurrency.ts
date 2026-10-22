@@ -79,3 +79,10 @@ export async function forEachLimit<T>(
 ): Promise<void> {
   await mapLimit(items, fn, limit);
 }
+
+/**
+ * Pool width for per-row deletes (Application Settings: CAPEX Accounts clean-up, Contracts DevCo
+ * links). Deletes are independent single-row requests, so they may run wider than writes while a
+ * save's peak in-flight count still stays well under the 52-request ceiling.
+ */
+export const DELETE_CONCURRENCY = 16;

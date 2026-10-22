@@ -1,104 +1,80 @@
 /**
- * Admin CAPEX Accounts — the data layer (connected 19 Oct 2026, decision D19).
+ * CAPEX Accounts data wiring: the tree query, the lazy "is a contract booked here?" checks, and
+ * one write mutation that invalidates everything the screen and the CAPEX cost screens read.
  *
- * Canvas screen: `Admin CAPEX Accounts` (PM app). All three tables are registered in
- * `power.config.json` with generated services; the reads live in `data/adminCapexAccounts.ts`.
- *
- *   useCapexTree()        `vsb_capexaccountlists` — every row, any status, ordered by `vsb_order`.
- *   useCapexContracts()   `vsb_capexprojectcontracts` — id + account, for the delete gates.
- *   useCapexPrivileges()  `platform/privileges.ts` `serverEnforcedProvider`: every command is
- *                         offered, Dataverse decides, and a refusal becomes a message
- *                         (`permissionMessage`). The SDK has no `DataSourceInfo` equivalent.
- *   useCapexWrites()      runs one `WritePlan` from `rules.ts` through `data/executePlan.ts`, in
- *                         order, then refreshes the admin tree AND the cost screens' cached chart
- *                         (`qk.capexAccounts`), so neither shows a stale account list.
- *
- * Two plans need a read first, and both are built here:
- *   - a create re-checks the number on the SERVER (`capexNumberExists`) before writing;
- *   - a deactivation reads the forecast costs in the cascade window (`listCascadeCosts`).
- * No flow or plugin fires on these tables (04-flow-inventory.md, verified 19 Oct 2026).
+ * Keys: `qk.adminCapexAccounts*` (shared with the invalidation helpers).
+ * The admin tree is NOT cached under the shared `qk.capexAccounts`, whose consumer
+ * (`features/contracts/hooks.ts`) expects active-only cost accounts; that key is invalidated after
+ * every write instead by `invalidateAfterCapexAccountsWrite`.
  */
-import { useQuery } from "@tanstack/react-query";
-import { ES, ES_ADMIN } from "@/data/dataverseNames";
+import { useMemo } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
-import type { ScreenData } from "@/data/notConnected";
-import { usePlanWrite } from "@/data/usePlanWrite";
-import {
-  capexNumberExists, listAllCapexAccounts, listCapexContractRefs, listCascadeCosts,
-} from "@/data/adminCapexAccounts";
-import { serverEnforcedProvider } from "@/platform/privileges";
-import {
-  MSG, composeSubaccountNumber, costCascadeWindow, planDeactivateAccount, planSaveAccount,
-  type CapexAccount, type CapexContractRef, type DeactivateArgs, type Privileges, type WritePlan,
-} from "./rules";
+import { ACCOUNTS_TABLE, hasContracts, loadCapexAccountRows } from "@/data/adminCapexAccounts";
+import { invalidateAfterCapexAccountsWrite } from "@/data/adminInvalidation";
+import { FRESH_ON_ENTRY } from "@/data/adminQueryPresets";
+import { useTablePrivileges, type TablePrivileges } from "@/platform/privileges";
+import { buildCapexTree, type ContractCheck } from "./rules";
 
-/** Entity sets this screen reads and writes. */
-export const TABLES: readonly string[] = [
-  ES_ADMIN.capexAccountLists,
-  ES.capexProjectContracts,
-  ES_ADMIN.capexCosts,
-];
-
-const NO_ACCOUNTS: CapexAccount[] = [];
-const NO_CONTRACTS: CapexContractRef[] = [];
-/** Master data maintained here; refetched after every write anyway. */
-const STALE_MS = 5 * 60 * 1000;
-
-/** The whole `CAPEX Account Lists` table, ordered by `Order`. */
-export function useCapexTree(): ScreenData<CapexAccount[]> {
-  const q = useQuery({ queryKey: qk.adminCapexAccounts, queryFn: listAllCapexAccounts, staleTime: STALE_MS });
-  return { data: q.data ?? NO_ACCOUNTS, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
-}
-
-/** `CAPEX Project Contracts` — only the id and the account each one references. */
-export function useCapexContracts(): ScreenData<CapexContractRef[]> {
-  const q = useQuery({ queryKey: qk.adminCapexContractRefs, queryFn: listCapexContractRefs, staleTime: STALE_MS });
-  return { data: q.data ?? NO_CONTRACTS, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
-}
-
-/** Table privileges — server-enforced (see the header). */
-export function useCapexPrivileges(): ScreenData<Privileges> {
-  const p = serverEnforcedProvider.forTable(ES_ADMIN.capexAccountLists);
-  return {
-    data: { canCreate: p.canCreate, canWrite: p.canWrite, canDelete: p.canDelete },
-    isLoading: false, error: undefined, connected: true,
-  };
-}
-
-/** Runs write plans; refreshes the admin tree, the contract refs, and the cost screens' chart. */
-export function useCapexWrites() {
-  return usePlanWrite({
-    invalidate: [qk.adminCapexAccounts, qk.adminCapexContractRefs, qk.capexAccounts],
-    action: "change CAPEX accounts",
+/** Always read fresh on entry — no dependency on navigation history. */
+export function useCapexTree() {
+  const query = useQuery({
+    ...FRESH_ON_ENTRY,
+    queryKey: qk.adminCapexAccountsTree,
+    queryFn: loadCapexAccountRows,
   });
+  const tree = useMemo(() => (query.data ? buildCapexTree(query.data) : undefined), [query.data]);
+  return { ...query, tree };
+}
+
+export interface ContractChecks {
+  /** id → true/false once answered, `"failed"` when the query errored; missing = loading. */
+  checks: Map<string, ContractCheck>;
+  /** Re-runs every failed check (the Retry action). */
+  retryFailed: () => void;
 }
 
 /**
- * The save plan, with the canvas uniqueness test asked of the server just before a create
- * (`LookUp('CAPEX Account Lists', Number = …)`), so a number someone else added meanwhile is
- * still refused.
+ * Server-side contract check per id (never a cached, truncated list). Only the ids
+ * actually on screen are asked about. A failed check is reported as `"failed"` rather than
+ * dropped, so the screen can explain why Delete is unavailable.
  */
-export async function checkedSavePlan(
-  form: Parameters<typeof planSaveAccount>[0],
-  opts: Parameters<typeof planSaveAccount>[1],
-): Promise<WritePlan> {
-  const plan = planSaveAccount(form, opts);
-  if (plan.refusedReason || opts.isEdit) return plan;
-  const number = opts.isSubaccount && opts.parent
-    ? composeSubaccountNumber(opts.parent.number, form.number)
-    : form.number.trim();
-  if (await capexNumberExists(number)) {
-    return { writes: [], log: [], refusedReason: opts.isSubaccount ? MSG.duplicateSubaccount : MSG.duplicateAccount };
-  }
-  return plan;
+export function useHasContracts(ids: readonly string[]): ContractChecks {
+  const results = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: qk.adminCapexHasContracts(id),
+      queryFn: () => hasContracts(id),
+      staleTime: 30_000,
+    })),
+  });
+  const checks = new Map<string, ContractCheck>();
+  ids.forEach((id, i) => {
+    const r = results[i];
+    if (typeof r?.data === "boolean") checks.set(id, r.data);
+    else if (r?.isError) checks.set(id, "failed");
+  });
+  const retryFailed = () => {
+    for (const r of results) if (r.isError) void r.refetch();
+  };
+  return { checks, retryFailed };
 }
 
-/** The deactivation cascade: reads the forecast costs in the window, then builds the plan. */
-export async function cascadeDeactivatePlan(args: Omit<DeactivateArgs, "costs">): Promise<WritePlan> {
-  const affected = new Set([args.account.id, ...args.subaccounts.map((s) => s.id)]);
-  const contractIds = args.contracts
-    .filter((c) => c.accountId !== null && affected.has(c.accountId))
-    .map((c) => c.id);
-  const costs = await listCascadeCosts(contractIds, costCascadeWindow(args.today));
-  return planDeactivateAccount({ ...args, costs });
+/** Server-enforced privileges (all enabled; a 403 becomes `permissionMessage`). */
+export function useCapexPrivileges(): TablePrivileges {
+  return useTablePrivileges(ACCOUNTS_TABLE);
+}
+
+/**
+ * Every write of the screen. Invalidation runs on SETTLED, not success: a multi-step write that
+ * failed part-way has still changed rows, and the screen must show what is there now.
+ * The shared helper refreshes the tree, the chart of accounts, the Costs settings hierarchy and
+ * every project cost book / totals / Add-Costs sheet; it uses `allSettled`, so
+ * a failed refetch never turns a landed write into a rejected save.
+ */
+export function useCapexWrite() {
+  const queryClient = useQueryClient();
+  return useMutation<unknown, unknown, () => Promise<unknown>>({
+    mutationFn: (run) => run(),
+    onSettled: () => invalidateAfterCapexAccountsWrite(queryClient),
+  });
 }

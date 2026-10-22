@@ -1,625 +1,495 @@
 /**
- * Admin Contract Screen — composition only (connected 19 Oct 2026, D23).
+ * Application Settings — Contracts (BoP standard-assumption contracts). Replaces the canvas
+ * `Admin Contract Screen`. Composition only: rules in `./rules.ts`, Dataverse in
+ * `@/data/adminContract.ts`, query wiring in `./hooks.ts`.
  *
- * Canvas screen: `Admin Contract Screen` (PM app),
- * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Contract Screen.pa.yaml`:
+ * Rendered at master's `/admin/contract` inside the app shell, which gates `/admin/*`. Within the
+ * screen `useAdminAccess` (Application Administrator / Controller Own Data) gates every write
+ * command: Add, Edit, Delete and Save are disabled for anyone else, as before the port. Writes are
+ * server-enforced (`serverEnforcedProvider`); a 403 shows `permissionMessage`.
  *
- *   cmp_Admin_Contracts_Header                    page title "Contracts"
- *   cmp_AdminContraacts_NestedCountryPickerColumn country rail (Wind / PV / BESS)
- *   con_AdminContract_Selected_Country_Technology scope heading + the two Add buttons
- *   gal_AdminContracts_StandardAssumptions_Updated contract cards (fold independently)
- *   con_AdminContracrt_RightPanel_NewEditContract the New / Edit panel
- *     left: fields                                Description, Closing Date Reference, Month
- *                                                 Difference, Margin, Comment
- *     right: DevCo Cost Form                      level-1 headers (accordion, tri-state) and
- *                                                 their level-3 accounts
- *   cmp_PopUp_Loading_AdminBoPContracts           the progress pop-up (`WriteFeedback`)
- *   cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1  delete confirmation
- *
- * Apply / Apply to All and their tracking labels are not ported (D20). The hidden
- * `btn_Add_Edit_AdminContracts_Reset` = rebuilding the panel form on open; the hidden
- * `btnGeneralPurposeReset` = the query invalidation after a write.
- *
- * Every decision lives in `rules.ts`; every query and write in `hooks.ts`.
+ * Shared modules: the Country / Technology picker (`CountryTechnologyPicker` +
+ * `useCountryTechnologyUrlSelection`, `?country&tech`, push history), the active-countries read,
+ * `useNotify()` toasts, `FormPanel` (`full`) and its `beforeunload` registration.
+ * Reusable components: `QueryStates` / `useQueryHealth`, `ScopeHeaderBand`,
+ * `DisabledReason`, `NoticeBar`, `usePanelState`, `useToggleSet`, `useConfirmDialog`,
+ * `useTablePrivileges`, and the three-way close prompt through `FormPanel closePrompt`.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { Button, makeStyles, mergeClasses } from "@fluentui/react-components";
+import { AddFilled } from "@fluentui/react-icons";
 import {
-  Button, Checkbox, Dropdown, Input, Option, Text, Textarea, makeStyles, mergeClasses, tokens,
-} from "@fluentui/react-components";
-import {
-  AddRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular, EditRegular,
-} from "@fluentui/react-icons";
-import {
-  Choices, ConfirmDialog, CostField, EmptyState, FormPanel, LoadingOverlay, PanelButtons,
-  WriteFeedback,
+  ConfirmDialog, CountryTechnologyPicker, DisabledReason, EmptyState, LoadingOverlay, NoticeBar, QueryStates,
+  ScopeHeaderBand, useNotify,
+  useQueryHealth, type CloseReason,
 } from "@/components";
+import { useConfirmDialog } from "@/features/shared/useConfirmDialog";
+import { useCountryTechnologyUrlSelection } from "@/features/shared/useCountryTechnologySelection";
+import { usePanelState } from "@/features/shared/usePanelState";
+import { useToggleSet } from "@/features/shared/useToggleSet";
+import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import { useAdminAccess } from "@/app/useCurrentUser";
-import { CHOICE_ADMIN } from "@/data/dataverseNames";
-import { palette, space, media } from "@/theme/tokens";
+import { useTablePrivileges } from "@/platform/privileges";
+import { repairLanguageTag } from "@/domain/locale";
+import { RecordGoneError } from "@/platform/errors";
 import {
-  CLOSING_DATE_REFERENCE_OPTIONS, CONTRACT_SCREEN_TEXT as T, CONTRACT_TYPE_VALUE, MARGIN_OPTIONS,
-  MARGIN_TYPE_OPTIONS, MSG,
-  buildContractAccountTree, buildContractPicker, canSaveContract, cardMarginHeading,
-  cardMarginText, cardMarginValue, cardShowsMarginDetails, changeMargin, changeMarginType,
-  classifyAccounts, closingDateLabelVisible, contractCapReached, contractTypeLabel,
-  defaultContractScope, devCoFormGroups, emptyContractForm, groupCostsForCard, leafChecked,
-  marginCurrency, marginFixedValueError, marginPercentageError, monthDifferenceErrorVisible,
-  nextExpandedId, openCardAfterSave, optionLabel, parentToggleEnabled, parentTriState,
-  planDeleteContract, planSaveContract, scopeFor, selectedAccountCount, sortContracts,
-  toContractForm, toggleAccount, toggleCard, toggleParent,
-  type AccountSelection, type BopContract, type BopContractType, type ContractForm,
-  type ContractScope, type TriState,
+  CONTRACT_COUNTRY_RULE, CONTRACT_DEFAULT, pickerCountries, sameCountryTechnology, type CountryTechnology,
+} from "@/domain/countryPicker";
+import { CONTRACT_TECHNOLOGIES, technologyOptionLabel } from "@/domain/technology";
+import { useActiveCountries } from "@/data/countries";
+import { ContractSaveError, ENTITY, OwnershipConflictError, type SaveContractInput } from "@/data/adminContract";
+import {
+  CONTRACT_TYPE, INCOMPLETE_CLOSED_WARNING, breadcrumbText, buildAccountTree,
+  canSave, classifyAccounts, closeDialogText, closePrompt, currencyOf, deleteDescription, groupDevCoTags, initialForm,
+  isDirty, limitFlags, limitMessage, panelTitle, sortContracts, validateForm,
+  withoutAccounts,
+  type ContractForm, type StandardContract,
 } from "./rules";
 import {
-  useBopContracts, useContractAccountTree, useContractCountries, useContractWrites, useDevCoCosts,
+  useCapexAccounts, useContractDevCo, useDeleteContract, useFetchContract,
+  useSaveContract, useStandardContracts,
 } from "./hooks";
+import { APPLY_ALL_FILL, APPLY_ALL_INFO, APPLY_ALL_LABEL, ApplyBar } from "./ApplyBar";
+import { ContractCard } from "./ContractCard";
+import { ContractPanel } from "./ContractPanel";
+import { DevCoCostForm } from "./DevCoCostForm";
+import {
+  CONTRACT_ALREADY_DELETED_MESSAGE, deleteErrorMessage, loadErrorText, openErrorMessage, saveErrorMessage,
+} from "./messages";
 
 const useStyles = makeStyles({
-  page: {
-    display: "flex", flexDirection: "column", rowGap: space.m, minWidth: 0,
-    paddingTop: space.m, paddingBottom: space.m, paddingLeft: space.l, paddingRight: space.l,
+  root: { display: "flex", gap: "5px", minHeight: "100%", alignItems: "stretch" },
+  // The content column owns the screen's single scroll region (keep one scroll
+  // container: the content area), so a long contract list cannot drive the row
+  // taller than the viewport and drag the stretched picker past the rail.
+  content: {
+    flexGrow: 1, minWidth: "0", minHeight: "0",
+    display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "10px",
+    overflowY: "auto",
   },
-  title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold },
-  layout: {
-    display: "flex", columnGap: space.l, rowGap: space.l, minWidth: 0,
-    [media.belowMd]: { flexDirection: "column" },
-  },
-  picker: {
-    width: "220px", flexShrink: 0, display: "flex", flexDirection: "column",
-    borderRightWidth: "1px", borderRightStyle: "solid", borderRightColor: palette.neutralLight,
-    [media.belowMd]: { width: "auto", borderRightWidth: "0px" },
-  },
-  pickerCountry: { justifyContent: "flex-start", fontWeight: tokens.fontWeightSemibold },
-  pickerTech: { paddingLeft: space.xl },
-  pickerSelected: { backgroundColor: palette.neutralLight },
-  content: { display: "flex", flexDirection: "column", rowGap: space.m, flexGrow: 1, minWidth: 0 },
-  scopeBar: { display: "flex", alignItems: "center", columnGap: space.m, rowGap: space.s, flexWrap: "wrap" },
-  scopeHeading: { fontSize: "16px", fontWeight: tokens.fontWeightSemibold },
-  addButton: {
-    color: palette.themePrimary,
-    borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
-    borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
-  },
-  cards: { display: "flex", flexDirection: "column", rowGap: space.s },
-  card: {
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: palette.neutralQuaternaryAlt, borderRightColor: palette.neutralQuaternaryAlt,
-    borderBottomColor: palette.neutralQuaternaryAlt, borderLeftColor: palette.neutralQuaternaryAlt,
-    borderTopLeftRadius: "4px", borderTopRightRadius: "4px",
-    borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
-    backgroundColor: palette.white,
-  },
-  cardHeader: {
-    display: "flex", alignItems: "center", columnGap: space.s, minHeight: "42px",
-    paddingLeft: space.m, paddingRight: space.s,
-  },
-  cardTitle: { flexGrow: 1, minWidth: 0, fontWeight: tokens.fontWeightSemibold },
-  cardBody: {
-    display: "flex", flexDirection: "column", rowGap: space.m,
-    paddingLeft: space.m, paddingRight: space.m, paddingBottom: space.m, paddingTop: space.s,
-    borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: palette.neutralQuaternaryAlt,
-  },
-  actions: { display: "flex", alignItems: "center", columnGap: space.s, flexWrap: "wrap" },
-  grid: {
-    display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", columnGap: space.l, rowGap: space.s,
-    [media.belowSm]: { gridTemplateColumns: "minmax(0, 1fr)" },
-  },
-  heading: { color: palette.neutralTertiary, fontSize: tokens.fontSizeBase200 },
-  value: { display: "block" },
-  group: { display: "flex", alignItems: "baseline", columnGap: "10px", marginBottom: "12px", flexWrap: "wrap" },
-  groupHeading: { fontSize: "14px", fontWeight: tokens.fontWeightSemibold, color: palette.neutralTertiary },
-  tags: { display: "flex", flexWrap: "wrap", columnGap: space.s, rowGap: space.s },
-  tag: {
-    paddingTop: "4px", paddingBottom: "4px", paddingLeft: "12px", paddingRight: "12px",
-    fontSize: "13px", fontWeight: tokens.fontWeightSemibold, whiteSpace: "nowrap",
-    borderTopLeftRadius: "16px", borderTopRightRadius: "16px",
-    borderBottomLeftRadius: "16px", borderBottomRightRadius: "16px",
-    backgroundColor: "#EDEBE9", color: "#323130",
-  },
-  panelColumns: {
-    display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: space.xl, rowGap: space.l,
-    [media.belowMd]: { gridTemplateColumns: "minmax(0, 1fr)" },
-  },
-  panelColumn: { display: "flex", flexDirection: "column", rowGap: space.l, minWidth: 0 },
-  monthRow: { display: "flex", columnGap: space.s },
-  sign: { width: "100px", minWidth: "0px" },
-  devCoCard: {
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.neutralLight,
-    borderLeftWidth: "4px", borderLeftStyle: "solid", borderLeftColor: "transparent",
-  },
-  devCoCardSelected: { borderLeftColor: palette.akzent1 },
-  devCoHeader: { display: "flex", alignItems: "center", columnGap: space.xs },
-  devCoRows: { display: "flex", flexDirection: "column", paddingLeft: space.xl },
-  usedRow: { color: palette.Warning },
+  addButton: { minWidth: "230px", justifyContent: "flex-start" },
+  // Cards touch each other (gallery `TemplatePadding: 0`, ACS:833); `minWidth: 0` keeps long
+  // content from widening the column.
+  list: { display: "flex", flexDirection: "column", gap: "0", paddingLeft: "20px", paddingRight: "20px", minWidth: "0" },
+  // ACS:612-653: an 80 px block with the 45 px bar at Y=10, so 10 px above and 25 px below it;
+  // the column gap is 12 px, hence the -2 / +13 px margins.
+  applyAll: { paddingLeft: "20px", paddingRight: "20px", minWidth: "0", marginTop: "-2px", marginBottom: "13px" },
 });
 
-type Panel = {
-  contractType: number | null;
-  existing: BopContract | null;
-  before: Map<string, AccountSelection>;
-};
-
-/** `img_Parent_TriState_Checkbox.Image` — the four canvas SVGs. */
-function TriStateIcon({ state }: { state: TriState }) {
-  const tick = <path d="M6 12 L10 16 L18 8" stroke="#FFFFFF" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />;
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      {state === "LOCKED" ? <><rect x="1" y="1" width="22" height="22" rx="2" ry="2" fill="#C8C6C4" />{tick}</> : null}
-      {state === "UNCHECKED" ? <rect x="1" y="1" width="22" height="22" rx="2" ry="2" fill="none" stroke="#605E5C" strokeWidth="1.5" /> : null}
-      {state === "CHECKED" ? <><rect x="1" y="1" width="22" height="22" rx="2" ry="2" fill="#0078D4" />{tick}</> : null}
-      {state === "PARTIAL" ? (
-        <>
-          <rect x="1" y="1" width="22" height="22" rx="2" ry="2" fill="#0078D4" />
-          <line x1="7" y1="12" x2="17" y2="12" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-        </>
-      ) : null}
-    </svg>
-  );
+/**
+ * The UI language for the `fn_Numeric` separator rule. The app has no Power Apps
+ * `Language()` equivalent; `navigator.language` is the source the shell uses too (`App.tsx`),
+ * repaired by the shared `repairLanguageTag` so a malformed tag cannot break `Intl`.
+ */
+function uiLanguage(): string {
+  return typeof navigator !== "undefined" && navigator.language ? repairLanguageTag(navigator.language) : "en-US";
 }
 
-/** The canvas delete has no error text; the failure detail is shown as is. */
-const plainError = (detail: string): string => detail;
+/**
+ * This screen's load checks, kept as they were before `useQueryHealth`:
+ * "loading" is `isLoading`, and ANY error is fatal — also over cached data after a failed refetch.
+ * Expressed as the shared `useQueryHealth` options instead of a local query projection.
+ */
+const AS_CHECKED_BEFORE = { fatalWhen: "any-error", loadingWhen: "isLoading" } as const;
 
-export default function AdminContractScreen() {
-  const s = useStyles();
-  const canEdit = useAdminAccess();
-  const writes = useContractWrites();
+interface PanelState {
+  contractType: number;
+  /** Fixed at open: a new contract keeps its "New …" title until a save fully succeeds. */
+  isNew: boolean;
+  /**
+   * The country/technology the panel opened on. Every save writes THESE, never the live
+   * URL selection; if the URL changes while the panel is open, the panel closes or prompts.
+   */
+  scope: CountryTechnology;
+  currency: string;
+  /** Set for edit, and after a partial save created the parent (so a retry updates it). */
+  contractId?: string;
+  initial: ContractForm;
+  form: ContractForm;
+  /** True while an edit panel waits for the fresh row. */
+  refreshing?: boolean;
+  /** The parent was written but not all DevCo links were. */
+  linksIncomplete?: boolean;
+}
 
-  const countriesQ = useContractCountries();
-  const accountsQ = useContractAccountTree();
-  const countries = countriesQ.data;
-  const picker = useMemo(() => buildContractPicker(countries), [countries]);
-  const [picked, setPicked] = useState<ContractScope | null>(null);
-  const scope = picked ?? defaultContractScope(countries);
-  const [expandedCountry, setExpandedCountry] = useState<string | null>(null);
-  const openCountry = expandedCountry ?? scope.countryId;
+export default function ContractsSettingsScreen() {
+  const styles = useStyles();
+  const brand = useBrandButtonStyles();
+  const lang = uiLanguage();
+  const notify = useNotify();
 
-  const contractsQ = useBopContracts(scope);
-  const contracts = useMemo(() => sortContracts(contractsQ.data), [contractsQ.data]);
-  const contractIds = useMemo(() => contracts.map((c) => c.id), [contracts]);
-  const costsQ = useDevCoCosts(contractIds);
-  const costs = costsQ.data;
-
-  const tree = useMemo(() => buildContractAccountTree(accountsQ.data), [accountsQ.data]);
-  const groups = useMemo(() => devCoFormGroups(tree), [tree]);
-  const accountNames = useMemo(() => new Map(accountsQ.data.map((a) => [a.id, a.name])), [accountsQ.data]);
-  const accountName = (id: string | null) => (id ? accountNames.get(id) ?? "" : "");
-
-  const loadError = [countriesQ, accountsQ, contractsQ, costsQ].some((q) => q.error);
-  const loading = countriesQ.isLoading || accountsQ.isLoading;
-  const scopeChosen = scope.countryId !== null && scope.technology !== null;
-
-  const [openCards, setOpenCards] = useState<Set<string>>(new Set());
-  const [panel, setPanel] = useState<Panel | null>(null);
-  const [form, setForm] = useState<ContractForm>(emptyContractForm());
-  const [after, setAfter] = useState<Map<string, AccountSelection>>(new Map());
-  const [expandedNode, setExpandedNode] = useState<string | null>(null);
-  const [toDelete, setToDelete] = useState<BopContract | null>(null);
-
-  const openPanel = (contractType: number | null, existing: BopContract | null) => {
-    const before = classifyAccounts(tree, costs, existing?.id ?? null);
-    writes.clear();
-    setPanel({ contractType, existing, before });
-    setForm(toContractForm(existing));
-    setAfter(before);
-    setExpandedNode(null);
+  const canAdmin = useAdminAccess();
+  const tablePrivileges = useTablePrivileges(ENTITY.contracts);
+  /** Table privileges narrowed by the admin rule: a non-admin gets no write command. */
+  const privileges = {
+    canCreate: canAdmin && tablePrivileges.canCreate,
+    canWrite: canAdmin && tablePrivileges.canWrite,
+    canDelete: canAdmin && tablePrivileges.canDelete,
   };
-  const closePanel = () => setPanel(null);
 
-  const addEnabled = (type: BopContractType) =>
-    canEdit && scopeChosen && !contractsQ.isLoading && !contractCapReached(contracts, scope, type);
+  /* ─────────────────────────────────────────────────────────── selection */
+  const countriesQuery = useActiveCountries();
+  const countries = useMemo(
+    () => pickerCountries(countriesQuery.data ?? [], CONTRACT_COUNTRY_RULE),
+    [countriesQuery.data],
+  );
+  const { selection, country: selectedCountry, select } = useCountryTechnologyUrlSelection({
+    countries, technologies: CONTRACT_TECHNOLOGIES, defaultTo: CONTRACT_DEFAULT, history: "push",
+  });
+  const currency = currencyOf(selectedCountry?.isoCurrencyCode);
 
-  const isEdit = panel?.existing != null;
-  const selectedCount = selectedAccountCount(after);
-  const update = (patch: Partial<ContractForm>) => setForm((f) => ({ ...f, ...patch, dirty: true }));
-  const markChanged = () => setForm((f) => ({ ...f, dirty: true }));
+  /* ─────────────────────────────────────────────────────────────────── data */
+  const contractsQuery = useStandardContracts(selection);
+  const devCoQuery = useContractDevCo(selection);
+  const capexQuery = useCapexAccounts();
+  const fetchContract = useFetchContract();
+  const saveMutation = useSaveContract();
+  const deleteMutation = useDeleteContract();
 
-  const isPct = form.marginType === CHOICE_ADMIN.contractMarginType.percentage;
-  const isFixed = form.marginType === CHOICE_ADMIN.contractMarginType.fixedValue;
-  const monthError = monthDifferenceErrorVisible(form.months) ? MSG.monthDifference : undefined;
-  const pctError = marginPercentageError(form.marginPercentage) ?? undefined;
-  const fixedError = marginFixedValueError(form.marginFixedValue) ?? undefined;
-  const panelCurrency = marginCurrency(scope.countryName);
+  const countriesHealth = useQueryHealth([countriesQuery], AS_CHECKED_BEFORE);
+  // Only the enabled query: without a selection the list query is disabled (and stays pending).
+  const contractsHealth = useQueryHealth(selection ? [contractsQuery] : [], AS_CHECKED_BEFORE);
 
-  const save = async () => {
-    if (!panel) return;
-    const plan = planSaveContract({
-      form, contractType: panel.contractType, scope, existing: panel.existing,
-      before: panel.before, after, tree, canEdit,
+  const contracts = useMemo(() => sortContracts(contractsQuery.data ?? []), [contractsQuery.data]);
+  const limits = limitFlags(contracts);
+  const tree = useMemo(() => buildAccountTree(capexQuery.data ?? []), [capexQuery.data]);
+  const devCoRows = devCoQuery.data;
+
+  /* ───────────────────────────────────────────────────────── local UI state */
+  const expanded = useToggleSet<string>();
+  const panelState = usePanelState<PanelState>();
+  const { panel } = panelState;
+  /** The open panel as last rendered — read by the async edit re-seed. */
+  const panelRef = useRef<PanelState | null>(null);
+  useEffect(() => { panelRef.current = panel; }, [panel]);
+  const deleteDialog = useConfirmDialog<"delete", StandardContract>();
+  const deleteTarget = deleteDialog.state?.payload ?? null;
+
+  /* ─────────────────────────────────────────────────────────── panel */
+  const classes = useMemo(
+    () => classifyAccounts(devCoRows ?? [], panel?.contractId),
+    [devCoRows, panel?.contractId],
+  );
+  const linksAvailable = devCoQuery.isSuccess && capexQuery.isSuccess;
+  /** the live URL no longer names the scope the open panel is bound to. */
+  const scopeChanged = panel !== null && !sameCountryTechnology(selection, panel.scope);
+  // only accounts shown in the tree count toward "at least one account"; links to inactive
+  // CAPEX accounts stay in the selection (never deleted on save) but do not satisfy the rule.
+  const errors = panel ? validateForm(panel.form, lang, undefined, tree.leaves) : {};
+  const dirty = panel ? isDirty(panel.form, panel.initial) : false;
+  const linksIncomplete = panel?.linksIncomplete === true;
+  // A retry after a partial save must be possible even when the form equals its loaded values.
+  const saveEnabled = panel && !scopeChanged && canAdmin
+    ? canSave({
+      form: panel.form, initial: panel.initial, errors, linksAvailable, forceDirty: linksIncomplete, visible: tree.leaves,
+    })
+    : false;
+
+  function openPanel(next: PanelState) {
+    panelRef.current = next;
+    panelState.open(next);
+  }
+
+  function openNew(contractType: number) {
+    if (!selection) return;
+    const form = initialForm(undefined, [], lang);
+    openPanel({ contractType, isNew: true, scope: selection, currency, initial: form, form });
+  }
+
+  /**
+   * the panel opens at once on the listed row, blocked by "Loading contract...", and is
+   * re-seeded from a fresh read of the row and of the DevCo scope (the canvas `Refresh`,
+   * ACS:1057). If EITHER fresh read fails the panel closes with an error toast rather than edit
+   * possibly stale data (`refetch()` resolves on error in TanStack v5, so its `isError` is
+   * checked explicitly).
+   */
+  function openEdit(contract: StandardContract) {
+    if (!selection) return;
+    const ownIds = (rows: typeof devCoRows) =>
+      (rows ?? []).filter((r) => r.contractId === contract.id).map((r) => r.accountId);
+    const form = initialForm(contract, ownIds(devCoRows), lang);
+    openPanel({
+      contractType: contract.contractType ?? CONTRACT_TYPE.Development, isNew: false,
+      scope: selection, currency,
+      contractId: contract.id, initial: form, form, refreshing: true,
     });
-    const existingId = panel.existing?.id ?? null;
-    closePanel();
-    const created = await writes.run({ progress: MSG.saving, plan });
-    const savedId = existingId ?? created?.[0] ?? null;
-    if (created && savedId) setOpenCards((open) => openCardAfterSave(open, savedId));
+    void Promise.all([fetchContract(contract.id), devCoQuery.refetch()])
+      .then(([fresh, scope]) => {
+        if (scope.isError || scope.data === undefined) {
+          throw scope.error ?? new Error("The DevCo account links could not be read");
+        }
+        const freshForm = initialForm(fresh, ownIds(scope.data), lang);
+        panelState.patch((prev) => (prev.refreshing && prev.contractId === contract.id
+          ? { ...prev, contractType: fresh.contractType ?? prev.contractType, initial: freshForm, form: freshForm, refreshing: false }
+          : prev));
+      })
+      .catch((error: unknown) => {
+        notify.error(openErrorMessage(error));
+        const current = panelRef.current;
+        if (current && current.contractId === contract.id && current.refreshing) panelState.close();
+      });
+  }
+
+  function closePanel(warnIncomplete: boolean) {
+    panelState.close();
+    if (warnIncomplete) notify.warning(INCOMPLETE_CLOSED_WARNING);
+  }
+
+  /**
+   * The three-way close prompt (discard / incomplete links), asked by `FormPanel` for ✕, Escape,
+   * backdrop, Cancel and `"scope"`: browser back/forward or a URL edit while the panel is
+   * open. A clean panel closes at once; "Keep editing" after a scope change restores the panel's
+   * own selection. `FormPanel` waits while a save is in flight (its input was already frozen).
+   */
+  function promptFor(reason: CloseReason) {
+    const kind = closePrompt({ dirty, linksIncomplete });
+    return kind === "none" ? null : closeDialogText(kind, reason === "scope");
+  }
+
+  async function save() {
+    if (!panel || !saveEnabled) return;
+    const input: SaveContractInput = {
+      contractId: panel.contractId,
+      contractType: panel.contractType,
+      countryId: panel.scope.countryId,
+      technology: panel.scope.technology,
+      form: panel.form,
+      accounts: tree.accounts,
+      lang,
+    };
+    try {
+      const { contractId } = await saveMutation.mutateAsync(input);
+      panelState.close();
+      expanded.add(contractId);
+      notify.success("Contract saved");
+    } catch (error) {
+      const message = saveErrorMessage(error, (id) => tree.accounts.get(id)?.number);
+      const saveError = error instanceof ContractSaveError ? error : undefined;
+      // accounts another contract now owns leave the selection, so a retry can succeed. The
+      // scope was refetched in `onSettled`, so the tree now shows them locked ("Used").
+      const conflicts = saveError?.cause instanceof OwnershipConflictError ? saveError.cause.accountIds : [];
+      // the contract was deleted meanwhile — nothing was written and a retry can only fail
+      // again, so the panel closes without an unsaved-changes prompt (the record is gone); the
+      // list refetched in `onSettled`, so its card disappears.
+      if (saveError?.phase === "parent" && saveError.cause instanceof RecordGoneError) {
+        closePanel(false);
+        notify.error(message);
+        return;
+      }
+      // the panel stays open with the input; a created parent is remembered for the retry.
+      panelState.patch((prev) => ({
+        ...prev,
+        form: conflicts.length > 0 ? withoutAccounts(prev.form, conflicts) : prev.form,
+        contractId: prev.contractId ?? saveError?.contractId,
+        linksIncomplete: prev.linksIncomplete === true || saveError?.parentSaved === true,
+      }));
+      panelState.setError(message);
+      notify.error(message);
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────── delete */
+  async function confirmDelete() {
+    if (!deleteTarget || !selection || !privileges.canDelete) return;
+    const scope = selection;
+    // The dialog closes first; the work runs under the page overlay and reports by toast.
+    await deleteDialog.confirm(async ({ payload: target }) => {
+      try {
+        const { alreadyDeleted } = await deleteMutation.mutateAsync({ id: target.id, selection: scope });
+        expanded.remove(target.id);
+        // a 404 means another user deleted it first — done, not "may still be in use". The
+        // list refetches in `onSettled` either way.
+        if (alreadyDeleted) notify.info(CONTRACT_ALREADY_DELETED_MESSAGE);
+        else notify.success("Contract deleted");
+      } catch (error) {
+        notify.error(deleteErrorMessage(error));
+      }
+    }, { closeFirst: true });
+  }
+
+  /* ─────────────────────────────────────────────────────────────── render */
+  if (countriesHealth.phase !== "ready") {
+    return (
+      <QueryStates
+        health={countriesHealth}
+        loadingLabel="Loading countries…"
+        fatal={{ title: "Countries could not be loaded", text: loadErrorText }}
+      >
+        {() => null}
+      </QueryStates>
+    );
+  }
+
+  const technologyLabel = selection ? breadcrumbText(selectedCountry?.name, selection.technology) : "Contracts";
+  const addButton = (contractType: number, label: string, full: boolean) => {
+    const disabled = !selection || !privileges.canCreate;
+    // At the limit the button stays focusable and says why; a disabled one stays disabled.
+    const reason = full && !disabled && selection && selectedCountry
+      ? limitMessage(contractType, selectedCountry.name, selection.technology)
+      : null;
+    return (
+      <DisabledReason reason={reason}>
+        <Button
+          appearance="secondary" className={mergeClasses(styles.addButton, brand.brandOutline)} icon={<AddFilled />}
+          disabled={disabled} disabledFocusable={!disabled && full}
+          aria-label={label} data-testid={`contracts-add-${contractType}`}
+          onClick={() => { if (!full) openNew(contractType); }}
+        >
+          {label}
+        </Button>
+      </DisabledReason>
+    );
   };
 
-  const confirmDelete = async () => {
-    const contract = toDelete;
-    setToDelete(null);
-    if (!contract) return;
-    await writes.run({
-      progress: MSG.deleting, errorText: plainError,
-      plan: planDeleteContract({ contract, canEdit }),
-    });
-  };
+  /** Same presentation as Costs and Project Gates: the side-column rail with SVG flags at every width. */
+  const picker = (
+    <CountryTechnologyPicker
+      countries={countries}
+      technologies={CONTRACT_TECHNOLOGIES}
+      value={selection}
+      onChange={select}
+    />
+  );
 
-  return (
-    <div className={s.page}>
-      <Text as="h1" className={s.title}>{T.title}</Text>
+  const devCoError = devCoQuery.isError ? loadErrorText(devCoQuery.error) : undefined;
+  const capexError = capexQuery.isError ? loadErrorText(capexQuery.error) : undefined;
 
-      <WriteFeedback
-        progress={writes.progress} error={writes.error} success={writes.success}
-        testIdPrefix="admin-contract"
-      />
-
-      {loadError ? (
-        <EmptyState title={MSG.loadFailedTitle} description={MSG.loadFailedDescription} />
-      ) : loading ? (
-        <LoadingOverlay mode="inline" label={MSG.loading} />
-      ) : (
-        <div className={s.layout}>
-          {/* `cmp_AdminContraacts_NestedCountryPickerColumn` — countries, each nesting Wind / PV / BESS. */}
-          <nav className={s.picker} data-testid="cmp_AdminContraacts_NestedCountryPickerColumn">
-            {picker.countries.map((country) => {
-              const open = openCountry === country.key;
-              const childs = picker.nestings.find((n) => n.country === country.name)?.childs ?? [];
+  const body = !selection
+    // The screen defaults to the first country / first technology (PO, 2026-10-17), so this
+    // branch now means only "the picker list is empty" — no configured country is active.
+    ? <EmptyState title="No countries available" description="No configured country is available, so there are no standard contracts to show." />
+    : (
+      <QueryStates
+        health={contractsHealth}
+        loadingLabel="Loading contracts…"
+        fatal={{ title: "Standard contracts could not be loaded", text: loadErrorText }}
+        empty={{
+          when: contracts.length === 0,
+          title: `No standard contracts for ${selectedCountry?.name ?? ""} / ${technologyOptionLabel(selection.technology)}`,
+        }}
+      >
+        {() => (
+          <div className={styles.list}>
+            {contracts.map((contract) => {
+              const own = devCoRows?.filter((r) => r.contractId === contract.id);
+              const tagGroups = devCoQuery.isError ? "error" as const
+                : own && capexQuery.data ? groupDevCoTags(own, tree.accounts) : undefined;
               return (
-                <div key={country.key}>
-                  <Button
-                    appearance="transparent"
-                    className={s.pickerCountry}
-                    icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-                    iconPosition="after"
-                    aria-label={country.name}
-                    aria-expanded={open}
-                    data-testid={`cbx_CountrySelected-${country.key}`}
-                    onClick={() => setExpandedCountry(open ? "" : country.key)}
-                  >
-                    {country.name}
-                  </Button>
-                  {open ? childs.map((child) => {
-                    const selected = scope.countryId === country.key && scope.technology === child.value;
-                    return (
-                      <div key={child.value} className={s.pickerTech}>
-                        <Button
-                          appearance="transparent"
-                          className={mergeClasses(selected && s.pickerSelected)}
-                          aria-label={child.value}
-                          aria-pressed={selected}
-                          data-testid={`admin-contract-technology-${country.key}-${child.value}`}
-                          onClick={() => setPicked(scopeFor(
-                            countries.find((c) => c.id === country.key) ?? null, child.value,
-                          ))}
-                        >
-                          {child.value}
-                        </Button>
-                      </div>
-                    );
-                  }) : null}
-                </div>
+                <ContractCard
+                  key={contract.id}
+                  contract={contract}
+                  expanded={expanded.has(contract.id)}
+                  currency={currency}
+                  tagGroups={tagGroups}
+                  canEdit={privileges.canWrite}
+                  canDelete={privileges.canDelete}
+                  onToggle={() => expanded.toggle(contract.id)}
+                  onEdit={() => openEdit(contract)}
+                  onDelete={() => deleteDialog.ask("delete", contract)}
+                />
               );
             })}
-          </nav>
-
-          <div className={s.content}>
-            {/* `con_AdminContract_Selected_Country_Technology` — heading and the two Add buttons. */}
-            <div className={s.scopeBar}>
-              {scopeChosen ? (
-                <Text className={s.scopeHeading} data-testid="lbl_AdminContract_Selected_Country_Technology">
-                  {T.scopeHeading(scope.countryName ?? "", scope.technology ?? "")}
-                </Text>
-              ) : null}
-              <Button
-                appearance="outline" className={s.addButton} icon={<AddRegular />}
-                aria-label={T.addDevelopment}
-                data-testid="btn_AdminContract_Add_Development_Contract"
-                disabled={!addEnabled("development")}
-                onClick={() => openPanel(CONTRACT_TYPE_VALUE.development, null)}
-              >
-                {T.addDevelopment}
-              </Button>
-              <Button
-                appearance="outline" className={s.addButton} icon={<AddRegular />}
-                aria-label={T.addConstruction}
-                data-testid="btn_AdminContract_Add_Construction_Contract"
-                disabled={!addEnabled("construction")}
-                onClick={() => openPanel(CONTRACT_TYPE_VALUE.construction, null)}
-              >
-                {T.addConstruction}
-              </Button>
-            </div>
-
-            {contractsQ.isLoading ? <LoadingOverlay mode="inline" label={MSG.loading} /> : null}
-
-            <div className={s.cards} data-testid="gal_AdminContracts_StandardAssumptions_Updated">
-              {contracts.map((c) => {
-                const open = openCards.has(c.id);
-                const name = c.name ?? "";
-                const showMargin = cardShowsMarginDetails(c);
-                return (
-                  <section key={c.id} className={s.card} data-testid="con_Card_Root">
-                    <div className={s.cardHeader}>
-                      <Text className={s.cardTitle} data-testid="lbl_Title">{name}</Text>
-                      <Button
-                        appearance="transparent"
-                        icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-                        aria-label={name}
-                        aria-expanded={open}
-                        data-testid="ico_Chevron_Expand_Collapse_AdminContracrs"
-                        onClick={() => setOpenCards((set) => toggleCard(set, c.id))}
-                      />
-                    </div>
-                    {open ? (
-                      <div className={s.cardBody}>
-                        <div className={s.actions}>
-                          <Button appearance="outline" icon={<EditRegular />} aria-label={T.edit}
-                            data-testid="btn_Edit_AdminContracts" disabled={!canEdit}
-                            onClick={() => openPanel(c.contractType, c)}>{T.edit}</Button>
-                          <Button appearance="outline" icon={<DeleteRegular />} aria-label={T.delete}
-                            data-testid="btn_Delete_AdminContracts" disabled={!canEdit}
-                            onClick={() => setToDelete(c)}>{T.delete}</Button>
-                        </div>
-                        <div className={s.grid} data-testid="con_Info_Grid1">
-                          <div>
-                            <Text className={s.heading}>{T.description}</Text>
-                            <Text className={s.value}>{c.description ?? ""}</Text>
-                          </div>
-                          <div>
-                            <Text className={s.heading}>{T.closingDateReference}</Text>
-                            <Text className={s.value}>
-                              {T.closingDateValue(
-                                optionLabel(CLOSING_DATE_REFERENCE_OPTIONS, c.closingDateReference),
-                                c.monthDifference ?? 0,
-                              )}
-                            </Text>
-                          </div>
-                          <div />
-                        </div>
-                        <div className={s.grid} data-testid="con_Info_Grid2">
-                          <div>
-                            <Text className={s.heading}>{T.margin}</Text>
-                            <Text className={s.value}>{cardMarginText(c)}</Text>
-                          </div>
-                          {showMargin ? (
-                            <div>
-                              <Text className={s.heading}>{T.marginType}</Text>
-                              <Text className={s.value}>{optionLabel(MARGIN_TYPE_OPTIONS, c.marginType)}</Text>
-                            </div>
-                          ) : null}
-                          {showMargin ? (
-                            <div>
-                              <Text className={s.heading}>{cardMarginHeading(c, scope.isoCurrencyCode)}</Text>
-                              <Text className={s.value}>{cardMarginValue(c)}</Text>
-                            </div>
-                          ) : null}
-                        </div>
-                        <div data-testid="con_DevCoCost_Section">
-                          <Text className={s.heading}>{T.devCoCostsFrom}</Text>
-                          {groupCostsForCard(costs, c.id, accountName).map((group) => (
-                            <div key={group.rootAccountName} className={s.group}>
-                              <span className={s.groupHeading}>{T.devCoGroupHeading(group.rootAccountName)}</span>
-                              <div className={s.tags}>
-                                {group.subaccounts.map((sub) => (
-                                  <span key={sub.id} className={s.tag}>{sub.label}</span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div data-testid="con_Footer_Comment_Section">
-                          <Text className={s.heading}>{T.comments}</Text>
-                          <Text className={s.value}>{c.comment ? c.comment : T.blankComment}</Text>
-                        </div>
-                      </div>
-                    ) : null}
-                  </section>
-                );
-              })}
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </QueryStates>
+    );
 
-      {/* `con_AdminContracrt_RightPanel_NewEditContract` */}
-      <FormPanel
-        open={panel !== null}
-        title={panel ? T.panelTitle(isEdit, contractTypeLabel(panel.contractType)) : ""}
-        width="wide"
-        onDismiss={closePanel}
-        closeTestId="ico_Add_Edit_AdminContracts_Close"
-        footer={
-          <PanelButtons
-            onSave={() => { void save(); }}
-            onCancel={closePanel}
-            disabled={!canSaveContract(form, { selectedCount, isEdit, canEdit })}
-            saveTestId="ico_AdminContracts_Save"
-            cancelTestId="ico_AdminContracts_Cancel"
-          />
-        }
-      >
-        <div className={s.panelColumns}>
-          <div className={s.panelColumn}>
-            <CostField label={T.description} required>
-              <Input
-                aria-label={T.description}
-                data-testid="txt_Add_Edit_AdminContracts_Description"
-                value={form.description}
-                maxLength={T.descriptionMax}
-                onChange={(_, d) => update({ description: d.value })}
-              />
-            </CostField>
-            <Choices
-              label={T.closingDateReference}
-              name="rad_Contracts_RightPanel_NewEdit_CostsUntilClosingDate"
-              required
-              value={optionLabel(CLOSING_DATE_REFERENCE_OPTIONS, form.closingDateReference)}
-              options={CLOSING_DATE_REFERENCE_OPTIONS.map((o) => o.label)}
-              onChange={(label) => update({
-                closingDateReference: CLOSING_DATE_REFERENCE_OPTIONS.find((o) => o.label === label)?.value ?? null,
-              })}
+  return (
+    <div className={styles.root}>
+      {picker}
+
+      <div className={styles.content}>
+
+        <ScopeHeaderBand
+          title={technologyLabel}
+          titleAs="h2"
+          ariaLabel="Contracts"
+          actionsAlign="start"
+          actions={(
+            <>
+              {addButton(CONTRACT_TYPE.Development, "Add Development Contract", limits.developmentFull)}
+              {addButton(CONTRACT_TYPE.Construction, "Add Construction Contract", limits.constructionFull)}
+            </>
+          )}
+        />
+
+        {/* Canvas ACS:612-724, drawn disabled: no calls, no writes. */}
+        {selection ? (
+          <div className={styles.applyAll}>
+            <ApplyBar
+              fill={APPLY_ALL_FILL} label={APPLY_ALL_LABEL} accessibleName={APPLY_ALL_LABEL}
+              infoText={APPLY_ALL_INFO} buttonWidth={140} filledIcon testId="contracts-apply-all"
             />
-            {closingDateLabelVisible(isEdit, form.closingDateReference) ? (
-              <span className="canvas-field-error" role="alert">{MSG.closingDateEmpty}</span>
-            ) : null}
-            <CostField label={T.monthDifference} required error={monthError}>
-              <span className={s.monthRow}>
-                <Dropdown
-                  className={s.sign}
-                  aria-label={T.monthDifference}
-                  data-testid="drp_Add_Edit_AdminContracts_MonthDifference_AddSub"
-                  value={form.monthSign === "−" ? "-" : "+"}
-                  selectedOptions={[form.monthSign === "−" ? "-" : "+"]}
-                  onOptionSelect={(_, d) => update({ monthSign: d.optionValue === "-" ? "−" : "+" })}
-                >
-                  {T.monthSigns.map((sign) => <Option key={sign} value={sign}>{sign}</Option>)}
-                </Dropdown>
-                <Input
-                  aria-label={T.monthDifference}
-                  data-testid="txt_Add_Edit_AdminContracts_MonthDifference_Month"
-                  value={form.months}
-                  onChange={(_, d) => update({ months: d.value })}
-                />
-              </span>
-            </CostField>
-            <Choices
-              label={T.margin}
-              name="rad_Add_Edit_AdminContracts_RightPanel_NewEdit_Margin"
-              required
-              value={form.margin ? MARGIN_OPTIONS.yes : MARGIN_OPTIONS.no}
-              options={[MARGIN_OPTIONS.yes, MARGIN_OPTIONS.no]}
-              onChange={(v) => setForm((f) => changeMargin(f, v === MARGIN_OPTIONS.yes))}
-            />
-            {form.margin ? (
-              <Choices
-                label=""
-                name="rad_AddEdit_AdminContracts_RightPanel_MarginType"
-                value={optionLabel(MARGIN_TYPE_OPTIONS, form.marginType)}
-                options={MARGIN_TYPE_OPTIONS.map((o) => o.label)}
-                onChange={(label) => setForm((f) => changeMarginType(
-                  f, MARGIN_TYPE_OPTIONS.find((o) => o.label === label)?.value ?? null,
-                ))}
-              />
-            ) : null}
-            {form.margin && isPct ? (
-              <CostField label={T.marginPercentage} required error={pctError}>
-                <Input
-                  aria-label={T.marginPercentage}
-                  data-testid="txt_Add_Edit_AdminContracts_MarginPercentage"
-                  value={form.marginPercentage}
-                  maxLength={T.marginMax}
-                  onChange={(_, d) => update({ marginPercentage: d.value })}
-                />
-              </CostField>
-            ) : null}
-            {form.margin && isFixed ? (
-              <CostField label={T.marginFixedValue(panelCurrency)} required error={fixedError}>
-                <Input
-                  aria-label={T.marginFixedValue(panelCurrency)}
-                  data-testid="txt_Add_Edit_AdminContracts_MarginFixedValue"
-                  value={form.marginFixedValue}
-                  maxLength={T.marginMax}
-                  onChange={(_, d) => update({ marginFixedValue: d.value })}
-                />
-              </CostField>
-            ) : null}
-            <CostField label={T.comment} counter={`${form.comment.trim().length}/${T.commentMax}`}>
-              <Textarea
-                aria-label={T.comment}
-                data-testid="txt_Add_Edit_AdminContracts_Comments"
-                value={form.comment}
-                maxLength={T.commentMax}
-                onChange={(_, d) => update({ comment: d.value })}
-              />
-            </CostField>
           </div>
+        ) : null}
 
-          <div className={s.panelColumn}>
-            <div className="canvas-field">
-              <span data-required="true">{T.devCoCostForm}</span>
-            </div>
-            <div data-testid="gal_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm">
-              {groups.map(({ category, leaves }) => {
-                const children = leaves
-                  .map((l) => after.get(l.id))
-                  .filter((x): x is AccountSelection => x !== undefined);
-                const state = parentTriState(children);
-                const open = expandedNode === category.id;
-                const label = `${category.number} ${category.name}`;
-                const triStateOn = state === "CHECKED" ? "true" : state === "PARTIAL" ? "mixed" : "false";
-                return (
-                  <div key={category.id} className={mergeClasses(s.devCoCard, open && s.devCoCardSelected)}>
-                    <div className={s.devCoHeader}>
-                      <Button
-                        appearance="transparent"
-                        role="checkbox"
-                        aria-checked={triStateOn}
-                        aria-label={label}
-                        data-testid="img_Parent_TriState_Checkbox"
-                        icon={<TriStateIcon state={state} />}
-                        disabled={!parentToggleEnabled(children)}
-                        onClick={() => {
-                          const next = new Map(after);
-                          for (const c of toggleParent(children)) next.set(c.accountId, c);
-                          setAfter(next);
-                          markChanged();
-                        }}
-                      />
-                      <Button
-                        appearance="transparent"
-                        icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-                        iconPosition="after"
-                        aria-label={label}
-                        aria-expanded={open}
-                        data-testid={`btn_Add_Edit_AdminContract_Right_Panel_DevCoCostForm_Transparent-${category.id}`}
-                        onClick={() => setExpandedNode(nextExpandedId(expandedNode, category.id))}
-                      >
-                        {label}
-                      </Button>
-                    </div>
-                    {open ? (
-                      <div className={s.devCoRows}>
-                        {leaves.map((leaf) => {
-                          const sel = after.get(leaf.id);
-                          const leafLabel = `${leaf.number} ${leaf.name}`;
-                          return (
-                            <Checkbox
-                              key={leaf.id}
-                              className={mergeClasses(sel?.used && s.usedRow)}
-                              label={leafLabel}
-                              aria-label={leafLabel}
-                              data-testid="chb_Contracts_RightPanel_NewEdit_CostssRow"
-                              value={leaf.id}
-                              checked={leafChecked(sel)}
-                              disabled={sel === undefined || sel.used}
-                              onChange={() => {
-                                setAfter(toggleAccount(after, leaf.id));
-                                markChanged();
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </FormPanel>
+        {selection && (devCoError || capexError) ? (
+          <NoticeBar
+            intent="warning"
+            inset={20}
+            action={{
+              label: "Retry",
+              ariaLabel: "Retry loading DevCo costs",
+              onClick: () => { void devCoQuery.refetch(); void capexQuery.refetch(); },
+            }}
+          >
+            {devCoError ?? capexError}
+          </NoticeBar>
+        ) : null}
+
+        {body}
+      </div>
+
+      {panel ? (
+        <ContractPanel
+          key={panelState.key}
+          open
+          title={panelTitle(panel.isNew, panel.contractType)}
+          form={panel.form}
+          onFormChange={(form) => panelState.patch({ form })}
+          errors={errors}
+          currency={panel.currency}
+          saveEnabled={saveEnabled}
+          saving={saveMutation.isPending}
+          loading={panel.refreshing === true}
+          onSave={() => void save()}
+          // Reload / tab close asks first while the panel holds unsaved input or incomplete links.
+          dirty={dirty || linksIncomplete}
+          closePrompt={promptFor}
+          promptRequest={scopeChanged && !saveMutation.isPending ? "scope" : undefined}
+          onPromptCancel={(reason) => { if (reason === "scope" && panel) select(panel.scope); }}
+          onDismiss={() => closePanel(linksIncomplete)}
+          errorText={panelState.error}
+          devCoForm={(
+            <DevCoCostForm
+              roots={tree.roots}
+              selected={new Set(panel.form.selectedAccountIds)}
+              classes={classes}
+              loading={devCoQuery.isLoading || capexQuery.isLoading}
+              errorText={devCoError ?? capexError}
+              onRetry={() => { void devCoQuery.refetch(); void capexQuery.refetch(); }}
+              disabled={saveMutation.isPending || scopeChanged}
+              validationMessage={dirty && errors.accounts ? errors.accounts : undefined}
+              onChange={(next) => panelState.patch((prev) => ({
+                ...prev, form: { ...prev.form, selectedAccountIds: [...next].sort() },
+              }))}
+            />
+          )}
+        />
+      ) : null}
 
       <ConfirmDialog
-        open={toDelete !== null}
-        title={T.deleteTitle}
-        description={T.deleteDescription(toDelete?.name ?? "")}
-        confirmText={T.confirm}
-        cancelText={T.cancel}
+        open={deleteTarget !== null}
+        title="Delete BoP Standard Contract"
+        description={deleteTarget ? deleteDescription(deleteTarget.name) : ""}
+        confirmText="Confirm"
         confirmIcon="delete"
-        onConfirm={() => { void confirmDelete(); }}
-        onCancel={() => setToDelete(null)}
+        destructive
+        onConfirm={() => void confirmDelete()}
+        onCancel={deleteDialog.cancel}
       />
+
+      {deleteMutation.isPending ? <LoadingOverlay mode="blocking" label="Please wait, deleting..." /> : null}
     </div>
   );
 }

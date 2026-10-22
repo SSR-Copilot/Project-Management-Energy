@@ -1,318 +1,258 @@
 /**
- * Admin Milestones Screen — composition only (connected 19 Oct 2026, D21).
+ * Application Settings — Milestones. Replaces the canvas 'Admin Milestones Screen'.
  *
- * Canvas screen: `Admin Milestones Screen` (PM app),
- * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Milestones Screen.pa.yaml`.
+ * Standard milestone assumptions per Country × Technology: average cluster durations (months)
+ * and cluster success rates, used by project screens as default milestone timings.
  *
- * Structure, matching the canvas containers:
- *   heading                  `cmp_Admin_Milestones_Header` (Project.Name)
- *   country accordion        `gal_CountriesMilestonesStandardAssumptions`
- *     card header            `con_Header_MilestonesStandardAssumptions_AdminScreen`
- *     card command bar       `cmd_MilestoneStandardAssumptionsDetails_Country_CommandBar` — Edit
- *     summary header + rows  `con_Header_MilestonesStandardAssumptionsDetails_AdminScreen`,
- *                            `gal_MilestonesStandardAssumptions_AdminScreen`
- *   right panel              `con_Admin_MilestoneAssumtion_Form` — durations and success rates
+ * Composition only: rules in `./rules.ts`, queries in `./hooks.ts`, Dataverse I/O in
+ * `@/data/adminMilestones.ts`.
  *
- * NOT PORTED (D20): `CommandBar1` (Apply All), the per-country Apply item, both Apply
- * confirmations and the `Icon3_1` recalculating badge.
+ * Route `/admin/milestones`: rendered inside the shell and admin nav, with the in-page h1;
+ * writes are per-row (`saveMilestonePatches`, no bulk services).
  *
- * Every decision lives in `rules.ts`; every query and write in `hooks.ts`. The hidden
- * `but_…_Reset` button's job (reset the editor on Close / Cancel / Save) is `closePanel`.
+ * Admin gate: `useAdminAccess` (canvas `Or(IsApplicationAdministrator, IsControllerOwnData)`,
+ * with the local-run bypass). A non-admin sees the grid, but Edit is disabled and a save is
+ * refused. Client-side only; Dataverse privileges are the real control.
+ *
+ * Not built, by decision: Apply, Apply All and the "currently recalculating" indicator —
+ * disabled/dead in the canvas, and their tables have no generated service.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { Text, makeStyles, tokens } from "@fluentui/react-components";
 import {
-  Button, Input, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text,
-  makeStyles, tokens,
-} from "@fluentui/react-components";
-import { ChevronDownRegular, ChevronUpRegular } from "@fluentui/react-icons";
-import {
-  CommandBar, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteFeedback,
+  CommandBar, InlineEmpty, LoadingOverlay, NoticeBar, QueryStates, SettingsAccordion, useNotify,
+  useBeforeUnload, useQueryHealth,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
-import { palette, space } from "@/theme/tokens";
+import { usePanelState } from "@/features/shared/usePanelState";
+import { localeInfo } from "@/domain/locale";
+import { userReason } from "@/platform/userMessage";
+import type { MilestoneCountry } from "@/data/adminMilestones";
+import { palette } from "@/theme/tokens";
+import { MSG, TYPOGRAPHY } from "./constants";
 import {
-  DURATION_FIELDS, INPUT_MAX_LENGTH, MILESTONE_SCREEN_TEXT as T, MSG, SUCCESS_RATE_FIELDS,
-  canSave, durationRows, editKey, editMilestonesTitle, initialInputValue, invalidEdits,
-  milestoneFieldDisplayLabel, milestoneInputTestId, pivotByTechnology, planSaveMilestones,
-  savingText, sortCountries, successRateRows, summaryCellText, technologyDisplayName, upsertEdit,
-  validateEdit,
-  type AssumptionRow, type CountryRow, type EditMap, type MilestoneField,
+  duplicatesWarning, evaluatePanel, groupAssumptions, saveFailureMessage, sortCountries,
+  toMilestoneCountries, type Draft, type TechnologyGroup,
 } from "./rules";
-import { useCountryAssumptions, useMilestoneCountries, useMilestoneWrites } from "./hooks";
+import { useMilestoneAssumptions, useMilestoneCountries, useSaveMilestones } from "./hooks";
+import { AssumptionsMatrix } from "./AssumptionsMatrix";
+import { EditMilestonesPanel } from "./EditMilestonesPanel";
 
 const useStyles = makeStyles({
-  /**
-   * The command bar's first icon starts on the left edge of the content under it (PO, 21 Oct
-   * 2026); `CommandBar` has no inset of its own. Over the "Technology" column caption: Fluent's 8 px
-   * header-cell padding.
-   */
-  commandBar: { paddingLeft: space.s },
   page: {
-    display: "flex", flexDirection: "column", rowGap: space.m, minWidth: 0,
-    paddingTop: space.m, paddingBottom: space.m, paddingLeft: space.l, paddingRight: space.l,
+    display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM,
+    paddingTop: "15px", paddingLeft: "10px", paddingRight: "10px", paddingBottom: tokens.spacingVerticalXL,
+    backgroundColor: palette.white, minHeight: "100%", boxSizing: "border-box",
   },
-  title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold },
-  gallery: { display: "flex", flexDirection: "column", rowGap: space.s },
-  card: {
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: palette.neutralQuaternaryAlt, borderRightColor: palette.neutralQuaternaryAlt,
-    borderBottomColor: palette.neutralQuaternaryAlt, borderLeftColor: palette.neutralQuaternaryAlt,
-    borderTopLeftRadius: "4px", borderTopRightRadius: "4px",
-    borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
-    backgroundColor: palette.white,
-  },
-  cardHeader: {
-    display: "flex", alignItems: "center", columnGap: space.s, minHeight: "42px",
-    paddingLeft: space.s, paddingRight: space.s,
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.neutralQuaternaryAlt,
-  },
-  cardTitle: {
-    flexGrow: 1, minWidth: 0, overflowX: "hidden", textOverflow: "ellipsis",
-    whiteSpace: "nowrap", fontWeight: tokens.fontWeightSemibold,
-  },
-  cardBody: {
-    display: "flex", flexDirection: "column", rowGap: space.xs,
-    paddingLeft: space.s, paddingRight: space.s, paddingBottom: space.s,
-  },
-  tableWrap: { overflowX: "auto" },
-  num: { textAlign: "center", whiteSpace: "pre-line" },
-  subLabels: { whiteSpace: "pre-line" },
-  panelBody: { display: "flex", flexDirection: "column", rowGap: space.l },
-  subHeader: { fontWeight: tokens.fontWeightSemibold },
-  error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
-  cellInput: { width: "90px", minWidth: "0px" },
+  /** Master's admin page heading (as the other master admin screens). */
+  title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold, margin: 0 },
+  /** Canvas Medium, `FontWeight.Normal`, black (AMS:814, 822-824, 833). */
+  countryName: { ...TYPOGRAPHY.countryName },
+  /** The section's stack; its padding is the shared accordion's `panelPadding` (10/10/12). */
+  details: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
 });
 
-/** `Language()` is the player's language — the browser's here. */
-const playerLanguage = (): string => (typeof navigator !== "undefined" && navigator.language) || "en-US";
+/** The accordion's 10 / 10 / 12 px panel padding (canvas parity). */
+const PANEL_PADDING = { left: 10, top: 10, bottom: 12 } as const;
 
-export default function AdminMilestonesScreen() {
-  const s = useStyles();
-  const countriesQ = useMilestoneCountries();
-  const writes = useMilestoneWrites();
+/**
+ * The reason sentence after a canvas prefix: the shared permission wording, else the shared
+ * hint for the failure. Never raw SDK / server text.
+ */
+const reasonOf = (error: unknown): string => userReason(error, MSG.permissionAction);
+
+/** The open editor: the edited country itself (so it survives a refetch) and the user's typed text. */
+interface EditPanel { country: MilestoneCountry; draft: Draft }
+const EMPTY_DRAFT: Draft = {};
+
+export default function MilestonesSettingsScreen() {
+  const styles = useStyles();
+  const notify = useNotify();
   const canEdit = useAdminAccess();
-  const connected = countriesQ.connected;
-  const countries = useMemo(() => sortCountries(countriesQ.data), [countriesQ.data]);
+  const locale = useMemo(() => localeInfo().tag, []);
 
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [panelCountry, setPanelCountry] = useState<CountryRow | null>(null);
-  const [edits, setEdits] = useState<EditMap>(new Map());
+  const countriesQuery = useMilestoneCountries();
+  const assumptionsQuery = useMilestoneAssumptions();
+  const save = useSaveMilestones();
+  /*
+   * In TanStack Query v5 a failed REFETCH sets `error` but keeps `data`. Only a query with
+   * nothing to show is fatal; a failed background refresh keeps the list and shows an
+   * out-of-date warning with Retry.
+   */
+  const health = useQueryHealth([countriesQuery, assumptionsQuery]);
 
-  /** Close / Cancel / Save — the hidden Reset button: clear the edits and close. */
-  const closePanel = () => { setPanelCountry(null); setEdits(new Map()); };
+  /** Every section starts collapsed on every visit (AMS:37). */
+  const [openItems, setOpenItems] = useState<string[]>([]);
+  /*
+   * The edited country itself, not just its id: if a refetched country list no longer
+   * contains it (e.g. it was deactivated), the panel and the draft stay instead of vanishing.
+   */
+  const {
+    panel: editPanel, open: openPanel, patch: patchPanel, close: closePanel,
+    error: panelError, setError: setPanelError,
+  } = usePanelState<EditPanel>();
+  const [preparing, setPreparing] = useState(false);
+  /**
+   * Why Edit could not open: an inline page message that stays until dismissed or the next
+   * Edit. A save success is a toast (`useNotify`).
+   */
+  const [editError, setEditError] = useState<string | null>(null);
 
-  const save = () => {
-    if (!panelCountry) return;
-    const country = panelCountry, journal = edits;
-    closePanel();
-    void writes.run({
-      progress: savingText(country.name),
-      success: MSG.saved,
-      plan: planSaveMilestones({ edits: journal, canEdit, language: playerLanguage() }),
-    });
-  };
+  const countries = useMemo(
+    () => sortCountries(toMilestoneCountries(countriesQuery.data ?? [])),
+    [countriesQuery.data],
+  );
+  const grouped = useMemo(() => groupAssumptions(assumptionsQuery.data ?? []), [assumptionsQuery.data]);
+  const editCountry = editPanel?.country ?? null;
+  const editCountryId = editCountry?.id;
+  const draft = editPanel?.draft ?? EMPTY_DRAFT;
+  const editGroups = useMemo<TechnologyGroup[]>(
+    () => (editCountryId ? grouped.get(editCountryId) ?? [] : []),
+    [editCountryId, grouped],
+  );
+  const panel = useMemo(() => evaluatePanel(editGroups, draft, locale), [editGroups, draft, locale]);
+  const panelOpen = editCountry !== null;
+
+  // Unsaved-changes guard for a reload or tab close while a draft is open.
+  useBeforeUnload(panelOpen && panel.touched);
+
+  /**
+   * Refetch so the editor starts from current values, then open. If the refetch fails the
+   * panel is NOT opened on the stale cache; the page says why instead.
+   * Cancel / ✕ / Escape on a dirty draft confirm first (`FormPanel`), then `closePanel`
+   * drops the draft and the save error.
+   */
+  const openEdit = useCallback(async (country: MilestoneCountry) => {
+    setEditError(null);
+    setPreparing(true);
+    let failed: unknown;
+    try {
+      const result = await assumptionsQuery.refetch();
+      if (result.isError) failed = result.error;
+    } catch (error) {
+      failed = error;
+    } finally {
+      setPreparing(false);
+    }
+    if (failed !== undefined) {
+      setEditError(`${MSG.editRefetchFailed} ${reasonOf(failed)}`);
+      return;
+    }
+    openPanel({ country, draft: {} });
+  }, [assumptionsQuery, openPanel]);
+
+  const onSave = useCallback(async () => {
+    if (!canEdit) {
+      setPanelError(MSG.noPermission);
+      return;
+    }
+    if (!panel.canSave) return;
+    setPanelError(undefined);
+    let outcome;
+    try {
+      outcome = await save.mutateAsync(panel.patches);
+    } catch (error) {
+      setPanelError(`${MSG.saveFailed} ${reasonOf(error)}`);
+      return;
+    }
+    if (outcome.failed.length === 0) {
+      closePanel();
+      notify.success(MSG.saved);
+      return;
+    }
+    // Panel and draft stay; saved rows now equal their stored values and read as untouched.
+    setPanelError(saveFailureMessage(
+      outcome.saved,
+      outcome.failed.map((f) => ({ patch: f.patch, reason: reasonOf(f.error) })),
+    ));
+  }, [canEdit, panel.canSave, panel.patches, save, closePanel, setPanelError, notify]);
+
+  const toggleSection = useCallback((id: string) => {
+    setOpenItems((open) => (open.includes(id) ? open.filter((x) => x !== id) : [...open, id]));
+  }, []);
 
   return (
-    <div className={s.page}>
-      <Text as="h1" className={s.title}>{T.title}</Text>
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="milestones" />
+    <div className={styles.page}>
+      {/*
+        Master port: master's shell header is not a heading, and every master admin screen names
+        itself with an in-page h1 (canvas `cmp_Admin_Milestones_Header`, `Project.Name`).
+      */}
+      <Text as="h1" className={styles.title}>{MSG.title}</Text>
+      {editError ? (
+        <NoticeBar intent="error" alert onDismiss={() => setEditError(null)}>{editError}</NoticeBar>
+      ) : null}
+      {health.phase === "ready" && health.staleError ? (
+        <NoticeBar intent="warning" action={{ label: "Retry", onClick: health.retryFailed }}>
+          {MSG.staleData} {reasonOf(health.staleError)}
+        </NoticeBar>
+      ) : null}
+      <QueryStates
+        health={health}
+        loadingLabel="Loading milestone assumptions…"
+        fatal={{ title: "Milestone assumptions could not be loaded", text: reasonOf, retry: "all" }}
+        empty={{
+          when: countries.length === 0,
+          title: "No countries found",
+          description: "There are no active countries to show milestone assumptions for.",
+        }}
+      >
+        {() => (
+          <SettingsAccordion
+            variant="light"
+            border="always"
+            panelPadding={PANEL_PADDING}
+            openItems={openItems}
+            onToggle={toggleSection}
+            items={countries.map((country) => {
+              const groups = grouped.get(country.id) ?? [];
+              const duplicates = duplicatesWarning(groups);
+              return {
+                id: country.id,
+                testId: `con_Main_MilestonesStandardAssumptions-${country.id}`,
+                title: <Text className={styles.countryName}>{country.name}</Text>,
+                content: (
+                  <div className={styles.details}>
+                    <CommandBar
+                      ariaLabel={`${country.name} actions`}
+                      testIdPrefix={`milestones-command-${country.id}`}
+                      commands={[{ key: "edit", label: "Edit", icon: "Edit", enabled: canEdit && groups.length > 0 && !preparing }]}
+                      onCommand={() => { if (canEdit) void openEdit(country); }}
+                    />
+                    {duplicates ? <NoticeBar intent="warning">{duplicates}</NoticeBar> : null}
+                    {groups.length > 0 ? (
+                      <AssumptionsMatrix countryName={country.name} groups={groups} locale={locale} />
+                    ) : (
+                      <InlineEmpty>No milestone assumptions are stored for {country.name}.</InlineEmpty>
+                    )}
+                  </div>
+                ),
+              };
+            })}
+          />
+        )}
+      </QueryStates>
 
-      {countriesQ.error ? (
-        <EmptyState title={MSG.loadFailedTitle} description={MSG.loadFailedDescription} />
-      ) : countriesQ.isLoading ? (
-        <LoadingOverlay mode="inline" label="Loading..." />
-      ) : (
-        <div className={s.gallery} data-testid="gal_CountriesMilestonesStandardAssumptions">
-          {countries.map((country) => (
-            <CountryCard
-              key={country.id}
-              country={country}
-              canEdit={connected && canEdit}
-              open={expanded.has(country.id)}
-              onToggle={() => setExpanded((prev) => {
-                const next = new Set(prev);
-                if (next.has(country.id)) next.delete(country.id); else next.add(country.id);
-                return next;
-              })}
-              onEdit={() => { setPanelCountry(country); setEdits(new Map()); }}
-            />
-          ))}
-        </div>
-      )}
-
-      <MilestonePanel
-        country={panelCountry}
-        edits={edits}
-        canEdit={connected && canEdit}
-        onChange={setEdits}
-        onSave={save}
+      <EditMilestonesPanel
+        open={panelOpen}
+        countryName={editCountry?.name ?? ""}
+        state={panel}
+        canEdit={canEdit}
+        saving={save.isPending}
+        error={panelError}
+        duplicates={duplicatesWarning(editGroups)}
+        onChange={(key, text) => patchPanel((p) => ({ ...p, draft: { ...p.draft, [key]: text } }))}
+        onSave={() => { void onSave(); }}
         onClose={closePanel}
       />
-    </div>
-  );
-}
 
-/* ─────────────────────────────────────────────────────── one country card */
-
-function CountryCard({
-  country, canEdit, open, onToggle, onEdit,
-}: {
-  country: CountryRow; canEdit: boolean; open: boolean; onToggle: () => void; onEdit: () => void;
-}) {
-  const s = useStyles();
-  const rowsQ = useCountryAssumptions(open ? country.id : null);
-  const pivot = useMemo(() => pivotByTechnology(rowsQ.data), [rowsQ.data]);
-
-  return (
-    <section className={s.card} data-testid="con_Main_MilestonesStandardAssumptions">
-      <div className={s.cardHeader}>
-        <Text className={s.cardTitle} data-testid="lbl_ClusterName_MilestonesStandardAssumptions_AdminScreen">
-          {country.name}
-        </Text>
-        <Button
-          appearance="transparent"
-          icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-          aria-label={country.name}
-          aria-expanded={open}
-          data-testid={open
-            ? "ico_Up_MilestonesStandardAssumptions_AdminScreen"
-            : "ico_Down_MilestonesStandardAssumptions_AdminScreen"}
-          onClick={onToggle}
-        />
-      </div>
-      {open ? (
-        <div className={s.cardBody}>
-          <div className={s.commandBar}>
-            <CommandBar
-              ariaLabel={country.name}
-              commands={[{ key: "editCountryMilestoneAssumtions", label: T.edit, icon: "Edit", enabled: canEdit }]}
-              onCommand={(key) => { if (canEdit && key === "editCountryMilestoneAssumtions") onEdit(); }}
-            />
-          </div>
-          <div className={s.tableWrap}>
-            <Table size="small" aria-label={country.name} data-testid="gal_MilestonesStandardAssumptions_AdminScreen">
-              <TableHeader>
-                <TableRow>
-                  <TableHeaderCell>{T.technology}</TableHeaderCell>
-                  <TableHeaderCell />
-                  {T.summaryHeaders.map((h) => <TableHeaderCell key={h}>{h}</TableHeaderCell>)}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pivot.map((t) => (
-                  <TableRow key={String(t.technology)}>
-                    <TableCell>{technologyDisplayName(t.technology)}</TableCell>
-                    <TableCell className={s.subLabels}>{`${T.subLabelDuration}\n${T.subLabelSuccessRate}`}</TableCell>
-                    {DURATION_FIELDS.map((field) => {
-                      const [first, second] = summaryCellText(t.entries.find((x) => x.label === field));
-                      return <TableCell key={field} className={s.num}>{`${first}\n${second}`}</TableCell>;
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
+      {/*
+        Portalled (`portal`) so the fixed scrim joins the body-level stacking
+        order AFTER the Drawer's own portal and covers it, whatever stacking contexts the shell creates.
+      */}
+      {save.isPending && editCountry ? (
+        <LoadingOverlay portal label={MSG.saving(editCountry.name)} />
       ) : null}
-    </section>
-  );
-}
-
-/* ────────────────────────────────────────────────────────────── the editor */
-
-function MilestonePanel({
-  country, edits, canEdit, onChange, onSave, onClose,
-}: {
-  country: CountryRow | null; edits: EditMap; canEdit: boolean;
-  onChange: (next: EditMap) => void; onSave: () => void; onClose: () => void;
-}) {
-  const s = useStyles();
-  const rowsQ = useCountryAssumptions(country?.id ?? null);
-  const durations = useMemo(() => durationRows(rowsQ.data), [rowsQ.data]);
-  const successes = useMemo(() => successRateRows(rowsQ.data), [rowsQ.data]);
-  const invalid = invalidEdits(edits);
-  const language = playerLanguage();
-
-  const value = (row: AssumptionRow, field: MilestoneField, kind: "duration" | "successRate"): string =>
-    edits.get(editKey(row.id, field))?.raw ?? initialInputValue(row, field, kind);
-
-  const matrix = (fields: readonly MilestoneField[], rows: AssumptionRow[], kind: "duration" | "successRate") => (
-    <Table
-      size="small"
-      aria-label={kind === "duration" ? MSG.durationsSectionTitle : MSG.successRateSectionTitle}
-      data-testid={kind === "duration"
-        ? "gal_Admin_MilestoneAssumption_Form_Fields_Durations_MilestoneInputs"
-        : "gal_Admin_MilestoneAssumption_Form_Fields_SuccessRates_MilestoneInputs"}
-    >
-      <TableHeader>
-        <TableRow>
-          <TableHeaderCell />
-          {rows.map((r) => <TableHeaderCell key={r.id}>{technologyDisplayName(r.technology)}</TableHeaderCell>)}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {fields.map((field) => {
-          const label = milestoneFieldDisplayLabel(field);
-          return (
-            <TableRow key={field}>
-              <TableCell>{label}</TableCell>
-              {rows.map((r) => {
-                const v = value(r, field, kind);
-                // The canvas border turns red for an invalid value, also for a blank initial one.
-                const bad = !validateEdit(kind, v, language);
-                return (
-                  <TableCell key={r.id}>
-                    <Input
-                      className={s.cellInput}
-                      aria-label={label}
-                      aria-invalid={bad}
-                      data-testid={milestoneInputTestId(kind, field)}
-                      value={v}
-                      maxLength={INPUT_MAX_LENGTH}
-                      disabled={!canEdit}
-                      style={bad ? { borderColor: palette.Error } : undefined}
-                      onChange={(_, d) => onChange(upsertEdit(edits, {
-                        rowId: r.id, field, kind, raw: d.value, valid: validateEdit(kind, d.value, language),
-                      }))}
-                    />
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
-
-  return (
-    <FormPanel
-      open={country !== null}
-      title={country ? editMilestonesTitle(country.name) : ""}
-      width="wide"
-      onDismiss={onClose}
-      footer={<PanelButtons onSave={onSave} onCancel={onClose} disabled={!canEdit || !canSave(edits)}
-        saveTestId="pcf_but_Admin_MilestoneAssumption_Form_Buttons_Save"
-        cancelTestId="pcf_but_Admin_MilestoneAssumption_Form_Buttons_Cancel" />}
-    >
-      <div className={s.panelBody}>
-        <Text className={s.subHeader}>{MSG.durationsSectionTitle}</Text>
-        {matrix(DURATION_FIELDS, durations, "duration")}
-        {invalid.some((e) => e.kind === "duration") ? (
-          <Text className={s.error} role="alert" data-testid="lbl_Admin_MilestoneAssumption_Form_Fields_Durations_InvalidMessage">
-            {MSG.invalidDuration}
-          </Text>
-        ) : null}
-
-        <Text className={s.subHeader}>{MSG.successRateSectionTitle}</Text>
-        {matrix(SUCCESS_RATE_FIELDS, successes, "successRate")}
-        {invalid.some((e) => e.kind === "successRate") ? (
-          <Text className={s.error} role="alert" data-testid="lbl_Admin_MilestoneAssumption_Form_Fields_SuccessRates_InvalidMessage">
-            {MSG.invalidSuccessRate}
-          </Text>
-        ) : null}
-      </div>
-    </FormPanel>
+      {preparing ? <LoadingOverlay portal label="Loading current values…" /> : null}
+    </div>
   );
 }

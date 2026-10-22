@@ -1,56 +1,55 @@
 /**
- * Admin Milestones Screen — the data layer (connected 19 Oct 2026, D21).
+ * Milestones settings — TanStack Query wiring. Reads/writes live in
+ * `@/data/adminMilestones.ts`; rules in `./rules.ts`.
  *
- * Canvas screen: `Admin Milestones Screen` (PM app). Both tables are registered; the reads live in
- * `data/adminMilestones.ts`:
- *
- *   useMilestoneCountries()     `vsb_countries` — id, name, `vsb_title` (the canvas `Key`; the
- *                               order is `Value(Key)`, sorted client-side).
- *   useCountryAssumptions(id)   `vsb_milestonesstandardassumptionses` for one country.
- *   useMilestoneWrites()        runs `planSaveMilestones` (updates only) and refreshes the
- *                               assumptions of every country.
- *
- * Apply / Apply All and the Fabric recalculating badge are out of scope (D20), so `Fabric Sync
- * Jobs` is not read and not registered. No flow or plugin fires on these tables.
+ * Keys come from `qk.adminMilestoneAssumptions` and the cross-screen refresh after a save from
+ * `invalidateAfterMilestonesWrite`. Countries are the ONE shared reference read
+ * (`useActiveCountries`); the screen maps and sorts them (`toMilestoneCountries`,
+ * `sortCountries`).
  */
-import { useQuery } from "@tanstack/react-query";
-import { ES, ES_ADMIN } from "@/data/dataverseNames";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/data/keys";
-import type { ScreenData } from "@/data/notConnected";
-import { usePlanWrite } from "@/data/usePlanWrite";
-import { listCountryAssumptions, listMilestoneCountries } from "@/data/adminMilestones";
-import { saveErrorText, type AssumptionRow, type CountryRow } from "./rules";
+import { useActiveCountries } from "@/data/countries";
+import { invalidateAfterMilestonesWrite } from "@/data/adminInvalidation";
+import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
+import { RecordGoneError } from "@/platform/errors";
+import {
+  listMilestoneAssumptions, saveMilestonePatches,
+  type MilestonePatch,
+} from "@/data/adminMilestones";
 
-/** Entity sets this screen reads and writes. */
-export const TABLES: readonly string[] = [
-  ES.countries,
-  ES_ADMIN.milestonesStandardAssumptions,
-];
-
-const NO_COUNTRIES: CountryRow[] = [];
-const NO_ROWS: AssumptionRow[] = [];
-
-/** The accordion axis — the whole `Countries` table. */
-export function useMilestoneCountries(): ScreenData<CountryRow[]> {
-  const q = useQuery({ queryKey: qk.milestoneCountries, queryFn: listMilestoneCountries, staleTime: 30 * 60 * 1000 });
-  return { data: q.data ?? NO_COUNTRIES, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
+/** Active countries (`statecode eq 0`), from the shared countries cache. */
+export function useMilestoneCountries() {
+  return useActiveCountries();
 }
 
-/** One country's `Milestones Standard Assumptions` rows (two per technology). */
-export function useCountryAssumptions(countryId: string | null): ScreenData<AssumptionRow[]> {
-  const q = useQuery({
-    queryKey: qk.milestoneAssumptions(countryId ?? ""),
-    queryFn: () => listCountryAssumptions(countryId!),
-    enabled: Boolean(countryId),
+/** ONE query for every country's rows; expanding sections never fetches. */
+export function useMilestoneAssumptions() {
+  return useQuery({
+    queryKey: qk.adminMilestoneAssumptions,
+    queryFn: listMilestoneAssumptions,
+    staleTime: 5 * 60 * 1000,
+    // An open draft is compared against these rows; do not swap them under the user on focus.
+    ...NO_FOCUS_REFETCH,
   });
-  return { data: q.data ?? NO_ROWS, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
 }
 
-/** Runs the save plan and refreshes the assumptions. */
-export function useMilestoneWrites() {
-  return usePlanWrite({
-    invalidate: [qk.milestoneAssumptionsAll],
-    action: "change the milestone assumptions",
-    errorText: saveErrorText,
+/**
+ * The save. Resolves with the outcome (saved + failed rows) rather than rejecting, because a
+ * partial save must still refresh the grid (invalidate when at least one row was written).
+ * The returned promise settles after the active queries have refetched, so the grid already
+ * shows the new values when the caller reacts. The shared helper also refreshes the
+ * project CAPEX cluster timeline.
+ */
+export function useSaveMilestones() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patches: MilestonePatch[]) => saveMilestonePatches(patches),
+    onSuccess: async (outcome) => {
+      // A row deleted meanwhile (RecordGoneError, nothing sent) also refreshes the grid.
+      const gone = outcome.failed.some((f) => f.error instanceof RecordGoneError);
+      if (outcome.saved.length === 0 && !gone) return;
+      await invalidateAfterMilestonesWrite(queryClient);
+    },
   });
 }

@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
 import { executePlan, PlanError } from "./executePlan";
 import type { WritePlan } from "./writePlan";
@@ -29,6 +30,8 @@ export interface PlanJob {
 export function writeErrorMessage(error: unknown, action: string, prefix?: (detail: string) => string): string {
   const denied = permissionMessage(error, action);
   if (denied) return denied;
+  // Only a guarded update can raise this (no PM plan sets `guarded`), so PM texts are unchanged.
+  if (isRecordGone(error)) return prefix ? prefix(RECORD_GONE_TEXT) : RECORD_GONE_TEXT;
   let detail = error instanceof Error ? error.message : String(error);
   if (error instanceof PlanError) {
     const sent = error.done > 0 ? ` ${error.done} of ${error.total} changes had already been saved.` : "";

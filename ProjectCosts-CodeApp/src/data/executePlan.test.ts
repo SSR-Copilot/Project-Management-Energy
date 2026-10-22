@@ -3,8 +3,11 @@
  * partial run.
  */
 import { describe, expect, it, vi } from "vitest";
-import { executePlan, PlanError, type PlanClient } from "./executePlan";
-import { CREATED_ROW_ID, createdRowRef, emptyPlan, refusePlan } from "./writePlan";
+import { RecordGoneError } from "@/platform/errors";
+import {
+  CreatedIdMissingError, executePlan, PlanError, PlanRefusedError, type PlanClient,
+} from "./executePlan";
+import { CREATED_ROW_ID, createdRowRef, emptyPlan, guardedUpdate, refusePlan } from "./writePlan";
 
 const ok = <T,>(data: T) => ({ success: true as const, data });
 const fail = (message: string) => ({ success: false as const, data: undefined, error: { message, status: 500 } });
@@ -109,5 +112,215 @@ describe("executePlan", () => {
     });
     await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanError);
     expect(calls).toEqual([]);
+  });
+});
+
+/* ───────────────────────── guarded updates (opt-in; no PM plan sets `guarded`) ───────────────────────── */
+
+const SET = "vsb_capexaccountlists";
+const PK = "vsb_capexaccountlistid";
+const ROW = "50000000-0000-0000-0000-000000000001";
+const ROW_2 = "50000000-0000-0000-0000-000000000002";
+const CREATED = "50000000-0000-0000-0000-00000000c001";
+
+/** A client that also answers the guard's existence read, logging every request in order. */
+function guardedStub(opts: { gone?: string[]; patchStatus?: number } = {}) {
+  const log: string[] = [];
+  const gone = new Set(opts.gone ?? []);
+  const raw = {
+    retrieveMultipleRecordsAsync: vi.fn(async (table: string, options: { filter?: string; select?: string[]; maxPageSize?: number }) => {
+      const id = /eq ([0-9a-f-]{36})$/i.exec(options.filter ?? "")?.[1] ?? "";
+      log.push(`read ${table} ${id}`);
+      return ok(gone.has(id) ? [] : [{ [PK]: id }]);
+    }),
+    createRecordAsync: vi.fn(async (table: string, data: Record<string, unknown>) => {
+      log.push(`create ${table} ${JSON.stringify(data)}`);
+      return ok({ [PK]: CREATED });
+    }),
+    updateRecordAsync: vi.fn(async (table: string, id: string, data: Record<string, unknown>) => {
+      log.push(`update ${table} ${id} ${JSON.stringify(data)}`);
+      if (opts.patchStatus) return { success: false as const, data: undefined, error: { message: `HTTP ${opts.patchStatus}`, status: opts.patchStatus } };
+      return ok({});
+    }),
+    deleteRecordAsync: vi.fn(async (table: string, id: string) => {
+      log.push(`delete ${table} ${id}`);
+      return ok(undefined);
+    }),
+  };
+  return { client: raw as unknown as PlanClient, log, raw };
+}
+
+const planOf = (...writes: ReturnType<typeof guardedUpdate>[]) => {
+  const plan = emptyPlan();
+  plan.writes.push(...writes);
+  return plan;
+};
+
+describe("executePlan: guarded updates", () => {
+  it("UT-PLAN-007 a guarded update reads the row by primary key, then PATCHes it", async () => {
+    const { client, log, raw } = guardedStub();
+    const result = await executePlan(planOf(guardedUpdate(SET, ROW, { vsb_name: "A" }, "rename")), "test", client);
+    expect(result).toEqual({ done: 1, createdIds: [] });
+    expect(log).toEqual([`read ${SET} ${ROW}`, `update ${SET} ${ROW} {"vsb_name":"A"}`]);
+    expect(raw.retrieveMultipleRecordsAsync).toHaveBeenCalledWith(SET, { select: [PK], filter: `${PK} eq ${ROW}`, maxPageSize: 1 });
+  });
+
+  it("UT-PLAN-008 a row that is gone sends NOTHING: PlanError(gone) with a RecordGoneError cause; earlier writes stand and are counted", async () => {
+    const { client, log } = guardedStub({ gone: [ROW_2] });
+    const plan = planOf(
+      guardedUpdate(SET, ROW, { vsb_name: "A" }, "first"),
+      guardedUpdate(SET, ROW_2, { vsb_name: "B" }, "second"),
+      guardedUpdate(SET, ROW, { vsb_name: "C" }, "third"),
+    );
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err).toBeInstanceOf(PlanError);
+    expect(err.gone).toBe(true);
+    expect(err.cause).toBeInstanceOf(RecordGoneError);
+    expect([err.done, err.total, err.failedReason]).toEqual([1, 3, "second"]);
+    expect(log).toEqual([
+      `read ${SET} ${ROW}`, `update ${SET} ${ROW} {"vsb_name":"A"}`,
+      `read ${SET} ${ROW_2}`,
+    ]);
+  });
+
+  it("UT-PLAN-009 create, then a guarded update of the created row through CREATED_ROW_ID (the read targets the new id)", async () => {
+    const { client, log } = guardedStub();
+    const plan = planOf(
+      { op: "create", entitySet: SET, data: { vsb_name: "N" }, reason: "create" },
+      guardedUpdate(SET, CREATED_ROW_ID, { statecode: 1 }, "status"),
+    );
+    const result = await executePlan(plan, "test", client);
+    expect(result).toEqual({ done: 2, createdIds: [CREATED] });
+    expect(log).toEqual([
+      `create ${SET} {"vsb_name":"N"}`, `read ${SET} ${CREATED}`, `update ${SET} ${CREATED} {"statecode":1}`,
+    ]);
+  });
+
+  it("UT-PLAN-010 a createdRowRef in the id of a guarded update is resolved before the read", async () => {
+    const { client, log } = guardedStub();
+    const plan = planOf(
+      { op: "create", entitySet: SET, data: { vsb_name: "P" }, reason: "parent" },
+      guardedUpdate(SET, createdRowRef(0), { vsb_name: "P2" }, "again"),
+    );
+    await executePlan(plan, "test", client);
+    expect(log.slice(1)).toEqual([`read ${SET} ${CREATED}`, `update ${SET} ${CREATED} {"vsb_name":"P2"}`]);
+  });
+
+  it("UT-PLAN-011 PM pin: an unguarded update is exactly one PATCH and never reads", async () => {
+    const { client, log, raw } = guardedStub();
+    const plan = planOf({ op: "update", entitySet: SET, id: ROW, data: { vsb_name: "A" }, reason: "plain" });
+    await executePlan(plan, "test", client);
+    expect(log).toEqual([`update ${SET} ${ROW} {"vsb_name":"A"}`]);
+    expect(raw.retrieveMultipleRecordsAsync).not.toHaveBeenCalled();
+  });
+
+  it("UT-PLAN-012 PM pin: an unguarded update works on a client that has no read at all", async () => {
+    const { client, calls } = stubClient();
+    const plan = planOf({ op: "update", entitySet: SET, id: "x", data: {}, reason: "plain" });
+    await expect(executePlan(plan, "test", client)).resolves.toEqual({ done: 1, createdIds: [] });
+    expect(calls).toEqual([`update ${SET} x {}`]);
+  });
+
+  it("UT-PLAN-013 guarded on a create or a delete is rejected before anything is sent", async () => {
+    for (const op of ["create", "delete"] as const) {
+      const { client, log } = guardedStub();
+      const plan = planOf({ op, entitySet: SET, id: ROW, data: {}, reason: op, guarded: true });
+      const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+      expect(err).toBeInstanceOf(PlanError);
+      expect(err.message).toMatch(/only an update can be guarded/);
+      expect(log).toEqual([]);
+    }
+  });
+
+  it("UT-PLAN-014 a client that cannot read fails closed: the guarded update is refused, never sent unguarded", async () => {
+    const { client, calls } = stubClient();
+    const err = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "x")), "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err).toBeInstanceOf(PlanError);
+    expect(err.message).toMatch(/cannot read rows/);
+    expect(calls).toEqual([]);
+  });
+
+  it("UT-PLAN-015 an id that is not a GUID is rejected before any request (read or PATCH)", async () => {
+    const { client, log } = guardedStub();
+    const err = (await executePlan(planOf(guardedUpdate(SET, "not-a-guid", {}, "x")), "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err).toBeInstanceOf(PlanError);
+    expect(err.gone).toBe(false);
+    expect(log).toEqual([]);
+  });
+
+  it("UT-PLAN-016 a table that is not registered fails a guarded update before any request", async () => {
+    const { client, log } = guardedStub();
+    await expect(executePlan(planOf(guardedUpdate("vsb_notatable", ROW, {}, "x")), "test", client)).rejects.toBeInstanceOf(PlanError);
+    expect(log).toEqual([]);
+  });
+
+  it("UT-PLAN-017 PlanError.createdIds lists the rows created before a later write failed", async () => {
+    const { client } = guardedStub({ gone: [CREATED] });
+    const plan = planOf(
+      { op: "create", entitySet: SET, data: {}, reason: "create" },
+      guardedUpdate(SET, CREATED_ROW_ID, { statecode: 1 }, "status"),
+    );
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+    expect([err.done, err.total, err.createdIds, err.gone]).toEqual([1, 2, [CREATED], true]);
+  });
+
+  it("UT-PLAN-018 PM pin: PlanError keeps done / total / failedReason, createdIds is empty when nothing was created", async () => {
+    const { client, raw } = stubClient();
+    raw.updateRecordAsync.mockResolvedValueOnce(fail("boom") as never);
+    const plan = planOf({ op: "update", entitySet: SET, id: "a", data: {}, reason: "first" });
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+    expect([err.done, err.total, err.failedReason, err.gone]).toEqual([0, 1, "first", false]);
+    expect(err.createdIds).toEqual([]);
+    expect(err.message).toBe("test: first failed: boom");
+  });
+
+  it("UT-PLAN-019 a create that returns no id throws CreatedIdMissingError with the same message as before", async () => {
+    const { client, raw } = stubClient();
+    raw.createRecordAsync.mockResolvedValueOnce(ok({}) as never);
+    const plan = planOf({ op: "create", entitySet: SET, data: {}, reason: "make" });
+    const err = (await executePlan(plan, "op", client).catch((e: unknown) => e)) as PlanError;
+    expect(err.cause).toBeInstanceOf(CreatedIdMissingError);
+    expect(err.cause).toBeInstanceOf(Error);
+    expect((err.cause as Error).message).toBe("op: make: the create returned no id");
+    expect(err.message).toBe("op: make: the create returned no id");
+  });
+
+  it("UT-PLAN-020 a refused plan throws PlanRefusedError, an Error with exactly the refusal text", async () => {
+    const { client } = stubClient();
+    const err = await executePlan(refusePlan("not allowed"), "test", client).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PlanRefusedError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(PlanError);
+    expect((err as Error).message).toBe("not allowed");
+  });
+
+  it("UT-PLAN-021 a PATCH refused with 404 after the read (the delete race) is mapped to a gone row", async () => {
+    const { client, log } = guardedStub({ patchStatus: 404 });
+    const err = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "x")), "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err.gone).toBe(true);
+    expect(err.cause).toBeInstanceOf(RecordGoneError);
+    expect(log).toHaveLength(2);
+  });
+
+  it("UT-PLAN-022 any other PATCH failure of a guarded update is NOT reported as gone", async () => {
+    const { client } = guardedStub({ patchStatus: 500 });
+    const err = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "x")), "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err.gone).toBe(false);
+    expect(err.cause).not.toBeInstanceOf(RecordGoneError);
+  });
+
+  it("UT-PLAN-023 a write's label is used verbatim as the operation text; without one it stays `<operation>: <reason>`", async () => {
+    const { client } = guardedStub({ patchStatus: 500 });
+    const labelled = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "why", "update gate active")), "op", client).catch((e: unknown) => e)) as PlanError;
+    expect(labelled.message).toBe("update gate active failed: HTTP 500");
+    const plain = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "why")), "op", client).catch((e: unknown) => e)) as PlanError;
+    expect(plain.message).toBe("op: why failed: HTTP 500");
+  });
+
+  it("UT-PLAN-024 guardedUpdate builds an update with guarded: true and only carries a label when given", () => {
+    expect(guardedUpdate(SET, ROW, { a: 1 }, "r")).toEqual({
+      op: "update", entitySet: SET, id: ROW, data: { a: 1 }, reason: "r", guarded: true,
+    });
+    expect(guardedUpdate(SET, ROW, {}, "r", "L")).toMatchObject({ label: "L", guarded: true });
   });
 });

@@ -1,149 +1,168 @@
 /**
- * Admin Cost Screen — the data layer (connected 19 Oct 2026, D24).
+ * Costs settings — TanStack Query hooks over `@/data/adminCost`.
  *
- * Canvas screen: `Admin Cost Screen` (PM app). Every table was already registered; the reads live
- * in `data/adminCost.ts`:
- *
- *   useCostCountries()            `vsb_countries` — the rail.
- *   useCostAccountChart()         `vsb_capexaccountlists` — the whole chart (shared key with Admin
- *                                 CAPEX Accounts); categories and subaccounts are derived in rules.
- *   useOpexSubaccounts()          `vsb_opexsubaccounts` + `vsb_opexaccounts` (Account.Order).
- *   useLandLeaseSubaccounts()     `vsb_landleasesubaccounts`.
- *   useOpexAssumptions(scope)     `vsb_opexlandleasestandardassumptionses` of the scope.
- *   useDevexCosts(scope)          `vsb_devexcapexstandardassumptionses` of the scope.
- *   useSpvDevCoMapping()          `vsb_spvdevcomappingcapexdevexes` — Cost Paid By's default.
- *   useInflationAreas(countryId)  `vsb_countryinflationprofiles` — the Area dropdown.
- *   useCostCurrencies()           `transactioncurrencies` — the preset EUR / PLN currency.
- *
- * WRITES — the plans from `rules.ts` run through `usePlanWrite`. FLOWS AND PLUGINS
- * (04-flow-inventory.md, verified 19 Oct 2026): deleting a DEVEX/CAPEX standard cost fires
- * `VSB_CapexAssumptionDeletion` (pre-validation), which deletes every project's CAPEX contracts
- * and costs built from it. Nothing fires on the OPEX & Land Lease table. No flow is called
- * (Apply is out of scope, D20).
- *
- * After a write: this screen's two families are refreshed, and so is the Cost CAPEX screen's
- * standard-assumption read, which comes from the same DEVEX/CAPEX table.
+ * Keys are the shared `qk.adminCost*`; countries are the shared `vsb_countries`
+ * read. After every write `invalidateAfterCostsWrite` refreshes the screen's own scoped
+ * list plus the keys under which the PROJECT cost screens cache the same standard-assumption
+ * tables, so a project opened afterwards does not see stale standards.
  */
-import { useQuery } from "@tanstack/react-query";
-import { ES, ES_ADMIN, ES_PLANT } from "@/data/dataverseNames";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { trace } from "@/platform/telemetry";
 import { qk } from "@/data/keys";
-import type { ScreenData } from "@/data/notConnected";
-import { usePlanWrite } from "@/data/usePlanWrite";
-import { listAllCapexAccounts } from "@/data/adminCapexAccounts";
+import { useActiveCountries } from "@/data/countries";
+import { invalidateAfterCostsWrite } from "@/data/adminInvalidation";
 import {
-  listCostCountries, listCostCurrencies, listDevexCosts, listInflationAreas, listLandLeaseSubaccounts,
-  listOpexAssumptions, listOpexSubaccounts, listSpvDevCoMapping,
+  deleteOpexContract, deleteOpexPeriod, listCostCurrencies,
+  listDevexCosts, listInactiveOpexRows, listInflationAreas, listLandLeaseSubaccounts, listOpexPeriods, listOpexSubaccounts,
+  loadCapexHierarchy, loadCostPayerDefaults, saveOpexPeriod,
+  type ContractScope, type CostScope, type DevexWrite, type OpexWrite,
 } from "@/data/adminCost";
-import type {
-  CapexAccount, CostScope, CountryRef, CurrencyRef, DevexCost, OpexPeriodRow, OpexSubaccount,
-  SpvDevCoMapping,
-} from "./rules";
+import { CreatedIdMissingError, PlanRefusedError } from "@/data/executePlan";
+import { runPlan } from "@/data/runPlan";
+import { DevexRuleError } from "@/domain/costStandards";
+import type { WritePlan } from "@/data/writePlan";
+import { planDeleteDevexCost, planSaveDevexCost } from "./rules";
 
-/** Entity sets this screen reads and writes. */
-export const TABLES: readonly string[] = [
-  ES.countries,
-  ES_ADMIN.capexAccountLists,
-  ES_PLANT.opexSubaccounts,
-  ES_PLANT.landLeaseSubaccounts,
-  ES_ADMIN.opexLandLeaseStandardAssumptions,
-  ES_ADMIN.devexCapexStandardAssumptions,
-  ES_ADMIN.opexAccounts,
-  ES_ADMIN.spvDevCoMapping,
-  ES.countryInflationProfiles,
-  ES.currencies,
-];
+const REFERENCE_STALE_MS = 30 * 60_000;
 
-/** Reference data — edited rarely. */
-const STALE_MS = 5 * 60 * 1000;
-const NONE = <T,>(): T[] => [];
-const NO_COUNTRIES: CountryRef[] = NONE();
-const NO_ACCOUNTS: CapexAccount[] = NONE();
-const NO_SUBACCOUNTS: OpexSubaccount[] = NONE();
-const NO_ROWS: OpexPeriodRow[] = NONE();
-const NO_COSTS: DevexCost[] = NONE();
-const NO_MAPPING: SpvDevCoMapping[] = NONE();
-const NO_AREAS: string[] = NONE();
-const NO_CURRENCIES: CurrencyRef[] = NONE();
+/* ═══════════════════════════════════════════════════════════════════ reads ══ */
 
-function asScreenData<T>(
-  q: { data: T | undefined; isLoading: boolean; error: unknown }, empty: T,
-): ScreenData<T> {
-  return { data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true };
+/** Active countries, from the shared read; order / exclusions are picker rules. */
+export function useCostCountries() {
+  return useActiveCountries();
+}
+export function useCapexHierarchy() {
+  return useQuery({ queryKey: qk.adminCostHierarchy, queryFn: loadCapexHierarchy, staleTime: REFERENCE_STALE_MS });
+}
+export function useLandLeaseSubaccounts() {
+  return useQuery({ queryKey: qk.adminCostLandLeaseSubaccounts, queryFn: listLandLeaseSubaccounts, staleTime: REFERENCE_STALE_MS });
+}
+export function useOpexSubaccounts() {
+  return useQuery({ queryKey: qk.adminCostOpexSubaccounts, queryFn: listOpexSubaccounts, staleTime: REFERENCE_STALE_MS });
+}
+export function useCostCurrencies() {
+  return useQuery({ queryKey: qk.adminCostCurrencies, queryFn: listCostCurrencies, staleTime: REFERENCE_STALE_MS });
+}
+export function useCostPayerDefaults() {
+  return useQuery({ queryKey: qk.adminCostPayerDefaults, queryFn: loadCostPayerDefaults, staleTime: REFERENCE_STALE_MS });
+}
+/** Only read when the Area field can show (Italy). */
+export function useInflationAreas(countryId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: qk.adminCostInflationAreas(countryId ?? "-"),
+    queryFn: () => listInflationAreas(countryId as string),
+    enabled: enabled && Boolean(countryId),
+    staleTime: REFERENCE_STALE_MS,
+  });
+}
+/** Re-queried per scope; expanding a picker country does not change the scope. */
+export function useDevexCosts(scope: CostScope | undefined) {
+  return useQuery({
+    queryKey: qk.adminCostDevex(scope),
+    queryFn: () => listDevexCosts(scope as CostScope),
+    enabled: Boolean(scope),
+  });
+}
+export function useOpexPeriods(scope: CostScope | undefined) {
+  return useQuery({
+    queryKey: qk.adminCostOpex(scope),
+    queryFn: () => listOpexPeriods(scope as CostScope),
+    enabled: Boolean(scope),
+  });
 }
 
-export function useCostCountries(): ScreenData<CountryRef[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.costCountries, queryFn: listCostCountries, staleTime: 30 * 60 * 1000 }),
-    NO_COUNTRIES,
-  );
+/**
+ * The scope's hidden (not active) contract rows. Keyed UNDER `opex(scope)`, so
+ * every Costs / OPEX write's invalidation of that key (prefix match) refreshes it too.
+ */
+export function useInactiveOpexRows(scope: CostScope | undefined) {
+  return useQuery({
+    queryKey: [...qk.adminCostOpex(scope), "inactive"] as const,
+    queryFn: () => listInactiveOpexRows(scope as CostScope),
+    enabled: Boolean(scope),
+  });
 }
 
-export function useCostAccountChart(): ScreenData<CapexAccount[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.adminCapexAccounts, queryFn: listAllCapexAccounts, staleTime: STALE_MS }),
-    NO_ACCOUNTS,
-  );
+/* ══════════════════════════════════════════════════════════════════ writes ══ */
+
+const report = (operation: string) => (error: unknown) => {
+  trace("error", `Costs settings: ${operation} failed`, error);
+};
+
+/**
+ * A refused plan carries a sentence written for the user (`MSG.subaccountInactive`, and the
+ * screen-unreachable `MSG.noPermission`). `saveDevexCost` used to throw exactly that as a
+ * `DevexRuleError`, which `errorText` prints verbatim, so the refusal is turned back into one
+ * rather than reaching the panel through the generic `userErrorText` path. Every other failure is
+ * rethrown by `runPlan` as the failed write's OWN error (`RecordGoneError`, `DataError`), so the
+ * screen's branches and texts are unchanged.
+ */
+async function runDevexPlan(plan: WritePlan, operation: string): Promise<string[]> {
+  try {
+    return (await runPlan(plan, operation)).createdIds;
+  } catch (error) {
+    if (error instanceof PlanRefusedError) throw new DevexRuleError(error.message);
+    throw error;
+  }
 }
 
-export function useOpexSubaccounts(): ScreenData<OpexSubaccount[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.costOpexSubaccounts, queryFn: listOpexSubaccounts, staleTime: STALE_MS }),
-    NO_SUBACCOUNTS,
-  );
+/**
+ * Every mutation invalidates on SETTLE, not only on success: several of these are multi-step
+ * and a failure can follow a write that already landed.
+ *
+ * The two DEVEX writes are `WritePlan`s from `./rules` (D36); only the `mutationFn` changed.
+ * `canEdit` is `useAdminAccess()`, passed by the screen; a plan built without it refuses.
+ */
+export function useSaveDevexCost(scope: CostScope | undefined, canEdit: boolean) {
+  const client = useQueryClient();
+  return useMutation({
+    /** Resolves to the saved row's id ("" when a create answered without one, as it always has). */
+    mutationFn: async (w: DevexWrite): Promise<string> => {
+      try {
+        const createdIds = await runDevexPlan(planSaveDevexCost(w, { canEdit }), "save standard cost");
+        return w.id ?? createdIds[0] ?? "";
+      } catch (error) {
+        if (error instanceof CreatedIdMissingError) return w.id ?? "";
+        throw error;
+      }
+    },
+    onError: report("save standard cost"),
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "devex", scope) : undefined),
+  });
 }
 
-export function useLandLeaseSubaccounts(): ScreenData<OpexSubaccount[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.costLandLeaseSubaccounts, queryFn: listLandLeaseSubaccounts, staleTime: STALE_MS }),
-    NO_SUBACCOUNTS,
-  );
+export function useDeleteDevexCost(scope: CostScope | undefined, canEdit: boolean) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await runDevexPlan(planDeleteDevexCost(id, { canEdit }), "delete standard cost"); },
+    onError: report("delete standard cost"),
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "devex", scope) : undefined),
+  });
 }
 
-export function useOpexAssumptions(scope: CostScope): ScreenData<OpexPeriodRow[]> {
-  const { countryId, technologyValue: tech } = scope;
-  return asScreenData(useQuery({
-    queryKey: qk.costOpexAssumptions(countryId ?? "", tech ?? -1),
-    queryFn: () => listOpexAssumptions(countryId!, tech!),
-    enabled: countryId !== null && tech !== null,
-  }), NO_ROWS);
+export function useSaveOpexPeriod(scope: CostScope | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (w: OpexWrite) => saveOpexPeriod(w),
+    onError: report("save standard contract"),
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "opex", scope) : undefined),
+  });
 }
 
-export function useDevexCosts(scope: CostScope): ScreenData<DevexCost[]> {
-  const { countryId, technologyValue: tech } = scope;
-  return asScreenData(useQuery({
-    queryKey: qk.costDevexCosts(countryId ?? "", tech ?? -1),
-    queryFn: () => listDevexCosts(countryId!, tech!),
-    enabled: countryId !== null && tech !== null,
-  }), NO_COSTS);
+export function useDeleteOpexContract(scope: CostScope | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (c: ContractScope) => deleteOpexContract(c),
+    onError: report("delete standard contract"),
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "opex", scope) : undefined),
+  });
 }
 
-export function useSpvDevCoMapping(): ScreenData<SpvDevCoMapping[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.costSpvMapping, queryFn: listSpvDevCoMapping, staleTime: STALE_MS }),
-    NO_MAPPING,
-  );
-}
-
-export function useInflationAreas(countryId: string | null): ScreenData<string[]> {
-  return asScreenData(useQuery({
-    queryKey: qk.costInflationAreas(countryId ?? ""),
-    queryFn: () => listInflationAreas(countryId!),
-    enabled: countryId !== null,
-    staleTime: STALE_MS,
-  }), NO_AREAS);
-}
-
-export function useCostCurrencies(): ScreenData<CurrencyRef[]> {
-  return asScreenData(
-    useQuery({ queryKey: qk.costCurrencies, queryFn: listCostCurrencies, staleTime: 30 * 60 * 1000 }),
-    NO_CURRENCIES,
-  );
-}
-
-/** Runs this screen's write plans and refreshes what they change. */
-export function useCostWrites() {
-  return usePlanWrite({
-    invalidate: [qk.costOpexAssumptionsAll, qk.costDevexCostsAll, qk.capexStandardAssumptionsAll],
-    action: "change the standard costs",
+export function useDeleteOpexPeriod(scope: CostScope | undefined) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: string; contract: ContractScope }) => deleteOpexPeriod(args.id, args.contract),
+    onError: report("delete standard contract period"),
+    onSettled: () => (scope ? invalidateAfterCostsWrite(client, "opex", scope) : undefined),
   });
 }

@@ -15,10 +15,16 @@
  * plan (the canvas pattern `Patch(Defaults(T), …)` followed by `UpdateIf(T, id = <new>, …)`).
  * `createdRowRef(n)` — in the `id` or inside a string value of `data`, such as a bind — is
  * replaced by the id of the plan's n-th create (a parent row its children are bound to).
+ *
+ * A write with `guarded: true` (an `update` only) first reads the row by primary key and, when it
+ * is gone, sends nothing and fails with `RecordGoneError` — the SDK 1.3.1 PATCH is an upsert, so
+ * this read is what stops it recreating a row another user deleted. The guard is
+ * `updateRecordIfExists` (`data/client.ts`), not a second copy. No PM plan sets `guarded`.
  */
 import { getClient } from "@microsoft/power-apps/data";
 import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo";
-import { unwrap } from "@/platform/errors";
+import { isRecordGone, unwrap } from "@/platform/errors";
+import { updateRecordIfExists, type GuardedUpdateClient } from "./client";
 import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
 
 /** The three SDK calls a plan needs — the `getClient` shape, narrowed so tests can stub it. */
@@ -27,6 +33,12 @@ export interface PlanClient {
   updateRecordAsync: ReturnType<typeof getClient>["updateRecordAsync"];
   deleteRecordAsync: ReturnType<typeof getClient>["deleteRecordAsync"];
 }
+
+/**
+ * What a plan with `guarded` writes needs from the client: the three SDK calls plus the read the
+ * guard makes. The real `getClient` result has it; `executePlan` fails closed when a stub lacks it.
+ */
+export type GuardedPlanClient = PlanClient & Pick<GuardedUpdateClient, "retrieveMultipleRecordsAsync">;
 
 export interface PlanResult {
   /** Writes sent successfully. */
@@ -41,20 +53,53 @@ export class PlanError extends Error {
   readonly total: number;
   readonly failedReason: string;
   override readonly cause: unknown;
+  /** Ids the plan's creates returned BEFORE the failure (rows that exist although the plan failed). */
+  readonly createdIds: readonly string[];
 
-  constructor(done: number, total: number, failedReason: string, cause: unknown) {
+  constructor(
+    done: number, total: number, failedReason: string, cause: unknown, createdIds: readonly string[] = [],
+  ) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.name = "PlanError";
     this.done = done;
     this.total = total;
     this.failedReason = failedReason;
     this.cause = cause;
+    this.createdIds = createdIds;
+  }
+
+  /** True when the failed write was a guarded update whose row was gone (nothing was sent for it). */
+  get gone(): boolean {
+    return isRecordGone(this.cause);
+  }
+}
+
+/** The plan was refused (`refusePlan`): NOTHING was sent. Same message as the plain `Error` it replaces. */
+export class PlanRefusedError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "PlanRefusedError";
+  }
+}
+
+/** A create succeeded but Dataverse returned no id, so later writes could not refer to the new row. */
+export class CreatedIdMissingError extends Error {
+  constructor(label: string) {
+    super(`${label}: the create returned no id`);
+    this.name = "CreatedIdMissingError";
   }
 }
 
 const CREATED_REF = /@created#(\d+)/g;
 
-/** Replaces every `createdRowRef(n)` in `value` with the n-th created id. */
+/**
+ * Replaces every `createdRowRef(n)` in `value` with the n-th created id.
+ *
+ * KNOWN HAZARD (pre-existing, deliberately left as is): this is applied to EVERY string value of
+ * a write's `data`, so free text a user typed that happens to contain `@created#<n>` would be
+ * rewritten, or throw "refers to created row" when no such create ran. A plan that carries
+ * free-text fields must not rely on this being impossible.
+ */
 function resolveRefs(value: string, createdIds: readonly string[]): string {
   return value.replace(CREATED_REF, (_, n: string) => {
     const id = createdIds[Number(n)];
@@ -86,14 +131,17 @@ const primaryKeyOf = (entitySet: string): string => {
 export async function executePlan(
   plan: WritePlan,
   operation: string,
-  client: PlanClient = getClient(dataSourcesInfo),
+  client: PlanClient & Partial<GuardedPlanClient> = getClient(dataSourcesInfo),
 ): Promise<PlanResult> {
-  if (plan.refusedReason) throw new Error(plan.refusedReason);
+  if (plan.refusedReason) throw new PlanRefusedError(plan.refusedReason);
 
   const createdIds: string[] = [];
   let done = 0;
   for (const write of plan.writes) {
     try {
+      if (write.guarded && write.op !== "update") {
+        throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
+      }
       const id = write.id === CREATED_ROW_ID
         ? createdIds[createdIds.length - 1]
         : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
@@ -101,7 +149,7 @@ export async function executePlan(
         throw new Error("a write refers to a created row, but no create preceded it");
       }
       const data = resolveData(write.data, createdIds);
-      const label = `${operation}: ${write.reason}`;
+      const label = write.label ?? `${operation}: ${write.reason}`;
       if (write.op === "create") {
         const key = primaryKeyOf(write.entitySet);
         const row = unwrap(
@@ -111,8 +159,18 @@ export async function executePlan(
           label,
         );
         const newId = row?.[key];
-        if (typeof newId !== "string" || !newId) throw new Error(`${label}: the create returned no id`);
+        if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
         createdIds.push(newId);
+      } else if (write.op === "update" && write.guarded === true) {
+        const primaryKey = primaryKeyOf(write.entitySet);
+        if (typeof client.retrieveMultipleRecordsAsync !== "function") {
+          throw new Error(`${label}: this client cannot read rows, so a guarded update is refused rather than sent unguarded`);
+        }
+        const guardClient = client as GuardedPlanClient;
+        await updateRecordIfExists(label, write.entitySet, id!, data, {
+          primaryKey,
+          client: () => guardClient as unknown as GuardedUpdateClient,
+        });
       } else if (write.op === "update") {
         primaryKeyOf(write.entitySet);
         unwrap(
@@ -127,7 +185,7 @@ export async function executePlan(
       }
       done += 1;
     } catch (cause) {
-      throw new PlanError(done, plan.writes.length, write.reason, cause);
+      throw new PlanError(done, plan.writes.length, write.reason, cause, [...createdIds]);
     }
   }
   return { done, createdIds };

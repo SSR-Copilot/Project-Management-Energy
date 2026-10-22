@@ -1,1043 +1,633 @@
 /**
- * Admin Contract Screen — every business rule as a pure function (redeveloped and connected
- * 19 Oct 2026, D23).
+ * Contracts standard assumptions (canvas `Admin Contract Screen`) — every pure rule.
  *
- * Canvas screen: `Admin Contract Screen` (PM app),
- * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Contract Screen.pa.yaml`.
- *
- * Maintains the BoP standard contracts for one country × technology: up to ten Development
- * Contracts and ten Construction Contracts, each with a description, a closing-date reference
- * and month offset, an optional margin, a comment, and the CAPEX subaccounts the contract
- * "owns" as DevCo costs. Each subaccount belongs to AT MOST ONE contract in the scope;
- * accounts owned by another contract render ticked and locked.
- *
- * SERVER AUTOMATION (04-flow-inventory.md, verified 19 Oct 2026; the plugin assemblies read
- * from the solution export):
- *  - `vsb_bopcontractsstandardassumptiondevcocosts` Create / Update of `vsb_capexaccount`
- *    (pre-operation, `DevCoCostRootCapexPlugin`) walks the CAPEX hierarchy and SETS
- *    `vsb_rootcapexaccount`. The canvas therefore never writes RootCapexAccount, and neither do
- *    we (the code app used to write it — removed, CONVENTIONS "never redo a plugin's work").
- *  - `vsb_bopcontractsstandardassumptions` Delete (pre-validation,
- *    `VSB.BoPContractAssumptionDeletion`) deletes the contract's template DevCo costs, every
- *    project's live `vsb_bopcontractsdevcocosts` and every `vsb_bopprojectscontracts` built from
- *    it. The parent → DevCo-cost relationship also has `CascadeDelete = Cascade`. Delete
- *    therefore removes the parent row only, exactly as the canvas `Remove(...)`.
- *  - No flow fires. `SynchronizeStandardAssumptionCosts` is only called from commented-out code.
- *
- * NOT PORTED: Apply / Apply to All, their info texts, the last-Apply labels and the
- * `Apply and Apply All Trackings` write — out of scope for the migration (D20). The canvas
- * buttons were `DisplayMode.Disabled` anyway. The flag images of the country rail.
- *
- * PERMISSION: entry and every write are gated on the admin rule (`useAdminAccess`), as on the
- * other admin screens. The canvas has no permission signal on this screen at all; the invented
- * country-scope rule (`canEditScope`) was removed (D23).
- *
- * HIDDEN CONTROLS:
- *  - `btn_Add_Edit_AdminContracts_Reset` (Select()-ed by Edit and Save) resets the panel
- *    inputs → the panel form is rebuilt from `toContractForm` every time it opens.
- *  - `btnGeneralPurposeReset` (Select()-ed by the picker, Save, Close and Delete) refreshes both
- *    tables, rebuilds the card cache keeping each card's fold state, and recomputes the caps →
- *    query invalidation; the open-card set lives outside the data, and the caps are derived
- *    from the live list (`contractCapReached`).
- *  - `fn_Numeric_AdminContracts` (IsOneDecimal / IsTwoDecimal / InRange) → `@/domain/powerFxNumeric`.
- *  - The hidden `chb_Add_Edit_AdminContract_Right_Panel_DevCoCostForm_Costs` (`Visible: false`
- *    with live handlers duplicating the tri-state) and the debug label `S:… U:…` are not ported.
- *
- * SOURCE DEFECTs fixed (each marked below):
- *  - the dirty flag of the DevCo form (`locContractDevCoCostsCahnged`) is never reset;
- *  - the month prefill reads `'BoP Projects Contracts'` (a relationship, not the column);
- *  - Save accepts a non-numeric month value;
- *  - a failed delete is silent (no `IfError` around `Remove`).
+ * Nothing here touches Dataverse or React. Citations are `ACS:<line>` into
+ * `_extracted/msapp/projectmanagement/Src/Admin Contract Screen.pa.yaml`.
  */
-import { isBlank, isOneDecimal, isTwoDecimal, inRange } from "@/domain/powerFxNumeric";
-import { ES, ES_ADMIN, CHOICE_ADMIN, CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER } from "@/data/dataverseNames";
 import {
-  buildAccountTree, flattenTree, type CapexAccount, type AccountNode,
-} from "@/features/admin/admin-capex-accounts/rules";
+  checkDecimalInput, formatFixed, inRangeInput, isMaxDecimals,
+} from "@/domain/numberInput";
+import { scopeBreadcrumb } from "@/domain/countryPicker";
+import { isDirty as formChanged } from "@/domain/form";
+import { powerFxTrim } from "@/domain/powerFx";
+import { technologyOptionLabel } from "@/domain/technology";
 import {
-  buildCountryPicker, toNestedPicker, COST_CONTRACT_EXCLUDED_COUNTRIES, technologyValue,
-} from "@/features/admin/admin-gates-approvals/rules";
-import { createdRowRef, emptyPlan, refusePlan as refuse, type WritePlan } from "@/data/writePlan";
+  CLOSING_REF, CONTRACT_TYPE, CONTRACT_TYPE_LABEL, MARGIN_TYPE, decimalSeparator,
+  type ContractForm, type DevCoRow, type StandardContract,
+} from "@/domain/contractStandards";
 
+/* ════════════════════════════════════════════════════ choice constants ══ */
+
+/*
+ * The choice constants, domain shapes, locale-number helpers, the initial form and the save
+ * payload / DevCo diff rules are shared with the data layer (`data/adminContract.ts`), so they
+ * live in `@/domain/contractStandards` and are RE-EXPORTED here (CONVENTIONS rule 17: one
+ * definition). Option VALUES, never labels — master's generated maps carry pac identifiers.
+ */
 export {
-  buildAccountTree, flattenTree, buildCountryPicker, toNestedPicker, COST_CONTRACT_EXCLUDED_COUNTRIES,
-  technologyValue,
-};
-export type { CapexAccount, AccountNode };
+  TECHNOLOGY, CONTRACT_TYPE, CLOSING_REF, MARGIN_TYPE, CONTRACT_TYPE_LABEL,
+  decimalSeparator, parseLocaleNumber, formatLocaleNumber, initialForm,
+  buildParentPayload, planDevCoDiff, findOwnershipConflicts,
+} from "@/domain/contractStandards";
+export type {
+  StandardContract, DevCoRow, ContractForm, ParentPayload,
+} from "@/domain/contractStandards";
 
-/* ═══════════════════════════════════════════════════════════════════ columns ════ */
+/** Option-set order (ACS:2222-2254). */
+export const CLOSING_REF_OPTIONS: readonly { value: number; label: string }[] = [
+  { value: CLOSING_REF.Cluster4, label: "Cluster 4" },
+  { value: CLOSING_REF.FID, label: "FID" },
+  { value: CLOSING_REF.Cluster5, label: "Cluster 5" },
+];
 
-export const BOP_CONTRACT_COL = {
-  id: "vsb_bopcontractsstandardassumptionsid",
-  name: "vsb_name",
-  description: "vsb_description",
-  country: "_vsb_country_value",
-  technology: "vsb_technology",
-  contractTypes: "vsb_contracttypes",
-  closingDateReference: "vsb_closingdatereference",
-  monthDifference: "vsb_monthdifference",
-  margin: "vsb_margin",
-  marginType: "vsb_margintype",
-  marginPercentage: "vsb_marginpercentage",
-  marginFixedValue: "vsb_marginfixedvalue",
-  comment: "vsb_comment",
-} as const;
-
-/**
- * `BoP Contracts Standard Assumption DevCo Costs`. Its Country and Technology columns carry the
- * `crc36_` publisher prefix (the code app had `vsb_country` / `vsb_technology`, which do not
- * exist).
- */
-export const DEVCO_COST_COL = {
-  id: "vsb_bopcontractsstandardassumptiondevcocostsid",
-  name: "vsb_name",
-  contract: "_vsb_bopcontractstandardassumption_value",
-  capexAccount: "_vsb_capexaccount_value",
-  /** Set by the `DevCoCostRootCapexPlugin` plugin — read, never written. */
-  rootCapexAccount: "_vsb_rootcapexaccount_value",
-  country: "_crc36_country_value",
-  technology: "crc36_technology",
-} as const;
-
-/** Navigation properties for `@odata.bind` (the lookups' schema names). */
-export const BOP_LOOKUP = {
-  /** On the contract. */
-  contractCountry: "vsb_Country",
-  /** On the DevCo cost. */
-  devCoCountry: "crc36_Country",
-  contract: "vsb_BoPContractStandardAssumption",
-  capexAccount: "vsb_CAPEXAccount",
-} as const;
-
-export const BOP_CONTRACT_ENTITY_SET = ES_ADMIN.bopContractsStandardAssumptions;
-export const DEVCO_COST_ENTITY_SET = ES_ADMIN.bopDevCoCosts;
-
-/** `locContractsCostsMax: 1000000000` — the margin fixed-value ceiling. */
-export const CONTRACT_COSTS_MAX = 1_000_000_000;
-
-/** `locDevContractLimitExceeded` / `locConstructionContractLimitExceeded`: `>= 10`. */
-export const CONTRACT_CAP = 10;
-
-/**
- * `cmp_AdminContraacts_NestedCountryPickerColumn.Nestings`: every country nests Wind, PV and
- * BESS — this screen overrides the component's Wind/PV default.
- */
-export const CONTRACT_PICKER_TECHNOLOGIES: readonly string[] = ["Wind", "PV", "BESS"];
-
-/* ═════════════════════════════════════════════════════════════════════ types ════ */
-
-/** The two families the Add buttons create. */
-export type BopContractType = "development" | "construction";
-
-export const CONTRACT_TYPE_VALUE: Record<BopContractType, number> = {
-  development: CHOICE_ADMIN.bopContractTypes.development,
-  construction: CHOICE_ADMIN.bopContractTypes.construction,
+export const MARGIN_TYPE_LABEL: Record<number, string> = {
+  [MARGIN_TYPE.Percentage]: "Percentage",
+  [MARGIN_TYPE.FixedValue]: "Fixed Value",
 };
 
-/**
- * `Text('BoP Contract Types'.<value>)` — the option labels of the global set
- * `vsb_contracttypes` (customizations.xml). The canvas composes the contract Name and the panel
- * title from them.
+/* ═════════════════════════════════════════════════════════ picker ══ */
+
+/*
+ * The picker model is shared: `@/domain/countryPicker` holds the six-country
+ * allow-list (`pickerCountries(rows, CONTRACT_COUNTRY_RULE)`: exact name match, canvas order,
+ * ISO-2 badge), `parseSelectionParams` / `sameCountryTechnology` and `CONTRACT_DEFAULT`
+ * (`{kind:"first"}` — the first listed country with its first technology, PO requirement of
+ * 2026-10-17, which replaced the earlier "no selection" start; the default is display-only, so the URL
+ * stays clean until the first pick); `@/domain/technology` holds `CONTRACT_TECHNOLOGIES`
+ * (Wind, PV, BESS).
  */
-export const CONTRACT_TYPE_LABELS: Readonly<Record<number, string>> = {
-  [CHOICE_ADMIN.bopContractTypes.none]: "None",
-  [CHOICE_ADMIN.bopContractTypes.development]: "Development Contract",
-  [CHOICE_ADMIN.bopContractTypes.construction]: "Construction Contract",
-  [CHOICE_ADMIN.bopContractTypes.projectRights]: "Project Rights Contract",
-};
 
-export const contractTypeLabel = (value: number | null): string =>
-  value === null ? "" : CONTRACT_TYPE_LABELS[value] ?? "";
-
-export interface BopContract {
-  id: string;
-  name: string | null;
-  description: string | null;
-  countryId: string | null;
-  technology: number | null;
-  contractType: number | null;
-  closingDateReference: number | null;
-  monthDifference: number | null;
-  margin: boolean | null;
-  marginType: number | null;
-  marginPercentage: number | null;
-  marginFixedValue: number | null;
-  comment: string | null;
+/** `Contracts / <Country> / <Technology>` (ACS:565). */
+export function breadcrumbText(countryName: string | undefined, technology: number | undefined): string {
+  return scopeBreadcrumb("Contracts", countryName, technology === undefined ? undefined : technologyOptionLabel(technology));
 }
 
-export interface DevCoCost {
-  id: string;
-  contractId: string | null;
-  capexAccountId: string | null;
-  rootAccountId: string | null;
+/* ══════════════════════════════════════════════════════════════ domain shapes ══ */
+
+/* `StandardContract` and `DevCoRow` come from `@/domain/contractStandards` (re-exported above). */
+
+/**
+ * inactive standard contracts are listed and count toward the limit of 10 (canvas
+ * parity), but the project Contracts reader filters them out, so they never seed a project.
+ * The card shows an "Inactive" badge so that difference is visible.
+ */
+export const INCLUDE_INACTIVE_STANDARD_CONTRACTS = true;
+export const STATE_INACTIVE = 1;
+
+export function isInactive(contract: Pick<StandardContract, "stateCode">): boolean {
+  return contract.stateCode === STATE_INACTIVE;
 }
 
-/** `Countries` with the column the card's currency heading reads. */
-export interface ContractCountry {
+/** A `vsb_capexaccountlists` row — structurally `AccountRow` from the project Contracts feature. */
+export interface CapexAccount {
   id: string;
+  number: string;
   name: string;
-  isoCurrencyCode: string | null;
+  order?: number;
+  parentId?: string;
 }
 
-export interface ContractScope {
-  countryId: string | null;
-  countryName: string | null;
-  /** The picker's `SelectedNestedValue` — `"Wind"`, `"PV"` or `"BESS"`. */
-  technology: string | null;
-  technologyValue: number | null;
-  /** `SelectedCountry.'ISO Currency Code'`. */
-  isoCurrencyCode: string | null;
-}
+/* ═════════════════════════════════════════════════════════════ limits ══ */
 
-/** Per-account classification when the panel opens: selected by THIS contract, or used by another. */
-export interface AccountSelection {
-  accountId: string;
-  selected: boolean;
-  used: boolean;
-  usedByContractId: string | null;
-  /** The existing child row's id, when this contract already owns the account (`ContractDevCo`). */
-  devCoCostId: string | null;
-}
+export const CONTRACT_LIMIT = 10;
 
-export { emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
-
-/* ═════════════════════════════════════════════════════════════════ messages ════ */
-
-export const MSG = {
-  /** `lbl_Add_Edit_AdminContracts_Description_ErrorMessage_1.Text` — verbatim. */
-  closingDateEmpty: "The Contract Closing Date cannot be empty.",
-  /** `lbl_Add_Edit_AdminContracts_MonthDifference_ErrorMessage.Text` — verbatim. */
-  monthDifference: "Only whole numbers with up to two digits are allowed.",
-  /** `gblAppResx.InputBlank` (`App.pa.yaml`) — verbatim. */
-  inputBlank: "Input must not be blank",
-  /** `gblAppResx.NumericOneDecimals` (`App.pa.yaml`) — verbatim. */
-  numericOneDecimals: "Numeric value with maximum of one decimals",
-  /** `gblAppResx.NumericTwoDecimals` (`App.pa.yaml`) — verbatim. */
-  numericTwoDecimals: "Numeric value with maximum of two decimals",
-  /**
-   * The range branch of both margin error labels — `$"Please select a value between 0 and
-   * {Text(max, fmt)}"`. `Text(100, "###,###0.0")` renders "100.0" and
-   * `Text(1000000000, "###,###0,00")` renders "1,000,000,000" (en-US).
-   */
-  outOfRange: (maxText: string) => `Please select a value between 0 and ${maxText}`,
-  /** `btn_AdminContract_Add_*.OnSelect` Notify — verbatim. Unreachable: the button is disabled first. */
-  capReached: (type: BopContractType, country: string, technology: string) =>
-    `Maximum 10 ${type} contracts allowed for ${country} - ${technology}`,
-  /** `ico_AdminContracts_Save.OnChange` → `locContractSpinnerInformationText` — verbatim. */
-  saving: "Please wait, saving...",
-  /** `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.OnConfirm` — verbatim. */
-  deleting: "Please wait, deleting...",
-  /** `Notify("Error saving Contract: " & FirstError.Message, NotificationType.Error)` — verbatim. */
-  saveError: (detail: string) => `Error saving Contract: ${detail}`,
-  /** NEW — no canvas equivalent: the save plan's refusal when nothing changed (Save is greyed). */
-  notDirty: "Nothing has been changed yet.",
-  /** NEW — no canvas equivalent: the save plan's refusal with no account (Save is greyed). */
-  noAccountSelected: "Select at least one CAPEX account for this contract.",
-  /** NEW — no canvas equivalent: the write plans' refusal without the admin rule. */
-  noPermission: "You do not have permission to change the BoP standard contracts.",
-  /** NEW — no canvas equivalent: rule 19 load-error state. */
-  loadFailedTitle: "Contracts are unavailable",
-  /** NEW — no canvas equivalent: rule 19 load-error state. */
-  loadFailedDescription: "The BoP standard contracts could not be loaded. Please try again.",
-  /** NEW — no canvas equivalent: rule 19 loading state. */
-  loading: "Loading...",
-} as const;
-
-/**
- * DOCUMENTED — TWO SIMILARLY NAMED LABELS, NEITHER OF WHICH DOES WHAT ITS NAME SAYS.
- * `lbl_Add_Edit_AdminContracts_Description_ErrorMessage_1` — the one in the Save conjunction —
- * is the CLOSING-DATE validator, visible only when EDITING with a blank closing date.
- * `lbl_Add_Edit_AdminContracts_Description_ErrorMessage` (no `_1`) is dead: its `Text` is
- * commented out. There is therefore no duplicate-description check on this screen, and none was
- * invented.
- */
-export const CLOSING_DATE_RULE_NOTE =
-  "lbl_…_Description_ErrorMessage_1 is the closing-date validator, not a description one; "
-  + "lbl_…_Description_ErrorMessage is dead. There is no duplicate-description check.";
-
-/** Deliberately `false`: the canvas has no such check and we did not add one. */
-export const duplicateDescriptionCheckExists = (): boolean => false;
-
-/* ═══════════════════════════════════════════════════════════════════ the scope ════ */
-
-/** The picker items: Spain, Greece and Romania excluded; Wind, PV and BESS under every country. */
-export function buildContractPicker(countries: readonly ContractCountry[]) {
-  return toNestedPicker(buildCountryPicker([...countries], {
-    exclude: COST_CONTRACT_EXCLUDED_COUNTRIES, technologies: CONTRACT_PICKER_TECHNOLOGIES,
-  }));
-}
-
-export function scopeFor(country: ContractCountry | null, technology: string | null): ContractScope {
+/** Counts the server rows for the selection; inactive rows count too (canvas parity). */
+export function limitFlags(contracts: readonly StandardContract[]) {
+  const development = contracts.filter((c) => c.contractType === CONTRACT_TYPE.Development).length;
+  const construction = contracts.filter((c) => c.contractType === CONTRACT_TYPE.Construction).length;
   return {
-    countryId: country?.id ?? null,
-    countryName: country?.name ?? null,
-    technology,
-    technologyValue: technologyValue(technology),
-    isoCurrencyCode: country?.isoCurrencyCode ?? null,
+    development,
+    construction,
+    developmentFull: development >= CONTRACT_LIMIT,
+    constructionFull: construction >= CONTRACT_LIMIT,
   };
 }
 
-/**
- * The picker's initial selection: `gal_Countries` defaults to its first row (Germany) and the
- * nested gallery to its first child (Wind).
- */
-export function defaultContractScope(countries: readonly ContractCountry[]): ContractScope {
-  const picker = buildContractPicker(countries);
-  const first = picker.countries[0];
-  const country = first ? countries.find((c) => c.id === first.key) ?? null : null;
-  return scopeFor(country, country ? CONTRACT_PICKER_TECHNOLOGIES[0] ?? null : null);
+/** The tooltip on a disabled Add button; also the canvas' unreachable warning text (ACS:584, 606). */
+export function limitMessage(contractType: number, countryName: string, technology: number): string {
+  const kind = contractType === CONTRACT_TYPE.Development ? "development" : "construction";
+  return `Maximum ${CONTRACT_LIMIT} ${kind} contracts allowed for ${countryName} - ${technologyOptionLabel(technology)}`;
 }
 
-/* ═══════════════════════════════════════════════════════════════════ the tree ════ */
-
-/**
- * `OnVisible`'s tree, seeded from `"00001"` and EXCLUDING `"10006"`:
- * `Filter(colCapexAllAccountsTemporary, And('Parent Account'.Number = "00001",
- * Not(ThisRecord.Number = "10006")))`. Only `Level = 3` nodes are selectable.
- */
-export function buildContractAccountTree(accounts: CapexAccount[]): AccountNode[] {
-  return buildAccountTree(accounts, { exclude: [CAPEX_CONTRACT_TREE_EXCLUDED_NUMBER] });
+/** Type ascending (numeric: Development before Construction), then name (ACS:818-830). */
+export function sortContracts(contracts: readonly StandardContract[]): StandardContract[] {
+  return [...contracts].sort((a, b) =>
+    (a.contractType ?? 0) - (b.contractType ?? 0) || a.name.localeCompare(b.name));
 }
 
-export const selectableNodes = (tree: AccountNode[]): AccountNode[] =>
-  flattenTree(tree).filter((n) => n.level === 3);
+/* ════════════════════════════════════════════════════════ card text ══ */
 
-/** One header of the DevCo Cost Form and the level-3 rows under it. */
-export interface DevCoFormGroup {
-  category: AccountNode;
-  leaves: AccountNode[];
+/**
+ * The text of a closing-reference choice, as `ThisItem.'Closing Date Reference'` concatenates it
+ * (ACS:1386): the choice's own label. A known code uses its option label; a code this app does not
+ * know (a new option added to `vsb_closingdatereference`) uses Dataverse's formatted label when it
+ * was sent, otherwise `""` — never a placeholder such as `"-"`, which the canvas never shows
+ * (canvas parity).
+ */
+export function closingRefLabel(code: number | undefined, formatted?: string): string {
+  return CLOSING_REF_OPTIONS.find((o) => o.value === code)?.label ?? formatted ?? "";
 }
 
 /**
- * `gal_Add_Edit_AdminContracts_Right_Panel_DevCoCostForm.Items` =
- * `Sort(Filter(col_Edit_DevCoCosts, Level = 1), Order)` — the level-1 CATEGORIES, every one of
- * them; each lists `Filter(col_Edit_DevCoCosts, ParentId = ThisItem.Id && Level = 3)`, i.e. ALL
- * its level-3 descendants flat (the level-3 `ParentId` is the level-1 id), in the
- * `SortByColumns(…, "Nummer")` order. Level-2 accounts are never shown.
+ * `<label> <sign> <abs> months`; `"- "` below zero, `"+ "` otherwise (ACS:1386-1393).
+ * Canvas: `ThisItem.'Closing Date Reference' & " " & Switch(...) & Abs(...) & " months"` — a blank reference
+ * (legacy rows) concatenates as "", so the canvas renders `" + 0 months"`.
+ * An unknown code renders its choice label (`formatted`), never `"- + n months"`.
  */
-export function devCoFormGroups(tree: AccountNode[]): DevCoFormGroup[] {
-  return tree.map((category) => ({
-    category,
-    leaves: category.children
-      .flatMap((account) => account.children.filter((n) => n.level === 3))
-      .sort((a, b) => a.number.localeCompare(b.number)),
-  }));
+export function formatClosingRef(
+  closingRef: number | null | undefined, monthDifference: number | null | undefined, formatted?: string,
+): string {
+  const months = monthDifference ?? 0;
+  const label = closingRef === undefined || closingRef === null ? "" : closingRefLabel(closingRef, formatted);
+  return `${label} ${months < 0 ? "-" : "+"} ${Math.abs(months)} months`;
 }
 
+/** ISO currency of the selected country, default EUR — the card AND the panel. */
+export function currencyOf(isoCurrencyCode: string | undefined): string {
+  return isoCurrencyCode?.trim() || "EUR";
+}
+
+export function marginValueHeading(marginType: number | undefined, currency: string): string {
+  return marginType === MARGIN_TYPE.FixedValue ? `Margin Fixed Value [${currency}]` : "Margin [%]";
+}
+
+export function marginValue(contract: StandardContract, locale?: string): string {
+  const value = contract.marginType === MARGIN_TYPE.FixedValue
+    ? contract.marginFixedValue : contract.marginPercentage;
+  if (value === undefined || value === null) return "-";
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+}
+
+export function commentText(comment: string | undefined): string {
+  return comment && comment.trim() !== "" ? comment : "-";
+}
+
+/* ═══════════════════════════════════════════════════════ CAPEX tree ══ */
+
+export interface TreeLeaf {
+  id: string; number: string; name: string; order?: number;
+  level: 3; rootId: string; parentId: string;
+}
+
+export interface TreeRoot {
+  id: string; number: string; name: string; order?: number;
+  level: 1; rootId: string; childCount: number; children: TreeLeaf[];
+}
+
+export interface AccountTree {
+  roots: TreeRoot[];
+  /** Every Level-3 account, by id. */
+  leaves: Map<string, TreeLeaf>;
+  /** Every CAPEX account read, by id — used to name DevCo rows. */
+  accounts: Map<string, CapexAccount>;
+}
+
+const ROOT_PARENT_NUMBER = "00001";
+const EXCLUDED_ROOT_NUMBER = "10006";
+
+const byOrderThenNumber = (a: { order?: number; number: string }, b: { order?: number; number: string }) =>
+  (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY) ||
+  a.number.localeCompare(b.number);
+
 /**
- * Opening the panel classifies every level-3 account (`btn_Edit_AdminContracts.OnSelect` /
- * `btn_AdminContract_Add_*.OnSelect`, over the scope's DevCo costs):
- *   `Selected` = the cost belongs to the contract being edited;
- *   `Used`     = it belongs to a DIFFERENT contract in the same scope.
- * For a NEW contract every cost found is `{Selected: false, Used: true}`.
+ * The canvas 3-level tree (ACS:134-273): Level 1 = children of the account numbered `00001`
+ * except `10006`; Level 2 = their children; Level 3 = THEIR children. Only Level 3 is shown and
+ * linked (canvas parity); deeper accounts are ignored, as in the canvas.
  */
-export function classifyAccounts(
-  tree: AccountNode[],
-  devCoCosts: DevCoCost[],
-  currentContractId: string | null,
-): Map<string, AccountSelection> {
-  const out = new Map<string, AccountSelection>();
-  for (const node of selectableNodes(tree)) {
-    out.set(node.id, {
-      accountId: node.id, selected: false, used: false, usedByContractId: null, devCoCostId: null,
+export function buildAccountTree(rows: readonly CapexAccount[]): AccountTree {
+  const accounts = new Map(rows.map((r) => [r.id, r]));
+  const childrenOf = new Map<string, CapexAccount[]>();
+  for (const row of rows) {
+    if (!row.parentId) continue;
+    const list = childrenOf.get(row.parentId) ?? [];
+    list.push(row);
+    childrenOf.set(row.parentId, list);
+  }
+
+  const leaves = new Map<string, TreeLeaf>();
+  const roots: TreeRoot[] = [];
+  for (const row of rows) {
+    const parent = row.parentId ? accounts.get(row.parentId) : undefined;
+    if (!parent || parent.number !== ROOT_PARENT_NUMBER || row.number === EXCLUDED_ROOT_NUMBER) continue;
+    const children: TreeLeaf[] = [];
+    for (const level2 of childrenOf.get(row.id) ?? []) {
+      for (const level3 of childrenOf.get(level2.id) ?? []) {
+        const leaf: TreeLeaf = {
+          id: level3.id, number: level3.number, name: level3.name, order: level3.order,
+          level: 3, rootId: row.id, parentId: level2.id,
+        };
+        children.push(leaf);
+        leaves.set(leaf.id, leaf);
+      }
+    }
+    children.sort((a, b) => a.number.localeCompare(b.number));
+    roots.push({
+      id: row.id, number: row.number, name: row.name, order: row.order,
+      level: 1, rootId: row.id, childCount: children.length, children,
     });
   }
-  for (const cost of devCoCosts) {
-    if (!cost.capexAccountId) continue;
-    if (!out.has(cost.capexAccountId)) continue;
-    const mine = currentContractId !== null && cost.contractId === currentContractId;
-    out.set(cost.capexAccountId, {
-      accountId: cost.capexAccountId,
-      selected: mine,
-      used: !mine,
-      usedByContractId: cost.contractId,
-      devCoCostId: mine ? cost.id : null,
-    });
+  roots.sort(byOrderThenNumber);
+  return { roots, leaves, accounts };
+}
+
+/* ═════════════════════════════════════════════════ ownership ══ */
+
+export interface AccountClass {
+  /** Linked to the contract being edited. */
+  selected: boolean;
+  /** Linked to ANOTHER contract of the same country/technology — locked. */
+  used: boolean;
+  usedBy?: string;
+  /** This contract's existing child row for the account. */
+  existingChildId?: string;
+}
+
+/**
+ * Classifies every linked account of the selection. With no `currentContractId` (a new
+ * contract) every linked account is `used`. If legacy data links one account to this AND
+ * another contract, this contract's own link wins (selected, not locked) so a save never
+ * deletes it behind the user's back.
+ */
+export function classifyAccounts(
+  devCoRows: readonly DevCoRow[], currentContractId?: string,
+): Map<string, AccountClass> {
+  const out = new Map<string, AccountClass>();
+  for (const row of devCoRows) {
+    const entry = out.get(row.accountId) ?? { selected: false, used: false };
+    if (currentContractId && row.contractId === currentContractId) {
+      entry.selected = true;
+      entry.used = false;
+      entry.usedBy = undefined;
+      entry.existingChildId = row.id;
+    } else if (!entry.selected) {
+      entry.used = true;
+      entry.usedBy = row.contractId;
+    }
+    out.set(row.accountId, entry);
   }
   return out;
 }
 
-/** `chb_Contracts_RightPanel_NewEdit_CostssRow.Checked = Or(ThisItem.Selected, ThisItem.Used)`. */
-export const leafChecked = (sel: AccountSelection | undefined): boolean =>
-  sel !== undefined && (sel.selected || sel.used);
+/* ═════════════════════════════════════════════════════ tri-state ══ */
 
-/* ═══════════════════════════════════════════════════════════ the tri-state box ════ */
-
-export type TriState = "LOCKED" | "UNCHECKED" | "PARTIAL" | "CHECKED";
+export interface RootState {
+  checked: boolean | "mixed";
+  disabled: boolean;
+  available: string[];
+  /** Used by another contract but still in this form's selection — can only be removed. */
+  stale: string[];
+}
 
 /**
- * `img_Parent_TriState_Checkbox.Image` — three pools over the header's level-3 rows:
- * `_TotalCount` all, `_AvailableCount` `!Used`, `_SelectedCount` `Selected && !Used`.
- * LOCKED when nothing is available, UNCHECKED when nothing is selected, CHECKED when
- * `_SelectedCount = _TotalCount`, PARTIAL otherwise. So a header with any used row can never read
- * fully checked — the canvas comment says so, and it is kept. `parentTriStateAvailableSemantics`
- * is the alternative, tested alongside so the choice stays reversible.
+ * An account another contract owns that is still in this form's selection (e.g. it was linked
+ * elsewhere while the panel was open). It may be unchecked, never re-checked.
  */
-export function parentTriState(children: AccountSelection[]): TriState {
-  const total = children.length;
-  const available = children.filter((c) => !c.used);
-  const selected = children.filter((c) => c.selected && !c.used);
-  if (available.length === 0) return "LOCKED";
-  if (selected.length === 0) return "UNCHECKED";
-  if (selected.length === total) return "CHECKED";
-  return "PARTIAL";
+export function isStaleSelection(
+  accountId: string, selected: ReadonlySet<string>, classes: ReadonlyMap<string, AccountClass>,
+): boolean {
+  return classes.get(accountId)?.used === true && selected.has(accountId);
 }
-
-/** The alternative semantics: CHECKED once every AVAILABLE child is selected. */
-export function parentTriStateAvailableSemantics(children: AccountSelection[]): TriState {
-  const available = children.filter((c) => !c.used);
-  const selected = available.filter((c) => c.selected);
-  if (available.length === 0) return "LOCKED";
-  if (selected.length === 0) return "UNCHECKED";
-  if (selected.length === available.length) return "CHECKED";
-  return "PARTIAL";
-}
-
-/** `img_Parent_TriState_Checkbox.DisplayMode`: disabled when `_AvailableCount = 0`. */
-export const parentToggleEnabled = (children: AccountSelection[]): boolean =>
-  children.some((c) => !c.used);
 
 /**
- * `img_Parent_TriState_Checkbox.OnSelect` — toggles ONLY the available children;
- * `_TurnOn: If(_SelectedAvailableCount = 0, true, false)`, so a partly selected header turns
- * everything OFF.
+ * ACS:3607-3677. Checked only when every child is selected by THIS contract; mixed when some
+ * are, or all available ones are while others are used elsewhere; disabled when none is
+ * available (and none is a stale selection to remove). A fully-used root shows
+ * checked-and-disabled, as the used children do.
  */
-export function toggleParent(children: AccountSelection[]): AccountSelection[] {
-  const available = children.filter((c) => !c.used);
-  const turnOn = available.filter((c) => c.selected).length === 0;
-  return children.map((c) => (c.used ? c : { ...c, selected: turnOn }));
+export function rootState(
+  root: TreeRoot, selected: ReadonlySet<string>, classes: ReadonlyMap<string, AccountClass>,
+): RootState {
+  const available = root.children.filter((c) => !classes.get(c.id)?.used).map((c) => c.id);
+  const stale = root.children.filter((c) => isStaleSelection(c.id, selected, classes)).map((c) => c.id);
+  const selectedCount = available.filter((id) => selected.has(id)).length;
+  if (available.length === 0) {
+    return { checked: root.children.length > 0, disabled: stale.length === 0, available, stale };
+  }
+  if (selectedCount === 0 && stale.length === 0) return { checked: false, disabled: false, available, stale };
+  if (selectedCount === root.children.length) return { checked: true, disabled: false, available, stale };
+  return { checked: "mixed", disabled: false, available, stale };
 }
 
-/** `chb_…_CostssRow.OnCheck` / `OnUncheck`. A used row is `DisplayMode.View` and never changes. */
-export function toggleAccount(
-  selections: Map<string, AccountSelection>,
-  accountId: string,
-): Map<string, AccountSelection> {
-  const next = new Map(selections);
-  const entry = next.get(accountId);
-  if (!entry || entry.used) return next;
-  next.set(accountId, { ...entry, selected: !entry.selected });
+/**
+ * Selects every available child when none is selected, otherwise clears them (ACS:3636).
+ * Clearing also drops stale selections; used accounts are never added.
+ */
+export function toggleRoot(
+  root: TreeRoot, selected: ReadonlySet<string>, classes: ReadonlyMap<string, AccountClass>,
+): Set<string> {
+  const { available, stale } = rootState(root, selected, classes);
+  const next = new Set(selected);
+  const anySelected = stale.length > 0 || available.some((id) => next.has(id));
+  for (const id of available) {
+    if (anySelected) next.delete(id);
+    else next.add(id);
+  }
+  if (anySelected) for (const id of stale) next.delete(id);
   return next;
 }
 
-/**
- * The DevCo Cost Form headers are an ACCORDION (`UpdateIf(col_Edit_DevCoCosts, true,
- * {IsFolded: true})`, then open the clicked one); the open header is also the highlighted one
- * (`locSelectedCapexAccountsForContract`, `rec_…_Card_Selected.Fill`).
- */
-export const nextExpandedId = (current: string | null, clicked: string): string | null =>
-  current === clicked ? null : clicked;
-
-/* ═══════════════════════════════════════════════════════════════════ the cards ════ */
-
-/**
- * `ico_Chevron_Expand_Collapse_AdminContracrs.OnSelect` — `Patch(colAdminContracts, ThisItem,
- * {IsFolded: !ThisItem.IsFolded})`: cards open and close INDEPENDENTLY ("others will stay
- * expanded"). New cards start folded (`AddColumns(…, IsFolded, true)`).
- */
-export function toggleCard(open: ReadonlySet<string>, id: string): Set<string> {
-  const next = new Set(open);
-  if (next.has(id)) next.delete(id); else next.add(id);
+/** A child toggle; a used account can never be added, only removed if still selected. */
+export function toggleLeaf(
+  accountId: string, selected: ReadonlySet<string>, classes: ReadonlyMap<string, AccountClass>,
+): Set<string> {
+  const next = new Set(selected);
+  if (classes.get(accountId)?.used) {
+    next.delete(accountId);
+    return next;
+  }
+  if (next.has(accountId)) next.delete(accountId);
+  else next.add(accountId);
   return next;
 }
 
-/** After Save the saved card is collected with `IsFolded: false` — opened, others unchanged. */
-export function openCardAfterSave(open: ReadonlySet<string>, id: string): Set<string> {
-  return new Set(open).add(id);
+/** The form without the given accounts — the recovery after a save-time ownership conflict. */
+export function withoutAccounts(form: ContractForm, accountIds: readonly string[]): ContractForm {
+  const drop = new Set(accountIds);
+  return { ...form, selectedAccountIds: form.selectedAccountIds.filter((id) => !drop.has(id)) };
 }
 
-/**
- * `gal_AdminContracts_StandardAssumptions_Updated.Items` — `SortByColumns(Filter(…, scope),
- * "vsb_contracttypes", Ascending, "vsb_name", Ascending)`. The server already orders the rows;
- * this keeps the order after a client-side change.
- */
-export function sortContracts(contracts: readonly BopContract[]): BopContract[] {
-  return [...contracts].sort((a, b) =>
-    (a.contractType ?? -1) - (b.contractType ?? -1) || (a.name ?? "").localeCompare(b.name ?? ""));
-}
+/* ══════════════════════════════════════════════════════ DevCo tags ══ */
 
-/** `con_MarginType_InfoGrid2.Visible` and `con_MarginFixedValuePercentage_InfoGrid2.Visible`. */
-export const cardShowsMarginDetails = (c: BopContract): boolean => c.margin === true;
-
-const isFixedMargin = (c: BopContract): boolean =>
-  c.margin === true && c.marginType === CHOICE_ADMIN.contractMarginType.fixedValue;
-
-/**
- * `lbl_MarginFixedValuePercentage_Heading.Text` — the card uses the country's ISO currency code
- * (fallback EUR); the PANEL uses the Poland test (`marginCurrency`). Both kept as the canvas has
- * them.
- */
-export function cardMarginHeading(c: BopContract, isoCurrencyCode: string | null): string {
-  return isFixedMargin(c)
-    ? CONTRACT_SCREEN_TEXT.marginFixedValue(isBlank(isoCurrencyCode) ? "EUR" : isoCurrencyCode!)
-    : CONTRACT_SCREEN_TEXT.marginPercentage;
-}
-
-/** `lbl_MarginFixedValuePercentage_Value.Text` — `Value(fixed)` or `Value(percentage)`. */
-export function cardMarginValue(c: BopContract): string {
-  const v = isFixedMargin(c) ? c.marginFixedValue : c.marginPercentage;
-  return v === null ? "" : String(v);
-}
-
-/** `lbl_Margin_Value.Text = ThisItem.Margin` — the two-option labels. */
-export const cardMarginText = (c: BopContract): string =>
-  c.margin === null ? "" : c.margin ? MARGIN_OPTIONS.yes : MARGIN_OPTIONS.no;
-
-/**
- * `htmlDevCoCostTagList` — the contract's DevCo costs grouped by root account
- * (`RootCapexAccount.Name`), the groups ordered by this rank (99 for any other name); each tag is
- * the cost's `'CAPEX Account'.Name`.
- */
-export const ROOT_ACCOUNT_RANK: Record<string, number> = {
+/** Root ranking by NAME (ACS:1707-1720), canvas parity (ranking by `vsb_order` is an open question). */
+const ROOT_RANK: Record<string, number> = {
   "Wind Turbine / Panels": 1,
   "Development Expenses": 2,
   "Construction Expenses": 3,
   "Substation / Grid Connection": 4,
   "Other CAPEX": 5,
 };
+export const OTHER_RANK = 99;
 
-export const UNRANKED_ROOT_ACCOUNT = 99;
-
-export const rootAccountRank = (name: string | null): number =>
-  name === null ? UNRANKED_ROOT_ACCOUNT : ROOT_ACCOUNT_RANK[name] ?? UNRANKED_ROOT_ACCOUNT;
-
-export interface CardGroup {
-  rootAccountName: string;
+export interface TagGroup {
+  rootId: string;
+  rootName: string;
   rank: number;
-  subaccounts: { id: string; label: string }[];
+  tags: { id: string; label: string }[];
 }
 
 /**
- * `GroupBy(_ScopedData, AccountName, Rank, …)` sorted by `Rank` only (equal ranks keep their
- * first-appearance order). Names come from the account chart the screen already reads.
+ * Groups a contract's child rows by root account. A row whose root is null (the plugin did not
+ * run) goes under "Other" with rank 99 — neither dropped nor a crash.
  */
-export function groupCostsForCard(
-  costs: readonly DevCoCost[],
-  contractId: string,
-  accountName: (id: string | null) => string,
-): CardGroup[] {
-  const byRoot = new Map<string, CardGroup>();
-  for (const cost of costs) {
-    if (cost.contractId !== contractId) continue;
-    const name = accountName(cost.rootAccountId);
-    const group = byRoot.get(name) ?? {
-      rootAccountName: name, rank: rootAccountRank(name || null), subaccounts: [],
+export function groupDevCoTags(rows: readonly DevCoRow[], accounts: ReadonlyMap<string, CapexAccount>): TagGroup[] {
+  const groups = new Map<string, TagGroup & { order: number; sortKeys: string[] }>();
+  for (const row of rows) {
+    const root = row.rootAccountId ? accounts.get(row.rootAccountId) : undefined;
+    const rootKey = row.rootAccountId ?? "";
+    const rootName = root?.name ?? (row.rootAccountId ? row.rootLabel ?? "Other" : "Other");
+    const group = groups.get(rootKey) ?? {
+      rootId: rootKey, rootName,
+      rank: row.rootAccountId ? ROOT_RANK[rootName] ?? OTHER_RANK : OTHER_RANK,
+      order: root?.order ?? Number.POSITIVE_INFINITY, tags: [], sortKeys: [],
     };
-    group.subaccounts.push({ id: cost.id, label: accountName(cost.capexAccountId) });
-    byRoot.set(name, group);
+    const account = accounts.get(row.accountId);
+    group.tags.push({ id: row.id, label: account?.name ?? row.accountLabel ?? "Unknown account" });
+    group.sortKeys.push(account?.number ?? "");
+    groups.set(rootKey, group);
   }
-  return [...byRoot.values()].sort((a, b) => a.rank - b.rank);
+  return [...groups.values()]
+    .sort((a, b) => a.rank - b.rank || a.order - b.order || a.rootName.localeCompare(b.rootName))
+    .map(({ rootId, rootName, rank, tags, sortKeys }) => {
+      const sorted = tags
+        .map((t, i) => ({ t, k: sortKeys[i] ?? "" }))
+        .sort((x, y) => x.k.localeCompare(y.k))
+        .map((x) => x.t);
+      return { rootId, rootName, rank, tags: sorted };
+    });
 }
 
-/* ═══════════════════════════════════════════════════════════════════ the caps ════ */
+/* ═════════════════════════════════════════════ numbers (fn_Numeric) ══ */
+
+/*
+ * The helpers are shared (`@/domain/numberInput`). These one-line bindings only fix
+ * Contracts' configuration: the UI-language separator rule (`"language"`: `.` for an `en-*`
+ * language, `,` otherwise — fn_Numeric:167-265), no sign and no trailing
+ * separator, `-0` normalised to `0`.
+ */
+
+/* `decimalSeparator`, `parseLocaleNumber`, `formatLocaleNumber`: `@/domain/contractStandards`. */
+
+/** `IsOneDecimal` / `IsTwoDecimal`: digits, then optionally the separator and 1..`n` decimals. */
+export function isNDecimal(text: string, n: number, lang: string): boolean {
+  return isMaxDecimals(text, { places: n, separator: decimalSeparator(lang) });
+}
+
+export function inRange(text: string, min: number, max: number, lang: string): boolean {
+  return inRangeInput(text, min, max, decimalSeparator(lang));
+}
+
+/** The maximum in the user's locale with the field's decimals: "100.0" / "1,000,000,000.00". */
+export const formatMax = formatFixed;
+
+export const MARGIN_PERCENT_MAX = 100;
+export const MARGIN_FIXED_MAX = 1_000_000_000;
+
+/* ═══════════════════════════════════════════════════════════ the form ══ */
+
+export const DESCRIPTION_MAX = 256;
+export const COMMENT_MAX = 50;
 
 /**
- * The ten-contract caps, `CountIf(colAdminContracts, Country.Name = …, Text(Technology) = …,
- * 'Contract Types' = …) >= 10`, which disable the Add buttons. The canvas recomputes them in
- * `OnVisible` and `btnGeneralPurposeReset`; here they derive from the live list.
+ * Comment counter `"{Len(Trim(v))}/50"` (ACS:3011): the length
+ * after Power Fx `Trim` — ends trimmed AND inner runs of spaces collapsed to one.
  */
-export function countContracts(
-  contracts: readonly BopContract[],
-  scope: ContractScope,
-  type: BopContractType,
-): number {
-  return contracts.filter((c) =>
-    c.countryId === scope.countryId
-    && c.technology === scope.technologyValue
-    && c.contractType === CONTRACT_TYPE_VALUE[type]).length;
+export function commentCounter(comment: string): string {
+  return `${powerFxTrim(comment).length}/${COMMENT_MAX}`;
 }
 
-export const contractCapReached = (
-  contracts: readonly BopContract[],
-  scope: ContractScope,
-  type: BopContractType,
-): boolean => countContracts(contracts, scope, type) >= CONTRACT_CAP;
+/* `ContractForm` and `initialForm`: `@/domain/contractStandards`. */
 
-/* ═══════════════════════════════════════════════════════════════════ the form ════ */
+export const MSG = {
+  inputBlank: "Input must not be blank",
+  oneDecimal: "Numeric value with maximum of one decimals",
+  twoDecimals: "Numeric value with maximum of two decimals",
+  closingRefBlank: "The Contract Closing Date cannot be empty.",
+  monthFormat: "Only whole numbers with up to two digits are allowed.",
+  marginBlank: "Select whether the contract has a margin.",
+  marginTypeBlank: "Select a margin type.",
+  accountsNone: "Select at least one DevCo cost account.",
+  range: (max: number, decimals: number, locale?: string) =>
+    `Please select a value between 0 and ${formatMax(max, decimals, locale)}`,
+} as const;
 
-export interface ContractForm {
-  description: string;
-  closingDateReference: number | null;
-  /** `drp_Add_Edit_AdminContracts_MonthDifference_AddSub` — `"+"` or `"−"`. */
-  monthSign: "+" | "−";
-  months: string;
-  margin: boolean;
-  marginType: number | null;
-  marginPercentage: string;
-  marginFixedValue: string;
-  comment: string;
-  /**
-   * `locContractDevCoCostsDirty` OR `locContractDevCoCostsCahnged` — the Save conjunction's
-   * first term. Reset whenever the panel opens (see `toContractForm`).
-   */
-  dirty: boolean;
+export interface FormErrors {
+  description?: string;
+  closingRef?: string;
+  month?: string;
+  margin?: string;
+  marginType?: string;
+  marginPercentage?: string;
+  marginFixed?: string;
+  accounts?: string;
 }
 
-/** `'Closing Date Reference'.'Cluster 4'` — the radio's default for a new or blank record. */
-export const CLOSING_DATE_CLUSTER_4 = 952850000;
+const MONTH_PATTERN = /^\d{1,2}$/;
 
 /**
- * A NEW contract: `rad_…_CostsUntilClosingDate` defaults to Cluster 4, the sign to "+", Margin to
- * No, and the Add buttons set `locSelectedContractMarginType: 'Contract Margin Type'.Percentage`.
+ * One margin input through the shared `checkDecimalInput` (UI-language separator, no sign, no
+ * trailing separator). A malformed number and one with too many decimals both get the
+ * `IsOneDecimal` / `IsTwoDecimal` message, as the canvas' single check did.
  */
-export const emptyContractForm = (): ContractForm => ({
-  description: "", closingDateReference: CLOSING_DATE_CLUSTER_4, monthSign: "+", months: "",
-  margin: false, marginType: CHOICE_ADMIN.contractMarginType.percentage,
-  marginPercentage: "", marginFixedValue: "", comment: "", dirty: false,
-});
-
-/**
- * The panel form for a record (Edit) or a new contract (Add).
- *
- * SOURCE DEFECT (fixed): `locContractDevCoCostsCahnged` — set by every DevCo tick — is NEVER
- * reset (only set to `true`, in five places), so after the first tick on the screen Save's
- * "changed" test passes for every later panel, even one where nothing was touched. Here `dirty`
- * starts `false` every time the panel opens. (`locContractDevCoCostsDirty` IS reset by the Add,
- * Edit and Close handlers.)
- *
- * Sign: `If(Value('Month Difference') > 0, "+", "-")` for a record — so 0 shows "-" (it saves 0
- * either way).
- *
- * SOURCE DEFECT (fixed): the month TEXTBOX reads `If(Not(IsBlank(locSelectedBoPStandardContract.
- * 'BoP Projects Contracts')), Abs('Month Difference'))` — `'BoP Projects Contracts'` is the
- * one-to-many relationship to project contracts, not a column, so a standard contract no project
- * uses yet opens with an EMPTY month and Save greyed until it is retyped. Here the stored value
- * is always shown; `monthPrefillCanvasParity` keeps the canvas rule.
- */
-export function toContractForm(contract: BopContract | null): ContractForm {
-  if (!contract) return emptyContractForm();
-  const months = contract.monthDifference ?? 0;
-  return {
-    description: contract.description ?? "",
-    closingDateReference: contract.closingDateReference ?? CLOSING_DATE_CLUSTER_4,
-    monthSign: months > 0 ? "+" : "−",
-    months: contract.monthDifference === null ? "" : String(Math.abs(months)),
-    margin: contract.margin === true,
-    marginType: contract.marginType,
-    marginPercentage: contract.marginPercentage === null ? "" : String(contract.marginPercentage),
-    marginFixedValue: contract.marginFixedValue === null ? "" : String(contract.marginFixedValue),
-    comment: contract.comment ?? "",
-    dirty: false,
-  };
-}
-
-/** The canvas month prefill: blank unless some project contract was built from this one. */
-export function monthPrefillCanvasParity(contract: BopContract, hasProjectContracts: boolean): string {
-  if (!hasProjectContracts || contract.monthDifference === null) return "";
-  return String(Math.abs(contract.monthDifference));
-}
-
-/**
- * `rad_…_NewEdit_Margin.OnChange` — dirty, both values set to 0, both inputs reset (so they show
- * "0").
- */
-export const changeMargin = (form: ContractForm, margin: boolean): ContractForm =>
-  ({ ...form, margin, marginPercentage: "0", marginFixedValue: "0", dirty: true });
-
-/** `rad_AddEdit_AdminContracts_RightPanel_MarginType.OnChange` — same reset to 0. */
-export const changeMarginType = (form: ContractForm, marginType: number | null): ContractForm =>
-  ({ ...form, marginType, marginPercentage: "0", marginFixedValue: "0", dirty: true });
-
-/**
- * The Patch's `'Month Difference'`: `If(sign = "+", Value(month), Value(month) * -1)`.
- */
-export function signedMonthDifference(sign: "+" | "−", months: string): number {
-  const n = Number(String(months).trim());
-  if (!Number.isFinite(n)) return 0;
-  return sign === "−" ? -n : n;
-}
-
-/** `IsMatch(month, "^\d{1,2}$")` — one or two digits, unsigned. */
-export const isValidMonthDifference = (months: string): boolean =>
-  /^\d{1,2}$/.test(String(months));
-
-/** `lbl_…_MonthDifference_ErrorMessage.Visible` — non-blank AND not matching. */
-export const monthDifferenceErrorVisible = (months: string): boolean =>
-  !isBlank(months) && !isValidMonthDifference(months);
-
-/** `Text(100, "###,###0.0")`. */
-const PERCENT_MAX_TEXT = "100.0";
-/** `Text(locContractsCostsMax, "###,###0,00")`. */
-const FIXED_MAX_TEXT = "1,000,000,000";
-
-/**
- * `lbl_…_MarginPercentage_ErrorMessage` — `null` when the label is hidden. `Visible` requires a
- * NON-BLANK value, so the label's own `InputBlank` branch never shows; blank is caught by Save's
- * separate `Not(IsBlank(Trim(…)))` term.
- */
-export function marginPercentageError(raw: string, language = "en-US"): string | null {
-  if (isBlank(raw.trim())) return null;
-  if (!isOneDecimal(raw, language)) return MSG.numericOneDecimals;
-  if (!inRange(raw, 0, 100, language)) return MSG.outOfRange(PERCENT_MAX_TEXT);
-  return null;
-}
-
-/** `lbl_…_MarginFixedValue_ErrorMessage` — the same shape, two decimals, 0 – 1,000,000,000. */
-export function marginFixedValueError(raw: string, language = "en-US"): string | null {
-  if (isBlank(raw.trim())) return null;
-  if (!isTwoDecimal(raw, language)) return MSG.numericTwoDecimals;
-  if (!inRange(raw, 0, CONTRACT_COSTS_MAX, language)) return MSG.outOfRange(FIXED_MAX_TEXT);
-  return null;
-}
-
-/**
- * The Patch's margin columns: `'Margin Type'` only when Margin = Yes; `'Margin Percentage'` only
- * when Yes AND Percentage; `'Margin Fixed Value'` only when Yes AND Fixed Value; otherwise
- * `Blank()` (= `null`).
- */
-export interface MarginFields {
-  margin: boolean;
-  marginType: number | null;
-  marginPercentage: number | null;
-  marginFixedValue: number | null;
-}
-
-export function marginFields(
-  marginYes: boolean,
-  marginType: number | null,
-  pct: string,
-  fixed: string,
-): MarginFields {
-  if (!marginYes) {
-    return { margin: false, marginType: null, marginPercentage: null, marginFixedValue: null };
+function marginError(text: string, maxDecimals: 1 | 2, max: number, lang: string, locale?: string): string | undefined {
+  const check = checkDecimalInput(text, { maxDecimals, separator: "language", lang, min: 0, max });
+  switch (check.kind) {
+    case "blank": return MSG.inputBlank;
+    case "format":
+    case "decimals": return maxDecimals === 1 ? MSG.oneDecimal : MSG.twoDecimals;
+    case "range": return MSG.range(max, maxDecimals, locale);
+    default: return undefined;
   }
-  const isPct = marginType === CHOICE_ADMIN.contractMarginType.percentage;
-  const isFixed = marginType === CHOICE_ADMIN.contractMarginType.fixedValue;
-  const toNumber = (raw: string) => {
-    if (isBlank(raw.trim())) return null;
-    const n = Number(String(raw).replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  };
-  return {
-    margin: true,
-    marginType,
-    marginPercentage: isPct ? toNumber(pct) : null,
-    marginFixedValue: isFixed ? toNumber(fixed) : null,
-  };
+}
+
+/** The month: blank, else digits only (one or two). */
+function monthError(text: string, lang: string): string | undefined {
+  const check = checkDecimalInput(text, { maxDecimals: 0, separator: "language", lang, digitsOnly: MONTH_PATTERN });
+  if (check.kind === "blank") return MSG.inputBlank;
+  return check.kind === "ok" ? undefined : MSG.monthFormat;
+}
+
+/** The Level-3 accounts shown in the tree — `AccountTree.leaves` satisfies it. */
+export interface VisibleAccounts { has(accountId: string): boolean }
+
+/**
+ * CAPEX accounts are read active-only, so a link to an inactive (or
+ * otherwise out-of-tree) account is in `selectedAccountIds` but nowhere in the tree. Such hidden
+ * links must NOT satisfy the "at least one account" rule — only selections the user can see count.
+ * They stay in the selection, so a save never deletes them (`planDevCoDiff` keeps them).
+ * Without `visible` every selection counts (the tree is not known yet).
+ */
+export function visibleSelectionCount(selectedAccountIds: readonly string[], visible?: VisibleAccounts): number {
+  return visible ? selectedAccountIds.filter((id) => visible.has(id)).length : selectedAccountIds.length;
 }
 
 /**
- * `lbl_Add_Edit_AdminContracts_Description_ErrorMessage_1.Visible` — edit-only (see
- * `CLOSING_DATE_RULE_NOTE`).
+ * Every validation rule of the screen: the month is blank or one to two digits, and at least one Level-3 account is required.
+ * `visible`: the tree's Level-3 accounts; hidden links do not count toward ≥ 1 account.
  */
-export const closingDateLabelVisible = (
-  isEdit: boolean,
-  closingDateReference: number | null,
-): boolean => isEdit && closingDateReference === null;
-
-/** Save's month term in the canvas: `Not(IsBlank(txt_…_MonthDifference_Month.Value))` only. */
-export const monthDifferenceSaveTermCanvasParity = (months: string): boolean => !isBlank(months);
-
-/**
- * SOURCE DEFECT (fixed): Save's month term is only `Not(IsBlank(…))` — the regex label is not in
- * the conjunction — so "abc" or "123" saves (`Value("abc")` writes a blank month difference).
- * Here the month must also match `^\d{1,2}$`.
- */
-export const monthDifferenceSaveTerm = (months: string): boolean =>
-  !isBlank(months) && isValidMonthDifference(months);
-
-/**
- * `ico_AdminContracts_Save.DisplayMode`, term by term:
- *  - (dirty OR changed) AND `CountIf(Filter(col_Edit_DevCoCosts, Selected = true)) > 0`;
- *  - `Not(IsBlank(Trim(description)))`;
- *  - the closing-date label not visible;
- *  - Margin = Yes → `'Margin Type' = Percentage` ? (pct label hidden AND pct non-blank) :
- *    (fixed label hidden AND fixed non-blank) — any type other than Percentage, blank included,
- *    takes the Fixed branch;
- *  - closing date non-blank; month non-blank (and now valid, see above); margin non-blank.
- */
-export function validateContract(
-  form: ContractForm,
-  args: { selectedCount: number; isEdit: boolean; language?: string },
-): string[] {
-  const errors: string[] = [];
-  const lang = args.language ?? "en-US";
-
-  if (!form.dirty) errors.push(MSG.notDirty);
-  if (args.selectedCount === 0) errors.push(MSG.noAccountSelected);
-  if (isBlank(form.description.trim())) errors.push(MSG.inputBlank);
-  // The label term (edit-only) and the radio's own non-blank term reduce to one rule.
-  if (form.closingDateReference === null) errors.push(MSG.closingDateEmpty);
-
-  if (form.margin) {
-    if (form.marginType === CHOICE_ADMIN.contractMarginType.percentage) {
-      const e = marginPercentageError(form.marginPercentage, lang);
-      if (e) errors.push(e);
-      else if (isBlank(form.marginPercentage.trim())) errors.push(MSG.inputBlank);
+export function validateForm(form: ContractForm, lang: string, locale?: string, visible?: VisibleAccounts): FormErrors {
+  const errors: FormErrors = {};
+  if (form.description.trim() === "") errors.description = MSG.inputBlank;
+  if (form.closingRef === null) errors.closingRef = MSG.closingRefBlank;
+  const month = monthError(form.monthText, lang);
+  if (month) errors.month = month;
+  if (form.margin === null) errors.margin = MSG.marginBlank;
+  if (form.margin === true) {
+    if (form.marginType === MARGIN_TYPE.Percentage) {
+      const e = marginError(form.marginPercentageText, 1, MARGIN_PERCENT_MAX, lang, locale);
+      if (e) errors.marginPercentage = e;
+    } else if (form.marginType === MARGIN_TYPE.FixedValue) {
+      const e = marginError(form.marginFixedText, 2, MARGIN_FIXED_MAX, lang, locale);
+      if (e) errors.marginFixed = e;
     } else {
-      const e = marginFixedValueError(form.marginFixedValue, lang);
-      if (e) errors.push(e);
-      else if (isBlank(form.marginFixedValue.trim())) errors.push(MSG.inputBlank);
+      errors.marginType = MSG.marginTypeBlank;
     }
   }
-
-  if (!monthDifferenceSaveTerm(form.months)) errors.push(MSG.monthDifference);
+  if (visibleSelectionCount(form.selectedAccountIds, visible) === 0) errors.accounts = MSG.accountsNone;
   return errors;
 }
 
-export const canSaveContract = (
-  form: ContractForm,
-  args: { selectedCount: number; isEdit: boolean; canEdit: boolean; language?: string },
-): boolean => args.canEdit && validateContract(form, args).length === 0;
-
-/** The number of level-3 accounts this contract will own. */
-export const selectedAccountCount = (after: ReadonlyMap<string, AccountSelection>): number =>
-  [...after.values()].filter((a) => a.selected && !a.used).length;
-
-/* ═══════════════════════════════════════════════════════════ the DevCo reconcile ════ */
-
-/**
- * Save's child steps, both scoped to the current contract:
- *   B. `RemoveIf(…, contract = varCurrentContractId && row in Filter(col_Edit_DevCoCosts,
- *      Selected = false && !IsBlank(ContractDevCo)).ContractDevCo)` — the released accounts;
- *   C. `Patch(…, ForAll(Filter(col_Edit_DevCoCosts, Selected && ContractDevCo = EmptyGUID &&
- *      Level = 3), …))` — the newly claimed accounts.
- */
-export interface ReconcileResult {
-  toDelete: string[];
-  toCreate: string[];
-}
-
-export function reconcileDevCoCosts(
-  before: Map<string, AccountSelection>,
-  after: Map<string, AccountSelection>,
-): ReconcileResult {
-  const toDelete: string[] = [];
-  const toCreate: string[] = [];
-  for (const [accountId, next] of after) {
-    const prev = before.get(accountId);
-    if (next.used) continue;                       // never touch another contract's row
-    const wasOwned = prev?.devCoCostId != null;
-    if (next.selected && !wasOwned) toCreate.push(accountId);
-    if (!next.selected && wasOwned) toDelete.push(prev!.devCoCostId!);
-  }
-  return { toDelete, toCreate };
-}
-
-/* ═════════════════════════════════════════════════════════════════════ the save ════ */
-
-/** `Name: Text(locContractTypeBoPAssumption) & " - " & txt_…_Description.Value` — untrimmed. */
-export const composeContractName = (contractType: number | null, description: string): string =>
-  `${contractTypeLabel(contractType)} - ${description}`;
-
-/**
- * The parent `Patch` — written on EVERY save, create or update: Name, Description, Country,
- * Technology, Closing Date Reference, signed Month Difference, Margin and its three columns,
- * Comment and Contract Types. The canvas writes no Owning Business Unit here (an admin table,
- * not project-scoped), so neither do we.
- */
-export function buildContractPayload(
-  form: ContractForm,
-  args: { contractType: number | null; scope: ContractScope },
-): Record<string, unknown> {
-  const margin = marginFields(
-    form.margin, form.marginType, form.marginPercentage, form.marginFixedValue,
-  );
-  const data: Record<string, unknown> = {
-    [BOP_CONTRACT_COL.name]: composeContractName(args.contractType, form.description),
-    [BOP_CONTRACT_COL.description]: form.description,
-    [BOP_CONTRACT_COL.technology]: args.scope.technologyValue,
-    [BOP_CONTRACT_COL.closingDateReference]: form.closingDateReference,
-    [BOP_CONTRACT_COL.monthDifference]: signedMonthDifference(form.monthSign, form.months),
-    [BOP_CONTRACT_COL.margin]: margin.margin,
-    [BOP_CONTRACT_COL.marginType]: margin.marginType,
-    [BOP_CONTRACT_COL.marginPercentage]: margin.marginPercentage,
-    [BOP_CONTRACT_COL.marginFixedValue]: margin.marginFixedValue,
-    [BOP_CONTRACT_COL.comment]: form.comment === "" ? null : form.comment,
-    [BOP_CONTRACT_COL.contractTypes]: args.contractType,
+/** Comparable form values; margin texts that are hidden do not make a form dirty. */
+function normalized(form: ContractForm): ContractForm {
+  return {
+    ...form,
+    description: form.description,
+    marginType: form.margin ? form.marginType : null,
+    marginPercentageText: form.margin && form.marginType === MARGIN_TYPE.Percentage ? form.marginPercentageText : "",
+    marginFixedText: form.margin && form.marginType === MARGIN_TYPE.FixedValue ? form.marginFixedText : "",
+    selectedAccountIds: [...form.selectedAccountIds].sort(),
   };
-  if (args.scope.countryId) {
-    data[`${BOP_LOOKUP.contractCountry}@odata.bind`] = `/${ES.countries}(${args.scope.countryId})`;
-  }
-  return data;
 }
 
 /**
- * A child create (step C): `{Name: $"{Nummer}-{Name}", 'BoP Contract Standard Assumption',
- * 'CAPEX Account', Country, Technology}`. RootCapexAccount is set by the
- * `DevCoCostRootCapexPlugin` plugin; no Owning Business Unit, as the canvas.
- * `contractRef` is the contract id, or `createdRowRef(0)` for a contract created in the same plan.
+ * A real diff against the loaded values: reverting a change makes it clean again.
+ * The shared `isDirty` (H7) over Contracts' normaliser.
  */
-export function buildDevCoCostPayload(args: {
-  node: AccountNode;
-  contractRef: string;
-  scope: ContractScope;
-}): Record<string, unknown> {
-  const data: Record<string, unknown> = {
-    [DEVCO_COST_COL.name]: `${args.node.number}-${args.node.name}`,
-    [`${BOP_LOOKUP.contract}@odata.bind`]: `/${BOP_CONTRACT_ENTITY_SET}(${args.contractRef})`,
-    [`${BOP_LOOKUP.capexAccount}@odata.bind`]: `/${ES_ADMIN.capexAccountLists}(${args.node.id})`,
-    [DEVCO_COST_COL.technology]: args.scope.technologyValue,
-  };
-  if (args.scope.countryId) {
-    data[`${BOP_LOOKUP.devCoCountry}@odata.bind`] = `/${ES.countries}(${args.scope.countryId})`;
-  }
-  return data;
+export function isDirty(form: ContractForm, initial: ContractForm): boolean {
+  return formChanged(form, initial, normalized);
 }
 
 /**
- * The save, in the canvas order: A. the parent create or update; B. the released children's
- * deletes; C. the new children's creates (bound to the parent — `createdRowRef(0)` when the
- * parent is created in the same plan). Not transactional (KNOWN-RISKS): a failure part-way is
- * reported with how many writes had run.
+ * dirty, at least one Level-3 account, and every field valid. `linksAvailable` is false
+ * when the DevCo link table cannot be read — the "≥ 1 account" rule then cannot be met.
+ * `visible`: only accounts shown in the tree count toward that rule.
  */
-export function planSaveContract(args: {
-  form: ContractForm;
-  contractType: number | null;
-  scope: ContractScope;
-  existing: BopContract | null;
-  before: Map<string, AccountSelection>;
-  after: Map<string, AccountSelection>;
-  tree: AccountNode[];
-  canEdit: boolean;
-  language?: string;
-}): WritePlan {
-  if (!args.canEdit) return refuse(MSG.noPermission);
-  const errors = validateContract(args.form, {
-    selectedCount: selectedAccountCount(args.after), isEdit: args.existing !== null, language: args.language,
-  });
-  if (errors.length > 0) return refuse(errors[0]!);
-
-  const plan = emptyPlan();
-  const payload = buildContractPayload(args.form, { contractType: args.contractType, scope: args.scope });
-  const label = contractTypeLabel(args.contractType);
-  if (args.existing === null) {
-    plan.writes.push({ op: "create", entitySet: BOP_CONTRACT_ENTITY_SET, data: payload, reason: `${label} created` });
-  } else {
-    plan.writes.push({
-      op: "update", entitySet: BOP_CONTRACT_ENTITY_SET, id: args.existing.id, data: payload,
-      reason: `${label} updated`,
-    });
-  }
-
-  const { toDelete, toCreate } = reconcileDevCoCosts(args.before, args.after);
-  for (const id of toDelete) {
-    plan.writes.push({ op: "delete", entitySet: DEVCO_COST_ENTITY_SET, id, reason: "CAPEX account released by this contract" });
-  }
-
-  const contractRef = args.existing?.id ?? createdRowRef(0);
-  const nodes = new Map(selectableNodes(args.tree).map((n) => [n.id, n]));
-  for (const accountId of toCreate) {
-    const node = nodes.get(accountId);
-    if (!node) continue;
-    plan.writes.push({
-      op: "create", entitySet: DEVCO_COST_ENTITY_SET,
-      data: buildDevCoCostPayload({ node, contractRef, scope: args.scope }),
-      reason: `CAPEX account ${node.number} claimed by this contract`,
-    });
-  }
-
-  plan.log.push(`${toCreate.length} account(s) claimed, ${toDelete.length} released.`);
-  return plan;
+export function canSave(args: {
+  form: ContractForm; initial: ContractForm; errors: FormErrors;
+  linksAvailable: boolean; forceDirty?: boolean; visible?: VisibleAccounts;
+}): boolean {
+  const { form, initial, errors, linksAvailable, forceDirty, visible } = args;
+  if (!linksAvailable) return false;
+  if (!forceDirty && !isDirty(form, initial)) return false;
+  if (visibleSelectionCount(form.selectedAccountIds, visible) === 0) return false;
+  return Object.values(errors).every((e) => !e);
 }
 
-/**
- * `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.OnConfirm` — `Remove('BoP Contracts
- * Standard Assumptions', locSelectedBoPStandardContract)`: the PARENT only. The DevCo costs go
- * with it (`CascadeDelete = Cascade`), and the deletion plugin also removes the project rows
- * built from it — none of that is redone here.
- *
- * SOURCE DEFECT (fixed): the canvas `Remove` has no `IfError`, so a refused delete closed the
- * spinner as if it had worked. The failure is now shown (`WriteFeedback`).
- */
-export function planDeleteContract(args: { contract: BopContract; canEdit: boolean }): WritePlan {
-  if (!args.canEdit) return refuse(MSG.noPermission);
-  const plan = emptyPlan();
-  plan.writes.push({
-    op: "delete", entitySet: BOP_CONTRACT_ENTITY_SET, id: args.contract.id,
-    reason: `Contract “${args.contract.name ?? args.contract.id}” deleted`,
-  });
-  return plan;
+/** Changing Margin or Margin Type clears both margin inputs (ACS:2873-2930). */
+export function withMargin(form: ContractForm, margin: boolean): ContractForm {
+  return { ...form, margin, marginPercentageText: "", marginFixedText: "" };
+}
+export function withMarginType(form: ContractForm, marginType: number): ContractForm {
+  return { ...form, marginType, marginPercentageText: "", marginFixedText: "" };
 }
 
-/* ═════════════════════════════════════════════════════════ screen captions (canvas) ════ */
+/* ══════════════════════════════════════════════════════ save payloads ══ */
+
+/* `ParentPayload`, `buildParentPayload`, `planDevCoDiff`, `findOwnershipConflicts`: `@/domain/contractStandards`. */
 
 /**
- * The visible strings of the `Admin Contract Screen`, verbatim (CONVENTIONS rule 7). Option-set
- * labels come from the global `<optionset>` blocks in `customizations.xml`, which is what
- * `Text(<choice>)` renders.
+ * `isNew` is fixed when the panel opens: a new contract keeps its "New …" title until a save
+ * fully succeeds, even after a partial save created the parent.
  */
-export const CONTRACT_SCREEN_TEXT = {
-  /** `cmp_Admin_Contracts_Header.Project` → `Name: "Contracts"`. */
-  title: "Contracts",
-  /** `lbl_AdminContract_Selected_Country_Technology.Text` — `$"Contracts / {country} / {technology}"`. */
-  scopeHeading: (country: string, technology: string) => `Contracts / ${country} / ${technology}`,
-  /** `btn_AdminContract_Add_Development_Contract.Text`. */
-  addDevelopment: "Add Development Contract",
-  /** `btn_AdminContract_Add_Construction_Contract.Text`. */
-  addConstruction: "Add Construction Contract",
-  /** `btn_Edit_AdminContracts.Text`, `btn_Delete_AdminContracts.Text`. */
-  edit: "Edit",
-  delete: "Delete",
-  /** The card info grids: `lbl_Description_Heading`, `lbl_ClosingDateReference_Heading`, … */
-  description: "Description",
-  closingDateReference: "Closing Date Reference",
-  margin: "Margin",
-  marginType: "Margin Type",
-  /** `lbl_MarginFixedValuePercentage_Heading.Text` / `lbl_Add_Edit_AdminContracts_Margin_Percentage.Text`. */
-  marginPercentage: "Margin [%]",
-  /** `lbl_Add_Edit_AdminContracts_MarginFixedValue.Text` — `"Margin Fixed Value [" & currency & "]"`. */
-  marginFixedValue: (currency: string) => `Margin Fixed Value [${currency}]`,
-  /**
-   * `lbl_ClosingDateReference_Value.Text` — `ref & " " & Switch(true, n < 0, "- ", n >= 0, "+ ",
-   * "+ ") & Abs(n) & " months"`.
-   */
-  closingDateValue: (reference: string, monthDifference: number) =>
-    `${reference} ${monthDifference < 0 ? "- " : "+ "}${Math.abs(monthDifference)} months`,
-  /** `lbl_DevCoCostFrom_Heading.Text`. */
-  devCoCostsFrom: "DevCo Costs From",
-  /** `htmlDevCoCostTagList` — each group header is `AccountName & " :"`. */
-  devCoGroupHeading: (rootAccountName: string) => `${rootAccountName} :`,
-  /** `lbl_Comment_Heading.Text`; `lbl_Comment_Value.Text` shows "-" when blank. */
-  comments: "Comments",
-  blankComment: "-",
-  /** `lbl_Add_Edit_AdminContracts_Header.Text` — `If(IsBlank(sel), "New ", "Edit ") & Text(type)`. */
-  panelTitle: (isEdit: boolean, typeLabel: string) => `${isEdit ? "Edit " : "New "}${typeLabel}`,
-  /** `lbl_Add_Edit_AdminContracts_MonthDifference.Text`. */
-  monthDifference: "Month Difference",
-  /** `drp_Add_Edit_AdminContracts_MonthDifference_AddSub.Items`. */
-  monthSigns: ["+", "-"] as readonly string[],
-  /** `lbl_Add_Edit_AdminContracts_Comments.Text`; counter `$"{Len(Trim(value))}/50"`. */
-  comment: "Comment",
-  commentMax: 50,
-  /** `txt_Add_Edit_AdminContracts_Description.MaxLength`. */
-  descriptionMax: 256,
-  /** `txt_…_MarginPercentage.MaxLength` / `txt_…_MarginFixedValue.MaxLength`. */
-  marginMax: 130,
-  /** `lbl_Add_Edit_AdminContracts_DevCoCostForm.Text`. */
-  devCoCostForm: "DevCo Cost Form",
-  /** `ico_AdminContracts_Save.Text`, `ico_AdminContracts_Cancel.Text`, the dialog's buttons. */
-  save: "Save",
-  cancel: "Cancel",
-  confirm: "Confirm",
-  /** `cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1.Title` / `.Description`. */
-  deleteTitle: "Delete BoP Standard Contract",
-  deleteDescription: (name: string) =>
-    `Are you sure that you want to permanently delete "${name}" contract?`,
-} as const;
+export function panelTitle(isNew: boolean, contractType: number): string {
+  return `${isNew ? "New" : "Edit"} ${CONTRACT_TYPE_LABEL[contractType] ?? ""}`;
+}
 
-/** `Closing Date Reference` option set (`vsb_closingdatereference`) — the radio's `Choices(...)`. */
-export const CLOSING_DATE_REFERENCE_OPTIONS: readonly { value: number; label: string }[] = [
-  { value: CLOSING_DATE_CLUSTER_4, label: "Cluster 4" },
-  { value: 952850001, label: "FID" },
-  { value: 952850002, label: "Cluster 5" },
-];
+/* ═══════════════════════════════════════════ closing the panel ══ */
 
-/** `Margin (BoP Contracts Standard Assumptions)` two-option set — the radio's `Choices(...)`. */
-export const MARGIN_OPTIONS = { yes: "Yes", no: "No" } as const;
-
-/** `Contract Margin Type` option set (`vsb_contractmargintype`) — the radio's `Choices(...)`. */
-export const MARGIN_TYPE_OPTIONS: readonly { value: number; label: string }[] = [
-  { value: CHOICE_ADMIN.contractMarginType.percentage, label: "Percentage" },
-  { value: CHOICE_ADMIN.contractMarginType.fixedValue, label: "Fixed Value" },
-];
-
-export const optionLabel = (options: readonly { value: number; label: string }[], value: number | null): string =>
-  options.find((o) => o.value === value)?.label ?? "";
+export type ClosePrompt = "none" | "discard" | "incomplete";
 
 /**
- * The currency in the PANEL's Margin Fixed Value caption — `lbl_Add_Edit_AdminContracts_MarginFixedValue.Text`:
- * `If(SelectedCountry.Name = "Poland", "PLN", "EUR")`.
+ * What closing the panel must ask first. After a partial save (`linksIncomplete`: the parent was
+ * written but its DevCo links were not all saved) the user is warned that a contract exists with
+ * incomplete links — that wins over the plain "Discard changes?" prompt.
  */
-export const marginCurrency = (countryName: string | null): string =>
-  countryName === "Poland" ? "PLN" : "EUR";
+export function closePrompt(args: { dirty: boolean; linksIncomplete: boolean }): ClosePrompt {
+  if (args.linksIncomplete) return "incomplete";
+  return args.dirty ? "discard" : "none";
+}
+
+export interface CloseDialogText { title: string; description: string; confirmText: string; cancelText: string }
+
+/** `fromScopeChange`: the country/technology changed (back/forward, URL) while the panel was open. */
+export function closeDialogText(kind: Exclude<ClosePrompt, "none">, fromScopeChange: boolean): CloseDialogText {
+  const scopeLead = fromScopeChange ? "The country or technology changed while this contract was open. " : "";
+  if (kind === "incomplete") {
+    return {
+      title: "DevCo accounts incomplete",
+      description: `${scopeLead}The contract was saved, but its DevCo accounts are incomplete. ` +
+        "Close anyway, or keep editing and select Save to retry?",
+      confirmText: "Close anyway",
+      cancelText: "Keep editing",
+    };
+  }
+  return fromScopeChange
+    ? {
+      title: "Discard changes?",
+      description: `${scopeLead}Discard your unsaved changes to it, or keep editing?`,
+      confirmText: "Discard",
+      cancelText: "Keep editing",
+    }
+    : {
+      title: "Discard changes?",
+      description: "You have unsaved changes to this contract. Do you want to discard them?",
+      confirmText: "Discard",
+      cancelText: "Keep editing",
+    };
+}
+
+export const INCOMPLETE_CLOSED_WARNING =
+  "The contract was saved, but its DevCo accounts are incomplete. Edit it to finish linking them.";
+
+export function deleteDescription(name: string): string {
+  return `Are you sure that you want to permanently delete "${name}" contract?`;
+}

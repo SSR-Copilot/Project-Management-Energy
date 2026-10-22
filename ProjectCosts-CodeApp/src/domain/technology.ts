@@ -12,6 +12,7 @@
  * `features/project-main/rules.ts` re-exports these, so its existing importers are unaffected.
  */
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
+import { TECHNOLOGY as TECHNOLOGY_CODES } from "./project";
 
 export const TECHNOLOGY_LABEL: Record<number, string> = {
   [CHOICE_PROCESS.technology.wind]: "Wind",
@@ -51,4 +52,37 @@ export function technologyLabel(v: unknown, formatted?: unknown): string {
   if (typeof formatted === "string" && formatted) return formatted;
   const n = technologyValue(v);
   return n === null ? "" : TECHNOLOGY_LABEL[n] ?? "";
+}
+
+/* ═══════════════════════════════════ Application Settings picker options (additive) ══ */
+
+/*
+ * Technology options for the Application Settings Country / Technology picker
+ * (`components/CountryTechnologyPicker.tsx`), ported with those screens. The integers are the
+ * global choice `vsb_technology` (`TECHNOLOGY` in `./project`). Settings rules match
+ * technologies by CODE, never by label; labels here are display only.
+ */
+export { TECHNOLOGY } from "./project";
+
+/** One technology a picker offers. */
+export interface TechnologyOption {
+  code: number;
+  label: string;
+}
+
+const option = (code: number): TechnologyOption => ({ code, label: TECHNOLOGY_LABEL[code] ?? String(code) });
+
+/** Gates & Approvals: Wind then PV. */
+export const GATE_TECHNOLOGIES: readonly TechnologyOption[] = [option(TECHNOLOGY_CODES.wind), option(TECHNOLOGY_CODES.pv)];
+/** Cost: Wind then PV. */
+export const COST_TECHNOLOGIES: readonly TechnologyOption[] = [option(TECHNOLOGY_CODES.wind), option(TECHNOLOGY_CODES.pv)];
+/** Contract: Wind, PV, BESS. */
+export const CONTRACT_TECHNOLOGIES: readonly TechnologyOption[] = [
+  option(TECHNOLOGY_CODES.wind), option(TECHNOLOGY_CODES.pv), option(TECHNOLOGY_CODES.bess),
+];
+
+/** Display label for a code; `""` for an unknown code (never the raw integer). */
+export function technologyOptionLabel(code: number | null | undefined): string {
+  if (code === null || code === undefined) return "";
+  return TECHNOLOGY_LABEL[code] ?? "";
 }

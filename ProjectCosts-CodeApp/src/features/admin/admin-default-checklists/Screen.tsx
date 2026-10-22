@@ -1,571 +1,507 @@
 /**
- * Admin Project Default Checklists Screen — layout and composition only.
+ * Application Settings — Check List Settings. Replaces the canvas
+ * 'Admin Project Default Checklists Screen'.
  *
- * Canvas screen: `Admin Project Default Checklists Screen` (PM app), transcribed from
- * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin Project Default Checklists Screen.pa.yaml`:
+ * Blocks: tab strip · cluster accordion · cluster command bar · task table (`TaskTable`) ·
+ * Add/Edit drawer (`TaskEditorDrawer`) · Reorder drawer (the shared `ReorderPanel`) ·
+ * confirmation dialogs · busy + result feedback (missing in the canvas). The header and
+ * navigation come from master's app shell and admin left nav (route
+ * `/admin/default-checklists`); this screen renders the content only. Outcomes of completed
+ * actions are app toasts (`useNotify`); load failures and in-panel save errors stay
+ * `MessageBar`s.
  *
- *   cmp_Admin_Project_Checklist_Header            the page title ("Checklist settings")
- *   tab_Admin_Project_Checklist_Association       the country × technology tab strip
- *   gal_DefaultChecklist_AdminScreen              one foldable section per gate
- *     con_Header_DefaultChecklist_AdminScreen       btn_Select (selects the gate; its caption is
- *                                                   lbl_ClusterName, semibold when selected) and
- *                                                   ico_Down / ico_Up (fold + select)
- *     pcf_CommandBar_Cluster_…                      Add Task · Reorder
- *     con_Header_TasksInCluster…                    Description · Holding Description ·
- *                                                   Gate Relevance · Completion Date · Active
- *     gal_TasksInClusterDefaultChecklist_AdminScreen  the task rows + Edit / Delete icons
- *   con_Admin_Checklist_Form                      the Add / Edit Task panel
- *   con_Admin_Checklist_Reorder                   the reorder panel (PowerDragDrop → drag + Move up/down)
- *   cmp_DeleteChecklistItem_AdminScreen           delete confirmation
- *   cmp_ActivateDeactiveChecklistItem_AdminScreen activate / deactivate confirmation
+ * Shared building blocks: tab strip `SettingsTabStrip`, page / section states `useQueryHealth`
+ * + `QueryStates`, load bars `NoticeBar` (small Retry), accordion `SettingsAccordion`, cluster
+ * commands `CommandBar` (canvas disabled greys), writes `useBusyRunner`, panels
+ * `usePanelState`, editor touch `useTouched`, dialogs `useConfirmDialog` (`closeFirst`), live
+ * region `VisuallyHidden`.
  *
- * HIDDEN CONTROLS: `but_Admin_Checklist_Form_Buttons_Reset` (Visible false) is `Select()`ed by
- * the panel's Close, Save and Cancel to reset all five fields — here every close resets `form`.
- * `lbl_ClusterName_Checklist_AdminScreen` (Visible false) is referenced nowhere and is not ported.
+ * Access: every write is gated by the admin rule (`useAdminAccess`, with its local-run bypass);
+ * a non-admin sees the screen read-only (commands, row actions and Save disabled).
  *
- * CONNECTED (19 Oct 2026, D18): reads and writes go through `hooks.ts`. Every write plan takes
- * `canEdit` = the admin rule (`useAdminAccess`, with its local-run bypass). While a write runs the
- * canvas progress text is shown, then its success or error text (`WriteFeedback`) — the canvas set
- * these texts but had no pop-up to show them. The per-gate command bars stay INSIDE their gate
- * (the canvas puts one in every gallery row), so none of them is portalled into `CommandSlot`.
+ * Every panel, dialog, selection and fold state is component state, so it starts closed and
+ * collapsed on every visit; only the selected tab lives in the URL (`?tab=`).
  */
-import { useMemo, useState, type ReactElement } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Spinner, Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
-  Button, Switch, Tab, TabList, Table, TableBody, TableCell,
-  TableHeader, TableHeaderCell, TableRow, Text, Tooltip, makeStyles, mergeClasses, tokens,
-} from "@fluentui/react-components";
-import {
-  CalendarLtrRegular, CalendarReplyRegular,
-  CheckmarkCircleRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular,
-  DismissCircleRegular, EditRegular,
-} from "@fluentui/react-icons";
-import {
-  type Command,
-  CommandBar,
-  ConfirmDialog,
-  EmptyState,
-  FormPanel,
-  LoadingOverlay,
-  PanelButtons,
-  ReorderList,
-  TextField,
-  WriteFeedback,
+  CommandBar, ConfirmDialog, LoadingOverlay, NoticeBar, QueryStates, ReorderPanel, SettingsAccordion,
+  SettingsTabStrip, VisuallyHidden, useNotify,
+  useQueryHealth,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
-import { emptyPlan, type WritePlan } from "@/data/writePlan";
-import { palette, space } from "@/theme/tokens";
-import { CHOICE_ADMIN } from "@/data/dataverseNames";
+import { useBusyRunner } from "@/features/shared/useBusyRunner";
+import { useConfirmDialog } from "@/features/shared/useConfirmDialog";
+import { usePanelState } from "@/features/shared/usePanelState";
+import { useTouched } from "@/features/shared/useTouched";
 import {
-  CHECKLIST_ENTITY_SET, DESCRIPTION_MAX_LENGTH, LABELS, MSG, activationConfirmText,
-  activationDescription, activationSavingText, activationTitle, checklistGates,
-  completionDateChangingText, completionDateErrorText, defaultScope, deleteDescription,
-  deletingText, emptyTaskForm, gateCaption, isSaveEnabled, isTaskLocked, nextOrderFromHighest,
-  panelTitle, planDeleteTask, planReorderTasks, planSaveTask, savingText, sortScopes, toTaskForm,
-  toggleActivePatch, toggleCompletionDatePatch, truncateHolding, visibleTasks,
-  type GateRow, type ScopeRow, type TaskForm, type TaskRow,
-} from "./rules";
+  RenumberAfterDeleteError, TaskCreatedIdUnknownError, TaskStatusNotSetError,
+  type ChecklistTask, type TaskForm,
+} from "@/data/adminDefaultChecklists";
+import { palette } from "@/theme/tokens";
 import {
-  highestTaskOrder, useBlockingApprovals, useChecklistGates, useChecklistScopes, useChecklistWrites,
-  useScopeTasks,
+  useChecklistClusters, useChecklistLocks, useChecklistPrivileges, useChecklistTabs,
+  useChecklistTasks, useReorder, useSaveTask, useSetActive, useSoftDelete, useToggleCompletion,
 } from "./hooks";
+import { OUT_OF_SCOPE_MESSAGE, errorText, loadErrorText } from "./messages";
+import {
+  REORDER_HELP, REORDER_STALE_MESSAGE, busyText, clusterCaption, deleteDialog, emptyTaskForm, findGroup,
+  formFromTask, groupTasksByCluster, isTaskFormValid, lockState, lockTooltipFor, nextOrder,
+  renumberAfterDelete, reorderPatch, reorderSnapshotStale, resolveTabId, snapshotGroup,
+  sortTabs, statusDialog, successText, taskFormChanged, type ReorderSnapshotRow,
+} from "./rules";
+import { TaskEditorDrawer } from "./TaskEditorDrawer";
+import { TaskTable } from "./TaskTable";
 
 const useStyles = makeStyles({
+  /** `con_Admin_Project_Checklist_RightContent` — white, padding L10 R10 T15. */
+  root: {
+    display: "flex", flexDirection: "column", rowGap: "8px",
+    backgroundColor: palette.white,
+    paddingLeft: "10px", paddingRight: "10px", paddingTop: "15px", paddingBottom: "15px",
+    minHeight: "100%", boxSizing: "border-box",
+  },
+  /** `Size: gblAppSizes.Font.Medium` (11 pt); Semibold when it is the last selected cluster. */
+  caption: { fontSize: "14.7px", fontWeight: tokens.fontWeightRegular, color: palette.black },
+  captionSelected: { fontWeight: tokens.fontWeightSemibold },
+  commands: { paddingLeft: "0" },
   /**
-   * The command bar's first icon starts on the left edge of the content under it (PO, 21 Oct
-   * 2026); `CommandBar` has no inset of its own. Over the "Description" column caption: Fluent's 8 px
-   * header-cell padding.
+   * `cmp_Admin_Project_Checklist_Header` page title. Master's admin shell does not show it, so
+   * the screen renders it (as master's admin screens do).
    */
-  commandBar: { paddingLeft: space.s },
-  page: {
-    display: "flex", flexDirection: "column", gap: space.m, minWidth: 0,
-    paddingTop: space.m, paddingBottom: space.m, paddingLeft: space.l, paddingRight: space.l,
-  },
-  title: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold },
-  tabs: { overflowX: "auto" },
-  gates: { display: "flex", flexDirection: "column", gap: space.s },
-  gate: {
-    display: "flex", flexDirection: "column", gap: space.s,
-    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.neutralLight,
-    paddingBottom: space.s,
-  },
-  gateHead: { display: "flex", alignItems: "center", gap: space.xs, width: "100%" },
-  gateSelect: {
-    flexGrow: 1, justifyContent: "flex-start", fontWeight: tokens.fontWeightRegular,
-    paddingLeft: space.s, paddingRight: space.s,
-  },
-  // `lbl_ClusterName_DefaultChecklist_AdminScreen.FontWeight`: Semibold when it is the selected gate.
-  gateSelected: { fontWeight: tokens.fontWeightSemibold },
-  tableWrap: { overflowX: "auto" },
-  table: { minWidth: "760px" },
-  actions: { display: "flex", alignItems: "center", gap: space.xxs },
-  iconAction: { color: palette.themePrimary },
-  green: { color: palette.akzent3 },
-  panelBody: { display: "flex", flexDirection: "column", gap: space.m },
+  title: { margin: "0", fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold, color: palette.black },
 });
 
-type ConfirmState = { kind: "delete" | "activate"; task: TaskRow; siblings: TaskRow[] } | null;
+/** The page title (canvas header component). */
+const PAGE_TITLE ="Checklist settings";
 
-/** A one-row update of a default checklist task, as a plan. */
-function updateTaskPlan(task: TaskRow, data: Record<string, unknown>, reason: string, canEdit: boolean): WritePlan {
-  if (!canEdit) return { writes: [], log: [], refusedReason: MSG.outOfScope };
-  const plan = emptyPlan();
-  plan.writes.push({ op: "update", entitySet: CHECKLIST_ENTITY_SET, id: task.id, data, reason });
-  return plan;
-}
+type Editor = {
+  mode: "create" | "edit";
+  clusterId: string;
+  /** Set in edit mode (and after a create whose status step failed). */
+  taskId: string | null;
+  /** The tab the task belongs to — the BU source for the edit write. */
+  tabId: string | null;
+  form: TaskForm;
+  /** The values the panel opened with; `form` differing from it makes the panel dirty. */
+  seed: TaskForm;
+};
 
-export default function AdminDefaultChecklistsScreen() {
-  const s = useStyles();
-  const scopesQ = useChecklistScopes();
-  const gatesQ = useChecklistGates();
-  const writes = useChecklistWrites();
-  /** The admin rule (with the local-run bypass) — every write plan takes it as `canEdit`. */
+/**
+ * `snapshot` is the group as it was when the panel opened. Names and the patch come
+ * from it, never from the live (refetchable) query; a live change marks the panel stale.
+ */
+type Reorder = { clusterId: string; snapshot: ReorderSnapshotRow[] };
+
+/**
+ * This screen shows a load error even over cached data (a failed refetch replaces the section,
+ * as it always has), and "loading" is TanStack's `isLoading`. The shared `useQueryHealth`
+ * options say exactly that.
+ */
+const AS_SHOWN = { fatalWhen: "any-error", loadingWhen: "isLoading" } as const;
+
+export default function CheckListSettingsScreen() {
+  const styles = useStyles();
+  const notify = useNotify();
+  const [params, setParams] = useSearchParams();
+
+  /* ─────────────────────────────────────────────────────────── queries ── */
+  const tabsQuery = useChecklistTabs();
+  const sortedTabs = useMemo(() => sortTabs(tabsQuery.data ?? []), [tabsQuery.data]);
+  const tabId = resolveTabId(sortedTabs, params.get("tab"));
+  const hasTabs = sortedTabs.length > 0;
+
+  const clustersQuery = useChecklistClusters(hasTabs);
+  const tasksQuery = useChecklistTasks(hasTabs ? tabId : null);
+  const locksQuery = useChecklistLocks(hasTabs);
+  useChecklistPrivileges(); // server-enforced: Dataverse still decides, a 403 is reported.
+  /** The admin rule (with the local-run bypass): a non-admin gets a read-only screen. */
   const canEdit = useAdminAccess();
-  /** Every write is disabled until the screen's tables are connected (`hooks.ts`). */
-  const connected = scopesQ.connected && gatesQ.connected;
 
-  const ordered = useMemo(() => sortScopes(scopesQ.data), [scopesQ.data]);
-  const [scopeId, setScopeId] = useState<string | null>(null);
-  const scope: ScopeRow | null = ordered.find((x) => x.id === scopeId) ?? defaultScope(ordered);
+  const tabsHealth = useQueryHealth([tabsQuery], AS_SHOWN);
+  const clustersHealth = useQueryHealth([clustersQuery], AS_SHOWN);
 
-  const gates = useMemo(() => checklistGates(gatesQ.data), [gatesQ.data]);
-  // Rule 2 — every gate starts folded (`IsFolded: true`).
-  const [openGateIds, setOpenGateIds] = useState<ReadonlySet<string>>(new Set());
-  // `locSelectedCluster` — set by btn_Select and by both chevrons.
-  const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
-  const toggleGate = (id: string) => {
-    setSelectedGateId(id);
-    setOpenGateIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+  const clusters = useMemo(() => clustersQuery.data ?? [], [clustersQuery.data]);
+  const groups = useMemo(
+    () => groupTasksByCluster(tasksQuery.data ?? [], clusters),
+    [tasksQuery.data, clusters],
+  );
+
+  /* ────────────────────────────────────────────────────────── mutations ── */
+  // The plan-building hooks take `canEdit`: the plan refuses itself when it is false (the screen
+  // still refuses first, so the message lands on the right surface — panel vs toast).
+  const saveTask = useSaveTask(tabId, canEdit);
+  const toggleCompletion = useToggleCompletion(tabId, canEdit);
+  const setActive = useSetActive(tabId, canEdit);
+  const softDelete = useSoftDelete(tabId);
+  const reorderMutation = useReorder(tabId);
+
+  /* ─────────────────────────────────────────────────────────────── state ── */
+  const [openClusters, setOpenClusters] = useState<string[]>([]);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const editor = usePanelState<Editor>();
+  const touched = useTouched<"name">();
+  const reorder = usePanelState<Reorder>();
+  const dialog = useConfirmDialog<"status" | "delete", ChecklistTask>();
+  /** Wraps every write: overlay text (or a row spinner), then success or a visible error. */
+  // A new write replaces the previous outcome message (as the page banner did).
+  const runner = useBusyRunner({ onStart: notify.dismissAll });
+
+  const busy = runner.isBusy;
+  // Locks unknown (query failed) or still loading → every row fails CLOSED
+  // rather than allowing an edit the canvas would have blocked; each state has its own tooltip,
+  // so a row is only called "in use by a Project Gate" when it actually is.
+  const locksUnknown = locksQuery.isError;
+  const locksLoading = !locksUnknown && !locksQuery.data;
+  const rowLockTip = (task: ChecklistTask) =>
+    lockTooltipFor(lockState(task.id, { isError: locksQuery.isError, data: locksQuery.data }));
+  const rowLocked = (task: ChecklistTask) => rowLockTip(task) !== null;
+
+  /* ───────────────────────────────────────────────────────────── events ── */
+  const selectTab = (id: string) => {
+    setParams((p) => { const next = new URLSearchParams(p); next.set("tab", id); return next; }, { replace: true });
+  };
+
+  const onToggleCluster = (id: string) => {
+    setOpenClusters((open) => (open.includes(id) ? open.filter((c) => c !== id) : [...open, id]));
+    setSelectedClusterId(id);
+  };
+
+  const openAdd = (clusterId: string) => {
+    setSelectedClusterId(clusterId);
+    touched.reset();
+    editor.open({ mode: "create", clusterId, taskId: null, tabId, form: emptyTaskForm(), seed: emptyTaskForm() });
+  };
+
+  const openEdit = (task: ChecklistTask) => {
+    if (rowLocked(task)) return;
+    touched.reset();
+    editor.open({
+      mode: "edit", clusterId: task.clusterId ?? "", taskId: task.id, tabId: task.tabId ?? tabId,
+      form: formFromTask(task), seed: formFromTask(task),
     });
   };
 
-  const [panelGate, setPanelGate] = useState<GateRow | null>(null);
-  const [editing, setEditing] = useState<TaskRow | null>(null);
-  const [form, setForm] = useState<TaskForm>(emptyTaskForm());
-  const [reorder, setReorder] = useState<{ gate: GateRow | null; tasks: TaskRow[]; ids: string[] } | null>(null);
-  const [confirm, setConfirm] = useState<ConfirmState>(null);
-
-  const openAdd = (gate: GateRow | null) => {
-    if (!gate) return;
-    setPanelGate(gate); setEditing(null); setForm(emptyTaskForm());
-  };
-  const openEdit = (gate: GateRow, task: TaskRow) => {
-    setPanelGate(gate); setEditing(task); setForm(toTaskForm(task));
-  };
-  /** Close / Save / Cancel — `Select(but_Admin_Checklist_Form_Buttons_Reset)` resets all five fields. */
-  const closePanel = () => { setPanelGate(null); setEditing(null); setForm(emptyTaskForm()); };
-
-  const openReorder = (gate: GateRow | null, tasks: TaskRow[]) =>
-    setReorder({ gate, tasks, ids: tasks.map((t) => t.id) });
-  const closeReorder = () => setReorder(null);
-
-  /** Save — `pcf_but_Admin_Checklist_Form_Buttons_Save.OnChange`: close the panel, then write. */
-  const saveTask = () => {
-    if (!panelGate || !scope) return;
-    const gate = panelGate, existing = editing, values = form, sc = scope;
-    closePanel();
-    void writes.run({
-      progress: savingText(values.description.trim()),
-      success: MSG.saved,
-      plan: async () => planSaveTask(values, {
-        scope: sc, gate, existing, canEdit,
-        // The next order is read at SAVE time (the canvas captured a count at Add-click).
-        nextOrderValue: existing ? 0 : nextOrderFromHighest(await highestTaskOrder(sc.id, gate.id)),
-      }),
-    });
-  };
-
-  const saveReorder = () => {
-    if (!reorder) return;
-    const { tasks, ids } = reorder;
-    closeReorder();
-    void writes.run({ progress: MSG.reorderSaving, plan: planReorderTasks({ tasks, orderedIds: ids, canEdit }) });
-  };
-
-  const onConfirm = () => {
-    if (!confirm) return;
-    const { kind, task, siblings } = confirm;
-    setConfirm(null);
-    if (kind === "delete") {
-      // The row action is disabled while locked, so `locked` is false here.
-      void writes.run({
-        progress: deletingText(task.name),
-        plan: planDeleteTask({ target: task, siblings, locked: false, canEdit }),
-      });
-    } else {
-      void writes.run({
-        progress: activationSavingText(task.name),
-        success: MSG.saved,
-        plan: updateTaskPlan(task, toggleActivePatch(task), `Status of “${task.name}” changed`, canEdit),
-      });
+  const saveEditor = async () => {
+    const current = editor.panel;
+    if (!current) return;
+    if (!canEdit) { editor.setError(OUT_OF_SCOPE_MESSAGE); return; }
+    if (!isTaskFormValid(current.form)) { touched.touch("name"); return; }
+    const tab = sortedTabs.find((t) => t.id === (current.tabId ?? tabId));
+    if (!tab) { editor.setError("The selected country/technology no longer exists. Reload the page."); return; }
+    try {
+      await runner.run(busyText.save(current.form.name), () =>
+        current.mode === "create" || !current.taskId
+          ? saveTask.mutateAsync({
+              mode: "create",
+              args: { tab, clusterId: current.clusterId, form: current.form, order: nextOrder(groups.get(current.clusterId) ?? []) },
+            })
+          : saveTask.mutateAsync({ mode: "edit", id: current.taskId, form: current.form, tab }));
+      editor.close();
+      notify.success(successText.save);
+    } catch (error) {
+      if (error instanceof TaskStatusNotSetError) {
+        // The row exists: a retry must UPDATE it, not create a second one. A
+        // refused status write (403) shows the permission text, not "Save again to retry".
+        editor.patch({ mode: "edit", taskId: error.createdId });
+        editor.setError(errorText(error, "change checklist items", "Checklist item could not be saved."));
+      } else if (error instanceof TaskCreatedIdUnknownError) {
+        // Created, id unknown. Close the panel (no create-mode retry, so no duplicate);
+        // `useSaveTask` invalidates on error, so the new row appears in the refetched list.
+        editor.close();
+        notify.warning(error.message);
+      } else {
+        editor.setError(errorText(error, "save checklist items", "Checklist item could not be saved."));
+      }
     }
   };
 
-  /** Rule 12 — the Completion Date toggle saves immediately, no confirmation. */
-  const toggleCompletionDate = (task: TaskRow) => {
-    void writes.run({
-      progress: completionDateChangingText(task.name),
-      success: MSG.completionDateChanged,
-      errorText: completionDateErrorText,
-      plan: updateTaskPlan(task, toggleCompletionDatePatch(task), `Completion Date of “${task.name}” toggled`, canEdit),
-    });
+  const onToggleCompletion = async (task: ChecklistTask) => {
+    if (rowLocked(task) || busy) return;
+    if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
+    try {
+      // Pending state on the row itself; the rest of the screen stays visible (read-only).
+      // The label is announced by the live region below (`runner.inlineLabel`).
+      await runner.run(busyText.completion(task.name), () => toggleCompletion.mutateAsync(task), { inline: task.id });
+      notify.success(successText.completion);
+    } catch (error) {
+      notify.error(errorText(error, "change checklist items", "Completion Date could not be changed."));
+    }
   };
 
-  const section = (gate: GateRow | null) => (
-    <GateSection
-      key={gate?.id ?? "none"}
-      gate={gate}
-      scope={scope}
-      open={gate === null || openGateIds.has(gate.id)}
-      selected={gate !== null && gate.id === selectedGateId}
-      canWrite={connected && canEdit}
-      onSelect={() => { if (gate) setSelectedGateId(gate.id); }}
-      onToggle={() => { if (gate) toggleGate(gate.id); }}
-      onAdd={() => openAdd(gate)}
-      onReorder={(tasks) => openReorder(gate, tasks)}
-      onEdit={(task) => { if (gate) openEdit(gate, task); }}
-      onDelete={(task, siblings) => setConfirm({ kind: "delete", task, siblings })}
-      onToggleActive={(task) => setConfirm({ kind: "activate", task, siblings: [] })}
-      onToggleCompletionDate={toggleCompletionDate}
-    />
-  );
+  const confirmStatus = () => dialog.confirm(async ({ payload: task }) => {
+    if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
+    const next = !task.isActive;
+    try {
+      await runner.run(busyText.save(task.name), () => setActive.mutateAsync({ id: task.id, isActive: next }));
+      notify.success(successText.status(next));
+    } catch (error) {
+      notify.error(errorText(error, "change checklist items", "The status could not be changed."));
+    }
+  }, { closeFirst: true });
 
-  const confirmActive = confirm?.task.status === CHOICE_ADMIN.status.active;
-  const loadError = scopesQ.error ?? gatesQ.error;
-  const reorderNames = new Map((reorder?.tasks ?? []).map((t) => [t.id, t.name]));
+  const confirmDelete = () => dialog.confirm(async ({ payload: task }) => {
+    if (!canEdit) { notify.error(OUT_OF_SCOPE_MESSAGE); return; }
+    // Case-insensitive lookup, so a GUID case mismatch never skips the renumber.
+    const found = findGroup(groups, task.clusterId);
+    const group = found?.tasks ?? [];
+    try {
+      await runner.run(busyText.remove(task.name), () =>
+        softDelete.mutateAsync({ id: task.id, renumber: renumberAfterDelete(group, task) }));
+      notify.success(successText.remove);
+    } catch (error) {
+      const text = errorText(error, "delete checklist items", "Checklist item could not be deleted.");
+      const reorderClusterId = found?.key ?? task.clusterId ?? undefined;
+      if (error instanceof RenumberAfterDeleteError && reorderClusterId) {
+        // The toast's Reorder opens the panel with the group as it is WHEN clicked.
+        notify.warning(text, { action: { label: "Reorder", onClick: () => openReorderRef.current(reorderClusterId) } });
+      } else if (error instanceof RenumberAfterDeleteError) {
+        notify.warning(text);
+      } else {
+        notify.error(text);
+      }
+    }
+  }, { closeFirst: true });
+
+  const liveGroup = (clusterId: string) => findGroup(groups, clusterId)?.tasks ?? [];
+
+  const openReorder = (clusterId: string) => {
+    // The canvas "reorderChecklist" branch (L359-373) never sets
+    // `locSelectedCluster`, so opening Reorder leaves the caption's font weight unchanged.
+    reorder.open({ clusterId, snapshot: snapshotGroup(liveGroup(clusterId)) });
+  };
+  // A toast action outlives the render that created it; it must call the CURRENT `openReorder`
+  // (current groups), never the one captured when the toast was dispatched.
+  const openReorderRef = useRef(openReorder);
+  useLayoutEffect(() => { openReorderRef.current = openReorder; });
+
+  // A refetch while the panel is open (window focus, another user, a partial write)
+  // must not silently change what Save writes.
+  const reorderStale = reorder.panel !== null && tasksQuery.isSuccess
+    && reorderSnapshotStale(reorder.panel.snapshot, liveGroup(reorder.panel.clusterId));
+
+  const saveReorder = async (ordered: readonly ReorderSnapshotRow[]) => {
+    const current = reorder.panel;
+    if (!current || reorderStale) return;
+    if (!canEdit) { reorder.setError(OUT_OF_SCOPE_MESSAGE); return; }
+    const rows = reorderPatch(current.snapshot, ordered.map((t) => t.id));
+    try {
+      await runner.run(busyText.reorder(), () => reorderMutation.mutateAsync(rows));
+      reorder.close();
+      notify.success(successText.reorder);
+    } catch (error) {
+      reorder.setError(errorText(error, "reorder checklist items", "The new order could not be saved."));
+    }
+  };
+
+  /* ───────────────────────────────────────────────────────────── render ── */
+  const heading = <Text as="h1" className={styles.title}>{PAGE_TITLE}</Text>;
+
+  if (tabsHealth.phase !== "ready" || !hasTabs) {
+    const states = (
+      <QueryStates
+        health={tabsHealth}
+        loadingLabel="Loading checklist settings…"
+        fatal={{ as: "notice", text: (e) => loadErrorText(e, "The checklist country/technology combinations") }}
+        empty={{
+          when: !hasTabs,
+          title: "No checklist country/technology combinations are configured",
+          description: "Add a Checklist Country And Technology record in Dataverse to maintain its default checklist.",
+        }}
+      >
+        {() => null}
+      </QueryStates>
+    );
+    // The loading state renders on its own; the error and empty states sit in the page body.
+    return tabsHealth.phase === "loading"
+      ? <>{heading}{states}</>
+      : <div className={styles.root}>{heading}{states}</div>;
+  }
+
+  const commandsEnabled = !busy && tasksQuery.isSuccess && canEdit;
+  const editorPanel = editor.panel;
 
   return (
-    <div className={s.page}>
-      {/* `cmp_Admin_Project_Checklist_Header.Project.Name` — the page title. */}
-      <Text as="h1" className={s.title}>{MSG.pageTitle}</Text>
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="default-checklists" />
+    <div className={styles.root}>
+      {heading}
 
-      {loadError ? (
-        <EmptyState title={LABELS.loadFailedTitle} description={LABELS.loadFailedDescription} />
-      ) : scopesQ.isLoading || gatesQ.isLoading ? (
-        <LoadingOverlay mode="inline" label={LABELS.loading} />
-      ) : (
-        <>
-          <TabList
-            className={s.tabs}
-            size="small"
-            selectedValue={scope?.id ?? ""}
-            onTabSelect={(_, d) => setScopeId(String(d.value))}
-            data-testid="tab_Admin_Project_Checklist_Association"
-          >
-            {ordered.map((sc) => (
-              <Tab key={sc.id} value={sc.id} aria-label={sc.name} data-testid={`default-checklists-scope-${sc.id}`}>{sc.name}</Tab>
-            ))}
-          </TabList>
-
-          <div className={s.gates} data-testid="gal_DefaultChecklist_AdminScreen">
-            {gates.length === 0 ? section(null) : gates.map((g) => section(g))}
-          </div>
-        </>
-      )}
-
-      {/* con_Admin_Checklist_Form — Add Task / Edit Task (rule 15). */}
-      <FormPanel
-        open={panelGate !== null}
-        title={panelTitle(editing)}
-        width="narrow"
-        onDismiss={closePanel}
-        footer={
-          <PanelButtons
-            onSave={saveTask}
-            onCancel={closePanel}
-            disabled={!connected || !canEdit || !isSaveEnabled(form)}
-            saveTestId="pcf_but_Admin_Checklist_Form_Buttons_Save"
-            cancelTestId="pcf_but_Admin_Admin_Checklist_Form_Buttons_Cancel"
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          <TextField
-            label={LABELS.fieldDescription}
-            required
-            value={form.description}
-            maxLength={DESCRIPTION_MAX_LENGTH}
-            disabled={!connected}
-            error={isSaveEnabled(form) ? undefined : MSG.descriptionBlank}
-            onChange={(v) => setForm((p) => ({ ...p, description: v }))}
-            testId="txt_Admin_Checklist_Form_Fields_Name"
-          />
-          <TextField
-            label={LABELS.fieldHoldingDescription}
-            value={form.holdingDescription}
-            maxLength={DESCRIPTION_MAX_LENGTH}
-            disabled={!connected}
-            onChange={(v) => setForm((p) => ({ ...p, holdingDescription: v }))}
-            testId="txt_Admin_Checklist_Form_Fields_HoldingDescription"
-          />
-          <Switch
-            label={LABELS.toggleGateRelevance}
-            aria-label={LABELS.toggleGateRelevance}
-            data-testid="tgl_GateRelevance_ChecklistForm"
-            checked={form.gateRelevance}
-            disabled={!connected}
-            onChange={(_, d) => setForm((p) => ({ ...p, gateRelevance: d.checked }))}
-          />
-          <Switch
-            label={LABELS.toggleCompletionDate}
-            aria-label={LABELS.toggleCompletionDate}
-            data-testid="tgl_CompletionDate_ChecklistForm"
-            checked={form.isCompletionDate}
-            disabled={!connected}
-            onChange={(_, d) => setForm((p) => ({ ...p, isCompletionDate: d.checked }))}
-          />
-          <Switch
-            label={LABELS.toggleActive}
-            aria-label={LABELS.toggleActive}
-            data-testid="tgl_Active_ChecklistForm"
-            checked={form.active}
-            disabled={!connected}
-            onChange={(_, d) => setForm((p) => ({ ...p, active: d.checked }))}
-          />
-        </div>
-      </FormPanel>
-
-      {/*
-        * con_Admin_Checklist_Reorder — `pcf_ReorderTaskList_AdminScreen` was a PowerDragDrop list.
-        * Here: native drag-and-drop plus Move up / Move down buttons, so the order can be changed
-        * from the keyboard too. Save sends `planReorderTasks` once the screen is connected.
-        */}
-      <FormPanel
-        open={reorder !== null}
-        title={LABELS.reorderTitle}
-        width="narrow"
-        onDismiss={closeReorder}
-        footer={
-          <PanelButtons
-            onSave={saveReorder}
-            onCancel={closeReorder}
-            disabled={!connected || !canEdit}
-            saveTestId="pcf_but_Admin_Checklist_Reorder_Buttons_Save"
-            cancelTestId="pcf_but_Admin_Admin_Checklist_Reorder_Buttons_Cancel"
-          />
-        }
-      >
-        <div className={s.panelBody}>
-          <Text>{LABELS.reorderHint}</Text>
-          <ReorderList
-            ids={reorder?.ids ?? []}
-            labelOf={(id) => reorderNames.get(id) ?? ""}
-            onChange={(ids) => setReorder((r) => (r ? { ...r, ids } : r))}
-            testId="pcf_ReorderTaskList_AdminScreen"
-            rowTestIdPrefix="default-checklists-reorder"
-            ariaLabel={LABELS.reorderTitle}
-            moveUpLabel={LABELS.moveUp}
-            moveDownLabel={LABELS.moveDown}
-          />
-        </div>
-      </FormPanel>
-
-      <ConfirmDialog
-        open={confirm?.kind === "delete"}
-        title={MSG.deleteTitle}
-        description={deleteDescription(confirm?.task.name ?? "")}
-        confirmText={LABELS.deleteConfirm}
-        cancelText={LABELS.cancel}
-        confirmIcon="delete"
-        destructive
-        onConfirm={onConfirm}
-        onCancel={() => setConfirm(null)}
+      {/* Tab strip */}
+      <SettingsTabStrip
+        tabs={sortedTabs.map((t) => ({ id: t.id, label: t.name }))}
+        selected={tabId ?? undefined}
+        onSelect={selectTab}
+        ariaLabel="Country and technology"
+        tabTestIdPrefix="checklist-tab"
+        size="small"
+        bandHeight={52}
+        layout="block"
       />
-      <ConfirmDialog
-        open={confirm?.kind === "activate"}
-        title={activationTitle(confirmActive)}
-        description={activationDescription(confirm?.task.name ?? "")}
-        confirmText={activationConfirmText(confirmActive)}
-        cancelText={LABELS.cancel}
-        onConfirm={onConfirm}
-        onCancel={() => setConfirm(null)}
+
+      {locksUnknown ? (
+        <NoticeBar
+          intent="warning"
+          action={{ label: "Retry", ariaLabel: "Retry loading Project Gate usage", onClick: () => void locksQuery.refetch() }}
+        >
+          {loadErrorText(locksQuery.error, "Project Gate usage")} Items cannot be changed until it loads.
+        </NoticeBar>
+      ) : locksLoading ? (
+        <Spinner size="tiny" labelPosition="after" label="Checking which items are in use by a Project Gate…" />
+      ) : null}
+
+      {tasksQuery.isError ? (
+        <NoticeBar
+          intent="error"
+          action={{ label: "Retry", ariaLabel: "Retry loading tasks", onClick: () => void tasksQuery.refetch() }}
+        >
+          {loadErrorText(tasksQuery.error, "The checklist tasks")}
+        </NoticeBar>
+      ) : null}
+
+      {/* Cluster accordion */}
+      <QueryStates
+        health={clustersHealth}
+        loadingLabel="Loading clusters…"
+        fatal={{
+          as: "notice",
+          text: (e) => loadErrorText(e, "The project clusters"),
+          retryAriaLabel: "Retry loading clusters",
+        }}
+        empty={{
+          when: clusters.length === 0,
+          title: "No project clusters are shown on the checklist",
+          description: "No Project State is marked 'Is Visible On Checklist'.",
+        }}
+      >
+        {() => (
+          <SettingsAccordion
+            variant="light"
+            border="folded"
+            itemInsetRight={10}
+            panelPadding={{ left: 20, top: 10, bottom: 12 }}
+            openItems={openClusters}
+            onToggle={onToggleCluster}
+            items={clusters.map((cluster) => {
+              const caption = clusterCaption(cluster.name);
+              return {
+                id: cluster.id,
+                testId: `checklist-cluster-${cluster.id}`,
+                title: (
+                  <span className={mergeClasses(styles.caption, selectedClusterId === cluster.id && styles.captionSelected)}>
+                    {caption}
+                  </span>
+                ),
+                content: (
+                  <>
+                    {/* Cluster command bar */}
+                    <CommandBar
+                      className={styles.commands}
+                      ariaLabel={`${caption} commands`}
+                      testIdPrefix={`checklist-command-${cluster.id}`}
+                      commands={[
+                        { key: "add-task", label: "Add Task", icon: "Add", enabled: commandsEnabled },
+                        { key: "reorder", label: "Reorder", icon: "Reorder", enabled: commandsEnabled },
+                      ]}
+                      onCommand={(key) => (key === "add-task" ? openAdd(cluster.id) : openReorder(cluster.id))}
+                    />
+                    {/* Task table */}
+                    {tasksQuery.isLoading ? (
+                      <Spinner size="tiny" label="Loading tasks…" />
+                    ) : tasksQuery.isSuccess ? (
+                      <TaskTable
+                        clusterId={cluster.id}
+                        caption={caption}
+                        tasks={groups.get(cluster.id) ?? []}
+                        lockTip={rowLockTip}
+                        busy={busy}
+                        readOnly={!canEdit}
+                        pendingTaskId={runner.inline ?? null}
+                        onToggleCompletion={(t) => void onToggleCompletion(t)}
+                        onChangeStatus={(t) => { if (!rowLocked(t)) dialog.ask("status", t); }}
+                        onEdit={openEdit}
+                        onDelete={(t) => { if (!rowLocked(t)) dialog.ask("delete", t); }}
+                      />
+                    ) : null}
+                  </>
+                ),
+              };
+            })}
+          />
+        )}
+      </QueryStates>
+
+      {/* Add/Edit drawer */}
+      <TaskEditorDrawer
+        open={editorPanel !== null}
+        mode={editorPanel?.mode ?? "create"}
+        form={editorPanel?.form ?? emptyTaskForm()}
+        touched={editorPanel !== null && touched.isTouched("name")}
+        dirty={editorPanel ? taskFormChanged(editorPanel.seed, editorPanel.form) : false}
+        error={editor.error ?? null}
+        saving={saveTask.isPending}
+        readOnly={!canEdit}
+        onChange={(form) => editor.patch({ form })}
+        onTouch={() => touched.touch("name")}
+        onSave={() => void saveEditor()}
+        onCancel={editor.close}
       />
+
+      {/* Reorder drawer (remounted per open, so it starts from the new snapshot) */}
+      <ReorderPanel
+        key={reorder.key}
+        open={reorder.panel !== null}
+        title="Reorder checklist"
+        items={reorder.panel?.snapshot ?? []}
+        getId={(t) => t.id}
+        getLabel={(t) => t.name}
+        listAriaLabel="Checklist order"
+        hint={REORDER_HELP}
+        savingLabel="Saving…"
+        bodyGap={12}
+        bodyPaddingBottom={20}
+        saving={reorderMutation.isPending}
+        error={reorder.error ?? null}
+        warning={reorderStale ? REORDER_STALE_MESSAGE : null}
+        canSave={(changed) => changed && !reorderStale && canEdit}
+        onSave={(ordered) => void saveReorder(ordered)}
+        onCancel={reorder.close}
+        saveTestId="checklist-reorder-save"
+        cancelTestId="checklist-reorder-cancel"
+        listProps={{
+          showPosition: true,
+          buttonLabels: "describedby",
+          announcePeriod: true,
+          emptyText: "There are no tasks to reorder in this cluster.",
+          itemTestId: (t) => `reorder-item-${t.id}`,
+        }}
+      />
+
+      {/* Confirmation dialogs */}
+      {dialog.state?.kind === "status" ? (
+        <ConfirmDialog
+          open
+          {...statusDialog(dialog.state.payload)}
+          confirmWidth={128}
+          onConfirm={() => void confirmStatus()}
+          onCancel={dialog.cancel}
+        />
+      ) : null}
+      {dialog.state?.kind === "delete" ? (
+        <ConfirmDialog
+          open
+          {...deleteDialog(dialog.state.payload)}
+          destructive confirmIcon="delete"
+          onConfirm={() => void confirmDelete()}
+          onCancel={dialog.cancel}
+        />
+      ) : null}
+
+      {/* Busy overlay (the canvas set the text but rendered nothing) */}
+      {/* `portal`: a save started from a drawer shows the scrim above that drawer. */}
+      {runner.busy !== undefined ? <LoadingOverlay portal label={runner.busy} /> : null}
+      {runner.inline !== undefined ? (
+        <VisuallyHidden as="div" role="status" aria-live="polite">{runner.inlineLabel}</VisuallyHidden>
+      ) : null}
     </div>
-  );
-}
-
-/* ───────────────────────────────────────────────────────────── one gate section */
-
-function GateSection({
-  gate, scope, open, selected, canWrite, onSelect, onToggle, onAdd, onReorder, onEdit, onDelete,
-  onToggleActive, onToggleCompletionDate,
-}: {
-  /** `null` renders the structure only — no gate is loaded yet. */
-  gate: GateRow | null;
-  scope: ScopeRow | null;
-  open: boolean;
-  selected: boolean;
-  canWrite: boolean;
-  onSelect: () => void;
-  onToggle: () => void;
-  onAdd: () => void;
-  onReorder: (tasks: TaskRow[]) => void;
-  onEdit: (task: TaskRow) => void;
-  onDelete: (task: TaskRow, siblings: TaskRow[]) => void;
-  onToggleActive: (task: TaskRow) => void;
-  onToggleCompletionDate: (task: TaskRow) => void;
-}) {
-  const s = useStyles();
-  const tasksQ = useScopeTasks(scope?.id ?? null, gate?.id ?? null);
-  const rows = useMemo(
-    () => visibleTasks(tasksQ.data, scope?.id ?? null, gate?.id ?? null),
-    [tasksQ.data, scope?.id, gate?.id],
-  );
-  const taskIds = useMemo(() => rows.map((r) => r.id), [rows]);
-  const lockQ = useBlockingApprovals(taskIds);
-  const writable = canWrite && tasksQ.connected && lockQ.connected && gate !== null;
-  const caption = gate ? gateCaption(gate.name) : "";
-
-  const commands: Command[] = [
-    { key: "addNewChecklistEntity", label: LABELS.addTask, icon: "Add", enabled: writable },
-    { key: "reorderChecklist", label: LABELS.reorder, icon: "NumberedList", enabled: writable },
-  ];
-  const onCommand = (key: string) => {
-    if (key === "addNewChecklistEntity") onAdd();
-    if (key === "reorderChecklist") onReorder(rows);
-  };
-
-  /** A locked row action carries the canvas tooltip and stays disabled. */
-  const action = (
-    locked: boolean, testId: string, node: (disabled: boolean) => ReactElement,
-  ) => {
-    const disabled = locked || !writable;
-    const el = node(disabled);
-    return locked
-      ? <Tooltip key={testId} content={MSG.inUse} relationship="description"><span>{el}</span></Tooltip>
-      : <span key={testId}>{el}</span>;
-  };
-
-  return (
-    <section className={s.gate} data-testid="con_Main_DefaultChecklist_AdminScreen">
-      {gate ? (
-        <div className={s.gateHead}>
-          {/* btn_Select selects only (no fold); lbl_ClusterName is its caption. */}
-          <Button
-            appearance="subtle"
-            className={mergeClasses(s.gateSelect, selected && s.gateSelected)}
-            aria-label={caption}
-            aria-pressed={selected}
-            data-testid="btn_Select_DefaultChecklist_AdminScreen"
-            onClick={onSelect}
-          >
-            {caption}
-          </Button>
-          {/* ico_Down (folded) / ico_Up (open) — fold or unfold, and select the gate. */}
-          {open ? (
-            <Button
-              appearance="subtle" icon={<ChevronUpRegular />}
-              aria-label={LABELS.collapse} aria-expanded
-              data-testid="ico_Up_DefaultChecklist_AdminScreen"
-              onClick={onToggle}
-            />
-          ) : (
-            <Button
-              appearance="subtle" icon={<ChevronDownRegular />}
-              aria-label={LABELS.expand} aria-expanded={false}
-              data-testid="ico_Down_DefaultChecklist_AdminScreen"
-              onClick={onToggle}
-            />
-          )}
-        </div>
-      ) : null}
-
-      {open ? (
-        <>
-          <div className={s.commandBar}>
-            <CommandBar commands={commands} onCommand={onCommand} ariaLabel={caption || MSG.pageTitle} />
-          </div>
-          <div className={s.tableWrap}>
-            <Table
-              size="small"
-              className={s.table}
-              aria-label={caption || MSG.pageTitle}
-              data-testid="gal_TasksInClusterDefaultChecklist_AdminScreen"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHeaderCell>{LABELS.colDescription}</TableHeaderCell>
-                  <TableHeaderCell>{LABELS.colHoldingDescription}</TableHeaderCell>
-                  <TableHeaderCell>{LABELS.colGateRelevance}</TableHeaderCell>
-                  <TableHeaderCell>{LABELS.colCompletionDate}</TableHeaderCell>
-                  <TableHeaderCell>{LABELS.colActive}</TableHeaderCell>
-                  <TableHeaderCell />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => {
-                  const locked = isTaskLocked(r.id, lockQ.data);
-                  const active = r.status === CHOICE_ADMIN.status.active;
-                  const status = active ? LABELS.statusActive : LABELS.statusInactive;
-                  const completion = r.isCompletionDate ? LABELS.yes : LABELS.no;
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell>{truncateHolding(r.holdingTaskDescription)}</TableCell>
-                      {/* `lbl_GateRelevanceValue_….Text: =ThisItem.'Gate Relevance'` — a boolean's text. */}
-                      <TableCell>{String(r.gateRelevance)}</TableCell>
-                      <TableCell>
-                        {action(locked, `date-${r.id}`, (disabled) => (
-                          <Button
-                            appearance="transparent" size="small" disabled={disabled}
-                            className={mergeClasses(s.iconAction, r.isCompletionDate && s.green)}
-                            icon={r.isCompletionDate ? <CalendarReplyRegular /> : <CalendarLtrRegular />}
-                            aria-label={completion}
-                            data-testid="ico_EnablelCompletionDate_TasksInClusterDefaultChecklist_AdminScreen"
-                            onClick={() => onToggleCompletionDate(r)}
-                          >
-                            {completion}
-                          </Button>
-                        ))}
-                      </TableCell>
-                      <TableCell>
-                        {action(locked, `active-${r.id}`, (disabled) => (
-                          <Button
-                            appearance="transparent" size="small" disabled={disabled}
-                            className={mergeClasses(s.iconAction, active && s.green)}
-                            // `IconName: If(Status = Active, "DeactivateOrders", "ActivateOrders")`.
-                            icon={active ? <DismissCircleRegular /> : <CheckmarkCircleRegular />}
-                            aria-label={status}
-                            data-testid="ico_ActivateDeactivate_TasksInClusterDefaultChecklist_AdminScreen"
-                            onClick={() => onToggleActive(r)}
-                          >
-                            {status}
-                          </Button>
-                        ))}
-                      </TableCell>
-                      <TableCell>
-                        <span className={s.actions}>
-                          {action(locked, `edit-${r.id}`, (disabled) => (
-                            <Button
-                              appearance="transparent" size="small" disabled={disabled}
-                              className={s.iconAction} icon={<EditRegular />}
-                              aria-label={LABELS.edit}
-                              data-testid="ico_Edit_TasksInClusterDefaultChecklist_AdminScreen"
-                              onClick={() => onEdit(r)}
-                            />
-                          ))}
-                          {action(locked, `delete-${r.id}`, (disabled) => (
-                            <Button
-                              appearance="transparent" size="small" disabled={disabled}
-                              className={s.iconAction} icon={<DeleteRegular />}
-                              aria-label={LABELS.delete}
-                              data-testid="ico_Delete_TasksInClusterDefaultChecklist_AdminScreen"
-                              onClick={() => onDelete(r, rows)}
-                            />
-                          ))}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </>
-      ) : null}
-    </section>
   );
 }

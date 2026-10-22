@@ -1,968 +1,410 @@
 /**
- * Admin CAPEX Accounts — every business rule as a pure function.
+ * CAPEX Accounts (Application Settings) — every business rule of the screen, pure.
  *
- * Canvas screen: `Admin CAPEX Accounts` (PM app)
- *   90 controls · 2 241 lines of Power Fx · 26 substantive blocks · band M
- *
- * Maintains the CAPEX chart of accounts: a two-level hierarchy inside the
- * self-referencing `CAPEX Account Lists` table. This is the only screen in the batch that
- * uses Dataverse privilege checks (`DataSourceInfo` / `RecordInfo`) to drive its UI, and
- * the only one whose deactivation cascade DESTROYS TRANSACTIONAL DATA (`CAPEX Costs`).
- *
- * ┌────────────────────────────────────────────────────────────────────────────────┐
- * │ SOURCE DEFECT — THE SCREEN ITSELF IS STILL UNPROTECTED.                         │
- * │                                                                                │
- * │ The per-command `DataSourceInfo(…, CreatePermission)` / `RecordInfo(…,          │
- * │ EditPermission)` tests decide what the COMMAND BAR offers. They are NOT a       │
- * │ screen-level check: `OnVisible` does only `UpdateContext(...)` plus an          │
- * │ `UpdateIf(colCapexAccounts, …)`, and entry is gated purely by                    │
- * │     ItemVisible: Or(gblCurrentUser.IsApplicationAdministrator,                  │
- * │                     gblCurrentUser.IsControllerOwnData)                         │
- * │ on the nav items — CLIENT-SIDE HIDING ONLY.                                     │
- * │                                                                                │
- * │ WHAT WE DID: every write plan takes `canEdit` — the admin rule                 │
- * │ `Or(IsApplicationAdministrator, IsControllerOwnData)` from `app/adminAccess.ts`│
- * │ (with its local-run bypass) — and the table privileges follow                   │
- * │ `platform/privileges.ts` (`serverEnforcedProvider`: Dataverse decides, a 403   │
- * │ becomes a message). There is NO admin route guard (an earlier note here claimed │
- * │ `RequireAdmin`; none exists). None of this is security — the server must       │
- * │ reject these writes too. This screen deletes forecast costs across every        │
- * │ project; an unauthorised deactivation is unrecoverable from the UI (rule 14:    │
- * │ activating the account back does NOT restore the deleted rows).                 │
- * └────────────────────────────────────────────────────────────────────────────────┘
- *
- * NO SERVER AUTOMATION: no flow and no plugin step is registered on the three tables this
- * screen writes (ProjectDocs/migration-plans/04-flow-inventory.md, verified 19 Oct 2026).
- * NO HIDDEN CONTROLS on this canvas screen.
- *
- * NOTE the subaccount Reorder command has NO `ItemEnabled` in the source (its privilege test
- * is commented out), so it is always enabled. KEPT AS THE CANVAS HAS IT (product decision
- * 19 Oct 2026, D19) — see `canReorderSubaccounts`.
- *
- * WHAT WAS DELETED AS A WORKAROUND
- *  - `colCapexAccounts` / `colCapexAccountCategories` / `colCapexProjectContracts`, built
- *    in `App.OnStart` and never refreshed: revisiting the screen after edits made
- *    elsewhere showed stale data until the app restarted. One query key, `['capexTree']`.
- *  - `ClearCollect(colCapexSubaccounts, 'CAPEX Account Lists')` — a full-table reload
- *    after every account delete (rule 16). Query invalidation replaces it.
- *  - `locResetOrderingList: "Reset" & Rand() & Now()`, whose only job was to force the
- *    drag control to re-read.
- *  - the `ForAll(...Patch)` cascade loops — one plan, one batch, and ideally one
- *    server-side custom API (see `planDeactivateAccount`'s note).
+ * Canvas: `Admin CAPEX Accounts.pa.yaml` (CA:line below).
+ * Nothing here touches Dataverse or React; `@/data/adminCapexAccounts.ts` does the I/O and
+ * `./Screen.tsx` the composition.
  */
-import { ES_ADMIN, CHOICE_ADMIN, CAPEX_ROOT_NUMBER, CAPEX_SECOND_ROOT_NUMBER } from "@/data/dataverseNames";
-import { canEditCountry, type CurrentUser } from "@/domain/session";
-import { CREATED_ROW_ID, emptyPlan, refusePlan as refuse, type WritePlan } from "@/data/writePlan";
+import { ES_ADMIN } from "@/data/dataverseNames";
+import { emptyPlan, guardedUpdate, refusePlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import type { TablePrivileges } from "@/platform/privileges";
+import type { CapexAccountRow } from "@/data/adminCapexAccounts";
 
-/* ═══════════════════════════════════════════════════════════════════ columns ════ */
+/* ═══════════════════════════════════════════════════════════════════ tree ══ */
 
-export const CAPEX_ACCOUNT_COL = {
-  id: "vsb_capexaccountlistid",
-  name: "vsb_name",
-  number: "vsb_number",
-  order: "vsb_order",
-  parentAccount: "_vsb_parentaccount_value",
-  owningBusinessUnit: "_owningbusinessunit_value",
-  statecode: "statecode",
-} as const;
+/** The root of the chart of accounts (App:1567-1580 `'Parent Account'.Number = "00001"`). */
+export const ROOT_NUMBER = "00001";
 
-export const CAPEX_ACCOUNT_LOOKUP = {
-  parentAccount: "vsb_ParentAccount",
-  owningBusinessUnit: "owningbusinessunit",
-} as const;
-
-export const CAPEX_COST_COL = {
-  id: "vsb_capexcostid",
-  contract: "_vsb_contract_value",
-  year: "vsb_year",
-  month: "vsb_month",
-  cost: "vsb_cost",
-} as const;
-
-export const CAPEX_CONTRACT_COL = {
-  id: "vsb_capexprojectcontractid",
-  account: "_vsb_account_value",
-} as const;
-
-export const CAPEX_ACCOUNT_ENTITY_SET = ES_ADMIN.capexAccountLists;
-export const CAPEX_COST_ENTITY_SET = ES_ADMIN.capexCosts;
-
-/* ═════════════════════════════════════════════════════════════════════ types ════ */
-
-/** One `CAPEX Account Lists` row, flat. */
-export interface CapexAccount {
+export interface CapexNode {
   id: string;
-  name: string;
   number: string;
+  name: string;
+  /** `vsb_order`; a null order sorts as 0. */
   order: number;
+  active: boolean;
   parentId: string | null;
-  /** `statecode` — 0 Active, 1 Inactive. */
-  status: number;
-  owningBusinessUnitId: string | null;
+  children: CapexNode[];
 }
 
-/** A node of the built tree. `level` 1 = category, 2 = account, 3 = subaccount. */
-export interface AccountNode extends CapexAccount {
-  level: 1 | 2 | 3;
-  childCount: number;
-  children: AccountNode[];
+export interface CapexTree {
+  /** Undefined when no row numbered `00001` exists. */
+  root: CapexNode | undefined;
+  /** Children of the root, i.e. the tabs. Inactive and Overleveraging included. */
+  categories: CapexNode[];
+  /** Every node reachable from the root, by id. Orphans are not in here. */
+  byId: Map<string, CapexNode>;
 }
 
-export interface CapexContractRef { id: string; accountId: string | null }
-
-export interface CapexCostRow {
-  id: string;
-  contractId: string | null;
-  year: number;
-  month: number;
-  cost: number | null;
+/** Siblings: `vsb_order` asc, tie-break `vsb_number`. */
+export function compareSiblings(a: CapexNode, b: CapexNode): number {
+  if (a.order !== b.order) return a.order - b.order;
+  return a.number.localeCompare(b.number, undefined, { numeric: true });
 }
 
 /**
- * Table and record privileges from the platform SDK — NEVER re-derived from a role name
- * (CONVENTIONS rule 4). `useTablePrivileges` supplies these; the rules only consume them.
+ * The whole table, read once, as a tree. Rows that are not reachable from the root
+ * (a deleted parent leaves its children orphaned — the lookup is RemoveLink) are ignored rather
+ * than crashed on. Cycles cannot hang this: a node is attached at most once.
  */
-export interface Privileges {
-  canCreate: boolean;
-  canWrite: boolean;
-  canDelete: boolean;
-}
-
-export const NO_PRIVILEGES: Privileges = { canCreate: false, canWrite: false, canDelete: false };
-
-export { emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
-
-/* ═════════════════════════════════════════════════════════════════ messages ════ */
-
-export const MSG = {
-  /**
-   * `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNotNumbers.Text` —
-   * verbatim.
-   */
-  numbersOnly: "Subaccount number must contain numbers only.",
-  /**
-   * `lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNumberExists.Text` —
-   * verbatim.
-   */
-  duplicateAccount: "Account number already in use. Please choose different number.",
-  /**
-   * `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number_ErrorMessageNumberExists.Text`
-   * — verbatim.
-   */
-  duplicateSubaccount: "Subaccount number already in use. Please choose different number.",
-  // The four confirmation texts are in `CAPEX_SCREEN_TEXT` (verbatim). Earlier non-verbatim
-  // copies here ("Are you sure you want…" for the canvas "Are you sure that you want…") were
-  // removed (19 Oct 2026, D19).
-  /**
-   * NEW — no canvas equivalent: raised when Dataverse refuses the create; the canvas admin
-   * screens carry no permission check at all (see the header block)
-   */
-  noCreatePrivilege: "You do not have permission to create CAPEX accounts.",
-  /**
-   * NEW — no canvas equivalent: raised when Dataverse refuses the update; the canvas had no
-   * permission check
-   */
-  noWritePrivilege: "You do not have permission to change CAPEX accounts.",
-  /**
-   * NEW — no canvas equivalent: raised when Dataverse refuses the delete; the canvas had no
-   * permission check
-   */
-  noDeletePrivilege: "You do not have permission to delete CAPEX accounts.",
-  /**
-   * NEW — no canvas equivalent: the country-scope gate is added by the code app —
-   * `gblCurrentUser.EditableCounties` is never read on this canvas screen
-   */
-  outOfScope: "This account is outside your editable country scope.",
-  /**
-   * NEW — no canvas equivalent: empty state for the accounts grid; the canvas gallery simply
-   * rendered nothing
-   */
-  emptyCategory: "This category has no accounts yet.",
-  /**
-   * NEW — no canvas equivalent: empty state for the subaccount grid; the canvas gallery simply
-   * rendered nothing
-   */
-  noSubaccounts: "This account has no subaccounts yet.",
-} as const;
-
-/* ═════════════════════════════════════════════════════════════ the account tree ════ */
-
-/**
- * The shared tree builder. Admin Contract imports this rather than repeating the canvas's
- * nested `ForAll` + `Collect` walk (its rule 2).
- *
- * `rootNumber` seeds the walk (`"00001"` on both screens); `exclude` drops nodes by
- * number — the Contract screen excludes `"10006"`, this screen excludes nothing.
- *
- * The canvas collected 13 columns per node (`TotalCost: 0`, `ContractDevCo: EmptyGUID`,
- * `Selected: false`, `Used: false`, `IsFolded: true`, …). Those are per-USE state, not
- * tree structure, so they live with the consumer; the tree carries only what the shape
- * needs.
- */
-export function buildAccountTree(
-  accounts: CapexAccount[],
-  opts: { rootNumber?: string; exclude?: readonly string[] } = {},
-): AccountNode[] {
-  const rootNumber = opts.rootNumber ?? CAPEX_ROOT_NUMBER;
-  const exclude = new Set(opts.exclude ?? []);
-
-  const root = accounts.find((a) => a.number === rootNumber) ?? null;
-  const byParent = new Map<string, CapexAccount[]>();
-  for (const a of accounts) {
-    if (exclude.has(a.number)) continue;
-    const key = a.parentId ?? "";
-    const list = byParent.get(key) ?? [];
-    list.push(a);
-    byParent.set(key, list);
+export function buildCapexTree(rows: readonly CapexAccountRow[]): CapexTree {
+  const nodes = new Map<string, CapexNode>();
+  for (const r of rows) {
+    nodes.set(r.id, {
+      id: r.id, number: r.number, name: r.name, order: r.order ?? 0,
+      active: r.active, parentId: r.parentId, children: [],
+    });
+  }
+  const childrenOf = new Map<string, CapexNode[]>();
+  for (const node of nodes.values()) {
+    if (!node.parentId) continue;
+    const list = childrenOf.get(node.parentId) ?? [];
+    list.push(node);
+    childrenOf.set(node.parentId, list);
   }
 
-  const build = (parentId: string, level: 1 | 2 | 3): AccountNode[] =>
-    (byParent.get(parentId) ?? [])
-      .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.number.localeCompare(b.number))
-      .map((a) => {
-        const children = level < 3 ? build(a.id, (level + 1) as 1 | 2 | 3) : [];
-        return { ...a, level, childCount: children.length, children };
-      });
+  const root = [...nodes.values()].find((n) => n.number === ROOT_NUMBER);
+  const byId = new Map<string, CapexNode>();
+  if (!root) return { root: undefined, categories: [], byId };
 
-  return root ? build(root.id, 1) : [];
-}
-
-/** Depth-first flatten, used by the pickers and by the tests. */
-export function flattenTree(nodes: AccountNode[]): AccountNode[] {
-  const out: AccountNode[] = [];
-  const walk = (list: AccountNode[]) => {
-    for (const n of list) { out.push(n); walk(n.children); }
+  const attach = (node: CapexNode) => {
+    byId.set(node.id, node);
+    const kids = (childrenOf.get(node.id) ?? []).filter((k) => !byId.has(k.id));
+    kids.sort(compareSiblings);
+    node.children = kids;
+    for (const k of kids) attach(k);
   };
-  walk(nodes);
-  return out;
+  attach(root);
+  return { root, categories: root.children, byId };
 }
 
-/**
- * Rule 1 — the CATEGORIES are the children of account number `"00001"`.
- *
- * DIVERGENCE, real and preserved: the Admin COST screen runs the same query with
- * `Not(Name = "Overleveraging")` appended; this screen does NOT. `excludeOverleveraging`
- * makes the divergence explicit rather than accidental (implementation step 3 of the Cost
- * screen).
- */
-/**
- * @labels-not-in-corpus — a `CAPEX Account List`.`Name` DATA value; the canvas only ever
- * compares it (`Not(Name = "Overleveraging")`) and never draws it
- */
-export const OVERLEVERAGING_CATEGORY_NAME = "Overleveraging";
+/* ═══════════════════════════════════════════════════════════ validations ══ */
 
-export function listCategories(
-  accounts: CapexAccount[],
-  opts: { excludeOverleveraging?: boolean } = {},
-): CapexAccount[] {
-  const root = accounts.find((a) => a.number === CAPEX_ROOT_NUMBER);
-  if (!root) return [];
-  return accounts
-    .filter((a) => a.parentId === root.id)
-    .filter((a) => !(opts.excludeOverleveraging && a.name === OVERLEVERAGING_CATEGORY_NAME))
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-}
-
-/**
- * Rule 2 — the parent command bar counts a DIFFERENT set:
- * `Filter('CAPEX Account Lists', And(Or(IsBlank('Parent Account'),
- *   'Parent Account'.Number = "10005"), Not(Number = "10005")))`
- * i.e. every root-level account plus the children of the second root `"10005"`, minus
- * `"10005"` itself. It is used ONLY for the reorder-enablement count (rule 3).
- */
-export function parentAccountsForReorder(accounts: CapexAccount[]): CapexAccount[] {
-  const secondRoot = accounts.find((a) => a.number === CAPEX_SECOND_ROOT_NUMBER);
-  return accounts.filter((a) =>
-    a.number !== CAPEX_SECOND_ROOT_NUMBER
-    && (a.parentId === null || (secondRoot !== undefined && a.parentId === secondRoot.id)));
-}
-
-/**
- * GUIDE p21 — the row label under a category tab is `"<number> - <name>"` verbatim,
- * e.g. `"80000 - Turbine / PV Supply Agreement"`. Row 80003's name literally contains
- * "(In-active)" IN ADDITION TO its own status chip reading "Inactive" — that is data
- * captured from the screenshot, not something this formatter adds or strips.
- */
-export const accountRowLabel = (account: Pick<CapexAccount, "number" | "name">): string =>
-  `${account.number} - ${account.name}`;
-
-/* ═══════════════════════════════════════════════════════════ command enablement ════ */
-
-/** Rule 4 — New is gated on the table's CreatePermission. */
-export const canCreateAccount = (p: Privileges): boolean => p.canCreate;
-
-/** Rule 4 — Edit needs a selection AND that record's EditPermission. */
-export const canEditAccount = (selected: CapexAccount | null, p: Privileges): boolean =>
-  selected !== null && p.canWrite;
-
-/** Rule 5 — Activate and Deactivate are mutually exclusive, both needing EditPermission. */
-export const showActivate = (selected: CapexAccount | null): boolean =>
-  selected !== null && selected.status === CHOICE_ADMIN.capexAccountStatus.inactive;
-
-export const showDeactivate = (selected: CapexAccount | null): boolean =>
-  selected !== null && selected.status === CHOICE_ADMIN.capexAccountStatus.active;
-
-/**
- * Rule 3 — Reorder needs MORE THAN ONE row and the table's EditPermission.
- *
- * SOURCE DEFECT, FIXED (19 Oct 2026, D19): the canvas counts `varColParentAccounts` (every
- * root-level account plus the children of "10005") to enable the command, but the ordering panel
- * it opens lists the SELECTED CATEGORY's accounts. The count now uses that same list, so Reorder
- * is enabled exactly when there is something to reorder. `canReorderAccountsCanvasParity`
- * keeps the canvas count.
- */
-export const canReorderAccounts = (accountsInCategory: CapexAccount[], p: Privileges): boolean =>
-  accountsInCategory.length > 1 && p.canWrite;
-
-/** The canvas count of rule 3, kept for parity testing. Not wired to the UI. */
-export const canReorderAccountsCanvasParity = (allAccounts: CapexAccount[], p: Privileges): boolean =>
-  parentAccountsForReorder(allAccounts).length > 1 && p.canWrite;
-
-/**
- * The subaccount Reorder command in the canvas has NO `ItemEnabled` — its privilege test is
- * commented out, so it is always enabled. KEPT (product decision 19 Oct 2026, D19): it stays
- * enabled; Dataverse refuses the write if the user lacks the privilege.
- */
-export const canReorderSubaccounts = (): boolean => true;
-
-/**
- * Rule 6 — Delete is HIDDEN, not merely disabled, when the account is in use: no
- * `CAPEX Project Contracts` anywhere under it AND no subaccounts. `ItemEnabled` is the
- * separate DeletePermission test, so an account can be visible-but-disabled.
- *
- * DIVERGENCE (product decision 19 Oct 2026, D19): the canvas only looks for contracts on the
- * SUBaccounts; the code also blocks the delete when a contract references the account ITSELF,
- * so no contract is ever left pointing at a deleted account.
- */
-export function canDeleteAccount(
-  account: CapexAccount | null,
-  subaccounts: CapexAccount[],
-  contracts: CapexContractRef[],
-): boolean {
-  if (!account) return false;
-  const children = subaccounts.filter((s) => s.parentId === account.id);
-  if (children.length > 0) return false;
-  const childIds = new Set([account.id, ...children.map((c) => c.id)]);
-  return !contracts.some((c) => c.accountId !== null && childIds.has(c.accountId));
-}
-
-/** Rule 6's `ItemEnabled` half — visible but disabled without the privilege. */
-export const deleteEnabled = (p: Privileges): boolean => p.canDelete;
-
-/**
- * GUIDE p21 — the toolbar above the account list, verbatim order and labels:
- * "Reorder", "New" (Add icon), "Edit" (pencil), "Deactivate". The canvas/previous build
- * ordered these New-first; the screenshot puts Reorder first. Activate and Deactivate
- * share one slot (rule 5, mutually exclusive); Delete is not captured in the screenshot's
- * toolbar text at all, but `canDeleteAccount` already hides it whenever the selected
- * account is in use — consistent with account 80000 (a supply-agreement account almost
- * certainly referenced by a contract) showing no fifth button.
- */
-export const CAPEX_TOOLBAR_LABELS = {
-  /**
-   * `pcf_Admin_CAPEX_Accounts_RightContent_Parents_CommandBar.Items.ItemDisplayName` — verbatim
-   * (the canvas literal lives in that formula's record field).
-   */
-  reorder: "Reorder",
-  /**
-   * `lbl_ProjectRevenues_RightPanel_NewEditCost_BodyHeader_2.Text` (`Project Revenues Screen`)
-   * — verbatim.
-   */
-  new: "New",
-  /** `btn_Edit_AdminContracts.Text` (`Admin Contract Screen`) — verbatim. */
-  edit: "Edit",
-  /** `con_DSRA_DSRF_Data_Deactivate.Text` (`Project Finance Screen`) — verbatim. */
-  activate: "Activate",
-  /** `con_DSRA_DSRF_Data_Deactivate.Text` (`Project Finance Screen`) — verbatim. */
-  deactivate: "Deactivate",
-  /** `btn_Delete_AdminContracts.Text` (`Admin Contract Screen`) — verbatim. */
-  delete: "Delete",
-} as const;
-
-export const CAPEX_TOOLBAR_ORDER = [
-  "reorder", "new", "edit", "deactivate", "activate", "delete",
-] as const;
-
-/** Reorders a command list into the GUIDE p21 sequence; unknown keys sort last, stable. */
-export function sortToolbarCommands<T extends { key: string }>(commands: readonly T[]): T[] {
-  const rank = (key: string): number => {
-    const i = (CAPEX_TOOLBAR_ORDER as readonly string[]).indexOf(key);
-    return i === -1 ? CAPEX_TOOLBAR_ORDER.length : i;
-  };
-  return commands
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => rank(a.c.key) - rank(b.c.key) || a.i - b.i)
-    .map((x) => x.c);
-}
-
-/**
- * Rule 7 — the subaccount row icons, computed per row.
- *
- * SOURCE DEFECT: the canvas `ChangeStatusIcon` switches on `Status`, and the INACTIVE arm
- * tests `And(ThisItem.Status = 'Status (CAPEX Account Lists)'.Active, RecordInfo(...))`.
- * Inside the Inactive branch that condition is never true, so THE ACTIVATE ICON NEVER
- * RENDERS for a subaccount — a deactivated subaccount can never be reactivated from the
- * grid.
- *
- * FIXED: `activate` is returned whenever the record is Inactive and the user has write
- * privilege. Both branches are unit-tested (UT-ADCAPEX-021).
- */
-export interface SubaccountRowIcons {
-  edit: boolean;
-  delete: boolean;
-  deactivate: boolean;
-  activate: boolean;
-}
-
-export function subaccountRowIcons(
-  record: CapexAccount,
-  p: Privileges,
-  contracts: CapexContractRef[],
-): SubaccountRowIcons {
-  const referenced = contracts.some((c) => c.accountId === record.id);
-  const active = record.status === CHOICE_ADMIN.capexAccountStatus.active;
-  return {
-    edit: p.canWrite,
-    // The delete icon is absent entirely when a contract references the subaccount.
-    delete: !referenced && p.canDelete,
-    deactivate: active && p.canWrite,
-    activate: !active && p.canWrite,     // the canvas branch that could never be true
-  };
-}
-
-/** The canvas behaviour of rule 7's status icon, for the parity test. Not wired to the UI. */
-export function subaccountActivateIconCanvasParity(
-  record: CapexAccount,
-  p: Privileges,
-): boolean {
-  const active = record.status === CHOICE_ADMIN.capexAccountStatus.active;
-  // Inside the Inactive arm the canvas tests `Status = Active` — a contradiction.
-  return active ? false : (active && p.canWrite);
-}
-
-/** Country scope, applied here and absent from the canvas. */
-export function canEditAccountScope(
-  user: CurrentUser | null,
-  countryId: string | null | undefined,
-): boolean {
-  if (!user) return false;
-  // Master accounts are global; only an explicit country scope narrows them.
-  if (countryId === null || countryId === undefined) return user.isApplicationAdministrator
-    || user.isControllerOwnData;
-  return canEditCountry(user, countryId);
-}
-
-/* ═════════════════════════════════════════════════════════════════ number rules ════ */
-
-/**
- * The numeric-only rule, reproducing the canvas's TRIPLE test verbatim:
- *   `Or(Not(IsNumeric(v)), IsMatch(v, ",", Contains), IsMatch(v, "\.", Contains))`
- * `IsNumeric("1.5")` is true in Power Fx, which is why the two explicit separator tests
- * exist. Blank passes here — the blank case is handled by the Save conjunction.
- */
-export function isNumericAccountNumber(input: string): boolean {
-  const v = input ?? "";
-  if (v.trim() === "") return true;
-  if (v.includes(",") || v.includes(".")) return false;
-  return /^\d+$/.test(v.trim());
-}
-
-/** Rule 9 — subaccount numbers are COMPOSED: `<parent number>_<input>`. */
-export const composeSubaccountNumber = (parentNumber: string, input: string): string =>
-  `${parentNumber}_${input.trim()}`;
-
-/**
- * Rule 8 — uniqueness is checked against the WHOLE table, by number.
- *
- * SOURCE DEFECT: the canvas sets `locIfAccountOrSubAccountNumberAlreadyExists` at SAVE
- * time and then `If(And(IsBlank(locSelectedAccount), <that flag>), "", <do the save>)` —
- * a duplicate silently does NOTHING except reveal the error label, and the label's
- * `Visible` is that post-hoc flag, so it is only ever true AFTER a failed attempt.
- *
- * FIXED: the message is shown inline from the cached tree (UT-ADCAPEX-011), and the hooks
- * re-ask the server (`capexNumberExists` in `data/adminCapexAccounts.ts`) just before a
- * create, so a number added meanwhile by someone else is still refused.
- */
-export const numberExists = (accounts: CapexAccount[], number: string): boolean =>
-  accounts.some((a) => a.number === number.trim());
-
-/** Rule 10 — `Order = Max(Max(<siblings>, Order), 0) + 1`. */
-export function nextOrder(siblings: { order: number }[]): number {
-  return siblings.reduce((m, s) => Math.max(m, s.order ?? 0), 0) + 1;
-}
-
-/* ═══════════════════════════════════════════════════════════════════ validation ════ */
-
-export interface AccountForm {
-  categoryId: string | null;
-  name: string;
-  /** The raw input; for a subaccount this is the suffix only. */
-  number: string;
-}
-
-export interface AccountFormErrors {
-  categoryMissing: boolean;
-  nameMissing: boolean;
-  numberMissing: boolean;
-  numberNotNumeric: boolean;
-  numberDuplicate: boolean;
-}
-
-export function validateAccountForm(
-  form: AccountForm,
-  opts: { isSubaccount: boolean; isEdit: boolean; existingNumbers: string[]; parentNumber?: string },
-): AccountFormErrors {
-  const composed = opts.isSubaccount && opts.parentNumber
-    ? composeSubaccountNumber(opts.parentNumber, form.number)
-    : form.number.trim();
-  return {
-    // A subaccount has no category dropdown — its parent is the selected account.
-    categoryMissing: !opts.isSubaccount && !opts.isEdit && !form.categoryId,
-    nameMissing: form.name.trim() === "",
-    numberMissing: !opts.isEdit && form.number.trim() === "",
-    numberNotNumeric: !isNumericAccountNumber(form.number),
-    // Rule 12 — Number is not editable, so the duplicate test only applies to a create.
-    numberDuplicate: !opts.isEdit && opts.existingNumbers.includes(composed),
-  };
-}
-
-export const hasFormErrors = (e: AccountFormErrors): boolean => Object.values(e).some(Boolean);
-
-export function accountFormMessages(
-  e: AccountFormErrors,
-  isSubaccount: boolean,
-): string[] {
-  const out: string[] = [];
-  if (e.categoryMissing) out.push("Select a category.");
-  if (e.nameMissing) out.push("Enter a name.");
-  if (e.numberMissing) out.push("Enter a number.");
-  // The account and subaccount panels have their own canvas texts.
-  if (e.numberNotNumeric) out.push(isSubaccount ? MSG.numbersOnly : CAPEX_SCREEN_TEXT.accountNumbersOnly);
-  if (e.numberDuplicate) {
-    out.push(isSubaccount ? MSG.duplicateSubaccount : MSG.duplicateAccount);
-  }
-  return out;
-}
-
-/** Rule 12 — editing an existing account or subaccount changes ONLY `Name`. */
-export const isNumberEditable = (isEdit: boolean): boolean => !isEdit;
-
-/**
- * `drp_Account_RightPanel_NewEditAccount_BodyContent_Category.DisplayMode: =DisplayMode.Disabled`
- * — ALWAYS disabled, defaulted to the selected tab. A new account is always created under the
- * category being viewed. (The previous code enabled it for New.)
- */
-export const isCategoryEditable = (_isEdit: boolean): boolean => false;
-
-/** `txt_…_Name.MaxLength: =55` on both the account and the subaccount panel. */
+/** UI `MaxLength 55` (CA:1341, 1885) — kept at 55. */
 export const NAME_MAX_LENGTH = 55;
 
-/**
- * `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountNumberAsPrefix.Visible:
- * =IsBlank(locSelectedCapexSubaccount)` — the `<parent>_` prefix shows only for a NEW
- * subaccount; on edit the field already holds the full composed number.
- */
-export const showSubaccountPrefix = (isEdit: boolean): boolean => !isEdit;
-
-/**
- * `btn_Account_AccountCardHeader.OnSelect: If(locSelectedAccount = ThisItem, Blank(), ThisItem)`
- * — a second click on the selected card deselects it.
- */
-export const toggleSelection = (selectedId: string | null, clickedId: string): string | null =>
-  selectedId === clickedId ? null : clickedId;
-
-/* ═════════════════════════════════════════════════════════════════════ the save ════ */
-
-/**
- * Rules 10–12 and 18 — the save payload.
- *
- * Rule 11, PRESERVED DELIBERATELY: anything newly created is IMMEDIATELY DEACTIVATED. The
- * canvas follows every create with
- * `UpdateIf('CAPEX Account Lists', … = <new>, {Status: …Inactive})`. It is non-obvious and
- * safety-relevant — a new account must not be usable before it is reviewed. Kept as the canvas
- * does it: a create, then an update of the created row (`planSaveAccount`), because a Web API
- * create cannot reliably set `statecode` to Inactive.
- *
- * Names are `Trim`med on write; the canvas stored them as typed (minor fix, D19).
- */
-export function buildAccountPayload(
-  form: AccountForm,
-  opts: {
-    isSubaccount: boolean;
-    isEdit: boolean;
-    parent: CapexAccount | null;
-    siblings: CapexAccount[];
-  },
-): Record<string, unknown> {
-  if (opts.isEdit) {
-    // Rule 12 — Name only.
-    return { [CAPEX_ACCOUNT_COL.name]: form.name.trim() };
-  }
-  const number = opts.isSubaccount && opts.parent
-    ? composeSubaccountNumber(opts.parent.number, form.number)
-    : form.number.trim();
-
-  const data: Record<string, unknown> = {
-    [CAPEX_ACCOUNT_COL.name]: form.name.trim(),
-    [CAPEX_ACCOUNT_COL.number]: number,
-    [CAPEX_ACCOUNT_COL.order]: nextOrder(opts.siblings),
-  };
-  // Rule 18 — the category IS the `'Parent Account'` lookup.
-  if (opts.parent) {
-    data[`${CAPEX_ACCOUNT_LOOKUP.parentAccount}@odata.bind`] =
-      `/${CAPEX_ACCOUNT_ENTITY_SET}(${opts.parent.id})`;
-  }
-  return data;
-}
-
-export function planSaveAccount(
-  form: AccountForm,
-  opts: {
-    isSubaccount: boolean;
-    isEdit: boolean;
-    editingId?: string;
-    parent: CapexAccount | null;
-    siblings: CapexAccount[];
-    existingNumbers: string[];
-    privileges: Privileges;
-    canEdit: boolean;
-  },
-): WritePlan {
-  if (!opts.canEdit) return refuse(MSG.outOfScope);
-  if (opts.isEdit && !opts.privileges.canWrite) return refuse(MSG.noWritePrivilege);
-  if (!opts.isEdit && !opts.privileges.canCreate) return refuse(MSG.noCreatePrivilege);
-
-  const errors = validateAccountForm(form, {
-    isSubaccount: opts.isSubaccount,
-    isEdit: opts.isEdit,
-    existingNumbers: opts.existingNumbers,
-    parentNumber: opts.parent?.number,
-  });
-  if (hasFormErrors(errors)) {
-    return refuse(accountFormMessages(errors, opts.isSubaccount)[0]!);
-  }
-
-  const data = buildAccountPayload(form, opts);
-  const plan = emptyPlan();
-  if (opts.isEdit && opts.editingId) {
-    plan.writes.push({
-      op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: opts.editingId, data,
-      reason: `Renamed to “${form.name.trim()}”`,
-    });
-    return plan;
-  }
-  const kind = opts.isSubaccount ? "Subaccount" : "Account";
-  plan.writes.push(
-    {
-      op: "create", entitySet: CAPEX_ACCOUNT_ENTITY_SET, data,
-      reason: `${kind} “${form.name.trim()}” created`,
-    },
-    // Rule 11 — the canvas `UpdateIf(…, {Status: Inactive})` on the row just created.
-    {
-      op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: CREATED_ROW_ID,
-      data: { [CAPEX_ACCOUNT_COL.statecode]: CHOICE_ADMIN.capexAccountStatus.inactive },
-      reason: `${kind} “${form.name.trim()}” set Inactive until reviewed`,
-    },
-  );
-  return plan;
-}
-
-/* ══════════════════════════════════════════════════════════════ the cost cascade ════ */
-
-/**
- * Rule 15 — the cascade WINDOW: "rest of this year zeroed, all future years deleted".
- *   current-year rows with `Month > Month(Today())`  →  `Cost = 0`
- *   rows with `Year > Year(Today())`                 →  removed
- * Past months and the current month are untouched.
- */
-export interface CostCascadeWindow {
-  zeroYear: number;
-  /** Rows in `zeroYear` with `month > zeroMonthExclusive` are zeroed. */
-  zeroMonthExclusive: number;
-  /** Rows with `year > deleteYearsAfter` are deleted. */
-  deleteYearsAfter: number;
-}
-
-export function costCascadeWindow(today: Date): CostCascadeWindow {
-  return {
-    zeroYear: today.getFullYear(),
-    zeroMonthExclusive: today.getMonth() + 1,   // Power Fx Month() is 1-based
-    deleteYearsAfter: today.getFullYear(),
-  };
-}
-
-export type CostCascadeAction = "zero" | "delete" | "keep";
-
-export function classifyCostRow(row: CapexCostRow, w: CostCascadeWindow): CostCascadeAction {
-  if (row.year > w.deleteYearsAfter) return "delete";
-  if (row.year === w.zeroYear && row.month > w.zeroMonthExclusive) return "zero";
-  return "keep";
-}
-
-/**
- * Rule 13 — DEACTIVATING AN ACCOUNT.
- *
- * ┌──────────────────────────────────────────────────────────────────────────────┐
- * │ DOCUMENTED DEFECT — THE CANVAS ACTIVATES THE SUBACCOUNTS IT SHOULD DEACTIVATE.│
- * │                                                                              │
- * │ `cmp_Account_PopUpConfirmation_ChangeStatusOfAccount.OnConfirm` sets the      │
- * │ account to Inactive and then sets EVERY CHILD to **Active** — while the       │
- * │ confirmation text the user just read says "All related subaccounts will be    │
- * │ automatically deactivated". It reads like a copy-paste inversion, and it      │
- * │ leaves the tree in a state the UI cannot describe: an inactive parent with    │
- * │ active children whose forecast costs have just been destroyed.                │
- * │                                                                              │
- * │ WE IMPLEMENT THE SANE BEHAVIOUR: children are deactivated with the parent,    │
- * │ which is what the dialog promises. `childStatusOnDeactivateCanvasParity`      │
- * │ keeps the source behaviour reachable and is what the parity test asserts, so  │
- * │ the decision can be reversed in one place if the business owner wants the     │
- * │ original. Do not "fix" this back without asking.                              │
- * └──────────────────────────────────────────────────────────────────────────────┘
- */
-export const childStatusOnDeactivate = (): number => CHOICE_ADMIN.capexAccountStatus.inactive;
-
-/** The canvas behaviour of rule 13 — children go ACTIVE. Parity only. */
-export const childStatusOnDeactivateCanvasParity = (): number =>
-  CHOICE_ADMIN.capexAccountStatus.active;
-
-export interface DeactivateArgs {
-  account: CapexAccount;
-  /** The account's own children; empty when deactivating a subaccount (rule 14). */
-  subaccounts: CapexAccount[];
-  /** Contracts anywhere under the affected accounts. */
-  contracts: CapexContractRef[];
-  /** The candidate cost rows for those contracts — already window-filtered server-side. */
-  costs: CapexCostRow[];
-  today: Date;
-  privileges: Privileges;
-  canEdit: boolean;
-  /** Set true to reproduce the canvas inversion instead of the sane behaviour. */
-  canvasParity?: boolean;
-}
-
-/**
- * Rules 13–15 as ONE plan.
- *
- * MOVE THIS SERVER-SIDE. The canvas issues N+1 round-trips and is not transactional — a
- * failure halfway leaves the accounts inactive with the costs only partly zeroed, and the
- * deleted rows are gone for good (rule 14: activating the account back does not restore
- * them). The plan below is one `$batch`, which is atomic enough for today; the durable fix
- * is a Dataverse custom API `vsb_DeactivateCapexAccount(accountId)` doing the status flips
- * and the cost zero/delete in one transaction. That API does not exist yet.
- */
-export function planDeactivateAccount(args: DeactivateArgs): WritePlan {
-  if (!args.canEdit) return refuse(MSG.outOfScope);
-  if (!args.privileges.canWrite) return refuse(MSG.noWritePrivilege);
-
-  const plan = emptyPlan();
-  const window = costCascadeWindow(args.today);
-
-  plan.writes.push({
-    op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: args.account.id,
-    data: { [CAPEX_ACCOUNT_COL.statecode]: CHOICE_ADMIN.capexAccountStatus.inactive },
-    reason: `${args.account.name} deactivated`,
-  });
-
-  const childStatus = args.canvasParity
-    ? childStatusOnDeactivateCanvasParity()
-    : childStatusOnDeactivate();
-
-  for (const child of args.subaccounts) {
-    plan.writes.push({
-      op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: child.id,
-      data: { [CAPEX_ACCOUNT_COL.statecode]: childStatus },
-      reason: `${child.name} ${childStatus === CHOICE_ADMIN.capexAccountStatus.inactive
-        ? "deactivated with its parent"
-        : "ACTIVATED (canvas parity — see the defect note)"}`,
-    });
-  }
-
-  // The contracts under the affected accounts define which cost rows are in scope.
-  const affectedIds = new Set([args.account.id, ...args.subaccounts.map((s) => s.id)]);
-  const contractIds = new Set(
-    args.contracts
-      .filter((c) => c.accountId !== null && affectedIds.has(c.accountId))
-      .map((c) => c.id),
-  );
-
-  for (const row of args.costs) {
-    if (row.contractId === null || !contractIds.has(row.contractId)) continue;
-    const action = classifyCostRow(row, window);
-    if (action === "zero") {
-      plan.writes.push({
-        op: "update", entitySet: CAPEX_COST_ENTITY_SET, id: row.id,
-        data: { [CAPEX_COST_COL.cost]: 0 },
-        reason: `Forecast cost ${row.year}/${row.month} zeroed`,
-      });
-    } else if (action === "delete") {
-      plan.writes.push({
-        op: "delete", entitySet: CAPEX_COST_ENTITY_SET, id: row.id,
-        reason: `Forecast cost ${row.year}/${row.month} deleted`,
-      });
-    }
-  }
-
-  plan.log.push(
-    `${args.account.name}: ${args.subaccounts.length} subaccount(s), `
-    + `${plan.writes.length - 1 - args.subaccounts.length} cost row(s) affected.`,
-  );
-  return plan;
-}
-
-/** Rule 14 — activating only flips `Status` back. The deleted costs are NOT restored. */
-export function planActivateAccount(
-  account: CapexAccount,
-  opts: { privileges: Privileges; canEdit: boolean },
-): WritePlan {
-  if (!opts.canEdit) return refuse(MSG.outOfScope);
-  if (!opts.privileges.canWrite) return refuse(MSG.noWritePrivilege);
-  const plan = emptyPlan();
-  plan.writes.push({
-    op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: account.id,
-    data: { [CAPEX_ACCOUNT_COL.statecode]: CHOICE_ADMIN.capexAccountStatus.active },
-    reason: `${account.name} activated (deleted forecast costs are not restored)`,
-  });
-  return plan;
-}
-
-/* ══════════════════════════════════════════════════════════════ delete + reorder ════ */
-
-/**
- * Rule 16 — deleting an account removes the row. The canvas then rebuilds
- * `colCapexSubaccounts` from the WHOLE TABLE; query invalidation replaces that.
- */
-export function planDeleteAccount(
-  account: CapexAccount,
-  opts: {
-    subaccounts: CapexAccount[];
-    contracts: CapexContractRef[];
-    privileges: Privileges;
-    canEdit: boolean;
-  },
-): WritePlan {
-  if (!opts.canEdit) return refuse(MSG.outOfScope);
-  if (!opts.privileges.canDelete) return refuse(MSG.noDeletePrivilege);
-  if (!canDeleteAccount(account, opts.subaccounts, opts.contracts)) {
-    return refuse("This account still has subaccounts or is referenced by a contract.");
-  }
-  const plan = emptyPlan();
-  plan.writes.push({
-    op: "delete", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id: account.id,
-    reason: `Account “${account.name}” deleted`,
-  });
-  return plan;
-}
-
-/** Rule 17 — reorder writes `Order: <position>` for the chosen level, as one batch. */
-export function planReorder(
-  accounts: CapexAccount[],
-  orderedIds: string[],
-  opts: { privileges: Privileges; canEdit: boolean },
-): WritePlan {
-  if (!opts.canEdit) return refuse(MSG.outOfScope);
-  if (!opts.privileges.canWrite) return refuse(MSG.noWritePrivilege);
-  const byId = new Map(accounts.map((a) => [a.id, a]));
-  const plan = emptyPlan();
-  orderedIds.forEach((id, index) => {
-    const position = index + 1;
-    if (byId.get(id)?.order === position) return;
-    plan.writes.push({
-      op: "update", entitySet: CAPEX_ACCOUNT_ENTITY_SET, id,
-      data: { [CAPEX_ACCOUNT_COL.order]: position },
-      reason: `Moved to position ${position}`,
-    });
-  });
-  return plan;
-}
-
-/* ═════════════════════════════════════════════════════════ screen captions (canvas) ════ */
-
-/**
- * The remaining visible strings of the `Admin CAPEX Accounts` canvas screen, verbatim
- * (CONVENTIONS rule 7). Each cites the `Control.Property` it is transcribed from in
- * `ProjectDocs/_extracted/msapp/projectmanagement/Src/Admin CAPEX Accounts.pa.yaml`.
- */
-export const CAPEX_SCREEN_TEXT = {
-  /** `cmp_Admin_CAPEX_Accounts_Header.Project` → `Name: "CAPEX Accounts"`. */
-  title: "CAPEX Accounts",
-  /** `pcf_Account_AccountCardBody_SubAccountsCommandBar.Items` → `orderSubaccounts.ItemDisplayName`. */
-  reorderSubaccounts: "Reorder subaccounts",
-  /** `pcf_Account_AccountCardBody_SubAccountsCommandBar.Items` → `newSubaccount.ItemDisplayName`. */
-  addSubaccount: "Add subaccount",
-  /** `pcf_Account_AccountCardBody_SubAccounts.columns_Items` → `ColDisplayName`s. */
-  colNumber: "Number",
-  colSubaccount: "Subaccount",
-  colStatus: "Status",
-  /** `lbl_Account_AccountStatus.Text` = `ThisItem.Status` — the `Status (CAPEX Account Lists)` labels. */
-  statusActive: "Active",
-  statusInactive: "Inactive",
-  /** `lbl_Account_RightPanel_NewEditAccount_BodyHeader.Text`. */
-  newAccount: "New Account",
-  editAccount: "Edit Account",
-  /** `lbl_Account_RightPanel_NewEditAccount_BodyContent_Category.Text`. */
-  category: "Category",
-  /** `lbl_Account_RightPanel_NewEditAccount_BodyContent_Number.Text`. */
-  number: "Number",
-  /** `lbl_Account_RightPanel_NewEditAccount_BodyContent_Name.Text`. */
-  name: "Name",
-  /** `lbl_Account_RightPanel_NewEditAccount_BodyContent_Number_ErrorMessageNotNumbers.Text`. */
-  accountNumbersOnly: "Account number must contain numbers only.",
-  /** `lbl_Account_RightPanel_NewEditSubaccount_BodyHeader.Text`. */
-  newSubaccount: "New Subaccount",
-  editSubaccount: "Edit Subaccount",
-  /** `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_AccountMain.Text`. */
-  mainAccount: "Main Account",
-  /** `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Number.Text`. */
-  subaccountNumber: "Subaccount Number",
-  /** `lbl_Account_RightPanel_NewEditSubaccount_BodyContent_Name.Text`. */
-  subaccountName: "Subaccount Name",
-  /** `lbl_Account_RightPanel_Ordering_BodyHeader.Text`. */
-  orderSubaccounts: "Subaccounts order",
-  orderAccounts: "'Capex Accounts' order",
-  /** `lbl_Account_RightPanel_Ordering_BodyContent.Text`. */
-  orderHint: "To reorder drag and drop listed items",
-  /*
-   * `locSpinnerInformationText` — the progress texts, verbatim. SOURCE DEFECT: the canvas screen
-   * has no spinner control, so they were never shown; the code app shows them while a write runs.
-   */
-  savingAccount: "Saving Account...",
-  savingSubaccount: "Saving Subaccount...",
-  savingOrder: "Saving new order...",
-  deletingAccount: "Deleting Account...",
-  deletingSubaccount: "Deleting Subaccount...",
-  updatingAccount: "Updating Account...",
-  updatingSubaccount: "Updating Subaccount...",
-  /** NEW — no canvas equivalent: rule 19 load-error state. */
-  loadFailedTitle: "CAPEX accounts are unavailable",
-  /** NEW — no canvas equivalent: rule 19 load-error state. */
-  loadFailedDescription: "The chart of accounts could not be loaded. Please try again.",
-  /** NEW — no canvas equivalent: the reorder panel's keyboard alternative to dragging. */
-  moveUp: "Move up",
-  moveDown: "Move down",
-  /** `cmp_Account_PopUpConfirmation_*.CancelButtonText` / `.ConfirmButtonText`. */
-  cancel: "Cancel",
-  confirm: "Confirm",
-  /** `cmp_Account_PopUpConfirmation_DeleteSubAccount.Title` / `.Description`. */
-  deleteSubaccountTitle: "Delete Subaccount?",
-  deleteSubaccountDescription: (name: string) =>
-    `Are you sure that you want to permanently delete "${name}" subaccount?`,
-  /** `cmp_Account_PopUpConfirmation_DeleteAccount.Title` / `.Description`. */
-  deleteAccountTitle: "Delete Account?",
-  deleteAccountDescription: (name: string) =>
-    `Are you sure that you want to permanently delete "${name}" account with its all related subaccounts?`,
-  /** `cmp_Account_PopUpConfirmation_ChangeStatusOfAccount.Title` / `.Description`. */
-  deactivateAccountTitle: "Deactivate Account?",
-  activateAccountTitle: "Activate Account?",
-  deactivateAccountDescription: (name: string) =>
-    `Are you sure that you want to deactivate "${name}" account? All related subaccounts will be automatically deactivated and associated forecasted costs will be deleted.`,
-  activateAccountDescription: (name: string) =>
-    `Are you sure that you want to activate "${name}" account?`,
-  /** `cmp_Account_PopUpConfirmation_ChangeStatusOfSubAccount.Title` / `.Description`. */
-  deactivateSubaccountTitle: "Deactivate Subaccount?",
-  activateSubaccountTitle: "Activate Subaccount?",
-  deactivateSubaccountDescription: (name: string) =>
-    `Are you sure that you want to deactivate "${name}" subaccount? All forecasted costs associated with this subaccount will be deleted.`,
-  activateSubaccountDescription: (name: string) =>
-    `Are you sure that you want to activate "${name}" subaccount?`,
+export const MSG = {
+  accountNotNumeric: "Account number must contain numbers only.",
+  accountExists: "Account number already in use. Please choose different number.",
+  subaccountNotNumeric: "Subaccount number must contain numbers only.",
+  subaccountExists: "Subaccount number already in use. Please choose different number.",
+  nameRequired: "Name is required.",
+  nameTooLong: `Name must be at most ${NAME_MAX_LENGTH} characters.`,
 } as const;
+
+/** A write by a user who fails the admin rule (`useAdminAccess`) is refused with this text. */
+export const OUT_OF_SCOPE = "This account is outside your editable country scope.";
+
+/** Shown when the edited row (or a new subaccount's parent) vanished in a refetch. */
+export const GONE = {
+  account: "This account no longer exists. Close the panel and refresh.",
+  subaccount: "This subaccount no longer exists. Close the panel and refresh.",
+  parent: "The parent account no longer exists. Close the panel and refresh.",
+} as const;
+
+/** A status change refused because the row was deleted by someone else. Nothing was written. */
+export const GONE_STATUS = {
+  account: "This account no longer exists, so its status was not changed. Close this dialog; the list will refresh.",
+  subaccount: "This subaccount no longer exists, so its status was not changed. Close this dialog; the list will refresh.",
+} as const;
+
+/** Busy texts the canvas set but never rendered. */
+export const BUSY = {
+  saveAccount: "Saving Account...",
+  saveSubaccount: "Saving Subaccount...",
+  saveOrder: "Saving new order...",
+  deleteSubaccount: "Deleting Subaccount...",
+  deleteAccount: "Deleting Account...",
+  updateAccount: "Updating Account...",
+  updateSubaccount: "Updating Subaccount...",
+} as const;
+
+/** Digits only, after trim (canvas `IsNumeric` also accepted `-5`, `+5`, `1e3`). */
+export function isDigitsOnly(value: string): boolean {
+  return /^\d+$/.test(value.trim());
+}
+
+/** CA:1274-1282 — shown only when the field is non-blank. */
+export function accountNumberError(value: string, editable: boolean): string | undefined {
+  // Gated by edit mode, unlike the canvas (a canvas defect): a legacy non-numeric
+  // number must not block a name-only edit.
+  if (!editable || value.trim() === "") return undefined;
+  return isDigitsOnly(value) ? undefined : MSG.accountNotNumeric;
+}
+
+/** CA:1817-1826 — evaluated only while the suffix is editable (New). */
+export function subaccountSuffixError(value: string, editable: boolean): string | undefined {
+  if (!editable || value.trim() === "") return undefined;
+  return isDigitsOnly(value) ? undefined : MSG.subaccountNotNumeric;
+}
+
+/** Trimmed; whitespace-only is blank. */
+export function nameError(value: string): string | undefined {
+  const t = value.trim();
+  if (t === "") return MSG.nameRequired;
+  if (t.length > NAME_MAX_LENGTH) return MSG.nameTooLong;
+  return undefined;
+}
+
+/** CA:1980 — `<account number>_<trim(suffix)>`. */
+export function composeSubaccountNumber(accountNumber: string, suffix: string): string {
+  return `${accountNumber}_${suffix.trim()}`;
+}
+
+export interface AccountForm { categoryId: string | undefined; number: string; name: string }
+
+/** Account save gate (CA:1411-1421); the name is trimmed. */
+export function canSaveAccount(form: AccountForm, isNew: boolean): boolean {
+  if (!form.categoryId) return false;
+  if (nameError(form.name)) return false;
+  if (!isNew) return true;
+  return form.number.trim() !== "" && !accountNumberError(form.number, true);
+}
+
+export interface SubaccountForm { suffix: string; name: string }
+
+/** Subaccount save gate (CA:1955-1964); the name is trimmed. */
+export function canSaveSubaccount(form: SubaccountForm, isNew: boolean): boolean {
+  if (nameError(form.name)) return false;
+  if (!isNew) return true;
+  return form.suffix.trim() !== "" && !subaccountSuffixError(form.suffix, true);
+}
+
+/**
+ * `Max(Max(siblings, Order), 0) + 1` (CA:1436, 1980): floored at 0 BEFORE adding 1, so the new
+ * row's order is never below 1 even when every sibling order is negative. Used by
+ * `createCapexAccount` with the live top sibling order. Shared in `@/domain/reorder`.
+ */
+export { nextOrder } from "@/domain/reorder";
+
+/* ═════════════════════════════════════════════════════ action availability ══ */
+
+export interface CommandState { visible: boolean; enabled: boolean }
+
+/**
+ * Result of the server-side "is a contract booked here?" check: `true`/`false` once
+ * answered, `undefined` while loading, `"failed"` when the query errored.
+ */
+export type ContractCheck = boolean | "failed" | undefined;
+
+/** Why Delete is shown disabled when the contract check could not run. */
+export const CONTRACT_CHECK_FAILED = {
+  account:
+    "Could not check whether CAPEX contracts are booked on this account, so Delete is unavailable. Retry to check again.",
+  subaccount: "Could not check bookings; Delete unavailable",
+} as const;
+
+export interface AccountCommands {
+  reorder: CommandState;
+  create: CommandState;
+  edit: CommandState;
+  activate: CommandState;
+  deactivate: CommandState;
+  delete: CommandState;
+}
+
+export interface AccountCommandInput {
+  selected: CapexNode | undefined;
+  categorySelected: boolean;
+  /** Number of accounts in the selected category (the canvas counted another set). */
+  categoryAccountCount: number;
+  /**
+   * Whether a contract is booked directly on the selected account. `undefined` while
+   * the check is still loading — Delete is then NOT offered. `"failed"` — Delete is shown
+   * DISABLED and the screen explains why.
+   */
+  selectedHasContracts: ContractCheck;
+  privileges: TablePrivileges;
+}
+
+/** The selected account would be deletable, but its contract check failed. */
+export function accountDeleteUnavailable(i: Pick<AccountCommandInput, "selected" | "selectedHasContracts">): boolean {
+  return Boolean(i.selected) && i.selected!.children.length === 0 && i.selectedHasContracts === "failed";
+}
+
+/** The account command bar. */
+export function accountCommands(i: AccountCommandInput): AccountCommands {
+  const sel = i.selected;
+  const p = i.privileges;
+  const deletable = Boolean(sel) && sel!.children.length === 0 && i.selectedHasContracts === false;
+  if (accountDeleteUnavailable(i)) {
+    return { ...accountCommands({ ...i, selectedHasContracts: undefined }), delete: { visible: true, enabled: false } };
+  }
+  return {
+    reorder: { visible: true, enabled: i.categoryAccountCount >= 2 && p.canWrite },
+    create: { visible: true, enabled: i.categorySelected && p.canCreate },
+    // Edit is shown disabled (not hidden) when nothing is selected (CA:233-239).
+    edit: { visible: true, enabled: Boolean(sel) && p.canWrite },
+    activate: { visible: Boolean(sel) && !sel!.active, enabled: p.canWrite },
+    deactivate: { visible: Boolean(sel) && sel!.active, enabled: p.canWrite },
+    delete: { visible: deletable, enabled: p.canDelete },
+  };
+}
+
+export interface SubaccountCommands { reorder: CommandState; add: CommandState }
+
+/** The subaccount command bar: Reorder needs ≥ 2 subaccounts. */
+export function subaccountCommands(account: CapexNode, p: TablePrivileges): SubaccountCommands {
+  return {
+    reorder: { visible: true, enabled: account.children.length >= 2 && p.canWrite },
+    add: { visible: true, enabled: p.canCreate },
+  };
+}
+
+export interface RowActions { edit: boolean; activate: boolean; deactivate: boolean; delete: boolean }
+
+/**
+ * Subaccount row actions (CA:538-589). `hasContracts` undefined = still checking → Delete hidden.
+ * Permissions are table-level here (server-enforced).
+ */
+export function subaccountRowActions(
+  sub: Pick<CapexNode, "active">,
+  parent: Pick<CapexNode, "active">,
+  hasContracts: ContractCheck,
+  p: TablePrivileges,
+): RowActions {
+  return {
+    edit: p.canWrite,
+    deactivate: sub.active && p.canWrite,
+    activate: !sub.active && parent.active && p.canWrite,
+    delete: hasContracts === false && p.canDelete,
+  };
+}
+
+/**
+ * The row's contract check failed — the Delete icon is rendered DISABLED with an
+ * explanation instead of being silently hidden. Never true together with `RowActions.delete`.
+ */
+export function subaccountDeleteUnavailable(hasContracts: ContractCheck, p: TablePrivileges): boolean {
+  return hasContracts === "failed" && p.canDelete;
+}
+
+/*
+ * Reorder: `moveItem`, `reorderDiff` (1-based, changed rows only) and
+ * `ORDER_BASE` now come from the shared `@/domain/reorder` (identical results).
+ */
+
+/* ═══════════════════════════════════════════════════════════════ dialogs ══ */
+
+export interface DialogText { title: string; description: string; confirmText: string }
+
+/** Account status dialog (CA:2401-2431). */
+export function accountStatusDialog(account: Pick<CapexNode, "name" | "active">): DialogText {
+  return account.active
+    ? {
+      title: "Deactivate Account?",
+      description:
+        `Are you sure that you want to deactivate "${account.name}" account? All related subaccounts ` +
+        "will be automatically deactivated and associated forecasted costs will be deleted.",
+      confirmText: "Deactivate",
+    }
+    : {
+      title: "Activate Account?",
+      description:
+        `Are you sure that you want to activate "${account.name}" account? Subaccounts keep their ` +
+        "current status and previously removed forecast costs are not restored.",
+      confirmText: "Activate",
+    };
+}
+
+/** Subaccount status dialog (CA:2432-2460) — title keyed on the SUBACCOUNT's status (the canvas title read the parent's). */
+export function subaccountStatusDialog(sub: Pick<CapexNode, "name" | "active">): DialogText {
+  return sub.active
+    ? {
+      title: "Deactivate Subaccount?",
+      description:
+        `Are you sure that you want to deactivate "${sub.name}" subaccount? All forecasted costs ` +
+        "associated with this subaccount will be deleted.",
+      confirmText: "Deactivate",
+    }
+    : {
+      title: "Activate Subaccount?",
+      description:
+        `Are you sure that you want to activate "${sub.name}" subaccount? Previously removed ` +
+        "forecast costs are not restored.",
+      confirmText: "Activate",
+    };
+}
+
+/** Delete-account dialog — no claim that subaccounts are deleted. */
+export function deleteAccountDialog(name: string): DialogText {
+  return {
+    title: "Delete Account?",
+    description: `Are you sure that you want to permanently delete "${name}" account?`,
+    confirmText: "Confirm",
+  };
+}
+
+/** Delete-subaccount dialog (CA:2339, 2364). */
+export function deleteSubaccountDialog(name: string): DialogText {
+  return {
+    title: "Delete Subaccount?",
+    description: `Are you sure that you want to permanently delete "${name}" subaccount?`,
+    confirmText: "Confirm",
+  };
+}
+
+/** `"<number> - <name>"` (CA:728). */
+export function accountLabel(node: Pick<CapexNode, "number" | "name">): string {
+  return `${node.number} - ${node.name}`;
+}
+
+/** Cutoff inputs: today's LOCAL year and month (canvas `Today()`). */
+export function forecastCutoff(today: Date): { year: number; month: number } {
+  return { year: today.getFullYear(), month: today.getMonth() + 1 };
+}
+
+/* ═══════════════════════════════════════════════════════════ write plans ══ */
+
+/*
+ * The screen's SINGLE-REQUEST writes — rename, activate account, activate subaccount — are built
+ * here as one-write `WritePlan`s and sent by `@/data/runPlan` through `@/data/executePlan`
+ * (CONVENTIONS rule 17, D36). Every one of them is a `guarded` update: the row is read by primary
+ * key first and, when another admin deleted it meanwhile, NOTHING is sent and `RecordGoneError`
+ * surfaces — exactly what `updateRecordIfExists` did for these writes in the data layer, so the
+ * requests on the wire are unchanged. `label` keeps each failure's operation text word for word.
+ *
+ * The screen's multi-step flows (create, reorder, delete, both deactivates) stay in
+ * `@/data/adminCapexAccounts.ts`: they read at save time, pool writes, skip rows deleted meanwhile
+ * and report per-step counts, none of which a static, sequential, fail-stop plan can express (D36).
+ *
+ * `canEdit` is `useAdminAccess()`. `Screen.tsx` refuses first (so the refusal lands on the surface
+ * the user is looking at, as an `OutOfScopeError`); the plan refuses again with the SAME text, so a
+ * plan can never be sent without it.
+ */
+const ACCOUNTS_SET = ES_ADMIN.capexAccountLists;
+
+/** `statecode`/`statuscode` of an Active row, in the order the data layer sent them. */
+export const STATE_ACTIVE_PAYLOAD = { statecode: 0, statuscode: 1 } as const;
+
+export interface PlanOptions { canEdit: boolean }
+
+function singleWrite(opts: PlanOptions, write: PlannedWrite): WritePlan {
+  if (!opts.canEdit) return refusePlan(OUT_OF_SCOPE);
+  const plan = emptyPlan();
+  plan.writes.push(write);
+  return plan;
+}
+
+/**
+ * Rename only — Number and Category are never sent, and the name is trimmed (CA:1436, 1980).
+ * A row deleted since the tree loaded is refused, never recreated.
+ */
+export function planRenameAccount(id: string, name: string, opts: PlanOptions): WritePlan {
+  return singleWrite(opts, guardedUpdate(
+    ACCOUNTS_SET, id, { vsb_name: name.trim() }, "account renamed", "rename CAPEX account",
+  ));
+}
+
+/** Activate an account: status only — subaccounts keep their status, costs are not restored. */
+export function planActivateAccount(id: string, opts: PlanOptions): WritePlan {
+  return singleWrite(opts, guardedUpdate(
+    ACCOUNTS_SET, id, { ...STATE_ACTIVE_PAYLOAD }, "account activated", "activate CAPEX account",
+  ));
+}
+
+/** Activate a subaccount: status only. */
+export function planActivateSubaccount(id: string, opts: PlanOptions): WritePlan {
+  return singleWrite(opts, guardedUpdate(
+    ACCOUNTS_SET, id, { ...STATE_ACTIVE_PAYLOAD }, "subaccount activated", "activate CAPEX subaccount",
+  ));
+}

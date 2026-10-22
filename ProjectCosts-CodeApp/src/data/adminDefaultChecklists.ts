@@ -1,136 +1,356 @@
 /**
- * Admin Project Default Checklists — the Dataverse reads behind
- * `features/admin/admin-default-checklists` (tables registered 19 Oct 2026, D18).
+ * Check List Settings — Dataverse reads and writes.
  *
- * SERVER AUTOMATION: every add or modify of `vsb_projectdefaultchecklists` fires the flow
- * `SynchroniseProjectTaskList-Add_Update`, which copies the task into live project checklists
- * (04-flow-inventory.md). The reads here have no side effects; the writes go through the screen's
- * `WritePlan`s, shaped so that flow behaves exactly as it does for the canvas.
+ * Canvas source: `Admin Project Default Checklists Screen.pa.yaml`. Every read (R-n) and write
+ * (W-n) here maps a canvas operation.
+ *
+ * TABLES. The three checklist tables (tasks, country/technology tabs, default approvals) are
+ * read and written through the generated services. Their entity sets, columns and row shapes
+ * live in ONE shared place, `data/adminChecklistTables.ts` (also used by Project Gates);
+ * this module maps that repository's models onto this screen's models. Clusters (`vsb_projectstates`) use the generated
+ * `Vsb_projectstatesService`.
+ *
+ * WRITE MODEL. Nothing here changes the cache optimistically: the sync flow
+ * `SynchroniseProjectTaskList-Add_Update` reads the committed row, so the UI must reflect only
+ * what Dataverse accepted.
  */
-import { Vsb_checklistcountryandtechnologiesService } from "@/generated/services/Vsb_checklistcountryandtechnologiesService";
-import { Vsb_checklistdefaultapprovalsesService } from "@/generated/services/Vsb_checklistdefaultapprovalsesService";
-import { Vsb_projectdefaultchecklistsesService } from "@/generated/services/Vsb_projectdefaultchecklistsesService";
 import { Vsb_projectstatesService } from "@/generated/services/Vsb_projectstatesService";
-import type { GateRow, ScopeRow, TaskRow } from "@/features/admin/admin-default-checklists/rules";
-import { fetchAll, fetchPage } from "./client";
-import { and, chunk, eq, idIn, lookupEq, ne } from "./odata";
+import { fetchAll } from "./client";
+import { f } from "./odata";
+import { RowWriteError } from "./adminRowWrites";
+import { forEachLimit } from "./concurrency";
+import {
+  checklistTables, isLockingApproval, taskBinds, type ChecklistApproval, type ChecklistTablesRepository,
+} from "./adminChecklistTables";
+import { owningBusinessUnitBind } from "@/data/odata";
 
-/** `Checklist Country And Technologies` — the tab strip. Sorted client-side (`vsb_order` is text). */
-export async function listChecklistScopes(): Promise<ScopeRow[]> {
-  const rows = await fetchAll(
-    "list checklist country/technology scopes",
-    (o) => Vsb_checklistcountryandtechnologiesService.getAll(o),
-    {
-      select: [
-        "vsb_checklistcountryandtechnologyid", "vsb_name", "vsb_order", "_vsb_country_value",
-        "vsb_technology", "_owningbusinessunit_value",
-      ],
-    },
-  );
-  return rows.map((r) => ({
-    id: r.vsb_checklistcountryandtechnologyid,
-    name: r.vsb_name ?? "",
-    order: r.vsb_order ?? null,
-    countryId: r._vsb_country_value ?? null,
-    technology: r.vsb_technology === undefined || r.vsb_technology === null ? null : Number(r.vsb_technology),
-    owningBusinessUnitId: r._owningbusinessunit_value ?? null,
-  }));
+/* ═══════════════════════════════════════════════════════════════ tables ══ */
+
+export const CLUSTER_SELECT = ["vsb_projectstateid", "vsb_name", "vsb_order"] as const;
+
+/**
+ * Write shape for `vsb_projectdefaultchecklistses` (navigation properties = SchemaName).
+ * The owning-BU bind key is LOWER CASE (PG audit PascalCase was rejected live).
+ */
+export interface ChecklistTaskWrite {
+  vsb_name?: string;
+  vsb_order?: number;
+  vsb_holdingtaskdescription?: string;
+  vsb_gaterelevance?: boolean;
+  vsb_iscompletiondate?: boolean;
+  vsb_todelete?: boolean;
+  statecode?: 0 | 1;
+  statuscode?: 1 | 2;
+  "vsb_AssociatedCountryAndTechnology@odata.bind"?: string;
+  "vsb_ClusterState@odata.bind"?: string;
+  "owningbusinessunit@odata.bind"?: string;
 }
 
-/** `Filter('Project States', 'Is Visible On Checklist')`, by `vsb_order`. */
-export async function listChecklistGates(): Promise<GateRow[]> {
-  const rows = await fetchAll(
-    "list checklist gates",
-    (o) => Vsb_projectstatesService.getAll(o),
-    {
-      select: ["vsb_projectstateid", "vsb_name", "vsb_order", "vsb_isvisibleonchecklist"],
-      filter: eq("vsb_isvisibleonchecklist", true),
-      orderBy: ["vsb_order asc"],
-    },
-  );
-  return rows.map((r) => ({
-    id: r.vsb_projectstateid,
-    name: r.vsb_name ?? "",
-    order: r.vsb_order ?? 0,
-    isVisibleOnChecklist: r.vsb_isvisibleonchecklist === true,
-  }));
+/* ═════════════════════════════════════════════════════════ screen models ══ */
+
+export interface ChecklistTab {
+  id: string;
+  name: string;
+  /** Raw text Order — sorted numerically by `sortTabs` in the screen's rules. */
+  order: string | null;
+  owningBusinessUnitId: string | null;
 }
 
-const TASK_SELECT = [
-  "vsb_projectdefaultchecklistsid", "vsb_name", "vsb_order", "vsb_holdingtaskdescription",
-  "vsb_gaterelevance", "vsb_iscompletiondate", "vsb_todelete",
-  "_vsb_associatedcountryandtechnology_value", "_vsb_clusterstate_value", "statecode",
-];
+export interface ChecklistCluster {
+  id: string;
+  name: string;
+  order: number | null;
+}
 
-const scopeGateFilter = (scopeId: string, gateId: string) => and(
-  lookupEq("vsb_associatedcountryandtechnology", scopeId),
-  lookupEq("vsb_clusterstate", gateId),
-);
+export interface ChecklistTask {
+  id: string;
+  name: string;
+  order: number | null;
+  holdingDescription: string;
+  gateRelevance: boolean;
+  /** `null` is kept:  flips `null` to `true` (Power Fx `Not(blank)`). */
+  isCompletionDate: boolean | null;
+  isActive: boolean;
+  toDelete: boolean;
+  clusterId: string | null;
+  tabId: string | null;
+}
 
-/** One gate's tasks in one scope, without soft-deleted rows, by `vsb_order`. */
-export async function listScopeTasks(scopeId: string, gateId: string): Promise<TaskRow[]> {
-  const rows = await fetchAll(
-    "list default checklist tasks",
-    (o) => Vsb_projectdefaultchecklistsesService.getAll(o),
-    {
-      select: TASK_SELECT,
-      // `ne true` keeps rows whose flag is null as well as false.
-      filter: and(scopeGateFilter(scopeId, gateId), ne("vsb_todelete", true)),
-      orderBy: ["vsb_order asc"],
-    },
-  );
-  return rows.map((r) => ({
-    id: r.vsb_projectdefaultchecklistsid,
-    name: r.vsb_name ?? "",
-    order: r.vsb_order ?? 0,
-    holdingTaskDescription: r.vsb_holdingtaskdescription ?? null,
-    gateRelevance: r.vsb_gaterelevance === true,
-    isCompletionDate: r.vsb_iscompletiondate === true,
-    toDelete: r.vsb_todelete === true,
-    countryTechId: r._vsb_associatedcountryandtechnology_value ?? null,
-    clusterStateId: r._vsb_clusterstate_value ?? null,
-    status: Number(r.statecode ?? 0),
-  }));
+/** What the Add/Edit drawer submits. */
+export interface TaskForm {
+  name: string;
+  holdingDescription: string;
+  gateRelevance: boolean;
+  isCompletionDate: boolean;
+  isActive: boolean;
+}
+
+/** One Order write (reorder and renumber-after-delete). */
+export interface OrderPatch {
+  id: string;
+  order: number;
+}
+
+/* ═══════════════════════════════════════════════════════════ repository ══ */
+
+/**
+ * The only seam to Dataverse for this screen (tests can inject a fake). The default
+ * implementation delegates to the shared `checklistTables` repository.
+ */
+export interface ChecklistRepository {
+  listTabs(): Promise<ChecklistTab[]>;
+  listClusters(): Promise<ChecklistCluster[]>;
+  listTasks(tabId: string): Promise<ChecklistTask[]>;
+  /** Task approvals that lock their task (mode is not "Only Notifications", or null). */
+  listLocks(): Promise<Pick<ChecklistApproval, "checklistId" | "mode">[]>;
+  /** Returns the new row's id. */
+  createTask(record: ChecklistTaskWrite): Promise<string>;
+  updateTask(id: string, changed: ChecklistTaskWrite): Promise<void>;
 }
 
 /**
- * The highest `Order` in the scope and gate, read at SAVE time for the next order
- * (`nextOrderFromHighest`).
+ * Step A (create) succeeded but Dataverse returned no id. The row very likely EXISTS,
+ * so the screen must not leave the drawer in create mode — a retry would add a duplicate.
  */
-export async function highestTaskOrder(scopeId: string, gateId: string): Promise<number | null> {
-  const rows = await fetchPage(
-    "read the highest default checklist order",
-    (o) => Vsb_projectdefaultchecklistsesService.getAll(o),
-    {
-      select: ["vsb_projectdefaultchecklistsid", "vsb_order"],
-      filter: and(scopeGateFilter(scopeId, gateId), ne("vsb_todelete", true)),
-      orderBy: ["vsb_order desc"],
-      top: 1,
+export class TaskCreatedIdUnknownError extends Error {
+  constructor() {
+    // Thrown before step B, so the status the user chose was never written.
+    super(
+      "The item was created but could not be confirmed, so its status may not be set. " +
+        "Check the list before adding it again, and set Active on the item if needed.",
+    );
+    this.name = "TaskCreatedIdUnknownError";
+  }
+}
+
+/** V9: the operation texts this screen's checklist writes carry in a `DataError`. */
+export const OPERATION = {
+  create: "Create checklist item",
+  update: "Update checklist item",
+} as const;
+
+/** Builds the screen repository over a checklist-tables repository (default: the shared one). */
+export function createChecklistRepository(tables: ChecklistTablesRepository = checklistTables): ChecklistRepository {
+  return {
+    /** All tabs once, no status filter. Client sorts numerically. */
+    listTabs: async () =>
+      (await tables.listChecklistHeaders({ operation: "Load checklist country/technology tabs" }))
+        .map((h) => ({ id: h.id, name: h.name, order: h.order, owningBusinessUnitId: h.owningBusinessUnitId })),
+
+    /** The visible project states (clusters) for the scope. */
+    listClusters: async () => {
+      const rows = await fetchAll("Load checklist clusters", Vsb_projectstatesService.getAll, {
+        select: [...CLUSTER_SELECT],
+        filter: f.eq("vsb_isvisibleonchecklist", true),
+        orderBy: ["vsb_order asc"],
+      });
+      return rows.map((r) => ({ id: r.vsb_projectstateid, name: r.vsb_name ?? "", order: r.vsb_order ?? null }));
     },
-  );
-  return rows[0]?.vsb_order ?? null;
+
+    /**
+     * ONE query per tab (the canvas ran one per cluster). The shared reader's
+     * `vsb_todelete` clause is null-safe, so it means what Power Fx `Not('To Delete' = true)` meant.
+     */
+    listTasks: async (tabId) =>
+      (await tables.listDefaultChecklists({ headerId: tabId, operation: "Load checklist tasks" }))
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          order: t.order,
+          holdingDescription: t.holdingDescription,
+          gateRelevance: t.gateRelevance,
+          isCompletionDate: t.isCompletionDate,
+          isActive: t.active,
+          toDelete: t.toDelete,
+          clusterId: t.clusterId,
+          tabId: t.headerId,
+        })),
+
+    /**
+     * One query per screen load instead of up to 8 LookUps per row. Dataverse `ne`
+     * does not return nulls, and a NULL mode locks in the canvas, so the shared filter has an
+     * explicit null clause.
+     */
+    listLocks: () =>
+      tables.listChecklistApprovals({ lockingOnly: true, operation: "Load Project Gate checklist approvals" }),
+
+    // V9 (reusable components E9): this screen names its writes with the capitalised
+    // pre-batch-2 operation texts again, so an error reads "Create checklist item failed: …".
+    createTask: async (record) => {
+      const id = await tables.createDefaultChecklist({ ...record }, OPERATION.create);
+      // `success: true` with no id: created, id unknown — never treat this as "not created".
+      if (!id) throw new TaskCreatedIdUnknownError();
+      return id;
+    },
+
+    updateTask: (id, changed) => tables.updateDefaultChecklist(id, { ...changed }, OPERATION.update),
+  };
+}
+
+export const dataverseChecklistRepository: ChecklistRepository = createChecklistRepository();
+
+/* ═══════════════════════════════════════════════════════════════ reads ══ */
+
+export function loadTabs(repo: ChecklistRepository = dataverseChecklistRepository): Promise<ChecklistTab[]> {
+  return repo.listTabs();
+}
+
+export function loadClusters(repo: ChecklistRepository = dataverseChecklistRepository): Promise<ChecklistCluster[]> {
+  return repo.listClusters();
+}
+
+export async function loadTasks(
+  tabId: string, repo: ChecklistRepository = dataverseChecklistRepository,
+): Promise<ChecklistTask[]> {
+  // Defensive: even if the server filter ever changed, a row waiting for deletion stays hidden.
+  return (await repo.listTasks(tabId)).filter((t) => !t.toDelete);
+}
+
+/** The ids of tasks "in use by a Project Gate". */
+export async function loadLockedTaskIds(
+  repo: ChecklistRepository = dataverseChecklistRepository,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const approval of await repo.listLocks()) {
+    const id = approval.checklistId;
+    // The query already excludes "Only Notifications"; re-check so a fake or a future filter
+    // change cannot widen the lock.
+    if (id && isLockingApproval(approval)) ids.add(id.toLowerCase());
+  }
+  return ids;
+}
+
+/* ═══════════════════════════════════════════════════════════ payloads ══ */
+
+/** Active → statecode 0 / statuscode 1; Inactive → 1 / 2. */
+export function statusPayload(isActive: boolean): { statecode: 0 | 1; statuscode: 1 | 2 } {
+  return isActive ? { statecode: 0, statuscode: 1 } : { statecode: 1, statuscode: 2 };
+}
+
+/** Create payload (step A). The BU bind is omitted when the tab has no BU. */
+export function buildCreatePayload(
+  tab: ChecklistTab, clusterId: string, form: TaskForm, order: number,
+): ChecklistTaskWrite {
+  return {
+    vsb_name: form.name.trim(),
+    vsb_order: order,
+    ...taskBinds(tab.id, clusterId),
+    vsb_holdingtaskdescription: form.holdingDescription.trim(),
+    vsb_gaterelevance: form.gateRelevance,
+    vsb_iscompletiondate: form.isCompletionDate,
+    ...owningBusinessUnitBind(tab.owningBusinessUnitId),
+  };
+}
+
+/** Edit payload (step B for an existing row). BU comes from the task's own tab. */
+export function buildEditPayload(form: TaskForm, tab: ChecklistTab | undefined): ChecklistTaskWrite {
+  return {
+    vsb_name: form.name.trim(),
+    vsb_holdingtaskdescription: form.holdingDescription.trim(),
+    vsb_gaterelevance: form.gateRelevance,
+    vsb_iscompletiondate: form.isCompletionDate,
+    ...statusPayload(form.isActive),
+    ...owningBusinessUnitBind(tab?.owningBusinessUnitId),
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════ writes ══ */
+
+/**
+ * Step A succeeded and step B (status) failed: the row EXISTS. The screen switches the drawer
+ * to edit that row, so a retry updates it instead of creating a duplicate.
+ */
+export class TaskStatusNotSetError extends Error {
+  readonly createdId: string;
+  override readonly cause?: unknown;
+  constructor(createdId: string, cause: unknown) {
+    super(
+      "The checklist item was created, but its status could not be set. " +
+      `Save again to retry. ${cause instanceof Error ? cause.message : ""}`.trim(),
+    );
+    this.name = "TaskStatusNotSetError";
+    this.createdId = createdId;
+    this.cause = cause;
+  }
+}
+
+export interface CreateTaskArgs {
+  tab: ChecklistTab;
+  clusterId: string;
+  form: TaskForm;
+  order: number;
 }
 
 /**
- * `Check List Default Approvals` for the given tasks, with their mode. The mode is NOT filtered
- * server-side: `ne` would drop blank modes, and a blank mode locks (`blockingChecklistIds`).
+ * Add mode. KEEPS the canvas create-then-update sequence on purpose: the
+ * sync flow copies `statecode` to project checklists only on Update, so a single create of an
+ * Inactive task would produce Active project tasks.
  */
-export async function listTaskApprovals(
-  taskIds: readonly string[],
-): Promise<{ projectDefaultChecklistId: string | null; approvalMode: number | null }[]> {
-  if (taskIds.length === 0) return [];
-  const batches = await Promise.all(chunk(taskIds).map((ids) =>
-    fetchAll(
-      "list default approvals of checklist tasks",
-      (o) => Vsb_checklistdefaultapprovalsesService.getAll(o),
-      {
-        select: ["vsb_checklistdefaultapprovalsid", "_vsb_projectdefaultchecklistid_value", "vsb_approvalmodecode"],
-        filter: idIn("_vsb_projectdefaultchecklistid_value", ids),
-      },
-    )));
-  return batches.flat().map((r) => ({
-    projectDefaultChecklistId: r._vsb_projectdefaultchecklistid_value ?? null,
-    approvalMode: r.vsb_approvalmodecode === undefined || r.vsb_approvalmodecode === null
-      ? null : Number(r.vsb_approvalmodecode),
-  }));
+export async function createTask(
+  args: CreateTaskArgs, repo: ChecklistRepository = dataverseChecklistRepository,
+): Promise<string> {
+  const id = await repo.createTask(buildCreatePayload(args.tab, args.clusterId, args.form, args.order));
+  try {
+    await repo.updateTask(id, statusPayload(args.form.isActive));
+  } catch (error) {
+    throw new TaskStatusNotSetError(id, error);
+  }
+  return id;
+}
+
+// MOVED (D36): edit, the Completion Date toggle and activate/deactivate are single guarded
+// updates, so they are `WritePlan`s built by `features/admin/admin-default-checklists/rules.ts`
+// (`planUpdateTask`, `planToggleCompletion`, `planSetActive`) and run through `data/runPlan.ts`.
+// `buildEditPayload` and `statusPayload` above are what those builders shape the body with; the
+// repository's `updateTask` stays — `createTask`, `writeOrders` and `softDeleteTask` still use it.
+
+/** Per-row Order writes are bounded; each row starts one flow run. */
+export const ORDER_WRITE_CONCURRENCY = 4;
+
+/**
+ * Writes only the rows whose Order changed, one PATCH per row by id (the canvas'
+ * non-delegable `UpdateIf` is gone). `UpdateMultiple` is not used: it is not proven against
+ * this table (and master has no bulk services). Throws `RowWriteError`
+ * with `partial` true when some rows were written before the failure.
+ */
+export async function writeOrders(
+  rows: readonly OrderPatch[], repo: ChecklistRepository = dataverseChecklistRepository,
+): Promise<void> {
+  if (rows.length === 0) return;
+  let landed = 0;
+  try {
+    await forEachLimit(rows, async (row) => {
+      await repo.updateTask(row.id, { vsb_order: row.order });
+      landed += 1;
+    }, ORDER_WRITE_CONCURRENCY);
+  } catch (error) {
+    throw new RowWriteError(error, landed > 0, landed, rows.length);
+  }
+}
+
+/** Step 2 of the soft delete failed after step 1 succeeded. */
+export class RenumberAfterDeleteError extends Error {
+  override readonly cause?: unknown;
+  constructor(cause: unknown) {
+    super("The checklist item was deleted, but the order of the remaining items may be out of date.");
+    this.name = "RenumberAfterDeleteError";
+    this.cause = cause;
+  }
+}
+
+/**
+ * The canvas SOFT delete. Sets `vsb_todelete`; the sync flow removes the project
+ * copies and then deletes the template row itself. The client never hard-deletes.
+ * Step 2 (close the Order gap) runs ONLY if step 1 succeeded.
+ */
+export async function softDeleteTask(
+  id: string, renumber: readonly OrderPatch[],
+  repo: ChecklistRepository = dataverseChecklistRepository,
+): Promise<void> {
+  await repo.updateTask(id, { vsb_todelete: true });
+  try {
+    await writeOrders(renumber, repo);
+  } catch (error) {
+    throw new RenumberAfterDeleteError(error);
+  }
 }

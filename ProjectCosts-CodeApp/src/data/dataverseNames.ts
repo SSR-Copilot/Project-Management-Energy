@@ -659,3 +659,16 @@ export const OVERLEVERAGING = "Overleveraging";
 
 /** The synthetic tab `App.OnStart` prepends to `colCapexAccountCategoriesNew`. */
 export const CAPEX_SUMMARY_TAB_NAME = "DEVEX/CAPEX Summary";
+
+/**
+ * The checklist tables shared by Check List Settings and Project Gates (entity sets), plus the
+ * business-unit set the owning-BU bind points at. Pure names: the rules of both screens use them
+ * to build `@odata.bind` payloads, so they live here and not in the SDK-touching data module.
+ */
+export const CHECKLIST_ENTITY_SETS = {
+  tasks: "vsb_projectdefaultchecklistses",
+  headers: "vsb_checklistcountryandtechnologies",
+  approvals: "vsb_checklistdefaultapprovalses",
+  clusters: "vsb_projectstates",
+  businessUnits: "businessunits",
+} as const;

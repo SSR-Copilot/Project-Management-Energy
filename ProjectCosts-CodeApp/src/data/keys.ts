@@ -4,6 +4,13 @@
  * Everything project-scoped carries the project id, because the Cost app is opened per
  * project via a deep link and switching projects must not show the previous one's rows.
  */
+
+/** A settings Country + Technology selection, as the Application Settings screens key their scoped reads. */
+export interface SettingsScope {
+  countryId: string;
+  technology: number;
+}
+
 export const qk = {
   session: ["session"] as const,
   environmentVariables: ["environmentVariables"] as const,
@@ -12,49 +19,80 @@ export const qk = {
   projectCountry: (countryId: string) => ["projectCountry", countryId] as const,
 
   capexAccounts: ["capexAccounts"] as const,
-  /** Admin CAPEX Accounts: the whole chart, any status, and the contract references. */
+  /*
+   * Application Settings (`/admin/*`) keys, flat and camelCase like the rest of `qk`. A key with a
+   * `...All` twin is a prefix of it, so one invalidation refreshes every scope.
+   */
+  /**
+   * The ONE `vsb_countries` read shared by the settings screens (`data/countries.ts`): every country,
+   * active or not; consumers narrow it with `select`. Not under `["countries"]`, which Project Main
+   * uses for its own read.
+   */
+  adminCountries: ["adminCountries"] as const,
+  /** Admin CAPEX Accounts: the whole chart (prefix of the two below), its tree, and one account's contract check. */
   adminCapexAccounts: ["adminCapexAccounts"] as const,
-  adminCapexContractRefs: ["adminCapexContractRefs"] as const,
-  /** Admin Default Checklists: scopes, gates, one gate's tasks, and their approval locks. */
-  checklistScopes: ["checklistScopes"] as const,
-  checklistGates: ["checklistGates"] as const,
-  checklistTasks: (scopeId: string, gateId: string) => ["checklistTasks", scopeId, gateId] as const,
-  checklistTaskLocks: (taskIds: readonly string[]) => ["checklistTaskLocks", ...taskIds] as const,
-  /** Prefix keys, for invalidating every scope/gate at once. */
-  checklistTasksAll: ["checklistTasks"] as const,
-  checklistTaskLocksAll: ["checklistTaskLocks"] as const,
-  /** Admin Milestones: the country axis and one country's assumptions. */
-  milestoneCountries: ["milestoneCountries"] as const,
-  milestoneAssumptions: (countryId: string) => ["milestoneAssumptions", countryId] as const,
-  milestoneAssumptionsAll: ["milestoneAssumptions"] as const,
-  /** Admin Gates Approvals: the rail, the states, one scope's rows, and the Entra lookups. */
-  gateCountries: ["gateCountries"] as const,
-  gateStates: ["gateStates"] as const,
-  gateApprovals: (countryId: string, technology: number) => ["gateApprovals", countryId, technology] as const,
-  gateApprovalsAll: ["gateApprovals"] as const,
-  gateScopeCountryTech: (countryId: string, technology: number) => ["gateScopeCountryTech", countryId, technology] as const,
-  gateChecklistItems: (countryTechId: string) => ["gateChecklistItems", countryTechId] as const,
-  gateChecklistApprovals: (itemIds: readonly string[]) => ["gateChecklistApprovals", ...itemIds] as const,
-  gateChecklistApprovalsAll: ["gateChecklistApprovals"] as const,
-  /** Admin Contract: the rail, one scope's BoP standard contracts, and their DevCo costs. */
-  contractCountries: ["contractCountries"] as const,
-  bopContracts: (countryId: string, technology: number) => ["bopContracts", countryId, technology] as const,
-  bopContractsAll: ["bopContracts"] as const,
-  bopDevCoCosts: (contractIds: readonly string[]) => ["bopDevCoCosts", ...contractIds] as const,
-  bopDevCoCostsAll: ["bopDevCoCosts"] as const,
-  /** Admin Cost: the rail, the subaccount lists, one scope's standard costs, and the lookups. */
-  costCountries: ["costCountries"] as const,
-  costOpexSubaccounts: ["costOpexSubaccounts"] as const,
-  costLandLeaseSubaccounts: ["costLandLeaseSubaccounts"] as const,
-  costOpexAssumptions: (countryId: string, technology: number) => ["costOpexAssumptions", countryId, technology] as const,
-  costOpexAssumptionsAll: ["costOpexAssumptions"] as const,
-  costDevexCosts: (countryId: string, technology: number) => ["costDevexCosts", countryId, technology] as const,
-  costDevexCostsAll: ["costDevexCosts"] as const,
-  costSpvMapping: ["costSpvMapping"] as const,
-  costInflationAreas: (countryId: string) => ["costInflationAreas", countryId] as const,
-  costCurrencies: ["costCurrencies"] as const,
-  /** Prefix key of the Cost CAPEX screen's standard-assumption read (`useCostBook`). */
+  adminCapexAccountsTree: ["adminCapexAccounts", "tree"] as const,
+  adminCapexHasContracts: (id: string) => ["adminCapexAccounts", "has-contracts", id] as const,
+  /** Admin Default Checklists: tabs, clusters, a tab's tasks and the approval locks. */
+  adminChecklistTabs: ["adminChecklistTabs"] as const,
+  adminChecklistClusters: ["adminChecklistClusters"] as const,
+  /** Prefix of every tab's task list. */
+  adminChecklistTasksAll: ["adminChecklistTasks"] as const,
+  adminChecklistTasks: (tabId: string | null) => ["adminChecklistTasks", tabId ?? ""] as const,
+  adminChecklistLocks: ["adminChecklistLocks"] as const,
+  /** Admin Gates & Approvals: the states, one Country + Technology dataset, the placeholder key and the Entra lookup. */
+  adminGateStates: ["adminGateStates"] as const,
+  /** Prefix of every dataset (and of the disabled `adminGateDatasetNone`). */
+  adminGateDatasetAll: ["adminGateDataset"] as const,
+  adminGateDataset: (countryId: string, technology: number) => ["adminGateDataset", countryId, technology] as const,
+  /** The placeholder key used while no context is selected. */
+  adminGateDatasetNone: ["adminGateDataset", "none"] as const,
+  adminGatePeople: (term: string) => ["adminGatePeople", term.trim().toLowerCase()] as const,
+  /** Admin Milestones: the assumption rows of every country. */
+  adminMilestoneAssumptions: ["adminMilestoneAssumptions"] as const,
+  /** Admin Cost: the account hierarchy, the subaccount lists, the lookups and one scope's standard costs. */
+  adminCostHierarchy: ["adminCostHierarchy"] as const,
+  adminCostLandLeaseSubaccounts: ["adminCostLandLeaseSubaccounts"] as const,
+  adminCostOpexSubaccounts: ["adminCostOpexSubaccounts"] as const,
+  adminCostCurrencies: ["adminCostCurrencies"] as const,
+  adminCostPayerDefaults: ["adminCostPayerDefaults"] as const,
+  adminCostInflationAreas: (countryId: string) => ["adminCostInflationAreas", countryId] as const,
+  /** Prefix of every scope's standard (DEVEX) cost list. */
+  adminCostDevexAll: ["adminCostDevex"] as const,
+  adminCostDevex: (scope: SettingsScope | undefined) =>
+    ["adminCostDevex", scope?.countryId ?? "-", scope?.technology ?? -1] as const,
+  /** Prefix of every scope's standard OPEX / Land Lease period list. */
+  adminCostOpexAll: ["adminCostOpex"] as const,
+  adminCostOpex: (scope: SettingsScope | undefined) =>
+    ["adminCostOpex", scope?.countryId ?? "-", scope?.technology ?? -1] as const,
+  /** Admin Contract: one scope's standard contracts and DevCo rows, and a single-contract read (each with its prefix). */
+  adminContractListAll: ["adminContractList"] as const,
+  adminContractList: (countryId: string, technology: number) => ["adminContractList", countryId, technology] as const,
+  adminContractDevCoAll: ["adminContractDevCo"] as const,
+  adminContractDevCo: (countryId: string, technology: number) => ["adminContractDevCo", countryId, technology] as const,
+  adminContractRecordAll: ["adminContractRecord"] as const,
+  adminContractRecord: (id: string) => ["adminContractRecord", id] as const,
+  /*
+   * Prefixes of the PROJECT-side caches that read tables Application Settings writes. The values are
+   * the literals `features/cost/costing/useCostBook.ts` builds today; naming them here lets the
+   * settings invalidation helpers (`data/adminInvalidation.ts`) be checked by the compiler.
+   */
+  /** `["capex-standard-assumptions", key]` — DEVEX/CAPEX standard costs. */
   capexStandardAssumptionsAll: ["capex-standard-assumptions"] as const,
+  /** `["land-lease-assumptions", country, tech]` — Land Lease standard periods. */
+  landLeaseAssumptionsAll: ["land-lease-assumptions"] as const,
+  /** `["opex-assumption-scopes", country, tech]` — OPEX standard-contract catalogue. */
+  opexAssumptionScopesAll: ["opex-assumption-scopes"] as const,
+  /** `["capex-milestone-durations", country, tech]` — cluster durations (Milestones table). */
+  capexMilestoneDurationsAll: ["capex-milestone-durations"] as const,
+  /** `["cost-book", projectId, category]` — every project's cost book (account names, costs). */
+  costBookAll: ["cost-book"] as const,
+  /** `["capex-totals", projectId]` — DEVEX/CAPEX summary totals. */
+  capexTotalsAll: ["capex-totals"] as const,
+  /** `["add-cost-sheet", projectId, category]` — the Add Costs from Table sheet. */
+  addCostSheetAll: ["add-cost-sheet"] as const,
+  /** Prefix key of the Admin Milestones assumptions (PM Milestones' row key sits under it). */
+  milestoneAssumptionsAll: ["milestoneAssumptions"] as const,
   /** PM General Data (D25): the project row, its reference data and its child rows. */
   generalDataProject: (projectId: string) => ["generalDataProject", projectId] as const,
   generalDataCountries: ["generalDataCountries"] as const,
@@ -117,7 +155,6 @@ export const qk = {
   priceInflation: (fidYear: number) => ["priceInflation", fidYear] as const,
   entraPeopleSearch: (term: string) => ["entraPeopleSearch", term] as const,
   entraPeople: (ids: readonly string[]) => ["entraPeople", ...ids] as const,
-  entraPeopleAll: ["entraPeople"] as const,
 
   contracts: (projectId: string) => ["contracts", projectId] as const,
   paymentTargets: (projectId: string) => ["paymentTargets", projectId] as const,

@@ -2,7 +2,7 @@ import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashRouter, RouterProvider, useRouteError } from "react-router-dom";
 import { useState, type ReactNode } from "react";
-import { ErrorBoundary } from "@/components";
+import { AppToaster, ErrorBoundary } from "@/components";
 import { vsbTheme } from "@/theme/fluent";
 import { isRetryable } from "@/platform/errors";
 import { SessionProvider } from "./SessionContext";
@@ -62,6 +62,8 @@ export function Providers({ children }: { children: ReactNode }) {
     <FluentProvider theme={vsbTheme} style={{ height: "100%" }}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
+        {/* The one toast region for `useNotify()` (the Application Settings screens' save notices). */}
+        <AppToaster />
       </QueryClientProvider>
     </FluentProvider>
   );
