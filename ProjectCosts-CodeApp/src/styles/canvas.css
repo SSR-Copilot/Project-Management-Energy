@@ -433,3 +433,48 @@
 /* `Choices horizontal` — a radio group with `Layout: Horizontal` (e.g. the Planning permit
    Plan / Actual): the options on one line under the caption. */
 .canvas-radio-horizontal > label { display: inline-flex; margin-right: 24px; }
+/* OPEX Add / Edit Period panel — `con_OpexCosts_RightPanel_NewEditCost`
+   (OpexCostScreenCode.txt:5400-8900), scoped by `FormPanel panelClassName="opex-canvas-panel"`.
+   Its captions are classic `Label`s, not the modern Text the other panels use: 11 pt
+   (`gblAppSizes.Font.Medium`), normal weight, black, 32 px high, with the red `*`
+   (`palette.Error`, #B22727) 10 px LEFT of the caption so the caption stays aligned with its box.
+   Every field block is 32 px caption + 32 px box, 76 px apart. */
+.opex-canvas-panel .canvas-field { gap: 0; }
+.opex-canvas-panel .canvas-field > span:first-child {
+  position: relative; display: flex; align-items: center; height: 32px;
+  font-size: 11pt; font-weight: 400; color: #000;
+}
+.opex-canvas-panel .canvas-field > span[data-required="true"]::before {
+  content: '*'; position: absolute; left: -10px; top: 0; height: 32px;
+  display: flex; align-items: center; font-weight: 600; color: #B22727;
+}
+/* The modern controls in `DisplayMode.Disabled` keep their own look on the canvas: a white box with
+   a light grey outline and grey text (Description, Start Date, Currency, Inflation Start Year and
+   Custom Inflation Profile on a later period). Editable boxes keep the grey fill. */
+.opex-canvas-panel .canvas-field > input:disabled {
+  background: #fff; border: 1px solid #e0e0e0; color: #bdbdbd; -webkit-text-fill-color: #bdbdbd;
+}
+.opex-canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled) {
+  background: #fff; border: 1px solid #e0e0e0;
+}
+.opex-canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled) :is(input, button, svg) {
+  background: transparent; color: #bdbdbd; -webkit-text-fill-color: #bdbdbd;
+}
+/* `dte_…_StartDate` is editable, but its `FontColor` is `If(<standard start date>, themePrimary)`
+   with no else, so on an ordinary row it falls back to the picker's pale default: the same white
+   outlined box and grey text as the disabled fields. A standard start date stays blue italic. */
+.opex-canvas-panel .fui-DatePicker { background: #fff; border: 1px solid #e0e0e0; }
+.opex-canvas-panel :not([data-standard-start]) > .fui-DatePicker input { color: #bdbdbd; -webkit-text-fill-color: #bdbdbd; }
+.opex-canvas-panel .fui-DatePicker svg { color: #bdbdbd; }/* A disabled `Toggle@1.1.5` or `Radio@0.0.25` greys its own label too. */
+.opex-canvas-panel .fui-Switch:has(input:disabled) ~ .fui-Text,
+.opex-canvas-panel label:has(> input[type="radio"]:disabled) { color: #bdbdbd; }
+/* The figures are canvas `TextInput`s, which have no spin buttons; the browser's up/down arrows on
+   `type="number"` are not part of the control. */
+.opex-canvas-panel input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.opex-canvas-panel input[type="number"]::-webkit-inner-spin-button,
+.opex-canvas-panel input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* `con_…_BodyButtons` — 60 px high. Cancel at `Parent.Width - 96 - 20`, Save at `Cancel.X - 96 - 20`:
+   two 96 x 32 PowerCAT `ActionButton`s, 20 px apart, with no `FontSize` set (the 14 px default,
+   not the 15 px the DEVEX/CAPEX buttons set). The hint is at `X: =20`. */
+.opex-canvas-panel .canvas-panel-footer { height: 60px; gap: 20px; padding: 0 20px; }
+.opex-canvas-panel .canvas-panel-footer button { width: 96px; min-width: 96px; height: 32px; font-size: 14px; }

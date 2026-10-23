@@ -383,16 +383,45 @@ describe("OPEX — period chains", () => {
     expect(chainHead([p2], p2).id).toBe("p2");
   });
 
-  it("UT-OPEX-016 the two 'last period' rules use different sort keys", () => {
-    // `lastPeriod` sorts by Name (the command bars); `lastPeriodByStartDate` by Start Date
-    // (the sub-account duration badge). They disagree once a date is edited by hand.
+  it("UT-OPEX-016 the last period is the latest start date, not the last Name (O-5 corrected)", () => {
+    // The canvas sorts by `Name`; a date edited by hand made the command bars and the duration
+    // badge disagree. Both now take the latest start date.
     const edited = groupChains([
       root,
       cost({ id: "p2", name: "Sub-Dev-Service - 2", parentCostId: "r", startDate: "2040-01-01" }),
       cost({ id: "p3", name: "Sub-Dev-Service - 3", parentCostId: "r", startDate: "2033-01-01" }),
     ])[0]!;
-    expect(lastPeriod(edited).id).toBe("p3");
+    expect(lastPeriod(edited).id).toBe("p2");
     expect(lastPeriodByStartDate(edited).id).toBe("p2");
+  });
+
+  it("UT-OPEX-016b Add Period and Delete follow period order when the stored names do not", () => {
+    // The live "Initialized O&M Contract" chain: rows 1-5 loaded with `vsb_name` = description,
+    // row 6 added in the app as `<sub-account>-<device>-<description>`, so by Name `- 5` was last.
+    const head = cost({ id: "i1", name: "Initialized O&M Contract", startDate: "2027-08-30" });
+    const migrated = [2, 3, 4, 5].map((n) => cost({
+      id: `i${n}`, name: `Initialized O&M Contract - ${n}`, parentCostId: "i1",
+      startDate: `${2027 + (n - 1) * 5}-08-30`,
+    }));
+    const added = cost({
+      id: "i6", name: "Operation & Maintenance-WTG 1-Initialized O&M Contract - 6",
+      parentCostId: "i1", startDate: "2057-08-30",
+    });
+    const cardCosts = [head, ...migrated, added];
+    expect(lastPeriod(groupChains(cardCosts)[0]!).id).toBe("i6");
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: added, cardCosts }))).toBe(true);
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: migrated[3]!, cardCosts }))).toBe(false);
+    expect(canDeleteCost(commandArgs({ selected: added, cardCosts }))).toBe(true);
+    expect(canDeleteCost(commandArgs({ selected: migrated[3]!, cardCosts }))).toBe(false);
+  });
+
+  it("UT-OPEX-016c a tenth period is last although '- 10' sorts before '- 2' as text", () => {
+    const periods = Array.from({ length: 9 }, (_, i) => cost({
+      id: `t${i + 2}`, name: `Sub-Dev-Service - ${i + 2}`, parentCostId: "r",
+      startDate: `${2030 + i}-01-01`,
+    }));
+    const chain10 = groupChains([root, ...periods])[0]!;
+    expect(lastPeriod(chain10).id).toBe("t10");
   });
 
   it("UT-OPEX-017 a new period starts where the previous one ended", () => {
@@ -1211,10 +1240,10 @@ describe("OPEX — panel behaviour and validation", () => {
     expect(DURATION_YEAR_OPTIONS.at(-1)?.value).toBe(35);
     expect(DURATION_MONTH_OPTIONS).toHaveLength(12);
     expect(DURATION_MONTH_OPTIONS.at(-1)?.value).toBe(11);
-    // SOURCE DEFECT O-11 — the years label tests the 1-based sequence index, so "0 year" and
-    // "1 years". The months label tests the value and is correct.
-    expect(DURATION_YEAR_OPTIONS[0]?.name).toBe("0 year");
-    expect(DURATION_YEAR_OPTIONS[1]?.name).toBe("1 years");
+    // `Items` tests `ThisRecord.Value-1 = 1` (`:6081`) like the months list; defect O-11 lives
+    // only in `DefaultSelectedItems` and never reaches the list.
+    expect(DURATION_YEAR_OPTIONS[0]?.name).toBe("0 years");
+    expect(DURATION_YEAR_OPTIONS[1]?.name).toBe("1 year");
     expect(DURATION_MONTH_OPTIONS[0]?.name).toBe("0 months");
     expect(DURATION_MONTH_OPTIONS[1]?.name).toBe("1 month");
   });
@@ -1452,13 +1481,19 @@ describe("OPEX — panel behaviour and validation", () => {
       .toBe(false);
   });
 
-  it("UT-OPEX-092 the error list reports blank required fields the canvas left silent", () => {
-    // NEW — no canvas equivalent; the canvas' own messages are reused. Nothing here changes
+  it("UT-OPEX-092 a blank required field shows nothing, as on the canvas; a duplicate is named", () => {
+    // The canvas leaves a blank box plain and only keeps Save disabled. Nothing here changes
     // what saves: `canSaveOpexCost` is the gate.
     const errors = opexFormErrors(form({ description: "", startDate: null, fixCosts: "1.234" }), ctx);
-    expect(errors.map((e) => e.field)).toContain("description");
-    expect(errors.map((e) => e.field)).toContain("startDate");
+    expect(errors.map((e) => e.field)).not.toContain("description");
+    expect(errors.map((e) => e.field)).not.toContain("startDate");
     expect(errors.find((e) => e.field === "fixCosts")?.message).toBe(OPEX_MSG.twoDecimal);
+    const duplicate = opexFormErrors(
+      form({ description: "Service" }),
+      { ...ctx, costsInScope: [cost({ description: "Service" })] },
+    );
+    expect(duplicate.find((e) => e.field === "description")?.message)
+      .toBe(OPEX_DESCRIPTION_MSG.duplicate);
     expect(OPEX_DESCRIPTION_MSG.blank).toBe("Value cannot be blank");
     expect(OPEX_DESCRIPTION_MSG.duplicate)
       .toBe("A period with the same description already exists.");
