@@ -2485,3 +2485,85 @@ a question**, and the code was wrong in two independent ways.*
    answer once.)
 7. **UX-10 / UX-11.** Commission the two unexamined areas — the Report a problem panel's appearance,
    and the screen's container geometry — or accept them as known-unaudited?
+
+---
+
+## D40 · DEV push of 23 Oct 2026 (master `690e508`): checklist step 5 waived again
+
+Recorded because `CONVENTIONS.md` ("Before pushing to DEV") requires any waived step to be
+written down with its reason. Same shape as **D37**, which waived the same step on 22 Oct.
+
+### What was deployed
+
+| | |
+|---|---|
+| Commit | `690e508` on `master` (fast-forward from `e172fa4`; `RounakDev1` identical) |
+| App | `807a2fba-665c-40f3-b158-ffe822aa7da4` ("Project App") |
+| Environment | VSBCloud_Dev, `be41add6-6f60-ebb0-9c73-2480d6bc615d` |
+| pac profile | `[2] ServiceAccount_DEV`, `flow.serviceuser.vsbcloud@vsb.energy` |
+| Command | `pac code push` — accepted, "App pushed successfully" |
+| Contents | The two DEVEX/CAPEX parity passes: `ce81088` (code) and `690e508` (docs) |
+
+### Checklist results
+
+| # | Step | Result |
+|---|---|---|
+| 1 | `npm ci` | Pass, on the **second** attempt — see the note below |
+| 2 | `check:power` | Pass — 81 registered, 0 problems |
+| 3 | `npm run verify` | Pass — 146 files, 3,891 tests, build OK |
+| 4 | knip + duplicate hygiene | Pass — no NEW unused files or dependencies; no byte-identical files in `src/` |
+| 5 | **Local smoke test against VSBCloud_Dev** | **WAIVED** |
+| 6 | Environment confirmed | Pass — `pac auth list` and `pac org who` both VSBCloud_Dev |
+| 7 | `pac code push` | Pass |
+
+Step 3 first aborted on **12 worker-start flakes** (134 files passed + 12 never started = 146,
+the full count; zero test failures). Re-run with `--maxWorkers=2`: 146 / 146 and 3,891 / 3,891,
+then `vite build` succeeded. Note that an aborted `verify` **skips every step after the tests**,
+including the build — so a partial run is not a weaker green, it is a different artifact. Check
+the file count and the `built in` line, not just the exit code.
+
+**Step 1 failed first time and left the tree unbuildable.** `npm ci` hit `EPERM` unlinking a
+rolldown native binding held open by the dev server still running from 22 Oct, after having
+already removed `node_modules/.bin` and `.package-lock.json` — exactly the state
+`10-SESSION-HANDOFF-2026-10-22.md` describes. Both stale processes (:3000 and :8080, started
+22 Oct 22:34) were stopped and the install re-run clean. **The warning in handoff 10 is not
+optional: stop every dev process before `npm ci` on this checkout.**
+
+### Why step 5 was waived, and what that costs
+
+Waived because the session performing the push cannot drive a browser against live Dataverse.
+This is the **second consecutive** DEV deployment without live verification.
+
+What is therefore unverified in the deployed build:
+
+- **Write paths.** All three CAPEX deletes now route through `deleteRecord`. The behaviour change
+  is only observable when Dataverse *refuses* — a successful delete looks identical either way —
+  so no test and no click-through here has exercised the path that changed.
+- **Every dialog dimension.** D39's heights (relink 200/250/280 and 60/120/150, paid 200/75) are
+  verified only as the right number reaching the right prop. jsdom cannot measure them, because
+  Fluent's own `height: fit-content` wins in its flat cascade. **The DEV app is the first place
+  these render.**
+- **Two screens outside CAPEX**, changed as collateral by the shared-component fixes: PM Revenues'
+  ⓘ dialog (`Screen.tsx:1302`), and the Application Settings error MessageBar, which now sits
+  flush against the actions row on seven admin screens.
+
+### What this means for anyone opening the DEV app
+
+**Nothing in D38 or D39 is product-approved.** Both are proposals. The deployed build therefore
+shows unapproved wording and layout, including:
+
+- the set-as-Paid dialog reading **"milestone-linked"** in its body under a **"Cluster-linked
+  Costs"** title — faithful to the canvas, and it will look like a typo to anyone who has not
+  read D39 §3;
+- the delete confirmation retitled **"Delete Contract"** with a plain blue Confirm instead of a
+  red Delete;
+- the admin error bar with no gap above the buttons.
+
+The Dev app is shared by every branch (`09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` §6); this
+push replaced whatever was deployed before it.
+
+### Owed
+
+The step-5 click-through, and the five browser measurements in
+`11-CAPEX-PARITY-CHANGE-RECORD-2026-10-23.md` §8. Both local dev processes were stopped during
+this push, so a restart is needed before either.
