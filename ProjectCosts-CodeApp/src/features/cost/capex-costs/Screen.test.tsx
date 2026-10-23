@@ -18,6 +18,8 @@ import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import type { CostAccount, CostLine } from "../costing/model";
 import type { GridCallback } from "./pcf/ui/GridRenderer";
+import { CATEGORY_LABELS, SUMMARY_TAB_NAME } from "./rules";
+import { MSG, PAID_CONFIRM_TITLE } from "./panelRules";
 
 const ACCOUNTS: CostAccount[] = [
   { id: "acc-1", number: "80000", name: "Turbine / PV Supply Agreement", category: 0 },
@@ -31,6 +33,15 @@ let lines: CostLine[] = [];
 let startClusterNo = 0;
 /** `gblSelectedProject.'Cluster State'.Order` — 0 until a test says otherwise. */
 let clusterStateOrder: number | undefined = undefined;
+
+/**
+ * `loadCapexCategories()` — the tab labels as Dataverse holds them.
+ *
+ * Defaults to `CATEGORY_LABELS` because that is what VSBCloud_Dev really returns today, so every
+ * pre-existing test in this file sees the strip it always saw. `undefined` stands for "the query
+ * has not resolved yet".
+ */
+let capexCategories: string[] | undefined = [...CATEGORY_LABELS];
 
 /**
  * `Project States`, as VSBCloud_Dev really holds them (measured 16 Sep): ten rows, of which
@@ -75,6 +86,7 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
     isLoading: false, error: null, save: { error: null }, projectId: "p1",
   }),
   useCapexTotals: () => ({ data: [], isLoading: false }),
+  useCapexCategories: () => ({ data: capexCategories }),
   useCapexWrites: () => ({
     setPaid, deleteLine, saveLine: { ...saveLine, isPending: savePending },
   }),
@@ -156,6 +168,17 @@ function mountAndOpenEdit(lineId: string) {
   return view;
 }
 
+/** The same, through the grid's `Delete` command, so the confirmation comes up. */
+function mountAndDelete(lineId: string) {
+  const view = mount();
+  const button = document.createElement("button");
+  button.setAttribute("data-testid", "open-add");
+  button.addEventListener("click", () => onAction("Delete", lineId));
+  document.body.appendChild(button);
+  openAddPanel();
+  return view;
+}
+
 /** The `line` the last save was asked to write. */
 const savedLine = () => saveLine.mutateAsync.mock.calls[0]?.[0]?.line;
 
@@ -163,6 +186,7 @@ beforeEach(() => {
   lines = [];
   startClusterNo = 0;
   clusterStateOrder = undefined;
+  capexCategories = [...CATEGORY_LABELS];
   savePending = false;
   vi.clearAllMocks();
   document.querySelectorAll('[data-testid="open-add"]').forEach((n) => n.remove());
@@ -414,9 +438,17 @@ describe("the Link to Milestone dropdown", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.getByText("Change Cluster Link")).toBeInTheDocument();
+    /*
+     * ONE message, so the canvas drops the header and the bullet and prints its own tailored
+     * sentence — `If(locCount > 1, <header + bullets>, <single statement>)` (`:20008-20024`).
+     * This used to assert the BULLET text ("Costs have been entered for Cluster 2 and linked
+     * to Cluster 3."), which the canvas only ever shows at two or more.
+     */
     expect(screen.getByText(
-      /Costs have been entered for Cluster 2 and linked to Cluster 3\./,
+      "You have entered costs in Cluster 2 and linked them to Cluster 3."
+      + " Would you like to proceed?",
     )).toBeInTheDocument();
+    expect(screen.queryByText(/following changes\?/)).not.toBeInTheDocument();
     // Nothing is written until the dialog is answered.
     expect(saveLine.mutateAsync).not.toHaveBeenCalled();
 
@@ -465,12 +497,20 @@ describe("the Link to Milestone dropdown", () => {
     fireEvent.click(screen.getByRole("radio", { name: "DevCo" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    // `Title: =If(locCostPaidByChanged && …, "Confirm Changes", locCostPaidByChanged,
-    //             "Change Cost Paid By", "Change Cluster Link")` (`:19941-19964`).
+    /*
+     * `Title` keys on the message COUNT, not on a pair of flags (`:20127-20170`):
+     * `If(locCountOfMessages >= 2, "Confirm Changes", locCostPaidByChanged,
+     *     "Change Cost Paid By", And(locClusterLinkageChanged, …), "Change Cluster Link",
+     *     locMilestoneRelinkResetNeeded, "Cluster-linked Costs")`.
+     */
     expect(screen.getByText("Change Cost Paid By")).toBeInTheDocument();
+    // One message → the single-statement form, with 'Cost Paid by' in SINGLE quotes and
+    // "influence the liquidity planning", not the bullet's "impact liquidity planning".
     expect(screen.getByText(
-      /Switch the "Cost Paid By" to DevCo\. This will impact liquidity planning and BoP\./,
+      "Are you sure you want to switch the 'Cost Paid by' to DevCo?"
+      + " This will influence the liquidity planning and BoP.",
     )).toBeInTheDocument();
+    expect(screen.queryByText(/following changes\?/)).not.toBeInTheDocument();
     expect(saveLine.mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -681,5 +721,199 @@ describe("Distribution and Distribution Scheme on an existing contract", () => {
     expect(screen.getByRole("radio", { name: "Individual Distribution" })).toBeEnabled();
     fireEvent.click(screen.getByRole("radio", { name: "Individual Distribution" }));
     expect(screen.getByRole("radio", { name: "% Values" })).toBeEnabled();
+  });
+});
+
+/**
+ * Strings and lists transcribed from the canvas rather than invented — CONVENTIONS rule 7 and
+ * the tab strip's data source. Decisions recorded in `02-OPEN-DECISIONS.md` D38 §3 and §4.
+ */
+describe("canvas fidelity of the screen's own copy", () => {
+  /**
+   * UT-CAPEXS-001 — `lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_17.Text` is
+   * "Start Date Distribution" and `…_Label_18.Text` is "End Date Distribution". This app had
+   * shortened both.
+   *
+   * The second half is the trap worth pinning: the CAPTION changed, the IDENTITY did not.
+   * `CostField` puts `name` on `aria-label` and `data-testid` and `label` in the visible span,
+   * so the canvas `AccessibleLabel` the identity gate compares is untouched.
+   */
+  it("UT-CAPEXS-001 captions the date boxes verbatim without moving their canvas identity", () => {
+    mountAndOpen();
+    fireEvent.click(screen.getByRole("radio", { name: "By Start and End Date" }));
+
+    expect(screen.getByText("Start Date Distribution")).toBeInTheDocument();
+    expect(screen.getByText("End Date Distribution")).toBeInTheDocument();
+    // The shortened captions are gone (exact match: "Start Date" ≠ "Start Date Distribution").
+    expect(screen.queryByText("Start Date")).not.toBeInTheDocument();
+    expect(screen.queryByText("End Date")).not.toBeInTheDocument();
+
+    expect(screen.getByTestId("txt_AddContract_RightPanel_StartDate_1"))
+      .toHaveAttribute("aria-label", "txt_AddContract_RightPanel_StartDate_1");
+    expect(screen.getByTestId("txt_AddContract_RightPanel_EndDate_1"))
+      .toHaveAttribute("aria-label", "txt_AddContract_RightPanel_EndDate_1");
+  });
+
+  /**
+   * UT-CAPEXS-002 — `cmp_PopUp_SubaccountCostsDeletion_Confirmation`: `Title: ="Delete Contract"`,
+   * `TextConfirmButton: ="Confirm"`, `TextCancelButton: ="Cancel"`, and a `Description` that
+   * names both the contract and its sub-account, each in `Char(34)` quotes. All four were
+   * invented before this.
+   */
+  it("UT-CAPEXS-002 asks the canvas' delete question, naming the contract and sub-account", () => {
+    lines = [individualContract({ description: "Gesamt" })];
+    mountAndDelete("l1");
+
+    expect(screen.getByText("Delete Contract")).toBeInTheDocument();
+    expect(screen.getByText(
+      'Are you sure you want to delete the costs for "Gesamt"'
+      + ' of the selected Subaccount "Turbine / PV Supply Agreement"?',
+    )).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    // The invented wording and the red button are both gone.
+    expect(screen.queryByText("Delete Cost")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(deleteLine.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * UT-CAPEXS-003 — the canvas builds the strip from
+   * `SortByColumns(Filter(colCapexAccountCategoriesNew, Not(Name = "Overleveraging")),
+   * "vsb_order")`. A category an admin adds must therefore get a tab, which the hard-coded list
+   * could never give it.
+   */
+  it("UT-CAPEXS-003 builds the tab strip from Dataverse, not from the hard-coded list", () => {
+    capexCategories = ["Wind Turbine / Panels", "Development Expenses", "Brand New Category"];
+    mount();
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      SUMMARY_TAB_NAME, "Wind Turbine / Panels", "Development Expenses", "Brand New Category",
+    ]);
+    expect(screen.queryByRole("tab", { name: "Other CAPEX" })).not.toBeInTheDocument();
+  });
+
+  /**
+   * UT-CAPEXS-004 — `categoryTabs` falls back to `CATEGORY_LABELS` rather than rendering a strip
+   * with only Summary on it: a transient query failure must not blank the navigation. Both the
+   * resolved-but-empty and the not-yet-resolved cases take that path.
+   */
+  it("UT-CAPEXS-004 falls back to the built-in categories when the query yields nothing", () => {
+    capexCategories = [];
+    const { unmount } = mount();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent))
+      .toEqual([SUMMARY_TAB_NAME, ...CATEGORY_LABELS]);
+    unmount();
+
+    capexCategories = undefined;
+    mount();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent))
+      .toEqual([SUMMARY_TAB_NAME, ...CATEGORY_LABELS]);
+  });
+});
+
+/**
+ * The dialog CARD dimensions, which `cmp_PopUp_Confirmation_New` takes per instance from its
+ * `BoxHeight` / `TextHeight` custom properties rather than from the component
+ * (`cmp_PopUp_Confirmation_New.pa.yaml:104`, `:167`). `ConfirmDialog` renders both as inline
+ * styles, so they are read off the element rather than through Griffel.
+ */
+describe("confirmation dialog dimensions", () => {
+  /** The `DialogSurface` — the white card itself. */
+  const surface = () => document.querySelector(".fui-DialogSurface") as HTMLElement;
+  /** The description band inside it: the surface's second child, after the 42 px header. */
+  const band = () => surface().children[1] as HTMLElement;
+  /** Local copy — the one in the Link to Milestone suite is scoped to that `describe`. */
+  const milestonePicker = () =>
+    screen.queryByRole("combobox", { name: "Link to Milestone" }) as HTMLElement;
+
+  /** An individually-distributed contract with one month of money, as the other tests use. */
+  const linkedCost = (patch: Partial<CostLine> = {}): CostLine => ({
+    id: "l1", accountId: "sub-1", description: "Linked cost", payer: "SPV",
+    depreciation: true, vat: true, standard: false, distribution: "individual",
+    equalMode: "cluster", distributionScheme: "absolute", startDate: "", endDate: "",
+    frequency: 1, clusters: [],
+    payments: [{ year: 2016, month: 6, amount: 500, paid: false }],
+    comments: [],
+    ...patch,
+  });
+
+  /**
+   * UT-CAPEXS-005 — ONE message: `BoxHeight` 200, `TextHeight` 60
+   * (`Switch(locCount, 1, 200, …)` at `:19906-19936`, `Switch(locCount, 1, 60, …)` at
+   * `:20096-20126`). The shortest arm, because the single form carries no header.
+   */
+  it("UT-CAPEXS-005 sizes the relink dialog 200/60 for a single message", () => {
+    lines = [linkedCost()];
+    mountAndOpenEdit("l1");
+    fireEvent.click(milestonePicker());
+    fireEvent.click(screen.getByRole("option", { name: "Cluster 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(surface()).toHaveStyle({ height: "200px" });
+    expect(band()).toHaveStyle({ height: "60px" });
+  });
+
+  /** UT-CAPEXS-006 — TWO messages: 250 / 120. Payer and link both moved. */
+  it("UT-CAPEXS-006 sizes the relink dialog 250/120 for two messages", () => {
+    lines = [linkedCost()];
+    mountAndOpenEdit("l1");
+    fireEvent.click(screen.getByRole("radio", { name: "DevCo" }));
+    fireEvent.click(milestonePicker());
+    fireEvent.click(screen.getByRole("option", { name: "Cluster 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("Confirm Changes")).toBeInTheDocument();
+    expect(surface()).toHaveStyle({ height: "250px" });
+    expect(band()).toHaveStyle({ height: "120px" });
+  });
+
+  /**
+   * UT-CAPEXS-007 — the paid-toggle dialog's dimensions are LITERALS on its instance,
+   * `BoxHeight: =200` (`:19868`) and `TextHeight: =75` (`:19878`) — note 75, not the 60 the
+   * relink dialog uses at one message. It always shows the same single sentence.
+   */
+  it("UT-CAPEXS-007 sizes the paid-toggle dialog 200/75 from its canvas literals", () => {
+    /*
+     * The month needs its `vsb_capexcostid`: `resolvePaidTarget` resolves the grid's click back
+     * to a cost ROW, and without an id it returns the "no monthly cost row found" error instead,
+     * so the dialog never opens. `paidToggleNeedsConfirmation` then needs the contract to be
+     * individually distributed AND cluster-linked.
+     */
+    lines = [linkedCost({
+      payments: [{ id: "c1", year: 2016, month: 6, amount: 500, paid: false }],
+      linkedClusterId: "ps-2", linkedClusterName: "Cluster 2", linkedClusterOrder: 2,
+    })];
+    const view = mount();
+    const button = document.createElement("button");
+    button.setAttribute("data-testid", "open-add");
+    button.addEventListener("click", () => onAction(
+      "SetCostPaidUnpaid", "l1", undefined, { year: 2016, month: 6, paid: true },
+    ));
+    document.body.appendChild(button);
+    openAddPanel();
+
+    expect(screen.getByText(PAID_CONFIRM_TITLE)).toBeInTheDocument();
+    expect(surface()).toHaveStyle({ height: "200px" });
+    expect(band()).toHaveStyle({ height: "75px" });
+    view.unmount();
+  });
+
+  /**
+   * UT-CAPEXS-008 — the DELETE dialog passes neither, so it keeps `ConfirmDialog`'s own default.
+   * Its canvas card height is the literal `=260` the plain component hard-codes
+   * (`cmp_PopUp_Confirmation.pa.yaml:88`), and the plain variant has no `TextHeight` property
+   * at all. This is the regression guard: it fails if someone later passes a height to every
+   * dialog for consistency's sake.
+   */
+  it("UT-CAPEXS-008 leaves the delete dialog on the component default", () => {
+    lines = [individualContract({ description: "Gesamt" })];
+    mountAndDelete("l1");
+
+    expect(screen.getByText(MSG.deleteTitle)).toBeInTheDocument();
+    expect(surface().style.height).toBe("");
+    expect(band().style.height).toBe("");
   });
 });

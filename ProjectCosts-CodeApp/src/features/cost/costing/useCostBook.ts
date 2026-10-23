@@ -4,7 +4,7 @@ import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
-import { loadMilestoneDurations, loadProjectStates } from "@/data/costBook";
+import { loadCapexCategories, loadMilestoneDurations, loadProjectStates } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
@@ -522,6 +522,25 @@ export function useProjectStates() {
     queryKey: ["capex-project-states"],
     staleTime: 30 * 60 * 1000,
     queryFn: () => loadProjectStates(),
+  });
+}
+
+/**
+ * The DEVEX/CAPEX category tab labels, live from Dataverse.
+ *
+ * The canvas builds the tab strip and the Summary table from
+ * `SortByColumns(Filter(colCapexAccountCategoriesNew, Not(Name = "Overleveraging")), "vsb_order")`,
+ * so a category an admin adds gets a tab; our hard-coded `CATEGORIES` would silently skip it.
+ * `loadCapexCategories` (`data/costBook.ts`) does the filtering and the `vsb_order` sort.
+ *
+ * Global master data, so it is keyed on nothing and cached for the session, exactly as
+ * `useProjectStates` above.
+ */
+export function useCapexCategories() {
+  return useQuery({
+    queryKey: ["capex-categories"],
+    staleTime: 30 * 60 * 1000,
+    queryFn: () => loadCapexCategories(),
   });
 }
 

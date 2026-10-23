@@ -25,7 +25,7 @@
  * `CapexScreenCode.txt:17413`), which is what the reference filename spells out. That ordering
  * is the caller's job — see `capex-costs/Screen.tsx`'s `persist()`.
  */
-import { makeStyles, Portal, Spinner, Text, tokens } from "@fluentui/react-components";
+import { makeStyles, mergeClasses, Portal, Spinner, Text, tokens } from "@fluentui/react-components";
 import { palette, space } from "@/theme/tokens";
 
 const useStyles = makeStyles({
@@ -46,11 +46,19 @@ const useStyles = makeStyles({
     // `DropShadow: =DropShadow.None`.
     boxShadow: "none",
   },
-  /** `spi_PopUpLoading_Spinner` — `Y: =50`, and the 90 px box it is centred in. */
+  /** `spi_PopUpLoading_Spinner` — `Y: =50`, and the box it is centred in (height below). */
   spinnerBox: {
     display: "flex", alignItems: "center", justifyContent: "center",
-    height: "90px", marginTop: "50px",
+    marginTop: "50px",
   },
+  /**
+   * `Height: =If(cmp_PopUp_Loading.InformationText = "", 120, 90)` (`:48-53`). With no
+   * information text the spinner box is 120 px, not 90 — and since
+   * `lbl_PopUpLoading_Description.Y = Spinner.Y + Spinner.Height + 10` (`:83`) there is nothing
+   * below it in that case, so the taller box simply fills more of the 240 px card.
+   */
+  spinnerBoxNoLabel: { height: "120px" },
+  spinnerBoxWithLabel: { height: "90px" },
   /** `Y: =Spinner.Y + Spinner.Height + 10`, i.e. 10 px under the spinner's box. */
   label: {
     marginTop: "10px",
@@ -111,7 +119,8 @@ function LoadingOverlayBody({ mode = "blocking", label }: Omit<LoadingOverlayPro
     // role at all, which is one of the 239 acc-AccessibleLabelNeeded findings.
     <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true">
       <div className={styles.card}>
-        <div className={styles.spinnerBox}>
+        {/* `InformationText = ""` (no label) ⇒ a 120 px spinner box; any text ⇒ 90 px. */}
+        <div className={mergeClasses(styles.spinnerBox, label ? styles.spinnerBoxWithLabel : styles.spinnerBoxNoLabel)}>
           {/* `AccessibleLabel: ="Waiting"`. */}
           <Spinner size="medium" aria-label="Waiting" />
         </div>

@@ -228,11 +228,60 @@ export const standardContractLoadingLabel = (description: string): string =>
 
 /* ══════════════════════════════════════════════════════ paid toggle (G11) ══ */
 
-/** `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation` — `CapexScreenCode.txt:19833`. */
+/**
+ * `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.Title` — verbatim.
+ * `Capex Costs Screen.pa.yaml:19879` (`CapexScreenCode.txt:19833`).
+ */
 export const PAID_CONFIRM_TITLE = "Cluster-linked Costs";
+
+/**
+ * `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.Description` — verbatim,
+ * `Capex Costs Screen.pa.yaml:19869`:
+ *
+ *     Description: ="Setting the milestone-linked cost to ‘Paid’ will remove the milestone
+ *     link for all costs in the contract. Do you want to proceed?"
+ *
+ * The typographic quotes around ‘Paid’ are the canvas's own characters, not ASCII `'`.
+ *
+ * SOURCE DEFECT: this one dialog contradicts itself in the canvas. Its `Title` says
+ * "Cluster-linked Costs" while its `Description` says "milestone-linked" / "milestone link"
+ * — for the same concept, and the `OnConfirm` next to them patches `'Linked Cluster': Blank()`,
+ * i.e. it clears the CLUSTER link, so the body text is the half that is wrong. This app had
+ * silently reconciled the body to "cluster-linked"/"cluster link"; that paraphrase breaks
+ * CONVENTIONS rule 7, so both halves are now reproduced exactly as the canvas writes them,
+ * inconsistency included. Reconciling the wording (which half to change, and to what) is a
+ * product decision, not a porting one — see `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`
+ * D38/D39.
+ */
 export const PAID_CONFIRM_DESCRIPTION =
-  "Setting the cluster-linked cost to ‘Paid’ will remove the cluster link for all "
+  "Setting the milestone-linked cost to ‘Paid’ will remove the milestone link for all "
   + "costs in the contract. Do you want to proceed?";
+
+/**
+ * `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.BoxHeight` — `=200`
+ * (`Capex Costs Screen.pa.yaml:19868`), the dialog card's height.
+ *
+ * `cmp_PopUp_Confirmation_New` drives `con_PopUpConfirmation_Body_2.Height` from this custom
+ * property (`cmp_PopUp_Confirmation_New.pa.yaml:104`); its own `Properties: Height: =320` is the
+ * component's AUTHORING canvas, not the card — the `Width: =320` beside it, next to a card that
+ * is `Min(450, Parent.Width)`, is what gives that away.
+ *
+ * A LITERAL here, unlike the relink dialog, whose `BoxHeight` is a live
+ * `Switch(locCount, 1, 200, 2, 250, 3, 280)` computed in `rules.ts`'s
+ * `clusterLinkageConfirmation`. This dialog always shows the same one sentence, so it has no
+ * count to branch on.
+ */
+export const PAID_CONFIRM_BOX_HEIGHT = 200;
+
+/**
+ * `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.TextHeight` — `=75`
+ * (`Capex Costs Screen.pa.yaml:19878`), the fixed height of the description band
+ * (`con_PopUpConfirmation_BodyDescription_2.Height`, `cmp_PopUp_Confirmation_New.pa.yaml:167`,
+ * repeated on the label at `:205`).
+ *
+ * Also a literal, for the same reason as `PAID_CONFIRM_BOX_HEIGHT`.
+ */
+export const PAID_CONFIRM_TEXT_HEIGHT = 75;
 
 /* ══════════════════════════════════════════ the relink confirmation's chrome ══ */
 
@@ -365,3 +414,60 @@ export function recalculatedPayments(
  * a schedule that can no longer regenerate them, which is why the canvas locks it.
  */
 export const distributionLocked = (isExistingContract: boolean): boolean => isExistingContract;
+
+/* ═════════════════════════════════════════ verbatim canvas strings (D38 §3) ══ */
+
+/**
+ * Strings transcribed from the canvas, not paraphrased (CONVENTIONS rule 7).
+ *
+ * They live here rather than in `rules.ts` because this file already carries this feature's
+ * other dialog copy (`PAID_CONFIRM_TITLE` / `PAID_CONFIRM_DESCRIPTION` above) — the same kind of
+ * presentation string, from the same kind of control.
+ *
+ * All five were read from
+ * `ProjectDocs/_extracted/msapp/projectcosts/Src/Capex Costs Screen.pa.yaml`.
+ */
+export const MSG = {
+  /**
+   * `lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_17.Text` — verbatim.
+   *
+   * The caption above `txt_AddContract_RightPanel_StartDate_1`. It is NOT "Start Date": the
+   * canvas says "Start Date Distribution", and this app shortened it.
+   */
+  startDateLabel: "Start Date Distribution",
+  /** `lbl_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_18.Text` — verbatim. */
+  endDateLabel: "End Date Distribution",
+  /** `cmp_PopUp_SubaccountCostsDeletion_Confirmation.Title` — verbatim. */
+  deleteTitle: "Delete Contract",
+  /** `cmp_PopUp_SubaccountCostsDeletion_Confirmation.TextConfirmButton` — verbatim. */
+  deleteConfirm: "Confirm",
+  /** `cmp_PopUp_SubaccountCostsDeletion_Confirmation.TextCancelButton` — verbatim. */
+  deleteCancel: "Cancel",
+} as const;
+
+/**
+ * `cmp_PopUp_SubaccountCostsDeletion_Confirmation.Description` — verbatim:
+ *
+ *     =If(
+ *         locSelectedCostRow.IsContract,
+ *         $"Are you sure you want to delete the costs for {Char(34)}{locSelectedCostRow.vsb_costdescription}{Char(34)}
+ *           of the selected Subaccount {Char(34)}{LookUp(colCapexProjectContracts,
+ *           'CAPEX Project Contract'=locSelectedCostRow.vsb_capexaccountlistid).Account.Name}{Char(34)}?"
+ *     )
+ *
+ * `Char(34)` is a double quote, so both values are quoted in the sentence. The whole formula is
+ * wrapped in `If(locSelectedCostRow.IsContract, …)` and yields BLANK for a non-contract row —
+ * unreachable in practice, because the canvas only enables Delete Cost when
+ * `locSelectedCostRow.IsContract` (`cmd_Costs_ProjectCosts_TableCommandBar.Items`), and here the
+ * Delete action is only ever raised from a contract row of the grid.
+ *
+ * This replaced "Delete this cost and its monthly values?", which named neither the contract nor
+ * the sub-account the costs are about to be deleted from.
+ */
+export function deleteContractDescription(
+  contractDescription: string,
+  subaccountName: string,
+): string {
+  return `Are you sure you want to delete the costs for "${contractDescription}"`
+    + ` of the selected Subaccount "${subaccountName}"?`;
+}

@@ -15,6 +15,7 @@ import {
 import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
+import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
 import { numberFormat } from "@/domain/locale";
 import { distributionSchedule, equalDistributionAmounts } from "./distribution";
 
@@ -43,8 +44,20 @@ export const CATEGORY_LABELS = CATEGORIES;
 /** The Summary tab is category `-1`; a real category is an index into `CATEGORIES`. */
 export const SUMMARY_CATEGORY = -1;
 
-/** `colDistributionFrequency` — the canvas offers these four on this panel. */
-export const FREQUENCY_OPTIONS = [1, 3, 6, 12] as const;
+/**
+ * The payment frequencies the Add/Edit Contract right panel offers.
+ *
+ * `drp_AddContract_RightPanel_PaymentFrequency_1` (`Capex Costs Screen.pa.yaml:11855`) has
+ * `Items: =colDistributionFrequency`, and `colDistributionFrequency` is declared in the Cost
+ * app's `App.pa.yaml` under `Formulas` (`:161-187`) with FIVE rows — ID 1 → 1 month,
+ * 2 → 2 months, 3 → 3 months, 4 → 6 months, 5 → 12 months. So the values are 1, 2, 3, 6, 12.
+ *
+ * Derived from the one shared definition (`DISTRIBUTION_FREQUENCY` in `data/dataverseNames.ts`,
+ * which OPEX and Land Lease also use) rather than re-declared here: this list previously said
+ * `[1, 3, 6, 12]`, which made a bi-monthly contract impossible to create and rendered a stored
+ * `vsb_distributionfrequency = 2` as a dropdown value absent from its own option list.
+ */
+export const FREQUENCY_OPTIONS: readonly number[] = DISTRIBUTION_FREQUENCY.map((f) => f.value);
 
 export const PAYER_FILTERS = ["Show All Cost", "DevCo", "SPV"] as const;
 
@@ -1027,17 +1040,54 @@ export function needsClusterLinkageConfirmation(args: {
  * (`CapexScreenCode.txt:19853-19980`), the one whose `Visible` really is
  * `locShowClusterLinkageConfirmation` (`:19965`).
  *
- * There is an OLDER `cmp_PopUp_Confirmation_1` in the same file (`:19672-19800`) with a
- * four-armed `If` that produces one sentence per case; it is DEAD — its `Visible` is a
- * commented-out `locShowClusterLinkageConfirmation` followed by a bare `false`
- * (`Capex Costs Screen.pa.yaml:426-428`). The live control is the bulleted one below, so that
- * is what is reproduced.
+ * There is an OLDER `cmp_PopUp_Confirmation_1` in the same file with a four-armed `If` that
+ * produces one sentence per case; it is DEAD — its `Visible` is a commented-out
+ * `locShowClusterLinkageConfirmation` followed by a bare `false`
+ * (`Capex Costs Screen.pa.yaml:426-428`).
+ *
+ * THE LIVE CONTROL IS NOT SIMPLY "THE BULLETED ONE", which is what this comment used to say and
+ * what the implementation assumed. The live `Description` branches on how many of the three
+ * conditions hold: more than one gives the header-plus-bullets form, EXACTLY ONE gives a
+ * separately worded single sentence. So the dead component's "one sentence per case" shape
+ * survives in the live control as its single-message branch, with different text again.
+ *
+ * Verified line anchors in `ProjectDocs/_extracted/msapp/projectcosts/Src/Capex Costs Screen.pa.yaml`,
+ * instance `cmp_PopUp_Confirmation_For_SetClusterLinkingConfirmationPopup` declared at `:19884`:
+ *
+ *     BoxHeight           :19888-19936      TextHeight           :20078-20126
+ *     Description         :19937-20027      Title                :20127-20170
+ *     TextConfirmButton   :20072-20077      WidthConfirmButton   :20173-20178
+ *
+ * (Earlier comments here cited `CapexScreenCode.txt` line numbers, which are a different
+ * extraction of the same screen and do not line up with the `.pa.yaml`.)
  */
 export interface ClusterLinkageConfirmation {
   title: string;
   description: string;
   confirmLabel: string;
   cancelLabel: string;
+  /**
+   * `BoxHeight` — the dialog surface's height, which is NOT fixed
+   * (`Capex Costs Screen.pa.yaml:19906-19936`):
+   *
+   *     With({locCount: …}, Switch(locCount, 1, 200, 2, 250, 3, 280))
+   *
+   * The `Switch` has NO default arm, so a count of 0 yields `Blank()` — reproduced here as
+   * `undefined`. That state is unreachable in practice: `needsClusterLinkageConfirmation` is
+   * what opens the dialog and it requires at least one of the three conditions, so a 0-message
+   * dialog never renders. `undefined` is therefore the faithful answer rather than an invented
+   * fallback height.
+   */
+  boxHeight: number | undefined;
+  /**
+   * `TextHeight` — the fixed height of the description band
+   * (`:20096-20126`): `Switch(locCount, 1, 60, 2, 120, 3, 150)`.
+   *
+   * Live. Two earlier formulas sit commented out directly above it (`:20079-20095`,
+   * `40 + locCount * 30` and `If(locCount > 1, 25, 8) + locCount * 40`); neither runs.
+   * Same no-default behaviour as `boxHeight`.
+   */
+  textHeight: number | undefined;
 }
 
 export function clusterLinkageConfirmation(args: {
@@ -1071,21 +1121,87 @@ export function clusterLinkageConfirmation(args: {
   // `Concat(locClusterItems, Order, ", ")` — `locClusterItems` is the UNFILTERED collection.
   const orders = args.clustersWithCost.map((c) => c.order).join(", ");
 
-  const description = "Are you sure you want to proceed with the following changes?"
-    + (showC1
-      ? `\n• Switch the "Cost Paid By" to ${args.payer}. This will impact liquidity planning and BoP.`
-      : "")
-    + (showC2
-      ? `\n• Costs have been entered for Cluster ${orders} and linked to ${args.selectedName}.`
-      : "")
-    + (showC3
-      ? '\n• "Paid" markers are not supported for milestone-linked costs. '
-        + "Linking this cost to a milestone will reset all costs to unpaid."
-      : "");
+  /**
+   * `locCount` — the SAME count the canvas computes four times over, for the description, the
+   * title, `BoxHeight` and `TextHeight`. All four use the FILTERED C2 (`locShowC2`), i.e. the
+   * selected cluster excluded. Only `WidthConfirmButton` / `confirmLabel` use the raw count —
+   * the quirk documented above.
+   */
+  const messageCount = (showC1 ? 1 : 0) + (showC2 ? 1 : 0) + (showC3 ? 1 : 0);
 
-  const title = showC1 && showC2
+  /*
+   * `locMsg1` … `locMsg3` (`Capex Costs Screen.pa.yaml:19983-19989`), verbatim. In Power Fx a
+   * doubled `""` inside a string literal is one `"`, so `""Cost Paid By""` is `"Cost Paid By"`.
+   *
+   * NOTE THE TRAILING SPACE ON `locMsg3` (`:19989`). It is load-bearing: the single-message
+   * branch concatenates `locMsg3 & "Do you want to continue?"` with no separator of its own, so
+   * the space is what keeps the two sentences apart. The multi-message branch uses `locMsg3`
+   * as-is, which means that bullet really does end in a space. Both halves reproduced.
+   */
+  const msg1 = `Switch the "Cost Paid By" to ${args.payer}. This will impact liquidity planning and BoP.`;
+  const msg2 = `Costs have been entered for Cluster ${orders} and linked to ${args.selectedName}.`;
+  const msg3 = '"Paid" markers are not supported for milestone-linked costs. '
+    + "Linking this cost to a milestone will reset all costs to unpaid. ";
+
+  /*
+   * `Description` (`:19991-20025`) is a BRANCH, which this function previously ignored —
+   * it always produced the multi-message form:
+   *
+   *     If(locCount > 1,
+   *        // MORE THAN ONE → header + one bullet per condition
+   *        "Are you sure you want to proceed with the following changes?" & …Char(10) & "• " & locMsgN…,
+   *        // EXACTLY ONE → just the statement, no header, no bullet
+   *        <a differently worded sentence per condition>)
+   *
+   * The single-message wording is not the bulleted wording minus the bullet — the canvas
+   * rewrites each sentence. C1 switches to single quotes and lowercase "by" (`'Cost Paid by'`)
+   * and says "influence the liquidity planning" where the bullet says "impact liquidity
+   * planning"; C2 becomes "You have entered costs in … and linked them to … Would you like to
+   * proceed?"; C3 appends "Do you want to continue?". One message is the common case, so this
+   * branch is what a user usually sees — and it is also why `BoxHeight` starts at 200 for a
+   * single message: there is no header line to fit.
+   *
+   * The canvas concatenates all three single-message arms; exactly one is non-empty when
+   * `locCount = 1`, so the concatenation is the one sentence.
+   */
+  const description = messageCount > 1
+    ? "Are you sure you want to proceed with the following changes?"
+      + (showC1 ? `\n• ${msg1}` : "")
+      + (showC2 ? `\n• ${msg2}` : "")
+      + (showC3 ? `\n• ${msg3}` : "")
+    : (showC1
+      ? `Are you sure you want to switch the 'Cost Paid by' to ${args.payer}?`
+        + " This will influence the liquidity planning and BoP."
+      : "")
+      + (showC2
+        ? `You have entered costs in Cluster ${orders} and linked them to ${args.selectedName}.`
+          + " Would you like to proceed?"
+        : "")
+      + (showC3 ? `${msg3}Do you want to continue?` : "");
+
+  /*
+   * `Title` (`:20127-20170`), which keys on the COUNT, not on a pair of flags:
+   *
+   *     If(locCountOfMessages >= 2, "Confirm Changes",
+   *        locCostPaidByChanged,     "Change Cost Paid By",
+   *        And(locClusterLinkageChanged, CountRows(Filter(…)) > 0), "Change Cluster Link",
+   *        locMilestoneRelinkResetNeeded, "Cluster-linked Costs")
+   *
+   * This was `showC1 && showC2 ? "Confirm Changes" : showC1 ? … : "Change Cluster Link"`, which
+   * was wrong twice over: C1+C3 and C2+C3 are two messages and should read "Confirm Changes"
+   * but fell through to a single-condition title, and the FOURTH arm — "Cluster-linked Costs",
+   * for a relink-reset on its own — was missing entirely, so that case showed "Change Cluster
+   * Link". No default arm, so 0 messages is `Blank()`; `""` here, and unreachable as above.
+   */
+  const title = messageCount >= 2
     ? "Confirm Changes"
-    : showC1 ? "Change Cost Paid By" : "Change Cluster Link";
+    : showC1 ? "Change Cost Paid By"
+      : showC2 ? "Change Cluster Link"
+        : showC3 ? "Cluster-linked Costs" : "";
+
+  /** `Switch(locCount, 1, 200, 2, 250, 3, 280)` / `(…, 1, 60, 2, 120, 3, 150)`. */
+  const boxHeight = ({ 1: 200, 2: 250, 3: 280 } as Record<number, number>)[messageCount];
+  const textHeight = ({ 1: 60, 2: 120, 3: 150 } as Record<number, number>)[messageCount];
 
   const confirmLabel = args.costPaidByChanged
     && args.clusterLinkageChanged
@@ -1095,7 +1211,7 @@ export function clusterLinkageConfirmation(args: {
     ? "Confirm All"
     : "Confirm";
 
-  return { title, description, confirmLabel, cancelLabel: "Cancel" };
+  return { title, description, confirmLabel, cancelLabel: "Cancel", boxHeight, textHeight };
 }
 
 /* ══════════════════════════════════════════════════════════ delete plan ══ */

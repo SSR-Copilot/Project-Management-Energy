@@ -21,7 +21,7 @@
  *                `X: =20`                                              (`_New:133-143`)
  *   close        `Icon: =Icon.Cancel`, 20 × 20, white, `X: =Parent.Width-Self.Width-15`
  *                                                                      (`_New:145-160`)
- *   body pad     `PaddingTop/Bottom: =16`, `PaddingLeft/Right: =10`     (`_New:172-175`)
+ *   body pad     per variant, see `body` / `bodyPlain` / `bodyInfo`    (`_New:172-175`)
  *   buttons row  `Height: =60`, Confirm then Cancel, 20 px apart, 20 px from the right edge,
  *                both `Height: =32`                                    (`_New:222-294`)
  *   Confirm      `FillColor: =themePrimary`, `FontColor: =white`,
@@ -54,9 +54,14 @@ const useStyles = makeStyles({
    * `con_PopUpConfirmation_Body_2` — the surface itself, with Fluent's own padding removed.
    *
    * `Height: =260` is fixed, not content-driven (`cmp_PopUp_Confirmation:88`,
-   * `cmp_PopUp_Confirmation_2:88`); the ⓘ variant `cmp_PopUp_Confirmation_New:81` is 320.
-   * A short description therefore leaves a tall gap above the buttons — which is what the
-   * Delete Contract / Delete Payment Target screenshots show.
+   * `cmp_PopUp_Confirmation_2:88`). A short description therefore leaves a tall gap above the
+   * buttons — which is what the Delete Contract / Delete Payment Target screenshots show.
+   *
+   * `_New` instead parameterises it: `con_PopUpConfirmation_Body_2.Height =
+   * cmp_PopUp_Confirmation_New.BoxHeight` (`_New:104`, custom property default `=260`,
+   * `_New:14-19`) — so an instance picks its own box height (the Capex paid dialog passes
+   * `BoxHeight: =200`). The `boxHeight` prop carries that; without it the ⓘ variant keeps
+   * this app's historical 320 (see `surfaceInfo`).
    */
   surface: {
     width: "450px", maxWidth: "calc(100vw - 32px)",
@@ -70,7 +75,12 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column",
     fontFamily,
   },
-  /** `cmp_PopUp_Confirmation_New` is the taller of the two. */
+  /**
+   * `cmp_PopUp_Confirmation_New`'s own AUTHORING size — `Properties: Height: =320` (`_New:81`),
+   * which is the component canvas, not the box (`con_PopUpConfirmation_Body_2.Height =
+   * BoxHeight`, `_New:104`). Kept as this app's ⓘ default so no existing caller moves; an
+   * instance that knows its real `BoxHeight` passes `boxHeight`, which overrides it.
+   */
   surfaceInfo: { height: "320px" },
   /** `con_PopUpConfirmation_BodyHeader_2` — `Height: =42`, themePrimary, title at `X: =20`. */
   header: {
@@ -97,12 +107,38 @@ const useStyles = makeStyles({
     ":disabled": { cursor: "default", opacity: 0.6 },
   },
   closeIcon: { fontSize: "20px" },
-  /** `con_PopUpConfirmation_BodyDescription_2` — the padded band the description sits in. */
+  /**
+   * The padded band the description sits in. `LayoutOverflowY: =LayoutOverflow.Scroll` on both
+   * components (`cmp_PopUp_Confirmation:154`, `_New:171`) → `overflow-y: auto`.
+   *
+   * The two components do NOT share this padding, so it is split per variant below rather than
+   * made uniform. Only `PaddingTop: =16` is common (`cmp_PopUp_Confirmation:155`, `_New:175`).
+   */
   body: {
     flexGrow: 1, minHeight: "0",
-    paddingTop: "16px", paddingBottom: "16px",
-    paddingLeft: "10px", paddingRight: "10px",
+    paddingTop: "16px",
     overflowY: "auto",
+  },
+  /**
+   * `cmp_PopUp_Confirmation` pads the LABEL, not the container:
+   * `con_PopUpConfirmation_BodyDescription` sets only `PaddingTop: =16` (`:155`) — no
+   * left/right/bottom — and `lbl_PopUpConfirmation_BodyDescription` sets `PaddingLeft: =20`,
+   * `PaddingRight: =20`, `PaddingTop: =0`, `PaddingBottom: =0` (`:176-179`). So the plain
+   * dialog's description is inset 20 px, and has NO bottom padding.
+   */
+  bodyPlain: {
+    paddingLeft: "20px", paddingRight: "20px",
+    paddingBottom: "0",
+  },
+  /**
+   * `con_PopUpConfirmation_BodyDescription_2` — `PaddingBottom: =16`, `PaddingLeft: =10`,
+   * `PaddingRight: =10`, `PaddingTop: =16` (`_New:172-175`), with the inner ⓘ block adding its
+   * own horizontal padding. Unlike the plain label, `lbl_PopUpConfirmation_BodyDescription_2`
+   * adds nothing horizontally (`PaddingRight: =0`, `_New:208`).
+   */
+  bodyInfo: {
+    paddingLeft: "10px", paddingRight: "10px",
+    paddingBottom: "16px",
   },
   /**
    * `pre-line`, because the canvas builds some of these descriptions with `Char(10)` and a `•`
@@ -116,13 +152,20 @@ const useStyles = makeStyles({
   },
   /** `cmp_PopUp_Confirmation` — no block, `Size: =11`. */
   descriptionPlain: { display: "block", fontSize: pt(11) },
-  /** `con_PopUpConfirmation_BodyDescription_Inside_2` — the ⓘ block, `Size: =9`. */
+  /**
+   * `con_PopUpConfirmation_BodyDescription_Inside_2` (`_New:182-193`) — the ⓘ block, `Size: =9`.
+   *
+   * It sets `Fill: =RGBA(225, 236, 244, 1)`, `PaddingLeft: =10` and `PaddingRight: =5`
+   * (`_New:191-192`) and NOTHING else: no `PaddingTop`/`PaddingBottom`, so it has no vertical
+   * padding of its own (its `Height` is the label's, `_New:188`), and no `Radius*` property, so
+   * it renders SQUARE. The band's own 16 px top/bottom (`bodyInfo`) is the only vertical space.
+   */
   infoBlock: {
     display: "flex", alignItems: "center", columnGap: "10px",
     paddingLeft: "10px", paddingRight: "5px",
-    paddingTop: "10px", paddingBottom: "10px",
+    paddingTop: "0", paddingBottom: "0",
     backgroundColor: "#E1ECF4",
-    borderRadius: "4px",
+    borderRadius: "0",
   },
   infoIcon: { flexShrink: 0, width: "22px", fontSize: "16px", color: "#323130" },
   infoText: { fontSize: pt(9) },
@@ -210,6 +253,20 @@ export interface ConfirmDialogProps {
   /** `WidthConfirmButton` — 96 unless the caller widens it for a longer label. */
   confirmWidth?: number;
   /**
+   * `cmp_PopUp_Confirmation_New.BoxHeight` — `con_PopUpConfirmation_Body_2.Height = BoxHeight`
+   * (`_New:104`), i.e. the height of the white box, per instance (the Capex paid dialog passes
+   * `BoxHeight: =200`). Omitted, the box keeps this app's existing fixed heights: 260 for the
+   * plain variant (`cmp_PopUp_Confirmation:88`) and 320 for the ⓘ one.
+   */
+  boxHeight?: number;
+  /**
+   * `cmp_PopUp_Confirmation_New.TextHeight` — the FIXED height of the description band
+   * (`con_PopUpConfirmation_BodyDescription_2.Height`, `_New:167`, and the label's own
+   * `Height`, `_New:205`); the Capex paid dialog passes `TextHeight: =75`. Omitted, the band
+   * keeps its `flex-grow: 1` behaviour and fills whatever the box leaves.
+   */
+  textHeight?: number;
+  /**
    * Optional (Application Settings): the confirmed action failed — a red `MessageBar`
    * (`role="alert"`) under the description. The fixed surface height is unchanged; the body scrolls.
    */
@@ -230,18 +287,30 @@ export function ConfirmDialog({
   variant = "plain",
   confirmIcon = "checkmark", cancelIcon = "dismiss",
   confirmWidth = 96,
+  boxHeight, textHeight,
   error, lockWhileBusy = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
   const locked = lockWhileBusy && busy;
+  const isInfo = variant === "info";
+
+  /**
+   * `BoxHeight` / `TextHeight` are per-instance NUMBERS, so they cannot live in `makeStyles`.
+   * Left out, neither emits a declaration, so the class values (`surface`/`surfaceInfo`'s
+   * height and the band's `flex-grow`) stand exactly as before.
+   */
+  const surfaceStyle = boxHeight === undefined ? undefined : { height: `${boxHeight}px` };
+  const bodyStyle = textHeight === undefined
+    ? undefined
+    : { height: `${textHeight}px`, flexGrow: 0 };
 
   const body = (
     <Text
       as="span"
       className={mergeClasses(
         styles.description,
-        variant === "info" ? styles.infoText : styles.descriptionPlain,
+        isInfo ? styles.infoText : styles.descriptionPlain,
       )}
     >
       {description}
@@ -255,7 +324,8 @@ export function ConfirmDialog({
       onOpenChange={(_, data) => { if (!data.open && !locked) onCancel(); }}
     >
       <DialogSurface
-        className={mergeClasses(styles.surface, variant === "info" && styles.surfaceInfo)}
+        className={mergeClasses(styles.surface, isInfo && styles.surfaceInfo)}
+        style={surfaceStyle}
         aria-label={title}
         backdrop={{ className: styles.backdrop }}
       >
@@ -268,8 +338,11 @@ export function ConfirmDialog({
           </button>
         </div>
 
-        <div className={styles.body}>
-          {variant === "info" ? (
+        <div
+          className={mergeClasses(styles.body, isInfo ? styles.bodyInfo : styles.bodyPlain)}
+          style={bodyStyle}
+        >
+          {isInfo ? (
             <div className={styles.infoBlock}>
               <InfoRegular className={styles.infoIcon} aria-hidden="true" />
               {body}

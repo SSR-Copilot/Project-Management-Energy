@@ -50,4 +50,30 @@ describe("ConfirmDialog — Application Settings additions", () => {
     await userEvent.click(screen.getByTestId("ico_PopUpConfirmation_BodyHeader_3"));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * The Application Settings screens pass neither `boxHeight` nor `textHeight`
+   * (`cmp_PopUp_Confirmation_New.BoxHeight` / `.TextHeight`), so their dialogs must keep the
+   * fixed box and the growing, scrolling band the error bar relies on.
+   */
+  it("UT-CONFIRM-S-005 the new box/text heights are opt-in — no inline sizing by default", () => {
+    mount({ error: "Deleting the account failed: forbidden" });
+    const surface = document.querySelector<HTMLElement>(".fui-DialogSurface")!;
+    expect(surface.style.height).toBe("");
+    const band = screen.getByText("Are you sure?").parentElement!;
+    expect(band.style.height).toBe("");
+    expect(band).toHaveStyle({ flexGrow: 1, overflowY: "auto" });
+  });
+
+  /**
+   * These dialogs are all `variant="plain"`, so they pick up the corrected 20 px inset from
+   * `lbl_PopUpConfirmation_BodyDescription.PaddingLeft/PaddingRight: =20`
+   * (`cmp_PopUp_Confirmation.pa.yaml:177-178`) — the error bar sits inside the same band.
+   */
+  it("UT-CONFIRM-S-006 the plain band's 20 px inset also holds the error bar", () => {
+    mount({ error: "Deleting the account failed: forbidden" });
+    const band = screen.getByText("Are you sure?").parentElement!;
+    expect(band).toHaveStyle({ paddingLeft: "20px", paddingRight: "20px" });
+    expect(band).toContainElement(screen.getByRole("alert"));
+  });
 });

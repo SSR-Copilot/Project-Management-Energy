@@ -61,6 +61,18 @@ vi.mock("./client", () => ({
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? rows;
   },
+  /**
+   * The CAPEX cost and contract deletes go through `deleteRecord` rather than the generated
+   * service's `delete()`, so that a Dataverse refusal surfaces instead of resolving like
+   * success (`ProjectDocs/instructions/CONVENTIONS.md` rule 14).
+   *
+   * Recorded into `deleted` with the same `cost:` / `contract:` prefixes the generated-service
+   * mocks below use, so the ordering assertions in UT-BOOK-039..041 read unchanged. Comments
+   * still delete through `Vsb_capexcommentsesService`, which is why that mock stays live.
+   */
+  deleteRecord: async (_operation: string, tableName: string, recordId: string) => {
+    deleted.push(`${tableName === "vsb_capexcosts" ? "cost" : "contract"}:${recordId}`);
+  },
 }));
 
 vi.mock("@/generated/services/Vsb_capexaccountlistsService", () => ({

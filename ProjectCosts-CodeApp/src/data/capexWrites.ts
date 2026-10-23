@@ -22,6 +22,7 @@ import { unwrap } from "@/platform/errors";
 import { capexWriteSet, type CostRowInput } from "@/features/cost/capex-costs/writeSet";
 import { byClusterJson, planDeleteContract, startEndJson } from "@/features/cost/capex-costs/rules";
 import { deleteComment, loadComments } from "./comments";
+import { deleteRecord } from "./client";
 import { COMMENT_TYPE } from "@/features/cost/capex-costs/comments";
 import { equalDistributionAmounts } from "@/features/cost/capex-costs/distribution";
 import type { CostLine } from "@/features/cost/costing/model";
@@ -281,8 +282,12 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
   }
 
   // Deletes last: an interrupted save then leaves extra rows rather than missing money.
+  // Through `deleteRecord`, not the generated service: the generated `delete()` discards the
+  // `IOperationResult` and the SDK never throws, so a refusal would resolve exactly like a
+  // success and the save would report a shrunk schedule that Dataverse never applied
+  // (`ProjectDocs/instructions/CONVENTIONS.md` rule 14).
   for (const costId of plan.deletes) {
-    await Vsb_capexcostsService.delete(costId);
+    await deleteRecord("delete CAPEX cost", "vsb_capexcosts", costId);
   }
 
   return contractId;
@@ -306,6 +311,20 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
  *
  * `loadComments` is asked for one contract, which is the narrow half of the query it already
  * serves the panel with, so this costs one extra request per delete.
+ *
+ * DIVERGENCE: the canvas does NOT delete the cost rows itself. In
+ * `cmp_PopUp_SubaccountCostsDeletion_Confirmation.OnConfirm`
+ * (`ProjectDocs/_extracted/msapp/projectcosts/Src/Capex Costs Screen.pa.yaml`, lines
+ * 8122-8134) the `RemoveIf('CAPEX Costs', Contract.'CAPEX Project Contract' = …)` is
+ * COMMENTED OUT; what runs is `RemoveIf('Capex Comments', …)` then
+ * `Remove('CAPEX Project Contracts', locContractToDelete)`, leaving the cost rows to the
+ * Dataverse cascade on `vsb_Contract`. This app deletes each cost row explicitly instead, for
+ * the same reason `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` §8 lists cascade reliance as a
+ * candidate deliberately not ported: the cascade behaviour is a server-side relationship
+ * setting no test or type here can pin, and a cascade configured as Restrict would leave the
+ * contract delete refused — now visibly, since all three deletes go through `deleteRecord`
+ * (rule 14) rather than the generated `delete()`, which swallows a refusal. Deleting the
+ * children first makes the outcome the same under either relationship setting.
  */
 export async function deleteCostLine(line: CostLine): Promise<void> {
   const comments = await loadComments([line.id]);
@@ -316,7 +335,9 @@ export async function deleteCostLine(line: CostLine): Promise<void> {
 
   for (const commentId of plan.commentIds) await deleteComment(commentId);
   for (const payment of line.payments) {
-    if (payment.id) await Vsb_capexcostsService.delete(payment.id);
+    if (payment.id) await deleteRecord("delete CAPEX cost", "vsb_capexcosts", payment.id);
   }
-  await Vsb_capexprojectcontractsService.delete(plan.contractId);
+  await deleteRecord(
+    "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
+  );
 }

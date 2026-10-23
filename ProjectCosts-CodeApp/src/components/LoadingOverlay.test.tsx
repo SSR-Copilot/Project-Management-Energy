@@ -33,4 +33,25 @@ describe("LoadingOverlay", () => {
     mount(<LoadingOverlay mode="inline" label="Loading..." portal />);
     expect(screen.getByTestId("host")).toContainElement(screen.getByRole("status"));
   });
+
+  /*
+   * `spi_PopUpLoading_Spinner.Height: =If(cmp_PopUp_Loading.InformationText = "", 120, 90)`
+   * (`cmp_PopUp_Loading.pa.yaml:48-53`). Both branches pinned.
+   */
+  it("UT-LOADOVL-005 No label: the spinner box is the canvas's 120 px", () => {
+    mount(<LoadingOverlay />);
+    const box = screen.getByLabelText("Waiting").parentElement;
+    expect(box).toHaveStyle({ height: "120px", marginTop: "50px" });
+  });
+
+  it("UT-LOADOVL-006 With a label: the spinner box is 90 px, leaving room for the description", () => {
+    mount(<LoadingOverlay label="Please wait, saving costs..." />);
+    const box = screen.getByLabelText("Waiting").parentElement;
+    expect(box).toHaveStyle({ height: "90px", marginTop: "50px" });
+  });
+
+  it("UT-LOADOVL-007 An empty label is the canvas's InformationText = \"\" branch", () => {
+    mount(<LoadingOverlay label="" />);
+    expect(screen.getByLabelText("Waiting").parentElement).toHaveStyle({ height: "120px" });
+  });
 });

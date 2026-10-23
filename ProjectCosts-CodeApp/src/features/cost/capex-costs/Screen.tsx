@@ -42,8 +42,8 @@ import { useSession } from "@/app/SessionContext";
 import { palette, space } from "@/theme/tokens";
 import { CLUSTERS, amount, type CostLine } from "../costing/model";
 import {
-  useCapexComments, useCapexTotals, useCapexWrites, useCostBook, useMilestoneDurations,
-  useProjectStates, useStandardAssumptions,
+  useCapexCategories, useCapexComments, useCapexTotals, useCapexWrites, useCostBook,
+  useMilestoneDurations, useProjectStates, useStandardAssumptions,
 } from "../costing/useCostBook";
 import { COMMENT_TYPE, commentCosts, commentThreads, gridCommentIndicators } from "./comments";
 import { costLabel, currencyCode } from "../contracts/rules";
@@ -59,7 +59,7 @@ import {
   navigationWindow, projectPeriods, synthesiseClusterDates,
 } from "./clusters";
 import {
-  CATEGORY_LABELS, DESCRIPTION_MAX_LENGTH, FREQUENCY_OPTIONS,
+  DESCRIPTION_MAX_LENGTH, FREQUENCY_OPTIONS,
   LINK_TO_MILESTONE_LABEL, NO_MILESTONE, PAYER_FILTERS,
   accountsInCategory, allocatedForYear, averagePayment, canSaveContract, categoryTabs,
   clusterLinkageChanged, clusterLinkageConfirmation, clustersHavingCost,
@@ -72,9 +72,12 @@ import {
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
 } from "./rules";
 import {
-  LOADING_COST, LOADING_DATA, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TITLE,
+  LOADING_COST, LOADING_DATA, MSG,
+  PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
+  PAID_CONFIRM_TITLE,
   RECALCULATE_ALLOCATED_COST, SAVING_COSTS,
   allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
+  deleteContractDescription,
   distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
   previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
   savingCostLabel, standardContractLoadingLabel,
@@ -158,7 +161,25 @@ export default function CapexCostsScreen() {
   const standardClass = useStandardValueClass();
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
-  const category = resolveCategory(search.get("category"));
+  /*
+   * The tab strip and the Summary table come from Dataverse, not from a literal — the canvas
+   * builds both from `SortByColumns(Filter(colCapexAccountCategoriesNew,
+   * Not(Name = "Overleveraging")), "vsb_order")`. `categoryTabs` prepends the Summary tab and
+   * falls back to `CATEGORY_LABELS` on an empty list, which is what keeps the navigation from
+   * blanking on a transient query failure — see its own doc comment; it is NOT reimplemented here.
+   *
+   * PARTIAL (D38 §4): this makes the STRIP data-driven, not the whole screen. `loadCostAccounts`
+   * (`data/costBook.ts`) still derives `CostAccount.category` with
+   * `CATEGORIES.indexOf(level1.name)` and skips a level-1 account whose name is not in that
+   * hard-coded list, so a category an admin adds today gets a tab with no accounts behind it.
+   * Re-basing that index touches every consumer of `category` at once and is deliberately out of
+   * scope here.
+   */
+  const categoriesQuery = useCapexCategories();
+  const tabs = categoryTabs(categoriesQuery.data);
+  /** The real categories, Summary removed — index `i` here is category `i`. */
+  const categoryNames = tabs.slice(1);
+  const category = resolveCategory(search.get("category"), categoryNames.length);
 
   /*
    * The category is resolved BEFORE the fetch so only the open tab's costs are requested. The
@@ -434,6 +455,8 @@ export default function CapexCostsScreen() {
   const proposed = edit ? resolvedPayments(edit, costValue, rawProposed) : [];
   const average = averagePayment(costValue, proposed.length);
   const isEdit = book.lines.some(c => c.id === edit?.id);
+  /** The contract the delete confirmation is about — it names both it and its sub-account. */
+  const deletingLine = book.lines.find(c => c.id === deleting);
 
   /* ── inline validation (`lbl_..._ErrorMessage_1`) ───────────────────────── */
 
@@ -585,6 +608,33 @@ export default function CapexCostsScreen() {
      * delete. Mapping `proposed` alone made a save purely additive: widening the frequency or
      * shortening the range left the old months behind with their old money.
      */
+    /*
+     * DIVERGENCE: the canvas recomputes an EQUAL distribution's cost rows only when something
+     * that shapes the schedule actually moved — the whole `RemoveIf('CAPEX Costs', …)` + re-Patch
+     * block in the Save button's equal branch is wrapped in
+     *
+     *     If(Or(locChangedByDate, locChangedDistribution, locChangedFrequency,
+     *           locClusterChanged, loctotalCostChanged) && !IsBlank(locSelectedProjectContract), …)
+     *
+     * so editing only the description, the payer or a toggle leaves every month untouched. This
+     * app recomputes the schedule and reconciles on EVERY save. The rows that end up in
+     * Dataverse are the same — reconciliation is idempotent, and unlike the canvas it does not
+     * delete-and-recreate, so paid flags and payment-date comments survive either way — but it
+     * does issue update requests the canvas would not. Recorded in D38 §6; no twin, because no
+     * number differs.
+     */
+    /*
+     * SOURCE DEFECT (canvas), fixed here: on an ADD of an equal-distribution contract the canvas
+     * never stores `Average Payment` or `Linked Cluster`. Its final Patch resolves the contract
+     * with `LookUp(colCapexProjectContracts, 'CAPEX Project Contract' =
+     * locSelectedCostRow.vsb_capexaccountlistid)`, but on an Add `locSelectedCostRow` is the
+     * SUB-ACCOUNT row, so that lookup is blank and the Patch writes nothing. Only a subsequent
+     * Edit — where the selected row really is the contract — fills them in.
+     *
+     * `saveCostLine` (`data/capexWrites.ts`) writes both on create, so a contract added here is
+     * complete from the first save. Recorded in D38 §8 and as a canvas bug in `01-BUGS-FOUND.md`;
+     * no `…CanvasParity` twin, because reproducing it would mean deliberately omitting a column.
+     */
     const stored = storedLine?.payments ?? [];
     try {
       await writes.saveLine.mutateAsync({
@@ -628,7 +678,7 @@ export default function CapexCostsScreen() {
 
   return <div className="canvas-cost-screen">
     <div role="tablist" aria-label="CAPEX categories" className="canvas-capex-tabs">
-      {categoryTabs().map((label, i) => (
+      {tabs.map((label, i) => (
         <button key={label} role="tab" aria-selected={category === i - 1} aria-label={label}
           data-testid={`tab_Costs_ContentAssignableAccountCategories-${i - 1}`}
           onClick={() => chooseCategory(i - 1)}>{label}</button>
@@ -638,7 +688,7 @@ export default function CapexCostsScreen() {
     {isSummaryTab(category) ? (
       totals.isLoading ? <LoadingOverlay mode="inline" label={LOADING_DATA} /> : (
         <table className="canvas-capex-summary" aria-label="DEVEX/CAPEX Summary"><tbody>
-          {CATEGORY_LABELS.map((name, i) => (
+          {categoryNames.map((name, i) => (
             <tr key={name}>
               <td>{name}</td>
               <td>{formatSummaryAmount(totals.data?.find(t => t.category === i)?.total)} {currency}</td>
@@ -807,11 +857,17 @@ export default function CapexCostsScreen() {
                 * placeholder (`CapexScreenCode.txt:11420-11445`) — there is no day component
                 * anywhere in this feature, and a `type="date"` picker invented one.
                 */}
-              <CostField label="Start Date" name="txt_AddContract_RightPanel_StartDate_1"
+              {/*
+                * The CAPTIONS are `lbl_…_Fields_Label_17` / `_18`, which read "Start Date
+                * Distribution" / "End Date Distribution" — not "Start Date" / "End Date", which
+                * is what this app had. `name` stays the canvas CONTROL name, because that is
+                * what the canvas puts on `AccessibleLabel` and what the identity gate compares.
+                */}
+              <CostField label={MSG.startDateLabel} name="txt_AddContract_RightPanel_StartDate_1"
                 required placeholder="MM/YYYY" value={startText}
                 error={startDateError ?? undefined}
                 onChange={v => { setStartText(v); update({ startDate: monthYearToIso(v) }); }} />
-              <CostField label="End Date" name="txt_AddContract_RightPanel_EndDate_1"
+              <CostField label={MSG.endDateLabel} name="txt_AddContract_RightPanel_EndDate_1"
                 required placeholder="MM/YYYY" value={endText}
                 error={endDateError ?? undefined}
                 onChange={v => { setEndText(v); update({ endDate: monthYearToIso(v) }); }} />
@@ -895,18 +951,35 @@ export default function CapexCostsScreen() {
       open={!!commentFor}
       contractId={commentFor}
       contractDescription={book.lines.find(c => c.id === commentFor)?.description ?? ""}
-      breadcrumb={`${CATEGORY_LABELS[category] ?? ""} / ${book.accounts.find(a => a.id === book.lines.find(c => c.id === commentFor)?.accountId)?.name ?? ""}`}
+      breadcrumb={`${categoryNames[category] ?? ""} / ${book.accounts.find(a => a.id === book.lines.find(c => c.id === commentFor)?.accountId)?.name ?? ""}`}
       payments={book.lines.find(c => c.id === commentFor)?.payments ?? []}
       distribution={book.lines.find(c => c.id === commentFor)?.distribution ?? "equal"}
       onDismiss={() => setCommentFor(null)}
     />
 
-    <ConfirmDialog open={!!deleting} title="Delete Cost"
-      description="Delete this cost and its monthly values?" confirmText="Delete" destructive
+    {/*
+      * `cmp_PopUp_SubaccountCostsDeletion_Confirmation` — `Visible:
+      * =locIsVisibleSubaccountCostsDeletionDialog`. All four strings are transcribed in `MSG` /
+      * `deleteContractDescription` (`panelRules.ts`); this app had invented every one of them.
+      *
+      * No `destructive`: the canvas component is a plain `cmp_PopUp_Confirmation` with
+      * `IconConfirmButton: ="CheckMark"` and `IconCancelButton: ="Cancel"`, which are
+      * `ConfirmDialog`'s own defaults, so Confirm is the themePrimary button with a ✓ rather
+      * than a red one. The canvas relied on the wording to convey the risk (D38 §3).
+      *
+      * The description carries record data, which is fine for a description — `ConfirmDialog`
+      * builds its accessible name from `title` alone (`aria-label={title}` on `DialogSurface`),
+      * and `title` is a constant. Rule 16's "never bound data" applies to labels, not copy.
+      */}
+    <ConfirmDialog open={!!deleting} title={MSG.deleteTitle}
+      description={deleteContractDescription(
+        deletingLine?.description ?? "",
+        book.accounts.find(a => a.id === deletingLine?.accountId)?.name ?? "",
+      )}
+      confirmText={MSG.deleteConfirm} cancelText={MSG.deleteCancel}
       onCancel={() => setDeleting(null)}
       onConfirm={() => {
-        const line = book.lines.find(c => c.id === deleting);
-        if (line) writes.deleteLine.mutate(line);
+        if (deletingLine) writes.deleteLine.mutate(deletingLine);
         setDeleting(null);
       }} />
 
@@ -925,6 +998,17 @@ export default function CapexCostsScreen() {
       cancelText={linkConfirmation.cancelLabel}
       variant="info" confirmIcon="none" cancelIcon="checkmark"
       confirmWidth={confirmButtonWidth(linkConfirmation.confirmLabel)}
+      /*
+       * `BoxHeight` / `TextHeight` on this instance are LIVE FORMULAS, not literals — both
+       * `Switch` on how many of the three changes the dialog is reporting (`BoxHeight`
+       * 1 → 200 · 2 → 250 · 3 → 280, `TextHeight` 1 → 60 · 2 → 120 · 3 → 150). The card grows
+       * because the description does: at one message the canvas drops the "following changes"
+       * header and the bullet and prints a single tailored sentence, which is why 1 is the
+       * shortest arm. `clusterLinkageConfirmation` computes both alongside that text, so the
+       * copy and the box it sits in can never disagree.
+       */
+      boxHeight={linkConfirmation.boxHeight}
+      textHeight={linkConfirmation.textHeight}
       onCancel={() => setLinkConfirmOpen(false)}
       onConfirm={() => { setLinkConfirmOpen(false); void persist(); }} />
 
@@ -932,10 +1016,16 @@ export default function CapexCostsScreen() {
       * `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation` (`:19833-19852`) — the
       * screen's other `cmp_PopUp_Confirmation_New`, with the same `IconConfirmButton: ="Text"` /
       * `IconCancelButton: ="CheckMark"` pair and `WidthConfirmButton: =96`.
+      *
+      * Its `BoxHeight: =200` and `TextHeight: =75` are LITERALS (`:19868`, `:19878`), where the
+      * relink dialog above computes both — this one always shows the same single sentence, so
+      * there is no message count to branch on. Both are cited constants in `panelRules.ts`
+      * rather than numbers inlined here.
       */}
     <ConfirmDialog open={!!paidRequest} title={PAID_CONFIRM_TITLE}
       description={PAID_CONFIRM_DESCRIPTION} confirmText="Confirm"
       variant="info" confirmIcon="none" cancelIcon="checkmark"
+      boxHeight={PAID_CONFIRM_BOX_HEIGHT} textHeight={PAID_CONFIRM_TEXT_HEIGHT}
       onCancel={() => setPaidRequest(null)}
       onConfirm={() => {
         if (paidRequest) writes.setPaid.mutate(paidRequest);

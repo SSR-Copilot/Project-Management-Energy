@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { CostLine } from "../costing/model";
 import {
-  LOADING_COST, LOADING_DATA, RECALCULATE_ALLOCATED_COST, SAVING_COST, SAVING_COSTS,
+  LOADING_COST, LOADING_DATA,
+  PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
+  PAID_CONFIRM_TITLE,
+  RECALCULATE_ALLOCATED_COST, SAVING_COST, SAVING_COSTS,
   allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
   distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
   previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
@@ -195,6 +198,50 @@ describe("spinner text", () => {
     expect(SAVING_COSTS).toBe("Please wait, saving costs...");
     expect(savingCostLabel("individual")).toBe("Please wait, saving the cost...");
     expect(savingCostLabel("equal")).toBe("Please wait, saving costs...");
+  });
+});
+
+describe("set-as-Paid confirmation copy", () => {
+  /** `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation.Title` (`:19879`). */
+  it("keeps the canvas title verbatim", () => {
+    expect(PAID_CONFIRM_TITLE).toBe("Cluster-linked Costs");
+  });
+
+  /**
+   * `…Description` (`:19869`), verbatim — including the typographic ‘ ’ around Paid. Pinned
+   * character-for-character so a tidy-up cannot re-paraphrase it back to "cluster-linked".
+   */
+  it("keeps the canvas description verbatim, typographic quotes included", () => {
+    expect(PAID_CONFIRM_DESCRIPTION).toBe(
+      "Setting the milestone-linked cost to ‘Paid’ will remove the milestone link"
+      + " for all costs in the contract. Do you want to proceed?",
+    );
+    expect(PAID_CONFIRM_DESCRIPTION).toContain("‘Paid’");
+    expect(PAID_CONFIRM_DESCRIPTION).not.toContain("'Paid'");
+  });
+
+  /**
+   * SOURCE DEFECT: the canvas title says "Cluster-linked" and its body says "milestone-linked"
+   * for the same concept. Both halves are reproduced as written; reconciling them is a product
+   * decision (02-OPEN-DECISIONS D38/D39), so this pins the inconsistency itself.
+   */
+  it("reproduces the canvas's own title/body inconsistency rather than reconciling it", () => {
+    expect(PAID_CONFIRM_TITLE).toContain("Cluster-linked");
+    expect(PAID_CONFIRM_DESCRIPTION).toContain("milestone-linked");
+    expect(PAID_CONFIRM_DESCRIPTION).toContain("milestone link");
+    expect(PAID_CONFIRM_DESCRIPTION).not.toContain("cluster");
+    expect(PAID_CONFIRM_DESCRIPTION).not.toContain("Cluster");
+  });
+
+  /**
+   * `BoxHeight: =200` (`:19868`) and `TextHeight: =75` (`:19878`) — LITERALS on this instance,
+   * where the relink dialog computes both from its message count in `rules.ts`. Pinned here so
+   * the two dialogs' dimensions cannot be "unified" by someone who sees only one of them: 75 is
+   * not the 60 the relink dialog uses at a single message.
+   */
+  it("carries the canvas card and band heights for this instance", () => {
+    expect(PAID_CONFIRM_BOX_HEIGHT).toBe(200);
+    expect(PAID_CONFIRM_TEXT_HEIGHT).toBe(75);
   });
 });
 

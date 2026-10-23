@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  NO_MILESTONE, SUMMARY_CATEGORY, SUMMARY_TAB_NAME,
+  FREQUENCY_OPTIONS, NO_MILESTONE, SUMMARY_CATEGORY, SUMMARY_TAB_NAME,
   accountsInCategory, allocatedForYear, applyDescriptionChange, averagePayment, byClusterJson,
   canPersistIndividual, canSaveContract, categoryTabs, clusterLinkageChanged,
   clusterLinkageConfirmation, clusterPayments, clustersHavingCost, contractSubLabel,
@@ -22,6 +22,7 @@ import {
   validateMonthAmount, monthAmountErrors, hasMonthRangeError,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
+import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
 
 const line = (over: Partial<CostLine> = {}): CostLine => ({
   ...newCostLine("acct-1", "line-1"), ...over,
@@ -952,38 +953,54 @@ describe("the relink confirmation copy", () => {
       ...over,
     });
 
-  it("UT-CAPEXR-109 renders the cost-paid-by bullet under Change Cost Paid By", () => {
+  /*
+   * UT-CAPEXR-109..111 and -113 are SINGLE-message cases, and they used to assert the
+   * header-plus-bullet form. That was the defect, not the spec: `Description`
+   * (`Capex Costs Screen.pa.yaml:19991-20025`) branches on `locCount > 1`, and at exactly one
+   * message the canvas renders a separately worded sentence with no header and no bullet. The
+   * expectations below are now the canvas's single-message text.
+   */
+
+  it("UT-CAPEXR-109 renders the cost-paid-by sentence under Change Cost Paid By", () => {
     const c = confirm({ costPaidByChanged: true, payer: "DevCo" });
     expect(c.title).toBe("Change Cost Paid By");
+    // `:20010` — single quotes and a lowercase "by", and "influence the liquidity planning".
     expect(c.description).toBe(
-      "Are you sure you want to proceed with the following changes?"
-      + '\n• Switch the "Cost Paid By" to DevCo. This will impact liquidity planning and BoP.',
+      "Are you sure you want to switch the 'Cost Paid by' to DevCo?"
+      + " This will influence the liquidity planning and BoP.",
     );
     expect(c.confirmLabel).toBe("Confirm");
     expect(c.cancelLabel).toBe("Cancel");
   });
 
-  it("UT-CAPEXR-110 renders the cluster bullet under Change Cluster Link", () => {
+  it("UT-CAPEXR-110 renders the cluster sentence under Change Cluster Link", () => {
     const c = confirm({
       clusterLinkageChanged: true,
       clustersWithCost: [{ order: 1 }, { order: 2 }],
       selectedName: "Cluster 3", selectedOrder: 3,
     });
     expect(c.title).toBe("Change Cluster Link");
+    // `:20014-20018` — "linked them to", and it asks "Would you like to proceed?".
     expect(c.description).toBe(
-      "Are you sure you want to proceed with the following changes?"
-      + "\n• Costs have been entered for Cluster 1, 2 and linked to Cluster 3.",
+      "You have entered costs in Cluster 1, 2 and linked them to Cluster 3."
+      + " Would you like to proceed?",
     );
   });
 
-  it("UT-CAPEXR-111 renders the relink-reset bullet verbatim", () => {
-    // `:19882` — the quotes around Paid are doubled in Power Fx, i.e. literal `"Paid"`.
+  it("UT-CAPEXR-111 renders the relink-reset sentence under Cluster-linked Costs", () => {
+    /*
+     * `:19989` + `:20022` — the quotes around Paid are doubled in Power Fx, i.e. literal
+     * `"Paid"`, and `locMsg3`'s trailing space is what separates it from "Do you want to
+     * continue?". The title is the canvas's FOURTH arm (`:20167-20168`), which this app was
+     * missing: a relink reset on its own reads "Cluster-linked Costs", not "Change Cluster Link".
+     */
     const c = confirm({ milestoneRelinkResetNeeded: true, selectedName: "Cluster 3" });
-    expect(c.description).toContain(
-      '\n• "Paid" markers are not supported for milestone-linked costs. '
-      + "Linking this cost to a milestone will reset all costs to unpaid.",
+    expect(c.description).toBe(
+      '"Paid" markers are not supported for milestone-linked costs. '
+      + "Linking this cost to a milestone will reset all costs to unpaid. "
+      + "Do you want to continue?",
     );
-    expect(c.title).toBe("Change Cluster Link");
+    expect(c.title).toBe("Cluster-linked Costs");
   });
 
   it("UT-CAPEXR-112 stacks all three bullets as Confirm Changes / Confirm All", () => {
@@ -1012,6 +1029,91 @@ describe("the relink confirmation copy", () => {
     expect(c.description).not.toContain("Costs have been entered");
     expect(c.title).toBe("Change Cost Paid By");
     expect(c.confirmLabel).toBe("Confirm All");
+    // With C2 filtered out this is a ONE-message dialog, so it takes the single-message branch.
+    expect(c.description).not.toContain("the following changes?");
+    expect(c.boxHeight).toBe(200);
+  });
+
+  it("UT-CAPEXR-116 omits the header and the bullet entirely at one message", () => {
+    const c = confirm({ costPaidByChanged: true, payer: "SPV" });
+    expect(c.description).not.toContain("Are you sure you want to proceed with the following");
+    expect(c.description).not.toContain("•");
+    expect(c.description).not.toContain("\n");
+  });
+
+  it("UT-CAPEXR-117 titles any two-message combination Confirm Changes", () => {
+    /*
+     * `Title` (`:20152-20156`) keys on `locCountOfMessages >= 2`, NOT on C1 && C2. This used to
+     * read `showC1 && showC2 ? …`, so C1+C3 fell through to "Change Cost Paid By" and C2+C3 to
+     * "Change Cluster Link" — both are two messages and both must say "Confirm Changes".
+     */
+    const c1c3 = confirm({
+      costPaidByChanged: true, payer: "DevCo", milestoneRelinkResetNeeded: true,
+    });
+    expect(c1c3.title).toBe("Confirm Changes");
+
+    const c2c3 = confirm({
+      clusterLinkageChanged: true, milestoneRelinkResetNeeded: true,
+      clustersWithCost: [{ order: 1 }], selectedName: "Cluster 3", selectedOrder: 3,
+    });
+    expect(c2c3.title).toBe("Confirm Changes");
+  });
+
+  it("UT-CAPEXR-118 sizes the dialog from the message count, with no default arm", () => {
+    /*
+     * `BoxHeight` (`:19927-19935`) `Switch(locCount, 1, 200, 2, 250, 3, 280)` and `TextHeight`
+     * (`:20117-20125`) `Switch(locCount, 1, 60, 2, 120, 3, 150)`. Neither has a default, so a
+     * zero-message dialog is `Blank()` — undefined here, and unreachable because
+     * `needsClusterLinkageConfirmation` is what opens the dialog.
+     */
+    const one = confirm({ costPaidByChanged: true, payer: "SPV" });
+    expect([one.boxHeight, one.textHeight]).toEqual([200, 60]);
+
+    const two = confirm({
+      costPaidByChanged: true, payer: "SPV", milestoneRelinkResetNeeded: true,
+    });
+    expect([two.boxHeight, two.textHeight]).toEqual([250, 120]);
+
+    const three = confirm({
+      costPaidByChanged: true, payer: "DevCo",
+      clusterLinkageChanged: true, milestoneRelinkResetNeeded: true,
+      clustersWithCost: [{ order: 1 }], selectedName: "Cluster 3", selectedOrder: 3,
+    });
+    expect([three.boxHeight, three.textHeight]).toEqual([280, 150]);
+
+    const none = confirm();
+    expect([none.boxHeight, none.textHeight]).toEqual([undefined, undefined]);
+    expect(none.title).toBe("");
+  });
+
+  it("UT-CAPEXR-119 keeps locMsg3's trailing space in the bulleted form too", () => {
+    // `:19989` — `locMsg3` ends in a space, and the multi branch uses it as-is (`:20004`).
+    const c = confirm({
+      costPaidByChanged: true, payer: "SPV", milestoneRelinkResetNeeded: true,
+    });
+    expect(c.description).toContain("will reset all costs to unpaid. ");
+    expect(c.description.split("\n")).toHaveLength(3);
+  });
+});
+
+/* ------------------------------------- the right panel's payment frequency */
+
+describe("FREQUENCY_OPTIONS", () => {
+  it("UT-CAPEXR-114 offers all five canvas frequencies and stays tied to the shared list", () => {
+    /*
+     * `drp_AddContract_RightPanel_PaymentFrequency_1` (`Capex Costs Screen.pa.yaml:11855`) has
+     * `Items: =colDistributionFrequency`, declared in the Cost app's `App.pa.yaml` `Formulas`
+     * (`:161-187`) with five rows: ID 1 → 1 month, 2 → 2 months, 3 → 3 months, 4 → 6 months,
+     * 5 → 12 months. "2 months" was missing here, so a bi-monthly contract could not be made.
+     * Asserting the derivation as well as the values keeps the two from drifting apart again.
+     */
+    expect(FREQUENCY_OPTIONS).toEqual([1, 2, 3, 6, 12]);
+    expect(FREQUENCY_OPTIONS).toEqual(DISTRIBUTION_FREQUENCY.map((f) => f.value));
+  });
+
+  it("UT-CAPEXR-115 labels the two-month frequency the way the canvas does", () => {
+    // `colDistributionFrequency` ID 2 — `Label: "2 months"`, verbatim.
+    expect(frequencyLabel(2)).toBe("2 months");
   });
 });
 
