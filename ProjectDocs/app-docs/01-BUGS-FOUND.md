@@ -441,6 +441,74 @@ literal parity here it is a one-line change in those two functions.
 
 ---
 
+### C-7 · A new equal-distribution contract never gets its Average Payment or cluster link
+
+`Src/Capex Costs Screen.pa.yaml` → `btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save`
+(control at L17506), at the very end of the Equal Distribution branch, after the cost rows have
+been written:
+
+```
+Patch(
+    'CAPEX Project Contracts',
+    LookUp(
+        colCapexProjectContracts,
+        'CAPEX Project Contract' = locSelectedCostRow.vsb_capexaccountlistid
+    ),
+    {
+        'Average Payment': RoundDown(txt_AddContract_RightPanel_TotalCost_1.Value / locNumPayments, 0),
+        'Linked Cluster': If(drp_…_Link_to_Cluster.Selected.Name <> "None", drp_…_Link_to_Cluster.Selected, Blank())
+    }
+);
+```
+
+`locSelectedCostRow` is the row the grid had selected when the panel opened. On an **Edit** that is
+the contract, so the `LookUp` finds it. On an **Add** it is the **sub-account** — the contract did
+not exist yet — so `'CAPEX Project Contract' = <a sub-account id>` matches nothing and the `LookUp`
+returns blank. `Patch` against a blank record writes nothing, silently.
+
+So every equal-distribution contract created through this panel is left with an empty
+`vsb_averagepayment`, and with no `vsb_linkedcluster` even when the user picked a milestone in the
+dropdown before saving. The same two columns are written correctly the moment the contract is
+edited and saved again, which is why the gap is easy to miss: it only shows on rows nobody has
+re-opened. Note that the Individual Distribution branch has no equivalent statement at all, so it
+is unaffected — this is specific to Equal Distribution.
+
+**Not reproduced.** `saveCostLine` (`data/capexWrites.ts`) computes `vsb_averagepayment` from
+`equalDistributionAmounts(...).averagePayment` in the contract payload itself, and binds
+`vsb_LinkedCluster@odata.bind` on create as well as on update, so both land on the first save. That
+is a silent divergence from the canvas and is being marked as such; whether to keep the fix or
+revert to parity is question 4 of **D38 §9**.
+
+---
+
+### D-7 · The two entry paths into the screen select different tabs
+
+`Src/Capex Costs Screen.pa.yaml`:
+
+- `Screen.OnVisible` (L14-301), when the base collections are ready, selects the first **real**
+  category — `First(SortByColumns(Filter(colCapexAccountCategoriesNew, !IsBlank('CAPEX Account
+  List') && Not(Name = "Overleveraging")), "vsb_order", SortOrder.Ascending))` — and then runs the
+  refresh subroutines.
+- `tmr_Capex_Initial_Load` (control at L778), which fires when `OnVisible` found the base data
+  *not* ready and had to defer, instead sets
+  `locSelectedCapexAccountCategory: LookUp(colCapexAccountCategoriesNew, Name = "DEVEX/CAPEX
+  Summary")` — the synthetic summary entry, whose `'CAPEX Account List'` is blank.
+
+Both paths are reachable on an ordinary launch; which one wins depends on whether `App.OnStart` has
+finished populating `colCapexAccountCategoriesNew` / `…AccountsNew` / `…SubaccountsNew` by the time
+`OnVisible` runs — i.e. on timing, network latency and cache warmth, not on anything the user did.
+A deep link into the screen therefore sometimes opens on the first CAPEX category and sometimes on
+the DEVEX/CAPEX Summary, with no pattern a user can predict. Nothing is lost either way; it is a
+consistency defect, and it also means a screenshot or a Tosca module recorded against one path can
+fail against the other.
+
+**Not reproduced.** The code app resolves the category from `?category=` on every entry
+(`features/cost/capex-costs/Screen.tsx`, `resolveCategory`), defaulting to the Summary tab when the
+parameter is absent or unusable, so the landing tab is deterministic and shareable. Recorded here
+rather than fixed-and-forgotten; see **D38 §8**.
+
+---
+
 ## Part 1c — In the OPEX screen (O&M and Other OPEX)
 
 Found while porting `OpexCostScreenCode.txt` (8,932 lines) into

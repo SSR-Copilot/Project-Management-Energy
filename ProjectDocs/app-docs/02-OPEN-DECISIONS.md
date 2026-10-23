@@ -919,7 +919,7 @@ Already registered and reused: `vsb_project`, `vsb_country` (the country's `'Bus
 Texts: progress "The project is being saved, please wait..", success = the `colProcessingSteps` lines joined `"{Value} \n"`, error = the canvas "Error: Project could not be saved. …" (`projectSaveErrorText`). After a save the project is re-read and nothing is dirty.
 
 **Corrected (would have failed or shown wrong data):**
-- Assumption columns: `vsb_cluster6` does not exist. Cluster 5 ← FID + `'Final Investment Decision'`; Cluster 6 ← Cluster 5 + `'Cluster 5'`; the End Date (`Coalesce('Operational Lifetime', 360)` months − 1 day), Sales Start (Cluster 4 + `'Sales Start'`) and Sales Completion (FID + `'Sales End'` = `vsb_salesduration`) buttons now work.
+- Assumption columns: `vsb_cluster6` does not exist. Cluster 5 ← FID + `'Final Investment Decision'`; Cluster 6 ← Cluster 5 + `'Cluster 5'`; the End Date (`Coalesce('Operational Lifetime', 360)` months − 1 day), Sales Start (Cluster 4 + `'Sales Start'`) and Sales Completion (FID + `'Sales End'` = `vsb_salesduration`) buttons now work.
 - Generator columns: `vsb_numberofgenerators`, `_vsb_generator_value`, `vsb_generatorscost` (the write went to a non-existent `vsb_totalcosteur`), and `vsb_wtgprice` … `vsb_wtgprice5`.
 - Hedge Type "Individual Volumes" is **3** (`CHOICE_FINANCE`); `CHOICE.hedgingType.individualVolumes` (952850001) is wrong and is no longer used here. Option values are pinned to the generated enums by UT-MSTONE-076.
 - The "Required fields" list uses the canvas row texts ("Check input for … date."; "Cluster 6 Date." with the capital D); the field-label copy stays under the fields. UT-MSTONE-007/010/047–053 had pinned the wrong text.
@@ -1989,3 +1989,499 @@ master `6a73ffa`, on the owner's instruction. Profile `ServiceAccount_DEV`
   owner, and should cover the six admin screens (D36) and the collapsed admin rail (CA-1).
 - 09 §6 still applies: the Dev app is shared by every branch, so this push replaces whatever was
   deployed before it.
+
+## D38 · DEVEX/CAPEX parity remediation (23 Oct 2026) — all items PROPOSED
+
+A read-only parity pass over the Cost app's DEVEX/CAPEX screen against
+`ProjectDocs/_extracted/msapp/projectcosts/Src/Capex Costs Screen.pa.yaml` (20,082 lines, 355
+controls). The full row-by-row comparison is
+`ProjectDocs/app-docs/gap-analysis/cost-capex-costs.md`; this entry records only the decisions it
+asks for.
+
+**Nothing in D38 is decided.** Every item below is marked *proposed, awaiting the product owner*.
+Two of them are behaviour changes that must be signed off **before** any code lands — **M-3** (the
+four verbatim strings, including whether the delete dialog keeps its red styling) and **M-5** (the
+1.21.753 arithmetic). The rest are defect fixes whose direction is not in doubt, but which still
+need the usual approval before a commit.
+
+Some of this work now exists in the **working tree** — uncommitted, ungated and unapproved; §4
+marks which part, and why that part is only half of its item. Being in the tree is not approval,
+and nothing here has been committed.
+
+Caveats that apply to the whole entry: the canvas source on disk is solution **1.21.709**, and
+none of this has been exercised against live `VSBCloud_Dev` — these are source-level findings, and
+H-2 in particular is the class of defect that `MIGRATION-STRATEGY.md` step 9 says only a real
+click-through confirms.
+
+### §1 H-1 · Distribution Frequency is missing "2 months" — *proposed*
+
+- **Canvas:** `drp_AddContract_RightPanel_PaymentFrequency_1.Items` (L11838) is
+  `colDistributionFrequency`, the five-row `App.Formulas` table (`App.pa.yaml` L161): **1, 2, 3, 6,
+  12 months**.
+- **Code:** `features/cost/capex-costs/rules.ts` declares `FREQUENCY_OPTIONS = [1, 3, 6, 12]`, with
+  a comment asserting the canvas offers four. Consumed at `Screen.tsx:822`.
+- **Effect:** a bi-monthly schedule cannot be created in CAPEX, and a contract stored with
+  `vsb_distributionfrequency = 2` renders a Dropdown `value` that is absent from its own options.
+  It is also a rule 17 violation: the correct list already exists once, at
+  `data/dataverseNames.ts:621`, and both OPEX (`UT-OPEX-073`) and Land Lease use it.
+- **Proposed:** derive `FREQUENCY_OPTIONS` from `DISTRIBUTION_FREQUENCY`, keeping the export name
+  and shape so no caller changes. Add tests.
+- **Cost of not doing it:** the gap stays invisible until a user needs a two-month schedule, and
+  the duplicate definition keeps drifting.
+
+### §2 H-2 · CAPEX delete paths bypass `deleteRecord` — *proposed*
+
+- **Rule:** `CONVENTIONS.md` rule 14 — a delete must surface an SDK refusal. The generated
+  `delete()` discards the `IOperationResult` and the SDK never throws, so a 403 or a cascade
+  restriction resolves exactly like success.
+- **Code:** `data/capexWrites.ts` calls `Vsb_capexcostsService.delete(...)` and
+  `Vsb_capexprojectcontractsService.delete(...)` **directly** — once in `saveCostLine`'s tombstone
+  loop and twice in `deleteCostLine`. Every admin module routes through `deleteRecord`
+  (`data/client.ts:113`; e.g. `data/adminCapexAccounts.ts:297` with its refusal test
+  `UT-ADCAPEX-019`).
+- **Effect:** this is the live risk named in `KNOWN-RISKS-AND-DECISIONS.md` ("several delete paths
+  discard the SDK's failure result silently"), now located in CAPEX specifically. A user whose
+  delete Dataverse refuses sees the row disappear from the grid and reappear on reload.
+- **Proposed:** route all three through `deleteRecord`, add refusal tests.
+- **Cost of not doing it:** silent data-state divergence between the UI and Dataverse, with no
+  telemetry.
+
+### §3 M-3 · Four visible strings diverge from the canvas — *proposed, needs sign-off*
+
+Rule 7 says visible strings are transcribed verbatim, typos included.
+
+| Canvas | Code |
+|---|---|
+| `lbl_GeneratorData_…_Fields_Label_17` (L11684) = "Start Date Distribution" | `Screen.tsx:810` "Start Date" |
+| `lbl_GeneratorData_…_Fields_Label_18` (L11770) = "End Date Distribution" | `Screen.tsx:814` "End Date" |
+| Delete dialog (L8088) Title "Delete Contract"; Confirm "Confirm"; Cancel "Cancel"; Description `$"Are you sure you want to delete the costs for ""{description}"" of the selected Subaccount ""{account}""?"` | `Screen.tsx:904` Title "Delete Cost", Confirm "Delete", description "Delete this cost and its monthly values?" |
+
+- **Note on how this escaped the gates.** The two date inputs' `AccessibleLabel` is each control's
+  own **name**, so the code's `aria-label` matches and `check:canvas` passes while the visible
+  caption is wrong. This is exactly the missing automated **G-LABEL** that
+  `TESTING-AND-HARNESS.md` describes; the canvas-identity gate cannot see caption drift.
+- **Proposed:** restore all four, in a `MSG` object with `Control.Property` citations. Leave every
+  `aria-label` untouched.
+- **Also for decision:** the code's delete confirm is styled `destructive` (red). The canvas uses
+  the standard confirm button with `WidthConfirmButton: =96`. Keep the red button as a deliberate
+  improvement, or revert to canvas parity?
+- **Cost of reverting the captions:** none technically; the longer labels are wider, which the
+  panel's two-column layout already accommodates.
+
+### §4 M-4 · Categories are only half Dataverse-driven — *proposed, PARTIALLY IMPLEMENTED*
+
+**Amended 23 Oct 2026, after the Phase 2 work.** This item is no longer a single change: half of it
+now exists in the working tree (unapproved, uncommitted) and half remains open, and the half that
+landed introduces a **new failure mode** a reviewer should weigh before approving.
+
+- **Canvas:** `tab_Costs_ContentAssignableAccountCategories.Items` (L2431) is
+  `SortByColumns(Filter(colCapexAccountCategoriesNew, Not(Name="Overleveraging")), "vsb_order")`,
+  and `gal_Costs_ContentCostsSummary.Items` (L7786) is the matching
+  `Filter(colDevexCapexSummaryView, Not(Name="Overleveraging"))`. In the canvas the same live
+  collection drives both the strip **and** the accounts beneath it, so the two cannot disagree.
+
+**Done (in the tree, awaiting approval).** `Screen.tsx` now calls `useCapexCategories()` and feeds
+the result to all four consumers: the tab strip (`categoryTabs(categoriesQuery.data)`), the URL
+resolution (`resolveCategory(raw, categoryNames.length)`), the Summary table rows, and the comments
+breadcrumb. The empty/failed-load fallback to `CATEGORY_LABELS` already lived in `rules.ts` and was
+reused rather than re-implemented. `useCapexCategories()` was added to
+`features/cost/costing/useCostBook.ts` over `loadCapexCategories` (`data/costBook.ts:742`, tested as
+`UT-BOOK-047`).
+
+**Still open.** `loadCostAccounts` (`data/costBook.ts:806-807`) derives the category index from the
+same hard-coded list and drops anything it does not recognise:
+
+```
+const category = CATEGORIES.indexOf(level1.name as (typeof CATEGORIES)[number]);
+if (category === -1) continue;
+```
+
+The `continue` skips the whole level-1 subtree, so none of that category's accounts, sub-accounts
+or contracts is ever emitted into the cost book.
+
+- **The new failure mode, stated plainly.** Before the Phase 2 change, a category an administrator
+  added in Dataverse was **absent**: no tab, no summary row, nothing to click. After it, that
+  category **gets a tab and a summary row with no accounts behind them** — the grid renders empty.
+  That is arguably the worse of the two, because an empty category reads as "configured but
+  unused" rather than as "missing", and a user has no way to tell the difference from the screen.
+  Neither state is reachable on VSBCloud_Dev today (the five names still match), so this is latent
+  either way — but it is a behaviour change, not purely an improvement, and it is the reason this
+  section is being corrected rather than marked done.
+- **Closing it fully** means re-basing `CostAccount.category` off the loaded category list instead
+  of `CATEGORIES.indexOf(...)`. That is **a separate piece of work with a wider blast radius**: the
+  numeric `category` index is consumed by `accountsInCategory`, the per-category fetch scoping in
+  `useCostBook`, `CapexCategoryTotal.category` on the Summary totals, and the `?category=` URL
+  contract — every one of them would have to move from "index into a literal" to "index into a
+  loaded list" at the same time, including the behaviour when the list has not loaded yet.
+  `loadCapexCategories`' own doc comment (`data/costBook.ts:718-724`) anticipated exactly this.
+  **Flagged as a follow-up; deliberately not folded into this decision.**
+- **Also owed by that follow-up:** the doc comment at `data/costBook.ts:718-724` now describes the
+  old behaviour ("the new one would simply never get a tab") and will be wrong once the Phase 2
+  change is approved. It should be corrected in the same pass.
+- **Cost of reverting the Phase 2 half:** low — it is additive wiring plus one hook, and the
+  fallback path is the previous behaviour exactly.
+
+### §5 M-5 · The three 1.21.753 arithmetic changes are still unapplied — *proposed, needs sign-off*
+
+From `1.21.753-REQUIRED-CHANGES.md`, re-verified as still outstanding:
+
+- **R2** — `% Values` months should use `RoundDown`, not `Round` (`rules.ts`
+  `individualDistribution` currently rounds).
+- **R3** — flooring every month leaves a shortfall; 1.21.753 hands it to the **latest month
+  carrying a positive amount**, so the contract sums exactly to the typed Total Cost. Not
+  implemented.
+- **R4** — a `% Values` contract should open in percent mode only when
+  `Coalesce('Total Cost', 0) <> 0`; a `% Values` contract with no total opens showing amounts. Not
+  implemented.
+
+- **Why this needs the owner:** all three change stored figures, and none can be verified against
+  the 1.21.709 YAML in this workspace. `VSBCloud_managed (2).zip` (1.21.753) exists in
+  `VSBCloud_CodeApps/` and could be unpacked to confirm before anything is built.
+- **Cost of reverting later:** low — each is a localised arithmetic change with a
+  `…CanvasParity` twin available.
+
+### §6 L-6 · The equal-distribution save always recomputes — *proposed, comment only*
+
+- **Canvas:** the whole `RemoveIf('CAPEX Costs', contract)` + re-`Patch` block runs only when
+  `Or(locChangedByDate, locChangedDistribution, locChangedFrequency, locClusterChanged,
+  loctotalCostChanged)` and the contract is not blank. Editing only the description writes no cost
+  rows at all.
+- **Code:** recomputes the schedule and reconciles on every save.
+- **Effect:** because the code reconciles rather than deletes, the end state matches — but it
+  issues PATCHes the canvas would not, on rows whose values are unchanged.
+- **Proposed:** no behaviour change; add the `DIVERGENCE:` comment so the next reader is not
+  misled. Revisit only if write volume becomes a concern (**R-11**).
+
+### §7 L-7 · Delete order diverges from the canvas — *proposed, comment only*
+
+- **Canvas:** `cmp_PopUp_SubaccountCostsDeletion_Confirmation.OnConfirm` (L8088) removes the
+  comments and then the contract. **Its `RemoveIf('CAPEX Costs', …)` is commented out** — it
+  relies on the Dataverse cascade.
+- **Code:** `deleteCostLine` removes comments, then each cost row explicitly, then the contract.
+- **Effect:** safer and more requests. Already listed in
+  `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` §8 as a deliberate "not ported" candidate
+  ("Contract delete relying on the Dataverse cascade"), but not marked at the call site.
+- **Proposed:** add the marker; keep the behaviour unless the owner prefers the cascade.
+
+### §8 L-8 · Two canvas defects handled silently — *proposed, comment only*
+
+Both are newly registered in `01-BUGS-FOUND.md` (**C-7** and **D-7**) and are cross-referenced
+here rather than restated.
+
+- **C-7** (new-contract `Average Payment` / `Linked Cluster` never written): the code **writes
+  both on create**, i.e. it silently fixes the canvas. Rule 8 requires that be marked and recorded;
+  whether to keep the fix is question 4 below.
+- **D-7** (the two entry paths land on different tabs): the code has one deterministic path driven
+  by the URL and does not reproduce the inconsistency.
+- **Proposed:** add `SOURCE DEFECT:` markers at both sites. No behaviour change proposed.
+- **Follow-up on where the C-7 marker lives (noted 23 Oct 2026, after Phase 2).** The marker was
+  written into `features/cost/capex-costs/Screen.tsx`, which is where the defect was *found*, but
+  not where it is *answered*: the create that actually writes `vsb_averagepayment` and
+  `vsb_LinkedCluster@odata.bind` is in `data/capexWrites.ts` (`saveCostLine`). A reader auditing
+  the write path — the likeliest person to need it — would not see it. Moving the marker to the
+  create site, leaving at most a pointer in `Screen.tsx`, is a comment-only follow-up. Recorded
+  here so it is not lost; **not** done in this pass, because `capexWrites.ts` belonged to another
+  agent while Phase 2 ran and a comment is not worth a write conflict.
+
+### §9 What the owner is being asked
+
+1. M-5: apply R2, R3 and R4, or defer until 1.21.753 is unpacked and confirmed?
+2. M-3: keep the delete dialog's red `destructive` confirm, or revert to the canvas' plain
+   Confirm? (The four strings are proposed for restoration either way.)
+3. L-7: keep the explicit cost-row deletes, or adopt the canvas' cascade reliance?
+4. C-7: keep writing `Average Payment` and `Linked Cluster` on create, or revert to canvas parity
+   and leave a new contract without them?
+5. The in-panel error strip `cmp_ShowErrorInContract` (L19760) is not ported — add it, or leave
+   Save silently disabled?
+6. The Add/Edit panel's year list: canvas `costStartYear … costEndYear + 3`, or the grid's
+   navigation window as the code currently uses?
+7. Confirm that **D1**'s provisional answer (the server refuses; a 403 becomes a message) still
+   stands for this screen's `DataSourceInfo` permission gates.
+
+## D39 · DEVEX/CAPEX UI/UX parity pass — popups and dialog chrome (23 Oct 2026) — all items PROPOSED
+
+A second read-only pass over the same screen, this time comparing what the user **sees**: the popup
+components' own geometry, fill, typography and padding, and what each click renders. The row-by-row
+comparison is §5 of `ProjectDocs/app-docs/gap-analysis/cost-capex-costs.md`, where the items are
+numbered **UX-1 … UX-11**; this entry records only the decisions they ask for.
+
+**Nothing in D39 is decided.** Every item is *proposed, awaiting the product owner*.
+
+> **Amended 23 Oct 2026**, after the agents that implemented these items reported back with
+> evidence that corrected two of my own characterisations:
+> - **UX-7's blast radius was overstated** and is now **zero visible change** — §7. I had grouped it
+>   with the cross-cutting items; enumerating all 42 call sites disproved that.
+> - **UX-8 was not an open question but a real defect**, wrong in two ways, and is now **§8** rather
+>   than a question in §9.
+> - **UX-2 has two per-instance dimensions, not one** — `TextHeight` as well as `BoxHeight`.
+
+**Read this before approving anything below.** Three of the eight findings are not CAPEX fixes at
+all — they are corrections to a **shared** component. `ConfirmDialog` has **36 call sites across 22
+files** (admin ×7, cost ×11, pm ×15, plus `discardGuard` and `UnsavedChangesGuard`), so **UX-4, UX-5
+and UX-6 change how dialogs look on every screen in the app**, not only on DEVEX/CAPEX. They are
+still the faithful values — the canvas components they replace are themselves shared, so the canvas
+number is right for every caller — but this is a decision about a **cross-cutting visual change**,
+not a local fix. A reviewer who approves them is approving a change to the whole app's dialog
+chrome.
+
+**UX-7 is not in that group**, despite what the first draft of this entry said. `LoadingOverlay`
+has 42 call sites across 27 files, but the branch it corrects is unreachable today — see §7.
+
+Two further things a reviewer should know up front:
+
+- **UX-1 changes user-facing copy**, in what is probably the relink dialog's most common case.
+- **UX-3 makes this app reproduce a canvas inconsistency it had previously smoothed over.** The
+  paid-toggle dialog will now read "Cluster-linked Costs" in its header and "milestone-linked" in
+  its body. That is rule 7 behaviour, but **it will look like a typo to anyone who does not know
+  why** — see §3 for the evidence about which half is actually stale.
+
+Caveats for the whole entry, as for D38: the canvas source on disk is solution **1.21.709**, and
+none of this has been exercised against live `VSBCloud_Dev`. Geometry findings in particular are
+the class that only a rendered comparison settles, which is why the remediation plan ends with a
+verification agent that measures the rendered dialogs rather than reading the code again.
+
+Part of this work exists in the **working tree** — uncommitted, ungated and unapproved. §5.5 of the
+gap report records which part. Being in the tree is not approval.
+
+### §1 UX-1 · The relink dialog's single-condition copy is missing entirely — *proposed*
+
+- **Canvas:** `cmp_PopUp_Confirmation_For_SetClusterLinkingConfirmationPopup` (L19884) builds its
+  `Description` as `If(locCount > 1, <header + one bullet per condition>, <a tailored single
+  sentence>)`. The one-condition arm is **three different sentences**, not the bulleted text with
+  the bullet stripped. For the payer case the canvas says
+  `Are you sure you want to switch the 'Cost Paid by' to {payer}? This will influence the liquidity
+  planning and BoP.` — single quotes, lower-case "by", "influence the liquidity planning" — against
+  the multi-condition `• Switch the "Cost Paid By" to {payer}. This will impact liquidity planning
+  and BoP.` The cluster and the paid-marker cases differ likewise, each ending in its own question
+  ("Would you like to proceed?", "Do you want to continue?").
+- **Code:** `rules.ts` `clusterLinkageConfirmation` always emits the header plus one bullet per
+  condition, so the single-condition dialog shows a header and a lone bullet where the canvas shows
+  one plain sentence.
+- **Proposed:** branch on the condition count and transcribe all three single-condition sentences
+  verbatim, each citing its canvas source.
+- **One character that is load-bearing.** `locMsg3` (`:19989`) ends in a **trailing space**. The
+  single-condition branch concatenates `locMsg3 & "Do you want to continue?"` with no separator, so
+  that space is the only thing parting the two sentences; the multi-condition branch uses `locMsg3`
+  as-is, so that bullet genuinely ends in a space. The previous code dropped it. It is restored and
+  pinned by `UT-CAPEXR-119` — precisely the kind of detail a later "tidy the whitespace" commit
+  destroys silently.
+- **Not a canvas defect.** This is deliberate design, not an oversight: the instance's `BoxHeight`
+  is `Switch(locCount, 1, 200, 2, 250, 3, 280)`, and the 200 exists precisely because the
+  single-condition form has no header. It is therefore recorded here as a **port gap** and
+  deliberately **not** added to `01-BUGS-FOUND.md`.
+- **Cost of not doing it:** the most common case of this dialog reads as a one-item checklist
+  rather than a question, and the box is sized for copy it is not showing (see §2).
+
+### §2 UX-2 · The ⓘ dialog's height is per instance, not fixed — *proposed*
+
+*Amended 23 Oct 2026: this item has **two** live per-instance dimensions, not one. `TextHeight` is
+as live as `BoxHeight`, and both must be carried.*
+
+- **Canvas:** the ⓘ component parameterises **both** the card and the description band:
+  - `con_PopUpConfirmation_Body_2.Height = cmp_PopUp_Confirmation_New.BoxHeight`
+    (`cmp_PopUp_Confirmation_New.pa.yaml:104`; custom-property default `=260`, `:14-19`).
+  - `con_PopUpConfirmation_BodyDescription_2.Height` and the label itself
+    `= cmp_PopUp_Confirmation_New.TextHeight` (`_New:167`, `:205`; default `=100`, `:62-67`).
+  - The paid-toggle instance passes `BoxHeight: =200` / `TextHeight: =75` (L19868, L19878). The
+    relink instance **computes both from the bullet count**:
+    `BoxHeight = Switch(locCount, 1, 200, 2, 250, 3, 280)` (`:19906-19936`) and
+    `TextHeight = Switch(locCount, 1, 60, 2, 120, 3, 150)` (`:20096-20126`). Each has two
+    commented-out predecessors above the live formula (rule 10), and **neither `Switch` has a
+    default arm**, so `locCount = 0` yields `Blank()` — unreachable, because
+    `needsClusterLinkageConfirmation` will not open the dialog with no conditions.
+- **Code:** `ConfirmDialog.tsx` hard-codes `surfaceInfo: { height: "320px" }` for every ⓘ dialog and
+  has no notion of a description-band height. The 320 is the component's own **authoring canvas
+  size** (`_New:81`), not the dialog box.
+- **Effect:** a single-condition ⓘ dialog is 120 px taller than the canvas renders it, with the gap
+  above the buttons, and the description band does not shrink with the content either.
+- **Proposed:** optional `boxHeight` / `textHeight` props whose **defaults keep every existing
+  caller pixel-identical**, with the CAPEX screen passing the canvas values and reproducing the
+  blank-at-zero case as `undefined`.
+- **Blast radius:** nil if the defaults are preserved — only CAPEX passes the new props.
+
+### §3 UX-3 · The paid-toggle dialog's body says "milestone", its title says "Cluster" — *proposed*
+
+- **Canvas**, instance `cmp_PopUp_Confirmation_For_SetasPaidUnpaidCostConfirmation` (L19864):
+  - `:19869` — `Description: ="Setting the milestone-linked cost to ‘Paid’ will remove the
+    milestone link for all costs in the contract. Do you want to proceed?"` (the quotes around
+    Paid are U+2018 / U+2019, not ASCII).
+  - `:19879` — `Title: ="Cluster-linked Costs"`.
+- **Code, before this pass:** both halves said "cluster-linked" / "cluster link" — the app had
+  silently reconciled the canvas' own contradiction, which rule 7 forbids ("not paraphrased, not
+  corrected for style") and rule 8 requires to be marked.
+- **Which half is stale is answerable, and the evidence points at the body.** The same instance's
+  `OnConfirm` (`:19875`) patches `'CAPEX Project Contracts'` with `{'Linked Cluster': Blank()}` —
+  it clears the **cluster** link. The column is `'Linked Cluster'`; there is no milestone column in
+  play. So the behaviour agrees with the **title**, and the body's "milestone" wording is the
+  canvas' own stale text rather than a second concept. (It is the same vocabulary drift visible
+  elsewhere on this screen, where the Add/Edit panel's cluster dropdown is captioned "Link to
+  Milestone" while writing `'Linked Cluster'`.)
+- **Proposed:** the code now reproduces **both halves verbatim**, as rule 7 requires, with a
+  `SOURCE DEFECT:` comment in `panelRules.ts` recording the contradiction. The likely **resolution**
+  is to correct the canvas body text to "cluster" rather than to keep reproducing it — but that is
+  a change to the canvas app, and it is **the product owner's call, not taken here**. Nothing in
+  the code anticipates the answer.
+- **Cost of not doing it:** the app keeps quietly disagreeing with the canvas on user-facing copy,
+  and the next person to notice re-opens the same question with no record of the evidence.
+
+### §4 UX-4 · The plain dialog's description band is wrong on three edges, not one — *proposed*
+
+*Amended 23 Oct 2026: the first draft described this as "inset 10 px instead of 20". The precise
+canvas values are below; the code was wrong on **left, right and bottom**.*
+
+- **Canvas:** `cmp_PopUp_Confirmation` splits the padding between the band and the label. The band
+  `con_PopUpConfirmation_BodyDescription` sets **only** `PaddingTop: =16` (`:155`); the label
+  `lbl_PopUpConfirmation_BodyDescription` sets `PaddingBottom: =0`, `PaddingLeft: =20`,
+  `PaddingRight: =20`, `PaddingTop: =0` (`:176-179`). So the faithful effective values are
+  **top 16, left/right 20, bottom 0**.
+- **Code:** `ConfirmDialog.tsx` padded the container **16 / 10 / 16 / 10** for both variants — too
+  narrow on left and right, and 16 px of bottom padding the canvas does not have.
+- **The ⓘ variant already matched and was deliberately not touched.** `_New` pads its *band*
+  `PaddingTop/Bottom: =16`, `PaddingLeft/Right: =10` (`_New:172-175`), which is exactly what the
+  code had. The two components genuinely differ and must not be unified; the fix moves the plain
+  values into their own class so it cannot leak into the ⓘ one. A reviewer would otherwise assume
+  both were changed.
+- **Proposed:** top 16, left/right 20, bottom 0 for the plain variant only.
+- **Blast radius:** **every plain dialog in the app** — 36 call sites, 22 files. The canvas value is
+  correct for all of them, because they all replace the same shared canvas component.
+- **Consequence:** see §5 — removing the bottom padding exposes an element the canvas does not have.
+
+### §5 UX-12 · The faithful bottom padding pushes the Application Settings error bar flush against the buttons — *proposed, product owner's call*
+
+*Added 23 Oct 2026. Not an independent defect: this is a **consequence of UX-4**. If UX-4 is
+reverted, this disappears with it.*
+
+- **What happens:** `ConfirmDialog`'s optional `error` MessageBar — an Application Settings addition
+  with no canvas counterpart — renders *inside* the description band with `marginTop: 12px` and no
+  bottom margin. With the band's bottom padding now faithfully **0** (§4), that bar sits flush
+  against the 60 px actions row.
+- **Who sees it:** the **7 admin screens** that pass `error`.
+- **Why there is no obvious fix.** The canvas has no error bar at all, so **there is no canvas value
+  to copy**. Any spacing would be invented, which is exactly what rule 6 ("theme values are
+  transcribed, not chosen") exists to prevent. The candidate fix is a `marginBottom` on
+  `styles.error`, but the number cannot be sourced.
+- **What was done:** nothing — deliberately. Inventing a value silently would be the worse error.
+  Where the bar sits today is pinned by `UT-CONFIRM-S-006`, so whichever way this is decided, the
+  change is visible in a diff rather than discovered later.
+- **Decision needed:** accept the flush bar as the price of canvas fidelity; add an invented
+  `marginBottom` (and if so, what value); or revert UX-4 and keep the app's own 16 px bottom padding
+  on the plain band. This is a judgement about an element the canvas does not define, so it is the
+  product owner's, not a transcription question.
+
+### §6 UX-5 · The ⓘ block has square corners in the canvas — *proposed*
+
+- **Canvas:** `con_PopUpConfirmation_BodyDescription_Inside_2` (`_New:182-193`) sets **no**
+  `Radius*` property, so it renders square.
+- **Code:** `infoBlock` had `borderRadius: "4px"`.
+- **Blast radius:** see §7 — **not CAPEX-only**.
+
+### §7 UX-6 · The ⓘ block has no vertical padding in the canvas — *proposed*
+
+- **Canvas:** the same container sets only `PaddingLeft: =10` and `PaddingRight: =5` (`_New:191-192`)
+  — note the right padding is **5**, not 10 — with the outer band carrying `PaddingTop/Bottom: =16`.
+- **Code:** `infoBlock` added `paddingTop/Bottom: "10px"` on top of the band's 16, so the ⓘ block is
+  inset further than the canvas renders it.
+
+**Blast radius for UX-5 and UX-6 — amended 23 Oct 2026.** The first draft of this entry said "ⓘ
+dialogs only" and left "does any screen other than CAPEX use the variant?" as a review check. That
+check has now been run exhaustively over `src/`, and **the premise was wrong**. There are exactly
+**three** `variant="info"` call sites:
+
+- `features/cost/capex-costs/Screen.tsx` — the relink confirmation
+- `features/cost/capex-costs/Screen.tsx` — the paid-toggle confirmation
+- **`features/pm/revenues/Screen.tsx:1302` — the hedge-over-100 dialog**
+
+So these two changes square an ⓘ block and shrink it by 20 px of vertical padding on a **Project
+Management screen as well as in Cost**. **PM Revenues must be in the smoke test**; a reviewer
+approving D39 on the assumption that the ⓘ variant is CAPEX-only would miss it.
+
+### §8 UX-7 · The save spinner is 120 px tall when it has no text — *proposed, latent*
+
+*Amended 23 Oct 2026. The first draft of this entry listed UX-7 with UX-4/5/6 as a cross-cutting
+visual change. **That was wrong**, and enumerating every call site disproved it. The corrected
+characterisation is below; no reviewer should be asked to weigh a visual change that does not
+occur.*
+
+- **Canvas:** `spi_PopUpLoading_Spinner.Height = If(cmp_PopUp_Loading.InformationText = "", 120, 90)`
+  (`cmp_PopUp_Loading.pa.yaml:48-53`).
+- **Code:** `LoadingOverlay.tsx` hard-coded a 90 px spinner box, so the no-text branch was absent.
+- **Blast radius: zero visible change.** All 42 `<LoadingOverlay>` JSX sites across 27 files were
+  read. Exactly four pass no `label`, and **all four are `mode="inline"`** —
+  `pm/revenues/Screen.tsx:620`, `pm/grid-operator/Screen.tsx:142`, `pm/production/Screen.tsx:666`,
+  `pm/generators/Screen.tsx:1649`. `mode="inline"` is this app's own addition with no canvas
+  counterpart and is untouched. **No `mode="blocking"` site renders without a label today**: every
+  one passes a literal, a `MSG`/`SPINNER` constant, or a value already guarded truthy. So the
+  canvas' 120 px branch is currently **unreachable in production**.
+- **Why it is still worth having.** The path exists and is one careless caller away from being
+  taken: `FormPanel.tsx:132` (`busyLabel`) and `:133` (`coverLabel`) gate on `!== undefined` rather
+  than truthiness, so they would pass `""` straight through. No caller does today —
+  `ContractPanel.tsx:126-127`, `DevexCostDrawer.tsx:82` and `ContractPeriodDrawer.tsx:127` all pass
+  a string or `undefined` — but if one ever did, the pre-fix code rendered a 90 px box with no label
+  beneath it, which is neither the canvas' layout nor a sensible one. `UT-LOADOVL-007` now pins the
+  `label=""` case to the 120 px branch.
+- **How to read this item:** a latent-parity fix, correct against the canvas, changing nothing a
+  user sees today. It needs approval as a code change, not as a design decision.
+
+### §9 UX-8 · The relink dialog's title was wrong in two ways — *proposed (a defect, now fixed in the tree)*
+
+*Amended 23 Oct 2026. The first draft of this entry listed UX-8 as an open question pending a read
+of the canvas formula. That read has been done and it settles the matter: this was **a defect, not
+a question**, and the code was wrong in two independent ways.*
+
+- **Canvas** (`Capex Costs Screen.pa.yaml:20127-20170`, the relink instance's `Title`):
+
+  ```
+  With({locCountOfMessages: C1 + C2filtered + C3},
+    If(locCountOfMessages >= 2,                                "Confirm Changes",
+       locCostPaidByChanged,                                   "Change Cost Paid By",
+       And(locClusterLinkageChanged, CountRows(Filter(…)) > 0), "Change Cluster Link",
+       locMilestoneRelinkResetNeeded,                          "Cluster-linked Costs"))
+  ```
+
+  `C2filtered` excludes the cluster being linked to, the same filtered count the bullets use.
+- **Defect 1 — wrong predicate.** The code keyed on `showC1 && showC2`, not on the **count**. So the
+  two-message combinations **C1+C3** and **C2+C3** were mis-titled: each has
+  `locCountOfMessages = 2` and must read **"Confirm Changes"**, but the code's test was false and it
+  fell through to a single-condition title.
+- **Defect 2 — a missing fourth arm.** A milestone-relink reset **on its own** titles the dialog
+  **"Cluster-linked Costs"**; the code said "Change Cluster Link". The code had only three arms.
+  Note that this is the **same title as the set-as-Paid dialog** (L19879) — which fits the canvas'
+  broader cluster/milestone wording confusion already recorded under **UX-3**, and is a further
+  reason to treat that vocabulary as one decision rather than several.
+- **Proposed:** key the title on the filtered count with all four arms, exactly as above.
+- **Worth recording:** four existing tests — `UT-CAPEXR-109`, `-110`, `-111` and `-113` — were
+  **pinning the defective behaviour** and had to be corrected rather than added to. A suite
+  asserting the wrong thing is precisely why this survived the earlier parity pass, which read the
+  tests as evidence of correctness.
+- **Blast radius:** CAPEX only.
+
+### §10 Open questions and unexamined area — no proposal yet
+
+- **UX-9 — the in-panel error strip.** `cmp_ShowErrorInContract` (L19760) is not ported; Save is
+  simply disabled with no explanation. Same item as the gap report's `S15` and D38's question 5.
+- **UX-10 — the Report a problem panel.** `cmp_ReportErrorRightPanel_CapexCosts` (L8081) exists on
+  this screen; `features/shared/report-problem` exists in the code. Their **appearance was not
+  compared**.
+- **UX-11 — the screen's own container geometry: NOT YET ANALYSED.** The toolbar, tab strip, grid
+  host and right-panel layout have not been measured against `src/styles/canvas.css`, `PcfGrid.tsx`
+  and the 1,270-line vendored PCF stylesheet. **This pass covered popups and interactions only. The
+  UI of this screen is not fully audited**, and closing UX-11 is a comparable amount of work again.
+
+### §11 What the product owner is being asked
+
+1. **UX-1.** Approve transcribing the three single-condition sentences, changing what the relink
+   dialog says in its most common case?
+2. **UX-2.** Approve the per-instance `BoxHeight` **and** `TextHeight` (200/250/280 and 60/120/150)
+   in place of the fixed 320 and an unconstrained band?
+3. **UX-3.** The paid-toggle dialog now says "Cluster-linked Costs" over a body that says
+   "milestone-linked". Keep reproducing the canvas verbatim, or correct the canvas body text to
+   "cluster" — which the `OnConfirm` evidence in §3 supports? Note **UX-8** turns up a third place
+   the same vocabulary appears, so this is one decision, not three.
+4. **UX-4, UX-5, UX-6.** Approve three **cross-cutting** visual corrections that change dialog
+   chrome on every screen, not just CAPEX?
+5. **UX-7, UX-8.** Approve as ordinary code changes — neither needs a design decision. UX-7 is a
+   latent fix with **no visible change today**; UX-8 is a defect fix with the canvas formula quoted.
+6. **UX-9.** Add the in-panel error strip, or leave Save silently disabled? (Duplicate of D38 Q5 —
+   answer once.)
+7. **UX-10 / UX-11.** Commission the two unexamined areas — the Report a problem panel's appearance,
+   and the screen's container geometry — or accept them as known-unaudited?
