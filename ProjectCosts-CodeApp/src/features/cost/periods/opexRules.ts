@@ -434,8 +434,24 @@ export function costsInScope(
 
 export interface OpexChain {
   root: OpexCost;
-  /** Root FIRST, then its children sorted by `Name` ascending — the canvas' own order. */
+  /** Root FIRST, then its children in period order (`byPeriodOrder`). */
   periods: OpexCost[];
+}
+
+/**
+ * The order of the periods in a chain: `Start Date` ascending, `Name` only to break a tie.
+ *
+ * CORRECTED, SOURCE DEFECT O-5. The canvas orders a chain by `Name` alone wherever it asks for
+ * "the last period" (the Add Period and Delete gates, `:557-566`, `:2806-2821`, `:2905-2914`, and
+ * the Other-OPEX row warning, `:2219-2259`). `Name` is text and is not the description the user
+ * sees: `… - 10` sorts before `… - 2`, and rows whose `vsb_name` was written by a migration sort
+ * apart from rows the app wrote. On the live "Initialized O&M Contract" chain that put `- 5` last,
+ * so Add Period proposed a `- 6` that already existed and could never be saved. Every period
+ * starts where the previous one ends, so the start date is the chain order the user sees and the
+ * one the duration badge (`lastPeriodByStartDate`) already uses.
+ */
+export function byPeriodOrder(a: OpexCost, b: OpexCost): number {
+  return (a.startDate ?? "").localeCompare(b.startDate ?? "") || a.name.localeCompare(b.name);
 }
 
 /**
@@ -456,7 +472,7 @@ export function groupChains(costs: readonly OpexCost[]): OpexChain[] {
       root,
       ...costs
         .filter((c) => c.parentCostId === root.id)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort(byPeriodOrder),
     ],
   }));
 }
@@ -464,11 +480,10 @@ export function groupChains(costs: readonly OpexCost[]): OpexChain[] {
 /**
  * `locLastPeriod` as the command bars compute it —
  * `Last(Sort(Filter(costs, 'Parent Cost' = firstPeriod …), Name, Ascending))` (`:557-566`,
- * `:2806-2821`, `:2905-2914`).
+ * `:2806-2821`, `:2905-2914`) — but in `byPeriodOrder`, i.e. the latest start date.
  *
- * SOURCE DEFECT: O-5. `Name` is text, so ten or more periods sort
- * `… - 10` before `… - 2` and the wrong row is treated as the chain's last. Reproduced, not
- * corrected: `Add Period` and `Delete` would enable on a different row in the live app.
+ * SOURCE DEFECT O-5, CORRECTED (see `byPeriodOrder`): `Add Period` and `Delete` enable on the
+ * period that actually comes last, which is not always the row the canvas picks.
  */
 export function lastPeriod(chain: OpexChain): OpexCost {
   return chain.periods[chain.periods.length - 1] ?? chain.root;
@@ -478,9 +493,8 @@ export function lastPeriod(chain: OpexChain): OpexCost {
  * `colLastPeriods` as the sub-account DURATION BADGE computes it —
  * `Last(Sort(costTypePeriods, 'Start Date', Ascending))` (`:2416-2422`, `:2569-2575`).
  *
- * A different sort key from `lastPeriod` above, on the same chain, in the same screen. Both are
- * transcribed because the two answers genuinely differ once the numbering and the dates
- * disagree — for example after a start date is edited by hand.
+ * The canvas sorts by start date alone here; on two equal start dates it keeps the later row in
+ * the chain, where `lastPeriod` breaks the tie by `Name`. Otherwise the two agree.
  */
 export function lastPeriodByStartDate(chain: OpexChain): OpexCost {
   return [...chain.periods].sort(
@@ -1080,10 +1094,11 @@ function deleteAllowedForRow(selected: OpexCost, cardCosts: readonly OpexCost[])
   if (isStandardByDescription(selected)) return isRoot;
   if (isRoot) return true;
   // `locLastPeriod` here filters CHILDREN only — `'Parent Cost' = locFirstPeriod` — so the root
-  // is deliberately excluded from the comparison (`:559-562`, `:2907-2910`).
+  // is deliberately excluded from the comparison (`:559-562`, `:2907-2910`). Period order, not
+  // the canvas `Name` sort (O-5, see `byPeriodOrder`).
   const siblings = cardCosts
     .filter((c) => c.parentCostId === selected.parentCostId)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(byPeriodOrder);
   return siblings[siblings.length - 1]?.id === selected.id;
 }
 
@@ -1941,9 +1956,10 @@ export function omDurationBadge(
  * `inf_OpexCost_AlignWithDuration.Visible` — the amber warning icon on an Other-OPEX ROW
  * (`:2219-2259`).
  *
- * Per row: resolve the chain head, take its last period by `Name` ascending, and if THIS row is
- * that period, show when `('Start Date' < 'Project Start Date' OR the end does not land)` AND
- * `Align With Project Duration = Yes`.
+ * Per row: resolve the chain head, take its last period, and if THIS row is that period, show
+ * when `('Start Date' < 'Project Start Date' OR the end does not land)` AND
+ * `Align With Project Duration = Yes`. The canvas takes the last period by `Name`; this takes it
+ * in period order (O-5, see `byPeriodOrder`), so the icon marks the period that really ends last.
  */
 export function otherAlignWarningVisible(
   row: OpexCost,
@@ -1953,7 +1969,7 @@ export function otherAlignWarningVisible(
   const headId = row.parentCostId ?? row.id;
   const inChain = subaccountCosts
     .filter((c) => c.parentCostId === headId || c.id === headId)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(byPeriodOrder);
   const last = inChain[inChain.length - 1];
   if (!last || last.id !== row.id) return false;
 
@@ -2151,8 +2167,44 @@ export const DURATION_BADGE_TEXT: Record<DurationBadge, string> = {
  * `Threshold` is worded DIFFERENTLY in the two galleries: `"Threshold [MWh]"` on the sub-account
  * table (`:1241`) and `"Threshold for <code>/MWh p.a."` on the device table (`:3635`), the latter
  * falling back to `"EUR"`. Both are transcribed.
+ *
+ * `width` and `align` are the canvas label geometry. Each header label is placed at the previous
+ * one's `X + Width` inside a fixed-width `CostsTableHeader` container, and each row label takes
+ * its header's `X`/`Width`. The two galleries were laid out separately, so the widths differ
+ * slightly between the sub-account table (`:1140-1440`) and the device table (`:3450-3898`).
+ *
+ * Duration is two labels under one 120 px header: years at the header's `X`, then months, with
+ * `inf_OpexCost_AlignWithDuration` right after the months label. The icon overhangs into the
+ * right-aligned `End Date` lane on the canvas, and does here too; no column gives up width for it.
  */
-export interface OpexColumn { key: string; label: string; numeric?: boolean }
+export interface OpexColumn {
+  key: string;
+  label: string;
+  numeric?: boolean;
+  /** The canvas label `Width`, in px. */
+  width: number;
+  /** `Align: =Align.Right` on the header and row labels; left otherwise. */
+  align?: "right";
+}
+
+type OpexColumnKey =
+  | "description" | "startDate" | "durationYears" | "durationMonths" | "endDate" | "currency"
+  | "inflationProfile" | "fixCosts" | "percentOfRevenues" | "threshold" | "eurPerMwh"
+  | "eurPerMw" | "eurPerWtg" | "aggregation" | "distributionFrequency";
+
+const OPEX_COLUMN_WIDTHS: Record<OpexMode, Record<OpexColumnKey, number>> = {
+  other: {
+    description: 160, startDate: 76, durationYears: 60, durationMonths: 60, endDate: 76,
+    currency: 80, inflationProfile: 140, fixCosts: 145, percentOfRevenues: 160, threshold: 160,
+    eurPerMwh: 110, eurPerMw: 110, eurPerWtg: 110, aggregation: 100, distributionFrequency: 200,
+  },
+  om: {
+    // Months sits at `Years.X + Years.Width - 10`, so years is 50 of the 120 and months 70.
+    description: 160, startDate: 76, durationYears: 50, durationMonths: 70, endDate: 70,
+    currency: 70, inflationProfile: 135, fixCosts: 140, percentOfRevenues: 160, threshold: 201,
+    eurPerMwh: 110, eurPerMw: 100, eurPerWtg: 105, aggregation: 90, distributionFrequency: 200,
+  },
+};
 
 export function opexColumns(
   mode: OpexMode,
@@ -2161,30 +2213,41 @@ export function opexColumns(
   const code = (isoCurrencyCode ?? "").trim();
   const cur = code === "" ? "Cur." : code;
   const eur = code === "" ? "EUR" : code;
+  const w = OPEX_COLUMN_WIDTHS[mode];
+  // The sub-account table right-aligns the two duration labels; the device table does not.
+  const durationAlign = mode === "other" ? "right" as const : undefined;
   const columns: OpexColumn[] = [
-    { key: "description", label: "Description" },
-    { key: "startDate", label: "Start Date" },
-    { key: "durationYears", label: "Duration" },
-    { key: "durationMonths", label: "" },
-    { key: "endDate", label: "End Date" },
-    { key: "currency", label: "Currency" },
-    { key: "inflationProfile", label: "Inflation Profile" },
-    { key: "fixCosts", label: `Fix Costs p.a. [${eur}]`, numeric: true },
-    { key: "percentOfRevenues", label: "Share of Revenues [%]", numeric: true },
+    { key: "description", label: "Description", width: w.description },
+    { key: "startDate", label: "Start Date", width: w.startDate, align: "right" },
+    { key: "durationYears", label: "Duration", width: w.durationYears, align: durationAlign },
+    { key: "durationMonths", label: "", width: w.durationMonths, align: durationAlign },
+    { key: "endDate", label: "End Date", width: w.endDate, align: "right" },
+    { key: "currency", label: "Currency", width: w.currency },
+    { key: "inflationProfile", label: "Inflation Profile", width: w.inflationProfile, align: "right" },
+    {
+      key: "fixCosts", label: `Fix Costs p.a. [${eur}]`, numeric: true,
+      width: w.fixCosts, align: "right",
+    },
+    {
+      key: "percentOfRevenues", label: "Share of Revenues [%]", numeric: true,
+      width: w.percentOfRevenues, align: "right",
+    },
   ];
   if (showThresholdColumn(mode)) {
     columns.push({
       key: "threshold",
       label: mode === "om" ? `Threshold for ${eur}/MWh p.a.` : "Threshold [MWh]",
       numeric: true,
+      width: w.threshold,
+      align: "right",
     });
   }
   columns.push(
-    { key: "eurPerMwh", label: `${cur}/MWh p.a.`, numeric: true },
-    { key: "eurPerMw", label: `${cur}/MW p.a.`, numeric: true },
-    { key: "eurPerWtg", label: `${cur}/WTG p.a.`, numeric: true },
-    { key: "aggregation", label: "Aggregation" },
-    { key: "distributionFrequency", label: "Distribution Frequency" },
+    { key: "eurPerMwh", label: `${cur}/MWh p.a.`, numeric: true, width: w.eurPerMwh, align: "right" },
+    { key: "eurPerMw", label: `${cur}/MW p.a.`, numeric: true, width: w.eurPerMw, align: "right" },
+    { key: "eurPerWtg", label: `${cur}/WTG p.a.`, numeric: true, width: w.eurPerWtg, align: "right" },
+    { key: "aggregation", label: "Aggregation", width: w.aggregation },
+    { key: "distributionFrequency", label: "Distribution Frequency", width: w.distributionFrequency },
   );
   return columns;
 }
@@ -2214,16 +2277,14 @@ export function panelTitle(ctx: Pick<PanelContext,
  * `drp_…_DurationYears.Items` (`:6078-6084`) — `ForAll(Sequence(36), {Name: Value-1 & …, Value: Value-1})`,
  * i.e. **0 to 35 years**, not 0 to 50 as `periods/rules.ts` has it.
  *
- * SOURCE DEFECT: O-11. The label is
- * `ThisRecord.Value - 1 & If(ThisRecord.Value = 1, " year", " years")` — the singular test reads
- * the 1-BASED sequence index while the caption reads the 0-based value, so the list starts
- * `"0 year", "1 years", "2 years"…`. The months list next to it tests `ThisRecord.Value - 1 = 1`
- * and is correct. Reproduced.
+ * The list reads `"0 years", "1 year", "2 years"…`: `Items` tests `ThisRecord.Value-1 = 1`
+ * (`:6081`), the same as the months list. SOURCE DEFECT O-11 is confined to
+ * `DefaultSelectedItems` (`:6065`), which tests `ThisRecord.Value = 1` on its own copy of the
+ * sequence; it only names the preselected record and never reaches the list.
  */
 export const DURATION_YEAR_OPTIONS: readonly { name: string; value: number }[] =
   Array.from({ length: 36 }, (_, i) => ({
-    // `i` is `Sequence` index - 1, so `ThisRecord.Value` is `i + 1`.
-    name: `${i}${i + 1 === 1 ? " year" : " years"}`,
+    name: `${i}${i === 1 ? " year" : " years"}`,
     value: i,
   }));
 
@@ -2622,10 +2683,12 @@ export function canSaveOpexCost(form: OpexForm, ctx: SaveGateContext): boolean {
 /**
  * Every error the panel should be showing, in field order.
  *
- * NEW — no canvas equivalent. The canvas has no error list: each `*_ErrorMessage` label computes
- * itself and a required field left BLANK shows nothing while still disabling Save, because every
- * `.Visible` requires `Not(IsBlank(value))`. That is the same D-4 gap the Contracts panel has.
- * Reporting blank required fields is a deliberate divergence; nothing here changes what saves.
+ * The canvas has no error list: each `*_ErrorMessage` label computes itself, and a required field
+ * left BLANK shows nothing while still disabling Save, because every `.Visible` requires
+ * `Not(IsBlank(value))`. This list follows that: a blank field is never reported (the product
+ * owner wants the empty boxes exactly as the canvas draws them). The one addition is the
+ * duplicate-description message, the canvas' own commented-out wording, shown only once a
+ * description is typed. Nothing here changes what saves; `canSaveOpexCost` is the gate.
  */
 export interface FieldError { field: string; message: string }
 
@@ -2649,13 +2712,13 @@ export function opexFormErrors(form: OpexForm, ctx: SaveGateContext): FieldError
   };
 
   push("description", descriptionError(form.description));
-  if (form.description.trim() === "") {
-    errors.push({ field: "description", message: OPEX_DESCRIPTION_MSG.blank });
-  } else if (ctx.selected === null
+  // A BLANK Description or Start Date shows nothing, as on the canvas: an empty box stays a plain
+  // box and only Save stays disabled. A duplicate is still named once something is typed, since
+  // nothing else on the panel explains why Save will not enable.
+  if (form.description.trim() !== "" && ctx.selected === null
     && ctx.costsInScope.some((c) => c.description === form.description.trim())) {
     errors.push({ field: "description", message: OPEX_DESCRIPTION_MSG.duplicate });
   }
-  push("startDate", startDateError(form.startDate));
   push("fixCosts", validateOpexNumber("fixCosts", form.fixCosts, ctx.locale));
   push("percentOfRevenues",
     validateOpexNumber("percentOfRevenues", form.percentOfRevenues, ctx.locale));

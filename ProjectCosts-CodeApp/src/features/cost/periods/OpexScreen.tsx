@@ -39,7 +39,7 @@ import {
   AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteRegular, EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import {
@@ -110,25 +110,44 @@ const AGGREGATION_OPTIONS: readonly number[] = [
 
 const useStyles = makeStyles({
   page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0 },
+  /*
+   * `gal_…_Subaccounts` / `gal_…_GeneratorsInProject` - `TemplatePadding: =0`, so the cards touch.
+   * Each `con_…_Card` is `Parent.Width - 10` wide with no border (`BorderStyle.None`); the thin
+   * line between cards is the `GroupContainer`'s default light drop shadow.
+   */
+  cardList: { display: "flex", flexDirection: "column", rowGap: 0 },
   card: {
-    borderTopWidth: "1px", borderRightWidth: "1px",
-    borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid",
-    borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: tokens.colorNeutralStroke2, borderRightColor: tokens.colorNeutralStroke2,
-    borderBottomColor: tokens.colorNeutralStroke2, borderLeftColor: tokens.colorNeutralStroke2,
-    backgroundColor: tokens.colorNeutralBackground1,
+    width: "calc(100% - 10px)",
+    backgroundColor: palette.white,
+    boxShadow: "0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14)",
   },
+  /*
+   * `con_…_CardHeader` - 42 px, `Fill: =ColorValue("#fdffff")`; the title at `X: =20`, the chevron
+   * at `Parent.Width - 20 - 6`, the badge 20 px left of the chevron. No hover fill on the canvas.
+   */
   cardHeader: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    width: "100%", gap: space.m,
-    paddingTop: space.m, paddingBottom: space.m,
-    paddingLeft: space.l, paddingRight: space.s,
-    backgroundColor: "transparent",
+    width: "100%", height: "42px", columnGap: "20px",
+    paddingTop: 0, paddingBottom: 0, paddingLeft: "20px", paddingRight: "6px",
+    backgroundColor: "#fdffff",
     borderTopStyle: "none", borderRightStyle: "none",
     borderBottomStyle: "none", borderLeftStyle: "none",
     cursor: "pointer",
-    ":hover": { backgroundColor: palette.Grayscale40 },
+  },
+  // The line between an open card's header and its body.
+  cardHeaderOpen: {
+    borderBottomStyle: "solid", borderBottomWidth: "1px", borderBottomColor: "#e1dfdd",
+  },
+  /*
+   * `ico_…_CardHeader_Up` / `_Down` - `Icon.ChevronUp` / `ChevronDown`, 20 x 18,
+   * `gblAppStyles.Icon.Color` (themePrimary). The classic glyph spans its whole box; Fluent's
+   * draws about 12 px wide inside a 20 px box, so the icon is drawn at 28 px and pulled in by
+   * the glyph's own inset to keep the 20 px gap to the badge and the 6 px right margin.
+   */
+  chevron: {
+    width: "28px", height: "28px", fontSize: "28px", flexShrink: 0,
+    marginLeft: "-5px", marginRight: "-5px",
+    color: palette.themePrimary,
   },
   /*
    * `lbl_OpexCosts_Content_SubaccountsCardHeader_SubaccountName` — `Size: Medium`,
@@ -138,26 +157,45 @@ const useStyles = makeStyles({
    * and the section headings rendered blue because of it.
    */
   cardTitle: {
-    fontSize: tokens.fontSizeBase400, color: palette.black,
+    // `Size: =gblAppSizes.Font.Medium` - 11 pt (`OnStart.txt:310-318`). Canvas sizes are points.
+    fontSize: "11pt", color: palette.black,
     textAlign: "left", flexGrow: 1, minWidth: 0,
   },
-  /** `con_AlignWithProjectDuration_Container` — `SuccessLight` / a 60 % faded `Warning`. */
+  /*
+   * `con_AlignWithProjectDuration_Container` - a 24 px pill (`Radius*: =34`), at least 50 wide,
+   * filled `SuccessLight` / a 60 % faded `Warning`, with `BorderColor: =ColorFade(Self.Fill, -30%)`
+   * (the fill 30 % darker) at 1 px. The caption is `Grayscale00`, 9 pt, centred, for both.
+   */
   badge: {
-    fontSize: tokens.fontSizeBase200, whiteSpace: "nowrap",
-    paddingTop: space.xxs, paddingBottom: space.xxs,
-    paddingLeft: space.s, paddingRight: space.s,
-    borderTopLeftRadius: tokens.borderRadiusMedium,
-    borderTopRightRadius: tokens.borderRadiusMedium,
-    borderBottomLeftRadius: tokens.borderRadiusMedium,
-    borderBottomRightRadius: tokens.borderRadiusMedium,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    boxSizing: "border-box", height: "24px", minWidth: "50px", flexShrink: 0,
+    fontSize: "9pt", whiteSpace: "nowrap", color: palette.Grayscale00,
+    paddingTop: 0, paddingBottom: 0, paddingLeft: "15px", paddingRight: "15px",
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid",
+    borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopLeftRadius: "34px", borderTopRightRadius: "34px",
+    borderBottomLeftRadius: "34px", borderBottomRightRadius: "34px",
   },
-  badgeMatch: { backgroundColor: palette.SuccessLight, color: palette.Success },
-  badgeMismatch: { backgroundColor: "#F8D49E", color: palette.Grayscale00 },
+  // #E9F3EC x 0.7 = #A3AAA5.
+  badgeMatch: {
+    backgroundColor: palette.SuccessLight,
+    borderTopColor: "#A3AAA5", borderRightColor: "#A3AAA5",
+    borderBottomColor: "#A3AAA5", borderLeftColor: "#A3AAA5",
+  },
+  // `ColorFade(Warning, 60%)` = #F8D49E; x 0.7 = #AE946E.
+  badgeMismatch: {
+    backgroundColor: "#F8D49E",
+    borderTopColor: "#AE946E", borderRightColor: "#AE946E",
+    borderBottomColor: "#AE946E", borderLeftColor: "#AE946E",
+  },
   // `useCommandRowStyles` puts the first icon on this 12 px edge — over the cost table's
   // select column (`selectCell`, 12 px in) — and the commands 16 px apart (21 Oct 2026).
+  // Inside `scroll`, whose 20 px inset this 10 px adds to: the first icon lands over the
+  // radio at X = 10 (`img_…_RadioSelection.X`), as on the canvas.
   toolbar: {
     display: "flex", alignItems: "center", gap: space.m, flexWrap: "wrap",
-    paddingLeft: space.m, paddingRight: space.m, paddingBottom: space.xs,
+    paddingLeft: "10px", paddingRight: space.m, paddingBottom: space.xs,
   },
   command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
   /*
@@ -181,34 +219,64 @@ const useStyles = makeStyles({
     color: palette.neutralTertiary,
     "& .fui-Button__icon": { color: palette.neutralTertiaryAlt },
   },
-  scroll: { overflowX: "auto", paddingBottom: space.xs },
-  table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  /*
+   * `con_…_CardBody` - `LayoutOverflowX: =LayoutOverflow.Scroll`, `PaddingLeft: =20`. The
+   * command bar, header and gallery all sit in it, and the gallery is a fixed width wider than
+   * the screen, so the whole body scrolls sideways under a permanent grey bar.
+   */
+  scroll: {
+    overflowX: "auto", paddingLeft: "20px", paddingBottom: space.xxs,
+    scrollbarColor: "#868686 #f1f1f1",
+    "::-webkit-scrollbar": { height: "10px" },
+    "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
+    "::-webkit-scrollbar-thumb": {
+      backgroundColor: "#868686",
+      borderTopLeftRadius: "5px", borderTopRightRadius: "5px",
+      borderBottomLeftRadius: "5px", borderBottomRightRadius: "5px",
+    },
+  },
+  // Fixed layout so every column holds its canvas width; `width` is set inline to their sum.
+  table: { tableLayout: "fixed", borderCollapse: "collapse", whiteSpace: "nowrap" },
   /*
    * `lbl_…_CardBody_CostsTableHeader_*` — `Color: gblAppStyles.Label.Color` (the app's dark
    * label colour) with `FontWeight.Semibold`. Without an explicit colour these headings picked
    * up the link blue from the card around them, which is what made the row of column titles
    * read as blue rather than as plain dark labels.
    */
+  // `CostsTableHeader` is 34 px high; each caption is `gblAppSizes.Font.Small` (10 pt), semibold.
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground1,
-    fontSize: tokens.fontSizeBase200,
-    paddingTop: space.s, paddingBottom: space.s,
-    paddingLeft: space.s, paddingRight: space.s,
+    fontSize: "10pt", height: "34px",
+    paddingTop: 0, paddingBottom: 0,
+    paddingLeft: "6px", paddingRight: "6px",
+    // A caption is never cut: one a little wider than its lane runs on, as canvas labels do.
+    overflow: "visible",
   },
-  thNumeric: { textAlign: "right" },
+  alignRight: { textAlign: "right" },
   /*
    * Every cell label carries the SAME colour rule, not one per column:
    * `Color: =If(StartsWith(ThisItem.Description, "Standard"), themePrimary, Label.Color)`
    * with `Italic:` on the same predicate. So a normal row is black throughout and a standard
    * row is blue italic throughout - see the shared `useStandardValueClass` on the row (rule 20).
    */
+  /*
+   * `CostsTableRow` is 30 px high; every label is `gblAppSizes.Font.ExtraExtraSmall` (8 pt) with
+   * `PaddingLeft/Right: =6` and `Wrap: =false`, so text past the width is cut, not wrapped.
+   */
   td: {
-    fontSize: tokens.fontSizeBase200, color: palette.black,
-    paddingTop: space.xs, paddingBottom: space.xs,
-    paddingLeft: space.s, paddingRight: space.s,
+    fontSize: "8pt", color: palette.black, height: "30px",
+    paddingTop: 0, paddingBottom: 0,
+    paddingLeft: "6px", paddingRight: "6px",
+    overflow: "hidden", textOverflow: "ellipsis",
   },
-  tdNumeric: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
+  tdNumeric: { fontVariantNumeric: "tabular-nums" },
+  /*
+   * `Description` and `Start Date` are the two row labels with
+   * `FontWeight: =If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` - semibold on
+   * this screen. Every other row label is `FontWeight.Normal`.
+   */
+  tdStrong: { fontWeight: tokens.fontWeightSemibold },
   /*
    * A selected row is NOT tinted. `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent`
    * and there is not one `Fill: =If(...)` on the Opex, Land Lease or Contracts screen - the
@@ -216,8 +284,18 @@ const useStyles = makeStyles({
    * ours. `aria-selected` still carries the state for assistive tech.
    */
   rowSelected: {},
-  selectCell: { width: "40px", paddingLeft: space.m },
-  warnCell: { display: "inline-flex", alignItems: "center", gap: space.xxs },
+  // `img_…_RadioSelection` - 16 x 16 at X = 10; `Description` starts at X = 40.
+  selectCell: {
+    paddingLeft: "10px", paddingRight: 0,
+    "& input": { width: "16px", height: "16px", marginLeft: 0, marginRight: 0, verticalAlign: "middle" },
+  },
+  warnCell: { display: "inline-flex", alignItems: "center" },
+  // The info icon overhangs into the End Date lane, as `inf_OpexCost_AlignWithDuration` does.
+  tdOverhang: { overflow: "visible" },
+  // The months text keeps the width of its 60 px canvas label (less padding) so the icon after it
+  // lines up row to row whatever the month count.
+  monthsText: { display: "inline-block", width: "48px", overflow: "hidden" },
+  monthsTextRight: { textAlign: "right" },
   warnIcon: { color: palette.Warning, minWidth: "auto", paddingLeft: 0, paddingRight: 0 },
   empty: {
     paddingTop: space.m, paddingBottom: space.m, paddingLeft: space.l,
@@ -233,8 +311,13 @@ const useStyles = makeStyles({
     paddingTop: space.s, paddingBottom: space.s, paddingLeft: space.m, paddingRight: space.m,
     backgroundColor: "#FBE9E9", color: palette.Error, fontSize: tokens.fontSizeBase200,
   },
+  /*
+   * `con_…_Body_ColumnLeft` / `_ColumnRight` are each half of the 660 px body, and every control
+   * sits at `X: =20`, `Width: =Parent.Width-Self.X*2`: two 290 px columns, 20 px from the panel
+   * edges and 40 px apart. The panel body already pads 20 px.
+   */
   panelColumns: {
-    display: "grid", gap: space.xl,
+    display: "grid", gap: "40px",
     gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
     "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
   },
@@ -249,7 +332,43 @@ const useStyles = makeStyles({
   durationMonths: { width: "120px", minWidth: "120px" },
   /** Every other panel dropdown is `Parent.Width - Self.X*2`, i.e. the full column. */
   panelDropdown: { width: "100%", minWidth: "unset" },
-  dateRow: { display: "flex", alignItems: "center", gap: space.xs },
+  /*
+   * The open list of a canvas `DropDown@0.0.45`: exactly as wide as its box (100 px for years,
+   * 120 for months), flat 14 px rows with no check mark, a light grey fill and a thin grey
+   * outline, 17 rows tall before it scrolls. Fluent's list keeps a 160 px minimum and a leading check, which is why it read as a
+   * different control. It renders in a portal, outside the panel, so it is styled through the
+   * `listbox` slot rather than `opex-canvas-panel`.
+   */
+  canvasListbox: {
+    // 17 rows of 27 px plus the 1 px outline top and bottom; longer lists scroll. Fluent's list
+    // puts a 2 px `rowGap` between options, which made the rows 29 px apart.
+    minWidth: 0, maxHeight: "461px", overflowX: "hidden", rowGap: 0,
+    paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
+    backgroundColor: "#f5f5f5", boxShadow: "none",
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: "#8a8886", borderRightColor: "#8a8886",
+    borderBottomColor: "#8a8886", borderLeftColor: "#8a8886",
+    borderTopLeftRadius: "2px", borderTopRightRadius: "2px",
+    borderBottomLeftRadius: "2px", borderBottomRightRadius: "2px",
+    // 27 px rows.
+    "& .fui-Option": {
+      boxSizing: "border-box", height: "27px", minHeight: "27px", alignItems: "center",
+      columnGap: 0, fontSize: "14px", lineHeight: "19px", color: palette.black,
+      paddingTop: 0, paddingBottom: 0, paddingLeft: "12px", paddingRight: "12px",
+      borderTopLeftRadius: 0, borderTopRightRadius: 0,
+      borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+      ":hover": { backgroundColor: "#e1dfdd" },
+    },
+    "& .fui-Option__checkIcon": { display: "none" },
+    // No focus bar under the active row; the canvas list marks it with a fill instead, which
+    // still shows keyboard users where they are.
+    "& .fui-Option::after": { display: "none" },
+    "& .fui-Option[data-activedescendant-focusvisible]": { backgroundColor: "#e1dfdd" },
+  },
+  // `ico_ResetStartDay_…` sits at `StartDate.X + StartDate.Width + 10`.
+  dateRow: { display: "flex", alignItems: "center", gap: "10px" },
+  startDate: { width: "calc(100% - 40px)", minWidth: 0 },
   /*
    * `ico_ResetStartDay_NewEditCost_*` is a `cat_PowerCAT.Icon` with `IconName: ="Refresh"`
    * at 30 x 30 and no explicit colour, so it takes the PowerCAT default off
@@ -262,12 +381,36 @@ const useStyles = makeStyles({
     color: palette.themePrimary,
     ":hover": { color: palette.themePrimary },
   },
-  toggleRow: { display: "flex", alignItems: "center", gap: space.s },
-  indent: { paddingLeft: space.xl, display: "flex", flexDirection: "column", gap: space.m },
-  required: { color: palette.Error, marginRight: "2px" },
-  label: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase300 },
+  toggleRow: { display: "flex", alignItems: "center", gap: space.s, position: "relative" },
+  /*
+   * `InfoButtonCanvas1` - `X: =Toggle.X + Toggle.Width` with the toggle `Parent.Width - 24 - 60`
+   * wide, which puts the button 20 px in from the column's right edge rather than against the
+   * caption. A 32 px button with a 20 px black (i).
+   */
+  externalInfo: {
+    marginLeft: "auto", marginRight: "20px",
+    width: "32px", height: "32px", minWidth: "32px", flexShrink: 0,
+    paddingLeft: 0, paddingRight: 0, color: palette.black,
+    "& .fui-Button__icon": { fontSize: "20px", width: "20px", height: "20px", color: palette.black },
+  },
+  // The Threshold block's label and radios sit at `X: =20` like every other field - no indent.
+  indent: { display: "flex", flexDirection: "column", gap: space.m },
+  /*
+   * `lbl_…_Asterisk` - `palette.Error`, semibold, 10 px wide at `X: =label.X - Self.Width`, i.e.
+   * in the margin LEFT of the caption, which stays aligned with the box under it.
+   */
+  required: {
+    position: "absolute", left: "-10px", top: 0, height: "32px",
+    display: "flex", alignItems: "center",
+    color: palette.Error, fontWeight: tokens.fontWeightSemibold,
+  },
+  /** `lbl_…_BodyContent_*` - a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
+  label: {
+    position: "relative", display: "flex", alignItems: "center", height: "32px",
+    fontWeight: tokens.fontWeightRegular, fontSize: "11pt", color: palette.black,
+  },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
-  hint: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase200 },
+
   readOnly: {
     backgroundColor: palette.Grayscale30, color: palette.Grayscale10,
     paddingTop: space.xs, paddingBottom: space.xs,
@@ -278,8 +421,9 @@ const useStyles = makeStyles({
     borderBottomRightRadius: tokens.borderRadiusSmall,
     fontSize: tokens.fontSizeBase200, minHeight: "22px",
   },
-  radioGroup: { display: "flex", flexDirection: "column", gap: space.xs },
-  radioRow: { display: "flex", alignItems: "center", gap: space.s, fontSize: tokens.fontSizeBase200 },
+  radioGroup: { display: "flex", flexDirection: "column" },
+  // `rdg_…_Threshold` - a modern `Radio@0.0.25`: 14 px options, 32 px apart.
+  radioRow: { display: "flex", alignItems: "center", gap: space.s, height: "32px", fontSize: "14px" },
 });
 
 /* ═══════════════════════════════════════════════════════════════ the cards ══ */
@@ -355,7 +499,7 @@ function aggregationUnion(value: number | null): CostPeriod["aggregation"] {
  *
  * `name` is REBUILT with `costName`, the canvas' own `vsb_name` composition
  * (`pcf_…_Save.OnChange`, `:8695`), because the book does not carry `vsb_name` and three rules
- * read it: `isStandardLocked`, `lastPeriod` (chain order, defect O-5) and `deleteAllowedForRow`.
+ * read it: `isStandardLocked`, and `lastPeriod` / `deleteAllowedForRow` to break a start-date tie.
  * Rebuilding it reproduces those three exactly rather than approximating them.
  *
  * The five money fields and the two threshold columns now come straight off the book: they are
@@ -935,52 +1079,54 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     <div className={styles.page}>
       {banner ? <div className={styles.banner} role="alert">{banner}</div> : null}
 
-      {cards.map((card) => (
-        <OpexCardView
-          key={card.id}
-          card={card}
-          mode={mode}
-          open={isOpen(card.id)}
-          columns={columns}
-          allCosts={allCosts}
-          project={projectContext}
-          selection={selection}
-          selectedCost={selectedCost}
-          /*
-           * `Filter('OPEX & Land Lease Standard Assumptions', Country && Technology &&
-           * 'Type Of Contract' [&& 'Opex Subaccount'])` — `:650-662` / `:3038-3049`, expressed by
-           * `standardAssumptionFilter` + `matchesStandardAssumption`. One query for the screen;
-           * each card tests its own scope, so `Add Standard Contract` arrives DISABLED where
-           * there is no catalogue instead of failing at the server with an inline error.
-           */
-          hasStandardAssumption={(assumptionScopes.data ?? []).some((a) =>
-            matchesStandardAssumption(
-              {
-                ...a,
-                // `matchesStandardAssumption` reads only these four; the rest of `OpexAssumption`
-                // is not fetched, because nothing here needs an assumption's figures.
-                id: a.id, period: 0, description: "",
-                durationYears: null, durationMonths: null,
-                currencyId: null, fixCosts: null, percentOfRevenues: null,
-                eurPerMwh: null, eurPerMw: null, eurPerWtg: null,
-                aggregation: null, distributionFrequency: null,
-                threshold: false, thresholdType: null, thresholdIndividual: null,
-                useInflationProfile: false, useCountryInflationProfile: false,
-                inflationProfile: null, inflationCountryArea: null,
-                alignWithProjectDuration: false, externalContract: false,
-              },
-              standardAssumptionFilter(mode, {
-                countryId: projectContext.countryId,
-                technology: projectContext.technology,
-                subaccountId: card.subaccount.id,
-              }),
-            ))}
-          onToggle={() => toggleCard(card.id)}
-          onSelectRow={(row) =>
-            setSelection((current) => toggleRowSelection({ current, row, cardScopeId: card.id }))}
-          onCommand={(key) => onCommand(card, key)}
-        />
-      ))}
+      <div className={styles.cardList}>
+        {cards.map((card) => (
+          <OpexCardView
+            key={card.id}
+            card={card}
+            mode={mode}
+            open={isOpen(card.id)}
+            columns={columns}
+            allCosts={allCosts}
+            project={projectContext}
+            selection={selection}
+            selectedCost={selectedCost}
+            /*
+             * `Filter('OPEX & Land Lease Standard Assumptions', Country && Technology &&
+             * 'Type Of Contract' [&& 'Opex Subaccount'])` — `:650-662` / `:3038-3049`, expressed by
+             * `standardAssumptionFilter` + `matchesStandardAssumption`. One query for the screen;
+             * each card tests its own scope, so `Add Standard Contract` arrives DISABLED where
+             * there is no catalogue instead of failing at the server with an inline error.
+             */
+            hasStandardAssumption={(assumptionScopes.data ?? []).some((a) =>
+              matchesStandardAssumption(
+                {
+                  ...a,
+                  // `matchesStandardAssumption` reads only these four; the rest of `OpexAssumption`
+                  // is not fetched, because nothing here needs an assumption's figures.
+                  id: a.id, period: 0, description: "",
+                  durationYears: null, durationMonths: null,
+                  currencyId: null, fixCosts: null, percentOfRevenues: null,
+                  eurPerMwh: null, eurPerMw: null, eurPerWtg: null,
+                  aggregation: null, distributionFrequency: null,
+                  threshold: false, thresholdType: null, thresholdIndividual: null,
+                  useInflationProfile: false, useCountryInflationProfile: false,
+                  inflationProfile: null, inflationCountryArea: null,
+                  alignWithProjectDuration: false, externalContract: false,
+                },
+                standardAssumptionFilter(mode, {
+                  countryId: projectContext.countryId,
+                  technology: projectContext.technology,
+                  subaccountId: card.subaccount.id,
+                }),
+              ))}
+            onToggle={() => toggleCard(card.id)}
+            onSelectRow={(row) =>
+              setSelection((current) => toggleRowSelection({ current, row, cardScopeId: card.id }))}
+            onCommand={(key) => onCommand(card, key)}
+          />
+        ))}
+      </div>
 
       {panel && form ? (
         <OpexPanel
@@ -1036,6 +1182,9 @@ function subaccountFor(
 
 /* ═══════════════════════════════════════════════════════════════ the card ══ */
 
+/** The radio's lane: `Description.X = 40` on both canvas galleries. */
+const SELECT_COLUMN_WIDTH = 40;
+
 function OpexCardView({
   card, mode, open, columns, allCosts, project, selection, selectedCost,
   hasStandardAssumption, onToggle, onSelectRow, onCommand,
@@ -1085,7 +1234,7 @@ function OpexCardView({
     <section className={styles.card}>
       <button
         type="button"
-        className={styles.cardHeader}
+        className={mergeClasses(styles.cardHeader, open && styles.cardHeaderOpen)}
         aria-expanded={open}
         onClick={onToggle}
         aria-labelledby={`opex-card-title-${card.id}`}
@@ -1103,11 +1252,13 @@ function OpexCardView({
             {DURATION_BADGE_TEXT[badge]}
           </span>
         ) : null}
-        {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+        {open
+          ? <ChevronUpRegular className={styles.chevron} />
+          : <ChevronDownRegular className={styles.chevron} />}
       </button>
 
       {open ? (
-        <>
+        <div className={styles.scroll}>
           <div className={mergeClasses(styles.toolbar, commandRow.row)}>
             {visibleCommands(mode).map((key) => (
               <Button
@@ -1128,92 +1279,116 @@ function OpexCardView({
           </div>
 
           {cardCosts.length === 0 ? null : (
-            <div className={styles.scroll}>
-              <table className={styles.table} aria-label={`${card.title} costs`}>
-                <thead>
-                  <tr>
-                    <th className={styles.selectCell} />
-                    {columns.map((c) => (
-                      <th
-                        key={c.key}
-                        scope="col"
-                        className={mergeClasses(styles.th, c.numeric && styles.thNumeric)}
-                      >
-                        {c.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {cardCosts.map((cost) => {
-                    const row = toOpexRow({
-                      cost, mode, selectedId: selection.selectedId, project, cardCosts,
-                    });
-                    return (
-                      <tr
-                        key={row.id}
-                        className={mergeClasses(
-                          /* `Italic: =StartsWith(ThisItem.Description, "Standard")` + `ColorValue(gblAppTheme.palette.themePrimary)`, rule 20. */
-                          standardClass(row.standard),
-                          row.selected && styles.rowSelected,
-                        )}
-                        onClick={() => onSelectRow(cost)}
-                        aria-label="Select cost"
-                        data-testid={mode === "om"
-                          ? `btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_1-${row.id}`
-                          : `btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton-${row.id}`}
-                      >
-                        <td className={styles.selectCell}>
-                          {/* `img_…_CostsTableRow_RadioSelection` is a PICTURE; the whole row is
-                              one `btn_…_TransparentButton` (`:2137`). Keeping the radio read-only
-                              and letting the click bubble to the row is what makes selection
-                              TOGGLE once rather than twice. */}
-                          <input
-                            type="radio"
-                            name={`opex-${card.id}`}
-                            checked={row.selected}
-                            readOnly
-                            aria-label={`Select ${row.cells.description}`}
-                            data-testid={`opex-select-${row.id}`}
-                          />
-                        </td>
-                        {columns.map((c) => (
-                          <td
-                            key={c.key}
-                            className={mergeClasses(
-                              styles.td,
-                              c.numeric && styles.tdNumeric,
-                            )}
-                          >
-                            {c.key === "durationMonths" ? (
-                              <span className={styles.warnCell}>
+            <table
+              className={styles.table}
+              style={{ width: `${SELECT_COLUMN_WIDTH + columns.reduce((sum, c) => sum + c.width, 0)}px` }}
+              aria-label={`${card.title} costs`}
+            >
+              <colgroup>
+                <col style={{ width: `${SELECT_COLUMN_WIDTH}px` }} />
+                {columns.map((c) => <col key={c.key} style={{ width: `${c.width}px` }} />)}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className={styles.selectCell} />
+                  {/* `CostsTableHeader_Duration` is ONE 120 px caption over the years and the
+                      months labels, so it spans both lanes. */}
+                  {columns.filter((c) => c.key !== "durationMonths").map((c) => (
+                    <th
+                      key={c.key}
+                      scope="col"
+                      colSpan={c.key === "durationYears" ? 2 : undefined}
+                      // The Duration caption has no `Align` in either gallery, even where the two
+                      // values under it are right-aligned.
+                      className={mergeClasses(
+                        styles.th, c.align === "right" && c.key !== "durationYears" && styles.alignRight,
+                      )}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cardCosts.map((cost) => {
+                  const row = toOpexRow({
+                    cost, mode, selectedId: selection.selectedId, project, cardCosts,
+                  });
+                  return (
+                    <tr
+                      key={row.id}
+                      className={mergeClasses(
+                        /* `Italic: =StartsWith(ThisItem.Description, "Standard")` + `ColorValue(gblAppTheme.palette.themePrimary)`, rule 20. */
+                        standardClass(row.standard),
+                        row.selected && styles.rowSelected,
+                      )}
+                      onClick={() => onSelectRow(cost)}
+                      aria-label="Select cost"
+                      data-testid={mode === "om"
+                        ? `btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_1-${row.id}`
+                        : `btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton-${row.id}`}
+                    >
+                      <td className={styles.selectCell}>
+                        {/* `img_…_CostsTableRow_RadioSelection` is a PICTURE; the whole row is
+                            one `btn_…_TransparentButton` (`:2137`). Keeping the radio read-only
+                            and letting the click bubble to the row is what makes selection
+                            TOGGLE once rather than twice. */}
+                        <input
+                          type="radio"
+                          name={`opex-${card.id}`}
+                          checked={row.selected}
+                          readOnly
+                          aria-label={`Select ${row.cells.description}`}
+                          data-testid={`opex-select-${row.id}`}
+                        />
+                      </td>
+                      {columns.map((c) => (
+                        <td
+                          key={c.key}
+                          className={mergeClasses(
+                            styles.td,
+                            c.numeric && styles.tdNumeric,
+                            c.align === "right" && styles.alignRight,
+                            (c.key === "description" || c.key === "startDate") && styles.tdStrong,
+                            c.key === "durationMonths" && styles.tdOverhang,
+                          )}
+                          // `Tooltip: =Self.Text` on the description, the one label that clips.
+                          title={c.key === "description" ? row.cells.description : undefined}
+                        >
+                          {c.key === "durationMonths" ? (
+                            <span className={styles.warnCell}>
+                              <span
+                                className={mergeClasses(
+                                  styles.monthsText, c.align === "right" && styles.monthsTextRight,
+                                )}
+                              >
                                 {row.cells[c.key] ?? ""}
-                                {/* `inf_OpexCost_AlignWithDuration` sits immediately after the
-                                    months cell (`X: = …DurationMonths.X + …Width`). */}
-                                {row.warnAlignment ? (
-                                  <Tooltip content={OPEX_MSG.doesNotAlign} relationship="label">
-                                    <Button
-                                      appearance="transparent"
-                                      size="small"
-                                      className={styles.warnIcon}
-                                      icon={<InfoRegular />}
-                                      aria-label={OPEX_MSG.doesNotAlign}
-                                      data-testid={`opex-warn-${row.id}`}
-                                    />
-                                  </Tooltip>
-                                ) : null}
                               </span>
-                            ) : row.cells[c.key] ?? ""}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              {/* `inf_OpexCost_AlignWithDuration` sits immediately after the
+                                  months cell (`X: = …DurationMonths.X + …Width`). */}
+                              {row.warnAlignment ? (
+                                <Tooltip content={OPEX_MSG.doesNotAlign} relationship="label">
+                                  <Button
+                                    appearance="transparent"
+                                    size="small"
+                                    className={styles.warnIcon}
+                                    icon={<InfoRegular />}
+                                    aria-label={OPEX_MSG.doesNotAlign}
+                                    data-testid={`opex-warn-${row.id}`}
+                                  />
+                                </Tooltip>
+                              ) : null}
+                            </span>
+                          ) : row.cells[c.key] ?? ""}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
-        </>
+        </div>
       ) : null}
     </section>
   );
@@ -1274,6 +1449,12 @@ function OpexPanel({
 
   const currencyCode = currencyCodeOf(form.currencyId);
   const disabled = (m: FieldMode) => m !== "edit";
+  // The canvas list opens flush under its box; Fluent leaves a 2 px gap. `autoSize` off: Fluent
+  // otherwise writes its own inline `max-height` (the space left on screen) over the 17-row cap.
+  const canvasList = {
+    listbox: { className: styles.canvasListbox },
+    positioning: { offset: { crossAxis: 0, mainAxis: 0 }, autoSize: false },
+  };
 
   /**
    * `con_…_AreaInflationProfile.Visible` is literally `false` (`:7576`) — defect O-2 — while the
@@ -1306,7 +1487,9 @@ function OpexPanel({
     <CostField
       label={label}
       name={name}
-      type="number"
+      // `TextInputCanvas.Type'.Text` (`:6413`): the figure is typed as text and checked by
+      // `validateOpexNumber`, so no browser spin buttons and a comma still reaches the message.
+      type="text"
       value={form[field]}
       disabled={disabled(modes[field])}
       error={errorFor(field)}
@@ -1318,21 +1501,23 @@ function OpexPanel({
     <FormPanel
       open
       title={panelTitle(ctx)}
-      width="cost"
+      // `con_…_Body.Width: =Min(660, Parent.Width)`; `opex-canvas-panel` carries the canvas
+      // label and disabled-control colours (canvas.css), for this panel only.
+      width={660}
+      panelClassName="opex-canvas-panel"
       onDismiss={onCancel}
       footer={
-        <>
-          {showAtLeastOneFigureHint(form) ? (
-            <Text className={styles.hint}>{OPEX_MSG.atLeastOneFigure}</Text>
-          ) : null}
-          <PanelButtons
-            onSave={onSave}
-            onCancel={onCancel}
-            disabled={!canSave || busy}
-            saveTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Save"
-            cancelTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Cancel"
-          />
-        </>
+        // `lbl_…_BodyButtons_Hint` sits at the footer's left edge (`X: =20`), red; the PowerCAT
+        // Save drops its fill while disabled.
+        <PanelButtons
+          onSave={onSave}
+          onCancel={onCancel}
+          disabled={!canSave || busy}
+          subtleWhenDisabled
+          hint={showAtLeastOneFigureHint(form) ? OPEX_MSG.atLeastOneFigure : undefined}
+          saveTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Save"
+          cancelTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Cancel"
+        />
       }
     >
       <div className={styles.panelColumns}>
@@ -1350,15 +1535,19 @@ function OpexPanel({
 
           <div>
             {fieldLabel(required.startDate, OPEX_PANEL_LABELS.startDate)}
-            <div className={styles.dateRow}>
-              <Input
-                type="date"
-                value={form.startDate ?? ""}
+            <div className={styles.dateRow} data-standard-start={panel.startDateStandard || undefined}>
+              {/* `dte_…_StartDate` — a `DatePicker@0.0.46`, `Format: LongAbbreviated` (`:5821`),
+                  `Width: =Parent.Width-Self.X*2-40`, which leaves room for the reset icon.
+                  `FontColor` / `FontItalic` follow `locIsStartDateStandardAssumption` (`:5819`). */}
+              <DateInput
+                value={form.startDate}
+                format="LongAbbreviated"
+                standard={panel.startDateStandard}
                 disabled={disabled(modes.startDate)}
-                style={{ flex: 1 }}
-                aria-label={OPEX_PANEL_LABELS.startDate}
-                data-testid="opex-start"
-                onChange={(_, d) => onStartDate(d.value)}
+                className={styles.startDate}
+                ariaLabel={OPEX_PANEL_LABELS.startDate}
+                testId="opex-start"
+                onChange={(v) => onStartDate(v ?? "")}
               />
               {/* `ico_ResetStartDay_NewEditCost_OPEXCosts` (`:5942-5963`) — chain roots only. */}
               {resetStartDateVisible({ selected, parent }) ? (
@@ -1374,9 +1563,7 @@ function OpexPanel({
                 </Tooltip>
               ) : null}
             </div>
-            {errorFor("startDate") ? (
-              <Text className={styles.error}>{errorFor("startDate")}</Text>
-            ) : null}
+
           </div>
 
           <div>
@@ -1386,10 +1573,16 @@ function OpexPanel({
                 aria-label="Duration years"
                 className={styles.durationYears}
                 data-testid="opex-years"
+                {...canvasList}
                 disabled={disabled(modes.durationYears)}
                 value={DURATION_YEAR_OPTIONS.find((o) => o.value === form.durationYears)?.name ?? ""}
                 selectedOptions={form.durationYears === null ? [] : [String(form.durationYears)]}
-                onOptionSelect={(_, d) => onChange({ durationYears: Number(d.optionValue) })}
+                // `drp_…_DurationMonths.DefaultSelectedItems` (`:6015-6019`): with no saved months
+                // and a year picked, the months box falls to `First(varColMonths)` - "0 months".
+                onOptionSelect={(_, d) => onChange({
+                  durationYears: Number(d.optionValue),
+                  ...(form.durationMonths === null ? { durationMonths: 0 } : {}),
+                })}
               >
                 {DURATION_YEAR_OPTIONS.map((o) => (
                   <Option key={o.value} value={String(o.value)}>{o.name}</Option>
@@ -1399,6 +1592,7 @@ function OpexPanel({
                 aria-label="Duration months"
                 className={styles.durationMonths}
                 data-testid="opex-months"
+                {...canvasList}
                 disabled={disabled(modes.durationMonths)}
                 value={DURATION_MONTH_OPTIONS.find((o) => o.value === form.durationMonths)?.name ?? ""}
                 selectedOptions={form.durationMonths === null ? [] : [String(form.durationMonths)]}
@@ -1418,6 +1612,7 @@ function OpexPanel({
               aria-label={OPEX_PANEL_LABELS.currency}
               className={styles.panelDropdown}
               data-testid="opex-currency"
+              {...canvasList}
               disabled
               value={form.currencyId ?? ""}
               selectedOptions={form.currencyId === null ? [] : [form.currencyId]}
@@ -1452,6 +1647,7 @@ function OpexPanel({
               aria-label={OPEX_PANEL_LABELS.aggregation}
               className={styles.panelDropdown}
               data-testid="opex-aggregation"
+              {...canvasList}
               disabled={disabled(modes.aggregation)}
               value={form.aggregation === null ? "" : OPEX_AGGREGATION_LABEL[form.aggregation] ?? ""}
               selectedOptions={form.aggregation === null ? [] : [String(form.aggregation)]}
@@ -1473,6 +1669,7 @@ function OpexPanel({
               aria-label={OPEX_PANEL_LABELS.distributionFrequency}
               className={styles.panelDropdown}
               data-testid="opex-frequency"
+              {...canvasList}
               disabled={disabled(modes.distributionFrequency)}
               value={OPEX_DISTRIBUTION_FREQUENCY
                 .find((o) => o.value === form.distributionFrequency)?.name ?? ""}
@@ -1547,6 +1744,7 @@ function OpexPanel({
                     aria-label={OPEX_PANEL_LABELS.area}
                     className={styles.panelDropdown}
                     data-testid="opex-area"
+                    {...canvasList}
                     disabled={disabled(modes.inflationCountryArea)}
                     value={form.inflationCountryArea ?? ""}
                     selectedOptions={form.inflationCountryArea ? [form.inflationCountryArea] : []}
@@ -1579,7 +1777,8 @@ function OpexPanel({
                 ) : (
                   <>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={form.inflationProfile}
                       disabled={disabled(modes.inflationProfile)}
                       aria-label={OPEX_PANEL_LABELS.customInflationProfile}
@@ -1647,7 +1846,7 @@ function OpexPanel({
                       label={OPEX_PANEL_LABELS.individualThreshold}
                       name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual"
                       required={required.thresholdIndividual}
-                      type="number"
+                      type="text"
                       value={form.thresholdIndividual}
                       disabled={disabled(modes.thresholdIndividual)}
                       error={errorFor("thresholdIndividual")}
@@ -1683,6 +1882,7 @@ function OpexPanel({
             <Tooltip content={OPEX_MSG.externalContractHelp} relationship="description">
               <Button
                 appearance="transparent"
+                className={styles.externalInfo}
                 icon={<InfoRegular />}
                 aria-label="About external contracts"
                 data-testid="InfoButtonCanvas1"

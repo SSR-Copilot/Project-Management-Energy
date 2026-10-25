@@ -250,8 +250,9 @@ describe("OpexScreen", () => {
     const { unmount } = render(<Harness><OpexScreen mode="om" /></Harness>);
     const headers = within(card("WTG V150-6.0")).getAllByRole("columnheader")
       .map((h) => h.textContent);
+    // One `Duration` caption spans the years and months lanes, as on the canvas.
     expect(headers).toEqual([
-      "", "Description", "Start Date", "Duration", "", "End Date", "Currency",
+      "", "Description", "Start Date", "Duration", "End Date", "Currency",
       "Inflation Profile", "Fix Costs p.a. [EUR]", "Share of Revenues [%]",
       "Threshold for EUR/MWh p.a.", "EUR/MWh p.a.", "EUR/MW p.a.", "EUR/WTG p.a.",
       "Aggregation", "Distribution Frequency",
@@ -416,8 +417,10 @@ describe("OpexScreen", () => {
     open("Insurance");
     fireEvent.click(within(card("Insurance")).getByTestId("opex-newOpexProjectCostType"));
     expect(within(panel()).getByText("Description").getAttribute("data-required")).toBe("true");
-    // `opexFormErrors` reports the blank the canvas' Save gate enforces silently.
-    expect(within(panel()).getByText("Value cannot be blank")).toBeInTheDocument();
+    // A blank Description is a plain box, as on the canvas: no message, no red outline.
+    expect(within(panel()).queryByText("Value cannot be blank")).not.toBeInTheDocument();
+    expect(within(panel()).getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description")
+      .closest(".canvas-field")).not.toHaveAttribute("data-invalid");
     unmount();
 
     render(<Harness><OpexScreen mode="other" /></Harness>);
@@ -445,16 +448,18 @@ describe("OpexScreen", () => {
     fireEvent.click(screen.getByTestId("opex-select-om-1"));
     fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
 
-    // Left column, in DOM order: years · months · currency · aggregation · frequency.
-    const combos = within(panel()).getAllByRole("combobox");
+    // Left column, in DOM order: years · months · currency · aggregation · frequency. The Start
+    // Date picker is a combobox too; it is not one of these lists.
+    const combos = within(panel()).getAllByRole("combobox")
+      .filter((c) => c.getAttribute("data-testid") !== "opex-start");
     expect(combos).toHaveLength(5);
 
     fireEvent.click(combos[0] as HTMLElement);
     const years = screen.getAllByRole("option").map((o) => o.textContent);
-    // `drp_…_DurationYears.Items: ForAll(Sequence(36), …)` — and defect O-11's "0 year".
+    // `drp_…_DurationYears.Items: ForAll(Sequence(36), …)` (`:6081`).
     expect(years).toHaveLength(36);
-    expect(years[0]).toBe("0 year");
-    expect(years[1]).toBe("1 years");
+    expect(years[0]).toBe("0 years");
+    expect(years[1]).toBe("1 year");
     expect(years[35]).toBe("35 years");
     fireEvent.click(combos[0] as HTMLElement);
 
@@ -515,8 +520,21 @@ describe("OpexScreen", () => {
     // `nextPeriodDescriptionPanel` — "… - 2" becomes "… - 3".
     expect(within(panel()).getByDisplayValue("Initialized O&M Contract - 3"))
       .toBeInTheDocument();
-    // `nextStartDate` — the previous period's start plus its whole duration.
-    expect(within(panel()).getByTestId("opex-start")).toHaveValue("2037-08-30");
+    // `nextStartDate` — the previous period's start plus its whole duration, shown the way
+    // the canvas `DatePicker@0.0.46` shows it (`Format: LongAbbreviated`).
+    expect(within(panel()).getByTestId("opex-start")).toHaveValue("Sun, Aug 30, 2037");
+  });
+
+  it("UT-OPEXUI-022b fills Months with 0 months once Years is picked, as the canvas does", () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-newOpexProjectCost"));
+    expect(within(panel()).getByTestId("opex-months")).toHaveTextContent("");
+
+    // `drp_…_DurationMonths.DefaultSelectedItems` falls to `First(varColMonths)` (`:6015-6019`).
+    fireEvent.click(within(panel()).getByTestId("opex-years"));
+    fireEvent.click(screen.getByRole("option", { name: "5 years" }));
+    expect(within(panel()).getByTestId("opex-months")).toHaveTextContent("0 months");
   });
 
   /* ── delete ─────────────────────────────────────────────────────────── */
