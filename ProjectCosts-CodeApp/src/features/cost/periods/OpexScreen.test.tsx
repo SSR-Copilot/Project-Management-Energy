@@ -635,6 +635,57 @@ describe("OpexScreen", () => {
     expect(addStandard.mutate.mock.calls[0]?.[0]).toMatchObject({ group: "WTG V150-6.0" });
   });
 
+  it("UT-OPEXUI-027b two devices with the SAME name each show only their own periods", () => {
+    // 0 Test Lucas: two "Dummy-Siemens Gamesa 5-7" cards. Keyed by name, both cards showed all
+    // three rows; the canvas filters `DeviceTypeInProject = ThisItem`, i.e. by the device ROW.
+    deviceTypes = [
+      [
+        { id: "dev-a", name: "WTG-SG", typeInProjectId: "gt-a",
+          createdOn: "2024-01-01T00:00:00Z", displayName: "Dummy-Siemens Gamesa 5-7" },
+        { id: "dev-b", name: "WTG-SG", typeInProjectId: "gt-b",
+          createdOn: "2024-02-01T00:00:00Z", displayName: "Dummy-Siemens Gamesa 5-7" },
+      ],
+      [],
+    ];
+    book = makeBook([
+      period({ id: "a1", mode: "om", group: "WTG-SG", deviceId: "dev-a", description: "asf" }),
+      period({ id: "a2", mode: "om", group: "WTG-SG", deviceId: "dev-a", description: "Description - 9 - 2" }),
+      period({ id: "b1", mode: "om", group: "WTG-SG", deviceId: "dev-b", description: "Description - 9" }),
+    ]);
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+
+    const [first, second] = screen.getAllByText("Dummy-Siemens Gamesa 5-7")
+      .map((t) => t.closest("section") as HTMLElement);
+    fireEvent.click(within(second!).getByText("Dummy-Siemens Gamesa 5-7"));
+
+    expect(within(first!).getByText("asf")).toBeInTheDocument();
+    expect(within(first!).getByText("Description - 9 - 2")).toBeInTheDocument();
+    expect(within(first!).queryByText("Description - 9")).not.toBeInTheDocument();
+    expect(within(second!).getByText("Description - 9")).toBeInTheDocument();
+    expect(within(second!).queryByText("asf")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-027c a save from the second same-named card binds to the second DEVICE", () => {
+    deviceTypes = [
+      [
+        { id: "dev-a", name: "WTG-SG", typeInProjectId: "gt-a",
+          createdOn: "2024-01-01T00:00:00Z", displayName: "Dummy-Siemens Gamesa 5-7" },
+        { id: "dev-b", name: "WTG-SG", typeInProjectId: "gt-b",
+          createdOn: "2024-02-01T00:00:00Z", displayName: "Dummy-Siemens Gamesa 5-7" },
+      ],
+      [],
+    ];
+    // Empty cards, so `Add Standard Contract` is enabled and its argument is observable.
+    book = makeBook([]);
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+
+    const second = screen.getAllByText("Dummy-Siemens Gamesa 5-7")[1]!.closest("section") as HTMLElement;
+    fireEvent.click(within(second).getByText("Dummy-Siemens Gamesa 5-7"));
+    fireEvent.click(within(second).getByTestId("opex-addStandardContract"));
+    expect(addStandard.mutate.mock.calls.at(-1)?.[0])
+      .toMatchObject({ group: "WTG-SG", deviceId: "dev-b" });
+  });
+
   it("UT-OPEXUI-028 orders the O&M cards by the generator's Created On, then the PV types", () => {
     // `Sort(…, CreatedOnGenerator.'Created On', Ascending)` (`:68-109`). The cards used to be
     // synthesised from the cost book's group names, so they came out in Description order.

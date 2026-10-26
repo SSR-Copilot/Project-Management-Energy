@@ -413,6 +413,15 @@ describe("mapOpexRow", () => {
     });
   });
 
+  it("UT-BOOK-019b carries the STORED vsb_name, which the Add Period / Delete gates sort on", () => {
+    // Migrated rows store the bare description; it must not be rebuilt into the app's pattern.
+    const period = mapOpexRow(
+      { ...BASE_ROW, vsb_name: "Initialized O&M Contract - 5" }, "V150-6.0", "om",
+    );
+    expect(period.name).toBe("Initialized O&M Contract - 5");
+    expect(mapOpexRow({ vsb_opexprojectcostid: "bare" }, "G", "om").name).toBe("");
+  });
+
   it("UT-BOOK-020 reads the MAX aggregation choice, not just SUM", () => {
     const period = mapOpexRow(
       { ...BASE_ROW, vsb_aggregation: AGGREGATION_VALUE.max }, "Other OPEX Sub", "other",

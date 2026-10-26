@@ -184,15 +184,19 @@ describe("toolbar dropdowns", () => {
     expect(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowCostPaidBy" })).toHaveValue("DevCo");
   });
 
-  it("opens on the cost-allowed start year rather than today's", () => {
-    // The project starts in 2015 and the window runs to 2030; `Year(Today())` is neither.
-    expect(new Date().getFullYear()).not.toBe(2015);
+  it("opens on today's year, as App.OnStart seeds gblSelectedProjectYear, not the 2015 start", () => {
+    // The project starts in 2015 and the window runs to 2030; the canvas opens on
+    // `Year(Today())` because the start date is in the past, clamped into that window.
+    const expected = Math.min(Math.max(new Date().getFullYear(), 2015), 2030);
     mount();
-    expect(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowSelectedYear" })).toHaveValue("2015");
+    expect(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowSelectedYear" }))
+      .toHaveValue(String(expected));
   });
 
   it("disables ◀ at the cost-allowed start year", () => {
     mount();
+    fireEvent.click(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowSelectedYear" }));
+    fireEvent.click(screen.getByRole("option", { name: "2015" }));
     expect(screen.getByRole("button", { name: "btn_Costs_ProjectCostbtn_ShowPreviousYear" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "btn_Costs_ProjectCostbtn_ShowNextYear" })).toBeEnabled();
   });

@@ -4,7 +4,7 @@ import {
   LOADING_COST, LOADING_DATA, RECALCULATE_ALLOCATED_COST, SAVING_COST, SAVING_COSTS,
   allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
   distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
-  previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
+  onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
   savingCostLabel, standardContractLoadingLabel,
 } from "./panelRules";
 
@@ -156,6 +156,36 @@ describe("defaultSelectedYear", () => {
     expect(defaultSelectedYear({
       selectedYear: null, navigationMinYear: 2030, navigationMaxYear: 2015, today,
     })).toBe(2030);
+  });
+});
+
+describe("onStartSelectedYear", () => {
+  const today = new Date(2026, 9, 26);
+
+  it("opens on this year, not on a past project start (the 2015 regression)", () => {
+    expect(onStartSelectedYear({ startDate: new Date(2015, 0, 20) }, 0, today)).toBe(2026);
+  });
+
+  it("opens on a FUTURE start year for a greenfield project", () => {
+    expect(onStartSelectedYear({ startDate: new Date(2028, 5, 1) }, 0, today)).toBe(2028);
+  });
+
+  it("reads the acquisition date, not the start date, beyond greenfield", () => {
+    const anchors = { startDate: new Date(2030, 0, 1), acquisitionDate: new Date(2027, 3, 27) };
+    expect(onStartSelectedYear(anchors, 3, today)).toBe(2027);
+    expect(onStartSelectedYear(anchors, 0, today)).toBe(2030);
+  });
+
+  it("falls back to this year when the date is missing", () => {
+    expect(onStartSelectedYear({}, 3, today)).toBe(2026);
+    expect(onStartSelectedYear({}, undefined, today)).toBe(2026);
+  });
+
+  it("is still clamped into a finished project's window by defaultSelectedYear", () => {
+    expect(defaultSelectedYear({
+      selectedYear: onStartSelectedYear({ startDate: new Date(2015, 0, 1) }, 0, today),
+      costAllowedStartYear: 2015, navigationMinYear: 2015, navigationMaxYear: 2019, today,
+    })).toBe(2019);
   });
 });
 

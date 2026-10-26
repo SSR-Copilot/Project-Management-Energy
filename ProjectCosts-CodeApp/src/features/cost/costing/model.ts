@@ -93,6 +93,19 @@ export interface CostPeriod {
   id: string; group: string; mode: PeriodMode; description: string;
   startDate: string; years: number; months: number; currency: string;
   /**
+   * OPEX only: the STORED `vsb_name`. The command bars' `locLastPeriod` sorts on it, and stored
+   * names do not follow one pattern — migrated rows carry the bare description, rows the app
+   * wrote carry `<account>-<sub-account>-<device>-<description>` — so it cannot be rebuilt.
+   * Undefined for a row that has not been read back from Dataverse.
+   */
+  name?: string;
+  /**
+   * O&M only: the `vsb_devicetypesinproject` row the period belongs to. `group` is that device's
+   * `vsb_name`, which is NOT unique — a project can hold two devices of the same name — so cards,
+   * row filtering and saves key on this id, as the canvas' `DeviceTypeInProject = ThisItem` does.
+   */
+  deviceId?: string;
+  /**
    * The five money columns — `vsb_fixcosts` / `vsb_ofrevenues` / `vsb_eurmwh` / `vsb_eurmw` /
    * `vsb_eurwtg` on OPEX, `vsb_fixedcosts` / … on Land Lease.
    *

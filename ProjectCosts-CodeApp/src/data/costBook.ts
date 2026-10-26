@@ -350,6 +350,8 @@ export function mapOpexRow(
     group,
     mode,
     description: r.vsb_description ?? "",
+    name: r.vsb_name ?? "",
+    deviceId: r._vsb_devicetypeinproject_value || undefined,
     startDate: (r.vsb_startdate ?? "").slice(0, 10),
     years: r.vsb_opexprojectdurationyears ?? 0,
     months: r.vsb_opexprojectdurationmonths ?? 0,

@@ -24,7 +24,7 @@ const PERIOD_FIELDS = [
   "group", "mode", "description", "startDate", "years", "months", "currency", "fixed", "revenue",
   "perMwh", "perMw", "perWtg", "aggregation", "frequency", "inflation", "countryInflation",
   "inflationYear", "inflationPercent", "inflationCountryArea", "threshold", "align", "external",
-  "standard", "isStartDateStandard", "contractId", "parentId", "periodIndex",
+  "standard", "isStartDateStandard", "contractId", "parentId", "periodIndex", "deviceId",
   // O&M's two threshold columns. `thresholdType` decides p75 / p90 / Individual and
   // `thresholdIndividual` is the figure behind Individual — a DIFFERENT column from `perMwh`,
   // which the write map used to copy into it.

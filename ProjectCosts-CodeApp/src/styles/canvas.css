@@ -196,6 +196,10 @@
    the rule above must not reach the dropdown triggers. */
 .canvas-cost-toolbar .fui-Dropdown,
 .canvas-cost-toolbar .fui-Dropdown button { color: #242424; font-weight: 400; }
+/* Both toolbar `ModernDropdown`s are `Height: =30`; Fluent's medium Dropdown is 32 px and made
+   them taller than the arrows and toggles beside them. */
+.canvas-cost-toolbar .fui-Dropdown { min-height: 30px; height: 30px; box-sizing: border-box; }
+.canvas-cost-toolbar .fui-Dropdown .fui-Dropdown__button { min-height: 28px; height: 28px; padding-top: 0; padding-bottom: 0; }
 /* Switch labels and the two selects are 14px/#242424 in the canvas, not 13px. */
 .canvas-cost-toolbar .fui-Switch label { font-size: 14px; color: #242424; }
 .canvas-cost-toolbar select { height: 30px; background: white; border: 1px solid #ccc; border-radius: 2px; font-size: 14px; color: #242424; padding: 0 12px; }
