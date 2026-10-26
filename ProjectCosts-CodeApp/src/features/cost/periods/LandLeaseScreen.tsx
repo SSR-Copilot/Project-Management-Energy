@@ -458,14 +458,14 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": { color: "#323130" },
     /*
      * `lbl_…_BodyButtons_Hint_1` — `X: =20`, `gblAppSizes.Font.ExtraSmall` (9 pt),
-     * `FontWeight.Lighter`, `palette.Error`, and only as wide as the room left of Save
-     * (`Parent.Width - Self.X*2 - Save.X`), so the message wraps onto two lines.
+     * `FontWeight.Lighter`, `palette.Error`. On ONE line, as on the O&M / Other OPEX and admin
+     * period panels (PO, 26 Oct 2026). It was capped at 135 px to copy a canvas screenshot in
+     * which it broke after "at least one", which made this the only panel with a two-line footer.
      */
     "&.canvas-panel .canvas-panel-footer > .fui-Text": {
-      // Measured off the canvas screenshot (26 Oct 2026): it breaks after "at least one".
-      flexGrow: 0, maxWidth: "135px", marginRight: "auto",
+      flexGrow: 0, marginRight: "auto",
       fontSize: "9pt", fontWeight: tokens.fontWeightRegular, lineHeight: 1.3,
-      whiteSpace: "normal", color: palette.Error,
+      whiteSpace: "nowrap", color: palette.Error,
     },
   },
   /*
