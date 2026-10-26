@@ -194,14 +194,15 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
   },
   /*
-   * `canvasFooter`: sized to the canvas screenshot (26 Oct 2026). The canvas draws in Open Sans,
-   * which this app does not load yet, so the Segoe UI fallback is set a step larger to fill the
-   * same width: 16 px description, 15 px regular-weight captions, and the PowerCAT icons in a
-   * 20 px box (a filled bin).
+   * `canvasFooter`: sized to the canvas "Delete Period?" screenshot (26 Oct 2026). The canvas
+   * draws in Open Sans, which this app does not load, so the Segoe UI sizes are set to fill the
+   * same widths: a 15.6 px title, a 15.4 px description on 20 px lines, 14 px regular-weight
+   * captions, and the PowerCAT icons in a 20 px box (a filled bin).
    */
-  descriptionCanvas: { fontSize: "16px", lineHeight: "1.4" },
+  titleCanvas: { fontSize: "15.6px" },
+  descriptionCanvas: { fontSize: "15.4px", lineHeight: "20px" },
   buttonCanvas: {
-    fontWeight: tokens.fontWeightRegular, fontSize: "15px",
+    fontWeight: tokens.fontWeightRegular, fontSize: "14px",
     "& svg": { fontSize: "20px", width: "20px", height: "20px" },
   },
   /** Both PowerCAT buttons: `Height: =32`, centred label, 14 px text. */
@@ -363,7 +364,7 @@ export function ConfirmDialog({
         backdrop={{ className: styles.backdrop }}
       >
         <div className={styles.header}>
-          <h2 className={styles.title}>{title}</h2>
+          <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
           <button type="button" className={styles.close} aria-label="Close"
             data-testid="ico_PopUpConfirmation_BodyHeader_3" onClick={onCancel} disabled={locked}>
