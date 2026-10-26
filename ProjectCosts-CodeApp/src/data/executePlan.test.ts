@@ -2,8 +2,24 @@
  * UT-PLAN — `executePlan` runs a WritePlan in order, substitutes the created id, and reports a
  * partial run.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecordGoneError } from "@/platform/errors";
+
+// `invalidatePageTokens` is spied on; everything else in `./client` (the real guard) is kept.
+const invalidated = vi.hoisted(() => [] as string[]);
+vi.mock("./client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./client")>();
+  return {
+    ...actual,
+    invalidatePageTokens: vi.fn((tableName: string) => {
+      invalidated.push(tableName);
+      actual.invalidatePageTokens(tableName);
+    }),
+  };
+});
+beforeEach(() => {
+  invalidated.length = 0;
+});
 import {
   CreatedIdMissingError, executePlan, PlanError, PlanRefusedError, type PlanClient,
 } from "./executePlan";
@@ -322,5 +338,84 @@ describe("executePlan: guarded updates", () => {
       op: "update", entitySet: SET, id: ROW, data: { a: 1 }, reason: "r", guarded: true,
     });
     expect(guardedUpdate(SET, ROW, {}, "r", "L")).toMatchObject({ label: "L", guarded: true });
+  });
+});
+
+/* ───────────────────────── P-1: accepted writes drop the table's cached page tokens ───────────────────────── */
+
+describe("executePlan: page-token invalidation", () => {
+  it("UT-PLAN-025 a create on vsb_projects (Add Project) invalidates exactly \"vsb_projects\" — the table name countedPage caches under", async () => {
+    const { client, raw } = stubClient();
+    raw.createRecordAsync.mockResolvedValueOnce(ok({ vsb_projectid: "p-new" }) as never);
+    const plan = planOf({ op: "create", entitySet: "vsb_projects", data: { vsb_name: "N" }, reason: "create the project" });
+    await executePlan(plan, "test", client);
+    expect(invalidated).toEqual(["vsb_projects"]);
+  });
+
+  it("UT-PLAN-026 an update and a delete each invalidate their own entity set, in plan order", async () => {
+    const { client } = stubClient();
+    const plan = planOf(
+      { op: "update", entitySet: "vsb_projects", id: "p-1", data: { vsb_name: "B" }, reason: "rename" },
+      { op: "delete", entitySet: "vsb_capexcosts", id: "c-9", reason: "delete" },
+    );
+    await executePlan(plan, "test", client);
+    expect(invalidated).toEqual(["vsb_projects", "vsb_capexcosts"]);
+  });
+
+  it("UT-PLAN-027 a failed step does not invalidate (the cache is still correct)", async () => {
+    for (const op of ["create", "update", "delete"] as const) {
+      invalidated.length = 0;
+      const { client, raw } = stubClient();
+      raw.createRecordAsync.mockResolvedValueOnce(fail("boom") as never);
+      raw.updateRecordAsync.mockResolvedValueOnce(fail("boom") as never);
+      raw.deleteRecordAsync.mockResolvedValueOnce(fail("boom") as never);
+      const plan = planOf({ op, entitySet: SET, id: op === "create" ? undefined : "x", data: {}, reason: op });
+      await expect(executePlan(plan, "test", client)).rejects.toBeInstanceOf(PlanError);
+      expect(invalidated).toEqual([]);
+    }
+  });
+
+  it("UT-PLAN-028 a plan that fails mid-way invalidates only the steps that succeeded", async () => {
+    const { client, raw } = stubClient();
+    raw.deleteRecordAsync.mockResolvedValueOnce(fail("boom") as never);
+    const plan = planOf(
+      { op: "update", entitySet: "vsb_projects", id: "p-1", data: {}, reason: "first" },
+      { op: "delete", entitySet: "vsb_capexcosts", id: "c-9", reason: "second" },
+      { op: "update", entitySet: "vsb_opexcosts", id: "o-1", data: {}, reason: "third" },
+    );
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err.done).toBe(1);
+    expect(invalidated).toEqual(["vsb_projects"]);
+  });
+
+  it("UT-PLAN-029 a refused plan invalidates nothing", async () => {
+    const { client } = stubClient();
+    await expect(executePlan(refusePlan("no"), "test", client)).rejects.toBeInstanceOf(PlanRefusedError);
+    expect(invalidated).toEqual([]);
+  });
+
+  it("UT-PLAN-030 guarded update: an accepted PATCH invalidates; a gone row (read empty, or PATCH 404) sends nothing and does NOT", async () => {
+    await executePlan(planOf(guardedUpdate(SET, ROW, { vsb_name: "A" }, "ok")), "test", guardedStub().client);
+    expect(invalidated).toEqual([SET]);
+
+    invalidated.length = 0;
+    const gone = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "x")), "test", guardedStub({ gone: [ROW] }).client)
+      .catch((e: unknown) => e)) as PlanError;
+    expect(gone.gone).toBe(true);
+    expect(invalidated).toEqual([]);
+
+    const raced = (await executePlan(planOf(guardedUpdate(SET, ROW, {}, "x")), "test", guardedStub({ patchStatus: 404 }).client)
+      .catch((e: unknown) => e)) as PlanError;
+    expect(raced.gone).toBe(true);
+    expect(invalidated).toEqual([]);
+  });
+
+  it("UT-PLAN-031 a create the server accepted but returned no id still invalidates: the row exists although the step failed", async () => {
+    const { client, raw } = stubClient();
+    raw.createRecordAsync.mockResolvedValueOnce(ok({}) as never);
+    const err = (await executePlan(planOf({ op: "create", entitySet: SET, data: {}, reason: "make" }), "op", client)
+      .catch((e: unknown) => e)) as PlanError;
+    expect(err.cause).toBeInstanceOf(CreatedIdMissingError);
+    expect(invalidated).toEqual([SET]);
   });
 });

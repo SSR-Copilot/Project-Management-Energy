@@ -20,11 +20,26 @@
  * is gone, sends nothing and fails with `RecordGoneError` — the SDK 1.3.1 PATCH is an upsert, so
  * this read is what stops it recreating a row another user deleted. The guard is
  * `updateRecordIfExists` (`data/client.ts`), not a second copy. No PM plan sets `guarded`.
+ *
+ * DIVERGENCE (no canvas equivalent; P-1 stale skip tokens): every write Dataverse ACCEPTS drops
+ * the cached `countedPage` walks for its table via `invalidatePageTokens(write.entitySet)`. A
+ * paging cookie encodes the last row's sort key and primary key, so once a create, an update of a
+ * sortable column (name, total capacity, start date, milestone dates) or a delete changes the row
+ * set, the cached tokens point at the wrong rows — and a cookie minted against a larger set can
+ * point past the end of the current one, which Dataverse answers with an EMPTY page. The canvas
+ * app has no paging cache, so there is nothing to reproduce; this only keeps the code app's own
+ * cache honest. It lives HERE, not in each feature, because every PM/admin/cost write that goes
+ * through a WritePlan passes this point (nine `vsb_projects` writes alone), and a per-call-site
+ * invalidation is exactly the copy CONVENTIONS rule 17 forbids — the one a new screen forgets.
+ * It runs for EVERY entity set, not just `vsb_projects`: any table may be paged by `countedPage`
+ * later, and invalidating a table nobody pages is a cheap no-op (a scan of a small Map).
+ * It runs only once the server has accepted the write, so a failed, refused or guarded-gone step
+ * keeps a cache that is still correct. Pinned by UT-PLAN-025..031.
  */
 import { getClient } from "@microsoft/power-apps/data";
 import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo";
 import { isRecordGone, unwrap } from "@/platform/errors";
-import { updateRecordIfExists, type GuardedUpdateClient } from "./client";
+import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
 import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
 
 /** The three SDK calls a plan needs — the `getClient` shape, narrowed so tests can stub it. */
@@ -158,6 +173,8 @@ export async function executePlan(
           ),
           label,
         );
+        // The row exists from here on, even if the id check below fails the step.
+        invalidatePageTokens(write.entitySet);
         const newId = row?.[key];
         if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
         createdIds.push(newId);
@@ -171,6 +188,10 @@ export async function executePlan(
           primaryKey,
           client: () => guardClient as unknown as GuardedUpdateClient,
         });
+        // Reached only when the PATCH was accepted. A gone row (RecordGoneError, from the read
+        // or a 404 PATCH) throws above with nothing sent, so it is NOT this plan's mutation and
+        // the cache is left alone; another user's delete is outside what this cache can track.
+        invalidatePageTokens(write.entitySet);
       } else if (write.op === "update") {
         primaryKeyOf(write.entitySet);
         unwrap(
@@ -179,9 +200,11 @@ export async function executePlan(
           ),
           label,
         );
+        invalidatePageTokens(write.entitySet);
       } else {
         primaryKeyOf(write.entitySet);
         unwrap(await client.deleteRecordAsync(write.entitySet, id!), label);
+        invalidatePageTokens(write.entitySet);
       }
       done += 1;
     } catch (cause) {

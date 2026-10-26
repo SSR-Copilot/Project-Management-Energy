@@ -2567,3 +2567,864 @@ push replaced whatever was deployed before it.
 The step-5 click-through, and the five browser measurements in
 `11-CAPEX-PARITY-CHANGE-RECORD-2026-10-23.md` §8. Both local dev processes were stopped during
 this push, so a restart is needed before either.
+
+---
+
+## D41 · Project Overview pagination — the skip-token walk (26 Oct 2026) — all items PROPOSED
+
+A read-only pass over the Main Project Overview's pagination, comparing
+`ProjectDocs/_extracted/msapp/projectmanagement/Src/Project Main Screen.pa.yaml` against
+`features/pm/project-main/` and the data layer it rests on — `data/projects.ts`'s
+`loadProjectPage` and `data/client.ts`'s `countedPage`.
+
+**Nothing in D41 is decided.** Every item is *proposed, awaiting the product owner*. Some of the
+items below have **already landed in the working tree as code** while this entry was being
+written — see §12 for exactly which, and what was verified present. As D38's preamble says and
+this repeats: **being in the tree is not approval.**
+
+Two of the findings — **P-9** and **P-10** — were discovered by the agents implementing the
+others, not by the original read-only pass. P-10 is a **regression introduced by P-4's own fix**,
+caught and guarded inside the same wave. Both are recorded in full because the second is the
+clearest evidence in this entry that a parallel wave needs agents reading **across** file
+boundaries, not just staying inside them.
+
+**Read this before approving anything below.** The canvas and this app do not page the same way,
+and almost every finding follows from that one structural fact:
+
+> The canvas **never paged on the server**. Its Apply handler `ClearCollect`s a filtered set into
+> `colFilteredProjects`, counts it client-side with `CountRows`, and pages that in-memory
+> collection (`Project Main Screen.pa.yaml:1605`). This app cannot do that — truncating the list
+> is not an option — so it pages Dataverse directly. **Dataverse rejects `$skip`** outright
+> (`0x80060888 "Skip Clause is not supported in CRM"`), so paging is forward-only through
+> `@odata.nextLink`, surfaced by the SDK as `skipToken`. To serve page N, `countedPage` **walks**
+> pages 1…N and caches each returned token.
+
+That walk, and the token cache behind it, is where the defects are. It has **no canvas
+counterpart at all**, so most of these are not parity failures — they are defects in machinery
+this app had to invent. Two items (**P-2**, **P-3**) *are* parity questions and need a product
+answer; the rest are engineering defects whose fixes need review, not a product decision.
+
+One more structural note that shapes §1 and §6. `loadProjectPage` serves the list as **two
+ordered segments** — rows with a value in the sorted column, then rows without — because
+Dataverse has no `NULLS LAST` and `$orderby` would otherwise put every nameless project first
+and fill page 1 with blank rows. The canvas never had this problem because it sorted a
+client-side collection. The segments do not share a page, which is why `totalPages` is computed
+rather than divided out of `totalRows`.
+
+Caveat for the whole entry: **none of this has been exercised against live `VSBCloud_Dev`.** It
+is source analysis. §1 in particular rests on a prediction about Dataverse paging-cookie
+semantics that is explicitly flagged as unobserved.
+
+### 1. P-1 · The page-token cache is never invalidated after a mutation — **High**
+
+**What this app does.** `data/client.ts` caches skip tokens in a module-level `Map`, keyed by a
+caller-supplied `signature`. `resetPageTokens` exists, is exported, and is documented
+*"Discards the walk when the filter or sort changes; a stale token returns the wrong rows."* Its
+**only caller in the entire `src/` tree** was `features/pm/project-main/Screen.test.tsx`'s
+`beforeEach` — zero production callers.
+
+Its documented purpose is already covered by something else: a changed filter or sort produces a
+different `signature`, so a fresh walk starts naturally. **The case nothing covered is a
+delete.** `deleteProject` leaves the signature identical while shifting every row across the page
+boundaries, and `useDeleteProject` then invalidates `["projectPage"]`, forcing a refetch that
+reuses tokens computed against the **pre-delete** row set.
+
+**Predicted symptom, NOT observed.** A Dataverse paging cookie encodes the last row's sort key
+and primary key. Delete a row on page 1 and page 1 refetches, pulling up what was row 201; page
+2's cached token still means *"after old row 200"*, so old row 201 would appear as **both** the
+last row of page 1 and the first row of page 2. A duplicated row at the seam, or a skipped one
+depending on direction.
+
+**This is a prediction from how the cookies work, not something anyone has seen.** Confirming it
+needs live `VSBCloud_Dev` with more than 200 projects: open page 1, delete a row, go to page 2,
+and look for a repeat at the boundary. A unit test can prove the tokens are discarded; it cannot
+prove the duplicate row ever existed, because a mock returns whatever tokens the test hands it.
+
+Secondary: the `Map` was never evicted, so every distinct filter/sort combination leaked a token
+array for the life of the tab.
+
+**Proposed.** Expose `invalidatePageTokens(tableName)` on the data layer and call it from
+`deleteProject` on success. Placing it beside the write rather than in the calling hook is
+deliberate — the data layer owns its own cache, so every caller is covered rather than just the
+one hook.
+
+### 2. P-2 · The Next button implements the canvas's *commented-out* formula — **Medium**
+
+This is `CONVENTIONS.md` rule 10 in reverse: rule 10 warns against porting a commented-out
+formula instead of the live one. Here the port implements the dead one deliberately.
+
+`ico_Main_Project_Overview_Context_Pagination_PageRight.DisplayMode`
+(`Project Main Screen.pa.yaml:2192`) reads:
+
+```
+=//If(psf_MainScreen_DetailList_Container_FluentDetailsList.HasNextPage,DisplayMode.Edit,DisplayMode.Disabled)
+  With(
+      {varRecPage: First(colFiltersOverview)},
+      If(varRecPage.Page < varRecPage.TotalPages, DisplayMode.Edit, DisplayMode.Disabled)
+  )
+```
+
+The **live** formula is `Page < TotalPages`. The **commented-out** one is the `HasNextPage`
+approach — and `Screen.tsx:1102` is `disabled={!(page?.hasNext ?? false) || pageQuery.isFetching}`,
+i.e. exactly the abandoned one.
+
+**The choice is defensible**: `@odata.count` is capped at 5000 by the platform, so a
+count-derived gate under-reports past that, whereas the server's token is always the truth. But
+it was **unmarked**, and it lets the two halves of the pager disagree on screen: `totalPages` is
+count-derived while `hasNext` is token-derived, so above the cap the label can read
+**"Page: 25 from 26"** with **Next disabled**.
+
+**Proposed.** Keep the token-based gate, mark it `DIVERGENCE:` with both canvas formulas quoted
+and the 5000-cap reasoning, and accept that the label and the button can disagree above 5000
+rows — or make `totalPages` token-derived too, which costs a full walk.
+
+> **Amended 26 Oct 2026 by D44.** The disagreement occurred live well below 5000 rows, because of
+> rows lost at page seams. Once the walk reaches the end of the data, `totalPages` now comes from the
+> walk, which costs nothing extra. The label and Next can therefore no longer disagree on the last
+> page. They still can before it, in the middle of the walk.
+
+### 3. P-3 · `clampPage` does not do what its own doc claims — **Medium, and the one real product question**
+
+**Canvas.** Inside the `OnSelect` of `but_Main_Project_Overview_Context_Filter_Apply`
+(`Project Main Screen.pa.yaml`, control block opens at **:1601**, the handler at **:1605**),
+verbatim:
+
+```
+adjustedPage: If(
+    currentPage > Value(RoundUp(totalRows / pageSize, 0) + If(totalRows = 0, 1, 0)),
+    1,
+    currentPage
+)
+```
+
+followed by
+`UpdateIf(colFiltersOverview, true, {TotalRows: totalRows, TotalPages: calculatedTotalPages, Page: adjustedPage})`.
+The canvas **writes the clamped value back**, so an out-of-range page genuinely **navigates** to
+page 1 rather than merely displaying "1" over the wrong rows.
+
+**This app.** `clampPage` in `rules.ts` carries the comment *"A page beyond the end snaps back to
+1, which is what the canvas `adjustedPage` does."* It does not, and the branch never fires:
+`clampPage` is called only from `pagerLabels`, which produces a display string, and the page it
+receives is the **served** page from `loadProjectPage` — already clamped to the last existing
+page because the walk stops early when the data runs out.
+
+**The behaviour difference needing a decision:** `?p=999` on a 6-page list — the canvas sends you
+to **page 1**; this app shows **page 6**.
+
+**And the consequence is worse than "the caption is cosmetic".** This app **never rewrites the
+out-of-range page number in the URL** after the server clamps it. `p=999` stays in the address
+bar, so every reopen of that link starts a **cold forward walk of the token chain to the end of
+the list again**. The cost is not paid once and cached — it repeats on every open, for as long as
+the link exists. A bookmarked or shared link carrying a stale page number is permanently more
+expensive than the same link with a valid one.
+
+**P-3, P-4 and P-6 compound on exactly this path.** The URL keeps an out-of-range page (P-3), the
+walk to reach it was unbounded (P-4), and each step of that walk costs an extra query because of
+the blank-segment probe (P-6). Three separate defects that multiply on one URL rather than adding
+up — which is why P-3 is worth deciding even though its visible symptom is only a caption.
+
+**Proposed.** Correct the comment to describe what the function actually does and mark the
+divergence (comment-only; no behaviour change pending this decision). Then decide: reproduce the
+canvas and snap to page 1, or keep showing the last page and additionally rewrite the URL so the
+link stops re-walking.
+
+### 4. P-4 · The forward walk was uncapped — **Medium**
+
+`countedPage` destructured and **discarded** `maxPages` (`const { maxPages: _ignored, … }`).
+Nothing bounded the walk except running out of data, so a hand-edited `?p=5000` on a large table
+would issue up to 5,000 sequential round trips. Harmless at 1,129 projects — six pages — but
+`countedPage` is a generic helper and the URL is user-editable.
+
+**Proposed.** Honour `maxPages`, default it, and report when the walk stopped at the cap rather
+than at the end of the data so a caller can tell "no more rows" from "we gave up".
+
+### 5. P-5 · The token cache key omitted the table — **Medium, latent**
+
+`countedPage` receives `tableName` but never folded it into the cache key, which was the
+caller-supplied `signature` alone. Two tables whose callers happened to build the same signature
+string would share tokens and serve each other's rows.
+
+Nothing collided in practice: `loadProjectPage` is the **only** production caller (two call
+sites) and prefixes its signatures `"named"` / `"blank"`. But that is caller discipline keeping a
+shared helper correct, which is backwards.
+
+**Proposed.** Make the key `` `${tableName}|${signature}` `` inside the helper.
+
+### 6. P-6 · Every page view costs at least two queries — **Medium, performance**
+
+The blank-segment probe runs on **every** request, including when no blank rows exist:
+`top: wantsTail ? pageSize : 1` (`data/projects.ts:127`). It is deliberate — the pager needs the
+tail's size to know the total page count — but with `staleTime: 30s` it is a recurring extra
+round trip, and a cold link to page 10 costs **eleven** requests (ten for the named walk, one for
+the probe).
+
+**Proposed.** Accept it as the cost of correct `totalPages`, or cache the tail count per
+signature so the probe runs once per filter rather than once per page view. **No fix attempted** —
+it needs a decision first, and the measurement to justify it.
+
+### 7. P-7 · `@odata.count` caps at 5000 — **Low, already on the risk register**
+
+`totalRows` and `totalPages` under-report beyond 5000 rows. Already recorded as **R-10** in
+`KNOWN-RISKS-AND-DECISIONS.md`.
+
+Worth stating plainly that **the canvas is worse**: its `TotalRows` is
+`CountRows(colFilteredProjects)` over a `ClearCollect` subject to the delegation limit
+(`:1605`), so it under-reports from roughly 2,000 rows — and silently, with no ceiling anyone
+documented. This app's ceiling is higher and known. No change proposed.
+
+### 8. P-8 · The canvas pager tooltips are absent — **Low**
+
+The canvas sets `Tooltip: ="Navigate to first page"` (`:2139`),
+`="Navigate to previous page"` (`:2173`) and `="Navigate to next page"` (`:2226`). This app's
+buttons carry `aria-label="First page"` / `"Previous page"` / `"Next page"` and no hover text.
+
+The canvas-identity gate passes, which indicates these icons carry no `AccessibleLabel` — so the
+`aria-label`s are derived, not canvas-sourced, and are not themselves a defect. What is missing is
+the **visible hover text** (rule 7). **Proposed:** restore the three tooltips verbatim, leaving
+the `aria-label`s untouched so the gate stays green.
+
+### 9. P-9 · The token cache never saved the first request — **Medium, found and fixed in this wave**
+
+`countedPage`'s own doc claimed *"Tokens are cached per query signature so Previous is free and a
+re-render does not re-walk."* **That was false.** The old code called `fetchAt(0)`
+**unconditionally** and consulted the cache only for pages 2…N, so every request for page 2 cost
+**two** round trips — page 1 re-fetched and thrown away, then page 2. The cache saved the *walk*
+but never the *first step of it*.
+
+Fixed by starting the walk at the furthest page a token is already held for, rather than always
+from page 1.
+
+**The interaction is the part a reviewer needs, and it cuts against P-1.** Before this fix, every
+request re-fetched page 1 and so *incidentally re-derived* the tokens each time — which masked
+staleness. Now a warm cache is trusted outright, so **if `invalidatePageTokens` is ever missed,
+or called with the wrong table name, the staleness window is wider than it was before the fix.**
+
+**P-1's and P-9's fixes are only safe together. Neither should be reverted alone** — reverting
+P-1 while keeping P-9 reintroduces the stale-token bug with the accidental mitigation removed.
+
+P-9 also means **§6's numbers were understated**: if every page view already cost one more request
+than the cache implied, "at least two queries per page view" was really **three** on any page past
+the first.
+
+### 10. P-10 · The new walk cap broke the segment-boundary inference — **Medium, regression introduced and fixed inside this wave**
+
+`loadProjectPage` decides where the named segment ends with:
+
+```ts
+const wantsTail = named.page < wanted;
+```
+
+That was sound only because of the invariant the comment above it asserts — `countedPage`
+*"stops early **only** when the data runs out"*. **P-4's fix made that invariant false.** With
+`DEFAULT_MAX_PAGE_WALK = 100`, a walk that stops **at the cap** also returns `named.page < wanted`,
+which the old line reads as "the named rows are exhausted, serve the tail".
+
+The consequence: a request for page 150 of a long named segment would **silently serve rows from
+the blank tail**, under a plausible page number, with no error. Same class as P-1 — **wrong rows
+presented as correct**.
+
+Guard: `const wantsTail = named.page < wanted && !named.limited;`
+
+Latent today — roughly 1,129 projects at 200 per page is about six pages, far short of the
+hundred-page cap — but the defect was real from the moment the cap landed.
+
+**Worth recording how it was caught**, because it is the thing that makes a parallel wave safe:
+the agent owning `data/projects.ts` read the consequences of a change in `data/client.ts`, **a
+file it did not own**, recognised that a documented invariant it depended on had been invalidated,
+and guarded against it rather than assuming the other agent's change was harmless. A file-ownership
+model prevents two agents writing the same line; it does nothing about a shared *invariant*. Only
+reading across the boundary catches that.
+
+### 11. Confirmed parity — what this pass found **correct**
+
+So the entry is not read as a list of failures. All verified at source:
+
+| Behaviour | Canvas | This app |
+|---|---|---|
+| Page size | `PageSize: 200` (`App.pa.yaml:1075`) | `PAGE_SIZE = 200` |
+| Pager hidden unless more than one page | `Visible: =If(TotalPages > 1, true, false)` (`:2109`) | `isPagerVisible` |
+| Row-count caption | `="Total Rows: " & TotalRows` (`:2254`) | `"Total Rows: N"`, verbatim |
+| Page caption | `$"Page: {Page} from {TotalPages}"` (`:2186`) | `"Page: X from Y"`, verbatim |
+| First / Previous gate | `If(Page > 1, Edit, Disabled)` (`:2127`, `:2161`) | `disabled={currentPage <= 1}` |
+| Button set | First, Previous, Next — **no Last page** | identical three |
+| Empty list | `RoundUp(0/size,0) + If(total=0,1,0)` = 1 | `totalPages(0) === 1` |
+
+The port also **adds** a guard the canvas lacks: every pager button is disabled while a fetch is
+in flight, so a double-click cannot queue two page changes.
+
+### 12. Remediation state at the time of writing — **uncommitted and unapproved**
+
+Four agents were editing code in parallel while this entry was written. What was **verified
+present in the working tree**, not merely planned:
+
+- **P-4 and P-5: fixed** in `data/client.ts`. `maxPages` is honoured with a default cap, the
+  cache key is `` `${tableName}|${signature}` ``, and `CountedPage` gained a `limited` flag that
+  is true only when the walk stopped at the cap rather than at the end of the data.
+- **P-1: both halves present.** `invalidatePageTokens(tableName)` is exported from
+  `data/client.ts`, and `data/projects.ts:219` calls it from `deleteProject`.
+- **P-2: unchanged behaviour** — `Screen.tsx:1102` still gates on `hasNext`; the proposed change
+  is a marker and a decision, not a code change.
+- **P-3: comment only** — the behaviour is deliberately left alone pending §3's decision.
+- **P-6: no fix attempted**, by design.
+- **P-9: fixed** in `data/client.ts` — the walk now starts at the furthest cached index instead of
+  always re-fetching page 1.
+- **P-10: fixed** in `data/projects.ts:118` — `wantsTail` now also requires `!named.limited`.
+
+None of this is committed. None of it is approved. A reviewer approving D41 is approving both the
+decisions **and** the code already sitting in the tree against them.
+
+**One sequencing constraint binds two of these items.** P-1 and P-9 must be accepted or rejected
+**together** (§9). P-9 removes an accidental mitigation that was masking P-1; keeping P-9 while
+reverting P-1 is strictly worse than the state before this wave.
+
+### 13. What the product owner is being asked
+
+1. **P-3.** Out-of-range page: reproduce the canvas and snap to **page 1**, or keep showing the
+   **last** page and rewrite the URL so a shared link stops re-walking?
+2. **P-2.** Accept that the page label and the Next button can disagree above 5,000 rows, or pay
+   a full walk to make `totalPages` token-derived as well?
+3. **P-6.** Accept two queries per page view, or cache the tail count per signature?
+4. **P-8.** Restore the three canvas tooltips?
+5. **P-1, P-4, P-5, P-9, P-10.** Engineering fixes needing review rather than a product decision
+   — but **P-1's symptom is unconfirmed**, and the live check described in §1 is owed before it is
+   written up as fact anywhere. Note the constraint in §12: **P-1 and P-9 must be decided
+   together.**
+
+### 14. Two items outside pagination, surfaced here because nothing else records them
+
+Neither belongs to this analysis; both are recorded because they would otherwise stay invisible.
+
+**14a · The 26 Oct DEV push has no decision entry.** `D37` covers the 22 Oct push and `D40` the
+23 Oct one. A third push went to VSBCloud_Dev on **26 Oct from commit `310c229`**, with checklist
+**step 5 (the live smoke test) waived for the third consecutive time** and **step 1 (`npm ci`)
+skipped with a recorded reason**. `CONVENTIONS.md` ("Before pushing to DEV") requires a waived
+step to be written down with its reason; no entry exists. That push also carried a 614-line
+rewrite of the OPEX screen that no one has clicked through against live data. **An entry is owed**
+— deliberately not written here, since it is not a pagination decision.
+
+**14b · Duplicate `UT-` test ids in the Project Overview suites — Low.** `CONVENTIONS.md` rule 13
+requires one id per `it()`, kept stable, so a failure points at a specific documented case.
+**Eleven ids are duplicated** across the two Project Overview test files, as read on 26 Oct:
+
+| Id | Occurrences |
+|---|---|
+| `UT-OV-057` | **4×** — `rules.test.ts:415`, `:536`; `Screen.test.tsx:420`, `:517` |
+| `UT-OVUI-003` | **3×** — `Screen.test.tsx:332`, `:344`, `:351` |
+| `UT-OV-049` | 2× **across files** — `rules.test.ts:468`; `Screen.test.tsx:89` |
+| `UT-OV-054` / `055` / `056` / `058` | 2× each, within `rules.test.ts` |
+| `UT-OVUI-011` / `033` / `034` / `035` | 2× each, within `Screen.test.tsx` |
+
+**No gate catches this.** `check-control-labels` enforces unique `data-testid`s, not unique `UT-`
+ids, and `check-canvas-identities` checks canvas names. So the trace from "a documented rule" to
+"the test that pins it" — the entire point of rule 13 — is broken in eleven places with nothing
+reporting it.
+
+Line numbers are as-read on 26 Oct while `Screen.test.tsx` was being edited concurrently, so
+re-derive them before acting. **Proposed:** renumber the duplicates, and consider extending the
+label gate to assert `UT-` id uniqueness per file so this cannot silently recur.
+
+### 15. Amendment, 26 Oct 2026 (later) — paging never worked past page 1
+
+*Added after the product owner reported, running locally, that page 2 is blank and Next is then
+disabled. §1–§14 above are left as written; this section corrects what they assumed.*
+
+1. **P-11 supersedes D41's framing of the risk.** Every section above treats pages 2 and beyond as
+   *at risk* — of a stale token after a mutation (P-1), of an uncapped walk (P-4), of extra round
+   trips (P-6). In fact **the walk never advanced past page 1 at all**: `countedPage` sent `$top`
+   as its page size, so no paging cookie ever came back. Root cause, evidence and fix: **D42**.
+2. **P-6's cost figures assumed a working walk.** "At least two queries per page view" and "a cold
+   link to page 10 costs eleven requests" describe the walk as designed, not as it behaved. In the
+   field the walk stopped after the first request, so those figures were never incurred — they are
+   what the corrected walk will cost once D42's fix lands, and should be re-read in that light.
+3. **P-1 is being completed, not merely confirmed.** §12 recorded `deleteProject` as the only caller
+   of `invalidatePageTokens`. The evaluator (G6) then found **nine** `vsb_projects` write paths
+   that invalidate nothing — `features/pm/general-data/rules.ts:1713`, `:1910`, `:1936` (a
+   **create**), `:1962`, `:1973`; `features/pm/milestones/rules.ts:1407`, `:1426`;
+   `features/pm/checklist/rules.ts:1424`, `:1626` — all `entitySet: ES.projects`
+   (`"vsb_projects"`, `data/dataverseNames.ts:30`), all writing columns in `SORTABLE`. The fix is
+   being made centrally in `data/executePlan.ts` so every plan write to a table invalidates that
+   table's walk. See D42 §6.
+4. **The §12 constraint still holds and now binds three items.** P-1, P-9 and P-11 must be accepted
+   together: P-11 makes the walk real, P-9 makes it trust its cache, and P-1 is what keeps that
+   cache honest.
+
+---
+
+## D42 · Project Overview — page 2 blank, Next then disabled: root cause (26 Oct 2026) — PROPOSED
+
+The root-cause record for a defect the product owner reported against a **local** run. Bug register:
+`01-BUGS-FOUND.md` **CA-2**. It follows D41, which analysed the same pagination machinery without
+having seen this symptom.
+
+**Nothing in D42 is decided.** Every item is *proposed, awaiting the product owner*. Code
+implementing the fix was being written by other agents while this entry was drafted; §8 records
+only what was observed in progress, not what was verified. **Being in the tree is not approval.**
+
+### 1. The report
+
+Running locally against `VSBCloud_Dev`, on the Main Project Overview:
+
+| # | Observation |
+|---|---|
+| 1 | On **page 1**, the Next button is **enabled** |
+| 2 | On **page 2**, the project list is **blank** |
+| 3 | On **page 2**, Next (to page 3) is **disabled** |
+
+### 2. Root cause — P-11 · `countedPage` sent the page size as `$top` — **High**
+
+`countedPage` (`data/client.ts`) passes the caller's page size to the SDK as `top`. In the deployed
+build the request is `compact({ ...query, count: true, skipToken: tokens[index] })`
+(`310c229:ProjectCosts-CodeApp/src/data/client.ts:190`), where `query` carries `top`, and
+`loadProjectPage` supplies `top: pageSize` (`data/projects.ts:94`) — 200, from `PAGE_SIZE`.
+
+The SDK (`@microsoft/power-apps` **1.3.1**) then does two separate things with one request:
+
+- `convertOptionsToQueryString` writes `top` as **`$top=200`** in the URL
+  (`node_modules/@microsoft/power-apps/dist/internal/data/core/data/executors/shared/stringQueryOptions.js:28`);
+- `retrieveMultipleRecordsAsync` destructures `const { maxPageSize = 500, ...rest } = options` and
+  **always** sends **`Prefer: odata.maxpagesize=500`**
+  (`…/executors/dataverseDataOperationExecutor.js:231`, `:234`) — `countedPage` never passed
+  `maxPageSize`, so the SDK's default applied.
+
+In the Dataverse Web API those mean different things. **`odata.maxpagesize` is the page size**;
+**`$top` caps the entire result set**. With the result set capped at 200 there is nothing further to
+page, so the response carries no `@odata.nextLink`, and the SDK's `extractSkipToken` returns
+`undefined` (`dataverseDataOperationExecutor.js:245`). `countedPage`'s walk loop —
+`while (index + 1 < wanted && current.next)` — therefore **never runs**. Every request reports
+`page: 1` and `hasNext: false` for the named segment, whatever page was asked for.
+
+### 3. How that produced each observation
+
+`loadProjectPage` serves the list as two segments — projects with a value in the sorted column
+(the **named** segment), then projects without one (the **blank** segment) — and infers where the
+first ends from the walk. Line numbers are the working tree's:
+
+1. **Page 1 — Next enabled.** The named segment returns its first 200 rows and no token, so
+   `named.hasNext` is `false`. The blank segment is probed with `top: 1` (`projects.ts:136`).
+   `hasNext = servesTail ? blank.hasNext : named.hasNext || blank.totalRows > 0` (`:158`) — so Next
+   is enabled **only because at least one project has no value in the sorted column**, not because
+   a second named page was ever reachable.
+2. **Page 2 — blank.** The walk cannot advance, so `named.page` is 1 against `wanted = 2`.
+   `wantsTail = named.page < wanted && !named.limited` (`:118`) is `true`; the blank segment is
+   fetched as its own page 1 (`page: wanted - named.page`); and `servesTail = wantsTail &&
+   blank.totalRows > 0` (`:148`) serves **it** as page 2 — the projects with an empty value in the
+   sorted column. The second named page, rows 201–400, is never requested.
+3. **Page 2 — Next disabled.** On the served tail `hasNext` is `blank.hasNext`, and that request
+   also carried `$top`, so it too came back without a cookie.
+
+**One open discriminator — record it for the live check.** "Blank" in the report fits two server
+behaviours, and the user's wording does not separate them:
+
+| Variant | What Dataverse does | Page 2 shows | Consistent with the report when… |
+|---|---|---|---|
+| **A — cookie suppressed** | `$top` returns ≤200 rows and no `@odata.nextLink` | the **blank segment**: rows whose Project Name (the default sort column) is empty | the blank segment is **non-empty** (that is what lit Next on page 1) |
+| **B — empty on cookie** | page 1 returns a cookie, but a request carrying both `$top` and the cookie returns **zero rows** | **zero rows** | the blank segment is **empty** (otherwise `named.hasNext \|\| blank.totalRows > 0` would re-enable Next on page 2) |
+
+The two are told apart by **whether page 2 shows rows with an empty Project Name, or no rows at all**.
+§7's fix removes `$top` from the request and so covers both; the discriminator matters only for the
+record.
+
+A third reading — that Dataverse **ignores** `$top` when the page-size header is present, which is
+how `09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md:101` (§8) phrased a related problem — would have
+returned pages of 500 with a cookie and paged correctly. **Taken literally it does not produce this
+symptom**, so it is not the mechanism here; it is cited below as precedent for the class of bug, not
+as the explanation.
+
+### 4. Pre-existing — not introduced by the 26 Oct wave
+
+The deployed build, `310c229`, issues the identical request (`310c229:…/client.ts:190`, no
+`maxPageSize` in `countedPage`) and supplies the same `top: pageSize` (`310c229:…/projects.ts:94`).
+**The DEV app has this bug too.** The 26 Oct pagination wave (D41) did not cause it — though P-9
+changed how the cache is trusted, which is why D41 §15 binds P-9 and P-11 together.
+
+### 5. Why roughly 3,935 green tests never saw it
+
+**This is the most important lesson in this entry.** Every test on this path drives a fake SDK, and
+every fake returns whatever `skipToken` the test hands it. None modelled what Dataverse does with
+`$top`. The defect therefore lived entirely in the gap between the **SDK's contract** (pass `top`,
+get rows and maybe a token) and the **server's semantics** (`$top` and paging cookies do not
+coexist) — the one place a mocked suite cannot see, however large it is.
+
+Per the hand-off from agent G1, its original `UT-PAGE-011` asserted that `top` was **forwarded** to
+the SDK — i.e. it pinned the defective wire behaviour as correct. That version was uncommitted and
+has since been rewritten, so it cannot be cited from disk. It is the third test in this project
+found asserting the defect it should have caught (after `UT-CAPEXR-109/110/111/113` and two cases
+in `capex-costs/Screen.test.tsx`; D39).
+
+A regression test that would have caught it has to make the fake **behave like Dataverse** — return
+no cookie, or no rows, whenever `$top` accompanies a paged read — rather than echo the test's input.
+
+### 6. A second, related defect — page tokens survive project edits
+
+D41 §1 (P-1) found that page tokens are invalidated only by `deleteProject`. The evaluator (G6) has
+since found **nine** `vsb_projects` writes that invalidate nothing — Add Project and every update
+that touches a column in `SORTABLE` (listed in D41 §15). A token minted against an older row set can
+point past the end of the current one, and Dataverse answers that with an **empty page** — the same
+symptom as §1, but only after an edit between page views. It is **not** what the product owner hit
+on a fresh load; it would hit them next, once §2 is fixed and the walk starts using its tokens.
+
+The fix is being made **centrally**: `data/executePlan.ts` invalidates a table's page tokens after
+any successful plan write to it, so every current and future writer is covered rather than nine
+call sites patched by hand.
+
+### 7. The fix — P-11
+
+`countedPage` stops sending `$top` and passes the page size as `maxPageSize` instead, so the SDK's
+`Prefer: odata.maxpagesize` header carries it and Dataverse returns `@odata.nextLink` whenever more
+rows exist. This is the pattern already used by `fetchAll` in the same file — `maxPageSize:
+DEFAULT_PAGE_SIZE` with no `$top` (`310c229:…/client.ts:62`, `:92`) — which
+`09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md:101` counts at about 40 call sites. That same §8 line
+records the central `$top` fix as **deliberately not ported** from `RounakDev1`, which is the closest
+the repository came to recording this risk before it surfaced.
+
+The `CountedPageRequest.top` field already documents itself as "Rows per page"; only its mapping to
+the wire was wrong.
+
+### 8. Remediation state at the time of writing — **in progress, unverified, uncommitted**
+
+- **P-11:** being applied in `data/client.ts` by agent F1. Observed in progress: `UT-PAGE-011` in
+  `data/client.countedPage.test.ts` has been rewritten to assert that the page size travels as
+  `maxPageSize`, not `top`.
+- **§6:** being applied in `data/executePlan.ts` by agent F3.
+- **Verification:** owed to the evaluator, against a fake server that models Dataverse's `$top`
+  behaviour (§5), not one that echoes the test's tokens.
+
+None of this is committed or approved.
+
+### 9. What remains unverified
+
+- **No live run.** Nothing here has been exercised against `VSBCloud_Dev`. The fix is derived from
+  the SDK source and documented Dataverse semantics.
+- **Which variant (§3, A or B)** Dataverse exhibits is unsettled. The fix covers both.
+- **The live check**: on a fresh load, page 1 should show 200 rows with Next enabled, page 2 should
+  show the **next 200 named projects** (not empty-name rows, not nothing), and Next should stay
+  enabled until the last page. Then edit a project's name and page again, to confirm §6.
+
+### 10. What the product owner is being asked
+
+1. Approve **P-11**'s fix — an engineering correction with no canvas counterpart and no product
+   choice in it.
+2. Approve **§6**'s central invalidation, completing D41's P-1.
+3. Note that **P-1, P-9 and P-11 stand or fall together** (D41 §15).
+4. Commission the **live check** in §9 before either is called fixed — this is the defect class
+   (`MIGRATION-STRATEGY.md` step 9) that only a real environment confirms.
+
+---
+
+## D43 · Project Overview — next-page performance (26 Oct 2026) — all items PROPOSED
+
+The product owner reported that the next page of the Main Project Overview **took a long time to
+load**. This entry records why, and four changes made to shorten it. It builds on D41 (the walk) and
+D42 (P-11, the walk made real); with P-11 fixed, the walk's costs that D41 §6 and §9 predicted are
+now actually incurred, and this is the answer to them.
+
+**Nothing in D43 is decided.** Every item is *proposed, awaiting the product owner*. All four
+changes are **in the working tree and covered by tests**, uncommitted. **Being in the tree is not
+approval.**
+
+### 1. What each Next click waited for
+
+| # | Cost | Where |
+|---|---|---|
+| 1 | **Two sequential round trips**: the named-segment read, then the blank-segment probe | `data/projects.ts` `loadProjectPage` |
+| 2 | A fresh **`$count`** on every request, not just the first | `data/client.ts` `countedPage` |
+| 3 | **No prefetch** — page N+1 was not requested until Next was clicked | `features/pm/project-main/hooks.ts` |
+| 4 | A **re-render of all 200 rows** on every `isFetching` change and on every row selection | `features/pm/project-main/Screen.tsx` |
+
+None of these has a canvas counterpart: the canvas pages a local collection
+(`Project Main Screen.pa.yaml:1605`), so its Next is a client-side slice. These are costs of the
+server-side paging this app had to invent (D41 preamble).
+
+### 2. Change 1 · `countedPage` requests `@odata.count` only once per walk
+
+`@odata.count` is requested only while the total for the key `` `${table}|${signature}` `` is
+**unknown** — in practice, the first request of a walk. The total is cached beside the skip tokens
+under the same key, and cleared with them by `invalidatePageTokens` / `resetPageTokens`. The
+`rows.length` fallback (used when the server returns no count) is **never** cached, so a missing
+count is asked for again rather than frozen.
+
+**Trade-off.** A row added by **another user** is not reflected in the total until the key changes
+(filter, sort or page size) or a write in this tab invalidates it (D42 §6). That is the same
+staleness rule the skip tokens already follow, so the total and the tokens go stale and refresh
+together rather than disagreeing with each other.
+
+The evaluator found two more forms of the same staleness:
+- **Edit Project** opens a new tab, so a save there does not clear the Overview tab's cache.
+- A **window-focus refetch** reuses the cached total, where before D43 it re-counted.
+
+D44 (b) corrects an overstated total once the user reaches the real last page. An understated tail
+count of 0 from the probe can still leave Next off on the last named page until the cache is
+cleared. A reload clears every case.
+
+Tests: **UT-PAGE-015..018**. **UT-PAGE-011**'s title was corrected to describe what it asserts.
+
+### 3. Change 2 · `loadProjectPage` runs the blank probe concurrently
+
+The blank-segment probe now runs **concurrently** with the named read (`Promise.all`), saving one
+round trip of waiting on every page view. The real tail read — the one that serves blank rows —
+stays **sequential**, because it depends on where the named segment ended; only the last pages need
+it.
+
+**Side effect.** A tail page now makes **three** reads instead of two: the probe runs before it is
+known whether the tail is wanted. That is the price of not waiting for the named read on every other
+page.
+
+Tests: **UT-PROJPAGE-026..031** — the two reads overlap, the results are unchanged, and an error in
+either read propagates with no unhandled rejection.
+
+### 4. Change 3 · `hooks.ts` prefetches page N+1
+
+- Once page N has **its own** data (not a placeholder) and `hasNext` is true, page N+1 is
+  prefetched. The prefetch and the visible query share **one key builder** (`projectPageKey` /
+  `projectPageOptions`) and the **debounced** filter, so a prefetched page is exactly the page Next
+  will ask for.
+- It reaches **one page ahead only**, respects `staleTime` 30 s, and uses `qc.query` —
+  `prefetchQuery` is deprecated in TanStack Query v5.102.
+- A Next click while that prefetch is still in flight **joins** the in-flight request rather than
+  sending a second one.
+- Previous was already instant from the cache (`gcTime` is the 5 min default); nothing changed there.
+
+Tests: **UT-OVUI-042..045**. **UT-OVUI-003** now reads the **first** request (a prefetch follows
+it), and **UT-OVUI-040** was reworked to gate page 4's prefetch.
+
+### 5. Change 4 · `Screen.tsx` memoises the grid rows
+
+`ProjectGridRow` is wrapped in `React.memo` and receives a **stable** `onSelect` (`setSelectedId`).
+Selecting a row now re-renders one or two rows — the old selection and the new — not all 200
+(**UT-OVUI-046**). No `aria-label` or `data-testid` changed, so the label and canvas-identity gates
+are unaffected.
+
+### 6. Unchanged — `PAGE_SIZE` stays at 200
+
+A smaller page would load faster, but `PageSize: 200` is the canvas's (`App.pa.yaml:1075`; D41
+§11). It is kept for parity.
+
+### 7. Rejected — load the whole table client-side
+
+Loading every project into the client, as the canvas does, would make Next instant as well. It is
+**rejected**: it breaks `CONVENTIONS.md` rule 2 ("Never materialise a table to filter it"), which
+exists precisely because the canvas's `ClearCollect` capped the old app at 2,000 rows with no
+warning.
+
+### 8. What remains unverified
+
+- **End-to-end timing in `VSBCloud_Dev` has not been measured.** The tests prove the **request
+  counts and their overlap**, not the wall-clock gain. Whether the next page now *feels* fast is
+  owed to a live run.
+
+### 9. What the product owner is being asked
+
+1. Approve the four changes, all engineering changes with no canvas counterpart.
+2. Accept **change 1's** trade-off: another user's new project is not counted until the filter,
+   sort or page size changes, or this tab writes.
+3. Accept **change 2's** side effect: a tail page costs three reads instead of two.
+4. Confirm `PAGE_SIZE` stays at 200, and that loading the whole table stays rejected.
+5. Commission the live timing check in §8.
+
+---
+
+## D44 · Project Overview — "page 6 of 7", Next disabled (26 Oct 2026) — PROPOSED
+
+Seen by the user **live in `VSBCloud_Dev`**: the pager reads **page 6 of 7** and Next is
+**disabled**, so page 7 cannot be reached. Bug register: `01-BUGS-FOUND.md` **CA-3**.
+
+**Nothing in D44 is decided.** The item is *proposed, awaiting the product owner*. The fix is in
+`data/projects.ts` (uncommitted); §3 was checked against that code on 26 Oct. **Being in the tree
+is not approval.**
+
+### 1. Mechanism — the two halves of the pager read different sources
+
+- **`totalPages`** comes from `@odata.count`: `max(named.page, ceil(count / pageSize))`.
+- **Next** comes from the skip-token walk: `named.hasNext || blank.totalRows > 0`.
+
+"Page 6 of 7" with Next disabled therefore means **the walk returned fewer rows than the count
+said exist**. This is the disagreement D41 §2 (P-2) predicted only above the 5,000-row cap; here it
+appears well below it.
+
+### 2. Likely root cause — a non-unique `$orderby`
+
+`$orderby` was the sort column alone — by default `vsb_projectname`, which is **not unique**. The
+Dataverse paging cookie continues from the last row's sort value, and Microsoft documents that
+ordering on a non-unique column can **skip or repeat rows across pages**. Rows skipped at the page
+boundaries shorten the walk, so it ends before the count says it should.
+
+### 3. Fix
+
+- **(a)** Add **`vsb_projectid asc`** as a unique tie-breaker to `$orderby` on **both** segments
+  (named and blank). The visible order is unchanged: the tie-breaker only orders rows that share a
+  sort value.
+- **(b)** Once the walk has reached the **end of the data**, `totalPages` uses the walk's page count
+  rather than the count, so the pager can never promise a page it cannot reach. This applies to the
+  named segment (`!named.hasNext && !named.limited`) and to the tail's real last page
+  (`servesTail && !blank.hasNext && !blank.limited`). In the middle of either walk the count still
+  decides, so a stale count can still overstate pages not yet reached. `totalPages` is also never
+  below the page being served.
+
+**Supersedes part of D41.** D41 recorded as a DIVERGENCE that the label kept the count-derived total
+(e.g. "Page: 25 from 26") while Next was already disabled. Fix (b) removes that state on purpose;
+`UT-OVUI-038` now pins the new rule.
+
+**SOURCE DEFECT, code-app only.** The canvas pages a local collection
+(`Project Main Screen.pa.yaml:1605`), so there is no canvas parity to keep and no `…CanvasParity`
+twin to write.
+
+Tests (`data/projects.page.test.ts`), using a fake that mimics the paging cookie by resuming
+strictly after the last row's order values:
+- **UT-PROJPAGE-032**: reproduces "page 6 of 7, no Next" with duplicate names at the seams. With the
+  fix it reaches page 7 and every row appears exactly once.
+- **033**: the same for the blank tail, with duplicate `vsb_name`s.
+- **034**: the tie-breaker is in both `$orderby`s, in both sort directions.
+- **035–038**: the page count agrees with the walk, the count is still used mid-walk, and `totalPages`
+  never falls below the page served.
+- **039**: the same rule on the tail.
+
+Existing tests changed:
+- for the tie-breaker: `UT-PROJPAGE-011` and `UT-OVUI-003/006/017`;
+- for fix (b): `UT-OVUI-005/011b/019/038/044`. Their fake now hands back a skip token wherever its
+  count promises more pages (`tokenPages`). `UT-OVUI-038` now pins the new rule.
+
+Each part was reverted in turn to confirm its tests go red: the tie-breaker (011, 032–034), the
+walk-derived count (035, 036, 039) and the page floor (038). The evaluator found that 038 did not
+protect the floor at first, because its fake tail had already ended. It was corrected on 26 Oct
+and now fails with the floor removed.
+
+### 3a. Related edge cases found, not fixed
+
+1. If the probe's count says a tail exists but the tail read comes back empty, Next stays lit on
+   the last named page and a click serves that same page again.
+2. If a cached token leads to an empty page (another user deleted rows), the grid shows
+   "N+1 of N+1" with no rows.
+3. If the sort column is blank on every row, page 1 is empty with Next lit, and the projects start
+   on page 2.
+
+### 4. Not yet confirmed
+
+- Whether the live data really has **duplicate names at page boundaries**. The root cause in §2 is
+  the documented behaviour that fits the symptom, not an observation of the data.
+- **The live check:** after restarting the local servers (`npm run dev` and `pac code run`), page 7
+  should appear and be reachable with Next. The user should confirm this.
+  > **Superseded 26 Oct 2026 by D45.** The user then compared the published canvas, which shows
+  > **6** pages for the same list. The "7" was itself wrong: each segment was rounded up
+  > separately. The live check is now: the code app shows the same page count as the canvas, and
+  > the last page is reachable with Next.
+
+### 5. Unaffected
+
+The earlier fixes — D41 (P-1, P-4, P-5, P-9, P-10) and D42 (P-11, and the central invalidation in
+§6) — are unaffected. D44 changes only the ordering and the `totalPages` source once the walk has
+ended.
+
+### 6. What the product owner is being asked
+
+1. Approve fix (a), the unique tie-breaker, and fix (b), the walk-derived `totalPages` at the end of
+   the data.
+2. Confirm on a live run that page 7 now appears. *(Superseded by D45: confirm the page count
+   matches the canvas.)*
+
+## D45 · Project Overview — page count differs from the canvas (6 vs 7) (26 Oct 2026) — PROPOSED
+
+The user reported it: the published canvas shows **6** pages for the project list, while the local
+code app showed **7**. **Nothing in D45 is decided.** The item is *proposed, awaiting the product
+owner*. The fix is uncommitted. **Being in the tree is not approval.**
+
+### 1. The canvas, the ground truth
+
+`Project Main Screen.pa.yaml` L1605 (Apply `OnSelect`), mirrored by `App.pa.yaml` L1082-1114:
+- `ClearCollect(colFilteredProjects, <filtered Projects>)` puts every row into one collection;
+- `TotalRows = CountRows(colFilteredProjects)`;
+- `TotalPages = RoundUp(TotalRows / PageSize, 0) + If(TotalRows = 0, 1, 0)`, with `PageSize = 200`.
+
+Every page holds 200 rows from that one continuous collection.
+
+### 2. Functional gaps found
+
+| # | Gap | Effect | Status |
+|---|---|---|---|
+| G1 | The code app served named rows and blank (no sort value) rows as two segments and rounded each up separately: `ceil(N/200) + ceil(B/200)`. The tail always started on a fresh page. | Up to **one extra page** whenever both segments are non-empty and N is not a multiple of 200. For example 1,100 + 50 gives 7, where the canvas gives 6. Every row after the boundary sat on a different page from the canvas. | **Fixed** (§3) |
+| G2 | The code app always filters `statecode eq 0` (`data/projects.ts`, `ACTIVE`). The canvas `Filter(Projects, …)` has no state condition, so it lists **inactive projects too**. | The code app's Total Rows and page count are **lower** than the canvas by the number of inactive projects that match. This was not marked and had no decision. | **Open, product question** (§5) |
+| G3 | The canvas collection is capped at 2,000 rows (`Properties.json` `DefaultConnectedDataSourceMaxGetRowsCount: 2000`). | Above 2,000 matching projects the canvas shows at most 10 pages and Total Rows of 2,000. The code app shows the true figure. | **Deliberate** (CONVENTIONS rule 2) |
+| G4 | The canvas matches Country, Area and Cluster State by **name** (`Country.Country = …`, `'Area/State/Province'.Name = …`, `'Cluster State'.'Project State' = …`). The code app matches by **id**. | The results differ only if two records share a name, in which case the canvas matches both. | Recorded; no change proposed |
+| G5 | A page past the end goes to page 1 in the canvas and to the last page in the code app (D41 P-3). | — | Still open in D41 |
+
+G1 is the only gap that makes the code app count **more** pages than the canvas, so it is the cause of
+the 6 against 7 the user saw. G2 pulls the other way. If that list includes inactive projects, the
+two apps can still disagree after the fix.
+
+### 3. Fix for G1 (`data/projects.ts`)
+
+`loadProjectPage` now pages **one continuous sequence**, `named ++ blank`. Page k holds rows
+`[(k−1)·200, k·200)`, and `totalPages = RoundUp(totalRows / 200)`, which reuses the existing
+`totalPages` from `features/pm/project-main/rules.ts` rather than copying it.
+
+- **The named/blank order is unchanged.** The visible order of rows is unchanged; only the page
+  boundaries move.
+- **The boundary.** The page where the named rows end carries the last named rows, followed by
+  the first blank rows. N is read exactly from the walk, never from `@odata.count` alone, because
+  that count is capped at 5,000 and is cached under D43.
+- **Tail pages.** These are sliced from the 0-aligned blank pages: at most two blank reads, with
+  repeat reads served from the token cache.
+- **D44 rules are kept.** These are the tie-breaker, the end-of-walk page count and the page floor.
+  A walk stopped at the cap (`limited`) never serves tail rows.
+- **Read costs.** A named-only page costs 2 reads (unchanged). The boundary page costs 3. A tail
+  page costs 3, or 4 when it spans two aligned blank pages. The page *after* the current one is
+  still prefetched (D43), so a Next click does not wait on these reads.
+- **Side effect.** Once the walk has reached the end, Total Rows is the walk's exact figure. On
+  the last pages the label can therefore drop from a stale count to the true number.
+
+Marked `SOURCE DEFECT:` in `projects.ts`, citing the canvas lines.
+
+**Tests.**
+- `UT-PROJPAGE-040..054` are new:
+  - the pure helpers `pageWindow` and `rowsBeforeEnd`;
+  - the user's case (1,100 + 50 at 200 gives 6 pages; page 6 is 100 named + 50 blank);
+  - every row seen exactly once in order across Next;
+  - 20/0, 20/5, 0/12 and 0/0;
+  - a tail spanning two aligned pages;
+  - `hasNext` on every boundary;
+  - request counts, clamping and `limited`.
+- Existing tests were updated to the canvas arithmetic: 001, 003–006, 009, 010, 014, 019, 025, 027,
+  028, 033, 036, 038, 039, and `UT-OVUI-019/020`.
+- With the old `namedPages + blankPages` arithmetic restored, 19 tests in `projects.page.test.ts`
+  and `UT-OVUI-019` go red.
+
+This supersedes D44 §4's expectation of a page 7, and D43's note that a probe count of 0 could hide
+the tail: the probe's row, not only its count, now proves a tail exists.
+
+### 3b. Evaluator follow-ups, fixed 26 Oct
+
+An independent evaluator ran a property check of the real `loadProjectPage` against a fake that
+behaves like Dataverse. It covered P = 3, 5 and 10, with N and B each from 0 to 25: 2,704 cases and
+35,724 page views, every one walked with Next and every page also opened by deep link. It found
+**0 failures** against the canvas arithmetic. It then raised two edge cases, now fixed:
+
+- **C1, the pager could get stuck.**
+  - A stale cached tail count above 0, after the last blank project was named or deleted elsewhere,
+    lit Next on an exact-fit last named page.
+  - The next page then clamped back, with Next still lit.
+  - Only the probe's **row**, which is fetched fresh, now proves a tail exists. Test:
+    `UT-PROJPAGE-055`.
+- **C2, the pager could hide a Next that existed.**
+  - With a stale or capped count, page 1 could read "1 from 1" while Next existed, and the pager
+    (`TotalPages > 1`) was then hidden.
+  - While Next is lit, `totalPages` is now at least `page + 1`. Test: `UT-PROJPAGE-056`.
+  - `UT-PROJPAGE-038` now expects 6, not 5.
+
+Each fix was reverted to confirm its test goes red. Two smaller fixes went in with them:
+- the paging loops in the tests are now bounded by passes, so a regression fails the test instead
+  of hanging the worker;
+- the `hooks.ts` prefetch comment now gives the real cost per page view.
+
+Still open, existing staleness: an empty page behind a stale token (another user deleted rows)
+shows an empty grid with an overstated Total Rows, until a reload.
+
+### 4. Not yet confirmed
+
+The live comparison: with the same filter, the code app should show the same page count and Total
+Rows as the canvas. If it still differs, G2 (inactive projects) is the first thing to check.
+
+### 5. What the product owner is being asked
+
+1. Approve the G1 fix: continuous pages, and the canvas page count.
+2. **Decide G2**: should the Project Overview list inactive projects, as the canvas does? If yes,
+   drop `ACTIVE` from the overview query, and mark it with a test. If no, mark the current filter
+   `DIVERGENCE:` and keep it.

@@ -800,3 +800,46 @@ describe("the SPO notifications", () => {
     expect(SPO_MSG.noTeams).toBe("For this Project, No Teams channel is available.");
   });
 });
+
+/* ──────────────────────────────────── clampPage's real contract (P-3) ──── */
+
+describe("clampPage, as it actually behaves", () => {
+  it("UT-OV-092 passes an in-range page through unchanged", () => {
+    expect(clampPage(1, 1129, 200)).toBe(1);
+    expect(clampPage(3, 1129, 200)).toBe(3);
+    expect(clampPage(6, 1129, 200)).toBe(6);
+  });
+
+  it("UT-OV-093 returns 1 for a page beyond the last one", () => {
+    // What the function does. DIVERGENCE: the canvas `adjustedPage` navigates to page 1;
+    // this app renders the last page, because Screen.tsx hands pagerLabels the SERVED page,
+    // already clamped by countedPage. The branch below is unreachable through the UI.
+    expect(clampPage(7, 1129, 200)).toBe(1);
+    expect(clampPage(999, 1129, 200)).toBe(1);
+  });
+
+  it("UT-OV-094 returns 1 for a non-finite or sub-1 page", () => {
+    expect(clampPage(0, 1129, 200)).toBe(1);
+    expect(clampPage(-4, 1129, 200)).toBe(1);
+    expect(clampPage(Number.NaN, 1129, 200)).toBe(1);
+    expect(clampPage(Number.POSITIVE_INFINITY, 1129, 200)).toBe(1);
+  });
+
+  it("UT-OV-095 reports one page for an empty list, so the footer reads 'from 1'", () => {
+    // `RoundUp(0 / size, 0) + If(total = 0, 1, 0)` — never 0.
+    expect(totalPages(0)).toBe(1);
+    expect(totalPages(0, 200)).toBe(1);
+    expect(clampPage(1, 0, 200)).toBe(1);
+  });
+
+  it("UT-OV-096 renders the canvas footer wording through pagerLabels", () => {
+    expect(pagerLabels({ page: 6, pageSize: 200, totalRows: 1129 })).toEqual({
+      totalRows: "Total Rows: 1129",
+      page: "Page: 6 from 6",
+    });
+    expect(pagerLabels({ page: 1, pageSize: 200, totalRows: 0 })).toEqual({
+      totalRows: "Total Rows: 0",
+      page: "Page: 1 from 1",
+    });
+  });
+});

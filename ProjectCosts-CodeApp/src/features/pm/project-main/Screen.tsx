@@ -31,7 +31,7 @@
  * Every caption, dialog title and notification on this screen is transcribed in `rules.ts`
  * with the canvas control it came from; none of them are written here.
  */
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { appTabUrl, projectAppUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import {
@@ -647,7 +647,9 @@ export default function ProjectOverviewScreen() {
     page: page?.page ?? criteria.page,
     pageSize: page?.pageSize ?? PAGE_SIZE,
     totalRows: page?.totalRows ?? 0,
-    // The two segments do not divide evenly, so the server counts the pages.
+    // `loadProjectPage` counts the pages: the canvas `RoundUp(TotalRows / PageSize)` over the two
+    // segments paged as one continuous sequence, or the walk's own answer once it has reached the
+    // end of the data (D44), which a count alone cannot give.
     ...(page?.totalPages === undefined ? {} : { totalPages: page.totalPages }),
   };
   const labels = pagerLabels(pagerState);
@@ -1040,7 +1042,9 @@ export default function ProjectOverviewScreen() {
                   row={row}
                   selected={row.id === selectedId}
                   alternate={index % 2 === 0}
-                  onSelect={() => setSelectedId(row.id)}
+                  // The state setter itself, which React keeps stable, so the memoised row is
+                  // not handed a new function on every render of the screen.
+                  onSelect={setSelectedId}
                   locale={locale}
                 />
               ))}
@@ -1066,7 +1070,14 @@ export default function ProjectOverviewScreen() {
               className={styles.iconButton}
               icon={<ArrowPreviousRegular />}
               aria-label="First page"
+              // `ico_Main_Project_Overview_Context_Pagination_FirstPage.Tooltip: ="Navigate to
+              // first page"` (Project Main Screen.pa.yaml:2139) — verbatim.
+              title="Navigate to first page"
               data-testid="ico_Main_Project_Overview_Context_Pagination_FirstPage"
+              // Canvas (line 2117):
+              //   `DisplayMode: =If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)`
+              // ported as-is; `|| pageQuery.isFetching` only stops a double-dispatch while the
+              // page this app actually fetches is in flight (the canvas pager is event-driven).
               disabled={currentPage <= 1 || pageQuery.isFetching}
               onClick={() => setPage(1)}
             />
@@ -1075,7 +1086,11 @@ export default function ProjectOverviewScreen() {
               className={styles.iconButton}
               icon={<ArrowLeftRegular />}
               aria-label="Previous page"
+              // `ico_Main_Project_Overview_Context_Pagination_PageLeft.Tooltip: ="Navigate to
+              // previous page"` (Project Main Screen.pa.yaml:2173) — verbatim.
+              title="Navigate to previous page"
               data-testid="ico_Main_Project_Overview_Context_Pagination_PageLeft"
+              // Canvas (line 2147): same `Page>1` gate as First Page, ported as-is.
               disabled={currentPage <= 1 || pageQuery.isFetching}
               onClick={() => setPage(currentPage - 1)}
             />
@@ -1085,9 +1100,47 @@ export default function ProjectOverviewScreen() {
               className={styles.iconButton}
               icon={<ArrowRightRegular />}
               aria-label="Next page"
+              // `ico_Main_Project_Overview_Context_Pagination_PageRight.Tooltip: ="Navigate to
+              // next page"` (Project Main Screen.pa.yaml:2226) — verbatim.
+              title="Navigate to next page"
               data-testid="ico_Main_Project_Overview_Context_Pagination_PageRight"
-              // Forward-only paging knows whether a next page exists from the server's token,
-              // which is more reliable than deriving it from a count the platform caps at 5000.
+              /*
+                DIVERGENCE: this app implements the canvas's COMMENTED-OUT formula, not its live
+                one — CONVENTIONS rule 10 in reverse, so it is marked here rather than left to
+                look like a porting slip.
+
+                `ico_Main_Project_Overview_Context_Pagination_PageRight.DisplayMode`
+                (Project Main Screen.pa.yaml:2191-2200) carries both:
+
+                  commented out (line 2192):
+                    //If(psf_MainScreen_DetailList_Container_FluentDetailsList.HasNextPage,
+                    //  DisplayMode.Edit,DisplayMode.Disabled)
+
+                  LIVE (lines 2193-2200):
+                    With(
+                        {varRecPage: First(colFiltersOverview)},
+                        If(
+                            varRecPage.Page < varRecPage.TotalPages,
+                            DisplayMode.Edit,
+                            DisplayMode.Disabled
+                        )
+                    )
+
+                The live formula derives "is there a next page" from TotalPages, which this app
+                computes from `@odata.count` — and the platform caps that count at 5000 rows. The
+                dead formula asks the grid whether the SERVER handed back a next-page token, which
+                is always the truth for forward-only paging. So the token wins: `page.hasNext`.
+
+                Consequence, and the reason this is recorded rather than silently "better" (D41):
+                `hasNext` is token-derived while `totalPages` starts out count-derived. Until
+                D44 that let the label read "Page: 25 from 26" (beyond the 5,000-row cap, or with
+                a count above what the walk really found) with Next already disabled. Since D44
+                `loadProjectPage` takes the page count from the walk once it has ended at the
+                data, and never lets it drop below the page served, so on the real last page the
+                label reads "Page: N from N" and Next is disabled. A count can still overstate the
+                pages not reached yet; the total corrects itself on arrival. See D41 and D44 in
+                `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`.
+              */
               disabled={!(page?.hasNext ?? false) || pageQuery.isFetching}
               onClick={() => setPage(currentPage + 1)}
             />
@@ -1226,21 +1279,31 @@ function ClearFilterButton({
   );
 }
 
-function ProjectGridRow({
+/**
+ * One grid row, memoised.
+ *
+ * Every prop is stable between renders of the screen: `row` keeps its identity through
+ * TanStack's structural sharing, `selected`/`alternate` are booleans, `locale` a string and
+ * `onSelect` the state setter. So a row re-renders only when its own data or selection changes,
+ * not each time `isFetching` flips or another row is picked — on a 200-row page that is the
+ * difference between one row and two hundred.
+ */
+const ProjectGridRow = memo(function ProjectGridRow({
   row, selected, alternate, onSelect, locale,
 }: {
   row: ProjectRow;
   selected: boolean;
   alternate: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
   locale: string;
 }) {
   const styles = useStyles();
   const decoration = approvalDecoration(row.approvalState);
+  const select = () => onSelect(row.id);
   return (
     <TableRow
       className={mergeClasses(alternate && styles.rowAlt, selected && styles.rowSelected)}
-      onClick={onSelect}
+      onClick={select}
       aria-selected={selected}
     >
       <TableCell className={styles.selectCell}>
@@ -1251,7 +1314,7 @@ function ProjectGridRow({
           className={styles.radio}
           name="selectedProject"
           checked={selected}
-          onChange={onSelect}
+          onChange={select}
           aria-label={`Select ${row.name}`}
           data-testid={`select-${row.id}`}
         />
@@ -1296,4 +1359,4 @@ function ProjectGridRow({
       </TableCell>
     </TableRow>
   );
-}
+});
