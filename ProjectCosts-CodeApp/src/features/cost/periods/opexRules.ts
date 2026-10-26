@@ -441,9 +441,11 @@ export interface OpexChain {
 /**
  * The order of the periods in a chain: `Start Date` ascending, `Name` only to break a tie.
  *
- * CORRECTED, SOURCE DEFECT O-5. The canvas orders a chain by `Name` alone wherever it asks for
+ * SOURCE DEFECT O-5. The canvas orders a chain by `Name` alone wherever it asks for
  * "the last period" (the Add Period and Delete gates, `:557-566`, `:2806-2821`, `:2905-2914`, and
- * the Other-OPEX row warning, `:2219-2259`). `Name` is text and is not the description the user
+ * the Other-OPEX row warning, `:2219-2259`). The two command gates were moved back to the canvas
+ * order on 26 Oct 2026 (`lastPeriodByName`); this order remains for the chain display and the
+ * warning icon. `Name` is text and is not the description the user
  * sees: `… - 10` sorts before `… - 2`, and rows whose `vsb_name` was written by a migration sort
  * apart from rows the app wrote. On the live "Initialized O&M Contract" chain that put `- 5` last,
  * so Add Period proposed a `- 6` that already existed and could never be saved. Every period
@@ -478,12 +480,9 @@ export function groupChains(costs: readonly OpexCost[]): OpexChain[] {
 }
 
 /**
- * `locLastPeriod` as the command bars compute it —
- * `Last(Sort(Filter(costs, 'Parent Cost' = firstPeriod …), Name, Ascending))` (`:557-566`,
- * `:2806-2821`, `:2905-2914`) — but in `byPeriodOrder`, i.e. the latest start date.
- *
- * SOURCE DEFECT O-5, CORRECTED (see `byPeriodOrder`): `Add Period` and `Delete` enable on the
- * period that actually comes last, which is not always the row the canvas picks.
+ * The chain's last period in `byPeriodOrder`, i.e. the latest start date — what the row warning
+ * icon reads. The `Add Period` and `Delete` gates do NOT use it: since 26 Oct 2026 they follow
+ * the canvas `Name` sort exactly, see `lastPeriodByName`.
  */
 export function lastPeriod(chain: OpexChain): OpexCost {
   return chain.periods[chain.periods.length - 1] ?? chain.root;
@@ -500,6 +499,33 @@ export function lastPeriodByStartDate(chain: OpexChain): OpexCost {
   return [...chain.periods].sort(
     (a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""),
   )[chain.periods.length - 1] ?? chain.root;
+}
+
+/**
+ * `locLastPeriod` exactly as the command bars compute it (`:557-566`, `:2793-2821`,
+ * `:2905-2914`):
+ *
+ *     locFirstPeriod: LookUp(costs, Or(id = selected.'Parent Cost',
+ *                                      And(IsBlank('Parent Cost'), id = selected)))
+ *     locLastPeriod:  Last(Sort(Filter(costs, Or('Parent Cost' = locFirstPeriod,
+ *                                               And(IsBlank('Parent Cost'), id = selected))),
+ *                               Name, SortOrder.Ascending))
+ *
+ * So the ROOT is a candidate only when it is itself the selection; a selected child is compared
+ * against its siblings alone. The sort is on `Name`, as text.
+ *
+ * SOURCE DEFECT O-5, REPRODUCED at the product owner's request (26 Oct 2026, "code app must
+ * behave like canvas"): `… - 10` sorts before `… - 2`, and a chain whose `vsb_name`s were written
+ * by a migration can put a middle period last. `lastPeriod` (period order) is still what the
+ * row warning icon and the duration badge use.
+ */
+export function lastPeriodByName(costs: readonly OpexCost[], selected: OpexCost): OpexCost | null {
+  const headId = selected.parentCostId ?? selected.id;
+  const candidates = costs.filter(
+    (c) => c.parentCostId === headId || (c.parentCostId === null && c.id === selected.id),
+  );
+  const sorted = [...candidates].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return sorted[sorted.length - 1] ?? null;
 }
 
 export function chainOf(chains: readonly OpexChain[], costId: string): OpexChain | null {
@@ -971,8 +997,8 @@ export function canAddPeriod(args: CommandArgs): boolean {
     if (selected === null) return cardCosts.length === 0;
     if (selectedScopeId !== cardScopeId) return false;
     if (selected.isStandardContract) return false;
-    const chain = chainOf(groupChains(cardCosts), selected.id);
-    return chain !== null && lastPeriod(chain).id === selected.id;
+    // The canvas `Name` sort (O-5 reproduced, see `lastPeriodByName`).
+    return lastPeriodByName(cardCosts, selected)?.id === selected.id;
   }
 
   if (selected === null) return false;
@@ -1093,13 +1119,10 @@ function deleteAllowedForRow(selected: OpexCost, cardCosts: readonly OpexCost[])
   const isRoot = selected.parentCostId === null;
   if (isStandardByDescription(selected)) return isRoot;
   if (isRoot) return true;
-  // `locLastPeriod` here filters CHILDREN only — `'Parent Cost' = locFirstPeriod` — so the root
-  // is deliberately excluded from the comparison (`:559-562`, `:2907-2910`). Period order, not
-  // the canvas `Name` sort (O-5, see `byPeriodOrder`).
-  const siblings = cardCosts
-    .filter((c) => c.parentCostId === selected.parentCostId)
-    .sort(byPeriodOrder);
-  return siblings[siblings.length - 1]?.id === selected.id;
+  // `locLastPeriod` for a CHILD filters its siblings only — the root is a candidate only when it
+  // is the selection, and roots returned above (`:559-562`, `:2907-2910`). The canvas `Name`
+  // sort (O-5 reproduced, see `lastPeriodByName`).
+  return lastPeriodByName(cardCosts, selected)?.id === selected.id;
 }
 
 export interface OpexCommandGates {

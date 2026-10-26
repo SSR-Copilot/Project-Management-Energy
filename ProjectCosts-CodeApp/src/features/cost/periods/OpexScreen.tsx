@@ -449,6 +449,12 @@ interface OpexCard {
    * WTG card the moment the header started showing a turbine type.
    */
   group: string;
+  /**
+   * O&M: the `vsb_devicetypesinproject` row id, which is also `id`. Two devices can share a
+   * `vsb_name`, so this — not `group` — is what rows are filtered by and saves bind to.
+   * Undefined for an orphan card whose device id is unknown.
+   */
+  deviceId?: string;
   /** The sub-account a save binds to: the O&M one, or the card itself in Other OPEX. */
   subaccount: OpexSubaccount;
 }
@@ -497,10 +503,13 @@ function aggregationUnion(value: number | null): CostPeriod["aggregation"] {
 /**
  * `CostPeriod` (the book's shape) → `OpexCost` (the rules' shape).
  *
- * `name` is REBUILT with `costName`, the canvas' own `vsb_name` composition
- * (`pcf_…_Save.OnChange`, `:8695`), because the book does not carry `vsb_name` and three rules
- * read it: `isStandardLocked`, and `lastPeriod` / `deleteAllowedForRow` to break a start-date tie.
- * Rebuilding it reproduces those three exactly rather than approximating them.
+ * `name` is the STORED `vsb_name` off the book. Three rules read it — `isStandardLocked` and the
+ * Add Period / Delete gates' `lastPeriodByName` — and the stored names do not follow one
+ * pattern: on the "Initialized O&M Contract" chain periods 1-5 are the bare description and
+ * period 6 is not, so by Name the canvas enables the commands on `- 5`. A rebuilt name (the
+ * previous approach) gave every row the same prefix and put `- 6` last. `costName` — the canvas'
+ * own composition (`pcf_…_Save.OnChange`, `:8695`) — is only the fallback for a row that has not
+ * been read back.
  *
  * The five money fields and the two threshold columns now come straight off the book: they are
  * NULLABLE there (an empty box stores `Blank()`, not 0, so `blankZero` is no longer needed for
@@ -516,7 +525,7 @@ function toOpexCost(
 ): OpexCost {
   return {
     id: period.id,
-    name: costName(
+    name: period.name ?? costName(
       {
         accountName,
         subaccountName: subaccount.name,
@@ -527,7 +536,8 @@ function toOpexCost(
     description: period.description,
     parentCostId: period.parentId ?? null,
     subaccountId: subaccount.id,
-    deviceTypeInProjectId: mode === "om" ? period.group : null,
+    // The device ROW id, as the card is keyed — see `OpexCard.deviceId`.
+    deviceTypeInProjectId: mode === "om" ? period.deviceId ?? period.group : null,
     startDate: period.startDate || null,
     durationYears: period.years,
     durationMonths: period.months,
@@ -730,18 +740,31 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     [mode, projectContext.isoCurrencyCode],
   );
 
+  /**
+   * The O&M device row a period belongs to: its own `deviceId`, else — for a period that has not
+   * been read back — the one device carrying its `group` name. A name two devices share resolves
+   * to neither, and the period stays on an orphan card rather than appearing under both.
+   */
+  const deviceIdOf = useMemo(() => {
+    const byName = new Map<string, string | null>();
+    for (const d of [...(deviceTypes.data?.[0] ?? []), ...(deviceTypes.data?.[1] ?? [])]) {
+      byName.set(d.name, byName.has(d.name) ? null : d.id);
+    }
+    return (p: CostPeriod): string => p.deviceId ?? byName.get(p.group) ?? p.group;
+  }, [deviceTypes.data]);
+
   /** `colOpexProjectCosts`, scoped to this rail item. */
   const allCosts = useMemo<OpexCost[]>(() => {
     if (!book || !subaccount || !account) return [];
     return book.periods
       .filter((p) => p.mode === mode)
       .map((p) => toOpexCost(
-        p,
+        mode === "om" ? { ...p, deviceId: deviceIdOf(p) } : p,
         mode,
         mode === "om" ? subaccount : subaccountFor(catalog.subaccounts, p.group, account),
         account.name,
       ));
-  }, [book, mode, subaccount, account, catalog.subaccounts]);
+  }, [book, mode, subaccount, account, catalog.subaccounts, deviceIdOf]);
 
   /** The book row behind each `OpexCost`, for the save/delete round trip. */
   const periodById = useMemo(
@@ -780,26 +803,38 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
      * This used to be synthesised from the cost book's group names, which meant two departures
      * from canvas that `loadOpexDeviceTypes` now closes: the WTG block was ordered by first
      * appearance in the book (`Description`, then `Start Date`) rather than by `Created On`, and
-     * a device with no cost yet had no card at all. `card.id` / `card.group` stay the device's
-     * `vsb_name` — the cost book groups on it and `resolveDeviceType` resolves on it — while
-     * `card.title` becomes the resolved `Generator.'Turbine Type'` / PV `Label`, which is what
-     * the canvas header label renders.
+     * a device with no cost yet had no card at all. `card.id` is the device ROW id — two devices
+     * may share a `vsb_name` (two "Dummy-Siemens Gamesa 5-7" cards on 0 Test Lucas), and keying
+     * on the name merged both devices' periods into each card. `card.group` stays the `vsb_name`
+     * for the record-type and row-name rules, and `card.title` is the resolved
+     * `Generator.'Turbine Type'` / PV `Label`, which is what the canvas header label renders.
      */
     const generators = deviceTypes.data?.[0] ?? [];
     const pvModules = deviceTypes.data?.[1] ?? [];
-    const known = new Set([...generators, ...pvModules].map((d) => d.name));
+    const known = new Set([...generators, ...pvModules].map((d) => d.id));
     // A device a cost still points at but the project no longer lists keeps its card rather than
     // taking its costs off screen with it — the silent-drop failure this codebase has had once.
-    const orphans = [...new Set(
-      (book?.periods ?? []).filter((p) => p.mode === "om").map((p) => p.group),
-    )].filter((name) => !known.has(name)).map((name) => ({
-      id: name, name, typeInProjectId: null, createdOn: null, displayName: name,
+    const orphanGroups = new Map<string, string>();
+    for (const p of book?.periods ?? []) {
+      if (p.mode !== "om") continue;
+      const key = deviceIdOf(p);
+      if (!known.has(key)) orphanGroups.set(key, p.group);
+    }
+    const orphans = [...orphanGroups].map(([id, name]) => ({
+      id, name, typeInProjectId: null, createdOn: null, displayName: name,
     }));
+    const orphanIds = new Set(orphans.filter((o) => o.id !== o.name).map((o) => o.id));
     return deviceTypeList(
       [...generators, ...orphans.filter((d) => addPeriodRecordType(d.name) === "Generator")],
       [...pvModules, ...orphans.filter((d) => addPeriodRecordType(d.name) !== "Generator")],
-    ).map((d) => ({ id: d.name, title: d.displayName, group: d.name, subaccount }));
-  }, [book, mode, subaccount, account, catalog.subaccounts, deviceTypes.data]);
+    ).map((d) => ({
+      id: d.id,
+      title: d.displayName,
+      group: d.name,
+      deviceId: known.has(d.id) || orphanIds.has(d.id) ? d.id : undefined,
+      subaccount,
+    }));
+  }, [book, mode, subaccount, account, catalog.subaccounts, deviceTypes.data, deviceIdOf]);
 
   // The first card opens by default — that is what both reference screenshots show. `openCards`
   // holds only what the user has since changed, so the default never fights a deliberate close.
@@ -877,6 +912,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       addStandard.mutate({
         mode,
         group: card.group,
+        deviceId: card.deviceId,
         countryId: extras.data?.countryId,
         technology: extras.data?.technology,
         codDate: projectContext.codDate ?? "",
@@ -961,6 +997,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       // The DEVICE NAME / SUB-ACCOUNT NAME, never `card.title`: in O&M the header now shows the
       // resolved turbine type, and the cost book and `resolveDeviceType` both key on the name.
       group: card.group,
+      deviceId: card.deviceId,
       mode,
       description: form.description.trim(),
       startDate: form.startDate ?? "",

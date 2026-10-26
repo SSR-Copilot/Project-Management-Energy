@@ -38,6 +38,7 @@ import {
   areaWithRegion,
   countryInflationPercent,
   canAddContractType,
+  lastPeriodByName,
   canAddPeriod,
   canAddStandardContract,
   canDeleteCost,
@@ -395,9 +396,10 @@ describe("OPEX — period chains", () => {
     expect(lastPeriodByStartDate(edited).id).toBe("p2");
   });
 
-  it("UT-OPEX-016b Add Period and Delete follow period order when the stored names do not", () => {
+  it("UT-OPEX-016b Add Period and Delete use the canvas Name sort (O-5 reproduced, 26 Oct 2026)", () => {
     // The live "Initialized O&M Contract" chain: rows 1-5 loaded with `vsb_name` = description,
-    // row 6 added in the app as `<sub-account>-<device>-<description>`, so by Name `- 5` was last.
+    // row 6 added in the app as `<sub-account>-<device>-<description>`. "Operation…" sorts after
+    // "Initialized…", so here the Name order and the period order agree on `- 6`.
     const head = cost({ id: "i1", name: "Initialized O&M Contract", startDate: "2027-08-30" });
     const migrated = [2, 3, 4, 5].map((n) => cost({
       id: `i${n}`, name: `Initialized O&M Contract - ${n}`, parentCostId: "i1",
@@ -408,20 +410,36 @@ describe("OPEX — period chains", () => {
       parentCostId: "i1", startDate: "2057-08-30",
     });
     const cardCosts = [head, ...migrated, added];
+    // The chain display and the warning icon still read period order.
     expect(lastPeriod(groupChains(cardCosts)[0]!).id).toBe("i6");
+    expect(lastPeriodByName(cardCosts, added)?.id).toBe("i6");
     expect(canAddPeriod(commandArgs({ mode: "om", selected: added, cardCosts }))).toBe(true);
     expect(canAddPeriod(commandArgs({ mode: "om", selected: migrated[3]!, cardCosts }))).toBe(false);
     expect(canDeleteCost(commandArgs({ selected: added, cardCosts }))).toBe(true);
     expect(canDeleteCost(commandArgs({ selected: migrated[3]!, cardCosts }))).toBe(false);
   });
 
-  it("UT-OPEX-016c a tenth period is last although '- 10' sorts before '- 2' as text", () => {
+  it("UT-OPEX-016c '- 9' is the canvas' last period because '- 10' sorts before '- 2' as text", () => {
     const periods = Array.from({ length: 9 }, (_, i) => cost({
       id: `t${i + 2}`, name: `Sub-Dev-Service - ${i + 2}`, parentCostId: "r",
       startDate: `${2030 + i}-01-01`,
     }));
     const chain10 = groupChains([root, ...periods])[0]!;
     expect(lastPeriod(chain10).id).toBe("t10");
+    const cardCosts = [root, ...periods];
+    expect(lastPeriodByName(cardCosts, periods[8]!)?.id).toBe("t9");
+    // So, as in the canvas, the commands light up on `- 9` and not on the real last period.
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: periods[7]!, cardCosts }))).toBe(true);
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: periods[8]!, cardCosts }))).toBe(false);
+    expect(canDeleteCost(commandArgs({ selected: periods[7]!, cardCosts }))).toBe(true);
+  });
+
+  it("UT-OPEX-016d a selected ROOT competes by Name with its children; a selected child does not see the root", () => {
+    const head = cost({ id: "h", name: "Zeta" });
+    const child = cost({ id: "c", name: "Alpha - 2", parentCostId: "h" });
+    expect(lastPeriodByName([head, child], head)?.id).toBe("h");
+    expect(lastPeriodByName([head, child], child)?.id).toBe("c");
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: head, cardCosts: [head, child] }))).toBe(true);
   });
 
   it("UT-OPEX-017 a new period starts where the previous one ended", () => {
