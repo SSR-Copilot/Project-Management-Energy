@@ -38,14 +38,14 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Button, Dropdown, Input, MessageBar, MessageBarBody, Option, Switch, Text, Tooltip,
+  Button, Dropdown, MessageBar, MessageBarBody, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
-  DeleteRegular, EditRegular,
+  AddFilled, AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
+  DeleteFilled, DeleteRegular, EditRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { serverEnforcedProvider } from "@/platform/privileges";
@@ -105,37 +105,137 @@ const AGGREGATION_OPTIONS: readonly number[] = [
 const rateLabel = (unit: "MWh" | "MW" | "WTG", iso: string | null | undefined): string =>
   `${iso || "EUR"}/${unit} p.a.`;
 
-const useStyles = makeStyles({
-  page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0 },
-  card: {
-    borderTopWidth: "1px", borderRightWidth: "1px",
-    borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid",
-    borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: tokens.colorNeutralStroke2, borderRightColor: tokens.colorNeutralStroke2,
-    borderBottomColor: tokens.colorNeutralStroke2, borderLeftColor: tokens.colorNeutralStroke2,
-    backgroundColor: tokens.colorNeutralBackground1,
+/**
+ * The canvas' classic scrollbar: a 10 px grey bar on a light track, with an arrow button at
+ * each end (the left/right arrows on `con_…_CardBody_1`, and the up/down arrows on the
+ * subaccount gallery). Only the `::-webkit-scrollbar` pseudo-elements are set — Chromium
+ * ignores all of them once the standard `scrollbar-color` is present, and the arrows go with
+ * them.
+ */
+const arrow = (path: string) =>
+  `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><path d='${path}' fill='%23505050'/></svg>")`;
+const scrollButton = (path: string) => ({
+  display: "block", width: "10px", height: "10px",
+  backgroundColor: "#f1f1f1", backgroundImage: arrow(path),
+  backgroundRepeat: "no-repeat", backgroundPosition: "center",
+});
+const canvasScrollbar = {
+  "::-webkit-scrollbar": { width: "10px", height: "10px" },
+  "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
+  "::-webkit-scrollbar-thumb": {
+    backgroundColor: "#868686",
+    borderTopLeftRadius: "5px", borderTopRightRadius: "5px",
+    borderBottomLeftRadius: "5px", borderBottomRightRadius: "5px",
   },
+  "::-webkit-scrollbar-button:horizontal:start:decrement": scrollButton("M6 0v8L1 4z"),
+  "::-webkit-scrollbar-button:horizontal:end:increment": scrollButton("M2 0v8l5-4z"),
+  "::-webkit-scrollbar-button:vertical:start:decrement": scrollButton("M0 6h8L4 1z"),
+  "::-webkit-scrollbar-button:vertical:end:increment": scrollButton("M0 2h8L4 7z"),
+  "::-webkit-scrollbar-button:start:increment": { display: "none" },
+  "::-webkit-scrollbar-button:end:decrement": { display: "none" },
+} as const;
+
+/** The radio's lane: `Description.X = 40` (LL:909). */
+const SELECT_COLUMN_WIDTH = 40;
+
+const useStyles = makeStyles({
+  /*
+   * `gal_LandLease_Content_Subaccounts` — `Height: =Parent.Height-Self.Y`. The Cost shell clips
+   * its content (`main { overflow: hidden }`), so the gallery is the thing that scrolls: without
+   * its own vertical scroll, opening several cards pushed the rest off the bottom with no
+   * scrollbar. The first card sits flush with the top of the content area, as the canvas
+   * screenshot (26 Oct 2026) shows — no 10 px band above "Locations".
+   */
+  page: {
+    display: "flex", flexDirection: "column", gap: space.s,
+    flex: 1, minWidth: 0, minHeight: 0,
+    overflowY: "auto", overflowX: "hidden",
+    ...canvasScrollbar,
+  },
+  /*
+   * `TemplatePadding: =0`, so the cards touch and read as one joined block. Each
+   * `con_…_Card_1` is `Parent.Width - 10` wide with `BorderStyle.None`; the line between cards
+   * is the header's own bottom divider.
+   */
+  cardList: { display: "flex", flexDirection: "column", rowGap: 0, flexShrink: 0 },
+  card: {
+    width: "calc(100% - 10px)",
+    backgroundColor: palette.white,
+    boxShadow: "0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14)",
+  },
+  /*
+   * `con_…_CardHeader_1` — 42 px, `Fill: =ColorValue("#fdffff")`, the title at `X: =20`, and
+   * `shp_…_CardHeader_BottomLine_2` a 1 px divider along its bottom on every card, open or not.
+   * No hover fill on the canvas.
+   */
   cardHeader: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    width: "100%",
-    paddingTop: space.m, paddingBottom: space.m,
-    paddingLeft: space.l, paddingRight: space.s,
-    backgroundColor: "transparent",
-    borderTopStyle: "none", borderRightStyle: "none",
-    borderBottomStyle: "none", borderLeftStyle: "none",
+    boxSizing: "border-box", width: "100%", height: "42px",
+    paddingTop: 0, paddingBottom: 0, paddingLeft: "20px", paddingRight: "10px",
+    backgroundColor: "#fdffff",
+    borderTopStyle: "none", borderRightStyle: "none", borderLeftStyle: "none",
+    borderBottomStyle: "solid", borderBottomWidth: "1px", borderBottomColor: "#e1dfdd",
     cursor: "pointer",
-    ":hover": { backgroundColor: palette.Grayscale40 },
   },
-  cardTitle: { fontSize: tokens.fontSizeBase400, color: tokens.colorNeutralForeground1 },
-  chevron: { color: tokens.colorBrandForegroundLink },
-  // `useCommandRowStyles` puts the first icon on this 12 px edge — over the periods table's
-  // select column (`selectCell`, 12 px in) — and the commands 16 px apart (21 Oct 2026).
+  // `lbl_…_SubaccountName_2` — `gblAppSizes.Font.Medium` (11 pt), `Label.Color`, normal weight.
+  cardTitle: { fontSize: "11pt", color: palette.black, textAlign: "left", flexGrow: 1, minWidth: 0 },
+  /*
+   * `ico_…_CardHeader_Up_2` / `_Down_2` — a classic `Icon.ChevronUp` / `ChevronDown`, 20 x 18,
+   * `gblAppStyles.Icon.Color` (themePrimary), 10 px in from the card's right edge. The classic
+   * glyph fills its box; Fluent's draws about 12 px wide inside a 20 px box, so it is drawn at
+   * 28 px and pulled in by the glyph's own inset.
+   */
+  chevron: {
+    width: "28px", height: "28px", fontSize: "28px", flexShrink: 0,
+    marginLeft: "-5px", marginRight: "-5px",
+    color: palette.themePrimary,
+  },
+  /*
+   * `con_…_CardBody_1` — `LayoutOverflowX: =LayoutOverflow.Scroll`, `PaddingLeft: =20`. The
+   * command bar, header and gallery all sit in it, and the gallery is a fixed width, so the whole
+   * body scrolls sideways under a PERMANENT bar (`scroll`, not `auto`) with arrows at both ends.
+   *
+   * Its `Height: =Max(gallery.Height + 74, 50)` is FIXED (set inline), and the bar is drawn
+   * inside that height: it sits straight under the last row, over the gallery's 10 px bottom
+   * pad, rather than below it — as the canvas screenshot (26 Oct 2026) shows.
+   */
+  scroll: {
+    boxSizing: "border-box", overflowX: "scroll", overflowY: "hidden",
+    paddingLeft: "20px", ...canvasScrollbar,
+  },
+  /*
+   * `pcf_…_SubaccountsCommandBar_1` — `Height: =40`. Inside `scroll`, whose 20 px inset this
+   * 10 px adds to: the first icon lands over the radio at X = 10.
+   *
+   * Its `Width: =Parent.Width` (LL:399) is the WHOLE card body, laid out after the body's
+   * `PaddingLeft: =20` — so the body always overflows by those 20 px and the canvas bar always
+   * shows its grey handle, even on a screen wide enough for every column. Without it a wide
+   * window showed only the pale track and arrows, which read as no scrollbar at all.
+   *
+   * The commands are centred in the full 40 px, ~19 px under the card header, with the column
+   * captions after them (canvas "Distance and Rotor Overfly Areas" screenshot, 26 Oct 2026).
+   */
   toolbar: {
-    display: "flex", alignItems: "center", gap: space.m, flexWrap: "wrap",
-    paddingLeft: space.m, paddingRight: space.m, paddingBottom: space.xs,
+    display: "flex", alignItems: "center", gap: space.m, flexWrap: "nowrap",
+    boxSizing: "border-box", minWidth: "calc(100% + 20px)",
+    height: "40px", paddingLeft: "10px", paddingRight: space.m,
   },
-  command: { color: tokens.colorBrandForegroundLink, fontWeight: tokens.fontWeightRegular },
+  /*
+   * `btn_OneTimePayment2_…` / `3_…` — a modern `Button@0.0.45`, `Appearance: Outline` with
+   * `BorderStyle.None`, `FontColor: themePrimary`, left aligned, with the modern button's
+   * Semibold caption and `IconStyle: Filled` (LL:5104). `DisplayMode.Disabled` greys it;
+   * painting it blue unconditionally made a disabled button look clickable.
+   */
+  command: {
+    color: palette.themePrimary, fontWeight: tokens.fontWeightSemibold,
+    justifyContent: "flex-start", alignSelf: "flex-start",
+    paddingLeft: 0, paddingRight: 0, minWidth: 0,
+    "& .fui-Button__icon": { color: palette.themePrimary },
+  },
+  commandDisabled: {
+    color: "#bdbdbd",
+    "& .fui-Button__icon": { color: "#bdbdbd" },
+  },
   /*
    * `pcf_…_SubaccountsCommandBar` is a `cat_PowerCAT.CommandBar`, the same PCF the Contracts
    * command bar uses: a BLACK label with a blue leading icon, greying to #595959 / #c8c6c4
@@ -157,25 +257,56 @@ const useStyles = makeStyles({
     color: palette.neutralTertiary,
     "& .fui-Button__icon": { color: palette.neutralTertiaryAlt },
   },
-  scroll: { overflowX: "auto", paddingBottom: space.xs },
-  table: { width: "100%", borderCollapse: "collapse", whiteSpace: "nowrap" },
-  /** `Color: gblAppStyles.Label.Color` + Semibold — dark labels, not the card's link blue. */
+  // Fixed layout so every column holds its canvas width; `width` is set inline to their sum.
+  table: { tableLayout: "fixed", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  /*
+   * `con_…_CostsTableHeader_1` is 34 px high; every caption is `Label.Color`, Semibold,
+   * `gblAppSizes.Font.Small` (10 pt) with the label's 6 px side padding — dark labels, not the
+   * card's link blue.
+   */
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground1,
-    fontSize: tokens.fontSizeBase200,
-    paddingTop: space.s, paddingBottom: space.s,
-    paddingLeft: space.s, paddingRight: space.s,
+    color: palette.black,
+    fontSize: "10pt", height: "34px",
+    paddingTop: 0, paddingBottom: 0,
+    paddingLeft: "6px", paddingRight: "6px",
+    overflow: "visible",
   },
   thRight: { textAlign: "right" },
+  /*
+   * `lbl_…_CostsTableHeader_Duration_2` is ONE 120 px right-aligned caption over both the
+   * years and the months lanes. The months header cell stays (empty), so the caption is placed
+   * across it: its right edge sits on the months lane's right padding.
+   */
+  thDuration: { position: "relative" },
+  thDurationCaption: { position: "absolute", right: "-54px", top: 0, lineHeight: "34px" },
+  /*
+   * `con_…_CostsTableRow_1` is 30 px high; every label is `gblAppSizes.Font.ExtraExtraSmall`
+   * (8 pt) with `PaddingLeft/Right: =6` and `Wrap: =false`, so text past the width is cut.
+   */
   td: {
-    fontSize: tokens.fontSizeBase200,
-    paddingTop: space.xs, paddingBottom: space.xs,
-    paddingLeft: space.s, paddingRight: space.s,
+    fontSize: "8pt", height: "30px",
+    paddingTop: 0, paddingBottom: 0,
+    paddingLeft: "6px", paddingRight: "6px",
+    overflow: "hidden", textOverflow: "ellipsis",
   },
   tdRight: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
-  /** `FontWeight: =If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1625). */
-  rowBold: { fontWeight: tokens.fontWeightSemibold },
+  /*
+   * `gal_…_CardBody_Costs_1.Height: =Max(AllItemsCount * 30 + 10, 50)` — the gallery keeps
+   * 10 px under its last row and is never shorter than 50 px, so an empty card still shows a
+   * band of white under the column captions. `rowsSpacer` makes up the difference.
+   */
+  rowsSpacer: { flexShrink: 0 },
+  /*
+   * Row label weights. Every cell but Description is
+   * `If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` — a control that does not
+   * exist on this screen, so always Semibold (LL:990, LL:1592). Description alone is
+   * `If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1632). Setting one weight on the
+   * whole row for Period 1 only made every row look the same.
+   */
+  tdSemibold: { fontWeight: tokens.fontWeightSemibold },
+  tdBold: { fontWeight: tokens.fontWeightBold },
+  tdNormal: { fontWeight: tokens.fontWeightRegular },
   /*
    * A selected row is NOT tinted. `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent`
    * and there is not one `Fill: =If(...)` on the Opex, Land Lease or Contracts screen - the
@@ -184,17 +315,175 @@ const useStyles = makeStyles({
    */
   rowSelected: {},
   row: { cursor: "pointer" },
-  selectCell: { width: "40px", paddingLeft: space.m },
-  empty: {
-    paddingTop: space.m, paddingBottom: space.m, paddingLeft: space.l,
-    color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase200,
+  // `img_…_RadioSelection_2` — 16 x 16 at X = 10; `Description` starts at X = 40.
+  selectCell: {
+    paddingLeft: "10px", paddingRight: 0,
+    "& input": { width: "16px", height: "16px", marginLeft: 0, marginRight: 0, verticalAlign: "middle" },
   },
+  /*
+   * `con_LandLease_RightPanel_NewEditPeriod_1` — the canvas panel chrome, scoped to this drawer
+   * through `FormPanel panelClassName`. Every selector starts `&.canvas-panel` so it outranks
+   * the shared `.canvas-panel …` rules in canvas.css whatever order the sheets load in.
+   */
+  panelSkin: {
+    // `lbl_…_BodyHeader_1` — `gblAppSizes.Font.Large` (12 pt), Semibold, white, on a 46 px bar.
+    "&.canvas-panel .canvas-panel-header": { height: "46px", paddingTop: 0, paddingBottom: 0 },
+    "&.canvas-panel .canvas-panel-header h2": {
+      fontSize: "12pt", lineHeight: "46px", fontWeight: tokens.fontWeightSemibold,
+    },
+    /*
+     * `con_…_BodyContent_2` — `PaddingTop: =10`, `LayoutOverflowY: =LayoutOverflow.Scroll`: the
+     * body scrolls under a permanent bar while the header and buttons stay put.
+     */
+    "&.canvas-panel .canvas-panel-body": { paddingTop: "10px", overflowY: "scroll", ...canvasScrollbar },
+    /*
+     * The captions are classic `Label`s: `gblAppSizes.Font.Medium` (11 pt), normal weight,
+     * `Label.Color`, 32 px high, with the box straight under them — not Fluent's 14 px
+     * semibold text with a 6 px gap.
+     */
+    "&.canvas-panel .canvas-field": { gap: 0 },
+    "&.canvas-panel .canvas-field > span:first-child": {
+      position: "relative", display: "flex", alignItems: "center", height: "32px",
+      fontSize: "11pt", fontWeight: tokens.fontWeightRegular, color: palette.black,
+    },
+    /*
+     * `lbl_…_Asterisk_1` — `palette.Error`, Semibold, 10 px wide at `X: =label.X - Self.Width`:
+     * in the margin LEFT of the caption, which stays aligned with its box.
+     */
+    "&.canvas-panel .canvas-field > span[data-required=\"true\"]::before": {
+      content: "'*'", position: "absolute", left: "-10px", top: "2px", lineHeight: "20px",
+      fontWeight: tokens.fontWeightSemibold, color: palette.Error,
+    },
+    /*
+     * `lbl_…_ErrorMessage_1` — `palette.Error`, Semibold, `gblAppSizes.Font.ExtraExtraSmall`
+     * (8 pt), wrapping inside the box's width.
+     *
+     * The field container only grows from 76 to 86 px while its message shows
+     * (`Height: =If(…ErrorMessage….Visible, 86, 76)`, LL:4789), whatever the message's length: a
+     * one- or two-line message spills into the space above the next caption instead of pushing
+     * it down. Letting each message take its full height pushed every later field down, so a
+     * column of errors cut Aggregation off at the bottom (canvas screenshot, 26 Oct 2026).
+     */
+    "&.canvas-panel .canvas-field-error": {
+      // 8 pt on the canvas renders ~7 % wider than here (canvas screenshot, 26 Oct 2026), so the
+      // percent message wraps onto two lines there; 8.5 pt reproduces both.
+      fontSize: "8.5pt", fontWeight: tokens.fontWeightSemibold, lineHeight: "11px",
+      color: palette.Error, whiteSpace: "normal", overflowWrap: "anywhere",
+      boxSizing: "border-box", height: "10px", paddingTop: "3px", overflow: "visible",
+      // The classic `Label`'s default 5 px left padding: the message starts just inside the box.
+      paddingLeft: "5px",
+    },
+    /*
+     * An invalid box keeps its own look on the canvas — the message under it is the only
+     * signal. The shared `.canvas-field[data-invalid]` red outline is not part of it.
+     */
+    "&.canvas-panel .canvas-field[data-invalid] > input": { outlineStyle: "none" },
+    "&.canvas-panel .canvas-field[data-invalid] > input:focus": { outlineStyle: "none" },
+    /*
+     * A focused text box keeps its grey fill with no outline and shows a thin 1 px themePrimary
+     * line along its bottom edge — not the full box outline the shared
+     * `.canvas-field > input:focus` rule draws (thinned to 1 px at the user's request, 26 Oct 2026).
+     */
+    "&.canvas-panel .canvas-field > input:focus": {
+      outlineStyle: "none",
+      boxShadow: `inset 0 -1px 0 ${palette.themePrimary}`,
+    },
+    /*
+     * A modern control in `DisplayMode.Disabled` keeps the canvas look: a white box with a light
+     * grey outline and grey text (the read-only Country Inflation Profile, Currency, and the
+     * header fields of a later period). Editable boxes keep the grey fill.
+     */
+    "&.canvas-panel .canvas-field > input:disabled": {
+      backgroundColor: palette.white, color: "#bdbdbd",
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+      borderTopColor: "#e0e0e0", borderRightColor: "#e0e0e0",
+      borderBottomColor: "#e0e0e0", borderLeftColor: "#e0e0e0",
+      WebkitTextFillColor: "#bdbdbd",
+    },
+    "&.canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled)": {
+      backgroundColor: palette.white,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+      borderTopColor: "#e0e0e0", borderRightColor: "#e0e0e0",
+      borderBottomColor: "#e0e0e0", borderLeftColor: "#e0e0e0",
+    },
+    "&.canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled) :is(input, button, svg)": {
+      backgroundColor: "transparent", color: "#bdbdbd", WebkitTextFillColor: "#bdbdbd",
+    },
+    // A disabled `Toggle@1.1.5` greys its own label too.
+    "&.canvas-panel .fui-Switch:has(input:disabled) ~ .fui-Text": { color: "#bdbdbd" },
+    "&.canvas-panel [data-strong-captions] .canvas-field > span:first-child": {
+      fontWeight: tokens.fontWeightSemibold,
+    },
+    /*
+     * Spacing around the toggle rows, measured off the canvas screenshots (26 Oct 2026):
+     *  - whatever follows a toggle (the Allocation and Inflation Start Year captions, the first
+     *    One-Time Payment field, the "Add One-Time payment" button) sits 5 px closer than the
+     *    column's gap. `PaymentBlock`'s wrapper is `display: contents`, so its first field moves;
+     *  - a toggle that follows a field (Inflation Profile after Allocation, One-Time Payment
+     *    after the inflation fields) sits 5 px further down;
+     *  - the first toggle (Secured) starts 4 px lower, level with the Description caption.
+     */
+    "&.canvas-panel [data-toggle-row] + :not([data-toggle-row]):not([data-strong-captions])": {
+      marginTop: "-5px",
+    },
+    "&.canvas-panel [data-toggle-row] + [data-strong-captions] > :first-child": {
+      marginTop: "-5px",
+    },
+    "&.canvas-panel :not([data-toggle-row]) + [data-toggle-row]": { marginTop: "5px" },
+    "&.canvas-panel [data-toggle-row]:first-child": { marginTop: "6px" },
+    /*
+     * `con_…_BodyButtons_1` — 60 px. Cancel at `Parent.Width - 96 - 20`, Save at
+     * `Cancel.X - 96 - 20`: two 96 x 32 buttons, 20 px apart, pinned RIGHT whether or not the
+     * hint is showing.
+     */
+    "&.canvas-panel .canvas-panel-footer": {
+      height: "60px", columnGap: "20px", justifyContent: "flex-end",
+      paddingTop: 0, paddingBottom: 0, paddingLeft: "20px", paddingRight: "20px",
+    },
+    // The PowerCAT buttons' captions are regular weight at 14 px, not Fluent's semibold.
+    "&.canvas-panel .canvas-panel-footer button": {
+      width: "96px", minWidth: "96px", height: "32px",
+      fontSize: "14px", fontWeight: tokens.fontWeightRegular,
+    },
+    /*
+     * The disabled PowerCAT Save is plain text in a DARK grey with a near-black checkmark
+     * (canvas screenshot, 26 Oct 2026) — not Fluent's pale disabled grey, which made it look
+     * missing rather than unavailable.
+     */
+    "&.canvas-panel .canvas-panel-footer button:disabled": {
+      color: "#605e5c", backgroundColor: "transparent",
+    },
+    "&.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": { color: "#323130" },
+    /*
+     * `lbl_…_BodyButtons_Hint_1` — `X: =20`, `gblAppSizes.Font.ExtraSmall` (9 pt),
+     * `FontWeight.Lighter`, `palette.Error`, and only as wide as the room left of Save
+     * (`Parent.Width - Self.X*2 - Save.X`), so the message wraps onto two lines.
+     */
+    "&.canvas-panel .canvas-panel-footer > .fui-Text": {
+      // Measured off the canvas screenshot (26 Oct 2026): it breaks after "at least one".
+      flexGrow: 0, maxWidth: "135px", marginRight: "auto",
+      fontSize: "9pt", fontWeight: tokens.fontWeightRegular, lineHeight: 1.3,
+      whiteSpace: "normal", color: palette.Error,
+    },
+  },
+  /*
+   * `con_…_LeftBodyContent` / `_RightBodyContent` share the 650 px body; each field sits at
+   * `X: =20` with `Width: =Parent.Width-Self.X*2`: two columns, 20 px from the panel edges and
+   * 40 px apart. The panel body already pads 20 px.
+   */
   panelColumns: {
-    display: "grid", gap: space.xl,
+    display: "grid", columnGap: "40px", rowGap: 0,
     gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-    "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
+    "@media (max-width: 649px)": { gridTemplateColumns: "minmax(0, 1fr)" },
   },
-  panelColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
+  /*
+   * Every field container is 76 px (78 for Description): a 32 px caption, a 32 px box and
+   * 13 px to the next caption — 77 px a field as measured on the canvas Edit Contract
+   * screenshot (26 Oct 2026) — not Fluent's tighter stack.
+   */
+  panelColumn: { display: "flex", flexDirection: "column", gap: "13px", minWidth: 0 },
   /*
    * `drp_…_DurationYears_1.Width = 100`, `…_DurationMonths_1.Width = 120`, and the months box
    * sits at `DurationYears.X + DurationYears.Width + 20` — so a 20px gap (`LL:2543`, `:2607`).
@@ -212,7 +501,84 @@ const useStyles = makeStyles({
    * than the panel and ragged against each other.
    */
   panelDropdown: { width: "100%", minWidth: "unset" },
-  dateRow: { display: "flex", alignItems: "flex-end", gap: space.xs },
+  /*
+   * `drp_…_AreaInflationProfile_1` sits in a container `Max(Parent.Width / 2, 280)` wide with
+   * `X: =20` / `Width: =Parent.Width-Self.X*2` (LL:4397) — a 240 px box, narrower than the
+   * full-column dropdowns beside it (canvas Edit Contract screenshot, 26 Oct 2026).
+   */
+  areaDropdown: { width: "240px", maxWidth: "100%" },
+  /*
+   * `cmb_…_AllocationWtg_1` — a `ComboBox@0.0.51` with `SelectMultiple`, one 32 px line: the
+   * chosen WTGs run on and are cut, they never wrap the box onto several lines.
+   */
+  /*
+   * The open list of a canvas `DropDown@0.0.45` — the same control and look as the OPEX panel's
+   * (`OpexScreen.canvasListbox`): exactly as wide as its box, flat 27 px rows with no check
+   * mark, a light grey fill and a thin grey outline, 17 rows before it scrolls under the canvas
+   * scrollbar. It renders in a portal, outside the drawer, so it is styled through the
+   * `listbox` slot rather than `panelSkin`.
+   */
+  canvasListbox: {
+    minWidth: 0, maxHeight: "461px", overflowX: "hidden", rowGap: 0,
+    paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
+    backgroundColor: "#f5f5f5", boxShadow: "none",
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    // A darker outline than Fluent's, sampled off the canvas screenshot (26 Oct 2026).
+    borderTopColor: "#605e5c", borderRightColor: "#605e5c",
+    borderBottomColor: "#605e5c", borderLeftColor: "#605e5c",
+    borderTopLeftRadius: "2px", borderTopRightRadius: "2px",
+    borderBottomLeftRadius: "2px", borderBottomRightRadius: "2px",
+    ...canvasScrollbar,
+    // 30 px rows with 15 px text, measured off the same screenshot.
+    "& .fui-Option": {
+      boxSizing: "border-box", height: "30px", minHeight: "30px", alignItems: "center",
+      columnGap: 0, fontSize: "15px", lineHeight: "20px", color: palette.black,
+      paddingTop: 0, paddingBottom: 0, paddingLeft: "12px", paddingRight: "12px",
+      borderTopLeftRadius: 0, borderTopRightRadius: 0,
+      borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+    },
+    "& .fui-Option__checkIcon": { display: "none" },
+    "& .fui-Option::after": { display: "none" },
+    /*
+     * ONE highlighted row, themePrimary with white text: the row under the pointer, or — with
+     * the pointer elsewhere — the current row (the chosen value when the list opens, else the
+     * first; then wherever the arrow keys move it). Fluent marks that row `data-activedescendant`.
+     */
+    "& .fui-Option:hover": { backgroundColor: palette.themePrimary, color: palette.white },
+    "& .fui-Option[data-activedescendant]": { backgroundColor: palette.themePrimary, color: palette.white },
+    "&:hover .fui-Option[data-activedescendant]:not(:hover)": {
+      backgroundColor: "transparent", color: palette.black,
+    },
+  },
+  /*
+   * `cmb_…_AllocationWtg_1`'s open list — the modern ComboBox keeps its check boxes, but its
+   * rows are 30 px apart with no gap between them (canvas screenshot, 26 Oct 2026).
+   */
+  allocationListbox: {
+    rowGap: 0, ...canvasScrollbar,
+    "& .fui-Option": { boxSizing: "border-box", height: "30px", minHeight: "30px", paddingTop: 0, paddingBottom: 0 },
+  },
+  // `PaymentBlock`'s wrapper: no box of its own, so its two fields stay in the column's gap.
+  contents: { display: "contents" },
+  // The chevron stays at the box's right edge (`display: block` alone moved it in after the text).
+  singleLine: {
+    position: "relative", height: "32px",
+    "& .fui-Dropdown__button": {
+      height: "32px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      display: "block", textAlign: "left", lineHeight: "30px", paddingRight: "36px",
+    },
+    "& .fui-Dropdown__expandIcon": {
+      position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
+    },
+  },
+  // `ico_ResetStartDay_…` sits at `StartDate.X + StartDate.Width + 10`.
+  dateRow: { display: "flex", alignItems: "center", gap: "10px" },
+  /*
+   * `dte_…_StartDate_1.Width: =Parent.Width-Self.X*2-40` — always 40 px narrower than the other
+   * boxes, whether or not the reset icon is there to fill the gap (it is hidden on a later period).
+   */
+  startDate: { flexGrow: 0, flexShrink: 0, width: "calc(100% - 40px)", minWidth: 0 },
   /*
    * `ico_ResetStartDay_NewEditCost_*` is a `cat_PowerCAT.Icon` with `IconName: ="Refresh"`
    * at 30 x 30 and no explicit colour, so it takes the PowerCAT default off
@@ -225,18 +591,34 @@ const useStyles = makeStyles({
     color: palette.themePrimary,
     ":hover": { color: palette.themePrimary },
   },
-  toggleRow: { display: "flex", alignItems: "center", gap: space.s },
-  required: { color: palette.Error, marginRight: "2px" },
-  label: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase300 },
-  warning: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
-  hint: { color: palette.Error, fontSize: tokens.fontSizeBase200, marginRight: "auto" },
-  footer: { display: "flex", alignItems: "center", gap: space.m, width: "100%" },
-  readOnly: {
-    backgroundColor: palette.Grayscale30, borderRadius: "3px",
-    paddingTop: space.xs, paddingBottom: space.xs,
-    paddingLeft: space.m, paddingRight: space.m,
-    fontSize: tokens.fontSizeBase300, minHeight: "22px",
+  /*
+   * `con_…_AlignWithProjectDuration_*` — toggles 42 px apart on the canvas (Edit Contract
+   * screenshot, 26 Oct 2026). The column already adds 13 px between children, so the row is a
+   * FIXED 29 px — a `minHeight` let Fluent's taller Switch stretch it to ~33 px.
+   */
+  toggleRow: { display: "flex", alignItems: "center", gap: space.s, height: "29px" },
+  /*
+   * `con_…_InflationToggles_1` holds Inflation Profile and Country Inflation Profile together,
+   * 33 px apart rather than a full row each (canvas screenshot, 26 Oct 2026).
+   */
+  toggleRowTight: { marginTop: "-7px" },
+  /*
+   * `lbl_…_Asterisk_1` — `palette.Error`, Semibold, 10 px wide at `X: =label.X - Self.Width`,
+   * i.e. in the margin LEFT of the caption, which stays aligned with the box under it.
+   */
+  // Raised: the canvas `*` sits level with the top of the caption, not on its centre line.
+  required: {
+    position: "absolute", left: "-10px", top: "2px", lineHeight: "20px",
+    color: palette.Error, fontWeight: tokens.fontWeightSemibold,
   },
+  /** `lbl_…_BodyContent_*` — a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
+  label: {
+    position: "relative", display: "flex", alignItems: "center", height: "32px",
+    fontWeight: tokens.fontWeightRegular, fontSize: "11pt", color: palette.black,
+  },
+  // `lbl_…_AllocationWtg_1` is the one panel caption with `FontWeight.Semibold` (LL:3997).
+  labelStrong: { fontWeight: tokens.fontWeightSemibold },
+  warning: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
 });
 
 /* ═════════════════════════════════════════════════════════════════ panel state ══ */
@@ -429,10 +811,19 @@ export default function LandLeaseScreen() {
       subaccountId: card.id, subaccountName: card.name,
       state: "Edit", cost, period: selectedPeriod, parentPeriod: null,
     });
-    setForm(landLeaseFormFrom({
+    const loaded = landLeaseFormFrom({
       cost, period: selectedPeriod, parentPeriod: null,
       allocations, panelState: "Edit", workingDate: null, resetStartDate: false,
-    }));
+    });
+    // `txt_…_EuroMWh_1` / `_EuroMW_1` / `_EuroWTG_1.Value` (LL:3245, :3376, :3507) are
+    // `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` — "54", not the "54.00" that
+    // `landLeaseFormFrom` gives them (only Fix Costs is `#0.00`).
+    setForm({
+      ...loaded,
+      eurPerMwh: canvasRate(selectedPeriod.eurPerMwh),
+      eurPerMw: canvasRate(selectedPeriod.eurPerMw),
+      eurPerWtg: canvasRate(selectedPeriod.eurPerWtg),
+    });
     setWorkingDate(null);
     setResetFlag(false);
   };
@@ -607,28 +998,30 @@ export default function LandLeaseScreen() {
         </MessageBar>
       ) : null}
 
-      {cards.map((card) => (
-        <SubaccountCard
-          key={card.id}
-          card={card}
-          columns={columns}
-          contracts={contracts}
-          costById={costById}
-          ctx={ctx}
-          selection={selection}
-          selectedPeriod={selectedPeriod}
-          selectedCost={selectedCost}
-          selectedContract={selectedContract}
-          costs={costs}
-          hasMatchingAssumption={
-            (assumptions.data ?? []).some((a) => a.subaccountId === card.id)
-          }
-          permissions={permissions}
-          onToggle={() => toggleCard(card.id)}
-          onSelectRow={(row) => setSelection((s) => toggleLeaseSelection(s, row))}
-          onCommand={(key) => onCommand(card, key)}
-        />
-      ))}
+      <div className={styles.cardList}>
+        {cards.map((card) => (
+          <SubaccountCard
+            key={card.id}
+            card={card}
+            columns={columns}
+            contracts={contracts}
+            costById={costById}
+            ctx={ctx}
+            selection={selection}
+            selectedPeriod={selectedPeriod}
+            selectedCost={selectedCost}
+            selectedContract={selectedContract}
+            costs={costs}
+            hasMatchingAssumption={
+              (assumptions.data ?? []).some((a) => a.subaccountId === card.id)
+            }
+            permissions={permissions}
+            onToggle={() => toggleCard(card.id)}
+            onSelectRow={(row) => setSelection((s) => toggleLeaseSelection(s, row))}
+            onCommand={(key) => onCommand(card, key)}
+          />
+        ))}
+      </div>
 
       <FormPanel
         open={panel !== null}
@@ -637,27 +1030,28 @@ export default function LandLeaseScreen() {
           selectedPeriod: panel?.period ?? null,
           subaccountName: panel?.subaccountName ?? "",
         })}
-        width="cost"
+        // `con_…_NewEditPeriod_Body_1.Width: =Min(650, Parent.Width)` (LL:2003); `panelSkin`
+        // carries the canvas captions, disabled boxes and footer for this drawer only.
+        width={650}
+        panelClassName={styles.panelSkin}
         onDismiss={closePanel}
         footer={
-          <div className={styles.footer}>
-            {/*
-              * `lbl_…_BodyButtons_Hint_1` (LL:5960) — and it is one of the fifteen labels the
-              * Save gate requires to be hidden, so it is a hard block, not advice.
-              */}
-            {form && hintVisible({
+          /*
+           * `lbl_…_BodyButtons_Hint_1` (LL:6103) — and it is one of the fifteen labels the Save
+           * gate requires to be hidden, so it is a hard block, not advice. The PowerCAT Save
+           * drops its fill while disabled: plain text with the checkmark.
+           */
+          <PanelButtons
+            onSave={() => { void commit(); }}
+            onCancel={closePanel}
+            disabled={saveDisabled}
+            subtleWhenDisabled
+            hint={form && hintVisible({
               form, selectedCost: panel?.cost ?? null, selectedPeriod: panel?.period ?? null,
-            }) ? (
-              <Text className={styles.hint} role="status">{LEASE_MSG.atLeastOneFigure}</Text>
-            ) : null}
-            <PanelButtons
-              onSave={() => { void commit(); }}
-              onCancel={closePanel}
-              disabled={saveDisabled}
-              saveTestId="pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Save_1"
-              cancelTestId="pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Cancel_1"
-            />
-          </div>
+            }) ? LEASE_MSG.atLeastOneFigure : undefined}
+            saveTestId="pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Save_1"
+            cancelTestId="pcf_LandLease_RightPanel_NewEditPeriod_BodyButtons_Cancel_1"
+          />
         }
       >
         {form && panel ? (
@@ -710,7 +1104,12 @@ export default function LandLeaseScreen() {
         description={dialog.body}
         confirmText={dialog.confirmLabel}
         cancelText={dialog.cancelLabel}
-        destructive
+        // `cmp_LandLease_PopUpConfirmation_DeletePeriod` / `…_DeleteLandLeaseCost` (LL:6191,
+        // LL:6225) — a `cmp_PopUp_Confirmation` with `IconConfirmButton: ="Delete"`: the
+        // component's own themePrimary Confirm with a bin, not a red danger button.
+        confirmIcon="delete"
+        // The canvas buttons row: divider above it, regular captions, 16 px icons (26 Oct 2026).
+        canvasFooter
         busy={writes.isPending}
         onCancel={() => setDeleting(null)}
         onConfirm={() => { void confirmDelete(); }}
@@ -750,9 +1149,16 @@ function SubaccountCard({
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
   const standardClass = useStandardValueClass();
-  // `gal_…_CardBody_Costs_1.Items` (LL:919) — every period of every contract in this
-  // sub-account, ordered by `Name` with `Start Date` breaking its ties.
-  const rows = subaccountPeriodRows(contracts, card.id);
+  /*
+   * `gal_…_CardBody_Costs_1.Items` (LL:919) — every period of every contract in this
+   * sub-account, `Sort(Sort(…, 'Start Date'), Name)`. Power Fx compares the names WITHOUT
+   * regard to case (ASdsfg, awef, awef - 2, Dec333 in the canvas screenshot, 26 Oct 2026);
+   * `subaccountPeriodRows` compares code units, which put every capitalised name first. The
+   * rows are re-ordered here for display, start date still breaking a tie.
+   */
+  const rows = [...subaccountPeriodRows(contracts, card.id)].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "accent" })
+    || (a.startDate ?? "").localeCompare(b.startDate ?? ""));
   const isSelectedCard = selection.subaccountId === card.id;
 
   const commands = leaseCommands({
@@ -767,6 +1173,10 @@ function SubaccountCard({
   });
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
   const open = !card.isFolded;
+  // `con_…_CostsTableHeader_1.Width: =OTP.X + OTP.Width` — the radio lane plus every column.
+  const tableWidth = SELECT_COLUMN_WIDTH + columns.reduce((sum, c) => sum + c.width, 0);
+  // `gal_…_CardBody_Costs_1.Height: =Max(AllItemsCount * 30 + 10, 50)` (LL:923).
+  const galleryHeight = Math.max(rows.length * 30 + 10, 50);
 
   return (
     <section className={styles.card}>
@@ -779,13 +1189,13 @@ function SubaccountCard({
         data-testid={`leasecard-${card.name}`}
       >
         <Text className={styles.cardTitle}>{card.name}</Text>
-        <span className={styles.chevron}>
-          {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
-        </span>
+        {open
+          ? <ChevronUpRegular className={styles.chevron} />
+          : <ChevronDownRegular className={styles.chevron} />}
       </button>
 
       {open ? (
-        <>
+        <div className={styles.scroll} style={{ height: `${Math.max(galleryHeight + 74, 50)}px` }}>
           <div className={mergeClasses(styles.toolbar, commandRow.row)}>
             {commands.map((c) => (
               <Button
@@ -809,89 +1219,102 @@ function SubaccountCard({
             * The header stands even with no rows - `…_CostsTableHeader_1.Visible: =true`,
             * unlike Opex, whose header is gated on the subaccount having costs.
             */}
-          {(
-            <div className={styles.scroll}>
-              <table className={styles.table} aria-label={`${card.name} periods`}>
-                <thead>
-                  <tr>
-                    <th className={styles.selectCell} />
+          <table
+            className={styles.table}
+            style={{ width: `${tableWidth}px` }}
+            aria-label={`${card.name} periods`}
+          >
+            <colgroup>
+              <col style={{ width: `${SELECT_COLUMN_WIDTH}px` }} />
+              {columns.map((c) => <col key={c.key} style={{ width: `${c.width}px` }} />)}
+            </colgroup>
+            <thead>
+              <tr>
+                <th className={styles.selectCell} />
+                {columns.map((c) => (
+                  <th
+                    key={c.key}
+                    scope="col"
+                    className={mergeClasses(
+                      styles.th, c.align === "right" && styles.thRight,
+                      c.key === "durationYears" && styles.thDuration,
+                    )}
+                  >
+                    {c.key === "durationYears"
+                      ? <span className={styles.thDurationCaption}>{c.label}</span>
+                      : c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((period) => {
+                const cost = period.projectCostId
+                  ? costById.get(period.projectCostId) ?? null
+                  : null;
+                const row = toLeaseGridRow({
+                  period, cost, ctx, selectedPeriodId: selection.periodId,
+                });
+                const select = () => onSelectRow({
+                  periodId: period.id,
+                  costId: period.projectCostId,
+                  subaccountId: card.id,
+                });
+                return (
+                  <tr
+                    key={row.id}
+                    className={mergeClasses(
+                      styles.row,
+                      /* `Italic: =StartsWith(ThisItem.Name, "Standard")` + the themePrimary `Color` (LL:992), rule 20. */
+                      standardClass(row.standard),
+                      row.selected && styles.rowSelected,
+                    )}
+                    onClick={select}
+                    aria-label="Select period"
+                    data-testid={`btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_2-${row.id}`}
+                  >
+                    <td className={styles.selectCell}>
+                      {/*
+                        * `img_…_CostsTableRow_RadioSelection_2` is a picture, not a
+                        * control: the whole row is one transparent button
+                        * (`btn_…_TransparentButton_2`, LL:1744) and clicking the row that
+                        * is already selected DESELECTS it. So the radio is `readOnly` and
+                        * its click bubbles to the row — one handler, one toggle, whether
+                        * the user hits the dot or the description.
+                        */}
+                      <input
+                        type="radio"
+                        name={`lease-${card.id}`}
+                        checked={row.selected}
+                        readOnly
+                        aria-label={`Select ${row.cells.description}`}
+                        data-testid={`lease-select-${row.id}`}
+                      />
+                    </td>
                     {columns.map((c) => (
-                      <th
+                      <td
                         key={c.key}
-                        scope="col"
-                        style={{ minWidth: c.width }}
                         className={mergeClasses(
-                          styles.th, c.align === "right" && styles.thRight,
+                          styles.td, c.align === "right" && styles.tdRight,
+                          c.key !== "description"
+                            ? styles.tdSemibold
+                            : row.bold ? styles.tdBold : styles.tdNormal,
                         )}
                       >
-                        {c.label}
-                      </th>
+                        {row.cells[c.key] ?? ""}
+                      </td>
                     ))}
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((period) => {
-                    const cost = period.projectCostId
-                      ? costById.get(period.projectCostId) ?? null
-                      : null;
-                    const row = toLeaseGridRow({
-                      period, cost, ctx, selectedPeriodId: selection.periodId,
-                    });
-                    const select = () => onSelectRow({
-                      periodId: period.id,
-                      costId: period.projectCostId,
-                      subaccountId: card.id,
-                    });
-                    return (
-                      <tr
-                        key={row.id}
-                        className={mergeClasses(
-                          styles.row,
-                          /* `Italic: =StartsWith(ThisItem.Name, "Standard")` + the themePrimary `Color` (LL:992), rule 20. */
-                          standardClass(row.standard),
-                          row.bold && styles.rowBold,
-                          row.selected && styles.rowSelected,
-                        )}
-                        onClick={select}
-                        aria-label="Select period"
-                        data-testid={`btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_2-${row.id}`}
-                      >
-                        <td className={styles.selectCell}>
-                          {/*
-                            * `img_…_CostsTableRow_RadioSelection_2` is a picture, not a
-                            * control: the whole row is one transparent button
-                            * (`btn_…_TransparentButton_2`, LL:1744) and clicking the row that
-                            * is already selected DESELECTS it. So the radio is `readOnly` and
-                            * its click bubbles to the row — one handler, one toggle, whether
-                            * the user hits the dot or the description.
-                            */}
-                          <input
-                            type="radio"
-                            name={`lease-${card.id}`}
-                            checked={row.selected}
-                            readOnly
-                            aria-label={`Select ${row.cells.description}`}
-                            data-testid={`lease-select-${row.id}`}
-                          />
-                        </td>
-                        {columns.map((c) => (
-                          <td
-                            key={c.key}
-                            className={mergeClasses(
-                              styles.td, c.align === "right" && styles.tdRight,
-                            )}
-                          >
-                            {row.cells[c.key] ?? ""}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                );
+              })}
+            </tbody>
+          </table>
+          <div
+            className={styles.rowsSpacer}
+            style={{ height: `${galleryHeight - rows.length * 30}px` }}
+            aria-hidden
+          />
+        </div>
       ) : null}
     </section>
   );
@@ -920,12 +1343,29 @@ function LeasePanelBody({
   onResetStartDate: () => void;
 }) {
   const styles = useStyles();
-  const standardClass = useStandardValueClass();
   const iso = ctx.isoCurrencyCode;
   const headerOn = headerEditable(panel.period, panel.cost);
   const allocationOn = allocationVisible(ctx.technology);
   const allocationEnabled = allocationEditable(panel.period, panel.cost);
   const errorFor = (key: string) => errors[key];
+  const [allocationOpen, setAllocationOpen] = useState(false);
+  /*
+   * `cmb_…_AllocationWtg_1.Items: =Sort(colGeneratorsInProject, Order, Ascending)` (LL:3944),
+   * `Order` being the number after the name's last "_". A name with no such number (the PV
+   * rows, "Label Test pV", "PV48") has a BLANK order, and the canvas lists those LAST — the
+   * canvas screenshot (26 Oct 2026) shows WTG 000_1 … 000_22 first. `generatorOptions` scores
+   * them 0, which put them first, so the list is re-ordered here for display; ties keep their
+   * order (`Array.prototype.sort` is stable).
+   */
+  const allocationList = [...generators].sort(
+    (a, b) => (a.order > 0 ? a.order : Infinity) - (b.order > 0 ? b.order : Infinity),
+  );
+  // The canvas list opens flush under its box; Fluent leaves a 2 px gap. `autoSize` off: Fluent
+  // otherwise writes its own inline `max-height` over the 17-row cap.
+  const canvasList = {
+    listbox: { className: styles.canvasListbox },
+    positioning: { offset: { crossAxis: 0, mainAxis: 0 }, autoSize: false },
+  } as const;
 
   /**
    * The dynamic required markers on Start Date, Duration, Distribution Frequency and
@@ -1013,16 +1453,22 @@ function LeasePanelBody({
             {required(periodBlockRequired)}{LEASE_LABELS.startDate}
           </Text>
           <div className={styles.dateRow}>
-            <Input
-              type="date"
+            {/*
+              * `dte_…_StartDate_1` — a `DatePicker@0.0.46`, `Format: LongAbbreviated`
+              * ("Wed, May 8, 2030"), `StartOfWeek: Monday`, `Width: =Parent.Width-Self.X*2-40`
+              * to leave room for the reset icon (LL:2336). `FontItalic` / `FontColor` follow the
+              * standard-assumption flag (rule 20). It sets NO `DisplayMode`, so it stays
+              * editable on a later period too — the period's own start date — unlike the header
+              * fields `headerEditable` locks (canvas Add Period screenshot, 26 Oct 2026).
+              */}
+            <DateInput
               value={startDate}
-              disabled={!headerOn}
-              onChange={(_, d) => onStartDate(d.value)}
-              style={{ flex: 1 }}
-              /* `dte_….FontItalic` / `.FontColor` while the date is still the standard assumption's (rule 20). */
-              className={standardClass(startDateIsStandard(form.isStartDateStandardAssumption))}
-              aria-label={LEASE_LABELS.startDate}
-              data-testid="lease-start"
+              format="LongAbbreviated"
+              standard={startDateIsStandard(form.isStartDateStandardAssumption)}
+              onChange={(v) => onStartDate(v ?? "")}
+              className={styles.startDate}
+              ariaLabel={LEASE_LABELS.startDate}
+              testId="lease-start"
             />
             {/* `ico_ResetStartDay_NewEditCost_LandLease_1` (LL:2503). */}
             {resetStartDateVisible(panel.period, panel.cost) ? (
@@ -1047,6 +1493,7 @@ function LeasePanelBody({
           <div className={styles.duration}>
             <Dropdown
               aria-label={`${LEASE_LABELS.duration} years`}
+              {...canvasList}
               value={form.durationYears === null ? "" : durationYearLabel(form.durationYears)}
               selectedOptions={form.durationYears === null ? [] : [String(form.durationYears)]}
               onOptionSelect={(_, d) => patch({
@@ -1064,6 +1511,7 @@ function LeasePanelBody({
             </Dropdown>
             <Dropdown
               aria-label={`${LEASE_LABELS.duration} months`}
+              {...canvasList}
               value={form.durationMonths === null ? "" : durationMonthLabel(form.durationMonths)}
               selectedOptions={form.durationMonths === null ? [] : [String(form.durationMonths)]}
               onOptionSelect={(_, d) => patch({ durationMonths: Number(d.optionValue) })}
@@ -1082,6 +1530,7 @@ function LeasePanelBody({
           <Text className={styles.label}>{LEASE_LABELS.currency}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.currency}
+            {...canvasList}
             className={styles.panelDropdown}
             value={currencyName}
             selectedOptions={[currencyName]}
@@ -1095,32 +1544,32 @@ function LeasePanelBody({
         <CostField
           label={leaseCurrencyLabel.fixCosts(iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_FixedCosts_1"
-          type="number" value={form.fixedCosts}
+          type="text" value={form.fixedCosts}
           error={errorFor("fixedCosts")} onChange={(v) => patch({ fixedCosts: v })}
         />
         <CostField
           label="Share of Revenues [%]"
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_PercentOfRevenues_1"
-          type="number" value={form.percentOfRevenues}
+          type="text" value={form.percentOfRevenues}
           error={errorFor("percentOfRevenues")}
           onChange={(v) => patch({ percentOfRevenues: v })}
         />
         <CostField
           label={rateLabel("MWh", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMWh_1"
-          type="number" value={form.eurPerMwh}
+          type="text" value={form.eurPerMwh}
           error={errorFor("eurPerMwh")} onChange={(v) => patch({ eurPerMwh: v })}
         />
         <CostField
           label={rateLabel("MW", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMW_1"
-          type="number" value={form.eurPerMw}
+          type="text" value={form.eurPerMw}
           error={errorFor("eurPerMw")} onChange={(v) => patch({ eurPerMw: v })}
         />
         <CostField
           label={rateLabel("WTG", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroWTG_1"
-          type="number" value={form.eurPerWtg}
+          type="text" value={form.eurPerWtg}
           error={errorFor("eurPerWtg")} onChange={(v) => patch({ eurPerWtg: v })}
         />
 
@@ -1129,6 +1578,7 @@ function LeasePanelBody({
           <Text className={styles.label}>{LEASE_LABELS.aggregation}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.aggregation}
+            {...canvasList}
             className={styles.panelDropdown}
             value={form.aggregation === null ? "" : AGGREGATION_LABELS[form.aggregation] ?? ""}
             selectedOptions={form.aggregation === null ? [] : [String(form.aggregation)]}
@@ -1147,6 +1597,7 @@ function LeasePanelBody({
           </Text>
           <Dropdown
             aria-label={LEASE_LABELS.distributionFrequency}
+            {...canvasList}
             className={styles.panelDropdown}
             value={DISTRIBUTION_FREQUENCIES
               .find((f) => f.value === form.distributionFrequency)?.label ?? ""}
@@ -1164,7 +1615,7 @@ function LeasePanelBody({
 
       {/* ── con_LandLease_RightPanel_NewEditContractPeriod_RightBodyContent ── */}
       <div className={styles.panelColumn}>
-        <div className={styles.toggleRow}>
+        <div className={styles.toggleRow} data-toggle-row>
           <Switch
             checked={form.securedChecked}
             disabled={!headerOn}
@@ -1178,7 +1629,7 @@ function LeasePanelBody({
         {/* `PA:3861` / `PA:3904` — both allocation controls are PV-or-Wind only. */}
         {allocationOn ? (
           <>
-            <div className={styles.toggleRow}>
+            <div className={styles.toggleRow} data-toggle-row>
               <Switch
                 checked={form.allWtgAllocated}
                 disabled={!allocationEnabled}
@@ -1187,8 +1638,13 @@ function LeasePanelBody({
                   // `locSelectAllWTG` — `cmb_…_AllocationWtg_1.DefaultSelectedItems` (LL:3905)
                   // pre-selects EVERY generator while it is on and falls back to the
                   // contract's stored allocation rows when it is off.
+                  // `colAllocatedWtgsInSelectedLandLeaseCost` — THIS contract's rows only. Passing
+                  // every contract's rows refilled a brand-new contract with every generator
+                  // allocated anywhere in the project when the toggle was switched off.
                   allocatedGeneratorIds: defaultAllocatedGenerators(
-                    generators, allocations, d.checked,
+                    generators,
+                    allocations.filter((a) => panel.cost !== null && a.projectCostId === panel.cost.id),
+                    d.checked,
                   ).map((g) => g.id),
                 })}
                 aria-label={LEASE_LABELS.allocateToAllWtgs}
@@ -1198,16 +1654,19 @@ function LeasePanelBody({
             </div>
 
             <div data-testid="lease-allocation">
-              <Text className={styles.label}>
+              <Text className={mergeClasses(styles.label, styles.labelStrong)}>
                 {required(periodBlockRequired)}{LEASE_LABELS.allocation}
               </Text>
               <Dropdown
                 multiselect
                 aria-label={LEASE_LABELS.allocation}
-                className={styles.panelDropdown}
+                className={mergeClasses(styles.panelDropdown, styles.singleLine)}
+                listbox={{ className: styles.allocationListbox }}
                 disabled={!allocationEnabled}
                 selectedOptions={form.allocatedGeneratorIds}
-                value={generators
+                // The modern ComboBox turns into an empty search box while its list is open.
+                onOpenChange={(_, d) => setAllocationOpen(d.open)}
+                value={allocationOpen ? "" : allocationList
                   .filter((g) => form.allocatedGeneratorIds.includes(g.id))
                   .map((g) => g.label)
                   .join(", ")}
@@ -1219,7 +1678,7 @@ function LeasePanelBody({
                 })}
                 data-testid="cmb_LandLease_RightPanel_NewEditCost_BodyContent_AllocationWtg_1"
               >
-                {generators.map((g) => (
+                {allocationList.map((g) => (
                   <Option key={g.id} value={g.id}>{g.label}</Option>
                 ))}
               </Dropdown>
@@ -1227,7 +1686,7 @@ function LeasePanelBody({
           </>
         ) : null}
 
-        <div className={styles.toggleRow}>
+        <div className={styles.toggleRow} data-toggle-row>
           <Switch
             checked={form.inflationChecked}
             disabled={!headerOn}
@@ -1245,7 +1704,7 @@ function LeasePanelBody({
 
         {inflationSectionVisible(form.inflationChecked) ? (
           <>
-            <div className={styles.toggleRow}>
+            <div className={mergeClasses(styles.toggleRow, styles.toggleRowTight)} data-toggle-row>
               {/*
                 * `lbl_…_CountryInflationToggleAsterisk_1.Visible` is `=//If(...)` — a formula
                 * that is nothing but a comment, so it evaluates blank and the marker never
@@ -1292,7 +1751,8 @@ function LeasePanelBody({
                 </Text>
                 <Dropdown
                   aria-label={LEASE_LABELS.area}
-                  className={styles.panelDropdown}
+                  {...canvasList}
+                  className={mergeClasses(styles.panelDropdown, styles.areaDropdown)}
                   value={form.inflationCountryArea ?? ""}
                   selectedOptions={form.inflationCountryArea ? [form.inflationCountryArea] : []}
                   disabled={!headerOn}
@@ -1306,23 +1766,23 @@ function LeasePanelBody({
 
             {/*
               * One label, two fields — `lbl_…_InflationProfile_1.Text` (LL:4645). The country
-              * toggle swaps an editable percentage for read-only text.
+              * toggle swaps the editable percentage for `txt_…_InflationProfile_2` (LL:4708), a
+              * `TextInput` that is `DisplayMode.Disabled` whenever it shows: the canvas' white
+              * outlined box with grey text, not a grey read-only strip.
               */}
             {form.countryInflationChecked ? (
-              <div>
-                <Text className={styles.label}>
-                  {inflationProfileLabel(true)}
-                </Text>
-                <div className={styles.readOnly} data-testid="lease-country-profile">
-                  {countryInflationDisplay(ctx)}
-                </div>
-              </div>
+              <CostField
+                label={inflationProfileLabel(true)}
+                name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_2"
+                value={countryInflationDisplay(ctx)}
+                disabled
+              />
             ) : (
               <CostField
                 label={inflationProfileLabel(false)}
                 name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
                 required
-                type="number"
+                type="text"
                 value={form.inflationProfile}
                 disabled={!headerOn}
                 error={errorFor("inflationProfile")}
@@ -1332,7 +1792,7 @@ function LeasePanelBody({
           </>
         ) : null}
 
-        <div className={styles.toggleRow}>
+        <div className={styles.toggleRow} data-toggle-row>
           <Switch
             checked={form.oneTimePaymentsOn}
             disabled={!headerOn}
@@ -1353,48 +1813,58 @@ function LeasePanelBody({
           <Text>{LEASE_LABELS.oneTimePayment}</Text>
         </div>
 
+        {/*
+          * The payment BLOCKS follow the toggle, but `btn_OneTimePayment2_…` does not: its
+          * `Visible: =!locShowThirdPayment` (LL:5136) has no toggle term, so with One-Time
+          * Payment off it still shows — disabled, its date and amount being blank — as the
+          * canvas screenshot (26 Oct 2026) shows. Unchecking the toggle resets both extra
+          * blocks, so the third button (`Visible: =locShowSecondPayment`) is hidden then.
+          */}
         {form.oneTimePaymentsOn ? (
-          <>
-            <PaymentBlock
-              n={1} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
-            />
-            {form.showSecondPayment ? (
-              <PaymentBlock
-                n={2} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
-              />
-            ) : null}
-            {paymentButton(2).visible ? (
-              <Button
-                appearance="transparent"
-                className={styles.command}
-                icon={paymentButton(2).icon === "Add" ? <AddRegular /> : <DeleteRegular />}
-                disabled={!paymentButton(2).enabled}
-                onClick={() => togglePaymentBlock(2, form.showSecondPayment)}
-                aria-label={paymentButton(2).label}
-                data-testid="lease-payment-2"
-              >
-                {paymentButton(2).label}
-              </Button>
-            ) : null}
-            {form.showThirdPayment ? (
-              <PaymentBlock
-                n={3} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
-              />
-            ) : null}
-            {paymentButton(3).visible ? (
-              <Button
-                appearance="transparent"
-                className={styles.command}
-                icon={paymentButton(3).icon === "Add" ? <AddRegular /> : <DeleteRegular />}
-                disabled={!paymentButton(3).enabled}
-                onClick={() => togglePaymentBlock(3, form.showThirdPayment)}
-                aria-label={paymentButton(3).label}
-                data-testid="lease-payment-3"
-              >
-                {paymentButton(3).label}
-              </Button>
-            ) : null}
-          </>
+          <PaymentBlock
+            n={1} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
+          />
+        ) : null}
+        {/* Canvas order (LL:4782-5799): payment 1, its button, payment 2, its button, payment 3. */}
+        {paymentButton(2).visible ? (
+          <Button
+            appearance="transparent"
+            className={mergeClasses(
+              styles.command, !paymentButton(2).enabled && styles.commandDisabled,
+            )}
+            icon={paymentButton(2).icon === "Add" ? <AddFilled /> : <DeleteFilled />}
+            disabled={!paymentButton(2).enabled}
+            onClick={() => togglePaymentBlock(2, form.showSecondPayment)}
+            aria-label={paymentButton(2).label}
+            data-testid="lease-payment-2"
+          >
+            {paymentButton(2).label}
+          </Button>
+        ) : null}
+        {form.oneTimePaymentsOn && form.showSecondPayment ? (
+          <PaymentBlock
+            n={2} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
+          />
+        ) : null}
+        {paymentButton(3).visible ? (
+          <Button
+            appearance="transparent"
+            className={mergeClasses(
+              styles.command, !paymentButton(3).enabled && styles.commandDisabled,
+            )}
+            icon={paymentButton(3).icon === "Add" ? <AddFilled /> : <DeleteFilled />}
+            disabled={!paymentButton(3).enabled}
+            onClick={() => togglePaymentBlock(3, form.showThirdPayment)}
+            aria-label={paymentButton(3).label}
+            data-testid="lease-payment-3"
+          >
+            {paymentButton(3).label}
+          </Button>
+        ) : null}
+        {form.oneTimePaymentsOn && form.showThirdPayment ? (
+          <PaymentBlock
+            n={3} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
+          />
         ) : null}
 
         {/* `con_LandLease_WarningOnSaveWithCost` (LL:5802). */}
@@ -1426,10 +1896,14 @@ function PaymentBlock({
   // The canvas names the first payment block `..._DueDate_1`/`..._Amount_1` and the other two
   // `..._DueDate2_1`/`..._DueDate3_1` — the digit mid-name, not after it.
   const nSuffix = n === 1 ? "" : String(n);
+  const styles = useStyles();
   return (
-    <>
+    // `lbl_…_DueDate*_1` / `lbl_…_Amount*_1` are the panel's Semibold captions (LL:4859, LL:5024).
+    <div className={styles.contents} data-strong-captions>
       <CostField
         label={LEASE_LABELS.oneTimePaymentDate(n)}
+        // `lbl_…_DueDate_1_1` / `_1_2` / `_1_3` — a `*` with no `Visible`, so always shown (LL:4888).
+        required
         name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_DueDate${nSuffix}_1`}
         value={form.payments[dateKey]}
         placeholder={LEASE_LABELS.dueDatePlaceholder}
@@ -1439,14 +1913,16 @@ function PaymentBlock({
       />
       <CostField
         label={leaseCurrencyLabel.oneTimePaymentAmount(n, iso)}
+        // `lbl_…_Amount_1_1` / `_1_2` / `_1_3` — a `*` with no `Visible`, so always shown (LL:5053).
+        required
         name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_Amount${nSuffix}_1`}
-        type="number"
+        type="text"
         value={form.payments[amountKey]}
         disabled={disabled}
         error={errors[amountKey]}
         onChange={(v) => patch({ payments: { ...form.payments, [amountKey]: v } })}
       />
-    </>
+    </div>
   );
 }
 
@@ -1460,6 +1936,14 @@ function isoDay(value: Date | undefined): string | null {
 }
 
 /** `txt_…_InflationProfile_1.Value` is a one-decimal string; blank stays blank. */
+/** `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` — a whole rate without decimals, else one or two. */
+function canvasRate(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  if (Number.isInteger(value)) return String(value);
+  const s = value.toFixed(2);
+  return s.endsWith("0") ? s.slice(0, -1) : s;
+}
+
 const formatProfile = (value: number | null): string =>
   value === null ? "" : value.toFixed(1);
 

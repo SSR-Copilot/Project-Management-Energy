@@ -279,7 +279,8 @@ describe("LandLeaseScreen", () => {
     fireEvent.click(within(card("Locations")).getByTestId("lease-newLandLeaseContractKey"));
 
     expect(screen.getByText("Add Contract - Locations")).toBeInTheDocument();
-    expect(screen.getByTestId("lease-start")).toHaveValue("2027-08-30");
+    // `dte_…_StartDate_1.Format: LongAbbreviated` — the canvas date picker's text, not ISO.
+    expect(screen.getByTestId("lease-start")).toHaveValue("Mon, Aug 30, 2027");
     // A new contract may edit the header, so the reset icon is offered.
     expect(screen.getByTestId("lease-reset-start")).toBeInTheDocument();
   });
@@ -290,11 +291,12 @@ describe("LandLeaseScreen", () => {
     fireEvent.click(screen.getByTestId("lease-select-p2"));
     fireEvent.click(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey"));
 
-    // `headerEditable` — Period 2 cannot rewrite the contract, so Secured, the inflation
-    // toggle and the start date are all disabled, and the reset icon is gone entirely.
+    // `headerEditable` — Period 2 cannot rewrite the contract, so Secured and the inflation
+    // toggle are disabled, and the reset icon is gone entirely. The start date is the PERIOD's
+    // own and stays editable: `dte_…_StartDate_1` sets no `DisplayMode` (LL:2336).
     expect(screen.getByTestId("lease-secured")).toBeDisabled();
     expect(screen.getByTestId("lease-inflation")).toBeDisabled();
-    expect(screen.getByTestId("lease-start")).toBeDisabled();
+    expect(screen.getByTestId("lease-start")).not.toBeDisabled();
     expect(screen.queryByTestId("lease-reset-start")).not.toBeInTheDocument();
     // The period's own fields stay editable.
     expect(screen.getByTestId("lease-frequency")).not.toBeDisabled();
