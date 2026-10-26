@@ -41,7 +41,7 @@ import type { ReactNode } from "react";
 import {
   Dialog, DialogSurface, MessageBar, MessageBarBody, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
-import { CheckmarkRegular, DeleteRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
+import { CheckmarkRegular, DeleteFilled, DeleteRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
 import { fontFamily, palette } from "@/theme/tokens";
 
 /** Canvas `Size:` is in points; Power Apps renders them at 96/72 px per point. */
@@ -177,6 +177,33 @@ const useStyles = makeStyles({
     display: "flex", alignItems: "center", justifyContent: "flex-end", columnGap: "20px",
     height: "60px", paddingLeft: "20px", paddingRight: "20px",
   },
+  /**
+   * `canvasFooter` (opt-in): the buttons row with a thin divider along its top, as the canvas
+   * `cmp_PopUp_Confirmation` renders on the Land Lease screen (canvas screenshot, 26 Oct 2026).
+   */
+  actionsDivider: {
+    borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: "#edebe9",
+  },
+  /**
+   * `canvasFooter`: the canvas card sits FLAT on the scrim — no drop shadow — with slightly
+   * rounded corners; `overflow: hidden` keeps the blue header inside them.
+   */
+  surfaceCanvas: {
+    boxShadow: "none", overflowX: "hidden", overflowY: "hidden",
+    borderTopLeftRadius: "4px", borderTopRightRadius: "4px",
+    borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
+  },
+  /*
+   * `canvasFooter`: sized to the canvas screenshot (26 Oct 2026). The canvas draws in Open Sans,
+   * which this app does not load yet, so the Segoe UI fallback is set a step larger to fill the
+   * same width: 16 px description, 15 px regular-weight captions, and the PowerCAT icons in a
+   * 20 px box (a filled bin).
+   */
+  descriptionCanvas: { fontSize: "16px", lineHeight: "1.4" },
+  buttonCanvas: {
+    fontWeight: tokens.fontWeightRegular, fontSize: "15px",
+    "& svg": { fontSize: "20px", width: "20px", height: "20px" },
+  },
   /** Both PowerCAT buttons: `Height: =32`, centred label, 14 px text. */
   button: {
     display: "inline-flex", alignItems: "center", justifyContent: "center", columnGap: "8px",
@@ -276,6 +303,11 @@ export interface ConfirmDialogProps {
    * Off by default, so every existing caller keeps its ✕ / Escape behaviour.
    */
   lockWhileBusy?: boolean;
+  /**
+   * Optional (Land Lease): the canvas buttons row — a divider above it, regular-weight captions
+   * and 16 px icons. Off by default, so every existing caller keeps its look.
+   */
+  canvasFooter?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -288,7 +320,7 @@ export function ConfirmDialog({
   confirmIcon = "checkmark", cancelIcon = "dismiss",
   confirmWidth = 96,
   boxHeight, textHeight,
-  error, lockWhileBusy = false,
+  error, lockWhileBusy = false, canvasFooter = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
@@ -311,6 +343,7 @@ export function ConfirmDialog({
       className={mergeClasses(
         styles.description,
         isInfo ? styles.infoText : styles.descriptionPlain,
+        canvasFooter && styles.descriptionCanvas,
       )}
     >
       {description}
@@ -324,7 +357,7 @@ export function ConfirmDialog({
       onOpenChange={(_, data) => { if (!data.open && !locked) onCancel(); }}
     >
       <DialogSurface
-        className={mergeClasses(styles.surface, isInfo && styles.surfaceInfo)}
+        className={mergeClasses(styles.surface, isInfo && styles.surfaceInfo, canvasFooter && styles.surfaceCanvas)}
         style={surfaceStyle}
         aria-label={title}
         backdrop={{ className: styles.backdrop }}
@@ -356,11 +389,12 @@ export function ConfirmDialog({
         </div>
 
         {/* Confirm sits LEFT of Cancel: `Confirm.X = Cancel.X - Self.Width - 20`. */}
-        <div className={styles.actions}>
+        <div className={mergeClasses(styles.actions, canvasFooter && styles.actionsDivider)}>
           <button
             type="button"
             className={mergeClasses(
               styles.button, destructive ? styles.destructive : styles.confirm,
+              canvasFooter && styles.buttonCanvas,
             )}
             style={{ width: confirmWidth }}
             onClick={onConfirm}
@@ -378,12 +412,12 @@ export function ConfirmDialog({
             aria-label={confirmText}
             data-testid="confirm-dialog-confirm"
           >
-            {ICONS[confirmIcon]}
+            {canvasFooter && confirmIcon === "delete" ? <DeleteFilled /> : ICONS[confirmIcon]}
             {confirmText}
           </button>
           <button
             type="button"
-            className={mergeClasses(styles.button, styles.cancel)}
+            className={mergeClasses(styles.button, styles.cancel, canvasFooter && styles.buttonCanvas)}
             onClick={onCancel}
             disabled={busy}
             aria-label={cancelText}

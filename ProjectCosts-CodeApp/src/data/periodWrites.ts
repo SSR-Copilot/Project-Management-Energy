@@ -151,6 +151,7 @@ async function resolveOpexGroupTarget(
   projectId: string,
   mode: "om" | "other",
   group: string,
+  deviceId?: string,
 ): Promise<OpexGroupTarget> {
   const [accounts, subaccounts] = await Promise.all([
     fetchAll(
@@ -188,7 +189,9 @@ async function resolveOpexGroupTarget(
     .sort(byOrder)[0];
   if (!omSubaccount) throw new Error(`No sub-account is configured under "${OPEX_MODE_NAME.om}".`);
 
-  const device = await resolveDeviceType(projectId, group);
+  // The card's own device id when it has one: two devices can share a `vsb_name`, and resolving
+  // by name bound a save from the second card to the first device.
+  const device = deviceId ? { id: deviceId, name: group } : await resolveDeviceType(projectId, group);
   return {
     accountName,
     subaccountId: omSubaccount.vsb_opexsubaccountid,
@@ -373,7 +376,7 @@ export async function saveOpexPeriod(
   const mode = period.mode as "om" | "other";
   const [currencyId, target] = await Promise.all([
     resolveCurrencyId(period.currency),
-    resolveOpexGroupTarget(ctx.projectId, mode, period.group),
+    resolveOpexGroupTarget(ctx.projectId, mode, period.group, period.deviceId),
   ]);
   const fields = opexFields(period, target, currencyId);
 
@@ -904,6 +907,8 @@ export interface StandardContractArgs {
   mode: PeriodMode;
   /** The card the command was pressed on: device name (O&M) or sub-account name (the other two). */
   group: string;
+  /** O&M: the card's device row id — the name in `group` is not unique. */
+  deviceId?: string;
   /** `gblSelectedProject.Country.Country` — `_vsb_country_value` on the project row. */
   countryId?: string;
   /** `gblSelectedProject.Technology` — the same global option set on both tables. */
@@ -1005,7 +1010,7 @@ async function addOpexStandardContract(
   args: StandardContractArgs,
 ): Promise<CostPeriod[]> {
   const mode = args.mode as "om" | "other";
-  const target = await resolveOpexGroupTarget(ctx.projectId, mode, args.group);
+  const target = await resolveOpexGroupTarget(ctx.projectId, mode, args.group, args.deviceId);
 
   const existing = await fetchAll(
     "check for an existing OPEX standard contract",
@@ -1055,6 +1060,7 @@ async function addOpexStandardContract(
     const period: CostPeriod = {
       id: "",
       group: args.group,
+      deviceId: target.deviceTypeInProjectId,
       mode,
       description,
       startDate,

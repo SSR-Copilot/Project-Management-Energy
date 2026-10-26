@@ -79,7 +79,7 @@ import {
   allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
   deleteContractDescription,
   distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
-  previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
+  onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
   savingCostLabel, standardContractLoadingLabel,
 } from "./panelRules";
 
@@ -217,12 +217,15 @@ export default function CapexCostsScreen() {
   // is preferred (`CapexScreenCode.txt:75-115`) — defaulting it to 0 picks the wrong one for
   // every acquired project.
   const allowedStart = costAllowedStart(project ?? {}, startClusterNo);
-  const [rawYear, setYear] = useState<number | null>(null);
+  const [pickedYear, setYear] = useState<number | null>(null);
+  /** `gblSelectedProjectYear` — the user's pick, else the `App.OnStart` seed. */
+  const rawYear = pickedYear ?? onStartSelectedYear(project ?? {}, startClusterNo);
   const window = navigationWindow(project ?? {}, clusters, allowedStart.year, rawYear);
   /*
    * `Coalesce(gblSelectedProjectYear, locCostAllowedStartYear, locNavigationMinYear,
    * Year(Today()))`, clamped — NOT `Year(Today())` on its own, which opened a 2015-2019
-   * project on a year it has no periods for.
+   * project on a year it has no periods for. The clamp is what still moves a finished
+   * project back into its own window.
    */
   const year = defaultSelectedYear({
     selectedYear: rawYear,

@@ -156,6 +156,30 @@ export function defaultSelectedYear(args: {
 }
 
 /**
+ * `gblSelectedProjectYear` as `App.OnStart` seeds it (`Src/App.pa.yaml`, `OnStart`):
+ *
+ *     Set(gblSelectedProjectYear, Year(
+ *         If('Start Cluster' <> 'Cluster States'.Greenfield,
+ *            If(Year('Acquisition date') > Year(Today()), 'Acquisition date', Today()),
+ *            If(Year('Project Start Date') > Year(Today()), 'Project Start Date', Today()))))
+ *
+ * So the screen's `Coalesce` in `defaultSelectedYear` never reaches `locCostAllowedStartYear`
+ * on first open — the canvas lands on THIS year, or on a future start/acquisition year. Leaving
+ * the seed out made the code app open on the project's start year (2015 on the test projects)
+ * and show different costs to the canvas.
+ */
+export function onStartSelectedYear(
+  anchors: { acquisitionDate?: Date; startDate?: Date },
+  startClusterNo: number | undefined,
+  today: Date = new Date(),
+): number {
+  const anchor = (startClusterNo ?? 0) > 0 ? anchors.acquisitionDate : anchors.startDate;
+  const year = today.getFullYear();
+  const anchorYear = anchor && !Number.isNaN(anchor.getTime()) ? anchor.getFullYear() : null;
+  return anchorYear !== null && anchorYear > year ? anchorYear : year;
+}
+
+/**
  * The floor the ◀ button stops at — `CapexScreenCode.txt:2833-2845`:
  *
  *     varMinSelectableYear: Coalesce(locCostAllowedStartYear,
