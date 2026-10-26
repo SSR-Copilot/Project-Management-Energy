@@ -114,21 +114,32 @@ const rateLabel = (unit: "MWh" | "MW" | "WTG", iso: string | null | undefined): 
  */
 const arrow = (path: string) =>
   `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><path d='${path}' fill='%23505050'/></svg>")`;
-const scrollButton = (path: string) => ({
-  display: "block", width: "10px", height: "10px",
+const scrollButton = (path: string, size = 10) => ({
+  display: "block", width: `${size}px`, height: `${size}px`,
   backgroundColor: "#f1f1f1", backgroundImage: arrow(path),
   backgroundRepeat: "no-repeat", backgroundPosition: "center",
 });
+/*
+ * The HORIZONTAL bar under each card's rows is the canvas' thicker classic bar (canvas "Other"
+ * screenshot, 26 Oct 2026): a 16 px track with 16 px arrow buttons and a 10 px handle inset by
+ * 3 px of track above and below. The vertical bars keep the slimmer 10 px look.
+ */
 const canvasScrollbar = {
-  "::-webkit-scrollbar": { width: "10px", height: "10px" },
+  "::-webkit-scrollbar": { width: "10px", height: "16px" },
   "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
   "::-webkit-scrollbar-thumb": {
     backgroundColor: "#868686",
     borderTopLeftRadius: "5px", borderTopRightRadius: "5px",
     borderBottomLeftRadius: "5px", borderBottomRightRadius: "5px",
   },
-  "::-webkit-scrollbar-button:horizontal:start:decrement": scrollButton("M6 0v8L1 4z"),
-  "::-webkit-scrollbar-button:horizontal:end:increment": scrollButton("M2 0v8l5-4z"),
+  "::-webkit-scrollbar-thumb:horizontal": {
+    borderTopWidth: "3px", borderBottomWidth: "3px", borderLeftWidth: 0, borderRightWidth: 0,
+    borderTopStyle: "solid", borderBottomStyle: "solid",
+    borderTopColor: "transparent", borderBottomColor: "transparent",
+    backgroundClip: "padding-box",
+  },
+  "::-webkit-scrollbar-button:horizontal:start:decrement": scrollButton("M6 0v8L1 4z", 16),
+  "::-webkit-scrollbar-button:horizontal:end:increment": scrollButton("M2 0v8l5-4z", 16),
   "::-webkit-scrollbar-button:vertical:start:decrement": scrollButton("M0 6h8L4 1z"),
   "::-webkit-scrollbar-button:vertical:end:increment": scrollButton("M0 2h8L4 7z"),
   "::-webkit-scrollbar-button:start:increment": { display: "none" },
@@ -267,7 +278,9 @@ const useStyles = makeStyles({
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
     color: palette.black,
-    fontSize: "10pt", height: "34px",
+    // 10 pt on the canvas; 10.5 pt here, because the canvas draws in the wider Open Sans and this
+    // app keeps Segoe UI (canvas "Other" screenshot, 26 Oct 2026).
+    fontSize: "10.5pt", height: "34px",
     paddingTop: 0, paddingBottom: 0,
     paddingLeft: "6px", paddingRight: "6px",
     overflow: "visible",
@@ -285,7 +298,8 @@ const useStyles = makeStyles({
    * (8 pt) with `PaddingLeft/Right: =6` and `Wrap: =false`, so text past the width is cut.
    */
   td: {
-    fontSize: "8pt", height: "30px",
+    // 8 pt on the canvas; 8.5 pt here for the same Open Sans / Segoe UI width difference.
+    fontSize: "8.5pt", height: "30px",
     paddingTop: 0, paddingBottom: 0,
     paddingLeft: "6px", paddingRight: "6px",
     overflow: "hidden", textOverflow: "ellipsis",
@@ -299,12 +313,11 @@ const useStyles = makeStyles({
   rowsSpacer: { flexShrink: 0 },
   /*
    * Row label weights. Every cell but Description is
-   * `If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` — a control that does not
-   * exist on this screen, so always Semibold (LL:990, LL:1592). Description alone is
-   * `If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1632). Setting one weight on the
-   * whole row for Period 1 only made every row look the same.
+   * `If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` (LL:990, LL:1592) — and the
+   * running canvas draws them NORMAL (canvas "Other" screenshot, 26 Oct 2026), so that control
+   * reads as visible. Description alone is `If(ThisItem.Period = 'Period 1', Bold, Normal)`
+   * (LL:1632).
    */
-  tdSemibold: { fontWeight: tokens.fontWeightSemibold },
   tdBold: { fontWeight: tokens.fontWeightBold },
   tdNormal: { fontWeight: tokens.fontWeightRegular },
   /*
@@ -329,7 +342,7 @@ const useStyles = makeStyles({
     // `lbl_…_BodyHeader_1` — `gblAppSizes.Font.Large` (12 pt), Semibold, white, on a 46 px bar.
     "&.canvas-panel .canvas-panel-header": { height: "46px", paddingTop: 0, paddingBottom: 0 },
     "&.canvas-panel .canvas-panel-header h2": {
-      fontSize: "12pt", lineHeight: "46px", fontWeight: tokens.fontWeightSemibold,
+      fontSize: "12.7pt", lineHeight: "46px", fontWeight: tokens.fontWeightSemibold,
     },
     /*
      * `con_…_BodyContent_2` — `PaddingTop: =10`, `LayoutOverflowY: =LayoutOverflow.Scroll`: the
@@ -344,7 +357,7 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-field": { gap: 0 },
     "&.canvas-panel .canvas-field > span:first-child": {
       position: "relative", display: "flex", alignItems: "center", height: "32px",
-      fontSize: "11pt", fontWeight: tokens.fontWeightRegular, color: palette.black,
+      fontSize: "11.6pt", fontWeight: tokens.fontWeightRegular, color: palette.black,
     },
     /*
      * `lbl_…_Asterisk_1` — `palette.Error`, Semibold, 10 px wide at `X: =label.X - Self.Width`:
@@ -433,6 +446,10 @@ const useStyles = makeStyles({
     },
     "&.canvas-panel :not([data-toggle-row]) + [data-toggle-row]": { marginTop: "5px" },
     "&.canvas-panel [data-toggle-row]:first-child": { marginTop: "6px" },
+    // Measured on the canvas Leaseholders screenshot (26 Oct 2026): the Allocation caption sits
+    // 3 px nearer its toggle, and One-Time Payment straight after Inflation Profile 3 px nearer.
+    "&.canvas-panel [data-toggle-row] + [data-testid=\"lease-allocation\"][data-testid]:not([data-toggle-row]):not([data-strong-captions])": { marginTop: "-8px" },
+    "&.canvas-panel [data-toggle-row] + [data-toggle-row][data-otp-row]": { marginTop: "-3px" },
     /*
      * `con_…_BodyButtons_1` — 60 px. Cancel at `Parent.Width - 96 - 20`, Save at
      * `Cancel.X - 96 - 20`: two 96 x 32 buttons, 20 px apart, pinned RIGHT whether or not the
@@ -513,13 +530,15 @@ const useStyles = makeStyles({
    */
   /*
    * The open list of a canvas `DropDown@0.0.45` — the same control and look as the OPEX panel's
-   * (`OpexScreen.canvasListbox`): exactly as wide as its box, flat 27 px rows with no check
-   * mark, a light grey fill and a thin grey outline, 17 rows before it scrolls under the canvas
-   * scrollbar. It renders in a portal, outside the drawer, so it is styled through the
-   * `listbox` slot rather than `panelSkin`.
+   * (`OpexScreen.canvasListbox`): exactly as wide as its box, flat 30 px rows with no check
+   * mark, a light grey fill and a thin grey outline, TWENTY rows (0–19 years) before it
+   * scrolls under the canvas scrollbar — a 14 px bar with ▲ / ▼ buttons (canvas Duration
+   * screenshot, 26 Oct 2026). It renders in a portal, outside the drawer, so it is styled
+   * through the `listbox` slot rather than `panelSkin`.
    */
   canvasListbox: {
-    minWidth: 0, maxHeight: "461px", overflowX: "hidden", rowGap: 0,
+    // 20 rows of 30 px plus the 1 px outline top and bottom.
+    minWidth: 0, maxHeight: "602px", overflowX: "hidden", rowGap: 0,
     paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
     backgroundColor: "#f5f5f5", boxShadow: "none",
     borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
@@ -530,6 +549,18 @@ const useStyles = makeStyles({
     borderTopLeftRadius: "2px", borderTopRightRadius: "2px",
     borderBottomLeftRadius: "2px", borderBottomRightRadius: "2px",
     ...canvasScrollbar,
+    // Chromium drops every `::-webkit-scrollbar` rule (arrows included) once the standard
+    // properties are set, so they are held at their initial values on the list.
+    scrollbarWidth: "auto", scrollbarColor: "auto",
+    "::-webkit-scrollbar": { width: "14px", height: "16px" },
+    "::-webkit-scrollbar-thumb:vertical": {
+      borderLeftWidth: "3px", borderRightWidth: "3px", borderTopWidth: 0, borderBottomWidth: 0,
+      borderLeftStyle: "solid", borderRightStyle: "solid",
+      borderLeftColor: "transparent", borderRightColor: "transparent",
+      backgroundClip: "padding-box",
+    },
+    "::-webkit-scrollbar-button:vertical:start:decrement": scrollButton("M0 6h8L4 1z", 14),
+    "::-webkit-scrollbar-button:vertical:end:increment": scrollButton("M0 2h8L4 7z", 14),
     // 30 px rows with 15 px text, measured off the same screenshot.
     "& .fui-Option": {
       boxSizing: "border-box", height: "30px", minHeight: "30px", alignItems: "center",
@@ -614,7 +645,7 @@ const useStyles = makeStyles({
   /** `lbl_…_BodyContent_*` — a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
   label: {
     position: "relative", display: "flex", alignItems: "center", height: "32px",
-    fontWeight: tokens.fontWeightRegular, fontSize: "11pt", color: palette.black,
+    fontWeight: tokens.fontWeightRegular, fontSize: "11.6pt", color: palette.black,
   },
   // `lbl_…_AllocationWtg_1` is the one panel caption with `FontWeight.Semibold` (LL:3997).
   labelStrong: { fontWeight: tokens.fontWeightSemibold },
@@ -1296,9 +1327,7 @@ function SubaccountCard({
                         key={c.key}
                         className={mergeClasses(
                           styles.td, c.align === "right" && styles.tdRight,
-                          c.key !== "description"
-                            ? styles.tdSemibold
-                            : row.bold ? styles.tdBold : styles.tdNormal,
+                          c.key === "description" && row.bold ? styles.tdBold : styles.tdNormal,
                         )}
                       >
                         {row.cells[c.key] ?? ""}
@@ -1792,7 +1821,7 @@ function LeasePanelBody({
           </>
         ) : null}
 
-        <div className={styles.toggleRow} data-toggle-row>
+        <div className={styles.toggleRow} data-toggle-row data-otp-row>
           <Switch
             checked={form.oneTimePaymentsOn}
             disabled={!headerOn}
