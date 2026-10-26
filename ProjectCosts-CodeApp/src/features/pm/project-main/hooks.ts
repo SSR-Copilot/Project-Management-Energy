@@ -7,9 +7,9 @@
  * change. `parseCriteria` validates everything it reads, so a hand-edited link renders the
  * default list rather than reaching `$filter` unchecked.
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
-  keepPreviousData, useMutation, useQuery, useQueryClient,
+  keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -104,12 +104,51 @@ export interface ProjectPageQuery {
   pageKey: readonly unknown[];
 }
 
+/** How long a fetched page counts as fresh — for the page on screen AND the prefetched next one. */
+const PROJECT_PAGE_STALE_MS = 30 * 1000;
+
+interface ProjectPageArgs {
+  /** The filter AS REQUESTED — i.e. with the debounced keyword, never the raw one. */
+  filter: ProjectFilter;
+  sort: SortState;
+  page: number;
+  scopeFilter?: string | undefined;
+  locale?: string | undefined;
+}
+
+/**
+ * The one definition of a project page's cache key.
+ *
+ * The query on screen and the next-page prefetch both build their key here. A prefetch whose
+ * key differs by anything — the raw keyword instead of the debounced one, a `null` scope instead
+ * of `""` — lands under a key no observer ever reads, and the request is wasted.
+ */
+function projectPageKey(args: ProjectPageArgs) {
+  return [
+    "projectPage",
+    args.filter, args.sort.col, args.sort.asc, args.page, args.scopeFilter ?? "",
+  ] as const;
+}
+
+/** Key, query function and freshness together, so the prefetch cannot drift from the query. */
+function projectPageOptions(args: ProjectPageArgs) {
+  return queryOptions({
+    queryKey: projectPageKey(args),
+    queryFn: () => loadProjectPage({
+      filter: args.filter, sort: args.sort, page: args.page,
+      scopeFilter: args.scopeFilter, locale: args.locale,
+    }),
+    staleTime: PROJECT_PAGE_STALE_MS,
+  });
+}
+
 export function useProjectPage(args: {
   criteria: Criteria;
   scopeFilter?: string | undefined;
   locale?: string;
 }): ProjectPageQuery {
   const { criteria, scopeFilter, locale } = args;
+  const qc = useQueryClient();
   // The keyword is the only field typed a character at a time.
   const keyword = useDebouncedValue(criteria.filter.keyword, 350);
   const filter = useMemo<ProjectFilter>(
@@ -117,23 +156,52 @@ export function useProjectPage(args: {
     [criteria.filter, keyword],
   );
 
+  // `criteria.sort` is a new object on every URL parse; its two fields are what the key carries.
+  const { col: sortCol, asc: sortAsc } = criteria.sort;
+  const sort = useMemo<SortState>(() => ({ col: sortCol, asc: sortAsc }), [sortCol, sortAsc]);
+  const page = criteria.page;
+
   const pageKey = useMemo(
-    () => [
-      "projectPage",
-      filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter ?? "",
-    ] as const,
-    [filter, criteria.sort.col, criteria.sort.asc, criteria.page, scopeFilter],
+    () => projectPageKey({ filter, sort, page, scopeFilter }),
+    [filter, sort, page, scopeFilter],
   );
 
   const query = useQuery({
+    ...projectPageOptions({ filter, sort, page, scopeFilter, locale }),
+    // The memoised copy of the same key, so `pageKey` handed to the delete is this exact one.
     queryKey: pageKey,
-    queryFn: () =>
-      loadProjectPage({ filter, sort: criteria.sort, page: criteria.page, scopeFilter, locale }),
     // Keeps the previous page visible while the next one loads, so the grid does not blank
     // out and the pager does not jump.
     placeholderData: keepPreviousData,
-    staleTime: 30 * 1000,
   });
+
+  /*
+   * Prefetch the NEXT page, so Next is served from the cache instead of the network.
+   *
+   * Only once the page on screen is its own (not the previous page held as a placeholder), only
+   * while it has a next page, and not while anything for it is still in flight. One page ahead,
+   * never further: page N + 1 resumes from page N's cached skip token rather than re-walking, and
+   * leaves the token for N + 2 behind for the next prefetch. It costs what any page view costs:
+   * 2 SDK calls on a named page, 3–4 where the page reaches into the blank tail (D45).
+   *
+   * The page number is the one the server SERVED, because that is what Next asks for
+   * (`setPage(currentPage + 1)` with `currentPage = page.page`) — a clamped `?p=9` must prefetch
+   * the page after the one on screen, not page 10.
+   *
+   * `qc.query` honours `staleTime`: a fresh cached N + 1 is not fetched again. If the user clicks
+   * Next while this request is still running, the page's `useQuery` attaches to the same
+   * in-flight query (`Query.fetch` returns the running promise), so no second request goes out.
+   */
+  const served = query.isPlaceholderData ? undefined : query.data;
+  const nextPage = served?.hasNext && !query.isFetching ? served.page + 1 : null;
+  useEffect(() => {
+    if (nextPage === null) return;
+    // A failed prefetch is not the user's error: it leaves the query in its error state, and
+    // the real Next click refetches it and surfaces any failure on screen. It is still traced,
+    // so a prefetch that keeps failing is not invisible.
+    qc.query(projectPageOptions({ filter, sort, page: nextPage, scopeFilter, locale }))
+      .catch((error: unknown) => trace("warning", "prefetch project page failed", { page: nextPage, error }));
+  }, [qc, nextPage, filter, sort, scopeFilter, locale]);
 
   return {
     data: query.data,
@@ -224,7 +292,9 @@ export function useDeleteProject(pageKey: readonly unknown[]) {
   return useMutation({
     mutationFn: (vars: DeleteProjectVars) => deleteProject(vars.id),
     onMutate: async (vars) => {
-      await qc.cancelQueries({ queryKey: pageKey });
+      // Every page, not only this one: a next-page prefetch still in flight would otherwise land
+      // after the invalidation below and be taken as fresh, with the deleted row still in it.
+      await qc.cancelQueries({ queryKey: ["projectPage"] });
       const previous = qc.getQueryData<ProjectPage>(pageKey);
       if (previous) {
         qc.setQueryData<ProjectPage>(pageKey, applyOptimisticDelete(previous, vars.id));

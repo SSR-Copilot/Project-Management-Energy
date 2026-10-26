@@ -9,12 +9,12 @@
  * against a stubbed transport, rather than mocking the repository layer and testing nothing.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FluentProvider } from "@fluentui/react-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 const PROJECT_ID = "33b9cc79-5b4f-f111-bec6-000d3a3855c2";
 const FV = "@OData.Community.Display.V1.FormattedValue";
@@ -48,6 +48,51 @@ let projectRows: Record<string, unknown>[] = [projectRow()];
 let projectTotal = 1;
 /** Set to a token to pretend a further page exists. */
 let projectNextToken: string | undefined;
+/**
+ * Held open to keep a project query in flight.
+ *
+ * The pager's three buttons also disable themselves while `pageQuery.isFetching`, and that state
+ * is only observable if the transport can be made to wait.
+ */
+let projectGate: Promise<void> | null = null;
+/**
+ * Hand back a DIFFERENT token per page — `P2` from page 1, `P3` from page 2 and so on — so a
+ * test can tell the request for page N (it carries `P<N>`) from every other one. The constant
+ * `projectNextToken` cannot: every page after the first would carry the same token.
+ */
+let chainTokens = false;
+/**
+ * With `chainTokens`, how many named pages the server really has: the response for that page
+ * hands back NO token, so the walk ends there. Unset, the chain never ends.
+ *
+ * Since D44 the pager believes the walk over `@odata.count` once the walk has ended, so a test
+ * whose count promises several pages must hand back tokens for them — a count of 1129 with no
+ * page-1 token now (correctly) means one named page.
+ */
+let tokenPages: number | undefined;
+/** When set, `projectGate` holds only the named request carrying this skip token. */
+let gateOnlyToken: string | undefined;
+const chainedToken = (incoming: unknown) => {
+  const served = typeof incoming === "string" ? Number(incoming.slice(1)) : 1;
+  return tokenPages !== undefined && served >= tokenPages ? undefined : `P${served + 1}`;
+};
+
+/**
+ * Counts renders of the grid row. `approvalDecoration` is called once per render of
+ * `ProjectGridRow` and nowhere else on the screen while the fixture rows carry a formatted
+ * approval label — so it is a render counter that needs no test hook in production code.
+ */
+const rowRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/domain/project", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/domain/project")>();
+  return {
+    ...actual,
+    approvalDecoration: (...a: Parameters<typeof actual.approvalDecoration>) => {
+      rowRenders.count += 1;
+      return actual.approvalDecoration(...a);
+    },
+  };
+});
 
 /**
  * The NAMELESS tail — projects with no value in the sorted column.
@@ -123,13 +168,17 @@ vi.mock("@microsoft/power-apps/data", () => ({
           if (String(options.filter ?? "").includes(" eq null")) {
             return { success: true, data: blankRows, count: blankTotal };
           }
+          if (projectGate && (gateOnlyToken === undefined || options.skipToken === gateOnlyToken)) {
+            await projectGate;
+          }
           // A second page exists only when the fixture says so, so the Next button and the
           // skip-token walk are both exercised for real.
+          const token = chainTokens ? chainedToken(options.skipToken) : projectNextToken;
           return {
             success: true,
             data: projectRows,
             count: projectTotal,
-            ...(projectNextToken ? { skipToken: projectNextToken } : {}),
+            ...(token ? { skipToken: token } : {}),
           };
         }
         if (table === "vsb_countries") {
@@ -174,10 +223,19 @@ import { SessionProvider } from "@/app/SessionContext";
 import ProjectOverviewScreen from "./Screen";
 import { DELETE_DIALOG } from "./rules";
 
-function Harness({ children, search = "" }: { children: ReactNode; search?: string }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+/**
+ * `gcTime: 0` by default, so no test sees another's cache. The prefetch tests pass the app's
+ * real default instead: with `gcTime: 0` a prefetched page has no observer and is collected a
+ * tick after it lands, which is not what a user's Next click meets.
+ */
+const APP_GC_TIME = 5 * 60 * 1000;
+
+function Harness({ children, search = "", gcTime = 0 }: {
+  children: ReactNode; search?: string; gcTime?: number;
+}) {
+  const [client] = useState(() => new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime } },
+  }));
   return (
     <FluentProvider theme={vsbTheme}>
       <QueryClientProvider client={client}>
@@ -264,6 +322,14 @@ const isBlankSegment = (o: Record<string, unknown>) =>
 const projectQuery = () => calls
   .filter((c) => c.table === "vsb_projects" && !isBlankSegment(c.options)).at(-1)?.options;
 
+/** Every query for the NAMED segment, in the order issued. */
+const namedCalls = () => calls
+  .filter((c) => c.table === "vsb_projects" && !isBlankSegment(c.options));
+
+/** How many named-segment requests carried this skip token — i.e. asked for that page. */
+const requestsFor = (token: string) =>
+  namedCalls().filter((c) => c.options.skipToken === token).length;
+
 /** The last query for the nameless tail. */
 const blankQuery = () => calls
   .filter((c) => c.table === "vsb_projects" && isBlankSegment(c.options)).at(-1)?.options;
@@ -278,6 +344,11 @@ describe("ProjectOverviewScreen", () => {
     projectRows = [projectRow()];
     projectTotal = 1;
     projectNextToken = undefined;
+    projectGate = null;
+    chainTokens = false;
+    tokenPages = undefined;
+    gateOnlyToken = undefined;
+    rowRenders.count = 0;
     blankRows = [];
     blankTotal = 0;
     envVarValues = {};
@@ -323,10 +394,17 @@ describe("ProjectOverviewScreen", () => {
   it("UT-OVUI-003 asks the server for a page, a count and an $orderby", async () => {
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    const q = projectQuery();
+    // The FIRST named request asks for the count; later ones for the same key (a walk step, a
+    // next-page prefetch) carry none and read the total from the token cache.
+    // Was `const q = projectQuery(); expect(q?.count).toBe(true);` — the LAST request.
+    const q = namedCalls()[0]?.options;
     expect(q?.count).toBe(true);
-    expect(q?.top).toBe(200);
-    expect(q?.orderBy).toEqual(["vsb_projectname asc"]);
+    // The page size travels as `maxPageSize` (odata.maxpagesize), never `$top`, which caps the
+    // whole result set and stops Dataverse paging (D42; was `expect(q?.top).toBe(200)`).
+    expect(q?.maxPageSize).toBe(200);
+    expect(q?.top).toBeUndefined();
+    // The primary key breaks ties so page seams are exact (D44; was `["vsb_projectname asc"]`).
+    expect(q?.orderBy).toEqual(["vsb_projectname asc", "vsb_projectid asc"]);
     // $select is mandatory — without it Dataverse returns all 112 project columns.
     expect(Array.isArray(q?.select)).toBe(true);
     expect((q!.select as string[]).length).toBeGreaterThan(15);
@@ -360,6 +438,9 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-005 renders the footer strings the screenshot shows", async () => {
     projectTotal = 1129;
+    // Six real pages behind the count: since D44 a count with no page-1 token means ONE page.
+    chainTokens = true;
+    tokenPages = 6;
     render(<Harness><ProjectOverviewScreen /></Harness>);
     // The footer renders during loading too, reading 0 — so wait for the data, not the
     // element, or the assertion races the query.
@@ -377,7 +458,8 @@ describe("ProjectOverviewScreen", () => {
     );
     await screen.findByText("Contr. Endpoint Testproject");
     const q = projectQuery();
-    expect(q?.orderBy).toEqual(["vsb_shortname desc"]);
+    // Tie-breaker always ascending, whatever the sort (D44; was `["vsb_shortname desc"]`).
+    expect(q?.orderBy).toEqual(["vsb_shortname desc", "vsb_projectid asc"]);
     expect(q?.skipToken).toBe("TOKEN-PAGE-2");
     expect(q).not.toHaveProperty("skip");
     expect(String(q?.filter)).toContain("contains(vsb_projectname,'endpoint')");
@@ -482,9 +564,15 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-011b disables Next when the server hands back no token", async () => {
     // Forward-only paging: the token is the truth, not a count the platform caps at 5000.
+    // On page 6 of six real pages the server hands back no token. (Was page 1 with a count and
+    // no token at all; since D44 that is a one-page list and the pager is not even shown.)
     projectTotal = 1129;
-    render(<Harness><ProjectOverviewScreen /></Harness>);
+    chainTokens = true;
+    tokenPages = 6;
+    render(<Harness search="?p=6"><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
+    await waitFor(() =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 6 from 6"));
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
@@ -538,10 +626,12 @@ describe("ProjectOverviewScreen", () => {
   it("UT-OVUI-017 asks for the named projects and the nameless ones separately", async () => {
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(projectQuery()?.orderBy).toEqual(["vsb_projectname asc"]);
+    // Both segments end on the primary key, so page seams are exact (D44; were
+    // `["vsb_projectname asc"]` and `["vsb_name asc"]`).
+    expect(projectQuery()?.orderBy).toEqual(["vsb_projectname asc", "vsb_projectid asc"]);
     // Nothing to sort the tail by — the column is empty on every one of them — so it takes the
     // autonumber, which is never blank.
-    expect(blankQuery()?.orderBy).toEqual(["vsb_name asc"]);
+    expect(blankQuery()?.orderBy).toEqual(["vsb_name asc", "vsb_projectid asc"]);
   });
 
   it("UT-OVUI-018 splits on the SORTED column, not always on the name", async () => {
@@ -553,19 +643,28 @@ describe("ProjectOverviewScreen", () => {
 
   it("UT-OVUI-019 keeps page 1 on the named projects even when nameless ones exist", async () => {
     projectTotal = 250;
+    // The two named pages really exist: page 1 hands back a token, page 2 none.
+    chainTokens = true;
+    tokenPages = 2;
     blankRows = [projectRow({ vsb_projectname: null, vsb_shortname: null })];
     blankTotal = 60;
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    // 250 named over two pages, then 60 nameless on a third.
+    // 250 named + 60 nameless = 310 rows in ONE continuous sequence: RoundUp(310 / 200) = 2 pages,
+    // as the canvas counts them. Was "Page: 1 from 3" (two named pages, the nameless on a third).
     expect(screen.getByTestId("total-rows")).toHaveTextContent("Total Rows: 310");
-    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 3");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 2");
   });
 
   it("UT-OVUI-020 offers a next page from the last named one, because the tail follows it", async () => {
     // No skip token: there is no further NAMED page, but the nameless tail still comes after.
-    blankRows = [projectRow({ vsb_projectname: null })];
-    blankTotal = 5;
+    // Was ONE nameless row (count 5). Since the tail tops up the last named page, one named row
+    // plus a few nameless ones all fit on page 1, so nothing follows: 200 nameless rows overflow
+    // the 199 slots left on page 1, and Next is lit by the tail.
+    blankRows = Array.from({ length: 200 }, (_, i) => projectRow({
+      vsb_projectid: `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`, vsb_projectname: null,
+    }));
+    blankTotal = 200;
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
     expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
@@ -577,7 +676,9 @@ describe("ProjectOverviewScreen", () => {
     render(<Harness search="?p=2"><ProjectOverviewScreen /></Harness>);
     // Page 2 is past the single named page, so it is the tail.
     expect(await screen.findByText("NONAME")).toBeInTheDocument();
-    expect(blankQuery()?.top).toBe(200);
+    // Page size as `maxPageSize`, never `$top` (D42; was `expect(blankQuery()?.top).toBe(200)`).
+    expect(blankQuery()?.maxPageSize).toBe(200);
+    expect(blankQuery()?.top).toBeUndefined();
   });
 
   it("UT-OVUI-022 falls back to the last named page when there is no tail at all", async () => {
@@ -843,5 +944,203 @@ describe("ProjectOverviewScreen", () => {
     await screen.findByText("Contr. Endpoint Testproject");
     expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 6");
     expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
+  });
+
+  it("UT-OVUI-038 once the walk has ended, the label's total is the page reached and Next is off",
+    async () => {
+      // What this USED to pin (D41): the recorded DIVERGENCE on
+      // `ico_..._Pagination_PageRight.DisplayMode` — the canvas's LIVE formula is
+      // `varRecPage.Page < varRecPage.TotalPages`, this app ports the commented-out
+      // `HasNextPage` one — had the consequence that `totalPages` was count-derived while
+      // `hasNext` was token-derived, so the label could read "from 6" with Next already dead.
+      // Old body: count 1129, no token, `?p=1`, expecting "Page: 1 from 6" and Next disabled.
+      //
+      // Why it changed (D44): that state was the "page 6 of 7 with Next disabled" bug, and the
+      // last page could never be reached. Once the walk ends at the data, the number of named
+      // pages IS the page reached, whatever `@odata.count` said. Next still follows the token.
+      projectTotal = 1400; // the count promises seven pages...
+      chainTokens = true;
+      tokenPages = 6; // ...the server has six: page 6 hands back no token.
+      render(<Harness search="?p=6"><ProjectOverviewScreen /></Harness>);
+      await screen.findByText("Contr. Endpoint Testproject");
+      await waitFor(() =>
+        expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 6 from 6"));
+      expect(screen.getByTestId("page-label")).not.toHaveTextContent("from 7");
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    });
+
+  it("UT-OVUI-039 disables First and Previous on page 1", async () => {
+    // `If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)` on both.
+    projectTotal = 1129;
+    projectNextToken = "tok";
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByRole("button", { name: "First page" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+  });
+
+  it("UT-OVUI-040 disables all three pager buttons while a page is in flight", async () => {
+    // The next page is PREFETCHED now, so one Next click is served from the cache and never
+    // puts the page in flight. The page that IS in flight is the one after it: its prefetch is
+    // held open below, and the second Next click attaches to it.
+    // Was: render `?p=2` with a constant token, set the gate, ONE Next click, expect disabled.
+    projectTotal = 1129;
+    chainTokens = true;
+    const user = userEvent.setup();
+    render(<Harness search="?p=2" gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "First page" })).toBeEnabled());
+    // Page 3's prefetch has gone out ungated, so it lands.
+    await waitFor(() => expect(requestsFor("P3")).toBe(1));
+
+    // Hold every further query open so `pageQuery.isFetching` is observable.
+    let release: () => void = () => {};
+    projectGate = new Promise<void>((resolve) => { release = resolve; });
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 3 from 6");
+      expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "First page" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    });
+    projectGate = null;
+    release();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled());
+  });
+
+  it("UT-OVUI-041 carries the canvas pager tooltips", async () => {
+    // `Tooltip:` on the three `ico_..._Pagination_*` icons — verbatim, lines 2139/2173/2226.
+    projectTotal = 1129;
+    projectNextToken = "tok";
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByRole("button", { name: "First page" }))
+      .toHaveAttribute("title", "Navigate to first page");
+    expect(screen.getByRole("button", { name: "Previous page" }))
+      .toHaveAttribute("title", "Navigate to previous page");
+    expect(screen.getByRole("button", { name: "Next page" }))
+      .toHaveAttribute("title", "Navigate to next page");
+  });
+
+  /* ──────────────────────────────────────────────── the next-page prefetch */
+
+  it("UT-OVUI-042 requests page 2 in the background once page 1 has a next page", async () => {
+    projectTotal = 1129;
+    chainTokens = true;
+    render(<Harness gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    // No click: page 2's request (it carries page 1's token, `P2`) goes out on its own.
+    await waitFor(() => expect(requestsFor("P2")).toBe(1));
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 6");
+    expect(screen.getByTestId("current-location")).toHaveTextContent(/^\/projects$/);
+    // One page ahead, never further.
+    expect(requestsFor("P3")).toBe(0);
+  });
+
+  it("UT-OVUI-043 serves Next from the prefetched page, with no new request", async () => {
+    projectTotal = 1129;
+    chainTokens = true;
+    const user = userEvent.setup();
+    render(<Harness gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    // Issued before any click, ungated, so it lands.
+    await waitFor(() => expect(requestsFor("P2")).toBe(1));
+
+    // From here every project request hangs, so page 2 can only render from the cache.
+    let release: () => void = () => {};
+    projectGate = new Promise<void>((resolve) => { release = resolve; });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 2 from 6"));
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeEnabled();
+    expect(requestsFor("P2")).toBe(1);
+    projectGate = null;
+    release();
+  });
+
+  it("UT-OVUI-044 does not prefetch when there is no next page", async () => {
+    // The real last page of six, whose walk has ended: page 6 hands back no token and there is
+    // no tail. (Was page 1 of a count with no token; since D44 that is a one-page list with no
+    // pager, which would leave "Next disabled" unobservable.)
+    projectTotal = 1129;
+    chainTokens = true;
+    tokenPages = 6;
+    render(<Harness search="?p=6" gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await waitFor(() =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 6 from 6"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled());
+    // Give a prefetch effect every chance to run before asserting it did not.
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    // The cold walk to page 6 is six requests, one per page (none, P2 … P6), each exactly once.
+    // A page-7 prefetch would resume from page 6's token and ask for page 6 again.
+    expect(namedCalls()).toHaveLength(6);
+    expect(requestsFor("P6")).toBe(1);
+    expect(requestsFor("P7")).toBe(0);
+  });
+
+  it("UT-OVUI-045 a Next click during the prefetch joins it instead of asking again", async () => {
+    projectTotal = 1129;
+    chainTokens = true;
+    const user = userEvent.setup();
+    // Hold page 2's prefetch open: only the request carrying page 1's token `P2` waits.
+    let release: () => void = () => {};
+    projectGate = new Promise<void>((resolve) => { release = resolve; });
+    gateOnlyToken = "P2";
+    render(<Harness gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await waitFor(() => expect(requestsFor("P2")).toBe(1));
+    // The prefetch is a different query from the page on screen, so the pager is still live.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    // The page is in flight (the pager says so) but no second request went out for it.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled());
+    expect(requestsFor("P2")).toBe(1);
+    projectGate = null;
+    release();
+    await waitFor(() =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 2 from 6"));
+    expect(requestsFor("P2")).toBe(1);
+  });
+
+  /* ─────────────────────────────────────────────────── row re-rendering */
+
+  it("UT-OVUI-046 selecting a row re-renders only the rows whose selection changed", async () => {
+    const ids = [
+      "aaaaaaaa-0000-0000-0000-000000000001",
+      "aaaaaaaa-0000-0000-0000-000000000002",
+      "aaaaaaaa-0000-0000-0000-000000000003",
+    ];
+    projectRows = ids.map((id, i) =>
+      projectRow({ vsb_projectid: id, vsb_projectname: `Project ${i + 1}` }));
+    projectTotal = 3;
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Project 3");
+    expect(rowRenders.count).toBeGreaterThanOrEqual(3);
+
+    // Selecting re-renders the screen several times (the selection, then the cluster-state
+    // read the Simulate gate needs), but only the newly selected row's props changed.
+    rowRenders.count = 0;
+    await selectRow(user, ids[1]);
+    expect(rowRenders.count).toBe(1);
+
+    // Moving the selection touches exactly two rows: the one left and the one picked.
+    rowRenders.count = 0;
+    await user.click(screen.getByTestId(`select-${ids[2]}`));
+    await waitFor(() => expect(screen.getByTestId(`select-${ids[2]}`)).toBeChecked());
+    await waitFor(() => expect(screen.getByTestId("command-editProject")).toBeEnabled());
+    expect(rowRenders.count).toBe(2);
   });
 });

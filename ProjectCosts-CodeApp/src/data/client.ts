@@ -149,19 +149,92 @@ export interface CountedPage<T> {
   page: number;
   /** True when the server returned a token for a further page. */
   hasNext: boolean;
+  /**
+   * True ONLY when the walk stopped because it hit `maxPages`, not because the data ran out.
+   * Lets a caller tell "there are no more rows" from "we gave up walking". False in every
+   * ordinary case, including a walk that ends early on a short table.
+   */
+  limited: boolean;
 }
 
-/** Token caches, keyed by query signature. `tokens[0]` is always undefined — page 1. */
-const tokenCache = new Map<string, (string | undefined)[]>();
+/**
+ * Token caches, keyed by `` `${tableName}|${signature}` ``. `tokens[0]` is always undefined —
+ * page 1 is fetched with no skip token.
+ *
+ * The table is part of the key because `signature` is caller-supplied: two tables whose callers
+ * happen to build the same signature string would otherwise share tokens and serve each other's
+ * rows. Caller discipline (prefixing the signature) must not be what keeps a shared helper
+ * correct.
+ *
+ * Each entry also holds the query's `@odata.count` once the server has reported it, so the
+ * total is requested ONCE per walk rather than on every page. `count: true` makes Dataverse
+ * recount the whole filtered set on every request, though the total cannot change between
+ * pages of the same query — that recount was a large part of what made Next slow. Keeping the
+ * total in the same entry as the tokens means `resetPageTokens` and `invalidatePageTokens`
+ * (which `executePlan` / `deleteProject` call after every accepted write) clear both at once.
+ *
+ * Trade-off: within a browser session, a row added or removed by ANOTHER user does not update
+ * the total until the entry is cleared — by a filter, sort or page-size change (a new
+ * signature, so a new key) or by a write in this tab. That is exactly the staleness rule the
+ * tokens already follow, so caching the total introduces no new kind of staleness.
+ *
+ * `total` is only ever the SERVER's count. The `rows.length` fallback used when no count comes
+ * back is never stored, so the next request asks for the count again.
+ */
+interface PageWalk {
+  tokens: (string | undefined)[];
+  total?: number;
+}
+const tokenCache = new Map<string, PageWalk>();
 
-/** Discards the walk when the filter or sort changes; a stale token returns the wrong rows. */
+/** The cache key. Both halves matter: a signature alone is not unique across tables. */
+function cacheKey(tableName: string, signature: string): string {
+  return `${tableName}|${signature}`;
+}
+
+/** Default cap on how many pages `countedPage` will walk to reach the requested page. */
+export const DEFAULT_MAX_PAGE_WALK = 100;
+
+/**
+ * Discards the walk when the filter or sort changes; a stale token returns the wrong rows.
+ *
+ * With no argument, clears every cached walk. With a signature, clears that signature on EVERY
+ * table (the key is composite now, so a bare signature is a prefix-free suffix match).
+ */
 export function resetPageTokens(signature?: string): void {
-  if (signature === undefined) tokenCache.clear();
-  else tokenCache.delete(signature);
+  if (signature === undefined) {
+    tokenCache.clear();
+    return;
+  }
+  const suffix = `|${signature}`;
+  for (const key of [...tokenCache.keys()]) {
+    if (key.endsWith(suffix)) tokenCache.delete(key);
+  }
+}
+
+/**
+ * Drops EVERY cached walk for one table.
+ *
+ * This is the invalidation a mutation needs. A changed filter or sort already produces a new
+ * `signature`, so that case takes care of itself — but a DELETE (or an insert) leaves the
+ * signature identical while shifting every row across the page boundaries. Reusing tokens
+ * computed against the pre-delete row set then duplicates or skips a row at the seam.
+ *
+ * It also bounds the cache: without it the map keeps one token array per distinct filter/sort
+ * combination for the life of the tab.
+ */
+export function invalidatePageTokens(tableName: string): void {
+  const prefix = `${tableName}|`;
+  for (const key of [...tokenCache.keys()]) {
+    if (key.startsWith(prefix)) tokenCache.delete(key);
+  }
 }
 
 export interface CountedPageRequest extends FetchAllOptions {
-  /** Rows per page. */
+  /**
+   * Rows per page. Sent to the SDK as `maxPageSize` (the `odata.maxpagesize` preference), NEVER
+   * as `$top` — `$top` caps the whole result set and stops the server paging. See `countedPage`.
+   */
   top: number;
   /** 1-based. */
   page: number;
@@ -177,31 +250,78 @@ export async function countedPage<T>(
   tableName: string,
   request: CountedPageRequest,
 ): Promise<CountedPage<T>> {
-  const { maxPages: _ignored, page, signature, ...query } = request;
+  // SOURCE DEFECT (code app only, no canvas parity involved — the canvas never paged on the
+  // server: it `ClearCollect`s and pages a local collection, `Project Main Screen.pa.yaml`
+  // ~L1605). `top` here means "rows per page", but it used to be forwarded to the SDK as-is,
+  // which emits it as `$top=` (`stringQueryOptions.js`) while `retrieveMultipleRecordsAsync`
+  // ALWAYS adds `Prefer: odata.maxpagesize=<maxPageSize ?? 500>`. In the Dataverse Web API
+  // `odata.maxpagesize` is the page size and `$top` caps the WHOLE result set, so with
+  // `$top=200` there was nothing further to page: no `@odata.nextLink` (hence no skip token),
+  // or zero rows once a cookie was sent alongside `$top`. The walk never advanced — Next was
+  // enabled on page 1 and page 2 came back blank. The page size therefore travels as
+  // `maxPageSize`, the SDK's own channel for it, and `top` is NEVER sent from here. `fetchAll`
+  // above is the precedent (`maxPageSize`, no `top`). The probe's `top: 1` becomes
+  // `maxPageSize: 1`, which still returns one row plus `@odata.count`.
+  const { maxPages, page, signature, top, ...query } = request;
+  const pageSize = Math.max(1, Math.floor(top) || DEFAULT_PAGE_SIZE);
   const client = getClient(dataSourcesInfo);
   const wanted = Math.max(1, Math.floor(page) || 1);
+  // Bounds the walk: without it a hand-edited `?p=5000` issues 5,000 sequential round trips.
+  const cap = Math.max(1, Math.floor(maxPages ?? DEFAULT_MAX_PAGE_WALK) || DEFAULT_MAX_PAGE_WALK);
 
-  const tokens = tokenCache.get(signature) ?? [undefined];
-  tokenCache.set(signature, tokens);
+  const key = cacheKey(tableName, signature);
+  const walk = tokenCache.get(key) ?? { tokens: [undefined] };
+  tokenCache.set(key, walk);
+  const { tokens } = walk;
 
   const fetchAt = async (index: number) => {
+    // Ask for `@odata.count` only while this query's total is unknown (see `tokenCache`).
+    const needCount = walk.total === undefined;
     const result = await client.retrieveMultipleRecordsAsync<T>(
       tableName,
-      compact({ ...query, count: true, skipToken: tokens[index] }),
+      compact({
+        ...query,
+        maxPageSize: pageSize,
+        count: needCount ? true : undefined,
+        skipToken: tokens[index],
+      }),
     );
     const rows = unwrap(result, `${operation} (page ${index + 1})`);
     // Remember the token that reaches the NEXT page, so Previous never re-walks.
     if (result.skipToken) tokens[index + 1] = result.skipToken;
-    return { rows, totalRows: result.count ?? rows.length, next: result.skipToken };
+    // Cache only a count the server actually sent — never the `rows.length` fallback.
+    if (typeof result.count === "number") walk.total = result.count;
+    return { rows, totalRows: walk.total ?? rows.length, next: result.skipToken };
   };
 
+  // Start from the furthest page we already hold a token for, rather than always from page 1:
+  // that is what makes Previous free and a re-render cheap. `tokens[0]` is undefined by
+  // definition (page 1 needs no token), so 0 is always a valid starting point.
   let index = 0;
-  let current = await fetchAt(0);
+  for (let i = Math.min(wanted - 1, tokens.length - 1); i > 0; i--) {
+    if (tokens[i] !== undefined) {
+      index = i;
+      break;
+    }
+  }
+  let current = await fetchAt(index);
+  let fetched = 1;
 
-  // Walk forward to the requested page, stopping early if the data runs out.
-  while (index + 1 < wanted && current.next) {
+  // Walk forward to the requested page, stopping early if the data runs out — or at the cap.
+  while (index + 1 < wanted && current.next && fetched < cap) {
     index += 1;
     current = await fetchAt(index);
+    fetched += 1;
+  }
+
+  // Stopped at the cap rather than at the end of the data: more pages exist and were wanted.
+  const limited = index + 1 < wanted && Boolean(current.next) && fetched >= cap;
+  if (limited) {
+    trace(
+      "error",
+      `${operation} stopped after ${fetched} pages walking to page ${wanted} — the page number is out of range or the filter is too broad`,
+      { page: index + 1 },
+    );
   }
 
   return {
@@ -209,6 +329,7 @@ export async function countedPage<T>(
     totalRows: current.totalRows,
     page: index + 1,
     hasNext: Boolean(current.next),
+    limited,
   };
 }
 

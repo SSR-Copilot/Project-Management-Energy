@@ -701,6 +701,80 @@ PM/admin rail is now that flat list: every screen link at the root as its icon a
 links shown, and each group header (no `ItemIconName`) as an empty row of the same height. The
 expanded rail and the Cost rail are unchanged. Test: `UT-RAIL-003`. Checked rendered in headless Edge.
 
+### CA-2 · Project Overview never paged past page 1 — page 2 blank, Next then disabled (P-11, found 26 Oct 2026)
+
+**A code-app defect, not a canvas defect.** The canvas never paged on the server — it
+`ClearCollect`s a filtered set into `colFilteredProjects` and pages that local collection
+(`ProjectDocs/_extracted/msapp/projectmanagement/Src/Project Main Screen.pa.yaml:1605`) — so there
+is no canvas formula this diverges from. The defect is in paging machinery this app had to invent.
+
+**Reported** by the product owner, running locally: on Project Overview, Next is enabled on page 1;
+page 2 renders blank; on page 2, Next is disabled.
+
+**Cause.** `countedPage` (`data/client.ts`) sent the page size as `top`, which the SDK writes as
+`$top=200`; the SDK's `retrieveMultipleRecordsAsync` separately always sends
+`Prefer: odata.maxpagesize=500`. In the Dataverse Web API `odata.maxpagesize` is the page size and
+`$top` caps the **whole result set**, so no `@odata.nextLink` paging cookie comes back and the walk
+never leaves page 1. `loadProjectPage` then treats page 2 as the start of its second segment and
+serves the projects with no value in the sorted column. Full walk-through and citations: **D42**.
+
+**Pre-existing.** The deployed build (`310c229`) issues the identical request, so the DEV app has
+this bug as well. It was not introduced by the 26 Oct pagination wave.
+
+**Why no test caught it.** Every test of this path drives a fake SDK that returns whatever
+`skipToken` the test supplies; none modelled Dataverse's `$top` semantics.
+
+**Not verified against live `VSBCloud_Dev`.** Status and fix: see D42.
+
+### CA-3 · Project Overview showed "page N of N+1" with Next disabled (found 26 Oct 2026)
+
+**A code-app defect, not a canvas defect (SOURCE DEFECT, code-app only).** The canvas pages a local
+collection (`ProjectDocs/_extracted/msapp/projectmanagement/Src/Project Main Screen.pa.yaml:1605`),
+so there is no canvas formula this diverges from.
+
+**Reported** by the user, live in `VSBCloud_Dev`: the pager read **page 6 of 7** with Next
+**disabled**, so the last page could not be reached.
+
+**Cause.** The pager's two halves read different sources: `totalPages` comes from `@odata.count`
+(`max(named.page, ceil(count / pageSize))`), while Next comes from the skip-token walk
+(`named.hasNext || blank.totalRows > 0`). The walk returned fewer rows than the count. Likely root
+cause: `$orderby` was the sort column alone (default `vsb_projectname`, not unique), and Microsoft
+documents that a Dataverse paging cookie on a non-unique ordering can skip or repeat rows across
+pages. Full record: **D44**.
+
+**Fix (`data/projects.ts`, uncommitted).**
+- (a) `vsb_projectid asc` is added as a unique tie-breaker on both segments; the visible order is
+  unchanged.
+- (b) Once a walk (the named segment, or the tail) has reached the end of the data, `totalPages` uses
+  the walk's page count, so the pager cannot promise an unreachable page.
+
+Tests: UT-PROJPAGE-032..039. UT-PROJPAGE-032 reproduces the exact symptom when the fix is reverted.
+
+**Not confirmed:** whether the live data has duplicate names at page boundaries. The user should
+confirm page 7 appears after restarting the local servers. Status: see D44. *(The expected page 7 is
+superseded by CA-4 / D45: the canvas shows 6.)*
+
+### CA-4 · Project Overview counted one page more than the canvas (found 26 Oct 2026)
+
+**Status: code-app defect, not a canvas defect (SOURCE DEFECT, code-app only).**
+
+**Reported** by the user, by comparing against the published canvas, which showed **6** pages. The
+code app showed **7**.
+
+**Cause.** The code app served projects with a sort value and those without one as two segments.
+It rounded each segment up separately, `ceil(N/200) + ceil(B/200)`, and started the second segment
+on a fresh page. The canvas pages one collection: `RoundUp(TotalRows / 200)`
+(`Project Main Screen.pa.yaml:1605`).
+
+**Fix (`data/projects.ts`, uncommitted).** Pages are now one continuous run of 200 over
+`named ++ blank`, and the page count is the canvas formula.
+
+**Tests:** UT-PROJPAGE-040..054.
+
+**Also found, not fixed:** the code app hides inactive projects (`statecode eq 0`), while the
+canvas lists them. That makes the code app's count lower; it needs a product decision. Full record:
+**D45**.
+
 ---
 
 ## Verification notes

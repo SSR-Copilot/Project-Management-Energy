@@ -4,12 +4,27 @@ Start a new chat by reading this file, then `09-APPLICATION-SETTINGS-PORT-OPEN-P
 "Progress" section) and `02-OPEN-DECISIONS.md` **D36** and **D37**. Re-check the code before you
 trust any line here.
 
+## Note, 26 Oct 2026 — Project Overview pagination work, uncommitted and unapproved
+
+Four decision entries in `02-OPEN-DECISIONS.md` cover work on the Main Project Overview's pager.
+All of it is **in the working tree only: uncommitted, and not approved by the product owner.**
+
+- **D41:** the skip-token walk (token invalidation, walk cap, cache key, first-request caching).
+- **D42:** page 2 blank, Next then disabled: `$top` suppressed the paging cookie (bug CA-2).
+- **D43:** next-page performance: count once per walk, concurrent blank probe, prefetch of page
+  N+1, memoised grid rows.
+- **D44:** "page 6 of 7" with Next disabled: a unique `$orderby` tie-breaker and a walk-derived
+  `totalPages` (bug CA-3). The fix was still in progress when this note was written.
+
+**Deployed DEV (`310c229`) has none of them.** None has been checked against live data.
+
 ## State at hand-off
 
 | | |
 |---|---|
-| `master` | `0fd2f95`, pushed. Clean except `power.config.json`, which shows as modified but has an empty diff (line endings only, rewritten by `pac code push`). Leave it or `git checkout -- ProjectCosts-CodeApp/power.config.json`. |
-| `RounakDev1` | `6a73ffa`, pushed; one commit behind `master` (the D37 doc only). |
+| `master` | `e172fa4` (this handoff), pushed. |
+| `RounakDev1` | Checked out. Local branch fast-forwarded to `e172fa4`; `origin/RounakDev1` is still `6a73ffa` (2 doc commits behind) until it is pushed. The owner works on `RounakDev1` and merges into `master` by fast-forward (linear history, no merge commits). |
+| Working tree | Clean. `pac code push` rewrites `power.config.json` with LF line endings (no content change); restore it with `git checkout -- ProjectCosts-CodeApp/power.config.json` after a push. |
 | Deployed to VSBCloud_Dev | App `807a2fba-665c-40f3-b158-ffe822aa7da4` ("Project App"), built from `6a73ffa`, 22 Oct 2026, profile `ServiceAccount_DEV`. The push was accepted. |
 | Last `npm run verify` | Exit 0 in one run: 81 tables, 145 files, 3,859 tests, build OK. |
 | Dev servers | None started by this session. |

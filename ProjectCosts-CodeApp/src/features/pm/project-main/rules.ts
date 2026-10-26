@@ -777,11 +777,12 @@ export interface PageState {
   pageSize: number;
   totalRows: number;
   /**
-   * The server's own page count, when the list is not a single evenly divided run.
+   * The server's own page count, when it knows better than `ceil(total / size)`.
    *
-   * `loadProjectPage` serves projects as TWO ordered segments — those with a value in the
-   * sorted column, then those without — so the last page of the first segment can be short and
-   * `ceil(total / size)` would under-count. Left out, the even division still applies.
+   * `loadProjectPage` pages ONE continuous sequence (named rows, then blank ones), so the
+   * count is the canvas `RoundUp(TotalRows / PageSize)` (D45). It still sends its own figure
+   * because, once the walk reaches the end of the data, that page is the last page whatever a
+   * stale or capped `@odata.count` says (D44). Left out, the even division applies.
    */
   totalPages?: number;
 }
@@ -796,12 +797,44 @@ export function totalPages(totalRows: number, pageSize = PAGE_SIZE): number {
 }
 
 /**
- * A page beyond the end snaps back to 1, which is what the canvas `adjustedPage` does.
+ * Clamp a page number for DISPLAY only: a non-finite or sub-1 page becomes 1, a page past the
+ * last one becomes 1, anything in range passes through floored.
  *
- * Still used by `pagerLabels`. It is NOT used to decide whether Next is available: Dataverse
- * caps `@odata.count` at 5000, so past that the count would under-report the page total,
- * whereas the skip token the server hands back is always the truth. See
- * `data/client.ts` → `countedPage`.
+ * Where it is actually used: `pagerLabels` alone, and only to build the `Page: X from Y`
+ * caption. It is NOT used to decide whether Next is available: Dataverse caps `@odata.count`
+ * at 5000, so past that the count would under-report the page total, whereas the skip token
+ * the server hands back is always the truth. See `data/client.ts` → `countedPage`.
+ *
+ * DIVERGENCE: the canvas sends an out-of-range page back to page 1; this app shows the LAST
+ * page instead, and leaves the out-of-range number in the URL. The canvas Apply handler
+ * (`but_Main_Project_Overview_Context_Filter_Apply.OnSelect`, `Project Main Screen.pa.yaml`
+ * line 1605) computes, verbatim:
+ *
+ *     adjustedPage: If(
+ *         currentPage > Value(
+ *             RoundUp(
+ *                 totalRows / pageSize,
+ *                 0
+ *             ) + If(
+ *                 totalRows = 0,
+ *                 1,
+ *                 0
+ *             )
+ *         ),
+ *         1,
+ *         currentPage
+ *     )
+ *
+ * and writes it back with `UpdateIf(colFiltersOverview, true, {… Page: adjustedPage})`, so the
+ * canvas genuinely NAVIGATES to page 1. Here `Screen.tsx` passes `page?.page ?? criteria.page`
+ * — the page `loadProjectPage` actually SERVED, which `countedPage` already clamped to the last
+ * existing page because its walk stops when the data runs out. So the `page > pages` branch
+ * below is unreachable through the UI: `?p=999` on a 6-page list renders page 6, keeps `p=999`
+ * in the URL, and re-walks to the end every time that link is opened.
+ *
+ * The branch is kept deliberately as a cheap guard for any caller that is NOT pre-clamped;
+ * deleting it would make a future regression silent. Changing the app to match the canvas is a
+ * product decision under CONVENTIONS rule 8 — see `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`.
  */
 export function clampPage(
   page: number,
