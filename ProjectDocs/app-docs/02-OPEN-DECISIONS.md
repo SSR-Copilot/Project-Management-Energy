@@ -4839,3 +4839,46 @@ ServiceAccount_DEV profile. This supersedes the `fceb336` build of D46.
 
 **Open, not product-approved:** everything in D51, including the deferral switches
 (`DEFER_CONTRACT_DELETES`, `DEFER_COST_DELETES`) and the CA-12 rule.
+
+## D53 · DEV push of `RounakDev1` `94eb07d`; the agent's local smoke test was waived (27 Oct 2026)
+
+This entry records a waived step, as CONVENTIONS ("Before pushing to DEV") requires. It has the
+same shape as D52.
+
+**What was deployed.** `RounakDev1` at `94eb07d`. That commit is **not on `master`**: the user asked
+for a DEV push of the branch, not a merge, so `master` stays at `2c7e6aa`. It contains:
+- the CAPEX instant refresh after an Add Cost from Table Save (CA-13, D51 §11.19);
+- the review fixes (§11.17–§11.18);
+- the UT-ADGATE-915 test fix.
+
+The target was app `807a2fba-665c-40f3-b158-ffe822aa7da4` in VSBCloud_Dev
+(`be41add6-6f60-ebb0-9c73-2480d6bc615d`), pushed with `pac code push` under the ServiceAccount_DEV
+profile. This supersedes the `2c7e6aa` build of D52.
+
+**Checklist.**
+1. **`npm ci`: passed.** The two dev servers on ports 3000 and 8080 were stopped first.
+2. **`check:power`: passed,** 84 registered and 0 problems.
+3. **`npm run verify`: passed after re-runs.**
+   - **Steps before the tests:** typecheck, lint (warnings only, none new), the label gate and the
+     canvas gate all passed.
+   - **The suite:** 149 files and 3,955 tests passed.
+   - **Worker-start failures:** 11 jsdom files hit "Failed to start threads worker", which aborted
+     the run. Re-run on their own from `ProjectCosts-CodeApp/`, they passed: 11 files, 402 tests.
+     The total is 160 files and 4,357 tests.
+   - **Build:** the aborted verify skipped it, so `npm run build` ran separately and passed.
+4. **Hygiene: passed.** knip lists the expected 12 unused files and no unused dependencies.
+5. **Local smoke test: waived for the agent,** which cannot drive a browser. The CAPEX refresh
+   (CA-13) has unit and mutation tests but **has not been tried live**.
+6. **Environment: passed.** `pac auth list` and `pac org who` both showed VSBCloud_Dev.
+7. **Push: accepted.**
+   - `pac code push` returned "App pushed successfully".
+   - The push rewrote `power.config.json` with line-ending changes only. The `environment_*` entry
+     was intact, and the file was restored with `git checkout`.
+   - The step-5 smoke test on the deployed app is left to the user.
+
+**Owed by the user: the step-5 smoke test on DEV.** Save on Add Cost from Table with an edited
+cell, a cleared cell and a removed contract. Then confirm:
+- the DEVEX/CAPEX screen shows all three at once;
+- the removed rows do not reappear before or after the `background deletes: …` log line.
+
+**Open, not product-approved:** everything in D51, including §11.19's optimistic display.
