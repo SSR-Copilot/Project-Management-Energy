@@ -920,7 +920,7 @@ verified** against live data. Record: **D51** §11.12.
 
 Record: **D51** §11.12–§11.13.
 
-### CA-13 · After an Add Cost from Table Save, DEVEX/CAPEX showed the pre-save data, then deleted rows came back (found 27 Oct 2026, fixed 27 Oct 2026, uncommitted)
+### CA-13 · After an Add Cost from Table Save, DEVEX/CAPEX showed the pre-save data, then deleted rows came back (found 27 Oct 2026, fixed 27 Oct 2026, committed `94eb07d`, on DEV, D53)
 
 **A code-app defect.**
 - **What happened.** A successful Save (`add-costs-from-table/Screen.tsx` `doSave`) navigates
@@ -952,6 +952,24 @@ Record: **D51** §11.12–§11.13.
 **Tests:** UT-PENDDEL-001…005, 010…012, 020…022, 030, 031; UT-SHEETPATCH-001…016; UT-ACSAVE-040…044;
 UT-ACSHEET-BULK-069…075; UT-ACSHEET-QUERY-009…017; UT-ACSHEET-CACHE-001; UT-BOOK-075, 076. **Not verified** against live
 data. Record: **D51** §11.19.
+
+### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, uncommitted)
+
+**A code-app defect** (layout). The canvas has no "Required" text here; it is this app's own
+message for an unset payment-date year.
+- **What happened.** On a "Comments to payment date" comment with no year, the Type, Year and
+  Month dropdowns were not on one line. Type and Month sat lower and were taller than Year, and
+  "Required" looked detached from its field. The user reported it with a screenshot on 28 Oct.
+- **Root cause.** The three boxes are Fluent `Field`s in one CSS grid row (`typeRow` in
+  `features/cost/capex-costs/CommentsPanel.tsx`). That grid kept the default
+  `align-items: stretch`, and a vertical Fluent `Field` is itself a grid of `auto` rows. The
+  "Required" message gives Year an extra row, so it was the tallest cell. Stretch then grew Type
+  and Month to the same height and shared the extra space between their label and control rows,
+  which pushed their dropdowns down.
+- **The fix.** `alignItems: "start"` on `typeRow`. Each field keeps its natural height, the three
+  dropdowns share one line, and "Required" sits directly under Year without moving anything else.
+- **Tests.** None automated: jsdom does no layout, so a unit test cannot see the alignment. The
+  fix needs a visual check in the running app.
 
 ---
 
