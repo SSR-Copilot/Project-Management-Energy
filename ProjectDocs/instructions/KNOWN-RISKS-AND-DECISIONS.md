@@ -75,7 +75,20 @@ this is a snapshot, not a live sync):
   Rows can be lower than the canvas. This is a product question; there is no marker yet.
 - **D13** — two hard-coded address lists (`REPORT_VIEWERS`-equivalent allow-lists) should both
   become environment variables before go-live; only one currently is.
-- **D51, Add Cost from Table bulk save** (27 Oct 2026). Uncommitted and **not product-approved**.
+- **D51, Add Cost from Table bulk save** (27 Oct 2026). Committed in `5d50e2b`, deployed to DEV in
+  `2c7e6aa` (D52), and **not product-approved**.
+  **Current state (27 Oct, after D51 §11.14–§11.16; it supersedes the t = 0 delete order described
+  below):** with `DEFER_CONTRACT_DELETES` and `DEFER_COST_DELETES` on, contract and cost deletes
+  start only after the writes have settled, each in its own gate of 4 (writes share a gate of 16),
+  and on a fully successful write they finish in the background (a `DIVERGENCE`, with toasts and a
+  background totals reconcile on failure). The existence check is skipped on a first attempt.
+  Measured live on DEV: 9.5 s / 70 requests before, 5.2 s / 3 with bulk, then 1.9 s / 5 and
+  1.6 s / 3; the floor is about 1.2–1.9 s per bulk request through the host, and only a fully
+  background save (not built, a product decision) would go lower. Open from the E5 review: the
+  resurrection window, where a CAPEX Edit Cost save (PATCH without `If-Match`) of a contract whose
+  background delete is still pending re-creates it (D51 §11.14). CA-12 is fixed to the canvas
+  `CostCountRows` rule, pending product confirmation (D51 §10 item 11).
+  The earlier record follows.
   Save keeps four numbered operations (contract writes, cost writes, per-record cost deletes,
   contract deletes), but since the performance wave (D51 §11) they run concurrently: the deletes
   and phase 0's existence reads at t = 0, then contracts and the costs of existing contracts
@@ -103,15 +116,17 @@ this is a snapshot, not a live sync):
     operations appear in `SavePlanError.failures`, depends on whether a failure arrived before
     the contract step succeeded.
 
-  Round-trip and prepare pass (D51 §11.12, uncommitted, no `verify` result recorded): contract and
+  Round-trip and prepare pass (D51 §11.12; committed in `5d50e2b`, verified in the `2c7e6aa` run;
+  its delete-at-t = 0 order is superseded by §11.16, see above): contract and
   cost deletes now start at t = 0 beside the verify, and a delete answering 404 counts as already
   gone. A first attempt with no per-row 501 flag skips the upsert verify, so the upserts start at
   t = 0 too. The Save's client prepare is now `prepareSheetSave`, without the quadratic scans.
   `diffRows` pairs rows by identity (CA-11), so an unedited Save sends no contract write. An
   unchanged contract whose stored `vsb_totalcost` already matches gets no write at all. Expected,
   not yet measured live: about 1.0–1.3 s for 40 requests and 2–2.5 s for 70; per-row deletes now
-  bound the critical path. Open: CA-12, two new same-named rows under one sub-account in one year
-  pass validation, where the canvas refuses them. New risks:
+  bound the critical path. CA-12 (two new same-named rows under one sub-account in one year passed
+  validation, where the canvas refuses them) has since been fixed to the canvas rule; product
+  confirmation is still open. New risks:
   - **Lock and 429 pressure.** Deletes at t = 0 overlap the upserts, cascades included. The shared
     gate of 16 caps the requests in flight.
   - **404 as success relies on the entity set being right.** A delete sent to the wrong entity

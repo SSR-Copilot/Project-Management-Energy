@@ -353,6 +353,55 @@ describe("executeSavePlan — reconciliation", () => {
     expect(fake.contracts.get("c-1")).toBe(fake.sumOf("c-1"));
   });
 
+  it("UT-ACBULK-077 nothing committed (deletes removed 0 rows): no reconcile write, committedBefore false (E6 #1)", async () => {
+    // SavePlanError: the cost delete is refused with removedCount 0, the contract delete removed 0.
+    // c-2's actual 50 differs from its planned 0, but this save changed no stored total.
+    const fake = fakeDataverse(seed());
+    const deps: SavePlanDeps = {
+      ...fake.deps,
+      deleteMany: async (t, ids) => {
+        if (t === CAPEX_COSTS) throw Object.assign(new Error("refused"), { deletedCount: 1, removedCount: 0 });
+        return { requests: ids.length, removed: 0 };
+      },
+    };
+    const e = await caught(executeSavePlan(typicalPlan({
+      contractUpserts: [], costUpserts: [], contractDeletes: ["c-gone"], totals: new Map([["c-2", 0]]),
+    }), deps));
+    expect(e.requests.reconcile).toBe(0);
+    expect(fake.calls.some((c) => c.label === "reconcile totals")).toBe(false);
+    expect(fake.contracts.get("c-2")).toBe(50);
+    expect(e.committedBefore).toBe(false);
+
+    // RowsGoneError: the deletes beside the check removed nothing; c-2 is not force-written.
+    const gone = seed();
+    delete (gone.contracts as Record<string, number>)["c-1"];
+    const fake2 = fakeDataverse(gone);
+    const err = await executeSavePlan(typicalPlan(), {
+      ...fake2.deps,
+      deleteMany: async (_t, ids) => ({ requests: ids.length, removed: 0 }),
+    }).then(() => null, (x: unknown) => x);
+    expect(err).toBeInstanceOf(RowsGoneError);
+    expect((err as RowsGoneError).requests.reconcile).toBe(0);
+    expect((err as RowsGoneError).committedBefore).toBe(false);
+    expect((err as RowsGoneError).reconciled).toBe(true);
+  });
+
+  it("UT-ACBULK-078 nothing landed and no total differs: committedBefore stays false", async () => {
+    const fake = fakeDataverse(
+      { contracts: { "c-1": 100 }, costs: [cost("k-1", "c-1", 100)] },
+      { failUpsert: { table: CAPEX_CONTRACTS, chunkSize: 1, afterChunks: 0 } },
+    );
+    const error = await caught(executeSavePlan(
+      typicalPlan({
+        contractUpserts: [contractRow("c-1", 100)], costUpserts: [], costDeletes: [], contractDeletes: [],
+        totals: new Map([["c-1", 100]]),
+      }),
+      fake.deps,
+    ));
+    expect(error.requests.reconcile).toBe(0);
+    expect(error.committedBefore).toBe(false);
+  });
+
   it("UT-ACBULK-006 a phase-2 failure leaves every stored total equal to its actual cost sum", async () => {
     // (2a) k-1 (→300) lands and then fails; (2b) k-new is never sent. (3) ran alongside.
     const fake = fakeDataverse(seed(), { failUpsert: { table: CAPEX_COSTS, chunkSize: 1, afterChunks: 1 } });
@@ -1585,5 +1634,92 @@ describe("executeSavePlan — deferred deletes start only after the writes settl
     const offFake = fakeDataverse(s2);
     await executeSavePlan(plan(), offFake.deps);
     expect(offFake.timeline.slice(0, 2)).toEqual([`delete:${CAPEX_CONTRACTS.entitySetName}`, `delete:${CAPEX_COSTS.entitySetName}`]);
+  });
+});
+
+/* ═══════════════════════ committedBefore: a delete that removed nothing (L2 / F5) ══ */
+
+describe("executeSavePlan — committedBefore is exact for deletes that removed nothing", () => {
+  /** The fake's deleter, answering `removed` as the wiring does when every id was a confirmed 404. */
+  const reporting = (deps: SavePlanDeps, removed: number | undefined): SavePlanDeps => ({
+    ...deps,
+    deleteMany: async (t, ids, label) => {
+      const r = await deps.deleteMany(t, ids, label);
+      return removed === undefined ? r : { ...r, removed };
+    },
+  });
+  /** Only (2a) and the two deletes: (2a) fails with 0 committed, so only the deletes can have landed. */
+  const deletesAndFailingCost = () => typicalPlan({
+    contractUpserts: [], costUpserts: [costRow("k-1", "c-1", 300, false)], totals: new Map(),
+  });
+  const failingCosts = { failUpsert: { table: CAPEX_COSTS, chunkSize: 1, afterChunks: 0 } };
+
+  it("UT-ACBULK-074 every delete removed 0 rows (all confirmed 404) and the write committed 0: committedBefore is false; removed 1 or omitted: true", async () => {
+    const none = fakeDataverse(seed(), failingCosts);
+    const e0 = await caught(executeSavePlan(deletesAndFailingCost(), reporting(none.deps, 0)));
+    expect(e0.phase).toBe(2);
+    expect(e0.committedBefore).toBe(false);
+    // The reconcile decision is unchanged: the deletes still count as landed for it (a compare).
+    expect(none.calls.some((c) => c.kind === "load")).toBe(false); // totals empty: nothing to read
+    expect(e0.reconciled).toBe(true);
+
+    const one = fakeDataverse(seed(), failingCosts);
+    expect((await caught(executeSavePlan(deletesAndFailingCost(), reporting(one.deps, 1)))).committedBefore).toBe(true);
+    const omitted = fakeDataverse(seed(), failingCosts);
+    expect((await caught(executeSavePlan(deletesAndFailingCost(), omitted.deps))).committedBefore).toBe(true);
+  });
+
+  it("UT-ACBULK-075 a failed delete whose removedCount is 0 committed nothing; without removedCount, deletedCount decides", async () => {
+    const fake = fakeDataverse(seed());
+    const refusal = Object.assign(new Error("refused"), { deletedCount: 1, removedCount: 0 });
+    const deps: SavePlanDeps = {
+      ...fake.deps,
+      deleteMany: async (t, ids, label) => {
+        if (t === CAPEX_COSTS) throw refusal;
+        return { ...(await fake.deps.deleteMany(t, ids, label)), removed: 0 };
+      },
+    };
+    const plan = typicalPlan({
+      contractUpserts: [], costUpserts: [], contractDeletes: ["c-gone"],
+      totals: new Map([["c-2", 0]]),
+    });
+    const e = await caught(executeSavePlan(plan, deps));
+    expect(e.phase).toBe(3);
+    expect(e.cause).toBe(refusal);
+    expect(e.committedBefore).toBe(false);
+    // Nothing committed: no reconcile read or write (E6 #1, UT-ACBULK-077).
+    expect(fake.calls.some((c) => c.kind === "load")).toBe(false);
+    // The same refusal without `removedCount`: falls back to `deletedCount`, as before.
+    const fake2 = fakeDataverse(seed());
+    const e2 = await caught(executeSavePlan(plan, {
+      ...fake2.deps,
+      deleteMany: async (t, ids, label) => {
+        if (t === CAPEX_COSTS) throw Object.assign(new Error("refused"), { deletedCount: 1 });
+        return { ...(await fake2.deps.deleteMany(t, ids, label)), removed: 0 };
+      },
+    }));
+    expect(e2.committedBefore).toBe(true);
+  });
+
+  it("UT-ACBULK-076 RowsGoneError: deletes beside the check that removed nothing leave committedBefore false", async () => {
+    const goneSeed = () => {
+      const s = seed();
+      delete (s.contracts as Record<string, number>)["c-1"]; // a stored target deleted by someone else
+      return s;
+    };
+    // The deletes find their rows already gone: nothing of this save committed, so the reconcile
+    // does not run (it would otherwise force c-2 to its actual 50, a write).
+    const fake = fakeDataverse(goneSeed());
+    const alreadyGone: SavePlanDeps = {
+      ...fake.deps,
+      deleteMany: async (_t, ids) => ({ requests: ids.length, removed: 0 }),
+    };
+    const err = await executeSavePlan(typicalPlan(), alreadyGone).then(() => null, (x: unknown) => x);
+    expect(err).toBeInstanceOf(RowsGoneError);
+    expect((err as RowsGoneError).committedBefore).toBe(false);
+    expect((err as RowsGoneError).requests.reconcile).toBe(0);
+    const fake2 = fakeDataverse(goneSeed());
+    const err2 = await executeSavePlan(typicalPlan(), fake2.deps).then(() => null, (x: unknown) => x);
+    expect((err2 as RowsGoneError).committedBefore).toBe(true);
   });
 });

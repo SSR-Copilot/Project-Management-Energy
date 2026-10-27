@@ -89,6 +89,8 @@ let costDeletesPeak = 0;
 let deleteStartAnswered: number[] = [];
 /** Per reconcile cost read, in call order: how many deletes (both tables) had answered by then. */
 let deletesAnsweredAtCostRead: number[] = [];
+/** When set, `CreateMultiple` refuses a request naming an id that already exists, as Dataverse does. */
+let createRefusesExisting = false;
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -177,6 +179,14 @@ const bulk = (action: Action) => async (entitySetName: string, targets: Record<s
   const once = refuseOnce.delete(key);
   if (upsertRefused || refusedActions.has(action) || once) {
     return { success: false, error: { message: `${action} bulk write refused`, status: 400 } };
+  }
+  // As Dataverse: `CreateMultiple` refuses the whole request when a target id already exists
+  // (duplicate key). Opt-in, so the older tests keep their permissive fake (F7, UT-068).
+  if (action === "create" && createRefusesExisting) {
+    const pk = PRIMARY_KEY[entitySetName] as string;
+    if (targets.some((t) => stored.has(String(t[pk]).toLowerCase()))) {
+      return { success: false, error: { message: "Cannot insert duplicate key.", status: 412 } };
+    }
   }
   // As Dataverse: `UpdateMultiple` refuses the whole request when a target row does not exist
   // (it never re-creates one). This is what makes skipping the upsert verify safe.
@@ -280,6 +290,8 @@ const {
 const { DataError, RecordGoneError, isRecordGone } = await import("@/platform/errors");
 const { BulkDeleteError, BulkWriteError, upsertMultiple } = await import("./bulkWrites");
 const { RowsGoneError, SavePlanError, executeSavePlan } = await import("./addCostSheetBulk");
+type SavePlanDeps = import("./addCostSheetBulk").SavePlanDeps;
+const { pendingDeletes } = await import("./pendingDeletes");
 /** The `verifyUpserts` dep of every `executeSavePlan` call so far. */
 const verifyFlags = () =>
   vi.mocked(executeSavePlan).mock.calls.map((c) => (c[1] as { verifyUpserts?: boolean }).verifyUpserts);
@@ -364,10 +376,17 @@ const saveLines = (info: InfoSpy) =>
   info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("Add Cost from Table save"));
 /** The first save line. */
 const saveLine = (info: InfoSpy) => saveLines(info)[0] ?? "";
-/** The deferred deletes' line (costs and contracts), once they settled. */
+/**
+ * The deferred deletes' line (costs and contracts), once they settled. The colon keeps out the
+ * `background deletes started: …` lines logged when they are sent (`startLines`).
+ */
 const backgroundLines = (info: InfoSpy) =>
   info.mock.calls.map((c) => String(c[0]))
-    .filter((l) => l.startsWith("Add Cost from Table background deletes"));
+    .filter((l) => l.startsWith("Add Cost from Table background deletes:"));
+/** The `background deletes started: …` lines, one per deferred delete batch sent. */
+const startLines = (info: InfoSpy) =>
+  info.mock.calls.map((c) => String(c[0]))
+    .filter((l) => l.startsWith("Add Cost from Table background deletes started:"));
 
 /**
  * An id cache as a retry leaves it: not empty, so the save is not a first attempt and the
@@ -412,6 +431,7 @@ beforeEach(() => {
   costDeletesPeak = 0;
   deleteStartAnswered = [];
   deletesAnsweredAtCostRead = [];
+  createRefusesExisting = false;
   vi.mocked(executeSavePlan).mockClear();
   vi.mocked(upsertMultiple).mockClear();
   resetBulkWriteAvailability();
@@ -1388,8 +1408,9 @@ describe("saveAddCostSheetBulk — parallel chunks and deferred contract deletes
     expect(backgroundLines(info)[0])
       .toMatch(/^Add Cost from Table background deletes: costs 1 req, contracts 1 req, \d+ ms$/);
     expect(backgroundDeleteFailureTexts(outcome as NonNullable<typeof outcome>, { deferredContracts: 1 })).toEqual([]);
-    // Nothing to defer: no background at all.
-    expect(await saveAddCostSheetBulk({ ...typical(), contractDeleteIds: [], deferCostDeletes: false })).toEqual({});
+    // Nothing to defer: no background at all (only `applied`, D51 §11.19).
+    expect(Object.keys(await saveAddCostSheetBulk({ ...typical(), contractDeleteIds: [], deferCostDeletes: false })))
+      .toEqual(["applied"]);
   });
 
   it("UT-ACSHEET-BULK-052 contract deletes run at most CONTRACT_DELETE_LIMIT at once, outside the write gate (E5 finding 4)", async () => {
@@ -1622,7 +1643,7 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     expect(raced).toBe("still waiting");
     release();
     const result = await save;
-    expect(result).toEqual({});
+    expect(Object.keys(result)).toEqual(["applied"]);
     expect(costDeletesAnswered).toBe(16);
     expect(saveLine(info)).toMatch(/delete costs 16 req \d+ ms/);
     expect(saveLine(info)).not.toContain("deferred");
@@ -1708,5 +1729,314 @@ describe("saveAddCostSheetBulk — deferred deletes start after the writes; per-
     });
     expect(saveLine(info)).toMatch(/upsert costs \(create 4 req bulk \[\d+ ms, \d+ ms, \d+ ms, \d+ ms\]\)/);
     expect(saveLines(info)).toHaveLength(1);
+  });
+});
+
+describe("saveAddCostSheetBulk — exact committedBefore (L2 / F5)", () => {
+  type PlanError = InstanceType<typeof SavePlanError>;
+  const failed = (p: Promise<unknown>) => p.then(() => null, (err: unknown) => err);
+
+  it("UT-ACSHEET-BULK-063 every delete answering a confirmed 404 beside a refused write: committedBefore false; one real delete: true", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // C1: January changes, February is cleared; DOOMED is removed. No new row, so each upsert is
+    // ONE group, refused with 0 committed.
+    const args = (): Args => ({ ...typical(), changedRows: [row("C1", C1, months(200, null))] });
+    deleteNotFound = new Set([COST_FEB, DOOMED]);
+    refusedActions = new Set(["update"]);
+    const e = await failed(saveAddCostSheetBulk(args()));
+    expect(e).toBeInstanceOf(SavePlanError);
+    expect(deleteCalls.map((d) => d.id).sort()).toEqual([COST_FEB, DOOMED].sort());
+    expect(verifyReads().length).toBeGreaterThan(0); // the 404s were read back and confirmed
+    expect((e as PlanError).committedBefore).toBe(false);
+    expect(toSaveFailure(e)).toMatchObject({ kind: "phase", phase: 1, committedBefore: false });
+
+    // The same save where the cleared cell's delete really removes its row.
+    deleteCalls = [];
+    stored = FIXTURE_ROWS();
+    deleteNotFound = new Set([DOOMED]);
+    const e2 = await failed(saveAddCostSheetBulk(args()));
+    expect((e2 as PlanError).committedBefore).toBe(true);
+  });
+
+  it("UT-ACSHEET-BULK-064 a refused delete batch whose only other row was a confirmed 404 removed nothing: removedCount 0, committedBefore false", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // Both of C1's cells cleared: COST_JAN answers 404 (gone), COST_FEB is refused with 403.
+    deleteNotFound = new Set([COST_JAN]);
+    deleteStatus = new Map([[COST_FEB, 403]]);
+    refusedActions = new Set(["update"]); // C1's total update
+    const e = await failed(saveAddCostSheetBulk({ ...typical(), changedRows: [row("C1", C1, months(null, null))], contractDeleteIds: [] }));
+    expect(e).toBeInstanceOf(SavePlanError);
+    const plan = e as PlanError;
+    const del = plan.failures.find((f) => f.phase === 3)?.cause;
+    expect(del).toBeInstanceOf(BulkDeleteError);
+    expect(del).toMatchObject({ failedIds: [COST_FEB], deletedCount: 1, removedCount: 0 });
+    expect(plan.committedBefore).toBe(false);
+    // Without the 404 (COST_JAN really deleted), the batch removed one row.
+    deleteCalls = [];
+    stored = FIXTURE_ROWS();
+    deleteNotFound = new Set();
+    const e2 = await failed(saveAddCostSheetBulk({ ...typical(), changedRows: [row("C1", C1, months(null, null))], contractDeleteIds: [] }));
+    expect((e2 as PlanError).failures.find((f) => f.phase === 3)?.cause).toMatchObject({ deletedCount: 1, removedCount: 1 });
+    expect((e2 as PlanError).committedBefore).toBe(true);
+  });
+
+  it("UT-ACSHEET-BULK-065 both upsert groups refused with 0 committed: a BulkWriteError with 0 rows, no reconcile, committedBefore false; a count-less group keeps the count-less error", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const args = (): Args => ({
+      projectId: PROJECT_ID, owningBusinessUnitId: BU,
+      changedRows: [row("C1", C1, months(200)), row("New", null, months(10))],
+      existingContracts: [contract(C1, "C1")],
+      existingCosts: [{ id: COST_JAN, contractId: C1, year: 2026, month: 1, cost: 100 }],
+      contractDeleteIds: [],
+    });
+    refusedActions = new Set(["create", "update"]);
+    const e = await failed(saveAddCostSheetBulk(args()));
+    expect(e).toBeInstanceOf(SavePlanError);
+    const plan = e as PlanError;
+    expect(plan.phase).toBe(1);
+    expect(plan.cause).toBeInstanceOf(BulkWriteError);
+    expect(plan.cause).toMatchObject({ rowsCommitted: 0, chunksCommitted: 0 });
+    // The detail of both refusals survives one level down, with the Dataverse status.
+    const inner = (plan.cause as InstanceType<typeof BulkWriteError>).cause;
+    expect(inner).toBeInstanceOf(DataError);
+    expect((inner as InstanceType<typeof DataError>).status).toBe(400);
+    expect(String((inner as Error).message)).toContain("both the create and the update group failed");
+    expect(plan.committedBefore).toBe(false);
+    expect(toSaveFailure(e)).toMatchObject({ kind: "phase", committedBefore: false });
+    // Nothing landed, so nothing to reconcile.
+    expect(reads.filter((r) => r.label === "list Add Cost from Table costs")).toEqual([]);
+    expect(plan.reconciled).toBe(true);
+
+    // The create group goes per row after a 501 and fails there (no counts): still count-less.
+    upsertCalls = [];
+    reads = [];
+    refusedActions = new Set(["update"]);
+    notImplemented = new Set(["create"]);
+    const e2 = await failed(saveAddCostSheetBulk(args()));
+    const cause2 = (e2 as PlanError).cause;
+    expect(cause2).toBeInstanceOf(DataError);
+    expect(cause2).not.toBeInstanceOf(BulkWriteError);
+    expect(cause2).not.toHaveProperty("rowsCommitted");
+    expect((e2 as PlanError).committedBefore).toBe(true);
+  });
+});
+
+describe("saveAddCostSheetBulk — the background deletes' log lines (item 1)", () => {
+  const STARTED = /^Add Cost from Table background deletes started: (costs|contracts) 1 row\(s\) at \d+ ms, delete gate (\d)\/4 busy$/;
+
+  it("UT-ACSHEET-BULK-066 the hook's call path: the background line is written although nothing ever attaches to background", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    let releaseContracts: () => void = () => undefined;
+    let releaseCosts: () => void = () => undefined;
+    contractDeleteGate = new Promise<void>((r) => { releaseContracts = r; });
+    costDeleteHold = new Promise<void>((r) => { releaseCosts = r; });
+    // What `useSaveAddCostSheet` calls (the repository's `saveAddCostSheet`, BULK_SAVE on).
+    expect(BULK_SAVE).toBe(true);
+    const result = await saveAddCostSheet(typical());
+    expect(result.background).toBeInstanceOf(Promise);
+    // Both deferred kinds were SENT (after the writes), logged before the save line.
+    const lines = info.mock.calls.map((c) => String(c[0]));
+    expect(startLines(info)).toHaveLength(2);
+    for (const l of startLines(info)) expect(l).toMatch(STARTED);
+    const firstStart = lines.findIndex((l) => STARTED.test(l));
+    expect(firstStart).toBeLessThan(lines.findIndex((l) => l.startsWith("Add Cost from Table save:")));
+    expect(backgroundLines(info)).toEqual([]);
+    // Like an unmounted screen: nobody awaits or chains `result.background`. The deletes answer.
+    contractDeleteGate = null;
+    costDeleteHold = null;
+    releaseContracts();
+    releaseCosts();
+    await vi.waitFor(() => expect(backgroundLines(info)).toHaveLength(1));
+    expect(backgroundLines(info)[0]).toMatch(/^Add Cost from Table background deletes: costs 1 req, contracts 1 req, \d+ ms$/);
+  });
+
+  it("UT-ACSHEET-BULK-067 a deferred delete that never answers: started lines only, and the next save reports the held gate slot", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    let release: () => void = () => undefined;
+    contractDeleteGate = new Promise<void>((r) => { release = r; });
+    try {
+      const first = await saveAddCostSheetBulk(typical());
+      const second = await saveAddCostSheetBulk(typical());
+      await new Promise((r) => setTimeout(r, 20));
+      const contractStarts = startLines(info).filter((l) => l.includes(": contracts "));
+      expect(contractStarts.map((l) => STARTED.exec(l)?.[2])).toEqual(["0", "1"]);
+      // The first save's contract delete holds its slot; neither background has settled.
+      expect(backgroundLines(info)).toEqual([]);
+      contractDeleteGate = null;
+      release();
+      await Promise.all([first.background, second.background]);
+      expect(backgroundLines(info)).toHaveLength(2);
+    } finally {
+      contractDeleteGate = null;
+      release();
+    }
+  });
+
+  it("UT-ACSHEET-BULK-068 F7: a retry after a partly-landed save flips the landed new ids to UpdateMultiple; CreateMultiple (which refuses existing ids) never gets them", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    createRefusesExisting = true;
+    const args = (): Args => ({
+      projectId: PROJECT_ID, owningBusinessUnitId: BU,
+      changedRows: [row("C1", C1, months(200)), row("New", null, months(10))],
+      existingContracts: [contract(C1, "C1")],
+      existingCosts: [{ id: COST_JAN, contractId: C1, year: 2026, month: 1, cost: 100 }],
+      contractDeleteIds: [],
+    });
+    const idCache = new Map<string, string>();
+    // Attempt 1: the new contract lands, its cost row (stage B) is refused.
+    refuseOnce = new Set([`create:${ES_COSTS}`]);
+    const first = await saveAddCostSheetBulk({ ...args(), idCache }).then(() => null, (err: unknown) => err);
+    expect(first).toBeInstanceOf(SavePlanError);
+    const newContract = String(targetsOf(ES_CONTRACTS, "create")[0]?.vsb_capexprojectcontractid);
+    expect(stored.has(newContract.toLowerCase())).toBe(true);
+    expect([...idCache.values()]).toContain(newContract);
+
+    // Attempt 2, the same sheet with the cached ids (the screen's retry).
+    upsertCalls = [];
+    const retry = await saveAddCostSheetBulk({ ...args(), idCache });
+    expect(Object.keys(retry)).toEqual(["applied"]);
+    expect(verifyFlags()).toEqual([false, true]); // the retry verifies, which is what flips
+    const created = upsertCalls.filter((c) => c.action === "create")
+      .flatMap((c) => c.targets.map((t) => String(t[PRIMARY_KEY[c.entitySetName] as string]).toLowerCase()));
+    expect(created).not.toContain(newContract.toLowerCase());
+    const asUpdate = targetsOf(ES_CONTRACTS, "update").find((t) => t.vsb_capexprojectcontractid === newContract);
+    expect(asUpdate).toBeDefined();
+    expect(asUpdate).not.toHaveProperty("owningbusinessunit@odata.bind"); // an update never moves its BU
+    // The cost row that never landed is still a create, now in stage A beside its contract.
+    expect(targetsOf(ES_COSTS, "create")).toHaveLength(1);
+  });
+});
+
+describe("saveAddCostSheetBulk — what the Save applied, for the DEVEX/CAPEX patch (D51 §11.19, CA-13)", () => {
+  it("UT-ACSHEET-BULK-069 a deferred save returns the deferred ids beside the counts", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const result = await saveAddCostSheetBulk(typical());
+    expect(result.background).toBeInstanceOf(Promise);
+    expect(result.deferredContractIds).toEqual([DOOMED]);
+    expect(result.deferredCostIds).toEqual([COST_FEB]);
+    expect(result.deferredContracts).toBe(result.deferredContractIds?.length);
+    expect(result.deferredCosts).toBe(result.deferredCostIds?.length);
+    await result.background;
+  });
+
+  it("UT-ACSHEET-BULK-070 applied describes the saved state in domain terms, with the ids that were sent", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const result = await saveAddCostSheetBulk(typical());
+    const newContract = String(targetsOf(ES_CONTRACTS, "create")[0]?.vsb_capexprojectcontractid);
+    const newCost = String(targetsOf(ES_COSTS, "create")[0]?.vsb_capexcostid);
+    expect(result.applied).toEqual({
+      contracts: [
+        {
+          id: C1, isNew: false, totalCost: 200,
+          columns: {
+            subaccountId: SUB, name: "C1", payer: "DevCo", depreciation: true, vat: true,
+            distribution: "individual", distributionScheme: "absolute",
+          },
+        },
+        {
+          id: newContract, isNew: true, totalCost: 10,
+          columns: {
+            subaccountId: SUB, name: "New", payer: "DevCo", depreciation: true, vat: true,
+            distribution: "individual", distributionScheme: "absolute",
+          },
+        },
+      ],
+      costs: [
+        { id: COST_JAN, contractId: C1, year: 2026, month: 1, amount: 200, isNew: false },
+        { id: newCost, contractId: newContract, year: 2026, month: 1, amount: 10, isNew: true },
+      ],
+      deletedContractIds: [DOOMED],
+      deletedCostIds: [COST_FEB],
+    });
+    // No Dataverse field bag reaches the caller.
+    expect(JSON.stringify(result.applied)).not.toMatch(/vsb_|@odata/);
+    await result.background;
+  });
+
+  it("UT-ACSHEET-BULK-071 with the deletes awaited (flags off) there are no deferred ids, but applied still lists the deletes", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const result = await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    expect(Object.keys(result)).toEqual(["applied"]);
+    expect(result.applied?.deletedContractIds).toEqual([DOOMED]);
+    expect(result.applied?.deletedCostIds).toEqual([COST_FEB]);
+  });
+
+  it("UT-ACSHEET-BULK-075 deferredCostIds include the retry-only costDeletesIfExist ids, not only the cleared cells", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // A failed attempt created a row for March, which is blank now: on this retry it is a
+    // `costDeletesIfExist` id, and the verify finds it.
+    const LEFT_BEHIND = "a0000007-0000-4000-8000-000000000007";
+    stored.add(LEFT_BEHIND);
+    const result = await saveAddCostSheetBulk({
+      ...typical(), idCache: new Map([[`cost:${C1}|2026|3`, LEFT_BEHIND]]),
+    });
+    expect(result.background).toBeInstanceOf(Promise);
+    expect(result.deferredCostIds).toEqual([COST_FEB, LEFT_BEHIND]);
+    expect(result.applied?.deletedCostIds).toEqual([COST_FEB, LEFT_BEHIND]);
+    await result.background;
+  });
+
+  it("UT-ACSHEET-BULK-072 a failed save resolves nothing: no applied state can reach the cache", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    upsertRefused = true;
+    await expect(saveAddCostSheetBulk(typical())).rejects.toThrow();
+  });
+});
+
+describe("saveAddCostSheetBulk — reads during an earlier Save's background deletes (D51 §11.19, review finding 1)", () => {
+  const COSTS_READ = "list Add Cost from Table costs";
+  const REFRESH_CONTRACTS = "refresh Add Cost from Table contracts";
+  /** A cost row of ANOTHER contract-year cell, deleted in the background by an earlier Save. */
+  const OTHER_PENDING = "a0000003-0000-4000-8000-000000000003";
+  const rawCost = (id: string, month: number, cost: number) => ({
+    vsb_capexcostid: id, _vsb_contract_value: C1, vsb_year: 2026, vsb_month: month, vsb_cost: cost,
+  });
+  const rawC1 = () => ({
+    vsb_capexprojectcontractid: C1, _vsb_account_value: SUB, vsb_name: "C1",
+    vsb_costtype: CHOICE.costPaidType.devCo, vsb_depreciation: true, vsb_applyvat: true,
+    vsb_isstandardcontract: false, vsb_distribution: CHOICE.distributionType.individual,
+    vsb_distributionscheme: CHOICE.distributionScheme.absoluteValues,
+    vsb_initialcontractsource: CHOICE.initialContractSource.pcf, vsb_iseditedfrompcf: true,
+    vsb_totalcost: 150,
+  });
+  let release: () => void = () => undefined;
+  afterEach(() => { release(); release = () => undefined; });
+
+  it("UT-ACSHEET-BULK-073 the retry re-read leaves out a cell an earlier Save is deleting: a value typed there is a CREATE, never an UPDATE of the doomed row", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // Save 1 cleared February (COST_FEB); its delete is still running.
+    release = pendingDeletes.add({ costIds: [COST_FEB] });
+    listRows.set(REFRESH_CONTRACTS, [rawC1()]);
+    listRows.set(COSTS_READ, [rawCost(COST_JAN, 1, 100), rawCost(COST_FEB, 2, 50)]);
+    // Save 2's retry: the reopened sheet (Feb hidden) has February typed as 75.
+    await saveAddCostSheetBulk({
+      projectId: PROJECT_ID,
+      changedRows: [row("C1", C1, months(100, 75))],
+      existingContracts: [contract(C1, "C1")],
+      existingCosts: [{ id: COST_JAN, contractId: C1, year: 2026, month: 1, cost: 100 }],
+      contractDeleteIds: [],
+      idCache: retryCache(),
+      refreshBeforePlan: true,
+    });
+    const written = upsertCalls.filter((c) => c.entitySetName === ES_COSTS)
+      .flatMap((c) => c.targets.map((t) => ({ action: c.action, id: String(t.vsb_capexcostid), month: t.vsb_month, cost: t.vsb_cost })));
+    expect(written.map((w) => w.id)).not.toContain(COST_FEB);
+    expect(written).toEqual([expect.objectContaining({ action: "create", month: 2, cost: 75 })]);
+    // The new row's total counts February once, from the new row.
+    expect(targetsOf(ES_CONTRACTS).find((t) => t.vsb_capexprojectcontractid === C1)?.vsb_totalcost).toBe(175);
+  });
+
+  it("UT-ACSHEET-BULK-074 the reconcile read leaves out an earlier Save's pending rows but keeps this Save's own (a failed own delete still exists)", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // OTHER_PENDING belongs to an earlier Save; COST_FEB is this Save's own deferred delete, which
+    // the hook has registered by the time its background reconcile runs.
+    release = pendingDeletes.add({ costIds: [OTHER_PENDING, COST_FEB] });
+    listRows.set(COSTS_READ, [rawCost(COST_JAN, 1, 200), rawCost(COST_FEB, 2, 50), rawCost(OTHER_PENDING, 3, 9)]);
+    const result = await saveAddCostSheetBulk(typical());
+    await result.background;
+    const deps = vi.mocked(executeSavePlan).mock.calls[0]?.[1] as SavePlanDeps;
+    const read = await deps.loadCosts([C1]);
+    expect(read.map((c) => c.id)).toEqual([COST_JAN, COST_FEB]);
   });
 });

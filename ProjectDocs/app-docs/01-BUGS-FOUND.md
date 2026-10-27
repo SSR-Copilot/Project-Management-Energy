@@ -825,7 +825,7 @@ later period's Start Date editable. The code app had locked it with the header f
 
 **Test:** UT-LLUI-009, inverted to `not.toBeDisabled()`. Record: **D49** §2.
 
-### CA-9 · Add Cost from Table left some contract totals stale (fixed 27 Oct 2026, uncommitted)
+### CA-9 · Add Cost from Table left some contract totals stale (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
 
 **A code-app defect in the legacy save path.**
 - **What happened.** `saveAddCostSheet` recomputed `vsb_totalcost` only for the contracts named by
@@ -839,7 +839,7 @@ later period's Start Date editable. The code app had locked it with the header f
 
 **Tests:** UT-ACSAVE-006, UT-ACSAVE-019. **Not verified** against live data. Record: **D51** §7.
 
-### CA-10 · Add Cost from Table deletes could fail silently (rule 14) (fixed 27 Oct 2026, uncommitted)
+### CA-10 · Add Cost from Table deletes could fail silently (rule 14) (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
 
 **A code-app defect.** `saveAddCostSheet` deleted cost and contract rows through the raw generated
 `delete()` (`data/addCostSheet.ts`, formerly lines 255, 327 and 329). That method discards the
@@ -860,7 +860,7 @@ UT-ACSHEET-BULK-022, 023 (refused and accepted total update, `addCostSheet.bulk.
 **Not fixed:** `deleteComment` in `data/comments.ts` still uses the raw `delete()` (CG-051,
 `ProjectDocs/Capex Cost Screen/15-GAP-ANALYSIS.md`). Record: **D51** §1.
 
-### CA-11 · Add Cost from Table reported almost every row as changed (fixed 27 Oct 2026, uncommitted)
+### CA-11 · Add Cost from Table reported almost every row as changed (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
 
 **A code-app defect.**
 - **What happened.** `diffRows` (`features/cost/add-costs-from-table/rules.ts`) paired each sheet
@@ -883,7 +883,7 @@ UT-ACSHEET-BULK-022, 023 (refused and accepted total update, `addCostSheet.bulk.
 (`adapter.test.ts`, through a real grid round trip), UT-ADDPERF-001 (the 3,487 count). **Not
 verified** against live data. Record: **D51** §11.12.
 
-### CA-12 · Two new same-named contracts under one sub-account pass validation (found 27 Oct 2026, fixed 27 Oct 2026, uncommitted)
+### CA-12 · Two new same-named contracts under one sub-account pass validation (found 27 Oct 2026, fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
 
 **A code-app divergence from the canvas, not marked in the code.** Found while fixing CA-11.
 - **The canvas.** `tmr__CheckChanges_Add_Costs_To_Dataverse.OnTimerEnd`
@@ -919,6 +919,39 @@ verified** against live data. Record: **D51** §11.12.
 - **Not ported:** the canvas message prefix (`UniqueID & " : "`). That gap predates this fix.
 
 Record: **D51** §11.12–§11.13.
+
+### CA-13 · After an Add Cost from Table Save, DEVEX/CAPEX showed the pre-save data, then deleted rows came back (found 27 Oct 2026, fixed 27 Oct 2026, uncommitted)
+
+**A code-app defect.**
+- **What happened.** A successful Save (`add-costs-from-table/Screen.tsx` `doSave`) navigates
+  straight back to `/costs/capex`. Two things then showed the wrong state:
+  - **Stale book (1–3 s).** `useSaveAddCostSheet` (`costing/useCostBook.ts`) invalidated the CAPEX
+    keys with the default `refetchType: "active"`. The CAPEX screen was unmounted at that moment,
+    so its queries were inactive: they were only marked stale, nothing was fetched. On mount the
+    screen rendered the cached PRE-save book and refetched in the background.
+  - **Deleted rows reappeared (5–20 s on DEV).** With `DEFER_CONTRACT_DELETES` /
+    `DEFER_COST_DELETES` (D51 §11.14–§11.16) the deletes were still running when that mount
+    refetch read, so removed contracts and cleared cells came back until `followBackgroundDeletes`
+    invalidated again after the background settled.
+- **The fix (D51 §11.19).**
+  - `src/data/pendingDeletes.ts`: a registry of the deferred contract and cost ids, filled when
+    the Save resolves and released when the background settles (success or failure). The CAPEX
+    book, the Summary totals and the sheet reload leave those rows out.
+  - `features/cost/costing/savedSheetPatch.ts` `applySavedSheetToBook`: the cached book is patched
+    with what the Save applied (`SavedSheetChanges`, returned by `saveAddCostSheetBulk` as
+    `applied`) in `onSuccess`, before `mutateAsync` resolves, so before `back()`.
+  - The CAPEX book and totals are invalidated with `refetchType: "all"`, so the confirming read
+    starts at save time.
+- **Scope.** Bulk path only for the patch; the legacy path (`BULK_SAVE = false`) returns `{}` and
+  is only refetched. The Contracts screen's DevCo queries are not filtered.
+- **Review fixes (D51 §11.19).** The save's own retry re-read and reconcile read now honour the
+  registry too (the reconcile keeps this Save's own deletes); a first book or totals load in flight
+  is cancelled before the post-save invalidation; a created contract is patched in only under a
+  sub-account of the book's own category.
+
+**Tests:** UT-PENDDEL-001…005, 010…012, 020…022, 030, 031; UT-SHEETPATCH-001…016; UT-ACSAVE-040…044;
+UT-ACSHEET-BULK-069…075; UT-ACSHEET-QUERY-009…017; UT-ACSHEET-CACHE-001; UT-BOOK-075, 076. **Not verified** against live
+data. Record: **D51** §11.19.
 
 ---
 

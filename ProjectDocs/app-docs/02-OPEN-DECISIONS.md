@@ -3698,8 +3698,17 @@ Recorded 26 Oct 2026 from the code. Commit `4fc8cff` (Sourabh Kumar) had no D-en
 
 ## D51 · Add Cost from Table: bulk Save through native `UpsertMultiple` (27 Oct 2026)
 
-**Status: PROPOSED, not product-approved.** Recorded 27 Oct 2026 from the code. Uncommitted. No
-commit, merge or push.
+**Status: PROPOSED, not product-approved.** Recorded 27 Oct 2026 from the code.
+
+**Current state (27 Oct 2026, end of day).** This status supersedes every "uncommitted" or "not
+measured live" line in §11–§11.16 below; those lines describe the state when each section was
+written.
+- **Committed** in `5d50e2b` on `RounakDev1`. `2c7e6aa` then took the analysis folder back out of
+  the branch.
+- **Fast-forwarded** into `master`.
+- **Deployed** to VSBCloud_Dev in `2c7e6aa` (D52).
+- **Measured live:** the latest saves took 1.9 s and 1.6 s (§11.16). The transport is
+  `CreateMultiple`/`UpdateMultiple`, not `UpsertMultiple`, despite this entry's title.
 - **First wave.** The full `npm run verify` ran after it: 152 files, 4,079 tests, all green, build OK.
 - **Second fix wave (27 Oct 2026, §3a–§3c, §8).** The full `npm run verify` ran after it: 152
   files, 4,129 tests. 4,128 passed; UT-ADGATE-910, the known flake, passed 33/33 when its file was
@@ -4579,7 +4588,254 @@ is confirmed or refuted by the per-request durations below.
 **Expected (inferred).** About 3–5 s for that save, down from 13.4 s, if the requests return to
 1–3 s each. The background then settles about 5–8 s after the click.
 
+**Measured live after this change (27 Oct 2026).** Both saves had the deferred deletes.
+
+| Save | Total | Requests | Contracts | Costs, existing contracts | Costs, new contracts | Gate peak |
+|---|---|---|---|---|---|---|
+| 96 rows | 1,916 ms | 5 | create 1.4 s, update 1.2 s | create 1.9 s, update 1.2 s | 556 ms | 4/16 |
+| 60 rows | 1,607 ms | 3 | update 865 ms | create 1.6 s, update 1.3 s | none | 3/16 |
+
+With the cascades no longer alongside the writes, each bulk request is back to 0.6–1.9 s, against
+6–11 s before. That confirms the lock-contention diagnosis. Against the 9.5 s baseline this is
+about 5–6×. Neither paste included the `background deletes …` line; see §11.17.
+
+#### 11.17 Review leftovers closed (27 Oct 2026, after the DEV push)
+
+- **The missing background-deletes log line: no code bug found.** `saveAddCostSheetBulk` attaches
+  the log itself, before it returns, so the line does not depend on the screen or the hook.
+  Navigation stays inside the app, and nothing clears the console. The line arrives 5–20 s after
+  the save line, under the CAPEX screen's logs. It goes missing only if a delete request never
+  answers, or if the tab is closed first (UT-ACSHEET-BULK-066/067).
+  - **Defensive addition.** When the deferred deletes begin, a new line is written:
+    `Add Cost from Table background deletes started: <costs|contracts> N row(s) at T ms, delete gate
+    B/4 busy`. The next live log shows whether they started, and whether they queued behind a
+    request that never answered. The text is for logs only and has no canvas equivalent.
+- **L2 / F5: `committedBefore` is now exact.**
+  - **Delete side.** The deleter reports `removed` (rows it deleted itself, excluding confirmed
+    404s), and `BulkDeleteError.removedCount` was added. `committedBefore` uses the new
+    `committedSomething`, so a batch where every row was already gone no longer says "Some of your
+    changes were already saved". The reconcile still uses the conservative `mayHaveLanded`.
+  - **Upsert side.** When both upsert groups fail with 0 committed, the adapter throws
+    `BulkWriteError(0, 0, 0)` around the `DataError`; before, it threw the bare `DataError`.
+  - **Tests:** UT-ACBULK-074…076 and UT-ACSHEET-BULK-063…065.
+- **F7: the retry wiring test now exists.** A `CreateMultiple` fake refuses ids that already exist,
+  with a 412 duplicate key. On the retry, the landed contract id goes only to `UpdateMultiple`,
+  without the owning-BU bind (UT-ACSHEET-BULK-068).
+- **Comments.**
+  - "Saves never overlap" is corrected: an earlier save's background work can still run.
+  - The parallel chunk count is stated accurately: up to 4 chunks at 2,000 rows or fewer, and
+    `ceil(n/500)` chunks above that.
+- **Mutation checks:** 9 of 9 killed.
+
 **Why 20× is not possible here.** No bulk request through the Power Apps host has measured under
 about 1 s, so a save that waits for the server cannot finish in about 0.5 s. Only a fully
 background save would reach that: the screen returns at once and the result arrives as a
 notification. That is not built; it is a product decision.
+
+#### 11.18 Review E6 of §11.17, and its three findings fixed (27 Oct 2026)
+
+**Status: uncommitted.** Review E6 found nothing that blocks a commit. It reported three
+low-severity findings, all now fixed:
+
+1. **A "nothing saved" failure could still write totals.** A delete that removed 0 rows is
+   "committed nothing" for `committedBefore`, but it still counted as "may have landed" for the
+   reconcile. The reconcile could therefore force a contract total, often a no-op write of the same
+   value, while the message said nothing was saved.
+   - **Fix:** `reconcileTotals` returns at once when no operation committed anything
+     (`committedSomething`). This save changed no stored total in that case, so there is nothing to
+     repair, and `committedBefore: false` stays true to Dataverse.
+   - **Tests:** UT-ACBULK-077 and 078 are new. UT-ACBULK-075 and 076 were updated, because they had
+     pinned the reconcile read and write that no longer happen.
+   - **Mutation check:** removing the guard fails 3 tests.
+2. **`backgroundDeleteStartLine` was exported but unused outside its module.** The `export` is
+   dropped, and knip no longer lists it.
+3. **Docstring.** The "busy" count in the start line can include this save's own cost-delete slots
+   on a retry. The docstring now says so.
+
+**Also fixed: UT-ADGATE-915, a test race on the Application Settings gates screen.** The test failed
+on the committed `2c7e6aa` as well. The people picker's inline listbox stays mounted while
+collapsed, so `findByRole("listbox")` resolved before the debounced search answered, and ArrowDown
++ Enter ran on an empty list. The test now waits for `aria-expanded="true"`. This is a test-only
+change.
+
+**Checks.**
+- The full `npm run verify` ran all 157 files and 4,304 tests.
+- 13 jsdom files had worker-start timeouts and were re-run on their own.
+- The admin-gates file now passes 33/33.
+- Typecheck and build are clean. Lint shows only its existing warning.
+
+#### 11.19 The saved state shows at once on DEVEX/CAPEX (27 Oct 2026)
+
+**Status: PROPOSED, not product-approved, uncommitted.** Bug **CA-13**.
+
+**RCA.** After a successful Save the screen navigates to `/costs/capex?category=N` at once.
+- `useSaveAddCostSheet` invalidated the CAPEX keys with the default `refetchType: "active"`. The
+  CAPEX screen was unmounted, so its queries were inactive: they were marked stale and nothing was
+  fetched. On mount the screen rendered the cached pre-save book and refetched it in the
+  background (1–3 s).
+- The deferred deletes (§11.14–§11.16) were still running when that mount refetch read, so removed
+  contracts and cleared cells reappeared until the second invalidation after `background` settled
+  (5–20 s live).
+
+**What changed.**
+1. **Pending-delete registry** (`src/data/pendingDeletes.ts`). When the Save resolves, the hook
+   registers the deferred ids, which `saveAddCostSheetBulk` now returns as `deferredContractIds`
+   and `deferredCostIds` beside the counts. They are released when `background` settles, success
+   or failure, and released BEFORE the second invalidation, so a row whose delete failed shows
+   again (the failure toast says why). The registry is reference-counted and lower-cases ids.
+   Reads that leave pending rows out, through the pure filters `excludePendingFromBook` and
+   `excludePendingFromSheet`:
+   - the DEVEX/CAPEX book (`useCostBook`): a pending contract's line, and a pending cost id in a
+     line's `payments`;
+   - the Summary totals (`loadCapexTotals(projectId, pending)`): pending contracts are not summed
+     or fetched; while a cost id is pending, the cost read also selects `vsb_capexcostid` and skips
+     it;
+   - the Add Cost from Table sheet (`useAddCostSheet`): a pending contract, its cost rows, and
+     pending cost rows. This covers the `blockedByPastCosts` branch, which stays on the screen and
+     refetches the sheet, and a sheet reopened inside the window.
+   Each read takes the snapshot when it starts. That is enough because every registry change is
+   followed by an invalidation, which cancels and restarts a read in flight.
+2. **Optimistic patch.** `buildSavePlan` now also returns `applied` (`SavedSheetChanges` in
+   `data/bulkTypes.ts`): saved contracts (id, `isNew`, final `totalCost`, the written columns in
+   book terms or `null`), saved cells (id, contract, year, month, amount, `isNew`; no-op cells
+   included), deleted contract ids and deleted cost ids (`costDeletes` and `costDeletesIfExist`).
+   No Dataverse field bag reaches the UI. In `onSuccess`, which runs before `mutateAsync`
+   resolves, the hook patches `["cost-book", projectId, category]` with
+   `applySavedSheetToBook` (`features/cost/costing/savedSheetPatch.ts`):
+   - deleted contracts and deleted cost rows go, deferred or not;
+   - updated cells take the new amount and keep their `paid` flag;
+   - new cells are added with `paid: false` (a create writes no `vsb_costpaid`), sorted by year
+     and month; a stale cached payment on the same cell is replaced;
+   - `totalCost` and the written columns (payer, VAT, depreciation, distribution, scheme) are
+     updated;
+   - a contract this Save created is added as `loadCostLines` maps the stored row: the trimmed
+     name as the description, `standard: false`, the Equal/By-Cluster defaults of blank JSON
+     columns, `frequency: 1`, no comments, no link.
+   No cached book, nothing is written. A patch that throws is logged and does not fail the Save.
+3. **Refetch now.** The CAPEX book and the totals are invalidated with `refetchType: "all"`, so
+   the confirming read starts at save time. `add-cost-sheet` stays `"none"`; the period book and
+   the Contracts screen's DevCo keys keep the default. The network part stays fire-and-forget
+   (§11: the Save does not wait for refetches). The second invalidation after `background` stays.
+4. **Legacy path.** `saveAddCostSheetLegacy` still resolves `{}`: no patch, no registry entry,
+   just the refetch.
+
+**Not patched optimistically, left to the refetch.**
+- An existing contract's description and account: the book shows `vsb_description ?? vsb_name`,
+  the sheet writes only `vsb_name`, and it binds the account only on a create.
+- A cost update whose row is not in the cached book: its `paid` flag is unknown.
+- A contract the cached book does not hold, unless this Save created it under a sub-account of
+  that book.
+- The Summary totals: no optimistic patch; the refetch, filtered by the registry, brings them.
+- `standard: false` and `frequency: 1` on a created contract are the column defaults, not values
+  the Save wrote. The refetch confirms them.
+
+**DIVERGENCE (rule 8).** The canvas reloads its collections when it returns to the CAPEX screen
+and shows what the reload returns. This app shows an optimistic saved state at once, confirmed by
+a refetch that started at save time. While the deferred deletes run, the rows being deleted are
+hidden from every read listed above.
+
+**The resurrection window (§11.14, finding 5), narrowed.** Within the tab that saved, the
+contracts and cleared cells being deleted are no longer on the CAPEX grid, in the Summary or in a
+reopened sheet. So the user cannot open their Edit Cost panel and PATCH them back from that tab
+during the window. Finding 6 (a reopened sheet showing the contract, then "deleted by someone
+else") is closed the same way. Still open:
+- another tab or another user whose book was loaded before the save;
+- the Contracts screen's DevCo reads, which do not consult the registry (not checked whether it
+  writes CAPEX contracts or cost rows);
+- a PATCH without `If-Match` from any of these still re-creates the row (R-12).
+
+**Tests.** UT-PENDDEL-001…005, 010…012, 020…022 (`src/data/pendingDeletes.test.ts`);
+UT-SHEETPATCH-001…015 (`savedSheetPatch.test.ts`); UT-ACSAVE-040…044 (`savePlan.test.ts`);
+UT-ACSHEET-BULK-069…072; UT-ACSHEET-QUERY-009…016; UT-BOOK-075, 076. Updated:
+UT-ACSHEET-QUERY-003…008 (the CAPEX keys now carry `refetchType: "all"`), and
+UT-ACSHEET-BULK-049, 058 and 068 (a result without a background is now `{ applied }`, not `{}`).
+Mutation checks: 10 of 10 killed (see the checks below).
+
+**Checks.**
+- `npm run verify`: `check:power` 84 registered, 0 problems; typecheck, lint, the label and
+  canvas gates passed; tests ran 159 files and 4,349 tests. 4,348 passed; only UT-ADGATE-910, the
+  known flake, failed, and it passed 33/33 when its file ran alone. `npm run build` then passed
+  separately, because the aborted verify skipped it.
+- After that run, two exports were made module-private (`savedContractColumns`,
+  `PendingDeletesRegistry`, for knip); typecheck and the affected files were re-run green.
+- Lint adds no warning in the changed files. knip: 12 unused files, as before.
+- Mutation checks, each killed: release after the invalidation (QUERY-013); no release on a
+  failed outcome (QUERY-014, 016); the book read ignoring the registry (QUERY-013, 014, 016);
+  the book's default `refetchType` (QUERY-003, 010…012, 016); no patch (QUERY-009, 012…014, 016);
+  an unseen update appended (SHEETPATCH-007); a created contract outside the category added
+  (SHEETPATCH-012); the totals ignoring a pending contract (BOOK-075); no deferred ids returned
+  (ACSHEET-BULK-069); the sheet reload ignoring the registry (QUERY-015, 016).
+- Not run: the live DEV test (`pac code run`). Owed before this is called done.
+
+**Review of §11.19 (27 Oct 2026), four findings, all fixed (uncommitted).**
+1. **MEDIUM: the retry re-read and the reconcile read bypassed the registry.** Scenario: Save 1
+   clears cell C and its delete is still running; the user reopens the sheet (C hidden), types a
+   value into C; Save 2 fails part-way; "Save again" (`refreshBeforePlan`) re-read C and planned an
+   UPDATE of it; Save 1's delete then removed C, losing the value while the total still counted it.
+   A reconcile could also sum rows about to be deleted.
+   - **Fix** (`data/addCostSheet.ts`): the `refreshSnapshot` result goes through
+     `excludePendingFromSheet(…, pendingDeletes.snapshot())`, so the typed value plans a CREATE.
+     The reconcile read (`SavePlanDeps.loadCosts`) goes through the new pure
+     `excludePendingCosts(…, pendingExcept(snapshot, own))`: it leaves out an earlier Save's pending
+     rows but keeps this Save's OWN deletes. Those are still registered while its background
+     reconcile runs, and a row whose own delete failed still exists and must be summed.
+   - **Tests:** UT-ACSHEET-BULK-073, 074; UT-PENDDEL-030, 031.
+2. **LOW: a first book load in flight was joined, not restarted.** TanStack 5's refetch cancels a
+   read in flight only when the query already holds data, so a FIRST load started before the save
+   landed its pre-save answer. **Fix:** `invalidate` calls `cancelQueries` on the book and the
+   totals keys, synchronously, before invalidating them (on save and on release). With no data and
+   no observer, the cancelled query is not refetched by the invalidation; the DEVEX/CAPEX screen's
+   mount reads it fresh. **Tests:** UT-ACSHEET-CACHE-001 (`useAddCostSheet.cache.test.ts`, a real
+   `QueryClient`), UT-ACSHEET-QUERY-017.
+3. **LOW, test gap: `costDeletesIfExist` in `deferredCostIds` was unpinned.** **Test:**
+   UT-ACSHEET-BULK-075.
+4. **LOW: the patch's category check checked "a known account".** `book.accounts` is the whole
+   chart. **Fix:** `applySavedSheetToBook(book, changes, category)` now admits a created contract
+   only under a sub-account whose `category` is the book's (the hook passes its key's category).
+   **Test:** UT-SHEETPATCH-016.
+
+Mutation checks of the fixes, each killed: refresh ignoring the registry (BULK-073); reconcile
+ignoring it (BULK-074); reconcile dropping this Save's own ids too (BULK-074); no cancel of the
+book read (CACHE-001, QUERY-017; QUERY-016 also failed, as a knock-on of 017's unreleased ids);
+`deferredCostIds` without `costDeletesIfExist` (BULK-075); no category check (SHEETPATCH-016).
+
+Checks after the fixes:
+- `npm run verify`: `check:power` 84 registered, 0 problems. Typecheck, lint and the label and
+  canvas gates passed. The tests ran 147 files (3,944 tests), all passed. 13 jsdom files had
+  worker-start timeouts and were re-run one at a time; all passed (330 tests). The exception was
+  `admin-gates-approvals/Screen.test.tsx`: its first lone run had 1 failure, not captured, in the
+  known-flaky file; its second lone run passed 33/33. That makes 160 files.
+- `npm run build` passed separately, because the aborted verify skipped it.
+- Lint adds no warning in the changed files.
+
+## D52 · DEV push of master `2c7e6aa`; the agent's local smoke test was waived (27 Oct 2026)
+
+This entry records a waived step, as CONVENTIONS ("Before pushing to DEV") requires. It has the
+same shape as D37, D40 and D46.
+
+**What was deployed.** Master `2c7e6aa`: the Add Cost from Table bulk Save (D51 §11–§11.16)
+fast-forwarded from `RounakDev1`. The target was app `807a2fba-665c-40f3-b158-ffe822aa7da4` in
+VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`), pushed with `pac code push` under the
+ServiceAccount_DEV profile. This supersedes the `fceb336` build of D46.
+
+**Checklist.**
+1. **`npm ci`: passed.** The two dev servers on ports 3000 and 8080 were stopped first.
+2. **`check:power`: passed,** 84 registered and 0 problems.
+3. **`npm run verify`: passed** on the first run: 157 files, 4,293 tests, and the build.
+4. **Hygiene: passed.** knip lists the expected 12 unused files: the 8 pre-existing ones plus the
+   generated `UpsertMultipleService` and the three `*MultipleModel` stubs. The only byte-identical
+   files are those three stubs, waived in D51 §11.11.
+5. **Local smoke test: waived for the agent,** which cannot drive a browser.
+   - **Mitigation.** Earlier the same day, the user ran the bulk Save locally against VSBCloud_Dev
+     several times. The console logs showed bulk `CreateMultiple`/`UpdateMultiple` accepted, and
+     saves of 1.9 s and 1.6 s.
+   - **Not covered.** The other Cost, PM and Admin screens were not clicked through in this session.
+6. **Environment: passed.** `pac auth list` and `pac org who` both showed VSBCloud_Dev.
+7. **Push: accepted.**
+   - `pac code push` returned "App pushed successfully".
+   - The push rewrote `power.config.json` with line-ending changes only. The `environment_*`
+     entry was intact, and the file was restored with `git checkout`.
+   - The step-5 smoke test on the deployed app is left to the user.
+
+**Open, not product-approved:** everything in D51, including the deferral switches
+(`DEFER_CONTRACT_DELETES`, `DEFER_COST_DELETES`) and the CA-12 rule.

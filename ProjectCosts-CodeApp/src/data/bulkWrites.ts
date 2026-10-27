@@ -132,6 +132,11 @@ export class BulkPartialWriteError extends Error {
  * One or more deletes in a `deleteMany` phase were refused. Every id was attempted first, so
  * `failedIds` is the complete list of rows still present and `deletedCount` the rows that went.
  * `causes[i]` is the error for `failedIds[i]`.
+ *
+ * `removedCount`: how many of the `deletedCount` rows this phase actually removed itself, leaving
+ * out the ones whose delete answered 404 and that were confirmed already gone (Add Cost from
+ * Table's `verifiedDeleteMany`). Defaults to `deletedCount`. The save orchestrator reads it only
+ * for "was anything saved?" (`committedBefore`), never for reconciling.
  */
 export class BulkDeleteError extends Error {
   readonly label: string;
@@ -139,6 +144,7 @@ export class BulkDeleteError extends Error {
   readonly table: string;
   readonly failedIds: readonly string[];
   readonly deletedCount: number;
+  readonly removedCount: number;
   readonly causes: readonly unknown[];
 
   constructor(
@@ -147,6 +153,7 @@ export class BulkDeleteError extends Error {
     failedIds: readonly string[],
     deletedCount: number,
     causes: readonly unknown[],
+    removedCount: number = deletedCount,
   ) {
     const first = causes[0];
     const detail = first instanceof Error ? first.message : String(first);
@@ -159,6 +166,7 @@ export class BulkDeleteError extends Error {
     this.table = table;
     this.failedIds = failedIds;
     this.deletedCount = deletedCount;
+    this.removedCount = removedCount;
     this.causes = causes;
   }
 }
@@ -258,7 +266,8 @@ export function toUpsertTargets(
  * `BulkWriteError` and no later chunk is sent.
  *
  * `parallel` (default 1 = the sequential behaviour above, exact prefix counts). When it is > 1
- * and the phase splits into more than one chunk (`parallelChunkSize`), every chunk is sent at
+ * and the phase splits into more than one chunk (`parallelChunkSize`: at most `parallel` chunks
+ * up to `parallel × chunkSize` rows, `ceil(n / chunkSize)` above that), every chunk is sent at
  * once (`Promise.allSettled`; the caller's transport is already gated by the shared concurrency
  * limiter, so no limiter is added here) and each result is unwrapped. Then:
  * - all succeeded → `{ requests, rows }`;
@@ -309,9 +318,14 @@ export async function upsertMultiple(
 }
 
 /**
- * Chunk size for a parallel phase: about `parallel` chunks, never below `MIN_PARALLEL_CHUNK`,
+ * Chunk size for a parallel phase: `ceil(rowCount / parallel)`, never below `MIN_PARALLEL_CHUNK`,
  * never above `maxChunk`. A phase under 2 × `MIN_PARALLEL_CHUNK` rows stays one request, so a
  * small save is not split into a full chunk plus a tiny remainder.
+ *
+ * So a phase is split into AT MOST `parallel` chunks only up to `parallel × maxChunk` rows (2,000
+ * with `parallel` 4 and the default 500). Above that the `maxChunk` cap wins and the phase is
+ * `ceil(rowCount / maxChunk)` chunks of `maxChunk` — MORE than `parallel` — and `upsertMultiple`
+ * sends every one of them at once (the caller's gate still bounds what is in flight).
  */
 export function parallelChunkSize(rowCount: number, parallel: number, maxChunk = DEFAULT_BULK_CHUNK): number {
   if (rowCount < 2 * MIN_PARALLEL_CHUNK) return Math.max(1, Math.min(maxChunk, rowCount));

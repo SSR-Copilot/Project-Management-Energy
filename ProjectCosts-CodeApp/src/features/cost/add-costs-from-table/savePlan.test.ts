@@ -886,3 +886,72 @@ describe("buildSavePlan ≡ the legacy per-row save", () => {
     expect(skippedContracts).toBeGreaterThan(0);
   });
 });
+
+/* ── `applied`: the plan in the DEVEX/CAPEX book's terms (D51 §11.19, CA-13) ── */
+
+describe("buildSavePlan — applied (SavedSheetChanges)", () => {
+  it("UT-ACSAVE-040 a new contract carries its columns in book terms, its total and its new cells", () => {
+    const plan = buildSavePlan(input({
+      changedRows: [row({ description: " New ", costPaidBy: "SPV", depreciation: "No", applyVat: "Yes", months: months({ 1: 10, 3: 20.4 }) })],
+    }), { newId: counter() });
+    expect(plan.applied.contracts).toEqual([{
+      id: "id-1", isNew: true, totalCost: 30,
+      columns: {
+        subaccountId: "sub-1", name: " New ", payer: "SPV", depreciation: false, vat: true,
+        distribution: "individual", distributionScheme: "absolute",
+      },
+    }]);
+    expect(plan.applied.costs).toEqual([
+      { id: "id-2", contractId: "id-1", year: 2026, month: 1, amount: 10, isNew: true },
+      { id: "id-3", contractId: "id-1", year: 2026, month: 3, amount: 20.4, isNew: true },
+    ]);
+    // Same ids as the targets the orchestrator sends.
+    expect(plan.applied.costs.map((c) => c.id)).toEqual(plan.costUpserts.map((t) => t.id));
+  });
+
+  it("UT-ACSAVE-041 an existing contract whose columns already match has columns null; no-op cells are listed", () => {
+    const plan = buildSavePlan(input({
+      changedRows: [row({ projectContractId: "c-1", months: months({ 1: 100, 2: 50 }) })],
+      existingContracts: [settled({ totalCost: 100 })],
+      existingCosts: [cost()],
+    }), { newId: counter() });
+    expect(plan.applied.contracts).toEqual([{ id: "c-1", isNew: false, totalCost: 150, columns: null }]);
+    expect(plan.applied.costs).toEqual([
+      { id: "k-1", contractId: "c-1", year: 2026, month: 1, amount: 100, isNew: false },
+      { id: "id-1", contractId: "c-1", year: 2026, month: 2, amount: 50, isNew: true },
+    ]);
+    // The no-op cell (k-1, 100 → 100) is not sent, but is in `applied`.
+    expect(plan.costUpserts.map((t) => t.id)).toEqual(["id-1"]);
+  });
+
+  it("UT-ACSAVE-042 a changed existing contract carries its new columns (DevCo payer)", () => {
+    const plan = buildSavePlan(input({
+      changedRows: [row({ projectContractId: "c-1", applyVat: "No", months: months({ 1: 100 }) })],
+      existingContracts: [settled({ totalCost: 100 })],
+      existingCosts: [cost()],
+    }), { newId: counter() });
+    expect(plan.applied.contracts[0]?.columns).toMatchObject({ payer: "DevCo", vat: false, depreciation: true });
+  });
+
+  it("UT-ACSAVE-043 deletes: removed contracts, and cleared cells of survivors plus the retry-only ids", () => {
+    const pendingKey = costIdentityKey("c-1", 2026, 5);
+    const plan = buildSavePlan(input({
+      changedRows: [row({ projectContractId: "c-1", months: months({ 1: 100 }) })],
+      existingContracts: [settled(), contract({ id: "c-x", name: "Gone" })],
+      existingCosts: [cost(), cost({ id: "k-2", month: 2, cost: 5 }), cost({ id: "k-x", contractId: "c-x" })],
+      contractDeleteIds: ["c-x"],
+      pendingIds: new Map([[pendingKey, "pend-5"]]),
+    }), { newId: counter() });
+    expect(plan.applied.deletedContractIds).toEqual(["c-x"]);
+    expect(plan.applied.deletedCostIds).toEqual(["k-2", "pend-5"]);
+    // A doomed contract's costs go by the cascade: not listed, and the contract is not "saved".
+    expect(plan.applied.contracts.map((c) => c.id)).toEqual(["c-1"]);
+  });
+
+  it("UT-ACSAVE-044 applied is frozen, like the rest of the plan", () => {
+    const plan = buildSavePlan(input({ changedRows: [row({ months: months({ 1: 1 }) })] }), { newId: counter() });
+    expect(Object.isFrozen(plan.applied)).toBe(true);
+    expect(Object.isFrozen(plan.applied.costs)).toBe(true);
+    expect(Object.isFrozen(plan.applied.contracts)).toBe(true);
+  });
+});

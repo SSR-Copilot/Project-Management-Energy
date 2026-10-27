@@ -113,8 +113,14 @@ export interface SavePlanDeps {
    * Deletes every id, attempting all of them; throws when any failed (A2's `deleteMany`). A row
    * that is already gone (404) must count as deleted: the orchestrator sends the plan's delete
    * ids without checking them first.
+   *
+   * `removed` (optional): how many rows THIS call actually removed, leaving out the ones that
+   * were confirmed already gone (404). Used only for `committedBefore`, so a batch of nothing but
+   * confirmed 404s does not count as "something was saved". Omitted: every id counts as removed.
+   * A failure says the same through the error's `removedCount` (`BulkDeleteError`).
    */
-  deleteMany: (table: BulkTableInfo, ids: readonly string[], label: string) => Promise<{ requests: number }>;
+  deleteMany: (table: BulkTableInfo, ids: readonly string[], label: string) =>
+    Promise<{ requests: number; removed?: number }>;
   /** Fresh server read of the cost rows of these contracts (for reconciliation). */
   loadCosts: (contractIds: readonly string[]) => Promise<ExistingCost[]>;
   /**
@@ -227,9 +233,11 @@ interface SavePlanErrorInit {
    */
   reconciled: boolean;
   /**
-   * True when something reached Dataverse: an operation of this save fully succeeded, or a
-   * failing one reports committed rows (`rowsCommitted` for an upsert, `deletedCount` for a
-   * delete). An error with no counts counts as "no".
+   * True when something reached Dataverse, or may have: an operation of this save succeeded, or a
+   * failing one reports committed rows (`rowsCommitted` / `chunksCommitted` for an upsert,
+   * `removedCount` or else `deletedCount` for a delete). An error with no counts counts as "may
+   * have". A delete that removed nothing itself (every id a confirmed 404: `removed` /
+   * `removedCount` 0) and an error that reports 0 rows count as "no" (`committedSomething`).
    */
   committedBefore: boolean;
   /** Set only when the reconcile itself failed; `cause` is still the phase's own error. */
@@ -367,7 +375,7 @@ const OP_TIMING: Record<OpKey, TimingKey> = {
  */
 type OpOutcome =
   | { key: OpKey; size: number; status: "empty" | "skipped" }
-  | { key: OpKey; size: number; status: "ok"; requests: number }
+  | { key: OpKey; size: number; status: "ok"; requests: number; removed?: number }
   | { key: OpKey; size: number; status: "failed"; cause: unknown; nothingSent?: boolean };
 
 /** The three upsert operations, once they were started (or decided not to be). */
@@ -408,16 +416,18 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
   const heldOf = (key: OpKey) => (held[OP_TIMING[key] as HeldKey] ??= { requests: 0 });
 
   const run = async (
-    key: OpKey, size: number, send: () => Promise<{ requests: number }>,
+    key: OpKey, size: number, send: () => Promise<{ requests: number; removed?: number }>,
   ): Promise<OpOutcome> => {
     if (size === 0) return { key, size, status: "empty" };
     const t0 = now();
     const holdBack = isDeferred(key);
     try {
-      const { requests: sent } = await send();
+      const { requests: sent, removed } = await send();
       if (holdBack) heldOf(key).requests += sent;
       else addRequests(requests, key, sent);
-      return { key, size, status: "ok", requests: sent };
+      return removed === undefined
+        ? { key, size, status: "ok", requests: sent }
+        : { key, size, status: "ok", requests: sent, removed };
     } catch (cause) {
       return { key, size, status: "failed", cause };
     } finally {
@@ -796,6 +806,8 @@ interface CommitProgress {
   rowsCommitted?: number;
   chunksCommitted?: number;
   deletedCount?: number;
+  /** `BulkDeleteError.removedCount`: rows this delete removed itself (confirmed 404s left out). */
+  removedCount?: number;
 }
 
 function commitProgress(error: unknown): CommitProgress {
@@ -806,6 +818,7 @@ function commitProgress(error: unknown): CommitProgress {
     rowsCommitted: num(e.rowsCommitted),
     chunksCommitted: num(e.chunksCommitted),
     deletedCount: num(e.deletedCount),
+    removedCount: num(e.removedCount),
   };
 }
 
@@ -826,6 +839,26 @@ function mayHaveLanded(o: OpOutcome): boolean {
   if (isDelete(o.key)) return p.deletedCount === undefined || p.deletedCount > 0;
   if (p.rowsCommitted === undefined && p.chunksCommitted === undefined) return true;
   return (p.rowsCommitted ?? 0) > 0 || (p.chunksCommitted ?? 0) > 0;
+}
+
+/**
+ * Did this operation CHANGE something in Dataverse itself, or may it have? `committedBefore`
+ * only (L2 / F5: "Some of your changes were already saved" must not be said when nothing was).
+ * It is `mayHaveLanded`, except that a delete which removed nothing itself — every id a
+ * confirmed 404 (`removed` 0 on success, `removedCount` 0 on a `BulkDeleteError`) — is "no".
+ *
+ * Not used for `needsReconcile` or the verify-failure propagation, which keep `mayHaveLanded`. It
+ * does gate the reconcile as a whole (E6 #1): when no operation committed anything, no stored total
+ * changed, so `reconcileTotals` writes nothing and `committedBefore` false stays true to Dataverse.
+ */
+function committedSomething(o: OpOutcome): boolean {
+  if (!isDelete(o.key)) return mayHaveLanded(o);
+  if (o.status === "ok") return o.removed === undefined || o.removed > 0;
+  if (o.status === "failed" && !sentNothing(o)) {
+    const removed = commitProgress(o.cause).removedCount;
+    if (removed !== undefined) return removed > 0;
+  }
+  return mayHaveLanded(o);
 }
 
 /**
@@ -897,7 +930,12 @@ async function reconcileTotals(
   plan: SaveBuildPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
   timings: SavePlanTimings, exclude: ReadonlySet<string>,
 ): Promise<ReconcileOutcome> {
-  if (!needsReconcile(outcomes)) return { reconciled: true, unverifiedContractIds: [] };
+  // Nothing of this save committed (every delete confirmed it removed 0 rows, every upsert reported
+  // 0): no stored total changed, so there is nothing to repair. Without this the reconcile could
+  // still force a no-op total write, and `committedBefore` would no longer be exact.
+  if (!needsReconcile(outcomes) || !outcomes.some(committedSomething)) {
+    return { reconciled: true, unverifiedContractIds: [] };
+  }
   const contracts = outcomes.find((o) => o.key === "contracts") as OpOutcome;
   const { ids, force, unverified } = reconcileScope(plan, contracts, exclude);
   const t0 = now();
@@ -934,8 +972,10 @@ async function failAndReconcile(
   const { phase, cause } = failures[0] as { phase: SavePhase; cause: unknown };
   // "May have" rather than "proved": an error without counts (creates and updates failing
   // together, or a per-row fallback) can still have landed rows, and the retry is safe either way
-  // because the ids are stable.
-  const committedBefore = outcomes.some(mayHaveLanded);
+  // because the ids are stable. A delete of rows that were all confirmed already gone, or an
+  // upsert error that reports 0 rows, changed nothing (`committedSomething`). The reconcile only
+  // runs when something did, so it cannot make a "nothing committed" save write.
+  const committedBefore = outcomes.some(committedSomething);
   const result = await reconcileTotals(plan, deps, outcomes, requests, timings, new Set());
   requests.total = sumRequests(requests);
   return new SavePlanError({ phase, cause, failures, requests, committedBefore, ...result });
@@ -950,7 +990,7 @@ async function goneAndReconcile(
   plan: SaveBuildPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
   timings: SavePlanTimings, verified: Verified,
 ): Promise<RowsGoneError> {
-  const committedBefore = outcomes.some(mayHaveLanded);
+  const committedBefore = outcomes.some(committedSomething);
   const result = await reconcileTotals(plan, deps, outcomes, requests, timings, verified.goneContractIds);
   requests.total = sumRequests(requests);
   return new RowsGoneError(verified.gone as { contracts: number; costs: number }, requests, {

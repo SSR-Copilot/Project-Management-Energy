@@ -14,7 +14,9 @@ import {
   backgroundDeleteFailureTexts, type DeferredCounts, type SaveAddCostSheetResult,
 } from "@/data/addCostSheet";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
+import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
 import type { CostBook, CostLine, CostPeriod } from "./model";
+import { applySavedSheetToBook } from "./savedSheetPatch";
 
 /**
  * Every field a save should compare — `id` decides create/update/delete, not equality.
@@ -63,7 +65,13 @@ export function useCostBook(category?: number) {
   const queryKey = ["cost-book", projectId, category ?? "none"];
   const query = useQuery({
     queryKey, enabled: Boolean(projectId), retry: false,
-    queryFn: () => costRepository().getCostBook(projectId as string, category),
+    // Rows a previous Add Cost from Table Save is still deleting in the background stay hidden
+    // (D51 §11.19). The snapshot is taken when the read starts: every registry change is followed
+    // by an invalidation, which cancels and restarts a read in flight.
+    queryFn: async () => {
+      const pending = pendingDeletes.snapshot();
+      return excludePendingFromBook(await costRepository().getCostBook(projectId as string, category), pending);
+    },
   });
   /**
    * The O&M / Land Lease / Other OPEX period screens' save.
@@ -374,7 +382,8 @@ export function useCapexTotals(enabled = true) {
     queryKey: ["capex-totals", projectId],
     enabled: enabled && Boolean(projectId),
     retry: false,
-    queryFn: () => costRepository().getCapexTotals(projectId as string),
+    // See `useCostBook`: pending background deletes are left out of the sums (D51 §11.19).
+    queryFn: () => costRepository().getCapexTotals(projectId as string, pendingDeletes.snapshot()),
   });
 }
 
@@ -448,7 +457,12 @@ export function useAddCostSheet(category: number) {
     // "Save again" into a silent partial save. It still loads fresh on entry and after a save.
     ...NO_FOCUS_REFETCH,
     refetchOnReconnect: false,
-    queryFn: () => costRepository().loadAddCostSheet(projectId as string, category),
+    // A sheet loaded while an earlier Save's deletes still run must not show (and so re-plan)
+    // the rows being deleted (D51 §11.19; the `blockedByPastCosts` branch reloads in place).
+    queryFn: async () => {
+      const pending = pendingDeletes.snapshot();
+      return excludePendingFromSheet(await costRepository().loadAddCostSheet(projectId as string, category), pending);
+    },
   });
 }
 
@@ -459,6 +473,21 @@ export function useAddCostSheet(category: number) {
  * the Summary tab's totals and the Contracts recalculation exactly like a single-line save
  * does — plus its own `add-cost-sheet` query, so re-opening the table shows the saved state
  * rather than the stale pre-save one.
+ *
+ * SAVED STATE AT ONCE (D51 §11.19, CA-13). The screen navigates back to DEVEX/CAPEX the moment
+ * the Save resolves, and that screen rendered the cached PRE-save book until a mount refetch
+ * (1–3 s) replaced it; rows deleted in the background then came back until the background
+ * settled (5–20 s). So `onSuccess`, which runs before `mutateAsync` resolves:
+ *  1. registers the deferred delete ids in `pendingDeletes` (every CAPEX read hides them);
+ *  2. patches the cached book with what the Save applied (`applySavedSheetToBook`; the legacy
+ *     path returns no `applied`, so it is only refetched);
+ *  3. invalidates the DEVEX/CAPEX book and the Summary totals with `refetchType: "all"`, so the
+ *     confirming read starts now, while the CAPEX screen is still unmounted, instead of on its
+ *     mount (the Contracts screen's DevCo keys keep the default, see `invalidate`);
+ *  4. when the background settles (success or failure), releases the ids FIRST, then invalidates
+ *     again, so a row whose delete failed shows again.
+ * Steps 1–2 are synchronous; the network part stays fire-and-forget (D51 §11: the Save must not
+ * wait for any refetch).
  */
 export function useSaveAddCostSheet(category: number) {
   const { projectId, project } = useSession();
@@ -466,15 +495,27 @@ export function useSaveAddCostSheet(category: number) {
   // Hook-level, so the closure below can still raise a toast after the screen navigated away:
   // `<AppToaster />` is mounted once by `app/Providers.tsx` and outlives every route.
   const notify = useNotify();
+  const bookKey = ["cost-book", projectId, category];
 
   const invalidate = async () => {
+    // A read of these two keys that started BEFORE this point would land a pre-save (or
+    // pre-release) answer. TanStack's refetch cancels a read in flight only when the query already
+    // HAS data, so a FIRST load still running would be joined, not restarted (review finding 2).
+    // Cancelling first (synchronously, before the invalidations below) makes the refetch a new read.
+    void client.cancelQueries({ queryKey: bookKey });
+    void client.cancelQueries({ queryKey: ["capex-totals", projectId] });
     await Promise.all([
       // Not refetched here: the screen navigates away on success, so a reload of the whole sheet
       // would be thrown away. It is marked stale and reloads on the next visit (or on demand).
       client.invalidateQueries({ queryKey: ["add-cost-sheet", projectId, category], refetchType: "none" }),
-      client.invalidateQueries({ queryKey: ["cost-book", projectId, category] }),
+      // The CAPEX keys refetch even while inactive: the DEVEX/CAPEX screen is about to mount.
+      client.invalidateQueries({ queryKey: bookKey, refetchType: "all" }),
+      // The period screens' book (no CAPEX lines): refetched only if one is showing.
       client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
-      client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
+      client.invalidateQueries({ queryKey: ["capex-totals", projectId], refetchType: "all" }),
+      // The Contracts screen's DevCo reads: that screen is not where the Save returns to, and
+      // they do not consult `pendingDeletes`, so they keep the default (refetch only if showing;
+      // otherwise on that screen's mount, after the second invalidation in the usual case).
       client.invalidateQueries({ queryKey: qk.devCoCapexContracts(projectId ?? "none") }),
       client.invalidateQueries({ queryKey: qk.devCoCapexCosts(projectId ?? "none") }),
     ]);
@@ -492,12 +533,26 @@ export function useSaveAddCostSheet(category: number) {
     // Fire-and-forget: returning the promise would make `mutateAsync` (and so the Save button)
     // wait for every invalidated query to refetch before the screen may navigate.
     onSuccess: (result: SaveAddCostSheetResult | undefined) => {
+      const release = result?.background
+        ? pendingDeletes.add({ contractIds: result.deferredContractIds, costIds: result.deferredCostIds })
+        : undefined;
+      const applied = result?.applied;
+      if (applied) {
+        try {
+          // An updater returning `undefined` (no book cached for this key) leaves the cache alone.
+          client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
+        } catch (error) {
+          // The Save itself succeeded: a patch that throws must not turn it into a failure. The
+          // refetch below still brings the saved state.
+          console.error("Add Cost from Table: patching the DEVEX/CAPEX book failed", error);
+        }
+      }
       void invalidate();
       if (result?.background) {
         followBackgroundDeletes(result.background, {
           deferredContracts: result.deferredContracts ?? 0,
           deferredCosts: result.deferredCosts ?? 0,
-        }, invalidate, notify);
+        }, invalidate, notify, release);
       }
     },
   });
@@ -510,15 +565,20 @@ export function useSaveAddCostSheet(category: number) {
  * reload still saw and picks up any totals the background reconcile rewrote; each failure becomes
  * an error toast, its text chosen by `backgroundDeleteFailureTexts`. NEVER throws or rejects:
  * nothing awaits it, so a throw would be an unhandled rejection.
+ *
+ * `release` (D51 §11.19) un-hides the deferred ids in `pendingDeletes`. It runs BEFORE the
+ * invalidation, whatever the outcome: after a failure the rows still exist and must show again.
  */
 function followBackgroundDeletes(
   background: Promise<BackgroundOutcome>,
   counts: DeferredCounts,
   invalidate: () => Promise<void>,
   notify: Notify,
+  release: () => void = () => undefined,
 ): void {
   void background
     .then((outcome) => {
+      release();
       void invalidate().catch(() => undefined);
       for (const text of backgroundDeleteFailureTexts(outcome, counts)) {
         try {
@@ -527,6 +587,10 @@ function followBackgroundDeletes(
           // A toaster that throws must not hide the next text, nor reject.
         }
       }
+    }, () => {
+      // `background` never rejects; if it ever did, the ids must still be released.
+      release();
+      void invalidate().catch(() => undefined);
     })
     .catch(() => undefined);
 }

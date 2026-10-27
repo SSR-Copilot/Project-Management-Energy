@@ -58,6 +58,7 @@ import type {
   DeviceTypeInProject, OpexAccount, OpexSubaccount,
 } from "@/features/cost/periods/opexRules";
 import type { CostLine, CostPeriod } from "@/features/cost/costing/model";
+import type { PendingDeleteIds } from "./pendingDeletes";
 
 export interface DevCoLink {
   id: string;
@@ -108,8 +109,11 @@ export interface CostRepository {
    * Separate from `getCostBook` because it needs no monthly rows at all — the figure lives on
    * the contract. Folding it into the book would mean fetching the project's whole cost set to
    * render five numbers.
+   *
+   * `pending`: rows whose deferred Add Cost from Table delete has not landed yet are left out of
+   * the sums (D51 §11.19, `./pendingDeletes.ts`).
    */
-  getCapexTotals(projectId: string): Promise<CapexCategoryTotal[]>;
+  getCapexTotals(projectId: string, pending?: PendingDeleteIds): Promise<CapexCategoryTotal[]>;
 
   /**
    * The Land Lease `Allocation` / `OTP` flags, keyed by `vsb_landleaseprojectcostid` — the id a

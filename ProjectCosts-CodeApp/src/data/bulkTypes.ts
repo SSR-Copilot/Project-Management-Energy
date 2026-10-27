@@ -59,6 +59,73 @@ export interface SaveBuildPlan {
   }>;
 }
 
+/**
+ * The columns a sheet Save wrote on one contract, in DOMAIN terms (the `CostLine` vocabulary of
+ * `features/cost/costing/model.ts`), never as a Dataverse field bag. D51 §11.19.
+ *
+ * Exactly the columns `contractFields` writes that the DEVEX/CAPEX book reads back; the account
+ * (`subaccountId`) is bound only on a CREATE, so it means something only when `isNew`.
+ * `name` is `vsb_name`; the book's `description` is `vsb_description ?? vsb_name`, and the sheet
+ * never writes `vsb_description`, so `name` is the book's description only for a NEW contract.
+ */
+export interface SavedContractColumns {
+  subaccountId: string | null;
+  name: string;
+  payer: "DevCo" | "SPV";
+  depreciation: boolean;
+  vat: boolean;
+  distribution: "equal" | "individual";
+  distributionScheme: "percent" | "absolute";
+}
+
+/** One contract a successful Save left in Dataverse (created, changed, or its total rewritten). */
+export interface SavedContract {
+  id: string;
+  /** Planned as a create: the sheet had no contract for it. */
+  isNew: boolean;
+  /** The contract's `vsb_totalcost` after the save (already rounded, `recomputeContractTotal`). */
+  totalCost: number;
+  /**
+   * The columns written. `null` when this save wrote at most the total (the stored columns already
+   * matched, or the contract was only touched through its cells).
+   */
+  columns: SavedContractColumns | null;
+}
+
+/** One month cell a successful Save left in Dataverse (`vsb_capexcosts`). */
+export interface SavedCost {
+  id: string;
+  contractId: string;
+  year: number;
+  /** 1-12. */
+  month: number;
+  amount: number;
+  /** Created by this save. A create writes no `vsb_costpaid`, so the row is not paid. */
+  isNew: boolean;
+}
+
+/**
+ * What a successful sheet Save applied, in domain terms — the input of the DEVEX/CAPEX book's
+ * optimistic patch (`applySavedSheetToBook`). Deletes are listed whether or not they were
+ * deferred; a deferred one is ALSO in `SaveAddCostSheetResult.deferred*Ids`.
+ *
+ * `costs` includes no-op cells (value equal to the stored one): writing their value back into the
+ * book changes nothing, and leaving them out would make the description depend on the snapshot.
+ */
+export interface SavedSheetChanges {
+  contracts: readonly SavedContract[];
+  costs: readonly SavedCost[];
+  /** The removed contracts; their cost rows go with them (cascade). */
+  deletedContractIds: readonly string[];
+  /** Cleared cells of surviving contracts (`costDeletes` and `costDeletesIfExist`). */
+  deletedCostIds: readonly string[];
+}
+
+/** `buildSavePlan`'s result: the plan the orchestrator sends, plus what it means in domain terms. */
+export interface SheetSavePlan extends SaveBuildPlan {
+  applied: SavedSheetChanges;
+}
+
 /** What the executor needs to address one table. */
 export interface BulkTableInfo {
   /** e.g. `vsb_capexcosts`. */

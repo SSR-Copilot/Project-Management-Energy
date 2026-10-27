@@ -34,15 +34,19 @@ The label gate does not cover controls created through the DOM API in the vendor
 (`features/cost/capex-costs/pcf/ui/GridRenderer.js`). That file's identities are documented in
 `ProjectDocs/migration-plans/09-tosca-automation-conventions.md`; check them by hand when it changes.
 
-As of the last verified run in this app (26 Oct 2026, commit `fceb336`): **3,998 tests in 148
-files**, 81 data sources; `typecheck`, `build`, and `lint` (warnings only) all clean.
+As of the last verified run in this app (27 Oct 2026, on `2c7e6aa` plus the D51 §11.17–§11.18
+fixes): **4,304 tests in 157 files**, all passing. 13 jsdom files had worker-start timeouts under
+the full run and passed on their own. There are 84 data sources (`check:power`: 84 registered,
+0 problems). `typecheck`, `build`, and `lint` (warnings only) are all clean. knip lists 12 unused
+files, as expected (D52). The run on `2c7e6aa` itself had 4,293 tests. The previous recorded run
+was 26 Oct on `fceb336`: 3,998 tests in 148 files, 81 data sources.
 UT-ADGATE-910 (`features/admin/admin-gates-approvals/Screen.test.tsx`) is a known timing flake
 under a full run and passes when its file runs alone. A run that fails only on it is aborted,
 not red: re-run that file, then run `npm run build`, because the aborted verify skipped it. (`ProjectDocs/app-docs/APP-README.md` still says "247 tests" and
 `appId: null` — both stale; see `ProjectDocs/instructions/PROJECT-MAP.md` on doc drift. Prefer a fresh run over
 any number quoted in a doc, including this one, if it matters to the task at hand.)
 
-**Since that run (27 Oct 2026, uncommitted, D51).** The full `npm run verify` ran after the
+**The runs leading up to it (27 Oct 2026, D51; committed in `5d50e2b`).** The full `npm run verify` ran after the
 first wave of the Add Cost from Table bulk save: **152 files, 4,079 tests**, all green, build OK.
 After the second fix wave it ran again: **152 files, 4,129 tests**. 4,128 passed, and only
 UT-ADGATE-910, the known flake, failed; it passed 33/33 when its file was run alone. `npm run build`
@@ -63,8 +67,8 @@ actions. It accepts the `environment_<id>` entry those actions need in `power.co
 (CONVENTIONS rule 9). The manual DEV test and the automated part are in
 `ProjectDocs/app-docs/13-ADDCOST-BULK-SAVE-TEST-PLAN.md`.
 
-**Performance wave (27 Oct 2026, uncommitted, D51 §11).** No `verify` result is recorded for it
-yet. It adds or changes these tests:
+**Performance wave (27 Oct 2026, D51 §11; committed in `5d50e2b`, covered by the `2c7e6aa` run
+above).** It adds or changes these tests:
 - `src/data/addCostSheetBulk.test.ts`: UT-ACBULK-031…038 (parallel verify reads, the concurrent
   stage order, stage B, settle-then-reconcile, the retried "new" target, timings).
 - `src/data/addCostSheet.bulk.test.ts`: UT-ACSHEET-BULK-024…034 (`CreateMultiple` /
@@ -75,8 +79,8 @@ yet. It adds or changes these tests:
   does not wait for the post-save reloads).
 - `src/platform/errors.rootCause.test.ts`: UT-ERR-ROOT-001/002.
 
-**Round-trip and prepare pass (27 Oct 2026, uncommitted, D51 §11.12).** No `verify` result is
-recorded for it yet. Two new test files:
+**Round-trip and prepare pass (27 Oct 2026, D51 §11.12; committed in `5d50e2b`, covered by the
+`2c7e6aa` run above).** Two new test files:
 - `src/features/cost/add-costs-from-table/prepare.bench.test.ts`, UT-ADDPERF-001…003: the Save's
   client prepare on a seeded 15,000-row sheet. 001 times each step and prints the table with
   `--reporter=verbose` (generous wall-clock bounds, plus the exact 3,487 changed rows); 002 and 003

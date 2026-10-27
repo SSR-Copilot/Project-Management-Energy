@@ -17,6 +17,10 @@
  * differs in HOW MANY writes it takes to get there (see the no-op notes below), plus one
  * correction, flagged `DIVERGENCE` at the totals.
  *
+ * The plan also carries `applied` (`SavedSheetChanges`, D51 §11.19): the same final state in the
+ * DEVEX/CAPEX book's own terms, so the hook can patch the cached book the moment the Save
+ * resolves without reading Dataverse field bags.
+ *
  * No React, no SDK, no clock and no randomness: a new row's id comes from the injected
  * `deps.newId`, so a cost row can bind to a brand-new contract in the same plan and a test can
  * pin every id (CONVENTIONS rule 5).
@@ -38,10 +42,12 @@
  * Complexity is O(rows × 12 + costs). Every lookup goes through a `Map`/`Set` built once; there
  * is no `find`, `filter` or `includes` inside a loop.
  */
-import type { SaveBuildPlan, UpsertTarget } from "@/data/bulkTypes";
+import type {
+  SavedContract, SavedContractColumns, SavedCost, SheetSavePlan, UpsertTarget,
+} from "@/data/bulkTypes";
 import { bind, OWNING_BU_BIND } from "@/data/odata";
 import {
-  ADDCOST_SAVE_MSG, contractUpserts, costCellKey, costWrites, recomputeContractTotal,
+  ADDCOST_SAVE_MSG, CHOICE, contractUpserts, costCellKey, costPaidByText, costWrites, recomputeContractTotal,
   type ContractUpsert, type ExistingContract, type ExistingCost, type SheetRow,
 } from "./rules";
 
@@ -131,6 +137,24 @@ export function contractFields(u: ContractUpsert): Record<string, unknown> {
   };
 }
 
+/**
+ * `contractFields(u)` in the DEVEX/CAPEX book's vocabulary (D51 §11.19): the same option-set
+ * readings `loadCostLines` (`data/costBook.ts`) applies to the stored row — `resolvePayer` (a
+ * sheet always writes DevCo or SPV, so the sub-account mapping is never consulted), Equal only
+ * for the Equal value, % only for the % value.
+ */
+function savedContractColumns(u: ContractUpsert): SavedContractColumns {
+  return {
+    subaccountId: u.subaccountId,
+    name: u.name,
+    payer: costPaidByText(u.costType) === "SPV" ? "SPV" : "DevCo",
+    depreciation: u.depreciation,
+    vat: u.applyVat,
+    distribution: u.distribution === CHOICE.distributionType.equal ? "equal" : "individual",
+    distributionScheme: u.distributionScheme === CHOICE.distributionScheme.percent ? "percent" : "absolute",
+  };
+}
+
 /** True when writing `contractFields(u)` would leave the stored contract exactly as it is. */
 function contractUnchanged(u: ContractUpsert, c: ExistingContract): boolean {
   return c.name === u.name
@@ -154,6 +178,8 @@ interface PendingContract {
   id: string;
   isNew: boolean;
   fields: Record<string, unknown> | null;
+  /** `fields` in domain terms (`SavedSheetChanges`); null exactly when `fields` is. */
+  columns: SavedContractColumns | null;
 }
 
 /** The `${year}-${month}` key the legacy total merge used, within one contract. */
@@ -162,7 +188,7 @@ const monthKey = (year: number, month: number): string => `${year}-${month}`;
 /** Distinct values, in first-seen order, quoted and joined for a sentence. */
 const quotedList = (values: readonly string[]): string[] => [...new Set(values)].map((v) => `"${v}"`);
 
-export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): SaveBuildPlan {
+export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): SheetSavePlan {
   const { projectId, owningBusinessUnitId, changedRows, existingContracts, existingCosts } = input;
   // Rule 4: only a CREATE carries the owning-BU bind; an update must not move the row.
   const buBind = owningBusinessUnitId ? bind("businessunits", owningBusinessUnitId) : null;
@@ -231,14 +257,14 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
       fields["vsb_Project@odata.bind"] = bind("vsb_projects", projectId);
       fields["vsb_Account@odata.bind"] = bind("vsb_capexaccountlists", u.subaccountId ?? "");
       if (buBind) fields[OWNING_BU_BIND] = buBind;
-      contracts.set(id, { id, isNew: true, fields });
+      contracts.set(id, { id, isNew: true, fields, columns: savedContractColumns(u) });
       contractsCreated += 1;
     } else {
       // An existing contract whose stored columns already equal the upsert gets its total only.
       // Same final state as the legacy save's unconditional update, one fewer column set.
       const existing = contractById.get(id);
       const fields = existing && contractUnchanged(u, existing) ? null : contractFields(u);
-      contracts.set(id, { id, isNew: false, fields });
+      contracts.set(id, { id, isNew: false, fields, columns: fields === null ? null : savedContractColumns(u) });
     }
   }
 
@@ -258,6 +284,8 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
   /* ── phases 2 and 3: costs ── */
   const writes = costWrites(resolvedRows, existingCosts);
   const costUpserts: UpsertTarget[] = [];
+  // Every cell this save leaves holding a value, no-ops included (`SavedSheetChanges.costs`).
+  const savedCosts: SavedCost[] = [];
   const costDeletes: string[] = [];
   const seenCells = new Set<string>();
   const seenCostIds = new Set<string>();
@@ -290,7 +318,9 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
   };
   /** A cost-touched contract with no contract upsert of its own still gets its total. */
   const touch = (contractId: string) => {
-    if (!contracts.has(contractId)) contracts.set(contractId, { id: contractId, isNew: false, fields: null });
+    if (!contracts.has(contractId)) {
+      contracts.set(contractId, { id: contractId, isNew: false, fields: null, columns: null });
+    }
   };
 
   for (const w of writes.upserts) {
@@ -307,6 +337,7 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
 
     if (w.costId !== null) {
       claimCostId(w.costId);
+      savedCosts.push({ id: w.costId, contractId, year: w.year, month: w.month, amount: w.cost, isNew: false });
       // No-op skip: the stored value already equals the cell, so nothing is written. This
       // differs from the legacy save in write COUNT only, never in final state.
       if (costById.get(w.costId)?.cost === w.cost) { noOpCells += 1; continue; }
@@ -323,7 +354,9 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
     };
     if (buBind) fields[OWNING_BU_BIND] = buBind;
     const contractRef = newContractRef.get(contractId) ?? contractId;
-    costUpserts.push({ id: freshId(costIdentityKey(contractRef, w.year, w.month)), isNew: true, fields: Object.freeze(fields) });
+    const costId = freshId(costIdentityKey(contractRef, w.year, w.month));
+    costUpserts.push({ id: costId, isNew: true, fields: Object.freeze(fields) });
+    savedCosts.push({ id: costId, contractId, year: w.year, month: w.month, amount: w.cost, isNew: true });
     costsCreated += 1;
   }
 
@@ -375,6 +408,7 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
    */
   const totals = new Map<string, number>();
   const contractTargets: UpsertTarget[] = [];
+  const savedContracts: SavedContract[] = [];
   let contractsUpdated = 0;
   for (const p of contracts.values()) {
     const merged = new Map<string, number>();
@@ -386,6 +420,8 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
     const total = recomputeContractTotal(values);
     // Kept even when no target is sent: the orchestrator's reconcile keys on `totals`.
     totals.set(p.id, total);
+    // Also kept without a target: the stored total then already equals `total`.
+    savedContracts.push({ id: p.id, isNew: p.isNew, totalCost: total, columns: p.columns });
 
     // Nothing to write: an existing contract whose columns already match (`fields: null`) and
     // whose STORED total already equals this one. `recomputeContractTotal` has already rounded
@@ -415,6 +451,12 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sa
       costsDeleted: costDeletes.length,
       contractsDeleted: contractDeletes.length,
       noOpCells,
+    }),
+    applied: Object.freeze({
+      contracts: Object.freeze(savedContracts),
+      costs: Object.freeze(savedCosts),
+      deletedContractIds: contractDeletes,
+      deletedCostIds: Object.freeze([...costDeletes, ...costDeletesIfExist]),
     }),
   };
 }
