@@ -93,6 +93,18 @@ this maps them to logical names (`vsb_name`, `vsb_totalcostofcontract`).
    `…CanvasParity` twin where numbers are involved, and gets an entry in `02-OPEN-DECISIONS.md`.
 9. **`src/generated/` and `.power/` are pac output.** Regenerate with
    `pac code add-data-source -a dataverse -t <table>`; never hand-edit.
+   **Dataverse actions and functions** (27 Oct 2026, D51): `pac` 2.13.1 cannot add them, and
+   `pac code add-data-source` skips `dataverseOperation` schemas. Use the npm Power Apps CLI
+   (preview): `npx @microsoft/power-apps-cli app add dataverse-api --api-name <Action>`
+   (`pa` 1.2.0; [Microsoft docs](https://learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/add-dataverse-action-function)).
+   It regenerates `dataSourcesInfo.ts` (diff it afterwards; every table must survive) and writes `src/generated/`.
+   **Keep the `environment_<id>` entry** (corrected 27 Oct 2026, D51 §11.2): for an action
+   bound to the abstract `crmbaseentity` (e.g. `CreateMultiple`, `UpdateMultiple`,
+   `UpsertMultiple`) it also adds a binding entry to `power.config.json`
+   (`"environment_<id>": { "entitySetName": "Environment", ... }`). It is not a table and has
+   no schema, but the host routes the bound operation through it. Do **not** remove it: removing
+   it by hand was followed by HTTP 501 from `UpsertMultiple`. `check:power` accepts
+   `environment_*` / `"Environment"` entries; re-run `npm run check:power` after the command.
 
 ## Reproducing the extraction
 

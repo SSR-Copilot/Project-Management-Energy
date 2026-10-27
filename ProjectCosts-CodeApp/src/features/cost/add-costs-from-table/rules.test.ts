@@ -8,7 +8,7 @@ import {
   sheetIsWritable, rowSignature, rowChanged, diffRows, costTypeFromText, isEditedFromPcf,
   initialContractSource, contractUpserts, costWrites, recomputeContractTotal,
   planContractDeletions, planContractDeletionsCanvasParity, canOpenBulkEdit, canSaveBulkEdit,
-  cancelWritesNothing,
+  cancelWritesNothing, ADDCOST_SAVE_MSG, saveFailureText,
   type ExistingContract, type ExistingCost, type SheetRow,
 } from "./rules";
 
@@ -207,9 +207,53 @@ describe("validateCostOnAccount", () => {
 
 describe("validateDuplicateContracts", () => {
   it("UT-ADDCOST-007 rejects two same-name contracts in the same year", () => {
-    const errors = validateDuplicateContracts([row({ rowId: "r1" }), row({ rowId: "r2" })]);
+    // One sub-account's contract rows share one Row_ID, as the grid emits them (CA-12).
+    const errors = validateDuplicateContracts([row({ rowId: "Row_3" }), row({ rowId: "Row_3" })]);
     expect(errors).toHaveLength(2);
-    expect(errors[0]?.message).toContain(ADDCOST_MSG.duplicateContract);
+    expect(errors[0]?.message).toBe(`My Cost${ADDCOST_MSG.duplicateContract}`);
+  });
+
+  it("UT-ADDCOST-084 CA-12: two NEW same-named rows, one sub-account, one year, months NOT overlapping, are refused", () => {
+    const a = row({ rowId: "Row_3", description: "Twin", months: [100, ...emptyMonths().slice(1)] });
+    const b = row({ rowId: "Row_3", description: "Twin", months: [null, 200, ...emptyMonths().slice(2)] });
+    expect(validateDuplicateContracts([a, b])).toEqual([
+      { rowKey: "Row_3", accountNumber: "80000_0", accountName: "Turbine", message: `Twin${ADDCOST_MSG.duplicateContract}` },
+      { rowKey: "Row_3", accountNumber: "80000_0", accountName: "Turbine", message: `Twin${ADDCOST_MSG.duplicateContract}` },
+    ]);
+    // The screen disables Save on any validation error.
+    const errors = validateSheet([a, b]);
+    expect(errors.map((e) => e.message)).toEqual([`Twin${ADDCOST_MSG.duplicateContract}`]);
+    expect(sheetIsWritable(errors)).toBe(false);
+    expect(ADDCOST_MSG.duplicateContract)
+      .toBe(" :- There cannot be two contracts with the same name under the same sub-account.");
+  });
+
+  it("UT-ADDCOST-085 the key is all five canvas fields: a difference in any one of them is not a duplicate", () => {
+    const base = row({ rowId: "Row_3", description: "Twin" });
+    for (const other of [
+      { accountName: "Grid" }, { year: 2027 }, { rowId: "Row_4" }, { accountNumber: "80000_1" }, { description: "Twin 2" },
+    ] satisfies Partial<SheetRow>[]) {
+      expect(validateDuplicateContracts([base, { ...base, ...other }]), JSON.stringify(other)).toEqual([]);
+    }
+    // Three rows on one key: all three are flagged; a fourth on its own key is not.
+    const three = [base, { ...base }, { ...base }, { ...base, year: 2027 }];
+    expect(validateDuplicateContracts(three).map((e) => e.rowKey)).toEqual(["Row_3", "Row_3", "Row_3"]);
+    // No separator collision: "a|b" + "c" and "a" + "b|c" are different keys.
+    expect(validateDuplicateContracts([
+      row({ rowId: "Row_3", accountName: "a|b", description: "c" }),
+      row({ rowId: "Row_3", accountName: "a", description: "b|c" }),
+    ])).toEqual([]);
+  });
+
+  it("UT-ADDCOST-086 one name under one sub-account at two Row_IDs is no longer a contract duplicate, but the sub-account check still refuses it", () => {
+    // The old rule's only case (more than one distinct Row_ID). The canvas `CostCountRows`
+    // counts 1 for each row; `locDuplicateSubaccounts` refuses the pair instead.
+    const jan = [1, ...emptyMonths().slice(1)];
+    const rows = [row({ rowId: "Row_3", months: jan }), row({ rowId: "Row_5", months: jan })];
+    expect(validateDuplicateContracts(rows)).toEqual([]);
+    const errors = validateSheet(rows);
+    expect(errors.map((e) => e.message)).toEqual([`80000_0 - Turbine${ADDCOST_MSG.duplicateSubaccount}`]);
+    expect(sheetIsWritable(errors)).toBe(false);
   });
 
   it("the same contract across two years is a legitimate pair of rows", () => {
@@ -324,6 +368,147 @@ describe("diffRows / rowChanged / rowSignature", () => {
     expect(rowChanged(a, a)).toBe(false);
     expect(rowSignature(a)).toBe(rowSignature({ ...a }));
     expect(rowChanged(a, b)).toBe(rowSignature(a) !== rowSignature(b));
+  });
+});
+
+/* ═════════════════════════════ the diff pairs rows by identity (UT-ADDCOST-074..) ══ */
+
+describe("diffRows pairs by identity, not Row_ID", () => {
+  /** One contract row per (contract, year), all sharing ONE Row_ID, as the grid emits them. */
+  const contractRow = (contractId: string, year: number, jan: number | null, rowId = "Row_3") =>
+    row({ rowId, projectContractId: contractId, description: `Name ${contractId}`, year,
+      months: [jan, ...emptyMonths().slice(1)] });
+
+  it("UT-ADDCOST-074 compares rows sharing a Row_ID but not a year with the RIGHT originals", () => {
+    const original = [contractRow("c-1", 2020, 1), contractRow("c-1", 2021, 2), contractRow("c-2", 2020, 3)];
+    // Unedited, every row shares "Row_3": a Row_ID map would pair all three with c-2/2020.
+    expect(diffRows(original.map((r) => ({ ...r })), original)).toEqual([]);
+    // The current sheet's walk handed out a different Row_ID; identity still pairs them.
+    const shifted = original.map((r) => ({ ...r, rowId: "Row_9" }));
+    expect(diffRows(shifted, original)).toEqual([]);
+    // Editing 2021 alone reports 2021 alone.
+    const edited = [original[0] as SheetRow, contractRow("c-1", 2021, 99), original[2] as SheetRow];
+    expect(diffRows(edited, original).map((r) => `${r.projectContractId}/${r.year}`)).toEqual(["c-1/2021"]);
+  });
+
+  it("UT-ADDCOST-075 one edited cell on a many-contract, many-year sheet gives exactly that row", () => {
+    const original = ["c-1", "c-2", "c-3"].flatMap((c) => [2020, 2021, 2022].map((y) => contractRow(c, y, y)));
+    const current = original.map((r) => ({ ...r, months: [...r.months] }));
+    (current[4] as SheetRow).months[7] = 123; // c-2 / 2021, August
+    expect(diffRows(current, original)).toEqual([current[4]]);
+  });
+
+  it("UT-ADDCOST-076 a new row is changed; a removed row is not in the diff", () => {
+    const original = [contractRow("c-1", 2020, 1), contractRow("c-1", 2021, 2)];
+    const fresh = row({ rowId: "Row_3", description: "Brand new", year: 2020, projectContractId: null });
+    // c-1/2021 removed (the orphan clean-up blanks it), a new row added under the same Row_ID.
+    const current = [original[0] as SheetRow, fresh];
+    expect(diffRows(current, original)).toEqual([fresh]);
+    // A new year of an existing contract has no original either.
+    expect(diffRows([...original, contractRow("c-1", 2022, null)], original).map((r) => r.year)).toEqual([2022]);
+  });
+
+  it("UT-ADDCOST-077 an identity two rows share cannot be paired, so every row carrying it is changed", () => {
+    // Two NEW rows with the same name under one sub-account share a Row_ID. Since CA-12
+    // validation refuses them (Save is disabled, UT-ADDCOST-084); `diffRows` still reports both,
+    // as a guard. The ORIGINAL side below is what validation never sees.
+    const twin = row({ rowId: "Row_3", description: "Twin", year: 2020, projectContractId: null });
+    const twins = [twin, { ...twin }];
+    expect(validateDuplicateContracts(twins)).toHaveLength(2);
+    expect(diffRows(twins, [twin])).toHaveLength(2);
+    // Two ORIGINALS on one identity: the single current row is changed, even when it equals one.
+    expect(diffRows([twin], twins)).toEqual([twin]);
+    // Rows with a unique identity beside them are still judged on their own.
+    const other = contractRow("c-9", 2020, 5);
+    expect(diffRows([...twins, other], [twin, other])).toEqual(twins);
+  });
+
+  it("UT-ADDCOST-078 property: over random sheets and edits, no edit is lost and no unedited row is reported", () => {
+    function seeded(seed: number): () => number {
+      let s = seed >>> 0;
+      return () => {
+        s = (s + 0x6d2b79f5) >>> 0;
+        let t = s;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    // The ORACLE: a current row is unchanged iff exactly one current and exactly one original row
+    // carry its identity, and every compared field equals that original's. Linear scans, no
+    // index, no Row_ID.
+    const same = (a: SheetRow, b: SheetRow) => a.description === b.description
+      && a.depreciation === b.depreciation && a.costPaidBy === b.costPaidBy && a.applyVat === b.applyVat
+      && a.months.every((m, i) => (m ?? null) === (b.months[i] ?? null))
+      && b.months.every((m, i) => (m ?? null) === (a.months[i] ?? null));
+    const identityOf = (r: SheetRow) => JSON.stringify(r.projectContractId !== null
+      ? ["c", r.projectContractId, r.year] : ["n", r.accountNumber, r.accountName, r.description, r.year]);
+    const oracle = (current: readonly SheetRow[], original: readonly SheetRow[]) => current.filter((r) => {
+      const peers = current.filter((c) => identityOf(c) === identityOf(r));
+      const matches = original.filter((o) => identityOf(o) === identityOf(r));
+      return !(peers.length === 1 && matches.length === 1 && same(r, matches[0] as SheetRow));
+    });
+
+    let edits = 0;
+    let unchanged = 0;
+    let ambiguous = 0;
+    for (let seed = 0; seed < 400; seed += 1) {
+      const rand = seeded(seed);
+      const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)] as T;
+      const months = () => Array.from({ length: 12 }, () => (rand() < 0.6 ? null : Math.round(rand() * 50)));
+      const original: SheetRow[] = [];
+      for (let i = 0; i < 6 + Math.floor(rand() * 10); i += 1) {
+        const contractId = rand() < 0.8 ? `c-${Math.floor(rand() * 6)}` : null;
+        original.push(row({
+          rowId: `Row_${Math.floor(rand() * 3)}`, projectContractId: contractId,
+          accountNumber: pick(["80000_0", "80000_1"]), description: contractId ?? pick(["New A", "New B"]),
+          year: pick([2020, 2021, 2022]), costPaidBy: pick(["DevCo", "SPV"]), applyVat: pick(["Yes", "No"]),
+          months: months(),
+        }));
+      }
+      // The user's session: drop some rows, edit some, renumber Row_IDs, add a few.
+      const current: SheetRow[] = [];
+      original.forEach((o) => {
+        if (rand() < 0.15) return;
+        let r: SheetRow = { ...o, rowId: `Row_${Math.floor(rand() * 3)}`, months: [...o.months] };
+        if (rand() < 0.35) {
+          const what = Math.floor(rand() * 4);
+          if (what === 0) r.months[Math.floor(rand() * 12)] = Math.round(rand() * 50);
+          else if (what === 1) r = { ...r, applyVat: r.applyVat === "Yes" ? "No" : "Yes" };
+          else if (what === 2) r = { ...r, costPaidBy: r.costPaidBy === "SPV" ? "DevCo" : "SPV" };
+          else r = { ...r, depreciation: r.depreciation === "Yes" ? null : "Yes" };
+        }
+        current.push(r);
+      });
+      for (let n = 0; n < Math.floor(rand() * 3); n += 1) {
+        current.splice(Math.floor(rand() * (current.length + 1)), 0, row({
+          rowId: "Row_1", description: pick(["New A", "New C"]), year: pick([2020, 2021]), months: months(),
+        }));
+      }
+
+      const diff = diffRows(current, original);
+      expect(diff, `seed ${seed}`).toEqual(oracle(current, original));
+      // Spelled out: every row that differs from its sole original is in the diff…
+      const inDiff = new Set(diff);
+      for (const r of current) {
+        const matches = original.filter((o) => identityOf(o) === identityOf(r));
+        const peers = current.filter((c) => identityOf(c) === identityOf(r));
+        if (peers.length > 1 || matches.length !== 1) {
+          ambiguous += peers.length > 1 || matches.length > 1 ? 1 : 0;
+          expect(inDiff.has(r), `seed ${seed}: unpaired row must be changed`).toBe(true);
+        } else if (!same(r, matches[0] as SheetRow)) {
+          edits += 1;
+          expect(inDiff.has(r), `seed ${seed}: edit lost`).toBe(true);
+        } else {
+          unchanged += 1;
+          expect(inDiff.has(r), `seed ${seed}: unedited row reported`).toBe(false);
+        }
+      }
+    }
+    // Every branch is really exercised.
+    expect(edits).toBeGreaterThan(100);
+    expect(unchanged).toBeGreaterThan(100);
+    expect(ambiguous).toBeGreaterThan(0);
   });
 });
 
@@ -526,5 +711,325 @@ describe("permissions and exits", () => {
   it("UT-ADDCOST-028/029 Cancel discards everything; a save returns to the same category", () => {
     expect(cancelWritesNothing).toBe(true);
     expect(contractUpserts(diffRows([], [row()]), [])).toEqual([]);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════ failed-save messages ══ */
+
+describe("saveFailureText", () => {
+  const FAILED = ADDCOST_MSG.saveFailed;
+
+  it("UT-ADDCOST-SAVEMSG-001 an unknown failure is exactly the canvas message", () => {
+    expect(saveFailureText({ kind: "other" })).toBe(FAILED);
+  });
+
+  it("UT-ADDCOST-SAVEMSG-002 a phase-1 failure with nothing committed names the step only", () => {
+    expect(saveFailureText({ kind: "phase", phase: 1, reconciled: true, committedBefore: false })).toBe(
+      `${FAILED} The save stopped at step 1 of 4 (saving contracts).`,
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-003 a later failure after a commit says Save again is safe", () => {
+    expect(saveFailureText({ kind: "phase", phase: 2, reconciled: true, committedBefore: true })).toBe(
+      `${FAILED} The save stopped at step 2 of 4 (saving costs). The changes written before it were `
+      + "saved. Press Save again to finish the save without duplicating anything.",
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-004 an unreconciled failure gives the reload hint instead of Save again", () => {
+    expect(saveFailureText({ kind: "phase", phase: 3, reconciled: false, committedBefore: true })).toBe(
+      `${FAILED} The save stopped at step 3 of 4 (deleting costs). `
+      + "Contract totals may not match the saved costs: reload the screen before saving again.",
+    );
+    expect(saveFailureText({ kind: "phase", phase: 1, reconciled: false, committedBefore: false })).toBe(
+      `${FAILED} The save stopped at step 1 of 4 (saving contracts). ${ADDCOST_SAVE_MSG.totalsMayBeStale}`,
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-005 every phase has its step name", () => {
+    expect(saveFailureText({ kind: "phase", phase: 4, reconciled: true, committedBefore: true }))
+      .toContain("step 4 of 4 (deleting contracts).");
+    expect(ADDCOST_SAVE_MSG.phase).toEqual({
+      1: "saving contracts", 2: "saving costs", 3: "deleting costs", 4: "deleting contracts",
+    });
+  });
+
+  it("UT-ADDCOST-SAVEMSG-006 a sheet conflict says nothing was saved and why", () => {
+    expect(saveFailureText({ kind: "conflict", detail: '"A" under account "B" has more than one row for 2026.' }))
+      .toBe(`${FAILED} Nothing was saved: "A" under account "B" has more than one row for 2026.`);
+  });
+
+  it("UT-ADDCOST-SAVEMSG-007 rows deleted by someone else: counts, singular and plural", () => {
+    const tail = "deleted by someone else after this sheet was loaded. Reload the screen and try again.";
+    expect(saveFailureText({ kind: "gone", contracts: 2, costs: 3, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: 2 contracts and 3 cost rows were ${tail}`);
+    expect(saveFailureText({ kind: "gone", contracts: 1, costs: 1, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: 1 contract and 1 cost row were ${tail}`);
+    expect(saveFailureText({ kind: "gone", contracts: 1, costs: 0, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: 1 contract was ${tail}`);
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 1, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: 1 cost row was ${tail}`);
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 4, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: 4 cost rows were ${tail}`);
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 0, committedBefore: false }))
+      .toBe(`${FAILED} Nothing was saved: some rows were ${tail}`);
+  });
+
+  it("UT-ADDCOST-SAVEMSG-009 gone with nothing committed before: exactly the 'Nothing was saved' text", () => {
+    expect(saveFailureText({ kind: "gone", contracts: 2, costs: 3, committedBefore: false })).toBe(
+      `${FAILED} Nothing was saved: 2 contracts and 3 cost rows were deleted by someone else after `
+      + "this sheet was loaded. Reload the screen and try again.",
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-010 gone after writes landed: never 'Nothing was saved'; says some changes were saved", () => {
+    const text = saveFailureText({ kind: "gone", contracts: 2, costs: 3, committedBefore: true });
+    expect(text).toBe(
+      `${FAILED} 2 contracts and 3 cost rows were deleted by someone else after this sheet was loaded. `
+      + "Some of your changes were already saved: reload the screen before saving again.",
+    );
+    expect(text).not.toContain("Nothing was saved");
+    expect(text.startsWith(`${ADDCOST_MSG.saveFailed} `)).toBe(true);
+    expect(saveFailureText({ kind: "gone", contracts: 1, costs: 0, committedBefore: true })).toBe(
+      `${FAILED} 1 contract was deleted by someone else after this sheet was loaded. `
+      + "Some of your changes were already saved: reload the screen before saving again.",
+    );
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 1, committedBefore: true })).toBe(
+      `${FAILED} 1 cost row was deleted by someone else after this sheet was loaded. `
+      + "Some of your changes were already saved: reload the screen before saving again.",
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-011 unknown counts (0 / 0) say 'some rows', never '0 contracts and 0 cost rows', in both branches", () => {
+    for (const committedBefore of [false, true]) {
+      const text = saveFailureText({ kind: "gone", contracts: 0, costs: 0, committedBefore });
+      expect(text.toLowerCase()).toContain(" some rows were deleted by someone else after this sheet was loaded.");
+      expect(text).not.toMatch(/\b0 (contracts?|cost rows?)\b/);
+    }
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 0, committedBefore: false })).toBe(
+      `${FAILED} Nothing was saved: some rows were deleted by someone else after this sheet was loaded. `
+      + "Reload the screen and try again.",
+    );
+    // Starts a sentence here, so it is capitalised.
+    expect(saveFailureText({ kind: "gone", contracts: 0, costs: 0, committedBefore: true })).toBe(
+      `${FAILED} Some rows were deleted by someone else after this sheet was loaded. `
+      + "Some of your changes were already saved: reload the screen before saving again.",
+    );
+    expect(ADDCOST_SAVE_MSG.goneAfterCommit(0, 0)).toBe(
+      "Some rows were deleted by someone else after this sheet was loaded. "
+      + "Some of your changes were already saved: reload the screen before saving again.",
+    );
+  });
+
+  it("UT-ADDCOST-SAVEMSG-008 the conflict details read naturally", () => {
+    expect(ADDCOST_SAVE_MSG.conflictSameCell("My Cost", "Turbine", 2026))
+      .toBe('"My Cost" under account "Turbine" has more than one row for 2026.');
+    expect(ADDCOST_SAVE_MSG.conflictSameGroup("X", ['"A"', '"B"']))
+      .toBe('"X" is listed under "A" and "B", which are the same sub-account.');
+    expect(ADDCOST_SAVE_MSG.conflictSameGroup("X", ['"A"']))
+      .toBe('"X" under account "A" is listed more than once.');
+    expect(ADDCOST_SAVE_MSG.conflictSameContract(['"A"', '"B"'], "Turbine"))
+      .toBe('"A" and "B" under account "Turbine" point to the same saved cost item.');
+  });
+});
+
+/* ═══════════════ indexed rules behave exactly like the scans (UT-ADDCOST-067..) ══ */
+
+/**
+ * `buildInitialSheet`, `planContractDeletions` and three of the six validations were rewritten
+ * to index once instead of scanning per row (`prepare.bench.test.ts` has the numbers). The
+ * implementations they replaced are kept here, verbatim, as the ORACLE, and every seeded
+ * random input must come out identical from both — including the awkward ones: duplicated
+ * sub-accounts and contract ids, contracts with no sub-account, two costs on one cell, months
+ * outside 1-12, null and zero costs, contracts with no costs at all.
+ */
+describe("the indexed rules match the scanning ones they replaced", () => {
+  /* ── the oracle: the pre-index implementations, verbatim ── */
+
+  const yesNoTextOrDefault = (v: boolean | null): string => (v === true ? "Yes" : v === false ? "No" : "No");
+
+  function oracleBuildInitialSheet(args: Parameters<typeof buildInitialSheet>[0]): SheetRow[] {
+    const payerDefaults = args.payerDefaults ?? new Map<string, string>();
+    const rows: SheetRow[] = [];
+    for (const sub of args.subaccounts) {
+      const subContracts = args.contracts.filter((c) => c.subaccountId === sub.id);
+      if (subContracts.length === 0) {
+        rows.push({
+          rowId: `new-${sub.id}`, accountNumber: sub.number, accountName: sub.name, description: "",
+          year: args.currentYear, costPaidBy: payerDefaults.get(sub.id) ?? null, depreciation: null,
+          applyVat: null, months: new Array(12).fill(null), subAccountId: sub.id, projectContractId: null,
+        });
+        continue;
+      }
+      for (const contract of subContracts) {
+        const contractCosts = args.costs.filter((c) => c.contractId === contract.id);
+        const years = [...new Set(contractCosts.map((c) => c.year))].sort((a, b) => a - b);
+        const yearsToShow = years.length > 0 ? years : [args.currentYear];
+        for (const year of yearsToShow) {
+          const months: (number | null)[] = new Array(12).fill(null);
+          for (const c of contractCosts) {
+            if (c.year === year && c.month >= 1 && c.month <= 12) months[c.month - 1] = c.cost ?? null;
+          }
+          rows.push({
+            rowId: `${contract.id}-${year}`, accountNumber: sub.number, accountName: sub.name,
+            description: contract.name, year, costPaidBy: costPaidByText(contract.costType),
+            depreciation: yesNoTextOrDefault(contract.depreciation),
+            applyVat: yesNoTextOrDefault(contract.applyVat), months, subAccountId: sub.id,
+            projectContractId: contract.id,
+          });
+        }
+      }
+    }
+    return rows;
+  }
+
+  function oraclePlanContractDeletions(args: Parameters<typeof planContractDeletions>[0]) {
+    const { originalRows, sheetRows, contracts, costs, currentYear } = args;
+    const stillPresent = new Set(sheetRows.map((r) => r.projectContractId).filter((x): x is string => x !== null));
+    const removed = [...new Set(
+      originalRows.map((r) => r.projectContractId).filter((x): x is string => x !== null && !stillPresent.has(x)),
+    )];
+    const hasPastCosts = (contractId: string) =>
+      costs.some((c) => c.contractId === contractId && c.year < currentYear && (c.cost ?? 0) !== 0);
+    if (args.allowPastCostDeletion) return { deleteIds: removed, blockedByPastCosts: [] };
+    const blocked = removed.filter(hasPastCosts);
+    return {
+      deleteIds: removed.filter((id) => !blocked.includes(id)),
+      blockedByPastCosts: blocked.map((id) => ({ id, name: contracts.find((c) => c.id === id)?.name ?? id })),
+    };
+  }
+
+  const oKey = (r: SheetRow) => ({ rowKey: r.rowId, accountNumber: r.accountNumber, accountName: r.accountName });
+
+  function oracleDuplicateSubaccounts(rows: readonly SheetRow[]) {
+    const groupKey = (r: SheetRow) => `${uniqueId(r)}|${r.year}`;
+    const byUnique = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const set = byUnique.get(groupKey(r)) ?? new Set<string>();
+      set.add(r.rowId);
+      byUnique.set(groupKey(r), set);
+    }
+    return rows.filter((r) => (byUnique.get(groupKey(r))?.size ?? 0) > 1)
+      .map((r) => ({ ...oKey(r), message: `${uniqueId(r)}${ADDCOST_MSG.duplicateSubaccount}` }));
+  }
+
+  /**
+   * Not the pre-index implementation (that rule was the reverse of the canvas, bug CA-12): the
+   * canvas formula itself, `CountIf(colPCFDataOut, Name = Current.Name, CurrentYear =
+   * Current.CurrentYear, row_ID = Current.row_ID, Number = Current.Number, Description =
+   * Current.Description) > 1`, as a quadratic scan with no key strings.
+   */
+  function oracleDuplicateContracts(rows: readonly SheetRow[]) {
+    const costCountRows = (c: SheetRow) => rows.filter((r) => r.accountName === c.accountName
+      && String(r.year) === String(c.year) && r.rowId === c.rowId
+      && r.accountNumber === c.accountNumber && r.description === c.description).length;
+    return rows.filter((r) => costCountRows(r) > 1)
+      .map((r) => ({ ...oKey(r), message: `${r.description}${ADDCOST_MSG.duplicateContract}` }));
+  }
+
+  function oracleContractHasCost(rows: readonly SheetRow[]) {
+    const groupKey = (r: SheetRow) => `${r.accountName}|${r.accountNumber}|${r.description}`;
+    const hasCost = new Map<string, boolean>();
+    for (const r of rows) {
+      const any = r.months.some((m) => m !== null && m !== 0);
+      hasCost.set(groupKey(r), (hasCost.get(groupKey(r)) ?? false) || any);
+    }
+    return rows.filter((r) => hasCost.get(groupKey(r)) === false)
+      .map((r) => ({ ...oKey(r), message: `${r.description}${ADDCOST_MSG.noCost}` }));
+  }
+
+  /* ── seeded, hostile inputs ── */
+
+  function seeded(seed: number): () => number {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function world(seed: number) {
+    const rand = seeded(seed);
+    const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)] as T;
+    const subIds = ["sub-1", "sub-2", "sub-3", "sub-1"];
+    const subaccounts = Array.from({ length: 1 + Math.floor(rand() * 4) }, (_, i) => ({
+      id: pick(subIds), number: `8000${i}_0`, name: pick(["Turbine", "Grid"]),
+    }));
+    const contracts: ExistingContract[] = Array.from({ length: Math.floor(rand() * 8) }, (_, i) => contract({
+      id: rand() < 0.15 ? "c-dup" : `c-${i}`, name: pick(["Alpha", "Beta", "", "Standard X"]),
+      subaccountId: rand() < 0.15 ? null : pick(subIds),
+      costType: pick([null, CHOICE.costPaidType.spv, CHOICE.costPaidType.devCo]),
+      depreciation: pick([null, true, false]), applyVat: pick([null, true, false]),
+    }));
+    const costs: ExistingCost[] = Array.from({ length: Math.floor(rand() * 25) }, (_, i) => cost({
+      id: `k-${i}`, contractId: contracts.length > 0 && rand() < 0.9 ? pick(contracts).id : "c-none",
+      year: pick([2018, 2019, 2020, 2021]), month: pick([0, 1, 2, 12, 13, 5]),
+      cost: pick([null, 0, 10, 250]),
+    }));
+    const sheetRow = (): SheetRow => row({
+      rowId: `Row_${Math.floor(rand() * 3)}`, accountNumber: pick(["80000_0", "80001_0"]),
+      accountName: pick(["Turbine", "Grid"]), description: pick(["Alpha", "Beta", "", "standard y"]),
+      year: pick([2019, 2020]), costPaidBy: pick(["DevCo", null, " "]), depreciation: pick(["Yes", null]),
+      applyVat: pick(["No", ""]),
+      months: Array.from({ length: 12 }, () => pick([null, null, 0, 3])),
+      subAccountId: rand() < 0.85 ? "sub-1" : null,
+      projectContractId: contracts.length > 0 && rand() < 0.7 ? pick(contracts).id : null,
+    });
+    const sheet = (n: number) => Array.from({ length: n }, sheetRow);
+    return { rand, subaccounts, contracts, costs, sheet };
+  }
+
+  const SEEDS = Array.from({ length: 400 }, (_, i) => 5000 + i);
+
+  it("UT-ADDCOST-067 buildInitialSheet builds the same rows as the per-contract cost filter", () => {
+    for (const seed of SEEDS) {
+      const w = world(seed);
+      const args = {
+        subaccounts: w.subaccounts, contracts: w.contracts, costs: w.costs, currentYear: 2020,
+        payerDefaults: new Map([["sub-2", "SPV"]]),
+      };
+      expect(buildInitialSheet(args), `seed ${seed}`).toEqual(oracleBuildInitialSheet(args));
+    }
+  });
+
+  it("UT-ADDCOST-068 planContractDeletions blocks, deletes and names exactly the same contracts", () => {
+    let blocked = 0;
+    for (const seed of SEEDS) {
+      const w = world(seed);
+      const originalRows = w.sheet(12);
+      const sheetRows = originalRows.filter(() => w.rand() < 0.5);
+      for (const allowPastCostDeletion of [undefined, true]) {
+        const args = {
+          originalRows, sheetRows, contracts: w.contracts, costs: w.costs, currentYear: 2020,
+          allowPastCostDeletion,
+        };
+        const expected = oraclePlanContractDeletions(args);
+        expect(planContractDeletions(args), `seed ${seed}`).toEqual(expected);
+        blocked += expected.blockedByPastCosts.length;
+      }
+    }
+    expect(blocked).toBeGreaterThan(0);
+  });
+
+  it("UT-ADDCOST-069 the three regrouped validations, and validateSheet, report the same errors", () => {
+    let reported = 0;
+    for (const seed of SEEDS) {
+      const rows = world(seed).sheet(15);
+      expect(validateDuplicateSubaccounts(rows), `seed ${seed}`).toEqual(oracleDuplicateSubaccounts(rows));
+      expect(validateDuplicateContracts(rows), `seed ${seed}`).toEqual(oracleDuplicateContracts(rows));
+      expect(validateContractHasCost(rows), `seed ${seed}`).toEqual(oracleContractHasCost(rows));
+      const all = [
+        ...oracleDuplicateSubaccounts(rows), ...validateCostOnAccount(rows), ...oracleDuplicateContracts(rows),
+        ...validateMissingMetadata(rows), ...validateStandardWord(rows), ...oracleContractHasCost(rows),
+      ];
+      const seen = new Set<string>();
+      const expected = all.filter((e) => (seen.has(e.message) ? false : (seen.add(e.message), true)));
+      expect(validateSheet(rows), `seed ${seed}`).toEqual(expected);
+      reported += expected.length;
+    }
+    expect(reported).toBeGreaterThan(0);
   });
 });

@@ -1831,6 +1831,9 @@ in the ported code is a per-row write (`src/data/adminRowWrites.ts`). Same reaso
 KNOWN-RISKS: there is no changeset, so a bulk call gains speed but not atomicity, and a
 per-row write reports which row failed. Revisit only with a Custom API (D6).
 
+*Pointer (27 Oct 2026):* **D51** lifts this rule for **Add Cost from Table only** (native
+`UpsertMultiple`, proposed). The admin screens are unchanged.
+
 ### 2. Component merge
 
 `FormPanel`, the field components and `PanelButtons` gained optional props for the settings
@@ -3428,3 +3431,1155 @@ Rows as the canvas. If it still differs, G2 (inactive projects) is the first thi
 2. **Decide G2**: should the Project Overview list inactive projects, as the canvas does? If yes,
    drop `ACTIVE` from the overview query, and mark it with a test. If no, mark the current filter
    `DIVERGENCE:` and keep it.
+
+## D46 · DEV push of master `fceb336`; the local smoke test was not run by the agent (26 Oct 2026)
+
+This entry records a waived step. CONVENTIONS ("Before pushing to DEV") requires one. It has the
+same shape as D37 and D40.
+
+**What was deployed:** master `fceb336` (the pagination work D41–D45, plus Land Lease UI parity
+and the cost book data layer from `origin/master`). Target: app
+`807a2fba-665c-40f3-b158-ffe822aa7da4` in VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`),
+pushed with `pac code push` under the ServiceAccount_DEV profile.
+
+**Checklist:**
+1. **`npm ci` — passed.** The two `pac code run` / `npm run dev` processes were stopped first, the
+   lesson of D40.
+2. **`check:power` — passed:** 81 registered, 0 problems.
+3. **`npm run verify` — 3,997 of 3,998 tests passed.** The one failure was UT-ADGATE-910, a
+   known timing flake in the Application Settings gates screen, unrelated to this change. Its file
+   then passed 33/33 when run alone, and `npm run build` passed separately, because the aborted
+   verify had skipped it.
+4. **Hygiene — passed.** knip shows no new unused files. The 8 it lists predate this push, and
+   the only files added since `310c229` are two test files. No file in `src/` is byte-identical
+   to another.
+5. **Local smoke test — waived for the agent**, because the session cannot drive a browser.
+   **Mitigation:** before this push, the user tested the pagination changes locally against
+   VSBCloud_Dev and confirmed they work ("working perfectly", 26 Oct). The Land Lease and cost
+   book changes from `origin/master` were **not** smoke-tested in this session.
+6. **Environment — passed.** `pac auth list` and `pac org who` both showed VSBCloud_Dev.
+7. **Push — accepted.** `pac code push` from master `fceb336` returned "App pushed successfully".
+   The step-5 smoke test, repeated on the deployed app, is left to the user.
+
+Nothing in D38–D45 is product-approved. The deployed build shows unapproved behaviour, including
+the D45 page count and the open G2 question.
+
+**Two gaps in this record:**
+- **An earlier push with no D-entry.** Earlier on 26 Oct, before this push, `RounakDev1`
+  `310c229` was also pushed to DEV, and that push has no D-entry of its own. It was superseded by
+  this one.
+- **Later commits not deployed.** Four commits reached master after this push: `717ced9`,
+  `1b019ad`, `1ae9a14` and `a94ec68` (the Land Lease warning text, the Land Lease sizing, and
+  `ConfirmDialog`). They are **not** deployed.
+
+## D47 · OPEX "last period": O-5 corrected on 23 Oct, reproduced again for the gates on 26 Oct (2026)
+
+Recorded 26 Oct 2026 from the code, after the fact. Neither commit wrote a D-entry. Commits:
+- `33c1a9d` (Sourabh Kumar, 23 Oct);
+- `4fc8cff` (Sourabh Kumar, 26 Oct);
+- the `01-BUGS-FOUND.md` O-5 row edit `45a279a` (26 Oct).
+
+### 1. What the canvas does
+
+`locLastPeriod` is
+`Last(Sort(Filter(costs, Or('Parent Cost' = locFirstPeriod, And(IsBlank('Parent Cost'), id = selected))), Name, Ascending))`
+(`OpexCostScreenCode.txt:557-566`, `:2806-2821`, `:2905-2914`). The sort is on `Name` as text, so
+`… - 10` sorts before `… - 2`. Migrated rows store a bare description while rows the app wrote
+store `<account>-<sub-account>-<device>-<description>`, so a middle period can come last.
+- **Where the canvas uses it.** Add Period and Delete use this order. So does the Other-OPEX row
+  warning icon, `inf_OpexCost_AlignWithDuration` (`:2219-2259`).
+- **What the defect is.** Source defect **O-5**.
+
+### 2. What the code app did, in order
+
+| When | Commit | Add Period / Delete gates | Chain display, Other-OPEX warning icon |
+|---|---|---|---|
+| Before 23 Oct | — | Canvas `Name` sort (O-5 reproduced) | `Name` sort |
+| 23 Oct | `33c1a9d` | **Corrected** to period order: `byPeriodOrder`, start date then Name | Period order |
+| 26 Oct | `4fc8cff` | **Reproduced again**: `lastPeriodByName`, the canvas formula, on the **stored** `vsb_name` | Period order, **unchanged** |
+
+`4fc8cff` also makes the book carry the stored `vsb_name` (`CostPeriod.name`, `mapOpexRow`), in
+place of the name the screen rebuilt with `costName`. A rebuilt name gave every row the same
+prefix, so it could not reproduce the canvas on migrated chains. `costName` is now only the
+fallback for a row that has not been read back.
+
+### 3. The product owner's instruction
+
+`opexRules.ts` (`lastPeriodByName`) and the O-5 row of `01-BUGS-FOUND.md` (`45a279a`) both
+record this:
+
+> "code app must behave like canvas"
+
+This is the product owner's instruction for the two command gates. The instruction is recorded
+in those two places only. No separate sign-off record exists.
+
+### 4. What is still not canvas (open)
+
+The code no longer marks these as divergences, but they are:
+- **Chain display order.** `groupChains` uses `byPeriodOrder`.
+- **The Other-OPEX row warning icon.** `otherAlignWarningVisible` uses `byPeriodOrder`. The canvas
+  takes its last period by `Name`.
+
+The O-5 row and the code comment say these "keep period order". Neither carries a `DIVERGENCE:`
+marker or a `…CanvasParity` twin (CONVENTIONS rule 8). **Open question for the product owner:**
+does "behave like canvas" also cover the warning icon? If it does, `otherAlignWarningVisible`
+should use `lastPeriodByName`. If it does not, mark it `DIVERGENCE:` with a twin.
+
+### 5. Tests
+
+These tests pin the current behaviour:
+- `UT-OPEX-016`: `lastPeriod` takes the latest start date. Its title still says "O-5 corrected",
+  which is true only of `lastPeriod`.
+- `UT-OPEX-016b`: the live "Initialized O&M Contract" chain.
+- `UT-OPEX-016c`: `- 9` is the canvas' last period, ahead of `- 10`.
+- `UT-OPEX-016d`: a selected root competes by Name with its children; a selected child does not
+  see the root.
+- `UT-BOOK-019b`: the stored `vsb_name` is carried as is.
+
+**Status:** the gates follow the canvas, on the product owner's recorded instruction. The display
+order and the warning icon are **open** (§4).
+
+## D48 · OPEX Add/Edit panel: blank fields silent again, O-12 no longer shown, O-11 re-read (23 Oct 2026)
+
+Recorded 26 Oct 2026 from the code. Commit `33c1a9d` (Sourabh Kumar, 23 Oct) had no D-entry.
+
+### 1. Blank required fields show nothing again (reverses OPEX's D4-style divergence)
+
+- **Canvas.** Every `*_ErrorMessage.Visible` requires `Not(IsBlank(value))`. A blank required
+  field shows no message, and Save stays disabled (D-4).
+- **Before `33c1a9d`.** `opexFormErrors` reported a blank Description ("Value cannot be blank")
+  and a blank Start Date, the D4 approach that Contracts takes.
+- **Now.** Neither is reported. A blank box stays plain, with no red outline. The code comment
+  gives the reason: "the product owner wants the empty boxes exactly as the canvas draws them".
+  That comment is the only record of the instruction; it carries no date or quote source.
+- **Tests:** `UT-OPEX-092` and `UT-OPEXUI-016`.
+- **Status:** canvas parity, on the instruction recorded in the code comment. D4 itself, for
+  Contracts, is unchanged.
+
+### 2. The corrected O-12 start-date message is no longer rendered
+
+- **What is unchanged.** `startDateError` (the O-12 correction) and
+  `startDateErrorVisibleCanvasParity` are still in `opexRules.ts`.
+- **What changed.** `opexFormErrors` no longer calls `startDateError`, and nothing else in
+  `OpexScreen.tsx` does. So the panel now behaves as the canvas does: the message is never
+  visible.
+- **The stale record.** The O-12 row of `01-BUGS-FOUND.md` still says "corrected + parity twin".
+  It is amended to match (26 Oct 2026).
+- **Status:** canvas parity in effect. The correction is dead code until someone decides.
+
+### 3. The duplicate-description message is a divergence that is not marked
+
+- **What the code shows.** Once a description is typed, `opexFormErrors` still shows
+  "A period with the same description already exists."
+- **Where the text comes from.** `OPEX_DESCRIPTION_MSG.duplicate` transcribes the
+  **commented-out** branch of `lbl_…_Description_ErrorMessage.Text` (`:5561-5577`). The live
+  canvas shows nothing and only keeps Save disabled.
+- **Why it breaks the rules.** It ports a commented-out formula, which CONVENTIONS rule 10 warns
+  against. It also has no `DIVERGENCE:` marker.
+- **Open question for the product owner:** keep it (and mark it), or remove it for full parity?
+
+### 4. O-11 was described wrongly: the canvas years list is correct
+
+- **Canvas.** `drp_OpexCosts_RightPanel_NewEditCost_BodyContent_DurationYears.Items`
+  (`Opex Costs Screen.pa.yaml` L6085-6091) tests `ThisRecord.Value-1 = 1`, so the list reads
+  "0 years", "1 year", "2 years"…. Only `DefaultSelectedItems` (L6066-6084) tests
+  `ThisRecord.Value = 1`. That record's Name is "0 year" / "1 years".
+- **Code before `33c1a9d`.** `DURATION_YEAR_OPTIONS` rendered "0 year", "1 years" in the list
+  itself, which the canvas never does.
+- **Code now.** The list is correct. The edit-mode preselected label is also the correct one,
+  so the `DefaultSelectedItems` quirk is **not** reproduced.
+- **The Land Lease twin.** Land Lease reproduces the same quirk as LL-D2
+  (`landLeaseRules.ts`).
+- **Open (cannot be settled from the source):** does the canvas `DropDown@0.0.45` show the
+  `DefaultSelectedItems` record's Name ("1 years") on an edit, or the matching `Items` record's?
+  If it shows the former, OPEX diverges from the canvas and from LL-D2. If the latter, LL-D2 is
+  reproducing something that never renders.
+- **Tests:** `UT-OPEX-072` and `UT-OPEXUI-018`.
+- **Records.** The O-11 row in `01-BUGS-FOUND.md` is amended (26 Oct 2026). Its canvas
+  description is kept as written.
+
+### 5. Other visible changes in `33c1a9d` (canvas transcription, no decision needed)
+
+- one `Duration` header over the years and months lanes;
+- the canvas column widths and alignment (`opexColumns`);
+- the Start Date shown as `DatePicker` `LongAbbreviated` (UT-OPEXUI-022);
+- Months set to "0 months" once Years is picked (`DefaultSelectedItems` falls to
+  `First(varColMonths)`, UT-OPEXUI-022b);
+- the canvas dropdown lists and panel geometry (`canvas.css`).
+
+None of these is verified against live data.
+
+## D49 · Land Lease UI parity pass, and the opt-in `ConfirmDialog` `canvasFooter` (26 Oct 2026)
+
+Recorded 26 Oct 2026 from the code. Commits, none with a D-entry:
+- `5c64900` (Tanya Amera);
+- `717ced9` (Sourabh Kumar);
+- `1ae9a14` (Tanya Amera).
+
+`5c64900` is deployed (in `fceb336`, D46). `717ced9` and `1ae9a14` are not.
+
+### 1. Shared-component change: `ConfirmDialog` `canvasFooter` (CONVENTIONS rule 17)
+
+- **What it adds.** `components/ConfirmDialog.tsx` gains `canvasFooter?: boolean`, **default
+  `false`**. When it is on:
+  - a 1 px `#edebe9` divider above the buttons row;
+  - a flat surface, with no shadow and 4 px corners;
+  - a 15.6 px title and a 15.4 px description on 20 px lines;
+  - 14 px regular-weight captions and 20 px icons;
+  - a **filled** bin when `confirmIcon="delete"`.
+- **Why the sizes.** The sizes match a canvas "Delete Period?" screenshot (26 Oct 2026). The canvas
+  draws in Open Sans, which this app does not load, so the Segoe UI sizes are larger to fill the
+  same width.
+- **Who uses it (verified 26 Oct 2026, by searching `src/`).** One caller: the single
+  `ConfirmDialog` in `LandLeaseScreen.tsx`, which serves both Land Lease delete popups
+  (`cmp_LandLease_PopUpConfirmation_DeletePeriod` and `…_DeleteLandLeaseCost`). Every other
+  caller keeps the default look.
+- **What is open.**
+  - **Other screens.** If the canvas `cmp_PopUp_Confirmation` really draws this footer
+    everywhere, the other callers diverge, and D39's dialog-chrome work should say whether
+    `canvasFooter` becomes the default.
+  - **Tests.** No test covers `canvasFooter`.
+  - **Docs.** The prop comment still says "16 px icons", but the style sets 20 px.
+
+### 2. Behaviour changes in the Land Lease screen (`5c64900`)
+
+| Change | Canvas source cited in code | Test |
+|---|---|---|
+| Rows sort by Name **case-insensitively**, then by start date | `gal_…_CardBody_Costs_1.Items` LL:919, `Sort(Sort(…, 'Start Date'), Name)` | none |
+| Start Date stays **editable** on a later period | `dte_…_StartDate_1` sets no `DisplayMode` (LL:2336) | UT-LLUI-009 |
+| Start Date shows as `Mon, Aug 30, 2027` | `Format: LongAbbreviated` | UT-LLUI-008 |
+| EUR/MWh, EUR/MW and EUR/WTG load as `54`, not `54.00` | `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` (LL:3245, :3376, :3507) | none |
+| The Allocation list puts generators with no `_n` order **last** | `Sort(colGeneratorsInProject, Order, Ascending)` (LL:3944); a blank sorts last | none |
+| Turning "Allocate to all WTGs" off refills from **this contract's** allocations only | `colAllocatedWtgsInSelectedLandLeaseCost` | none (CA-7) |
+| The second One-Time Payment button shows, disabled, while the toggle is off | `Visible: =!locShowThirdPayment` (LL:5136) has no toggle term | none |
+
+The rest is canvas geometry: the joined cards, the 42 px headers, the fixed widths, the scrollbars
+with arrows, the 650 px panel, the 11 pt captions with left asterisks, and the dropdown lists.
+
+### 3. The footer hint on one line (`717ced9`) — a layout divergence on a PO instruction
+
+`lbl_…_BodyButtons_Hint_1` reads "Please fill in at least one commercial figure"
+(`landLeaseRules.ts`, `LEASE_MSG.atLeastOneFigure`). Its canvas width
+(`Parent.Width - Self.X*2 - Save.X`) wraps it onto two lines, and `5c64900` copied that wrap (a
+135 px cap).
+- **What `717ced9` does.** It puts the hint on one line (`white-space: nowrap`), to match the
+  O&M / Other OPEX and admin period panels.
+- **Who asked.** The code comment records "PO, 26 Oct 2026".
+- **What is missing.** It has no `DIVERGENCE:` marker and no test.
+- **Status:** follows a recorded PO instruction. It still needs marking.
+
+### 4. Not verified
+
+None of these has been clicked through against VSBCloud_Dev.
+
+## D50 · CAPEX opens on the `App.OnStart` year, not the cost-allowed start year (26 Oct 2026)
+
+Recorded 26 Oct 2026 from the code. Commit `4fc8cff` (Sourabh Kumar) had no D-entry.
+
+- **What the canvas does.** `App.OnStart` (`App.pa.yaml` L205) seeds `gblSelectedProjectYear`:
+  - past Greenfield: `Year('Acquisition date')` if it is later than this year, else this year;
+  - otherwise: `Year('Project Start Date')` if it is later than this year, else this year.
+
+  So the screen's `Coalesce(gblSelectedProjectYear, locCostAllowedStartYear, …)` never reaches
+  the cost-allowed start year on first open.
+- **What the code app did before.** It had no seed, so it opened on the cost-allowed start year.
+  A test pinned that, "opens on the cost-allowed start year rather than today's". A 2015 project
+  therefore opened on 2015 and showed different costs from the canvas.
+- **What it does now.** `panelRules.ts` `onStartSelectedYear` seeds the year, and
+  `defaultSelectedYear` clamps it into the window, so a finished 2015–2019 project opens on 2019.
+- **This reverses earlier behaviour.** The gap report (`cost-capex-costs.md` B1) had called the
+  old default a defect fix. It is amended.
+- **Tests.**
+  - The `onStartSelectedYear` block in `panelRules.test.ts` has five cases, with no `UT-` ids
+    (rule 13).
+  - `Screen.test.tsx` "opens on today's year, as App.OnStart seeds gblSelectedProjectYear".
+- **Status:** canvas parity fix, **proposed**. No product decision is recorded; none should be
+  needed. Not verified live. Bug **CA-6**.
+
+## D51 · Add Cost from Table: bulk Save through native `UpsertMultiple` (27 Oct 2026)
+
+**Status: PROPOSED, not product-approved.** Recorded 27 Oct 2026 from the code. Uncommitted. No
+commit, merge or push.
+- **First wave.** The full `npm run verify` ran after it: 152 files, 4,079 tests, all green, build OK.
+- **Second fix wave (27 Oct 2026, §3a–§3c, §8).** The full `npm run verify` ran after it: 152
+  files, 4,129 tests. 4,128 passed; UT-ADGATE-910, the known flake, passed 33/33 when its file was
+  run alone. `npm run build` passed separately. An adversarial review followed.
+- **Review follow-up N1 (fixed).** A refetch on window focus or reconnect after a failed save
+  re-hydrated the grid, which dropped the unsaved edits and cleared the retry-id cache. A "Save
+  again" could then become a silent partial save. `useAddCostSheet` now sets
+  `refetchOnWindowFocus: false` (`NO_FOCUS_REFETCH`) and `refetchOnReconnect: false`
+  (UT-ACSHEET-QUERY-001). Test plan BS-15.
+- **Live finding, 27 Oct 2026: `UpsertMultiple` answers HTTP 501 Not Implemented.**
+  - **What happened.** The user ran the app locally (`pac code run`) against VSBCloud_Dev. Phase 1
+    was refused: "HTTP 501: The server returned an HTTP error with code 501", request
+    `df79b7a3-8fde-451e-be69-57bd42611576`. Nothing was written.
+  - **Not yet proven.** Whether the 501 comes from Dataverse (the table not supporting the bulk
+    messages) or from the Power Apps host route for collection-bound actions.
+  - **Fix.** A 501 on the first chunk now falls back to one `PATCH <set>(<id>)` per planned
+    target. The SDK sends no `If-Match`, so each PATCH is a per-row upsert, and the stable retry
+    ids and phase-0 check stay valid. A session flag then skips `UpsertMultiple`. Any other
+    refusal still fails (UT-ACSHEET-BULK-024…026).
+  - **Diagnostics.** The screen's technical line now carries Dataverse's own reason, status and
+    request id (`rootCauseDetail`, UT-ERR-ROOT-001/002), and the full error chain goes to the
+    console.
+  - **Open.** The sdkmessagefilter check in the test plan tells which side refuses. If only the
+    host refuses, re-test a deployed build.
+  - **Probable root cause (later on 27 Oct, §11.2).** The `environment_<id>` entry in
+    `power.config.json` that §5 had removed by hand. It is now kept. Not yet confirmed live.
+- **Performance wave (27 Oct 2026, §11).** The bulk path now sends `CreateMultiple` (new rows) and
+  `UpdateMultiple` (existing rows) instead of `UpsertMultiple`, and the four operations no longer
+  run strictly one after another. This **supersedes** the transport of §2 and §5 and the strict
+  phase order of §2 and §3; those sections keep their original text, marked where it no longer
+  holds. Uncommitted; no new `verify` result is recorded here (a review was running).
+- **Round-trip and prepare pass (27 Oct 2026, §11.12).** Deletes start at t = 0, a first attempt
+  skips the upsert verify, the Save's client prepare lost its quadratic scans, `diffRows` pairs
+  rows by identity (bug **CA-11**), and unchanged contracts get no write. It found a validation gap
+  that needs a product decision (bug **CA-12**). Uncommitted; no `verify` result is recorded here.
+- **Live DEV test.** Not run (the user is to run it). Plan:
+  `ProjectDocs/app-docs/13-ADDCOST-BULK-SAVE-TEST-PLAN.md`.
+
+### 1. What changed
+
+- **The planner.** `features/cost/add-costs-from-table/savePlan.ts` `buildSavePlan` is pure. It
+  reduces a Save to one in-memory `SaveBuildPlan` (`data/bulkTypes.ts`).
+- **The orchestrator.** `data/addCostSheetBulk.ts` `executeSavePlan` runs the plan.
+- **The executor.** `data/bulkWrites.ts` sends the requests.
+- **Ids.** New contracts and costs get client-generated GUIDs (`crypto.randomUUID`), so a cost
+  binds to a new contract in the same plan. Since the second wave the same id is reused on a
+  retry (§3a).
+- **Binds.** The owning-BU bind is sent on new rows only (CONVENTIONS rule 4).
+- **No-ops.** Unchanged cells are skipped.
+- **The cascade does the contract deletes' children.** A deleted contract's cost rows and comments
+  are **not** deleted explicitly. Contract → cost and contract → comment are both Cascade
+  (`customizations.xml`; `ProjectDocs/Capex Cost Screen/11-DATAVERSE-TABLES.md` §3). The legacy
+  path loaded and deleted the comments, then the cost rows, then the contract.
+- **`rules.ts`.** `contractUpserts` and `costWrites` use Map indexes instead of `find`, with
+  identical behaviour (UT-ACSAVE-018).
+- **A rule-14 fix in the legacy path.** `saveAddCostSheet` deleted cost and contract rows through
+  the raw generated `delete()` (`addCostSheet.ts`, formerly lines 255, 327 and 329), so a refused
+  delete looked like success. It now uses `deleteRecord`. Bug **CA-10**. In the second wave its
+  per-contract `vsb_totalcost` update was also put through `unwrap` (rule 3); before that a refused
+  total update resolved like success.
+
+### 2. The four phases
+
+> **Superseded in part (performance wave, §11.3–§11.4).** The phase numbers still name the four
+> operations in messages and in `SavePlanError.phase`, but the operations no longer run one after
+> another: phase 0's two reads run in parallel, then contract deletes, contracts, the costs of
+> existing contracts and cost deletes run concurrently (stage A), and the costs of new contracts
+> follow as soon as the contract step succeeds (stage B). The upserts go out as `CreateMultiple` /
+> `UpdateMultiple`, not `UpsertMultiple`. The list below is the first-wave design.
+
+0. **Verify (no write).** One existence read per table before anything is sent (§3b).
+1. `UpsertMultiple` on `vsb_capexprojectcontracts`: new contracts, field changes, and each touched
+   contract's final `vsb_totalcost`.
+2. `UpsertMultiple` on `vsb_capexcosts`.
+3. Per-record deletes of cost rows whose contract survives, bounded in parallel, through
+   `deleteRecord`.
+4. Per-record deletes of contracts, through `deleteRecord`.
+
+**Batching.**
+- Chunks of 500 rows (Microsoft guidance is 100–1,000), sent sequentially.
+- Each chunk is all-or-nothing on a standard table. **The four phases together are not
+  transactional** (KNOWN-RISKS, "No Dataverse changeset").
+- Duplicate keys are rejected before anything is sent.
+- Deletes attempt every id and report the failed ids. A refusal never resolves as success (rule 14).
+
+**Request counts.**
+- **Now:** a typical save is (verify reads) + 1 + 1 + (cost-only deletes) + (contract deletes). The
+  request count `executeSavePlan` returns carries a `verify` entry: one per chunk of 40 ids per table.
+- **Legacy:** one request per changed contract, one per changed month cell and one per total, plus a
+  comment load, the comment deletes, and one delete per cost row of every deleted contract.
+
+### 3. Totals and reconciliation
+
+> **Superseded in part (performance wave, §11.4).** Reconciliation now starts only after EVERY
+> operation has settled, and it runs whenever something of operations 1–3 landed (or may have)
+> while something of them failed or was skipped. An existing contract whose own row did not land
+> is always rewritten with its actual sum. The trigger list below is the first-wave rule.
+
+- **Final state.** Totals are computed from the final state (existing rows, then upserts, minus
+  deletes), so they agree with the deletions.
+- **On failure.** Reconciliation runs if phase 2 or 3 fails, or if phase 1 fails after committing
+  at least one chunk. `executeSavePlan` re-reads the touched contracts' costs and rewrites only the
+  totals that differ. It then throws `SavePlanError` with `reconciled: true/false` and
+  `committedBefore` (did anything reach Dataverse before the failure).
+- **Phase 1 with no commit counts.** It also runs when a phase-1 error reports neither
+  `rowsCommitted` nor `chunksCommitted`, treated as "may have committed". Only the EXISTING
+  contracts are reconciled then: an upsert of a new contract's id that never landed would create
+  a bare contract. The new ones are listed in `unverifiedContractIds`, and the error reports
+  `reconciled: false` whenever that list is not empty.
+- **`BulkValidationError`** (the executor's own check, before any send) adds no inconsistency of
+  its own, so it never leads to a false "totals may be stale". In phase 1 it skips reconciliation;
+  in phase 2 or 3 it still reconciles when phase 1 committed.
+- **Phase 4.** A phase-4 failure needs no reconciliation.
+
+### 3a. Stable ids on a retry (second wave)
+
+- **The key.** The planner calls `newId(identityKey)`, never bare:
+  `contractIdentityKey(subaccountId, name)` for a contract, and
+  `costIdentityKey(contractRef, year, month)` for a cost. `contractRef` is the new contract's
+  identity key, not its issued id.
+- **The cache.** `Screen.tsx` keeps an `idCache` (a `useRef` Map) and passes it into the save.
+  It is cleared after a successful save, and by an effect on `sheetQuery.data` (a fresh sheet
+  load). It is **not** cleared on failure.
+- **The effect.** A retry re-sends the same ids, so `UpsertMultiple` updates what the failed
+  attempt created instead of creating a duplicate. *Since §11:* phase 0 also checks the NEW ids,
+  and a "new" target that already exists is sent as an update (without the owning-BU bind), so
+  `CreateMultiple` never receives an id that exists.
+- **`pendingIds`.** The cache also goes to the planner as `pendingIds`. A cost id a failed attempt
+  may have created, whose cell is now blank (or whose row was reverted), goes to
+  `plan.costDeletesIfExist`. It is deleted only if phase 0 finds it.
+- **Caveat.** A NEW contract created by a failed attempt and then removed from the sheet before
+  the retry is not cleaned up. The retry's sheet no longer names it, so nothing plans its delete,
+  and it stays as an orphan contract.
+
+### 3b. Phase 0, the pre-write existence check (second wave)
+
+- **The read.** Before any write, one id read per table (`existingIds` in `addCostSheet.ts`):
+  `$select` is the primary key only, ids are filtered on the server through `idIn` in chunks of
+  40, and there is no `statecode` filter. It checks the existing (`isNew: false`) contract and
+  cost targets and the delete ids.
+- **An upsert target is gone.** The save throws `RowsGoneError` and writes nothing. The user is
+  told how many contracts and cost rows were deleted by someone else, and to reload.
+- **A delete id is gone.** It is dropped: the goal is already reached. `costDeletesIfExist` keeps
+  only the ids that exist and joins phase 3.
+- **A failed verify read** propagates as it is; nothing was sent.
+- **Residual risks:**
+  - a row deleted between the verify and the write can still be re-created; only `If-Match`
+    would close that;
+  - inactive rows count as existing.
+
+### 3c. Failure messages (second wave)
+
+- **Where the words live.** `rules.ts`: `ADDCOST_SAVE_MSG` and `saveFailureText`. The text is NEW,
+  with no canvas equivalent. Every message starts with the canvas `ADDCOST_MSG.saveFailed`,
+  verbatim.
+- **Classification.** `toSaveFailure` in `addCostSheet.ts` maps:
+  - `SheetConflictError` to `conflict`;
+  - `RowsGoneError` to `gone`;
+  - `SavePlanError` to `phase`, carrying `reconciled` and `committedBefore`;
+  - anything else to `other`.
+- **A phase failure** says "The save stopped at step N of 4 (…)". "Press Save again" follows only
+  when something committed AND the totals were reconciled. With unreconciled totals the reload
+  hint replaces it.
+- **Sheet conflicts.** `SheetConflictError.detail` is a readable sentence built from row data, for
+  example `"My Cost" under account "Turbine" has more than one row for 2026.` Its `message` keeps
+  the technical reason with ids, for the log.
+- **Leftover (open UX question).** `Screen.tsx` still shows the raw technical `save.error.message`
+  in a second alert under the mapped text.
+
+### 4. The rollback flag
+
+`BULK_SAVE = true` in `data/addCostSheet.ts`. Setting it to `false` restores the legacy per-row path
+at once. Treat it as a live product decision, like `CANVAS_PARITY_DELETION` (CONVENTIONS rule 15),
+which is unchanged.
+
+### 5. How the action is reached (`pa` CLI)
+
+> **Superseded in part (performance wave, §11.2–§11.3).** The Save no longer calls
+> `UpsertMultiple`; it calls `CreateMultiple` and `UpdateMultiple`, added the same way. The
+> `environment_39a902ba` entry this section says was removed is now **kept** (the probable cause of
+> the 501), and `check:power` accepts it: **84 registered, 0 problems**. The text below is the
+> first-wave record.
+
+- **The call.** `UpsertMultiple` is the native Dataverse bound action
+  `POST /api/data/v9.2/{entityset}/Microsoft.Dynamics.CRM.UpsertMultiple`, called through
+  `src/generated/services/UpsertMultipleService.ts`. There is no plugin and no custom API; the
+  product owner chose this explicitly.
+- **How it was generated.** With the **npm Power Apps CLI** (`npx @microsoft/power-apps-cli`
+  1.2.0): `pa app add dataverse-api --api-name UpsertMultiple`. `pac` 2.13.1 cannot add Dataverse
+  actions. Microsoft docs:
+  https://learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/add-dataverse-action-function
+- **What the command wrote.**
+  - It regenerated `.power/schemas/appschemas/dataSourcesInfo.ts`. All 81 tables were kept,
+    re-sorted alphabetically, and `upsertmultiple` was added.
+  - It added `.power/schemas/dataverse/UpsertMultiple.Schema.json`.
+  - It added `src/generated/models/UpsertMultipleModel.ts` and `services/UpsertMultipleService.ts`,
+    and updated `src/generated/index.ts`.
+- **Footgun.** It also added a bogus binding-table entry to `power.config.json`
+  (`"environment_39a902ba": { "entitySetName": "Environment", ... }`), because `UpsertMultiple`
+  is bound to the abstract `crmbaseentity`. That entry failed `check:power` and was removed by
+  hand. `check:power` now reports **82 registered, 0 problems** (was 81). Recorded in CONVENTIONS
+  rule 9. **Superseded (§11.2):** removing the entry was wrong. It is kept, the gate accepts it,
+  and CONVENTIONS / APP-README rule 9 now say so.
+- **SDK.** `@microsoft/power-apps` 1.3.1 (installed) runs it through
+  `executeAsync({ dataverseRequest: { action: 'customapi', ... } })`, resolving
+  `dataSourcesInfo.upsertmultiple.apis.UpsertMultiple`. 1.4.0 and 1.5.0 exist and use the same
+  mechanism.
+
+### 6. The D36 §1 exception
+
+D36 §1 ("No bulk Dataverse services … Revisit only with a Custom API (D6)") is lifted for **this one
+screen**. The admin screens are unchanged, and so is CONVENTIONS rule 17's admin write-path
+exception.
+
+### 7. Divergences (marked in code)
+
+- **Write order and request count differ** from the canvas and from the legacy path. The final rows
+  and columns are the same, verified by a 400-seed equivalence property test (UT-ACSAVE-019).
+- **Stale totals fixed.** Legacy recomputed totals only for contracts named by `contractUpserts`.
+  Where a group's rows pointed at different contracts, one contract's total went stale. The plan
+  recomputes every touched surviving contract (UT-ACSAVE-006, 019). A code-app defect in the legacy
+  path: bug **CA-9**.
+- **Ambiguous sheets now throw before writing.** That is a duplicate (contract, year, month) write,
+  or two groups resolving to the same sub-account and name. Legacy sent racing writes or created
+  duplicate cost rows.
+- **Total-only targets.** A contract whose columns are unchanged gets a total-only upsert target.
+
+### 8. Open risks
+
+- **Upsert resurrection (mitigated in the second wave).** If another user deleted a contract or a
+  cost row after the sheet loaded, upserting its id re-created it, without the owning BU and
+  without its parent binds (a cost row with no contract, a contract with no project). The R-12
+  class (KNOWN-RISKS). Phase 0 (§3b) now refuses the save before any write. Residual: a delete
+  between the verify and the write, and inactive rows counting as existing.
+- **Retry duplication (fixed in the second wave).** Each attempt used to issue fresh GUIDs, so
+  pressing Save again after a failure that had already created rows created them a second time.
+  Fixed by the stable ids of §3a. Residual: the orphan-contract caveat in §3a.
+- **Raw error under the message.** `Screen.tsx` still shows `save.error.message` below the mapped
+  text (§3c). An open UX question.
+- **The `identify()` form is not confirmed.** `identify()` in `bulkWrites.ts` sends the primary key
+  in the body. Whether Dataverse matches an existing row by that, or needs
+  `"@odata.id": "<set>(<id>)"`, must be confirmed in the live DEV test. Since §11 this applies to
+  `UpdateMultiple` (match) and `CreateMultiple` (the client id becomes the new row's id).
+- **Performance-wave risks (§11.8):** lock contention, throttling and timing-dependent failure
+  details from the concurrent operations.
+- **The cascade is confirmed only from the solution export.** It must be confirmed live.
+- **The `pa` CLI is in preview.**
+- **`pac` and `pa` coexist.** `pac code add-data-source` skips `dataverseOperation` schemas, per
+  Microsoft docs.
+- **Unchanged:** `deleteComment` in `data/comments.ts` still uses the raw `delete()` (consolidated
+  gap CG-051, `ProjectDocs/Capex Cost Screen/15-GAP-ANALYSIS.md`).
+
+### 9. Tests
+
+Four new test files, plus additions to two existing ones.
+- `savePlan.test.ts` (new), UT-ACSAVE-001…031. Includes a benchmark (10,000 stored costs, 800
+  changed rows, built in about 18 ms) and the 400-seed equivalence test. Second wave: 020…031
+  (identity keys, stable ids, `pendingIds`, readable conflict details, no BU bind on a total-only
+  target).
+- `bulkWrites.test.ts` (new), UT-BULK-001…047, with gaps. Second wave: 040…047
+  (`BulkValidationError` before any send).
+- `addCostSheetBulk.test.ts` (new), UT-ACBULK-001…030. Second wave: 018…030 (phase 0, and
+  `committedBefore` / reconcile after a `BulkValidationError`).
+- `addCostSheet.bulk.test.ts` (new), UT-ACSHEET-BULK-001…023, end to end with a mocked SDK. Second
+  wave: 015…023 (retry with the same ids, the phase-0 query shape, `toSaveFailure`, the
+  conflict detail, the legacy total update through `unwrap`).
+- `rules.test.ts`, UT-ADDCOST-SAVEMSG-001…008 (every failure message).
+- `addCostSheet.test.ts`, UT-ACSHEET-LEGACY-001…003 (the legacy path's refused deletes, CA-10).
+- Later on 27 Oct: UT-ACSHEET-BULK-024…026 (the 501 fallback), UT-ERR-ROOT-001/002
+  (`rootCauseDetail`), UT-ACSHEET-QUERY-001 (no focus/reconnect refetch). Performance wave: see
+  §11.7. Round-trip and prepare pass: see §11.12.
+
+Manual and automated test plan: `ProjectDocs/app-docs/13-ADDCOST-BULK-SAVE-TEST-PLAN.md`.
+
+### 10. What the product owner is being asked
+
+1. Approve bulk save for Add Cost from Table (`BULK_SAVE = true`).
+2. Keep the stale-totals fix (CA-9), or restore the legacy totals.
+3. Keep "ambiguous sheets throw before writing".
+4. Accept the residual upsert-resurrection risk now that phase 0 checks the ids before any write
+   (§3b), or ask for `If-Match` concurrency.
+5. Accept the orphan-contract caveat of the retry ids (§3a).
+6. Decide whether the raw technical error should still be shown under the failure message (§3c).
+7. Approve the new failure-message wording (§3c); it has no canvas equivalent.
+8. Approve the concurrent operation order and the `CreateMultiple` / `UpdateMultiple` transport
+   of §11, and its new risks (§11.8).
+9. Decide whether to remove the now-unused `UpsertMultiple` artifacts (§11.3). The user's call.
+10. Approve the round-trip changes of §11.12: deletes at t = 0 with a 404 counted as already gone,
+    and no upsert verify on a first attempt.
+11. Decide CA-12: restore the canvas duplicate-contract check, which refuses two same-named rows
+    under one sub-account in one year, or keep the current check as a recorded divergence (§11.12).
+
+### 11. Performance wave (27 Oct 2026)
+
+Uncommitted. Recorded from the code (`data/addCostSheet.ts`, `addCostSheetBulk.ts`,
+`bulkWrites.ts`, `scripts/check-power-sources.mjs`, `features/cost/costing/useCostBook.ts`,
+`features/cost/add-costs-from-table/Screen.tsx`). **Nothing here has been measured live after the
+change yet.**
+
+#### 11.1 Measured before the change
+
+Console timings from the user's local run against VSBCloud_Dev:
+
+| Save | Total | Requests | Steps |
+|---|---|---|---|
+| 1 | 9,522 ms | 70 | plan 2 ms; verify 256 + 267 ms, one after the other; upsert contracts 998 ms (including the refused 501); upsert costs 4,282 ms; deletes 3,970 ms |
+| 2 | 4,102 ms | 40 | — |
+
+What the numbers show:
+- the phases ran strictly one after another;
+- the per-row writes are throughput-bound: the host runs far fewer than 16 requests at once;
+- Save also waited for a full reload of the sheet before navigating away.
+
+#### 11.2 Probable root cause of the 501
+
+- `pa app add dataverse-api` adds an `environment_<id>` entry (entity set `"Environment"`) to
+  `power.config.json` for bound operations. §5 records that it was removed by hand on 27 Oct
+  because `check:power` flagged it. `UpsertMultiple` then answered 501.
+- The entry (`environment_39a902ba`) is now **kept**. `scripts/check-power-sources.mjs` skips a
+  data source whose key starts with `environment_` and whose entity set is `"Environment"`: it is
+  not a table and has no schema, but the host routes the operation through it.
+- `check:power` reports **84 registered, 0 problems**: the 81 tables plus `upsertmultiple`,
+  `createmultiple` and `updatemultiple` in `dataSourcesInfo.ts`.
+- CONVENTIONS and APP-README rule 9 corrected (they said to remove the entry).
+- **Not yet confirmed live.**
+
+#### 11.3 Transport: `CreateMultiple` + `UpdateMultiple`, no `UpsertMultiple`
+
+- **Why.** Microsoft's bulk guidance: Upsert carries a performance penalty, so use Create or
+  Update when you know whether the row exists. The planner knows, per row (`UpsertTarget.isNew`).
+- **How.** `upsertRowsByAction` in `addCostSheet.ts` (the orchestrator's `upsert`) validates ALL
+  the rows first (`toUpsertTargets`: duplicate id, empty id, reserved key), then splits them in
+  input order into creates (`isNew`) and updates, and sends the two groups **in parallel**: one
+  `CreateMultiple` / `UpdateMultiple` request per 500 rows each, through the generated
+  `CreateMultipleService` / `UpdateMultipleService`. Both were added with
+  `pa app add dataverse-api`. The reconcile write uses the same adapter (all updates).
+- **501 fallback, per action.** A 501 on the FIRST chunk of an action (nothing written, each chunk
+  is all-or-nothing) makes that action's rows go out as one `PATCH <set>(<id>)` each. The SDK sends
+  no `If-Match`, so each PATCH is an upsert. The refused request counts as a request. The fallback
+  is remembered per action in `sessionStorage` (`vsb.addCostSheet.createMultiple501`,
+  `vsb.addCostSheet.updateMultiple501`) and in memory; one action's 501 leaves the other on its bulk
+  path. The retired `vsb.addCostSheet.upsertMultiple501` key is only ever removed (by the test
+  reset).
+- **Errors.** Any other refusal, or a 501 after a chunk landed, propagates. Both groups are awaited
+  to the end before anything is thrown. When only one group had rows, its own error is rethrown
+  unchanged (so `BulkWriteError.rowsCommitted` keeps its prefix meaning). When both had rows, a
+  plain `DataError` with **no** commit counts is thrown, its cause the first failure (create before
+  update) and its status that failure's innermost Dataverse status.
+- **Concurrency.** The per-row fallback and the deletes both run 16 at once
+  (`ROW_WRITE_CONCURRENCY = DELETE_CONCURRENCY = 16`; Dataverse allows 52 per user).
+- **Unused now; removing them is the user's call:** `src/generated/services/UpsertMultipleService.ts`,
+  `src/generated/models/UpsertMultipleModel.ts`, the `upsertmultiple` entry in
+  `.power/schemas/appschemas/dataSourcesInfo.ts` (and its `UpsertMultiple.Schema.json`). Note that
+  `power.config.json` has **no** per-action entry: the one `environment_39a902ba` entry serves all
+  three actions and must stay.
+
+#### 11.4 The orchestrator (`addCostSheetBulk.ts` `executeSavePlan`)
+
+> **Superseded in part (§11.12).** The deletes now start at t = 0 beside phase 0, and a first
+> attempt skips the upsert verify, so (1) and (2a) start at t = 0 too.
+
+- **Phase 0.** The contract and cost existence reads run in parallel. They now check the NEW ids as
+  well. A missing stored target still throws `RowsGoneError` before any write. A "new" target that
+  already exists (left by an earlier failed attempt, §3a) is sent as `isNew: false` without the
+  owning-BU bind; its other fields, parent binds included, are re-sent unchanged.
+- **Stage A, concurrently:** (4) contract deletes (started first: the cascade makes them the
+  slowest), (1) contracts, (2a) costs of contracts that already exist, (3) cost deletes. They may
+  overlap because (2a) binds only to existing contracts, (3) holds only cost rows of surviving
+  contracts, the planner never writes a doomed contract's cells, and (2) and (3) never name the same
+  cost id.
+- **Stage B:** (2b) costs of the plan's new contracts, started as soon as (1) succeeds, provided no
+  stage-A operation has failed by then; otherwise it is `skipped`. It overlaps the rest of stage A.
+- **On failure:** wait for every operation to settle (no reconcile while a write is in flight),
+  then reconcile if needed, then throw `SavePlanError`.
+  - `phase` / the message name the **lowest** failed phase; `failures` lists every failed
+    operation, lowest phase first.
+  - `committedBefore` means "may have landed": an operation succeeded, or a failing one reports
+    committed rows, or reports no counts at all.
+  - Reconcile runs when something of (1)–(3) landed or may have, and something of them failed or
+    was skipped. Contracts whose (1) row landed are rewritten only when the actual sum differs.
+    **Changed:** an EXISTING contract whose own row did not land (or may not have) is always
+    rewritten with its actual sum (`force`). A NEW contract with unknown outcome is never written
+    (`unverifiedContractIds`).
+- **Result.** `executeSavePlan` returns `timings` (ms per step: verify, each operation, reconcile,
+  total) beside `requests` and `stats`.
+
+#### 11.5 The post-save reload
+
+`useSaveAddCostSheet`'s `onSuccess` calls the invalidation without returning its promise, so Save
+no longer waits for refetches (UT-ACSHEET-QUERY-002). The `add-cost-sheet` query is invalidated
+with `refetchType: "none"`; the other keys (cost book, CAPEX totals, DevCo contracts and costs) are
+invalidated as before. The screen refetches the sheet itself only when it stays open (the
+past-cost notice).
+
+#### 11.6 Logging and screen
+
+- **One `console.info` per save:** total ms, request count, and per-step timings with request
+  counts and the path of each upsert group (`bulk`, `per-row after 501`, `per-row since an earlier
+  501`). A failed save logs its elapsed time and steps too.
+- **Screen.** The technical line joins the error message and `rootCauseDetail(save.error)` (the
+  Dataverse reason) with " Dataverse: "; `save.reset()` runs at the start of a save so an earlier
+  attempt's technical line never sits under a newer outcome; a `Set` replaced an `includes` inside a
+  filter.
+
+#### 11.7 Tests
+
+- `addCostSheetBulk.test.ts`: UT-ACBULK-031…038 (parallel verify reads, stage-A start order,
+  stage B timing, settle-then-reconcile, lowest phase and `committedBefore`, the retried "new"
+  target as an update, a contract-delete failure skipping stage B, timings).
+- `addCostSheet.bulk.test.ts`: UT-ACSHEET-BULK-024…034 (024–026 rewritten for the per-action
+  fallback; 027–034 new: action split, parallel groups, per-action 501 flags, one-group and
+  mixed failures, the save log). 003 and 008 updated for the parallel order.
+- `useAddCostSheet.test.ts`: UT-ACSHEET-QUERY-001/002.
+- `errors.rootCause.test.ts`: UT-ERR-ROOT-001/002.
+
+#### 11.8 New risks
+
+- **Lock contention.** Contract updates (1) and cost writes (2a) on the same contracts now run at
+  the same time. No plugin or flow exists on these tables today, so nothing server-side rolls a
+  cost write up into the contract; a future one could deadlock or serialise.
+- **Throttling.** Contract deletes cascade server-side while the other operations run, so a large
+  delete set adds load in parallel; service-protection limits could answer 429.
+- **Failure details vary with timing.** Whether stage B runs, and so which operations appear in
+  `failures`, depends on whether a stage-A failure arrived before (1) succeeded.
+
+#### 11.9 Expected timings (inferred, not measured)
+
+> **Superseded (§11.12).** The round-trip pass changed the expected timings; this is the
+> performance-wave estimate.
+
+- **If the bulk actions work:** about 4–5 round trips at any size, roughly 1.5–2.5 s.
+- **If they still answer 501:** about 2.5 s for 40 requests and about 5 s for 70.
+
+#### 11.10 Local testing
+
+Restart the local host so it reads `power.config.json`, with
+`npx @microsoft/power-apps-cli app run` (Microsoft's pointer for Dataverse operations) instead of
+`pac code run`. Clear the tab's 501 flags first: a new tab, or remove
+`vsb.addCostSheet.createMultiple501` and `vsb.addCostSheet.updateMultiple501` from
+`sessionStorage`. Test plan BS-30 records the console line.
+
+#### 11.11 Review follow-ups (27 Oct 2026)
+
+An adversarial review followed the performance wave.
+
+**What it ran.**
+- `npm run verify`: 154 files, 4,152 tests. 4,151 passed. The one failure, UT-ADGATE-915, is a
+  timing failure in the same file as the known UT-ADGATE-910 flake; it passed 33/33 alone.
+- `npm run build`, run separately: OK.
+- Mutation checks: 8 of 8 killed.
+
+**What was fixed afterwards.**
+- **F1, duplicate rows on a stale snapshot.** Because Save no longer waits for the reload, a second
+  Save could be planned against the pre-save snapshot. That happens after a save that stays on the
+  screen, or on re-entry while stale cached data is showing. Fresh ids would then create cells and
+  contracts a second time. Save is now disabled while `sheetQuery.isFetching` (`Screen.tsx`).
+- **F2, a wasted read.** Phase 0 read back every new id, including ids minted for this save, which
+  cannot exist. The new optional `SavePlanDeps.mayExist` checks only ids that were in the retry
+  cache before planning (UT-ACBULK-039).
+- **F3, too many requests in flight.** Up to five concurrent operations, each with a pool of 16,
+  could put about 100 requests in flight, past Dataverse's 52-per-user limit, and writes are not
+  retried on 429. Every write of a save (bulk calls, per-row upserts, deletes) now passes one shared
+  gate of 16 (`createGate` in `data/concurrency.ts`, UT-CONC-011/012).
+
+**Still open.**
+- **F4, refused attempts.** Up to 4 refused 501 requests on a first save, because two operations
+  start both actions before either flag is set. A stale 501 flag also keeps a tab on the per-row
+  path, so the timing test must use a fresh tab.
+- **F5, imprecise messages.** When nothing landed, the messages can still say "may not match" or
+  "were saved". This is safe, but imprecise.
+- **F6, an SDK assumption.** The per-row create fallback relies on the SDK sending no `If-Match`.
+  Re-check this when upgrading `@microsoft/power-apps`.
+- **F7, a test gap.** No wiring test proves the retry flip against a `CreateMultiple` fake that
+  refuses existing ids.
+
+**Waiver: byte-identical generated files.** `src/generated/models/CreateMultipleModel.ts`,
+`UpdateMultipleModel.ts` and `UpsertMultipleModel.ts` are identical 7-line `pa` stubs
+(`export {}`). They are generated, so they cannot be made different by hand. The "no
+byte-identical file in `src/`" push check (CONVENTIONS, "Before pushing to DEV" step 4) is waived
+for `src/generated/` models of Dataverse operations. knip lists the three model files and
+`UpsertMultipleService.ts` as unused.
+
+#### 11.12 Round-trip and prepare pass (27 Oct 2026)
+
+Uncommitted. Recorded from the code (`data/addCostSheetBulk.ts`, `data/addCostSheet.ts`,
+`data/concurrency.ts`, and `savePlan.ts`, `rules.ts`, `spreadsheet/adapter.ts`,
+`spreadsheet/SpreadSheet.tsx` and `Screen.tsx` under `features/cost/add-costs-from-table/`). No
+`verify` result is recorded here (a review was running). **Nothing here has been measured live.**
+This pass **supersedes** the stage order of §11.4 and the expected timings of §11.9.
+
+**G1 · The orchestrator graph (`executeSavePlan`).**
+- **At t = 0, never waiting for anything:** (4) contract deletes (started first, because the
+  cascade makes them the slowest), (3) cost deletes, and phase 0, the verify. Deletes no longer
+  wait for the verify: the deleter treats a 404 as "already gone" (G2), so an id someone else
+  deleted first is harmless.
+- **The upsert verify is skipped on a first attempt.** `verifyUpserts` (a new optional
+  `SavePlanDeps` field, default `true`) is `false` only when `skipUpsertVerify` in
+  `addCostSheet.ts` holds: the retry id cache was empty before planning, **and** neither per-row
+  501 flag (`vsb.addCostSheet.createMultiple501`, `vsb.addCostSheet.updateMultiple501`) is set.
+  Then there is no read of the upsert targets, and (1) contracts and (2a) the costs of existing
+  contracts start at t = 0 as well (UT-ACBULK-040, 041, 046).
+  - **Why it is safe.** `UpdateMultiple` refuses a row that does not exist instead of re-creating
+    it, and every id of a first attempt was minted for this save, so none can already exist for
+    `CreateMultiple` to collide with.
+  - **A gone update target** is then an ordinary failure of its phase, followed by the reconcile,
+    not a `RowsGoneError` (UT-ACBULK-042).
+  - On a retry, or with either 501 flag set, the verify runs and (1) and (2a) wait for it, as
+    before (UT-ACBULK-043; UT-ACSHEET-BULK-037, 038).
+- **`costDeletesIfExist` stays gated on the verify.** Its ids are always read, and (3') deletes the
+  ones that exist once the read answers (UT-ACBULK-044, 045). They come from the retry cache, so a
+  first attempt has none and makes no read at all.
+- **(2b), the costs of the plan's new contracts,** still starts as soon as (1) succeeds, provided
+  no operation has failed by then.
+- **`RowsGoneError` now waits for in-flight work and reconciles.** The deletes started alongside
+  the verify are awaited to the end. When cost deletes landed, the totals they feed are reconciled
+  (the gone contracts are never written). The error carries `committedBefore`, `reconciled`,
+  `reconcileError` and `failures` (UT-ACBULK-049).
+- **A failed verify read after deletes landed becomes a `SavePlanError`.** It is reported on the
+  phases it stopped (1 and/or 2, or 3 for `costDeletesIfExist`), with the read's error as `cause`,
+  after the reconcile (UT-ACBULK-047, 048). A failed read with nothing landed still propagates as
+  it is.
+- **Critical path.** On a first attempt with both bulk actions working, about **2 round trips**:
+  (1) contracts (with (2a) beside it), then (2b) the costs of new contracts. Without new contracts,
+  about 1. The per-row delete waves overlap from t = 0: every write shares the gate of 16, so N
+  deletes take about N / 16 waves beside the upserts. A retry adds the verify read in front of the
+  upserts.
+
+**G2 · Wiring (`data/addCostSheet.ts` `saveAddCostSheetBulk`).**
+- **A delete answering 404 counts as already gone** (`deleteOrAlreadyGone`), and is counted for the
+  log. Any other refusal still rejects (rule 14) (UT-ACSHEET-BULK-035, 036).
+- **The mid-save `UpdateMultiple` 501 guard.** When the verify was skipped and `UpdateMultiple`
+  answers 501 on its first chunk, the per-row fallback (`upsertEachRow`) reads the update ids back
+  first, one read per 40 ids, counted as requests. If any is missing, none of the group is sent: a
+  `BulkWriteError` with 0 committed, its cause a `RecordGoneError`, reported through `SavePlanError`
+  (UT-ACSHEET-BULK-039). A per-row PATCH is an upsert, so without the check it would re-create a
+  row deleted since the sheet loaded. Create rows are not checked: their ids were minted for this
+  save.
+- **Metrics in the log line.** Both the success and the failure line end with, for example,
+  `gate peak 9/16, req avg 380 ms max 1200 ms, verify skipped, 2 already gone`: the gate's peak
+  in-flight count, the average and maximum time a request held a gate slot (queueing excluded),
+  whether the upsert verify ran, and how many deletes found their row already gone
+  (UT-ACSHEET-BULK-040).
+- **`createGate` `peak()` / `reset()`** (`data/concurrency.ts`). Measurement only; scheduling is
+  unchanged. `saveGate.reset()` runs at the start of every save (UT-CONC-013, 014).
+
+**G3 · Client prepare.**
+- **`prepareSheetSave`** (`spreadsheet/adapter.ts`) holds the steps that used to be inline in
+  `Screen.tsx` `doSave`, in the same order: the identity round-trip check, the alignment of the
+  originals, `diffRows`, the contract-deletion plan (canvas parity or the past-cost guard), and the
+  orphan clean-up. It is pure; the clock is injected (UT-ADDCOST-065, 066).
+- **Quadratic scans removed.** `find` / `filter` per row became indexes built once in
+  `buildInitialSheet`, `sheetRowsToGrid`, `outputRowsToSheetRows`, `alignOriginalRowIds`,
+  `planContractDeletions`, three of the validations, and the identity lookups (`IdentityIndex`,
+  which builds no identity string for a row with a contract). `gridToJson` copies only the three
+  cells it rewrites. Each is checked against the replaced implementation, kept verbatim as an
+  oracle, over seeded hostile sheets (UT-ADDCOST-062…064, 067…069, 072, 073), and by read counts
+  (UT-ADDPERF-002, 003).
+- **Timings on the 15,000-row bench, as measured by the pass:**
+
+  | Step | Before | After |
+  |---|---|---|
+  | Save prepare | 15–60 ms | about 4 ms |
+  | `planContractDeletions`, all contracts removed | 94–420 ms | 0.8 ms |
+  | `outputRowsToSheetRows` | 38–190 ms | 4–5 ms |
+  | `buildInitialSheet` | 117 ms | 8 ms |
+
+  Two reruns of `prepare.bench.test.ts` by the docs pass on 27 Oct, on a busy machine, gave
+  `prepareSheetSave` 12–20 ms, `outputRowsToSheetRows` 7–15 ms, `buildInitialSheet` 8–11 ms and
+  `planContractDeletions` 1.4–3.5 ms (the bench's own edit, not "all contracts removed"; that case
+  is not in the file). Wall-clock numbers vary; the read counts are the guard.
+- **The mount re-decoration is gone.** `SpreadSheetComp` used to decorate the seeded grid a second
+  time on mount. That handed react-spreadsheet a new `data` reference (a full table rebuild) and
+  fired `onDataChange` again, and the screen answers each one with a full read-back
+  (`gridToJson` + `outputRowsToSheetRows`). Now `onDataChange` fires once on mount, and a genuinely
+  new grid still re-hydrates (UT-ADDCOST-070, 071).
+- **The prepare log line.** One `console.info` per Save click:
+  `Add Cost from Table prepare: <ms> ms (round-trip check …, align …, diff …, deletions …, orphans …; last edit's grid read-back …, validation …; <n> rows)`.
+- **Two edge-case behaviour notes** (from the code and UT-ADDCOST-072; output unchanged for every
+  sheet the app produces):
+  - **Undefined cells.** `gridToJson` no longer copies the cells after the first three, but reads
+    them through `value || ""`, as the copy did. An undefined value or a missing cell (a ragged row)
+    still reads as `""`, and the grid is no longer mutated.
+  - **Non-string descriptions.** `sheetRowsToGrid` now calls `description.trim()` on every row
+    while grouping; the old filter called it only on rows of a sub-account in the list. A row whose
+    description is not a string would now throw instead of being skipped. `SheetRow.description`
+    is typed `string`, and every producer gives one.
+
+**H1 · `diffRows` paired rows by `rowId` (bug CA-11, fixed, uncommitted).** Contract rows share one
+`Row_ID` per sub-account, so almost every row counted as changed: 14,416 of 14,650 on the bench,
+against 3,487 truly changed. It now pairs by identity, with an ambiguity fallback (an identity two
+rows share reports every row carrying it). Final data was never wrong, because the planner
+compares with the stored costs; the defect inflated the contract writes.
+
+**A validation gap found by H1 (bug CA-12, open, needs a product decision).**
+`validateDuplicateContracts` flags only groups with more than one distinct `rowId`, so two NEW
+same-named rows under one sub-account in the same year pass validation (UT-ADDCOST-077). The
+canvas refuses them: its `CostCountRows > 1` check counts rows sharing the name, year, `row_ID`,
+number and description (`tmr__CheckChanges_Add_Costs_To_Dataverse.OnTimerEnd`,
+`Add Costs from Table.pa.yaml` line 30). The planner's `SheetConflictError` still stops the save
+when the two rows write the same month. Rows whose months do not overlap are merged into one new
+contract (from reading the code; untested).
+
+**H2 · Skipping unchanged contracts.**
+- **`vsb_totalcost` is now read** with the sheet's contracts (`ExistingContract.totalCost`, `null`
+  when unknown).
+- **No target when nothing changes.** An existing contract whose columns are unchanged
+  (`fields: null`) and whose stored total equals the planned total (`recomputeContractTotal`,
+  rounded) gets no contract target, but stays in `plan.totals`. The stored value is compared
+  exactly, so a stored 100.4 against a planned 100 is written. An unknown stored total is always
+  written. A new contract is always created (UT-ACSAVE-032…039).
+- **The reconcile compares, it does not force.** A contract in `plan.totals` with no target is
+  compared and rewritten only when the actual sum differs; it is no longer force-written after a
+  partial failure (UT-ACBULK-050).
+- **With H1,** an unedited Save sends no contract write at all (test plan BS-31).
+- **Side effect.** A skipped contract that someone else deletes mid-save, under which the save only
+  creates cost rows, ends as a reconcile error rather than "gone". It has no upsert target, so the
+  verify never reads it; the cost creates fail on the missing parent, and the reconcile's
+  `UpdateMultiple` is refused.
+
+**Tests** (ranges checked against the test files):
+- `data/addCostSheetBulk.test.ts`: UT-ACBULK-040…050.
+- `data/addCostSheet.bulk.test.ts`: UT-ACSHEET-BULK-035…040.
+- `data/concurrency.test.ts`: UT-CONC-013, 014.
+- `features/cost/add-costs-from-table/`: UT-ADDCOST-062…083 (`spreadsheet/adapter.test.ts` 062–066,
+  072, 073, 079–083; `rules.test.ts` 067–069, 074–078; `spreadsheet/SpreadSheet.test.tsx`, new,
+  070, 071), UT-ADDPERF-001…003 (`prepare.bench.test.ts`, new), UT-ACSAVE-032…039
+  (`savePlan.test.ts`).
+
+**Expected timings (inferred, not measured live).**
+- With both bulk actions working: about 1.0–1.3 s for a 40-request save, and about 2–2.5 s for 70.
+- Deletes stay one request per row: the only bulk delete, `DeleteMultiple`, is for elastic tables
+  only. They now bound the critical path.
+- The live numbers come from the two console lines, `Add Cost from Table prepare: …` and
+  `Add Cost from Table save: … gate peak …` (test plan BS-30).
+
+**New risks.**
+- **Lock and 429 pressure.** Deletes start at t = 0 and overlap the upserts, including the contract
+  deletes' cascades. The gate of 16 caps the requests in flight.
+- **404 as success** relies on the entity set being right. A delete sent to a wrong entity set would
+  answer 404 for every id and be counted as "already gone". The two sets are the constants
+  `CAPEX_CONTRACTS` and `CAPEX_COSTS`, both resolved through `dataverseNames.ts`.
+- **Error classes vary with timing.** Whether a save that finds a row gone ends as `RowsGoneError`
+  or as `SavePlanError` depends on whether the verify ran; and which operations appear in
+  `failures` depends on what had settled when a failure arrived (§11.8).
+
+#### 11.13 Review fixes after the round-trip pass (27 Oct 2026)
+
+Two adversarial reviews, E3 and then E4, found defects that this round-trip pass introduced or
+exposed. The fixes are uncommitted.
+
+- **F-A, high: a retry after a partly-landed save could lose an edit.** The screen keeps its
+  pre-save snapshot, so a value set back to its snapshot value diffed as unchanged and was never
+  written.
+  - **Fix.** The screen keeps the row identities each failed attempt sent (`sentInFailedAttempts`,
+    the same lifecycle as `idCache`). The next save re-sends exactly those rows plus the new diff,
+    with `refreshBeforePlan: true`. `saveAddCostSheetBulk` then re-reads those contracts (through
+    the shared `loadContracts`) and their costs, in parallel, before planning. This costs one read
+    round trip, on retries only.
+  - **First version replaced.** It re-sent every row on the sheet (E4 finding **M1**). That made
+    `contractUpserts` rewrite contracts the user never touched to Individual / Absolute Values /
+    "edited from PCF".
+  - **Tests:** UT-ADDCOST-100…108 and UT-ACSHEET-BULK-041…043.
+- **F-B, medium: "Nothing was saved" after deletes had landed.** The gone message now carries
+  `committedBefore`. When it is set, the text is: "…deleted by someone else after this sheet was
+  loaded. Some of your changes were already saved: reload the screen before saving again." That
+  sentence is new text with no canvas equivalent. A `SavePlanError` caused by a `RecordGoneError`
+  also maps to gone (UT-ACSHEET-BULK-044/045, UT-ADDCOST-SAVEMSG-009…011).
+- **F-C: a 404 delete is now read back once** (one request per 40 ids). A row that still exists
+  fails the phase (UT-ACSHEET-BULK-046/047). A normal save is unchanged.
+- **F1: the `isFetching` Save guard now has tests** (`saveButtonDisabled`, UT-ADDCOST-102/103).
+- **CA-12: fixed, at canvas parity** (`01-BUGS-FOUND.md`).
+- **Hygiene:** unused exports and stale `UpsertMultiple` comments removed. The stray 0-byte
+  `ProjectCosts-CodeApp/addCostSheet.bulk.test.ts` was deleted.
+
+**E4's run.** 157 files and 4,229 tests, all green once 8 worker-start failures and the
+UT-ADGATE-910 flake were re-run alone. Build OK. 9 of 9 mutations killed. The M1 fix itself was
+then mutation-checked: UT-ADDCOST-107 goes red when it is undone.
+
+**Accepted or open, low severity.**
+- **L1.** The refresh fires all of its contract and cost chunks at once. That only matters above
+  about 1,000 contracts in a category.
+- **L2.** "Some of your changes were already saved" can overstate the case when every delete
+  answered 404 and was confirmed gone.
+- **F4–F7 from §11.11.**
+- **Duplicate test ids.** UT-ADDCOST-033/034/036/037 are duplicated between `addCostSheet.test.ts`
+  and `adapter.test.ts`; that predates this work.
+
+#### 11.14 Parallel bulk chunks and background contract deletes (27 Oct 2026)
+
+**Status: PROPOSED, not product-approved, uncommitted.** Option A was chosen in conversation
+("proceed") on the agent's recommendation. Not measured live yet.
+
+**Why.** A live DEV save on 27 Oct showed:
+
+```
+save 5,202 ms, 3 requests
+  CreateMultiple contracts   1,016 ms
+  CreateMultiple costs       3,283 ms   (after the contracts)
+  contract DELETE            5,198 ms   (from t = 0)
+gate peak 2/16
+```
+
+- **Bulk works.** `CreateMultiple` was accepted, which confirms the root cause of the 501 (§11.2):
+  the `environment_*` entry had been removed.
+- **Where the time goes.** All of it is server time. One request's rows are processed one after
+  another, and deleting one contract cascades its costs and comments, which took 5.2 s.
+
+**What changed.**
+
+1. **Parallel chunks** (`bulkWrites.ts` `parallel`; `BULK_PARALLEL_CHUNKS = 4` in
+   `addCostSheet.ts`).
+   - **Splitting.** A phase of 50 rows or more is split into up to 4 chunks, sent at once. Each
+     chunk holds 25–500 rows; under 50 rows it stays one request.
+   - **This is Microsoft's guidance:** send bulk messages in parallel. Every chunk passes the shared
+     gate of 16.
+   - **Failures.**
+     - **Every chunk fails:** `BulkWriteError` with 0 committed, so the 501 fallback still works.
+     - **Some chunks fail:** `BulkPartialWriteError`, which carries no prefix counts. Totals are
+       reconciled cautiously.
+   - **Tests:** UT-BULK-050…067 and UT-ACSHEET-BULK-048 and 051.
+2. **Background contract deletes, option A** (`deferContractDeletes` in `executeSavePlan`;
+   `DEFER_CONTRACT_DELETES = true` in `addCostSheet.ts`).
+   - **When Save returns early.** When every write succeeds, the verify found nothing gone and no
+     reconcile is needed, the save returns without waiting for contract deletes. They finish in the
+     background.
+   - **Every other path waits and behaves exactly as before.** That covers any failure, a
+     `RowsGoneError`, a failed verify and a skipped stage B.
+   - **Why a background delete is safe.** It affects no total: a deleted contract is never in
+     `plan.totals`.
+   - **After the background deletes finish,** the hook (`useSaveAddCostSheet`) invalidates the
+     CAPEX queries again. On a failure it raises a toast through `useNotify`; `AppToaster` lives in
+     `Providers.tsx`, so the toast shows after navigation too. The text is new, with no canvas
+     equivalent (rule 7): "Removing <n> contract(s) did not finish. Open Add Costs from Table again
+     and remove them once more."
+   - **Tests:** UT-ACBULK-051…058, UT-ACSHEET-BULK-049, 050 and 052, and UT-ACSHEET-QUERY-003…005.
+3. **Contract deletes get their own gate** (`CONTRACT_DELETE_LIMIT = 4`, outside the write gate),
+   which fixes E5 finding 4.
+   - **The problem.** Inside the shared gate of 16, sixteen slow cascades would hold every slot. That
+     stalls the upserts, cancels the deferral, and leaks into the next save's statistics.
+   - **Peak in flight** is now 16 + 4, under the limit of 52 per user.
+   - **Test:** UT-ACSHEET-BULK-052. With the change undone, the test fails and two others time out.
+
+**DIVERGENCE (rule 8).** The canvas, and the code app until now, did not finish the Save until every
+delete had finished. With `DEFER_CONTRACT_DELETES`, a removed contract can still appear for about
+5 seconds:
+- on the CAPEX screen, until the second invalidation;
+- in Add Costs from Table, if it is reopened within that window.
+
+`DEFER_CONTRACT_DELETES = false` restores the waiting behaviour.
+
+**Open, from the E5 review.**
+- **Resurrection window, low–medium (finding 5).** In the delete window, saving that contract from
+  the CAPEX Edit Cost panel is a PATCH without `If-Match`, so it would re-create the contract as a
+  bare row once the delete commits. That needs the user to edit, within seconds, a contract they just
+  removed.
+  - Option: delay the CAPEX invalidation until the background settles.
+  - Option: filter out the ids still pending deletion.
+  - This is a product decision.
+- **Misleading "deleted by someone else" (finding 6).** A sheet reopened during the window can show
+  the contract. Editing it fails as "deleted by someone else", which is safe but confusing.
+- **Mixed 501 answers (finding 9).** A mix of 501 and success, which is not expected per route,
+  gives a partial error, not the fallback.
+- **The E5 review run.** 157 files and 4,262 tests: 4,261 passed, and the known UT-ADGATE-910 flake
+  passed 33/33 alone. Build OK. Survivors c2 and c3 are now killed (UT-ACBULK-057 and 058).
+
+**Expected (inferred, not yet measured).** The measured save takes about 2.0–2.8 s. That is about
+2× the 5.2 s run and about 3.5–4.5× the original 9.5 s. A cost-only save on existing contracts takes
+about 0.5–1.5 s. The floor is about 1 s per bulk request through the Power Apps host, so a 10× gain
+on completion time is not possible. Only a fully background save would reach it, and that is not
+built.
+
+#### 11.15 Cost deletes: their own gate, and run in the background (27 Oct 2026)
+
+**Status: PROPOSED, not product-approved, uncommitted.**
+
+**Why.** A live DEV save on 27 Oct took 7,303 ms for 23 requests:
+
+```
+delete costs              16 req    4,180 ms
+upsert contracts                    4,729 ms
+upsert costs  (stage A)             5,871 ms
+upsert costs  (stage B, 4 req)      2,553 ms
+gate peak 16/16, req avg 2,971 ms
+```
+
+The 16 per-row deletes of cleared cells shared the write gate and took every slot at t = 0. Every
+upsert queued about 4 s behind them, and the combined load slowed each request to about 3 s.
+
+**What changed.**
+
+1. **Cost deletes get their own gate** (`COST_DELETE_LIMIT = 4`, `costDeleteGate`), as contract
+   deletes already do (§11.14). Writes keep the 16-slot `saveGate`, so peak in flight is
+   16 + 4 + 4, under Dataverse's 52. The gate peak and the request statistics now measure writes
+   only. Tests: UT-ACSHEET-BULK-053.
+2. **Cost-only deletes run in the background, option A extended** (`deferCostDeletes` in
+   `executeSavePlan`; `DEFER_COST_DELETES = true` in `addCostSheet.ts`). This covers both
+   `costDeletes` and the retry-only `costDeletesIfExist`.
+   - **When Save returns early.** All of these must hold:
+     - every write succeeded;
+     - the verify found nothing gone;
+     - no reconcile is needed;
+     - no cost delete had failed by then (`costDeleteFailureSeen`).
+   - **Every other path waits, exactly as before.**
+   - **Totals are affected.** Unlike a contract delete, a cost delete changes a total: phase 1 has
+     already written totals that assume the deletes landed. If a background cost delete fails, a
+     background reconcile runs over every surviving contract in `plan.totals`. It compares the
+     totals and writes back only those that differ.
+   - **One merged background promise** for cost and contract deletes. Its outcome type is
+     `BackgroundOutcome`, which carries `costDeleteError`, `contractDeleteError`, `reconciled` and
+     `reconcileError`.
+   - **Tests:** UT-ACBULK-059…068, UT-ACSHEET-BULK-054…058 and UT-ACSHEET-QUERY-006…008.
+3. **Toasts** (new text, no canvas equivalent; rule 7). Both failing gives two toasts, the cost one
+   first.
+   - A cost-delete failure that was reconciled: "Some cleared cells could not be removed. Totals
+     were corrected; open Add Costs from Table again and clear them once more."
+   - Not reconciled: "Some cleared cells could not be removed. Open Add Costs from Table again and
+     clear them once more. Contract totals may not match: reload the CAPEX screen."
+   - A contract-delete failure keeps the §11.14 text.
+4. **Log.** The save line shows `delete costs deferred`. The background line is `Add Cost from Table
+   background deletes: costs N req, contracts M req, T ms[, failed][, totals reconciled|totals NOT
+   reconciled]`.
+
+**DIVERGENCE (rule 8).** For a few seconds after Save, a cleared cell can still exist on the CAPEX
+screen while its contract's stored total already excludes it. If a background delete fails, the
+cell stays until the user clears it again; the totals are reconciled in the background, and the
+user is told. `DEFER_COST_DELETES = false` restores the waiting behaviour.
+
+**Checks.** The affected suites (40 files, 887 tests) are green; `SpreadSheet.test.tsx` was re-run
+alone after a worker-start failure. Typecheck and lint are clean. All 7 mutations were killed (Q1 4,
+Q2 3). Neither a full `verify` nor an adversarial review has run since this change; both are owed
+before any commit.
+
+**Expected (inferred).** The measured 7.3 s save should return in about 2–3 s. The background
+should settle at about 5–6 s, mostly the contract cascades.
+
+**Further reduction, needs product sign-off.** Write a cleared cell as `vsb_cost = null` inside the
+cost `UpdateMultiple`, instead of a per-row delete. That removes every cost-delete request; in this
+save, 16 of the 23. It is a DIVERGENCE: the canvas deletes the row, and empty cost rows would then
+remain in Dataverse, Fabric and reports.
+
+#### 11.16 Deferred deletes start after the writes (27 Oct 2026)
+
+**Status: PROPOSED, uncommitted.**
+
+**Why.** A live DEV save on 27 Oct showed the writes slowing down while the deletes ran:
+
+```
+save 13,421 ms, 8 requests
+  upsert contracts                       10,751 ms
+  upsert costs (stage A)                 11,319 ms
+  upsert costs (stage B, 4 req)           2,652 ms
+gate peak 5/16, req avg 6,080 ms, max 11,319 ms
+background deletes: costs 1 req, contracts 2 req, 16,542 ms
+```
+
+Nothing was queued (peak 5 of 16), yet each bulk request took 6–11 s, against 1–3 s in the run
+before. The deferred deletes still started at t = 0, so the two contract cascades ran alongside the
+writes on the same tables. The likely cause is server-side lock contention. That is inferred and
+is confirmed or refuted by the per-request durations below.
+
+**What changed.**
+- **Late start for deferred delete groups.** A deferred group (`deferContractDeletes` /
+  `deferCostDeletes`) is now sent only after verify, (1), (2a) and (2b) have all settled, contract
+  deletes first. With the flags off, deletes still start at t = 0.
+- **Every path keeps its semantics.** On a success, the deletes run in the background. On a failure
+  or a reconcile path, the save waits for them, then reconciles. There is never a reconcile while a
+  write or delete is in flight.
+- **Side effect.** A deferred delete can no longer fail fast and skip stage B (E5-1). A refused
+  cleared-cell delete under the default flag is now always a background failure.
+- **Per-request server durations in the save line.** For example:
+  `upsert contracts (create 1 req bulk [980 ms], update 1 req bulk [10.7 s])`. Time spent queueing
+  is excluded, so one slow request among fast ones points at contention.
+- **Tests:** UT-ACBULK-069…073 and UT-ACSHEET-BULK-059…062. The tests that pinned deletes at t = 0
+  under the flags were updated (ACBULK-051, 057, 059 and 065; ACSHEET-BULK-008, 011, 013 and 035).
+  Mutations M1–M4 were all killed.
+
+**Expected (inferred).** About 3–5 s for that save, down from 13.4 s, if the requests return to
+1–3 s each. The background then settles about 5–8 s after the click.
+
+**Why 20× is not possible here.** No bulk request through the Power Apps host has measured under
+about 1 s, so a save that waits for the server cannot finish in about 0.5 s. Only a fully
+background save would reach that: the screen returns at once and the result arrives as a
+notification. That is not built; it is a product decision.

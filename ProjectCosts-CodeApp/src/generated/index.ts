@@ -7,12 +7,15 @@
 export * as AadusersModel from './models/AadusersModel';
 export * as BusinessunitsModel from './models/BusinessunitsModel';
 export * as CommonModels from './models/CommonModels';
+export * as CreateMultipleModel from './models/CreateMultipleModel';
 export * as EnvironmentvariabledefinitionsModel from './models/EnvironmentvariabledefinitionsModel';
 export * as EnvironmentvariablevaluesModel from './models/EnvironmentvariablevaluesModel';
 export * as RolesModel from './models/RolesModel';
 export * as SystemusersModel from './models/SystemusersModel';
 export * as TeamsModel from './models/TeamsModel';
 export * as TransactioncurrenciesModel from './models/TransactioncurrenciesModel';
+export * as UpdateMultipleModel from './models/UpdateMultipleModel';
+export * as UpsertMultipleModel from './models/UpsertMultipleModel';
 export * as Vsb_aquisitionstatusesModel from './models/Vsb_aquisitionstatusesModel';
 export * as Vsb_aquisitiontypesModel from './models/Vsb_aquisitiontypesModel';
 export * as Vsb_assumptionslocaltaxfrancesModel from './models/Vsb_assumptionslocaltaxfrancesModel';
@@ -90,12 +93,15 @@ export * as Vsb_substructuretypeinprojectsModel from './models/Vsb_substructuret
 // Services
 export * from './services/AadusersService';
 export * from './services/BusinessunitsService';
+export * from './services/CreateMultipleService';
 export * from './services/EnvironmentvariabledefinitionsService';
 export * from './services/EnvironmentvariablevaluesService';
 export * from './services/RolesService';
 export * from './services/SystemusersService';
 export * from './services/TeamsService';
 export * from './services/TransactioncurrenciesService';
+export * from './services/UpdateMultipleService';
+export * from './services/UpsertMultipleService';
 export * from './services/Vsb_aquisitionstatusesService';
 export * from './services/Vsb_aquisitiontypesService';
 export * from './services/Vsb_assumptionslocaltaxfrancesService';

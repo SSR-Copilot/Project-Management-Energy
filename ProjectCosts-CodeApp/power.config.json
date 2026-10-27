@@ -336,6 +336,11 @@
         "financinginputstepupmargins": {
           "entitySetName": "vsb_financinginputstepupmarginses",
           "logicalName": "vsb_financinginputstepupmargins"
+        },
+        "environment_39a902ba": {
+          "entitySetName": "Environment",
+          "logicalName": "environment_39a902ba",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

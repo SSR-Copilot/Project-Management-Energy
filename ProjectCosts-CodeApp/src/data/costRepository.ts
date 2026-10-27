@@ -36,7 +36,7 @@ import {
 import { deleteCostLine, saveCostLine, setCostPaid, type SaveCostLineArgs } from "./capexWrites";
 import {
   loadAddCostSheetData, saveAddCostSheet,
-  type AddCostSheetData, type SaveAddCostSheetArgs,
+  type AddCostSheetData, type SaveAddCostSheetArgs, type SaveAddCostSheetResult,
 } from "./addCostSheet";
 import {
   addStandardContract, deletePeriod, savePeriod,
@@ -215,9 +215,10 @@ export interface CostRepository {
 
   /**
    * Writes a diffed Add Cost from Table sheet: contract upserts, cost upserts/deletes,
-   * contract-total recompute, then contract deletes.
+   * contract-total recompute, then contract deletes. The bulk path may resolve before the
+   * contract deletes finish; the result's `background` then settles when they do (D51 option A).
    */
-  saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<void>;
+  saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<SaveAddCostSheetResult>;
 
   /* ── targeted CAPEX writes ─────────────────────────────────────────────
    * A whole-book save cannot work against Dataverse without diffing the entire project, so

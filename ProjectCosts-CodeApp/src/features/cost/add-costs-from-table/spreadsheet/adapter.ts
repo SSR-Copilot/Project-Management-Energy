@@ -23,7 +23,10 @@
 import DropdownEditor from "./CostPaidBy";
 import YesNoEditor from "./YesNoDropDown";
 import type { SheetCell, SheetGrid, SpreadsheetOutputRow } from "./SpreadSheet";
-import { resolveRow, type SheetRow } from "../rules";
+import {
+  IdentityIndex, diffRows, planContractDeletions, planContractDeletionsCanvasParity, resolveRow,
+  type ContractDeletePlan, type ExistingContract, type ExistingCost, type SheetRow,
+} from "../rules";
 
 const FIXED_HEADERS = [
   "Account Number", "Account Name", "Cost Description", "Cost Paid By", "Depreciation", "Apply VAT",
@@ -81,20 +84,29 @@ export function sheetRowsToGrid(
 
   const grid: SheetGrid = [header];
 
+  // A row with no description is not a contract — `buildInitialSheet` emits one per
+  // empty sub-account, and the canvas has no such row. It is dropped rather than
+  // rendered as a filler row; "Add Row" is how a user starts a new contract.
+  //
+  // Grouped ONCE by (number, name), in row order — the same rows, in the same order, that a
+  // `rows.filter` per sub-account returned, without reading all 15,000 rows 300 times.
+  const rowsBySub = new Map<string, Map<string, SheetRow[]>>();
+  for (const r of rows) {
+    if (r.description.trim() === "") continue;
+    let byName = rowsBySub.get(r.accountNumber);
+    if (!byName) rowsBySub.set(r.accountNumber, (byName = new Map()));
+    const list = byName.get(r.accountName);
+    if (list) list.push(r);
+    else byName.set(r.accountName, [r]);
+  }
+
   for (const account of accounts) {
     grid.push(labelRow(account.number, account.name, ACCOUNT_MARKER, years));
 
     for (const sub of account.subaccounts) {
       grid.push(labelRow(sub.number, sub.name, "", years));
 
-      // A row with no description is not a contract — `buildInitialSheet` emits one per
-      // empty sub-account, and the canvas has no such row. It is dropped rather than
-      // rendered as a filler row; "Add Row" is how a user starts a new contract.
-      const subRows = rows.filter(
-        (r) => r.accountNumber === sub.number
-          && r.accountName === sub.name
-          && r.description.trim() !== "",
-      );
+      const subRows = rowsBySub.get(sub.number)?.get(sub.name) ?? [];
 
       /*
        * Keyed on the CONTRACT, falling back to the description for a row that has no contract
@@ -112,7 +124,9 @@ export function sheetRowsToGrid(
       const byContract = new Map<string, SheetRow[]>();
       for (const r of subRows) {
         const key = r.projectContractId ?? `description:${r.description}`;
-        byContract.set(key, [...(byContract.get(key) ?? []), r]);
+        const group = byContract.get(key);
+        if (group) group.push(r);
+        else byContract.set(key, [r]);
       }
 
       for (const group of byContract.values()) {
@@ -161,8 +175,32 @@ export function outputRowsToSheetRows(
     (r) => r.Description.trim() !== "" && r.Description !== ACCOUNT_MARKER,
   );
 
-  const subOf = (r: SpreadsheetOutputRow) =>
-    subaccounts.find((s) => s.name === r.Name && s.number === r.Number);
+  /*
+   * Every lookup is indexed once, so this is O(rows + sub-accounts + contracts). It runs on
+   * EVERY settled edit, and a `subaccounts.find` per row plus a `contracts.filter` per grid
+   * row was 4.4 million reads on a 15,000-row sheet.
+   *
+   * Sub-accounts by (name, number), FIRST match winning as `find` did. Nested maps rather
+   * than a joined string key, so no two distinct pairs can collide.
+   */
+  const subByNameNumber = new Map<string, Map<string, (typeof subaccounts)[number]>>();
+  for (const s of subaccounts) {
+    let byNumber = subByNameNumber.get(s.name);
+    if (!byNumber) subByNameNumber.set(s.name, (byNumber = new Map()));
+    if (!byNumber.has(s.number)) byNumber.set(s.number, s);
+  }
+  const subs = kept.map((r) => subByNameNumber.get(r.Name)?.get(r.Number));
+
+  // Contracts by (sub-account, name), each list in input order — exactly the
+  // `contracts.filter((c) => c.subaccountId === sub.id && c.name === r.Description)` result.
+  const contractsBySubName = new Map<string | null, Map<string, (typeof contracts)[number][]>>();
+  for (const c of contracts) {
+    let byName = contractsBySubName.get(c.subaccountId);
+    if (!byName) contractsBySubName.set(c.subaccountId, (byName = new Map()));
+    const list = byName.get(c.name);
+    if (list) list.push(c);
+    else byName.set(c.name, [c]);
+  }
 
   /*
    * Which GRID ROW each entry came from.
@@ -206,11 +244,13 @@ export function outputRowsToSheetRows(
   const contractByGridRow = new Map<number, string | null>();
   const claimed = new Map<string, number>();
   kept.forEach((r, i) => {
-    const sub = subOf(r);
+    const sub = subs[i];
     const gridRow = gridRowOf[i] as number;
     if (!sub || contractByGridRow.has(gridRow)) return;
+    // The claim counter keeps its original string key, collisions and all, so claims are
+    // counted exactly as before; only the candidate list is looked up instead of filtered.
     const nameKey = `${sub.id}|${r.Description}`;
-    const matches = contracts.filter((c) => c.subaccountId === sub.id && c.name === r.Description);
+    const matches = contractsBySubName.get(sub.id)?.get(r.Description) ?? [];
     const taken = claimed.get(nameKey) ?? 0;
     contractByGridRow.set(gridRow, matches[taken]?.id ?? null);
     claimed.set(nameKey, taken + 1);
@@ -231,7 +271,7 @@ export function outputRowsToSheetRows(
       depreciation: r.Depreciation || null,
       applyVat: r.ApplyVAT || null,
       months,
-      subAccountId: subOf(r)?.id ?? null,
+      subAccountId: subs[i]?.id ?? null,
       projectContractId: contractByGridRow.get(gridRowOf[i] as number) ?? null,
     };
   });
@@ -239,39 +279,148 @@ export function outputRowsToSheetRows(
 
 /* ═══════════════════════════════════════════════ identity round-trip safety ══ */
 
-/**
- * A sheet row's REAL identity, independent of `Row_ID`.
- *
- * `Row_ID` is POSITIONAL — `sanitizeSpreadsheetData` hands out `Row_2`, `Row_3`, … as it walks
- * the grid, and every contract row under one sub-account deliberately shares one id (the
- * duplicate-sub-account validation counts distinct ids per sub-account and would otherwise
- * report every multi-contract sub-account as "is duplicated"). It therefore cannot be used to
- * pair a row with its pre-edit self: inserting or deleting a row shifts every id below it.
+/*
+ * `rowIdentity` and its `IdentityIndex` live in `../rules` (one definition, rule 17): `diffRows`
+ * pairs rows on it there. Re-exported here, where the round-trip guards first used it.
  */
-export function rowIdentity(row: SheetRow): string {
-  const account = row.projectContractId
-    ?? `${row.accountNumber}|${row.accountName}|${row.description}`;
-  return `${account}|${row.year}`;
-}
+export { rowIdentity } from "../rules";
 
 /**
  * Re-keys `originalRows` onto the ids the CURRENT sheet carries, matching on `rowIdentity`.
  *
- * `diffRows` and the Screen's orphan cleanup both pair rows by `rowId`. Feeding them raw
- * `Row_N` ids from two different walks of the grid pairs unrelated rows — which is how a
- * whole project's historical costs were emptied in one save. Rows with no counterpart keep
- * their own id, so they read as "removed", which is what they are.
+ * Feeding raw `Row_N` ids from two different walks of the grid to anything that pairs on
+ * `rowId` pairs unrelated rows — which is how a whole project's historical costs were emptied
+ * in one save. Rows with no counterpart keep their own id, so they read as "removed", which is
+ * what they are.
+ *
+ * `diffRows` now pairs by identity itself and no longer needs this; the result is the same with
+ * or without it. Kept for the deletion planners' input in `prepareSheetSave`, so no consumer of
+ * the originals there ever sees a mispaired `rowId` again.
  */
 export function alignOriginalRowIds(
   originalRows: readonly SheetRow[],
   currentRows: readonly SheetRow[],
 ): SheetRow[] {
-  const currentIdByIdentity = new Map<string, string>();
-  for (const r of currentRows) currentIdByIdentity.set(rowIdentity(r), r.rowId);
+  // The LAST current row with an identity wins, as the sequential `set` always did.
+  const currentIdByIdentity = new IdentityIndex<string>();
+  for (const r of currentRows) currentIdByIdentity.set(r, r.rowId);
   return originalRows.map((o) => {
-    const aligned = currentIdByIdentity.get(rowIdentity(o));
+    const aligned = currentIdByIdentity.get(o);
     return aligned === undefined || aligned === o.rowId ? o : { ...o, rowId: aligned };
   });
+}
+
+/* ═══════════════════════════════════════════════ preparing a save ══ */
+
+/** Milliseconds per prepare step, as measured by the injected clock. */
+interface PrepareTimings {
+  roundTripCheck: number;
+  align: number;
+  diff: number;
+  deletions: number;
+  orphans: number;
+  total: number;
+}
+
+type PreparedSheetSave =
+  /** `identityRoundTripFailures` found contracts the read-back lost: the save must be refused. */
+  | { kind: "lost"; lost: { id: string; description: string }[]; timings: PrepareTimings }
+  | {
+    kind: "ready";
+    /** Rows `diffRows` reports as changed against their identity-matched originals. */
+    changed: SheetRow[];
+    /** Rows that were on the sheet and no longer are, with their months blanked. */
+    orphanCleanup: SheetRow[];
+    deletion: ContractDeletePlan;
+    timings: PrepareTimings;
+  };
+
+/**
+ * Everything the Save does between the click and the first request — moved here from
+ * `Screen.tsx` unchanged, so it is one pure, testable, timeable function:
+ *
+ *  1. refuse when the identity round trip lost a contract (`identityRoundTripFailures`);
+ *  2. re-key the originals by identity (`alignOriginalRowIds`) and diff (`diffRows`, which
+ *     pairs rows by identity on its own);
+ *  3. plan contract deletions — canvas parity or the past-cost guard, as the caller chooses;
+ *  4. blank the months of every (contract, year) that left the sheet (the orphan clean-up).
+ *
+ * Steps 2 and 4 key on identity through `IdentityIndex`, which never builds the identity
+ * string for a row with a contract; the screen used to build every row's string twice.
+ *
+ * `now` is injected (rule 5): the screen passes `performance.now`; tests pass nothing.
+ */
+export function prepareSheetSave(args: {
+  loadedRows: readonly SheetRow[];
+  roundTripped: readonly SheetRow[];
+  originalRows: readonly SheetRow[];
+  currentRows: readonly SheetRow[];
+  contracts: readonly ExistingContract[];
+  costs: readonly ExistingCost[];
+  currentYear: number;
+  canvasParityDeletion: boolean;
+  now?: () => number;
+}): PreparedSheetSave {
+  const now = args.now ?? (() => 0);
+  const { originalRows, currentRows } = args;
+  const t0 = now();
+
+  const lost = identityRoundTripFailures(args.loadedRows, args.roundTripped);
+  const t1 = now();
+  if (lost.length > 0) {
+    return {
+      kind: "lost", lost,
+      timings: { roundTripCheck: t1 - t0, align: 0, diff: 0, deletions: 0, orphans: 0, total: t1 - t0 },
+    };
+  }
+
+  // `Row_ID` is positional; pair rows by what they actually ARE before diffing.
+  const alignedOriginals = alignOriginalRowIds(originalRows, currentRows);
+  const t2 = now();
+  const changed = diffRows(currentRows, alignedOriginals);
+  const t3 = now();
+
+  const deletion: ContractDeletePlan = args.canvasParityDeletion
+    ? {
+      deleteIds: planContractDeletionsCanvasParity({
+        originalRows: alignedOriginals, sheetRows: currentRows,
+      }),
+      blockedByPastCosts: [],
+    }
+    : planContractDeletions({
+      originalRows: alignedOriginals,
+      sheetRows: currentRows,
+      contracts: args.contracts,
+      costs: args.costs,
+      currentYear: args.currentYear,
+    });
+  const t4 = now();
+
+  /*
+   * A (contract, year) that was on the sheet and no longer is has its months blanked, so the
+   * cost rows behind it are removed. Keyed on identity, NOT on `rowId` — `rowId` shifts
+   * whenever a row is inserted or deleted, and blanking a row that is still on the sheet
+   * deletes booked money. Built from the UNALIGNED originals, as the screen always did.
+   */
+  const stillPresent = new IdentityIndex<true>();
+  for (const r of currentRows) if (r.projectContractId !== null) stillPresent.set(r, true);
+  const doomed = new Set(deletion.deleteIds);
+  const orphanCleanup: SheetRow[] = [];
+  originalRows.forEach((orig) => {
+    if (orig.projectContractId === null) return;
+    if (stillPresent.get(orig) === true) return;
+    if (doomed.has(orig.projectContractId)) return;
+    orphanCleanup.push({ ...orig, months: new Array<number | null>(12).fill(null) });
+  });
+  const t5 = now();
+
+  return {
+    kind: "ready", changed, orphanCleanup, deletion,
+    timings: {
+      roundTripCheck: t1 - t0, align: t2 - t1, diff: t3 - t2, deletions: t4 - t3,
+      orphans: t5 - t4, total: t5 - t0,
+    },
+  };
 }
 
 /**

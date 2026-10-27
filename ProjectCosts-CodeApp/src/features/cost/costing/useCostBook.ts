@@ -2,12 +2,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/app/SessionContext";
 import { qk } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
+import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
 import { loadCapexCategories, loadMilestoneDurations, loadProjectStates } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
+import { useNotify, type Notify } from "@/components/useNotify";
+import {
+  backgroundDeleteFailureTexts, type DeferredCounts, type SaveAddCostSheetResult,
+} from "@/data/addCostSheet";
+import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
 import type { CostBook, CostLine, CostPeriod } from "./model";
 
 /**
@@ -437,6 +443,11 @@ export function useAddCostSheet(category: number) {
     queryKey: ["add-cost-sheet", projectId, category],
     enabled: Boolean(projectId),
     retry: false,
+    // The sheet is an editor: a refetch re-hydrates the grid (dropping unsaved edits) and clears the
+    // Screen's retry-id cache, so after a failed save a focus or reconnect refetch would turn a safe
+    // "Save again" into a silent partial save. It still loads fresh on entry and after a save.
+    ...NO_FOCUS_REFETCH,
+    refetchOnReconnect: false,
     queryFn: () => costRepository().loadAddCostSheet(projectId as string, category),
   });
 }
@@ -452,10 +463,15 @@ export function useAddCostSheet(category: number) {
 export function useSaveAddCostSheet(category: number) {
   const { projectId, project } = useSession();
   const client = useQueryClient();
+  // Hook-level, so the closure below can still raise a toast after the screen navigated away:
+  // `<AppToaster />` is mounted once by `app/Providers.tsx` and outlives every route.
+  const notify = useNotify();
 
   const invalidate = async () => {
     await Promise.all([
-      client.invalidateQueries({ queryKey: ["add-cost-sheet", projectId, category] }),
+      // Not refetched here: the screen navigates away on success, so a reload of the whole sheet
+      // would be thrown away. It is marked stale and reloads on the next visit (or on demand).
+      client.invalidateQueries({ queryKey: ["add-cost-sheet", projectId, category], refetchType: "none" }),
       client.invalidateQueries({ queryKey: ["cost-book", projectId, category] }),
       client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
       client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
@@ -473,8 +489,46 @@ export function useSaveAddCostSheet(category: number) {
         projectId: projectId as string,
         owningBusinessUnitId: project?.owningBusinessUnitId,
       }),
-    onSuccess: invalidate,
+    // Fire-and-forget: returning the promise would make `mutateAsync` (and so the Save button)
+    // wait for every invalidated query to refetch before the screen may navigate.
+    onSuccess: (result: SaveAddCostSheetResult | undefined) => {
+      void invalidate();
+      if (result?.background) {
+        followBackgroundDeletes(result.background, {
+          deferredContracts: result.deferredContracts ?? 0,
+          deferredCosts: result.deferredCosts ?? 0,
+        }, invalidate, notify);
+      }
+    },
   });
+}
+
+/**
+ * The deferred deletes of a Save — contracts and cleared cells (D51 option A and its extension,
+ * `DEFER_CONTRACT_DELETES` / `DEFER_COST_DELETES`). When they settle, the CAPEX queries are
+ * invalidated AGAIN, so the DEVEX/CAPEX screen (usually showing by then) drops the rows its first
+ * reload still saw and picks up any totals the background reconcile rewrote; each failure becomes
+ * an error toast, its text chosen by `backgroundDeleteFailureTexts`. NEVER throws or rejects:
+ * nothing awaits it, so a throw would be an unhandled rejection.
+ */
+function followBackgroundDeletes(
+  background: Promise<BackgroundOutcome>,
+  counts: DeferredCounts,
+  invalidate: () => Promise<void>,
+  notify: Notify,
+): void {
+  void background
+    .then((outcome) => {
+      void invalidate().catch(() => undefined);
+      for (const text of backgroundDeleteFailureTexts(outcome, counts)) {
+        try {
+          notify.error(text);
+        } catch {
+          // A toaster that throws must not hide the next text, nor reject.
+        }
+      }
+    })
+    .catch(() => undefined);
 }
 
 /**
