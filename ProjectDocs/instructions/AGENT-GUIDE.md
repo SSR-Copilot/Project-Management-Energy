@@ -25,11 +25,19 @@ folder in the workspace.
 
 ## Quick orientation
 
-- **Start here in a new chat:** `ProjectDocs/app-docs/10-SESSION-HANDOFF-2026-10-22.md` (the
-  latest state, what is deployed, and what waits on the product owner), then
+- **Start here in a new chat:** `ProjectDocs/app-docs/14-SESSION-HANDOFF-2026-10-27.md` (the
+  latest state, what is deployed, and what waits on the product owner). Then read
+  `02-OPEN-DECISIONS.md` **D51** (Add Cost from Table bulk Save, especially §10 and §11–§11.16)
+  and **D52** (the DEV push of `2c7e6aa`), then D41–D46 (Project Overview pagination) and
   `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` (the admin-screen
-  replacement, D36). Older context: `08-SESSION-HANDOFF-2026-10-19.md`,
-  `07-SESSION-HANDOFF-2026-10-15.md` and `RESTRUCTURE-2026-10-19.md` (the folder move).
+  replacement, D36).
+- **Older context:**
+  - `12-SESSION-HANDOFF-2026-10-26.md`
+  - `10-SESSION-HANDOFF-2026-10-22.md`
+  - `11-CAPEX-PARITY-CHANGE-RECORD-2026-10-23.md`
+  - `08-SESSION-HANDOFF-2026-10-19.md`
+  - `07-SESSION-HANDOFF-2026-10-15.md`
+  - `RESTRUCTURE-2026-10-19.md` (the folder move)
 
 - @PROJECT-MAP.md — what every folder is, and which one is ground truth
 - @CONVENTIONS.md — the real app's coding rules (OData, privileges, labels, tests)

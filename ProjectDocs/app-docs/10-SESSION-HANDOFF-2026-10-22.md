@@ -4,6 +4,10 @@ Start a new chat by reading this file, then `09-APPLICATION-SETTINGS-PORT-OPEN-P
 "Progress" section) and `02-OPEN-DECISIONS.md` **D36** and **D37**. Re-check the code before you
 trust any line here.
 
+> **Superseded by `12-SESSION-HANDOFF-2026-10-26.md`.** The pagination work below was
+> committed (`e1dd777`), merged into `master` and deployed to DEV (`fceb336`, D46). Read that
+> file for the current state.
+
 ## Note, 26 Oct 2026 — Project Overview pagination work, uncommitted and unapproved
 
 Four decision entries in `02-OPEN-DECISIONS.md` cover work on the Main Project Overview's pager.

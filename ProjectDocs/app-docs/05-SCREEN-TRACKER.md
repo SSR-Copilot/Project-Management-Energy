@@ -98,6 +98,18 @@ options are empty, assumptions/permissions/threaded comments are incomplete, and
 CAPEX test suite exists in the current app. A rendered 1919×1018 comparison also found visible
 header, rail, typography, and table deltas.
 
+> **26 Oct 2026 (`4fc8cff`) — the opening year now follows `App.OnStart`.**
+> - **What changed.** The screen opens on `gblSelectedProjectYear` as the canvas seeds it: this
+>   year, or a future start year (the acquisition year when the start cluster is past
+>   Greenfield). `panelRules.ts` `onStartSelectedYear` does this, and `defaultSelectedYear` still
+>   clamps it into the project's window.
+> - **Before.** The code app opened on the cost-allowed start year, so a 2015 project opened on
+>   2015 and showed different costs from the canvas.
+> - **Other changes.** The two toolbar dropdowns are 30 px high, as in the canvas (`canvas.css`).
+> - **Records.** CA-6, D50. The `onStartSelectedYear` tests in `panelRules.test.ts` carry no
+>   `UT-` id (rule 13).
+> - **Not verified** against live data.
+
 ### 19–23 · Added 14 Sep — the comments panel and the year column
 
 Five captures arrived after this tracker was first written. They do not add new screens; they
@@ -145,6 +157,15 @@ Built: four-column two-row filter grid, funnel buttons, server-side filter/sort/
 token, command bar in the header band, no left rail, accent bar, alternating rows, approval
 glyph, `Total Rows` + pager.
 
+Pager (26 Oct 2026, D41–D45, deployed to DEV in `fceb336`):
+- pages are one continuous run of 200, with projects lacking a sort value last;
+- the page count is the canvas `RoundUp(TotalRows / 200)`;
+- Next follows the server's skip token, and the next page is prefetched;
+- tests UT-PROJPAGE-001..056.
+
+Open question D45 G2: the canvas lists inactive projects, while this app filters
+`statecode eq 0`.
+
 Deltas still to close:
 - Next-page button in the reference is a **filled blue square**; First/Previous are subtle grey.
 - Reference shows a scrollbar track on the grid's right edge at all times.
@@ -152,33 +173,114 @@ Deltas still to close:
 
 ### 11–14 · OPEX · Land Lease · Other OPEX · Add/Edit Period
 
-Built as ONE screen for all three rail destinations — which is what the canvas did (`Opex Costs
-Screen` served both OPEX items) and what the reference filenames say ("Almost same for Landlease
-and other Opex also"). `features/periods/rules.ts` holds every decision, `Screen.tsx` only
-composes; `opex-costs/Screen.tsx` and `land-lease/Screen.tsx` are now three-line route entries.
+> **Rewritten 26 Oct 2026 from the code** (the earlier text described a September layout that no
+> longer exists: one shared `features/periods/rules.ts` / `Screen.tsx` and a demo cost book). Where
+> this section and an older doc disagree, the code below wins.
 
-Built: collapsible group cards with the first open, the per-card toolbar (Add Period · Add
-Standard Contract · Edit · Delete, plus Add Contract Type on Land Lease's `Locations` card with
-Add Period disabled there), the 15-column period table with a radio-select column and a
-horizontal scrollbar, Land Lease's three extra columns, italic blue standard-contract rows,
-blank-not-zero numeric cells, `dd.mm.yy` dates, the two-column Add/Edit Period panel with its
-conditional inflation fields and computed end date, Add Contract Type, and the delete
-confirmation. 47 rule tests + 10 render tests.
+**Two screens, not one.** The canvas has two screens here, and so does the code app:
+- `Opex Costs Screen` serves both OPEX rail items. It is `features/cost/periods/OpexScreen.tsx`
+  (`mode="om"` or `"other"`), with its rules in `periods/opexRules.ts`.
+- `Land Lease Costs Screen` is separate. It is `features/cost/periods/LandLeaseScreen.tsx`, with
+  its rules in `periods/landLeaseRules.ts`.
 
-Deltas still to close:
-- **Group order is alphabetical** for O&M and Other OPEX. The live app almost certainly orders
-  by subaccount number; the reference screenshot shows too few groups to tell. Needs one look at
-  `vsb_opexsubaccounts` before it can be called right.
-- **Inflation Profile shows blank for a country profile.** `toPeriodRow` takes a `countryName`
-  and the screen does not pass one yet — the project's country is not on the session. The custom
-  `2.0 %` form renders correctly.
-- **Land Lease `Allocation` and `OTP` are always blank**, and `Secured` is derived from
-  `standard` as a placeholder. All three need `vsb_landleaseallocationwtgs`, which is also the
-  S-5 owning-business-unit defect.
-- **Add Standard Contract seeds a row** rather than importing from
-  `vsb_opexlandleasestandardassumptionses`. The imported-group naming (`… [Imported]`) is
-  reproduced, the import is not.
-- Same demo-mode gate as CAPEX: the periods live in the demo cost book, not in Dataverse.
+`features/cost/opex-costs/Screen.tsx` and `features/cost/land-lease/Screen.tsx` are only route
+entries that render those two components. There is no `features/periods/rules.ts` any more.
+
+**Data: live Dataverse, reads and writes.** `costRepository()` (`data/costRepository.ts`) returns
+the Dataverse implementation and nothing else. Demo mode was removed on 15 Sep (see "Stage 1 — demo
+mode removed" below).
+- **Reads:**
+  - OPEX periods come from `data/costBook.ts` (`mapOpexRow`).
+  - The OPEX card catalogue comes from `data/opexCatalog.ts`.
+  - Land Lease headers, periods and `vsb_landleaseallocationwtgs` come from `data/landLease.ts`.
+- **Writes:** `data/periodWrites.ts`. Every create writes `owningbusinessunit@odata.bind`.
+- **Hooks:** `features/cost/costing/useCostBook.ts`.
+
+**Built (OPEX):**
+- **Cards.**
+  - O&M has one card per device, ordered by the generator's Created On, then the PV types
+    (UT-OPEXUI-028).
+  - Other OPEX has one card per sub-account, ordered by `vsb_order`.
+- **Card commands.** Each card has its command bar, the duration badge and the period table at
+  the canvas column widths (`opexColumns`, 33c1a9d).
+- **The panel.** The two-column Add/Edit panel has:
+  - the canvas date picker text (`Sun, Aug 30, 2037`);
+  - the 0–35 years and 0–11 months lists;
+  - Months filling with "0 months" once Years is picked (UT-OPEXUI-022b).
+- **Standard contracts.** Add Standard Contract imports from
+  `vsb_opexlandleasestandardassumptionses`.
+- **Delete.** The delete dialog cascades, as the canvas `OnConfirm` does.
+
+**Since 26 Oct (`4fc8cff`):**
+- **Cards are keyed on the device row id** (`CostPeriod.deviceId`), not on the device's `vsb_name`.
+  Before this, two devices with the same name merged their periods into both cards, and a save from
+  the second card bound to the first device (CA-5; tests UT-OPEXUI-027b, UT-OPEXUI-027c).
+- **The Add Period and Delete gates sort on the stored `vsb_name`**, as the canvas does (O-5
+  reproduced at the product owner's request; D47).
+
+**Built (Land Lease):**
+- **Cards.** Nine sub-account cards are joined into one block, with 42 px headers and fixed
+  column widths.
+- **Grid.** It has:
+  - a permanent horizontal scrollbar with arrows;
+  - row order by Name, case-insensitive, as Power Fx sorts (5c64900);
+  - the canvas cell weights.
+- **The 650 px Add/Edit panel.**
+  - Start Date uses the canvas date picker. It is now editable on later periods, because the canvas
+    sets no `DisplayMode` (UT-LLUI-009; CA-8).
+  - The rates show as `54`, not `54.00`.
+  - The Allocation list puts unnumbered rows last.
+  - The One-Time Payment controls follow the canvas order.
+  - The footer hint is on one line (717ced9, PO 26 Oct; D49).
+- **Delete popups.** These are the shared `ConfirmDialog` with the new opt-in `canvasFooter`
+  (D49).
+
+**Tests (as counted on 26 Oct 2026, `it(` lines):**
+
+| File | Tests |
+|---|---|
+| `opexRules.test.ts` | 104 |
+| `OpexScreen.test.tsx` | 34 |
+| `landLeaseRules.test.ts` | 129 |
+| `LandLeaseScreen.test.tsx` | 16 |
+
+The data layer adds `costBook`, `periodWrites`, `landLease` and `opexCatalog` tests.
+
+**The September deltas, re-checked against the code on 26 Oct 2026:**
+- ~~Group order is alphabetical~~: **closed.** O&M orders by Created On and Other OPEX by
+  `vsb_order`.
+- ~~Inflation Profile blank for a country profile~~: **closed.** The cell reads
+  `Country Inflation Profiles` (`opexRules.ts`, `countryInflationPercent`).
+- ~~Land Lease Allocation / OTP always blank, Secured a placeholder~~: **closed.**
+  - `vsb_secured`, the one-time-payment columns and `vsb_landleaseallocationwtgs` are read in
+    `data/landLease.ts`.
+  - The allocation create writes the owning business unit.
+- ~~Add Standard Contract seeds a row~~: **closed.** It imports from
+  `vsb_opexlandleasestandardassumptionses` (`periodWrites.ts`, `addOpexStandardContract`).
+- ~~Demo-mode gate~~: **closed 15 Sep.**
+
+**Deltas still open (26 Oct 2026):**
+- **Not smoke-tested live.** Nobody has clicked through `33c1a9d`, `4fc8cff`, `5c64900`,
+  `717ced9` or `1ae9a14` against VSBCloud_Dev.
+  - The first three are deployed: `33c1a9d` in `310c229`, and all three in `fceb336`.
+  - `717ced9` and `1ae9a14` are not deployed (D46).
+- **Land Lease parity changes without a test.** These changes from `5c64900` have none:
+  - the case-insensitive row order;
+  - the allocation preselection scoped to this contract (CA-7);
+  - the Allocation list order;
+  - the `54` rate format;
+  - the visibility of the second One-Time Payment button;
+  - the `canvasFooter` dialog look.
+
+  Only the date format (UT-LLUI-008) and the editable later-period Start Date (UT-LLUI-009) are
+  pinned.
+- **OPEX validation messages changed in `33c1a9d` with no D-entry until now** (D48):
+  - blank required fields are silent again;
+  - the corrected O-12 start-date message is no longer shown;
+  - the duplicate-description message, taken from a commented-out canvas formula, is still shown.
+- **O-11 re-read** (D48). The canvas years list itself is correct (`Opex Costs Screen.pa.yaml`
+  L6089). The OPEX code no longer reproduces the preselected-label quirk, while Land Lease still
+  reproduces its twin, LL-D2.
 
 ### 15–18 · Contracts
 Built: contract list, payment targets, all three add panels, both delete confirmations, the
@@ -210,6 +312,22 @@ Modal over a dark scrim, blue title bar `<Project> - <Category>`, toolbar (Add R
 Copy Table), a spreadsheet with A/B/C column letters and numbered rows, header row 1, account and
 subaccount rows with **locked grey month cells**, contract rows editable, `Version 1.0.77`
 bottom-left, Save / Cancel bottom-right. Source: `vsbcloud-pcf-spreadsheet`.
+
+*Stale heading: the screen is built and connected (`features/cost/add-costs-from-table`; see
+PROJECT-MAP).* **27 Oct 2026, uncommitted, proposed (D51):** Save now runs as one bulk plan
+(`savePlan.ts` → `data/addCostSheetBulk.ts` → `data/bulkWrites.ts`). That is native
+`UpsertMultiple` on contracts and on costs, then per-record deletes through `deleteRecord`. The
+rollback is `BULK_SAVE = false` in `data/addCostSheet.ts`. Bugs CA-9 (stale totals) and CA-10 (raw
+deletes, and the unwrapped legacy total update) are fixed. A second fix wave the same day added
+stable ids on a retry, a pre-write existence check, and readable failure messages (D51 §3a–§3c).
+The full `verify` passed after the first wave (4,079 tests) and after the second (4,129 tests; only
+the known UT-ADGATE-910 flake failed, and it passed alone; D51 status). **Performance wave, 27 Oct
+(D51 §11, uncommitted):** writes now go out as `CreateMultiple` / `UpdateMultiple` in parallel (no
+longer `UpsertMultiple`), the four operations run concurrently, Save no longer waits for the sheet
+to reload, and one console line per Save logs the timings. `power.config.json` keeps its
+`environment_<id>` entry; `check:power` reports 84. Measured before: 9.5 s / 70 requests and
+4.1 s / 40; not yet measured after (test plan BS-30). No `verify` result recorded for this wave
+yet. Not yet run: the live DEV test, per `ProjectDocs/app-docs/13-ADDCOST-BULK-SAVE-TEST-PLAN.md`.
 
 ---
 

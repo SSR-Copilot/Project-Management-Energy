@@ -7,7 +7,7 @@
  * Dataverse cuts a user off at 52 concurrent requests and there is no retry on the write path.
  */
 import { describe, expect, it } from "vitest";
-import { mapLimit, forEachLimit, WRITE_CONCURRENCY } from "./concurrency";
+import { createGate, mapLimit, forEachLimit, WRITE_CONCURRENCY } from "./concurrency";
 
 /** Resolves on the next microtask, so tasks actually overlap. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -100,5 +100,68 @@ describe("forEachLimit", () => {
     expect(await forEachLimit([1, 2, 3], async (n) => { await tick(); seen.push(n); }, 2))
       .toBeUndefined();
     expect(seen.sort()).toEqual([1, 2, 3]);
+  });
+});
+
+describe("createGate", () => {
+  it("UT-CONC-011 caps in-flight tasks across SEVERAL pools sharing one gate", async () => {
+    const gate = createGate(3);
+    let active = 0;
+    let peak = 0;
+    const task = async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await tick();
+      active -= 1;
+    };
+    // Three pools of width 4 each = 12 would be in flight without the shared gate.
+    await Promise.all([1, 2, 3].map(() => forEachLimit([1, 2, 3, 4, 5], () => gate(task), 4)));
+    expect(peak).toBe(3);
+  });
+
+  it("UT-CONC-012 a failed task frees its slot", async () => {
+    const gate = createGate(1);
+    await expect(gate(async () => { throw new Error("boom"); })).rejects.toThrow("boom");
+    expect(await gate(async () => "next")).toBe("next");
+  });
+
+  it("UT-CONC-013 peak() reports the highest in-flight count, capped at the limit", async () => {
+    const gate = createGate(3);
+    expect(gate.peak()).toBe(0);
+    await gate(async () => undefined);
+    expect(gate.peak()).toBe(1);
+    // 10 tasks through a gate of 3: the slot hand-over never pushes the count past 3.
+    await Promise.all(Array.from({ length: 10 }, () => gate(tick)));
+    expect(gate.peak()).toBe(3);
+    // Two at once afterwards does not lower the recorded peak.
+    await Promise.all([gate(tick), gate(tick)]);
+    expect(gate.peak()).toBe(3);
+  });
+
+  it("UT-CONC-014 reset() restarts the peak from what is in flight now, without changing scheduling", async () => {
+    const gate = createGate(2);
+    await Promise.all([gate(tick), gate(tick), gate(tick)]);
+    expect(gate.peak()).toBe(2);
+    gate.reset();
+    expect(gate.peak()).toBe(0); // idle
+    await gate(tick);
+    expect(gate.peak()).toBe(1);
+
+    // A reset while one task is in flight starts from 1, and the cap still holds afterwards.
+    let release: () => void = () => undefined;
+    const held = gate(() => new Promise<void>((r) => { release = r; }));
+    gate.reset();
+    expect(gate.peak()).toBe(1);
+    // The held task still counts: with it, the cap of 2 is reached, and never passed.
+    let active = 1;
+    let observed = 1;
+    const task = async () => { active += 1; observed = Math.max(observed, active); await tick(); active -= 1; };
+    const more = Promise.all([gate(task), gate(task), gate(task)]);
+    await tick();
+    release();
+    active -= 1;
+    await Promise.all([held, more]);
+    expect(observed).toBeLessThanOrEqual(2);
+    expect(gate.peak()).toBe(2);
   });
 });

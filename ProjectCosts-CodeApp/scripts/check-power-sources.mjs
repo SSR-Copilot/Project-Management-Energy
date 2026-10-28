@@ -40,6 +40,11 @@ export function checkPowerSources() {
   const config = JSON.parse(fs.readFileSync(path.join(APP, "power.config.json"), "utf8"));
   const sources = config.databaseReferences?.["default.cds"]?.dataSources ?? {};
   for (const [key, { entitySetName, logicalName }] of Object.entries(sources)) {
+    // `pa app add dataverse-api` registers a bound operation (CreateMultiple, UpdateMultiple,
+    // UpsertMultiple) against an `environment_<id>` entry whose entity set is "Environment". It is
+    // not a table and has no schema, but the host routes the operation through it: removing it
+    // was followed by HTTP 501 from UpsertMultiple (D51, 27 Oct 2026). Accept it.
+    if (entitySetName === "Environment" && key.startsWith("environment_")) continue;
     if (!registered.has(entitySetName)) problems.push(`${logicalName}: not in dataSourcesInfo.ts`);
     if (!fs.existsSync(path.join(SCHEMAS, `${key}.Schema.json`))) problems.push(`${logicalName}: no ${key}.Schema.json`);
   }

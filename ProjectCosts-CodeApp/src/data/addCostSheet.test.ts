@@ -1,5 +1,5 @@
 /**
- * `saveAddCostSheet` — the delete half.
+ * `saveAddCostSheetLegacy` (the per-row save, `BULK_SAVE = false`) — the delete half.
  *
  * Add Cost from Table can remove a whole category's contracts in one save, and it removed them
  * the way `deleteCostLine` used to: cost rows, then the contract, and NOT the comments. Every
@@ -28,22 +28,36 @@ let rowsByLabel: Record<string, unknown[]> = {};
 /** The options every `fetchAll` was called with, by label. */
 let queriedBy: Record<string, unknown[]> = {};
 
+/** Ids whose `deleteRecord` Dataverse refuses (it throws, as the real one does on `success: false`). */
+let refused = new Set<string>();
+
+/** `deleteRecord`'s entity set → the prefix `deleted` records it under. */
+const PREFIX: Record<string, string> = { vsb_capexcosts: "cost", vsb_capexprojectcontracts: "contract" };
+
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
   },
+  // Cost and contract deletes go through `deleteRecord` (CONVENTIONS rule 14), not the generated
+  // services' raw `delete()`, so this is where they are recorded.
+  deleteRecord: async (operation: string, tableName: string, id: string) => {
+    if (refused.has(id)) throw new Error(`${operation}: 403 refused`);
+    deleted.push(`${PREFIX[tableName] ?? tableName}:${id}`);
+  },
 }));
+
+/** A raw generated `delete()` must never be reached on this path; it would discard a refusal. */
+const rawDelete = (table: string) => async (id: string) => {
+  throw new Error(`raw ${table}.delete(${id}) called; use deleteRecord`);
+};
 
 vi.mock("@/generated/services/Vsb_capexprojectcontractsService", () => ({
   Vsb_capexprojectcontractsService: {
     getAll: async () => ({ success: true, data: [] }),
     create: async () => ({ success: true, data: { vsb_capexprojectcontractid: "contract-new" } }),
     update: async () => ({ success: true, data: {} }),
-    delete: async (id: string) => {
-      deleted.push(`contract:${id}`);
-      return { success: true, data: {} };
-    },
+    delete: rawDelete("Vsb_capexprojectcontractsService"),
   },
 }));
 vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
@@ -51,9 +65,13 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
     getAll: async () => ({ success: true, data: [] }),
     create: async () => ({ success: true, data: { vsb_capexcostid: "cost-new" } }),
     update: async () => ({ success: true, data: {} }),
-    delete: async (id: string) => {
-      deleted.push(`cost:${id}`);
-      return { success: true, data: {} };
+    delete: rawDelete("Vsb_capexcostsService"),
+  },
+}));
+vi.mock("@/generated/services/UpsertMultipleService", () => ({
+  UpsertMultipleService: {
+    UpsertMultiple: async () => {
+      throw new Error("the legacy path must not call UpsertMultiple");
     },
   },
 }));
@@ -105,7 +123,9 @@ vi.mock("@/generated/services/Vsb_milestonesstandardassumptionsesService", () =>
   },
 }));
 
-const { saveAddCostSheet } = await import("./addCostSheet");
+// The LEGACY per-row path, driven directly: these pin its delete order whatever `BULK_SAVE` is.
+// The bulk path has its own suite (`addCostSheet.bulk.test.ts`).
+const { saveAddCostSheetLegacy } = await import("./addCostSheet");
 
 /** `lookupIn`/`guid` reject anything that is not a real GUID, so every fixture id is one. */
 const PROJECT_ID = "9f5aade5-2b7c-ef11-ac20-000d3a466ab7";
@@ -117,7 +137,7 @@ const cost = (id: string, contractId: string) => ({
 });
 
 const save = (contractDeleteIds: string[], existingCosts: ReturnType<typeof cost>[] = []) =>
-  saveAddCostSheet({
+  saveAddCostSheetLegacy({
     projectId: PROJECT_ID,
     changedRows: [],
     existingContracts: [],
@@ -129,9 +149,10 @@ beforeEach(() => {
   deleted = [];
   rowsByLabel = {};
   queriedBy = {};
+  refused = new Set();
 });
 
-describe("saveAddCostSheet contract deletion", () => {
+describe("saveAddCostSheetLegacy contract deletion", () => {
   it("UT-ADDCOST-032 deletes the contract's comments, then its cost rows, then the contract", async () => {
     rowsByLabel = {
       "list CAPEX comments": [
@@ -199,5 +220,36 @@ describe("saveAddCostSheet contract deletion", () => {
   it("UT-ADDCOST-037 still deletes a contract that has no comments", async () => {
     await save([DOOMED], [cost("cost-1", DOOMED)]);
     expect(deleted).toEqual(["cost:cost-1", `contract:${DOOMED}`]);
+  });
+});
+
+describe("saveAddCostSheetLegacy refused deletes (CONVENTIONS rule 14)", () => {
+  it("UT-ACSHEET-LEGACY-001 a refused cost delete rejects the save and keeps its contract", async () => {
+    refused = new Set(["cost-1"]);
+    await expect(save([DOOMED], [cost("cost-1", DOOMED)])).rejects.toThrow(/403 refused/);
+    // The contract delete never ran: its child is still there.
+    expect(deleted).not.toContain(`contract:${DOOMED}`);
+  });
+
+  it("UT-ACSHEET-LEGACY-002 a refused contract delete rejects the save", async () => {
+    refused = new Set([DOOMED]);
+    await expect(save([DOOMED])).rejects.toThrow(/delete CAPEX contract: 403 refused/);
+  });
+
+  it("UT-ACSHEET-LEGACY-003 a refused blanked-month delete rejects the save", async () => {
+    const CONTRACT = "22222222-7777-8888-9999-aaaaaaaaaaaa";
+    refused = new Set(["cost-blank"]);
+    const months = new Array<number | null>(12).fill(null);
+    await expect(saveAddCostSheetLegacy({
+      projectId: PROJECT_ID,
+      changedRows: [{
+        rowId: "1", accountNumber: "100", accountName: "A", description: "C1", year: 2026,
+        costPaidBy: "DevCo", depreciation: "Yes", applyVat: "Yes", months,
+        subAccountId: "33333333-7777-8888-9999-aaaaaaaaaaaa", projectContractId: CONTRACT,
+      }],
+      existingContracts: [],
+      existingCosts: [{ id: "cost-blank", contractId: CONTRACT, year: 2026, month: 1, cost: 100 }],
+      contractDeleteIds: [],
+    })).rejects.toThrow(/delete CAPEX cost: 403 refused/);
   });
 });

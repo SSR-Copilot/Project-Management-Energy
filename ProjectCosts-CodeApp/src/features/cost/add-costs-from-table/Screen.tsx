@@ -13,7 +13,7 @@
  *
  * DELETION BEHAVIOUR is a single switch — `CANVAS_PARITY_DELETION` below.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@fluentui/react-components";
 import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -23,16 +23,15 @@ import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
 import { CATEGORY_LABELS, resolveCategory } from "@/features/cost/capex-costs/rules";
 import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/useCostBook";
+import { toSaveFailure } from "@/data/addCostSheet";
+import { rootCauseDetail } from "@/platform/errors";
 import {
-  ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, diffRows,
-  planContractDeletions, planContractDeletionsCanvasParity, sheetTitle, sheetYearRange,
-  validateSheet, type SheetRow, type ValidationError,
+  ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
+  sheetTitle, sheetYearRange, validateSheet, type SheetRow, type ValidationError,
 } from "./rules";
-import {
-  alignOriginalRowIds, identityRoundTripFailures, outputRowsToSheetRows, rowIdentity,
-  sheetRowsToGrid,
-} from "./spreadsheet/adapter";
+import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
+import { saveButtonDisabled, saveRequestRows } from "./saveRetry";
 
 /**
  * Canvas-exact deletion, ON — the client's explicit choice.
@@ -59,8 +58,6 @@ const ROUND_TRIP_FAILED = (names: string[]): string =>
   "This cost table could not be matched back to the contracts it was built from "
   + `(${names.join(", ")}), so saving it could delete costs you did not change. `
   + "Nothing was saved. Please reload the screen and report this if it persists.";
-
-const emptyMonths = (): (number | null)[] => new Array(12).fill(null);
 
 export default function AddCostsFromTableScreen() {
   const navigate = useNavigate();
@@ -94,6 +91,20 @@ export default function AddCostsFromTableScreen() {
   const [addRowToken, setAddRowToken] = useState(0);
   const [deleteRowToken, setDeleteRowToken] = useState(0);
   const [copyTableToken, setCopyTableToken] = useState(0);
+  /*
+   * Identity key → id of every NEW row a save attempt of THIS loaded sheet sent. Kept across a
+   * failed save on purpose: the retry sends the same ids, so it updates what the failed attempt
+   * created instead of duplicating it. Cleared after a successful save and on every fresh load.
+   */
+  const idCache = useRef(new Map<string, string>());
+  /*
+   * Row identities sent by failed saves of THIS loaded sheet: they may have landed, so for them
+   * the snapshot (`originalRows`, `existingContracts`, `existingCosts`) no longer matches
+   * Dataverse. The next save re-sends them and asks the data layer to re-read before it plans
+   * (`saveRequestRows`). Same lifecycle as `idCache`: cleared after a successful save and on
+   * every fresh load.
+   */
+  const sentInFailedAttempts = useRef(new Set<string>());
 
   const subaccounts = sheetQuery.data?.subaccounts ?? [];
   const existingContracts = sheetQuery.data?.contracts ?? [];
@@ -133,6 +144,17 @@ export default function AddCostsFromTableScreen() {
   const initialGrid: SheetGrid | null = loaded?.grid ?? null;
 
   // Re-hydrates whenever fresh data lands — first load, or a refetch after a save elsewhere.
+  /*
+   * A fresh snapshot (first load, another project or category, a refetch after a save) already
+   * holds whatever an earlier attempt created, as stored rows, so the cache starts over. Keyed on
+   * the sheet DATA, not on `loaded`: a session refresh rebuilds `loaded` from the same, older
+   * snapshot, and clearing then would let a retry duplicate rows a failed attempt created.
+   */
+  useEffect(() => {
+    idCache.current.clear();
+    sentInFailedAttempts.current.clear();
+  }, [sheetQuery.data]);
+
   useEffect(() => {
     if (!loaded) return;
     setOriginalRows(loaded.roundTripped);
@@ -156,13 +178,29 @@ export default function AddCostsFromTableScreen() {
     canCreateContract: serverEnforcedProvider.forTable("vsb_capexprojectcontracts").canCreate,
   }), []);
 
-  const errors: ValidationError[] = useMemo(() => validateSheet(currentRows), [currentRows]);
+  /*
+   * How long the latest grid read-back and validation took, for the Save's one-line timing
+   * log. Both run on every settled edit, not on Save — `currentRows` is already up to date
+   * when Save is clicked — but they are the client-side work a Save waits behind.
+   */
+  const readBackMs = useRef(0);
+  const validationMs = useRef(0);
+
+  const errors: ValidationError[] = useMemo(() => {
+    const t0 = performance.now();
+    const out = validateSheet(currentRows);
+    validationMs.current = performance.now() - t0;
+    return out;
+  }, [currentRows]);
 
   const back = () => navigate({ pathname: "/costs/capex", search: `?category=${category}` });
 
   const handleDataChange = (grid: SheetGrid) => {
+    const t0 = performance.now();
     const json = gridToJson(grid, String(years.start));
-    setCurrentRows(outputRowsToSheetRows(json, subaccounts, existingContracts));
+    const rows = outputRowsToSheetRows(json, subaccounts, existingContracts);
+    readBackMs.current = performance.now() - t0;
+    setCurrentRows(rows);
   };
 
   const doSave = async () => {
@@ -175,63 +213,73 @@ export default function AddCostsFromTableScreen() {
      * grid is read back. To every deletion planner that looks exactly like "the user removed
      * this row", and the contract plus its whole cost history goes. It is never a real user
      * action, so it must fail loudly instead.
+     *
+     * That refusal, the identity alignment, the diff, the deletion plan and the orphan clean-up
+     * (which blanks the months of every (contract, year) that left the sheet, keyed on
+     * identity, never on the positional `rowId`) are one pure function, `prepareSheetSave`,
+     * with the same steps in the same order as when they were written out here.
      */
-    const lost = identityRoundTripFailures(loaded.loadedRows, loaded.roundTripped);
-    if (lost.length > 0) {
-      setSaveError(ROUND_TRIP_FAILED(lost.map((l) => l.description)));
+    const prepared = prepareSheetSave({
+      loadedRows: loaded.loadedRows,
+      roundTripped: loaded.roundTripped,
+      originalRows,
+      currentRows,
+      contracts: existingContracts,
+      costs: existingCosts,
+      currentYear,
+      canvasParityDeletion: CANVAS_PARITY_DELETION,
+      now: () => performance.now(),
+    });
+    const t = prepared.timings;
+    const ms = (n: number) => n.toFixed(1);
+    // One line, so a slow Save can be pinned on the client side or the network side at a glance.
+    console.info(
+      `Add Cost from Table prepare: ${ms(t.total)} ms (round-trip check ${ms(t.roundTripCheck)}, `
+      + `align ${ms(t.align)}, diff ${ms(t.diff)}, deletions ${ms(t.deletions)}, `
+      + `orphans ${ms(t.orphans)}; last edit's grid read-back ${ms(readBackMs.current)}, `
+      + `validation ${ms(validationMs.current)}; ${currentRows.length} rows)`,
+    );
+    if (prepared.kind === "lost") {
+      setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
       return;
     }
-
-    // `Row_ID` is positional; pair rows by what they actually ARE before diffing.
-    const alignedOriginals = alignOriginalRowIds(originalRows, currentRows);
-    const changed = diffRows(currentRows, alignedOriginals);
-
-    const deletion = CANVAS_PARITY_DELETION
-      ? {
-        deleteIds: planContractDeletionsCanvasParity({
-          originalRows: alignedOriginals, sheetRows: currentRows,
-        }),
-        blockedByPastCosts: [] as { id: string; name: string }[],
-      }
-      : planContractDeletions({
-        originalRows: alignedOriginals,
-        sheetRows: currentRows,
-        contracts: existingContracts,
-        costs: existingCosts,
-        currentYear,
-      });
+    const { changed, orphanCleanup, deletion } = prepared;
     const contractDeleteIds = deletion.deleteIds;
+    // After a failed attempt: re-send the rows it sent, and re-read before planning (F-A, M1).
+    const { changedRows, refreshBeforePlan, sentIdentities } = saveRequestRows({
+      changed, orphanCleanup, currentRows, sentBefore: sentInFailedAttempts.current,
+    });
 
-    /*
-     * A (contract, year) that was on the sheet and no longer is has its months blanked, so the
-     * cost rows behind it are removed. Keyed on identity, NOT on `rowId` — `rowId` shifts
-     * whenever a row is inserted or deleted, and blanking a row that is still on the sheet
-     * deletes booked money.
-     */
-    const stillPresent = new Set(
-      currentRows.filter((r) => r.projectContractId !== null).map(rowIdentity),
-    );
-    const orphanCleanup = originalRows
-      .filter((orig) => orig.projectContractId !== null && !stillPresent.has(rowIdentity(orig)))
-      .filter((orig) => !contractDeleteIds.includes(orig.projectContractId as string))
-      .map((orig) => ({ ...orig, months: emptyMonths() }));
-
+    // Drop the previous attempt's technical line so it never sits under a newer outcome.
+    save.reset();
     try {
       await save.mutateAsync({
-        changedRows: [...changed, ...orphanCleanup],
+        changedRows,
         existingContracts,
         existingCosts,
         contractDeleteIds,
+        idCache: idCache.current,
+        refreshBeforePlan,
       });
+      idCache.current.clear();
+      sentInFailedAttempts.current.clear();
       if (deletion.blockedByPastCosts.length > 0) {
         // Saved, but something the user asked to remove was deliberately spared — stay put and
         // say so rather than navigating away from a half-applied intention.
         setSaveNotice(ADDCOST_MSG.pastCostGuard(deletion.blockedByPastCosts.map((c) => c.name)));
+        // The save no longer waits for a reload (it navigates away), so staying here reloads now.
+        void sheetQuery.refetch();
         return;
       }
       back();
-    } catch {
-      setSaveError(ADDCOST_MSG.saveFailed);
+    } catch (error) {
+      // The canvas wording, plus what the bulk save says about the failure. The id cache is
+      // deliberately NOT cleared here: a retry must reuse the ids this attempt sent. Part of
+      // this attempt may have landed, so the retry plans against a fresh read, not the snapshot.
+      for (const id of sentIdentities) sentInFailedAttempts.current.add(id);
+      setSaveError(saveFailureText(toSaveFailure(error)));
+      // The full chain (phase → chunk → Dataverse fault) for support; the screen shows one line.
+      console.error("Add Cost from Table save failed", error);
     }
   };
 
@@ -320,7 +368,9 @@ export default function AddCostsFromTableScreen() {
         {saveError ? <div className="canvas-error" role="alert">{saveError}</div> : null}
         {saveNotice ? <div className="canvas-error" role="status">{saveNotice}</div> : null}
         {save.error ? (
-          <div className="canvas-error" role="alert">{(save.error as Error).message}</div>
+          <div className="canvas-error" role="alert">
+            {[(save.error as Error).message, rootCauseDetail(save.error)].filter(Boolean).join(" Dataverse: ")}
+          </div>
         ) : null}
         {errors.length > 0 ? (
           <div className="canvas-error" role="alert">
@@ -355,7 +405,12 @@ export default function AddCostsFromTableScreen() {
             aria-label="Save"
             data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save"
             appearance="primary"
-            disabled={!canSaveBulkEdit(permissions, errors) || save.isPending}
+            // Not while the sheet reloads (`saveButtonDisabled` says why).
+            disabled={saveButtonDisabled({
+              canSave: canSaveBulkEdit(permissions, errors),
+              isPending: save.isPending,
+              isFetching: sheetQuery.isFetching,
+            })}
             onClick={() => { void doSave(); }}
           >
             Save
