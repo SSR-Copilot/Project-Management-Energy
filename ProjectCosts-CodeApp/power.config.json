@@ -9,7 +9,61 @@
   "buildEntryPoint": "index.html",
   "localAppUrl": "http://localhost:3000",
   "logoPath": "Default",
-  "connectionReferences": {},
+  "connectionReferences": {
+    "f88796d2-edb4-4c00-8f1b-5177fc74b3b2": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sql",
+      "displayName": "SQL Server",
+      "dataSources": [
+        "assumptionsbanks",
+        "assumptionsrevenue",
+        "assumptionskfwtranche",
+        "assumptionsdebt",
+        "assumptionsbopcontracts"
+      ],
+      "authenticationType": "oauthSP",
+      "sharedConnectionId": "/providers/Microsoft.PowerApps/apis/shared_sql/connections/9b9170f3ee4640d0af705334d497fb0e",
+      "dataSets": {
+        "boz3vyychhteznlv6ac7stdyye-tvqgjsfypsjuvljjwc7mcivubu.datawarehouse.fabric.microsoft.com,Lakehouse_Gold": {
+          "dataSources": {
+            "assumptionsbanks": {
+              "tableName": "[dbo].[AssumptionsBanks]",
+              "tableNameOverride": {
+                "environmentVariableName": "vsb_AssumptionsBanksSQL"
+              }
+            },
+            "assumptionsrevenue": {
+              "tableName": "[dbo].[AssumptionsRevenue]",
+              "tableNameOverride": {
+                "environmentVariableName": "vsb_AssumptionsRevenuesSQL"
+              }
+            },
+            "assumptionskfwtranche": {
+              "tableName": "[dbo].[AssumptionsKfWTranche]",
+              "tableNameOverride": {
+                "environmentVariableName": "vsb_AssumptionsKfWTrancheSQL"
+              }
+            },
+            "assumptionsdebt": {
+              "tableName": "[dbo].[AssumptionsDebt]",
+              "tableNameOverride": {
+                "environmentVariableName": "vsb_AssumptionsDebtSQL"
+              }
+            },
+            "assumptionsbopcontracts": {
+              "tableName": "[dbo].[AssumptionsBoPContracts]",
+              "tableNameOverride": {
+                "environmentVariableName": "vsb_AssumptionsBoPContracts"
+              }
+            }
+          },
+          "datasetOverride": {
+            "environmentVariableName": "vsb_FabricSQLServer,vsb_FabricSQLDatabase"
+          }
+        }
+      },
+      "xrmConnectionReferenceLogicalName": "vsb_VSBCloudFabricSQL"
+    }
+  },
   "databaseReferences": {
     "default.cds": {
       "dataSources": {

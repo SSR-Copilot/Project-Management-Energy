@@ -233,14 +233,16 @@ it. Lint warnings do not fail the gate, but do not add new ones.
 Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failure.
 
 1. **Clean install.** `npm ci`, so the build uses exactly the lockfile.
-2. **Data sources present.** `npm run check:power` must report 84 registered and 0 problems
-   (count as of 27 Oct 2026: 81 tables plus the `CreateMultiple`, `UpdateMultiple` and
-   `UpsertMultiple` actions, D51; it grows as screens register tables).
+2. **Data sources present.** `npm run check:power` must report 89 registered and 0 problems
+   (count as of 28 Oct 2026: 81 tables, the `CreateMultiple`, `UpdateMultiple` and
+   `UpsertMultiple` actions (D51), and the 5 Fabric SQL tables (D54); it grows as screens
+   register tables).
    `.power/` is git-ignored, so on a fresh checkout regenerate it first: re-add each table in
    `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, and the
    `CreateMultiple` and `UpdateMultiple` actions (plus `UpsertMultiple` while its generated
-   files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds), then
-   re-run the check.
+   files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds). Re-add
+   the SQL tables with the D54 command, then restore the `datasetOverride` the CLI does not
+   write, and re-run the check.
 3. **The full gate.** `npm run verify` must exit 0.
 4. **Hygiene.** `npx -y knip@5`: no new unused files or dependencies. No file may be
    byte-identical to another in `src/`.

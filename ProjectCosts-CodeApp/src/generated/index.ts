@@ -5,6 +5,11 @@
 
 // Models
 export * as AadusersModel from './models/AadusersModel';
+export * as AssumptionsBanksModel from './models/AssumptionsBanksModel';
+export * as AssumptionsBoPContractsModel from './models/AssumptionsBoPContractsModel';
+export * as AssumptionsDebtModel from './models/AssumptionsDebtModel';
+export * as AssumptionsKfWTrancheModel from './models/AssumptionsKfWTrancheModel';
+export * as AssumptionsRevenueModel from './models/AssumptionsRevenueModel';
 export * as BusinessunitsModel from './models/BusinessunitsModel';
 export * as CommonModels from './models/CommonModels';
 export * as CreateMultipleModel from './models/CreateMultipleModel';
@@ -92,6 +97,11 @@ export * as Vsb_substructuretypeinprojectsModel from './models/Vsb_substructuret
 
 // Services
 export * from './services/AadusersService';
+export * from './services/AssumptionsBanksService';
+export * from './services/AssumptionsBoPContractsService';
+export * from './services/AssumptionsDebtService';
+export * from './services/AssumptionsKfWTrancheService';
+export * from './services/AssumptionsRevenueService';
 export * from './services/BusinessunitsService';
 export * from './services/CreateMultipleService';
 export * from './services/EnvironmentvariabledefinitionsService';

@@ -4882,3 +4882,93 @@ cell, a cleared cell and a removed contract. Then confirm:
 - the removed rows do not reappear before or after the `background deletes: …` log line.
 
 **Open, not product-approved:** everything in D51, including §11.19's optimistic display.
+
+## D54 · The Fabric SQL assumption tables registered as code-app data sources (28 Oct 2026)
+
+**Status: PROPOSED, uncommitted. The tables are registered; no screen reads them yet.** The user
+asked for these five tables to be configured as data sources. The configuration consumes the
+solution's existing environment variables and connection reference. No environment variable or
+connection reference was created, changed or duplicated.
+
+**What exists in VSBCloud_Dev**, all of it in the unmanaged solution **VSBCloud**
+(`44aa38f9-6c1f-45e1-a963-5c51941fbe73`). Everything below was read with `pac org fetch`.
+- **Table variables.** Each is a Data Source variable on `shared_sql`, with parameter key `table`,
+  and is a child of `vsb_FabricSQLDatabase`.
+
+  | Variable | DEV value | Data source name |
+  |---|---|---|
+  | `vsb_AssumptionsBanksSQL` | `[dbo].[AssumptionsBanks]` | `assumptionsbanks` |
+  | `vsb_AssumptionsRevenuesSQL` | `[dbo].[AssumptionsRevenue]` | `assumptionsrevenue` |
+  | `vsb_AssumptionsKfWTrancheSQL` | `[dbo].[AssumptionsKfWTranche]` | `assumptionskfwtranche` |
+  | `vsb_AssumptionsDebtSQL` | `[dbo].[AssumptionsDebt]` | `assumptionsdebt` |
+  | `vsb_AssumptionsBoPContracts` | `[dbo].[AssumptionsBoPContracts]` | `assumptionsbopcontracts` |
+
+- **The chain.** `vsb_FabricSQLDatabase` (parameter key `database`, value `Lakehouse_Gold`) is a
+  child of `vsb_FabricSQLServer` (parameter key `server`, the Fabric warehouse endpoint
+  `boz3vyychhteznlv6ac7stdyye-tvqgjsfypsjuvljjwc7mcivubu.datawarehouse.fabric.microsoft.com`).
+- **The connection reference.** `vsb_VSBCloudFabricSQL` ("VSBCloud - Fabric SQL", `shared_sql`) is
+  bound to connection `9b9170f3ee4640d0af705334d497fb0e` ("SQL Server Fabric", Connected). Both
+  canvas apps use this reference.
+- **KfW.** The KfW definition is absent from the extracted solution on disk, which is an older
+  export. In DEV it is a VSBCloud component.
+- **Left alone.** A parallel `vsbdev_envVar_Fabric_SQL_*` set and the `vsb_FabricSync*SQL`
+  variables were not used. The server and database variables are also listed in a
+  `VSBobsoleteComponents` solution.
+
+**What changed.**
+- **Registration.** Each table was added with the npm Power Apps CLI 1.3.0 (pac 2.13.1 has no
+  environment-variable support):
+  `npx @microsoft/power-apps-cli@1.3.0 app add data-source --non-interactive --connector shared_sql --connection-ref vsb_VSBCloudFabricSQL --solution-id 44aa38f9-6c1f-45e1-a963-5c51941fbe73 --dataset "<server>,Lakehouse_Gold" --table "@envvar:<table variable>"`.
+- **What the CLI wrote to `power.config.json`** (`connectionReferences`):
+  - one entry with `xrmConnectionReferenceLogicalName: "vsb_VSBCloudFabricSQL"`;
+  - `authenticationType: "oauthSP"`, as in the canvas apps;
+  - the shared connection id;
+  - each table's `tableNameOverride` pointing at its variable.
+- **Credentials.** No credentials are stored anywhere.
+- **Generated files.** The CLI wrote `src/generated/models|services/Assumptions*` and the
+  `.power/` schemas. The columns match the canvas `DataSources.json` exactly. `dataSourcesInfo.ts`
+  kept every Dataverse entry; `check:power` reports 89 registered, 0 problems.
+- **The dataset override, added by hand.** The CLI records only the dataset resolved at add time,
+  so in another environment it would still point at DEV's server. The documented code-app form
+  is one String variable that holds `server,database`, but this solution has two Data Source
+  variables instead. `datasetOverride.environmentVariableName` was therefore set to
+  `"vsb_FabricSQLServer,vsb_FabricSQLDatabase"`, the exact value both canvas apps carry in their
+  `LocalConnectionReferences`.
+- **First attempt.** `--dataset "@envvar:vsb_FabricSQLDatabase"` failed: it resolves to the
+  database alone, and the metadata call fails without the server. Microsoft's issue #445
+  reports the same failure.
+
+**Open.**
+1. **The dataset override is not proven at runtime.** No code-app doc or sample shows the
+   comma-pair, canvas-style override. Microsoft's code-apps repo (issue #445) documents a single
+   combined String variable. If the player does not resolve the pair, the options are:
+   - a new combined `server,database` variable, which the user ruled out for this change;
+   - no dataset override, which keeps DEV's server in every environment.
+
+   This needs a live read in DEV, then in a second environment.
+2. **The code app is not in the VSBCloud solution.** `vsb_projectapp_2f794` is not a component;
+   only the three canvas apps are. A connection reference and environment-variable binding only
+   travel with a solution. So until the app is pushed into VSBCloud
+   (`pa app push --solution-id 44aa38f9-…`, which changes the solution), the bindings do not
+   reach another environment. In each target environment, the variables' current values and the
+   reference's connection must be set as well (deployment settings).
+3. **No screen consumes the tables yet.**
+   - Finance (Debt, Banks, KfW), Revenues, Production and Milestones (Revenue) still return
+     `notConnected()`.
+   - Contracts still reads the Dataverse BoP copy, under provisional decision D2.
+   - Wiring them is a separate change. It needs D2 confirmed and the canvas formulas ported per
+     screen.
+4. **Read only.** The generated services also expose `create`/`update`/`delete`, but the canvas
+   execution policy allows only `get` on these tables. Consumers must only read.
+5. **Access.** The connection uses `oauthSP`. Users need the connection shared with them, or the
+   policy the canvas apps already rely on.
+6. **Hygiene.** knip lists 22 unused files: the 12 known before, plus the 10 new generated SQL
+   models and services. They stay listed until a screen reads them.
+
+**Checks (28 Oct 2026).**
+- `check:power`: 89 registered, 0 problems. Typecheck, lint, the label gate and the canvas gate
+  all passed.
+- **Tests:** the full run passed 147 files and 3,946 tests. 13 jsdom files hit worker-start
+  failures; run on their own they passed 411 tests, so 160 files in all.
+- **Build:** `npm run build` passed.
+- **Variables:** `pa app list-environment-variables` lists all seven variables of the chain.
