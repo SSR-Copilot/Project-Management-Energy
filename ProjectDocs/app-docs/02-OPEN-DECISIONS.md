@@ -4946,7 +4946,8 @@ connection reference was created, changed or duplicated.
    - no dataset override, which keeps DEV's server in every environment.
 
    This needs a live read in DEV, then in a second environment.
-2. **The code app is not in the VSBCloud solution.** `vsb_projectapp_2f794` is not a component;
+2. **Resolved 28 Oct 2026 (D55): the app is now a VSBCloud component.** Before that, the code
+   app was not in the VSBCloud solution. `vsb_projectapp_2f794` was not a component;
    only the three canvas apps are. A connection reference and environment-variable binding only
    travel with a solution. So until the app is pushed into VSBCloud
    (`pa app push --solution-id 44aa38f9-…`, which changes the solution), the bindings do not
@@ -4972,3 +4973,35 @@ connection reference was created, changed or duplicated.
   failures; run on their own they passed 411 tests, so 160 files in all.
 - **Build:** `npm run build` passed.
 - **Variables:** `pa app list-environment-variables` lists all seven variables of the chain.
+
+## D55 · DEV push of `RounakDev1` `644b486`, and the code app added to the VSBCloud solution (28 Oct 2026)
+
+**What was done.**
+- **Deployed.** `RounakDev1` at `644b486` (the D54 SQL sources) went to app
+  `807a2fba-665c-40f3-b158-ffe822aa7da4` in VSBCloud_Dev. This supersedes the `30061f1` build.
+- **Pushed with the npm CLI.** The push used `npx @microsoft/power-apps-cli@1.3.0 app push
+  --non-interactive`, not `pac code push`. The build now has connector sources with connection
+  references, and Microsoft advises pushing those with the npm CLI. This CLI takes the
+  environment from `power.config.json`, and it did not rewrite that file.
+- **Added to the solution.** At the user's request the app was added to the unmanaged solution
+  **VSBCloud** (`44aa38f9-6c1f-45e1-a963-5c51941fbe73`) with `pac solution add-solution-component
+  --solutionUniqueName VSBCloud --component 807a2fba-665c-40f3-b158-ffe822aa7da4
+  --componentType 300`.
+  - It was not done with `pa app push --solution-id`, because that path does not guarantee that
+    the existing app record is kept.
+  - The user required the name and the app id to stay unchanged.
+- **Read back.** Afterwards `canvasapp` still shows `vsb_projectapp_2f794`, "Project App",
+  `807a2fba-…`, and VSBCloud lists it as a Canvas App component next to the three canvas apps.
+
+**Checklist.**
+1. **`npm ci`:** passed.
+2. **`check:power`:** passed, 89 registered, 0 problems.
+3. **`npm run verify`:** passed on the first run, 160 files and 4,357 tests, build OK.
+4. **knip:** 22 unused files, as expected: 12 known plus the 10 SQL ones (D54).
+5. **Local smoke test:** waived for the agent, which cannot drive a browser.
+6. **Environment:** `pac org who` showed VSBCloud_Dev.
+7. **Push:** accepted. The step-5 test and the D54 runtime check are owed by the user.
+
+**Effect.** The connection reference and the environment-variable bindings now travel with
+VSBCloud. In a target environment, the variables' current values and the connection for
+`vsb_VSBCloudFabricSQL` must still be set when the solution is imported.
