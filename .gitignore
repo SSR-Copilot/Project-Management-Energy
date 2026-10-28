@@ -27,7 +27,6 @@ yarn-error.log*
 Thumbs.db
 
 # Power Platform / pac local artifacts
-.power/
 obj/
 bin/
 *.pcf.cache
