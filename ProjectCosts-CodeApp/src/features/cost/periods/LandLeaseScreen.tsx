@@ -70,7 +70,7 @@ import {
   deleteDialog,
   durationMonthLabel, durationYearLabel, emptyLandLeaseForm, headerEditable, hintVisible,
   inflationProfileLabel, inflationSectionVisible, inflationStartYearDefault, isPeriodOne,
-  landLeaseColumns, landLeaseFormFrom, leaseAssumptionQuery, leaseCommands, leaseCurrencyLabel,
+  landLeaseColumns, landLeaseFormFrom, lastPeriod, leaseAssumptionQuery, leaseCommands, leaseCurrencyLabel,
   leaseFieldErrors, leasePanelTitle, leaseSaveError, orderedSubaccounts,
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
@@ -823,12 +823,15 @@ export default function LandLeaseScreen() {
 
   const openAddPeriod = (card: LeaseSubaccountCard) => {
     if (!selectedCost || !selectedPeriod) return;
+    // DIVERGENCE (27 Oct 2026): the new period follows the contract's LAST period whichever
+    // period was selected, so its name and start date continue the chain (`leaseCommands`).
+    const parentPeriod = (selectedContract && lastPeriod(selectedContract)) ?? selectedPeriod;
     setPanel({
       subaccountId: card.id, subaccountName: card.name,
-      state: "New", cost: selectedCost, period: null, parentPeriod: selectedPeriod,
+      state: "New", cost: selectedCost, period: null, parentPeriod,
     });
     setForm(landLeaseFormFrom({
-      cost: selectedCost, period: null, parentPeriod: selectedPeriod,
+      cost: selectedCost, period: null, parentPeriod,
       allocations, panelState: "New", workingDate: null, resetStartDate: false,
     }));
     setWorkingDate(null);

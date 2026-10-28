@@ -63,10 +63,12 @@ export interface AppShellProps extends Omit<AppHeaderProps, "commandSlotRef"> {
    * form that must scroll, like the canvas screen's vertical container.
    */
   contentScrolls?: boolean;
+  /** Whether the "Version …" footer strip shows; with the rail by default. */
+  showFooter?: boolean;
 }
 
 export function AppShell({
-  children, showRail = true, adminVisible = true, contentScrolls = false, ...header
+  children, showRail = true, adminVisible = true, contentScrolls = false, showFooter = showRail, ...header
 }: AppShellProps) {
   const styles = useStyles();
   // A ref callback into state, not a `useRef`: the portal has to re-render once the element
@@ -83,7 +85,7 @@ export function AppShell({
             {children}
           </main>
         </div>
-        {showRail ? <footer className={styles.footer}>
+        {showFooter ? <footer className={styles.footer}>
           <Text className={styles.footerText}>{`Version ${header.appVersion ?? ""}`}</Text>
         </footer> : null}
       </div>

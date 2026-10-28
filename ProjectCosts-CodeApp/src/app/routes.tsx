@@ -24,7 +24,10 @@ const OpexCostsScreen = lazy(() => import("@/features/cost/opex-costs/Screen"));
 const LandLeaseScreen = lazy(() => import("@/features/cost/land-lease/Screen"));
 const AddCostsFromTableScreen = lazy(() => import("@/features/cost/add-costs-from-table/Screen"));
 
-/* Project Management — UI built, not connected to Dataverse yet (`data/notConnected.ts`). */
+/*
+ * Project Management — each screen's `hooks.ts` says what it reads and writes; anything not wired
+ * yet is listed in `data/notConnected.ts`.
+ */
 const GeneralDataScreen = lazy(() => import("@/features/pm/general-data/Screen"));
 const MilestonesScreen = lazy(() => import("@/features/pm/milestones/Screen"));
 const GeneratorsScreen = lazy(() => import("@/features/pm/generators/Screen"));
@@ -84,9 +87,15 @@ export function CostProjectGate() {
 }
 
 /**
- * Project Management screens need a selected project, exactly like the cost screens — with one
- * exception the canvas makes: General Data with NO project is the New Project screen
- * (`addProject` blanks `gblRecordSelectedProject` and navigates there).
+ * The New Project screens: General Data with NO project is the New Project form (`addProject`
+ * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator open on
+ * their page-lock banner ("• General" not saved yet) instead of asking for a project.
+ */
+const NEW_PROJECT_PATHS = new Set(["/project/general", "/project/milestones", "/project/generators"]);
+
+/**
+ * Project Management screens need a selected project, exactly like the cost screens — except the
+ * New Project screens above.
  */
 export function ProjectScreenGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
@@ -97,7 +106,7 @@ export function ProjectScreenGate() {
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open the project again." action={action} />;
   if (!projectId) {
-    if (pathname === "/project/general") return <Outlet />;
+    if (NEW_PROJECT_PATHS.has(pathname)) return <Outlet />;
     return <EmptyState title="Select a project" description="Open a project from the project list." action={action} />;
   }
   if (error) return <EmptyState title="The project could not be loaded"
@@ -123,8 +132,8 @@ export function AppRoutes() {
           The two Project Management destinations the overview's command bar navigates to
           (`NEW_PROJECT_PATH`, `projectGeneralDataPath`). They stay stable links and redirect to
           the PM route shape, `/project/general[?projectId=]` — General Data with no project is
-          the New Project screen. The screen's UI is built but not connected to Dataverse yet
-          (`features/pm/general-data/hooks.ts`), so it creates nothing.
+          the New Project screen. It saves through `useGeneralDataWrites`
+          (`features/pm/general-data/hooks.ts`), which creates the project in Dataverse.
 
           `projects/new` is declared BEFORE `projects/:projectId/general` so the literal wins;
           React Router ranks static segments above dynamic ones, but the order also makes the

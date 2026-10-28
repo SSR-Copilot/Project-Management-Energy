@@ -204,6 +204,11 @@ describe("page lock", () => {
     expect(isPageLocked(project())).toBe(false);
     expect(pageLock(project())).toEqual([]);
   });
+
+  it("a New Project (no record, nothing saved in General) is locked on both sections", () => {
+    expect(isPageLocked(null)).toBe(true);
+    expect(pageLock(null)).toEqual(["• General", "• Milestones"]);
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════ command bar ════ */

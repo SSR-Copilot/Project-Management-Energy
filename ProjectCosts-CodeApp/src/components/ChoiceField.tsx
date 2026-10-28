@@ -5,7 +5,8 @@
  * (20 Oct 2026, D35 §6) so every PM screen's dropdowns look the same (rule 17).
  *
  *  - the filled grey box, no outline; the `*` before the caption; the canvas error label under it;
- *  - `readOnly` = canvas `DisplayMode.View` (the value in black, the list never opens);
+ *  - `readOnly` = canvas `DisplayMode.View` (the value in black, the list never opens, and no
+ *    chevron — the canvas shows a View-mode dropdown as plain text in the box);
  *    `disabled` = `DisplayMode.Disabled` (greyed);
  *  - `standard`: the canvas standard-assumption pair via `useStandardValueClass` (rule 20);
  *  - `multiselect` (`SelectMultiple: true`): `values` + `onSelectMany`; the text is the chosen
@@ -86,7 +87,7 @@ export function ChoiceField({
         disabled={disabled}
         placeholder={placeholder}
         multiselect={multiselect}
-        {...(view ? { open: false } : {})}
+        {...(view ? { open: false, expandIcon: null } : {})}
         value={text}
         selectedOptions={selected}
         onOptionSelect={(_, d) => {
