@@ -88,10 +88,12 @@ export function CostProjectGate() {
 
 /**
  * The New Project screens: General Data with NO project is the New Project form (`addProject`
- * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator open on
+ * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Team / Grid Operator open on
  * their page-lock banner ("• General" not saved yet) instead of asking for a project.
  */
-const NEW_PROJECT_PATHS = new Set(["/project/general", "/project/milestones", "/project/generators"]);
+const NEW_PROJECT_PATHS = new Set([
+  "/project/general", "/project/milestones", "/project/generators", "/project/team", "/project/grid-operator",
+]);
 
 /**
  * Project Management screens need a selected project, exactly like the cost screens — except the

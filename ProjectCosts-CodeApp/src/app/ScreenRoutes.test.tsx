@@ -200,6 +200,8 @@ describe("UT-ROUTES — Project Management", () => {
   it.each([
     ["milestones", "con_Milestones_Page_LockMessage"],
     ["generators", "con_Milestones_Page_LockMessage_1"],
+    ["team", "con_Milestones_Page_LockMessage_4"],
+    ["grid-operator", "con_Milestones_Page_LockMessage_6"],
   ])("New Project: /project/%s without a project shows the page lock, not 'Select a project'", async (slug, lockId) => {
     session = {};
     renderAt(`/project/${slug}`);
