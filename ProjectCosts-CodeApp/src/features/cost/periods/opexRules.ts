@@ -528,6 +528,20 @@ export function lastPeriodByName(costs: readonly OpexCost[], selected: OpexCost)
   return sorted[sorted.length - 1] ?? null;
 }
 
+/**
+ * The last period of the chain `selected` belongs to — root and every child, in `byPeriodOrder`
+ * (latest start date, `Name` breaking a tie).
+ *
+ * DIVERGENCE (product owner, 27 Oct 2026): `Add Period` is enabled on ANY row of a chain, and
+ * the new period always follows the chain's last one — its description and start date come from
+ * this row, not from the row the user happened to select.
+ */
+export function chainLastPeriod(costs: readonly OpexCost[], selected: OpexCost): OpexCost {
+  const headId = selected.parentCostId ?? selected.id;
+  const chain = costs.filter((c) => c.id === headId || c.parentCostId === headId);
+  return [...chain].sort(byPeriodOrder)[chain.length - 1] ?? selected;
+}
+
 export function chainOf(chains: readonly OpexChain[], costId: string): OpexChain | null {
   return chains.find((c) => c.periods.some((p) => p.id === costId)) ?? null;
 }
@@ -982,30 +996,28 @@ export function canAddContractType(args: CommandArgs): boolean {
  *    sub-account bar has no last-period clause at all, so Other OPEX lets a period be added
  *    after any selected row in the chain.
  *
- * CANVAS DIVERGENCE FROM THE SKELETON — `opex-costs/rules.ts:263-271` applies the last-period
- * rule and the `StartsWith(Name, "Standard")` lock to both modes. Neither is what the canvas
- * does. The canvas is followed.
+ * DIVERGENCE (product owner, 27 Oct 2026): O&M's last-period clause is DROPPED — Add Period is
+ * enabled on any non-standard row in both modes, and the panel follows `chainLastPeriod`. For
+ * the same reason Other OPEX's free-description test is run on the description the LAST period
+ * would produce, not the selected row's (`candidateDescription` is no longer read here).
  */
 export function canAddPeriod(args: CommandArgs): boolean {
   const {
-    mode, cardScopeId, selectedScopeId, selected, allCosts, cardCosts,
-    candidateDescription, permissions,
+    mode, cardScopeId, selectedScopeId, selected, allCosts, cardCosts, permissions,
   } = args;
   if (!permissions.canCreate) return false;
 
   if (mode === "om") {
     if (selected === null) return cardCosts.length === 0;
     if (selectedScopeId !== cardScopeId) return false;
-    if (selected.isStandardContract) return false;
-    // The canvas `Name` sort (O-5 reproduced, see `lastPeriodByName`).
-    return lastPeriodByName(cardCosts, selected)?.id === selected.id;
+    return !selected.isStandardContract;
   }
 
   if (selected === null) return false;
   if (selectedScopeId !== cardScopeId) return false;
   if (isStandardLocked(selected)) return false;
   return descriptionIsFree(
-    candidateDescription,
+    nextPeriodDescription(chainLastPeriod(cardCosts, selected).description),
     allCosts,
     // In Other OPEX mode `locSelectedDeviceTypeInProject` is always blank — see O-8.
     null,
@@ -1119,10 +1131,10 @@ function deleteAllowedForRow(selected: OpexCost, cardCosts: readonly OpexCost[])
   const isRoot = selected.parentCostId === null;
   if (isStandardByDescription(selected)) return isRoot;
   if (isRoot) return true;
-  // `locLastPeriod` for a CHILD filters its siblings only — the root is a candidate only when it
-  // is the selection, and roots returned above (`:559-562`, `:2907-2910`). The canvas `Name`
-  // sort (O-5 reproduced, see `lastPeriodByName`).
-  return lastPeriodByName(cardCosts, selected)?.id === selected.id;
+  // DIVERGENCE (product owner, 27 Oct 2026): the canvas compares against `locLastPeriod`, a
+  // `Name` sort (O-5, see `lastPeriodByName`), which on the live chain offered Delete on `- 5`
+  // while `- 6` existed. Only the chain's real last period (`chainLastPeriod`) may be deleted.
+  return chainLastPeriod(cardCosts, selected).id === selected.id;
 }
 
 export interface OpexCommandGates {

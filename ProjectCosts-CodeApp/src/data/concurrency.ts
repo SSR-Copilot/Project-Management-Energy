@@ -86,3 +86,48 @@ export async function forEachLimit<T>(
  * save's peak in-flight count still stays well under the 52-request ceiling.
  */
 export const DELETE_CONCURRENCY = 16;
+
+/**
+ * A limit shared by several concurrent pools: `gate(task)` runs `task` once fewer than `limit`
+ * gated tasks are in flight. `mapLimit` bounds ONE pool; a save that runs several pools at once
+ * (Add Cost from Table, D51) needs one ceiling across all of them to stay under the 52-request
+ * service-protection limit. A finished task hands its slot straight to the next waiter, so the
+ * count never exceeds `limit`, even transiently.
+ *
+ * MEASUREMENT (no effect on scheduling): `peak()` is the highest number of gated tasks that were
+ * in flight at once since the gate was made or last `reset()`; `reset()` sets it back to the
+ * number in flight right now (zero when the gate is idle). Add Cost from Table logs it per save.
+ */
+interface Gate {
+  <T>(task: () => Promise<T>): Promise<T>;
+  /** Highest in-flight count since creation or the last `reset()`. */
+  peak(): number;
+  /** Restarts `peak()` from the current in-flight count. */
+  reset(): void;
+}
+
+export function createGate(limit: number): Gate {
+  let active = 0;
+  let peak = 0;
+  const waiting: (() => void)[] = [];
+  const gate = async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < limit) {
+      active += 1;
+      if (active > peak) peak = active;
+    } else {
+      // A slot handed over by a finishing task keeps `active` unchanged, so the peak cannot grow here.
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active -= 1;
+    }
+  };
+  return Object.assign(gate, {
+    peak: () => peak,
+    reset: () => { peak = active; },
+  });
+}

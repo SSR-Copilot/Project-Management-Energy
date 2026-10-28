@@ -16,7 +16,7 @@ import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
 import type { CostBook, CostPeriod } from "@/features/cost/costing/model";
-import { DELETE_DIALOG, OPEX_MSG, deleteDialogText } from "./opexRules";
+import { DELETE_DIALOG, OPEX_MSG, deleteDialogSingleText } from "./opexRules";
 
 /* ───────────────────────────────────────────────────────────────── fixtures */
 
@@ -300,7 +300,7 @@ describe("OpexScreen", () => {
     expect(within(card("PV Module A")).getByTestId("opex-editOpexProjectCost")).toBeDisabled();
   });
 
-  it("UT-OPEXUI-008 O&M requires the chain's LAST period for Add Period; Other OPEX does not", () => {
+  it("UT-OPEXUI-008 Add Period is enabled on every period in both modes (27 Oct 2026)", () => {
     const { unmount } = render(<Harness><OpexScreen mode="om" /></Harness>);
     const scope = within(card("WTG V150-6.0"));
 
@@ -308,7 +308,7 @@ describe("OpexScreen", () => {
     expect(scope.getByTestId("opex-newOpexProjectCost")).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("opex-select-om-1"));
-    expect(scope.getByTestId("opex-newOpexProjectCost")).toBeDisabled();
+    expect(scope.getByTestId("opex-newOpexProjectCost")).toBeEnabled();
 
     fireEvent.click(screen.getByTestId("opex-select-om-2"));
     expect(scope.getByTestId("opex-newOpexProjectCost")).toBeEnabled();
@@ -525,6 +525,17 @@ describe("OpexScreen", () => {
     expect(within(panel()).getByTestId("opex-start")).toHaveValue("Sun, Aug 30, 2037");
   });
 
+  it("UT-OPEXUI-022c Add Period on an EARLIER row still follows the chain's last period", () => {
+    // DIVERGENCE (27 Oct 2026) — `chainLastPeriod`, not the selected row, seeds the panel.
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-newOpexProjectCost"));
+
+    expect(within(panel()).getByDisplayValue("Initialized O&M Contract - 3"))
+      .toBeInTheDocument();
+    expect(within(panel()).getByTestId("opex-start")).toHaveValue("Sun, Aug 30, 2037");
+  });
+
   it("UT-OPEXUI-022b fills Months with 0 months once Years is picked, as the canvas does", () => {
     render(<Harness><OpexScreen mode="om" /></Harness>);
     fireEvent.click(screen.getByTestId("opex-select-om-2"));
@@ -546,10 +557,15 @@ describe("OpexScreen", () => {
 
     const dialog = screen.getByRole("alertdialog");
     expect(within(dialog).getByText(DELETE_DIALOG.title)).toBeInTheDocument();
-    // A chain ROOT warns about its periods; `deleteDialogText` follows the parent, not O-3.
+    // Canvas wording verbatim (27 Oct 2026) — O-3 included: even a chain ROOT reads "… cost?".
+    expect(within(dialog).getByText(deleteDialogSingleText("Initialized O&M Contract")))
+      .toBeInTheDocument();
     expect(within(dialog).getByText(
-      deleteDialogText({ description: "Initialized O&M Contract", parentCostId: null } as never),
+      'Are you sure that you want to permanently delete "Initialized O&M Contract" cost?',
     )).toBeInTheDocument();
+    // `IconConfirmButton: ="Delete"` / `TextConfirmButton: ="Delete"` / `TextCancelButton: ="Cancel"`.
+    expect(within(dialog).getByTestId("confirm-dialog-confirm")).toHaveTextContent("Delete");
+    expect(within(dialog).getByTestId("confirm-dialog-cancel")).toHaveTextContent("Cancel");
     expect(save.mutate).not.toHaveBeenCalled();
   });
 

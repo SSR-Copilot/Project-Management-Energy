@@ -264,7 +264,8 @@ export default function CheckListScreen() {
   const settings = settingsQ.data;
 
   const { abandoned: abandonedState, inactive: inactiveState } = terminalStates(states);
-  const lockEntries = project ? pageLock(project) : [];
+  // New Project mode (no project yet) opens locked, as the canvas does.
+  const lockEntries = project || !projectId ? pageLock(project) : [];
   const locked = lockEntries.length > 0;
   const terminalProject = projectIsTerminal(project, abandonedState?.id ?? null, inactiveState?.id ?? null);
   const technologySupported = project === null

@@ -17,7 +17,7 @@ export { DateField, DateInput } from "./DateField";
 export { ChoiceField } from "./ChoiceField";
 export type { ChoiceFieldProps, ChoiceOption } from "./ChoiceField";
 export type { DateFieldProps, DateInputProps } from "./DateField";
-export { FIELD_APPEARANCE, useFieldControlClass, useFieldSkin } from "./fieldSkin";
+export { FIELD_APPEARANCE, useCanvasRequiredMark, useFieldControlClass, useFieldSkin, useNoInvalidOutline } from "./fieldSkin";
 export { FormPanel } from "./FormPanel";
 export type { FormPanelActions, FormPanelProps } from "./FormPanel";
 export { PanelMessages } from "./PanelMessages";

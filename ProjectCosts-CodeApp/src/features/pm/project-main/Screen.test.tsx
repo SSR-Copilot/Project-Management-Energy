@@ -1020,12 +1020,12 @@ describe("ProjectOverviewScreen", () => {
     projectNextToken = "tok";
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(screen.getByRole("button", { name: "First page" }))
-      .toHaveAttribute("title", "Navigate to first page");
-    expect(screen.getByRole("button", { name: "Previous page" }))
-      .toHaveAttribute("title", "Navigate to previous page");
-    expect(screen.getByRole("button", { name: "Next page" }))
-      .toHaveAttribute("title", "Navigate to next page");
+    // Shown as a Fluent tooltip above the button, as the canvas draws it, not the browser's
+    // `title` box. Only Next is enabled on page 1, and a disabled button gets no hover.
+    const user = userEvent.setup();
+    await user.hover(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Navigate to next page");
+    expect(screen.getByRole("button", { name: "First page" })).not.toHaveAttribute("title");
   });
 
   /* ──────────────────────────────────────────────── the next-page prefetch */

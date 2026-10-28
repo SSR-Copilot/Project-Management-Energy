@@ -248,15 +248,19 @@ describe("LandLeaseScreen", () => {
     expect(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey")).toBeDisabled();
   });
 
-  it("UT-LLUI-006 offers Add Period only on the LAST period of a contract", () => {
+  it("UT-LLUI-006 offers Add Period on every period, following the contract's LAST one (27 Oct 2026)", () => {
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
 
-    fireEvent.click(screen.getByTestId("lease-select-p1"));
-    expect(within(card("Locations")).getByTestId("lease-newLandLeasePeriodKey")).toBeDisabled();
-
     fireEvent.click(screen.getByTestId("lease-select-p2"));
     expect(within(card("Locations")).getByTestId("lease-newLandLeasePeriodKey")).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    expect(within(card("Locations")).getByTestId("lease-newLandLeasePeriodKey")).toBeEnabled();
+
+    // Period 1 is selected, but the new period continues from Period 2.
+    fireEvent.click(within(card("Locations")).getByTestId("lease-newLandLeasePeriodKey"));
+    expect(screen.getByDisplayValue("Parcel 12/4 - 3")).toBeInTheDocument();
   });
 
   it("UT-LLUI-007 titles the panel 'Edit Contract' on Period 1 and 'Edit Period' after it", () => {

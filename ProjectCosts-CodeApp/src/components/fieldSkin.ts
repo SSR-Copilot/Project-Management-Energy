@@ -4,6 +4,7 @@
  * `Dropdown` / `Combobox` pairs can wear the same skin (rule 17).
  */
 import { makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { palette } from "@/theme/tokens";
 
 /** The canvas `DisplayMode` of a control: `Edit`, `View` (read-only, normal text) or `Disabled`. */
 export type FieldDisplayMode = "edit" | "view" | "disabled";
@@ -51,6 +52,47 @@ export const useFieldSkin = makeStyles({
   },
   /** `Align: =Align.Right` (e.g. Latitude / Longitude). */
   right: { "& input": { textAlign: "right" } },
+});
+
+const clearOutline = {
+  borderTopColor: "transparent", borderRightColor: "transparent",
+  borderBottomColor: "transparent", borderLeftColor: "transparent",
+};
+
+/**
+ * Put on a screen root: no red outline on an invalid control. The canvas shows only the error
+ * label under a field (`lbl_…_ErrorMessage`); the box itself never turns red, while Fluent's
+ * invalid state (`:not(:focus-within)`) paints the border red.
+ */
+export const useNoInvalidOutline = makeStyles({
+  root: {
+    "& .fui-Input:not(:focus-within)": clearOutline,
+    "& .fui-Input:hover:not(:focus-within)": clearOutline,
+    "& .fui-Dropdown:not(:focus-within)": clearOutline,
+    "& .fui-Dropdown:hover:not(:focus-within)": clearOutline,
+    "& .fui-Combobox:not(:focus-within)": clearOutline,
+    "& .fui-Combobox:hover:not(:focus-within)": clearOutline,
+    "& .fui-Textarea:not(:focus-within)": clearOutline,
+    "& .fui-Textarea:hover:not(:focus-within)": clearOutline,
+  },
+});
+
+/**
+ * Put on a PM screen root: the canvas `lbl_…_Requered` asterisk — a classic `Label@2.5.1`
+ * (`Text "*"`, `Color: gblAppColors.Error`, normal weight) in a 16 × 16 box at X 5 / Y 3 of the
+ * cell, its default 5-px padding putting the glyph 10 px left of the caption (X 20) and a little
+ * above the caption's cap height — not Fluent's semibold asterisk on the caption baseline.
+ */
+export const useCanvasRequiredMark = makeStyles({
+  root: {
+    "& .fui-Field .fui-Field__label .fui-Label__required": {
+      boxSizing: "border-box", flexShrink: 0,
+      width: "15px", marginLeft: "-15px", paddingLeft: "5px", paddingRight: 0,
+      position: "relative", top: "-2px",
+      fontSize: "14px", fontWeight: 400, lineHeight: 1,
+      color: palette.akzent5,
+    },
+  },
 });
 
 /** Resolves the legacy `disabled` + `readOnly` props into one canvas display mode. */

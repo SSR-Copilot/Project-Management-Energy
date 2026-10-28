@@ -1541,9 +1541,10 @@ describe("Land Lease — the command bar", () => {
     expect(gates().newLandLeasePeriodKey).toBe(true);
   });
 
-  it("UT-LAND-104 Add Period only works on the last period, by PERIOD number", () => {
-    // Ported from skeleton UT-LEASE-015.
-    expect(gates({ selectedPeriod: chain.periods[1]! }).newLandLeasePeriodKey).toBe(false);
+  it("UT-LAND-104 Add Period works on ANY period (divergence, 27 Oct 2026)", () => {
+    // Ported from skeleton UT-LEASE-015, whose last-period rule the product owner dropped.
+    expect(gates({ selectedPeriod: chain.periods[0]! }).newLandLeasePeriodKey).toBe(true);
+    expect(gates({ selectedPeriod: chain.periods[1]! }).newLandLeasePeriodKey).toBe(true);
     expect(gates({ selectedPeriod: chain.periods[2]! }).newLandLeasePeriodKey).toBe(true);
     expect(gates({ selectedPeriod: null }).newLandLeasePeriodKey).toBe(false);
   });
@@ -1614,19 +1615,22 @@ describe("Land Lease — the command bar", () => {
       .deleteLandLeasePeriodKey).toBe(true);
   });
 
-  it("UT-LAND-110 a non-standard period deletes from Period 1 or the last row BY NAME", () => {
-    // canvas-only. SOURCE DEFECT LL-D4 — LL:370 sorts by Name where LL:262 sorts by Period.
+  it("UT-LAND-110 a non-standard period deletes from Period 1 or the ACTUAL last (27 Oct 2026)", () => {
+    // SOURCE DEFECT LL-D4 — LL:370 sorts by Name where LL:262 sorts by Period. Corrected at the
+    // product owner's request: Delete uses the period number, as Add Period does.
     const odd = buildContracts([cost()], [
       period({ id: "p1", name: "Zulu", period: LAND_LEASE_PERIOD.period1, fixedCosts: 1 }),
-      period({ id: "p2", name: "Alpha", period: LAND_LEASE_PERIOD.period2 }),
-      period({ id: "p3", name: "Mike", period: LAND_LEASE_PERIOD.period3 }),
+      period({ id: "p2", name: "Mike", period: LAND_LEASE_PERIOD.period2 }),
+      period({ id: "p3", name: "Alpha", period: LAND_LEASE_PERIOD.period3 }),
     ])[0]!;
-    // "Zulu" sorts last by name AND is Period 1 — deletable twice over.
     expect(gates({ contract: odd, selectedPeriod: odd.periods[0]! }).deleteLandLeasePeriodKey)
       .toBe(true);
-    // The real last period, "Mike" at Period 3, is REFUSED because "Zulu" sorts after it.
-    expect(gates({ contract: odd, selectedPeriod: odd.periods[2]! }).deleteLandLeasePeriodKey)
+    // "Mike" sorts last by name among the children but is a MIDDLE period — refused.
+    expect(gates({ contract: odd, selectedPeriod: odd.periods[1]! }).deleteLandLeasePeriodKey)
       .toBe(false);
+    // "Alpha" at Period 3, the actual last period, is allowed although it sorts first.
+    expect(gates({ contract: odd, selectedPeriod: odd.periods[2]! }).deleteLandLeasePeriodKey)
+      .toBe(true);
     // On a normally-named chain the two notions agree.
     expect(gates({ selectedPeriod: chain.periods[2]! }).deleteLandLeasePeriodKey).toBe(true);
     expect(gates({ selectedPeriod: chain.periods[1]! }).deleteLandLeasePeriodKey).toBe(false);

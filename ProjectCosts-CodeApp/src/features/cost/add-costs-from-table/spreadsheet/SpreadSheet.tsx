@@ -191,18 +191,27 @@ export interface SpreadsheetOutputRow {
 
 /** Unpivots the month-block columns (6+, 12 per year) back into one row per year. */
 export function gridToJson(grid: SheetGrid, startYear: string): SpreadsheetOutputRow[] {
-  const rows = grid.slice(1).map((row) => row.map((cell) => ({ ...cell, value: cell.value || "" })));
+  /*
+   * `sanitizeSpreadsheetData` writes to the first three cells of a row only (Number, Name,
+   * Description, and Row_ID on the first), so only those are copied; every other cell is read
+   * straight from the grid, through the same `value || ""` the copy used to apply. Copying all
+   * ~126 cells of every row was most of this function's time, and it runs on every edit.
+   */
+  const rows = grid.slice(1).map((row) => row.map((cell, j) => (
+    j < 3 ? { ...cell, value: cell.value || "" } : cell
+  )));
   const sanitized = sanitizeSpreadsheetData(rows);
   const jsonData: SpreadsheetOutputRow[] = [];
+  const valueOf = (cell: SheetCell | undefined): string => (cell ? cell.value || "" : "");
 
   sanitized.forEach((row) => {
     const baseRow = {
       Number: row[0]?.value ?? "",
       Name: row[1]?.value ?? "",
       Description: row[2]?.value ?? "",
-      CostPaidBy: row[3]?.value ?? "",
-      Depreciation: row[4]?.value ?? "",
-      ApplyVAT: row[5]?.value ?? "",
+      CostPaidBy: valueOf(row[3]),
+      Depreciation: valueOf(row[4]),
+      ApplyVAT: valueOf(row[5]),
       Row_ID: row[0]?.Row_ID ?? "",
       Year: "",
     };
@@ -215,7 +224,7 @@ export function gridToJson(grid: SheetGrid, startYear: string): SpreadsheetOutpu
       const newRow: SpreadsheetOutputRow = { ...baseRow, Year: String(Number(startYear) + i) };
       yearData.forEach((cell, cellIndex) => {
         const key = MONTH_KEYS[cellIndex];
-        if (key) newRow[key] = cell?.value || "";
+        if (key) newRow[key] = valueOf(cell);
       });
       jsonData.push(newRow);
     }
@@ -236,8 +245,18 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   const selectedCtorRef = React.useRef<string>("");
   const hasMountedRef = React.useRef({ add: false, del: false, copy: false });
 
-  // Re-hydrate whenever the caller supplies a genuinely new initial grid (e.g. after load).
+  /*
+   * Re-hydrate whenever the caller supplies a genuinely new initial grid (e.g. after load).
+   *
+   * Not for the grid the state was just seeded with: on mount this used to decorate the same
+   * grid a second time, which handed react-spreadsheet a new `data` reference (a full rebuild
+   * of a ~190,000-cell table) and fired `onDataChange` twice — two more full read-backs of the
+   * sheet. The content was identical every time; only the work was repeated.
+   */
+  const seededFrom = React.useRef(initialData);
   React.useEffect(() => {
+    if (initialData === seededFrom.current) return;
+    seededFrom.current = initialData;
     setData(decorateGrid(initialData));
     // Only when the reference itself changes — the caller controls that by memoizing.
     // eslint-disable-next-line react-hooks/exhaustive-deps

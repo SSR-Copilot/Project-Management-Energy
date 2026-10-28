@@ -861,7 +861,8 @@ export default function GeneratorsScreen() {
     }));
 
   /* ── the command bar ── */
-  const locked = project !== null && isPageLocked(project);
+  // A New Project (no record yet) is locked too: `IsBlank(gblRecordSelectedProject.'Project ID')`.
+  const locked = !loading && isPageLocked(project);
   const editable = !locked;
   const cmdState = commandBarState({
     canEdit: perms.canEdit,
@@ -1621,22 +1622,13 @@ export default function GeneratorsScreen() {
   }
 
   const bodyVisible = isBodyVisible(project);
-  const lockBullets = locked ? pageLock(project) : [];
+  const lockBullets = !locked ? [] : projectId ? pageLock(project) : ["• General", "• Milestones"];
   const typeDirty = (f: string) => typeForm.dirty.has(f);
   const simple = simpleFamily ? SIMPLE_PANEL[simpleFamily] : null;
 
   return (
     <div className={s.page} data-testid="Project Generators Screen">
-      {/*
-        `pcf_Generators_DisplayProject_Body_Form_CommandBar` sits in the screen BODY, above Total
-        Capacity — not in the header, where it was squeezed and its first commands clipped.
-      */}
-      <div className={s.commandBar}>
-        <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
-      </div>
-
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="generators" />
-
+      {/* `con_Milestones_Page_LockMessage_1` (X 40, Y 40) is the first thing in the body, above the command bar. */}
       {locked ? (
         <div className={s.lock} role="status" data-testid="con_Milestones_Page_LockMessage_1">
           <LockClosedRegular aria-hidden fontSize={20} color={LOCK_TEXT} />
@@ -1646,6 +1638,16 @@ export default function GeneratorsScreen() {
           </span>
         </div>
       ) : null}
+
+      {/*
+        `pcf_Generators_DisplayProject_Body_Form_CommandBar` sits in the screen BODY, above Total
+        Capacity — not in the header, where it was squeezed and its first commands clipped.
+      */}
+      <div className={s.commandBar}>
+        <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
+      </div>
+
+      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="generators" />
 
       {loading ? <LoadingOverlay mode="inline" /> : null}
 

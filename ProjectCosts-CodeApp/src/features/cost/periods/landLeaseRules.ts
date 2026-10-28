@@ -2619,19 +2619,20 @@ export function leaseCommands(args: LeaseCommandArgs): LeaseCommand[] {
 
   // "Add Period" — LL:241. Create permission on the PERIODS table, the cost is not standard,
   // the selected period's name does not start with "Standard", both a period and a cost are
-  // selected, the card is the selected one, the selected period is the LAST by period number,
-  // and Period 1 carries at least one rate.
-  const isLastByPeriod = contract !== null && selectedPeriod !== null
-    && lastPeriod(contract)?.id === selectedPeriod.id;
+  // selected, the card is the selected one, and Period 1 carries at least one rate.
+  // DIVERGENCE (product owner, 27 Oct 2026): the canvas also requires the selected period to be
+  // the LAST by period number; that clause is dropped. Add Period is enabled on any period of the
+  // contract, and the new one always follows `lastPeriod(contract)` (the screen passes it as the
+  // parent), so the cap is checked against the last period too.
+  const last = contract ? lastPeriod(contract) : null;
   const nextExists = args.canvasParityPeriodWrap === true
     ? true
-    : nextPeriod(selectedPeriod?.period ?? null) !== null;
+    : nextPeriod(last?.period ?? null) !== null;
   const addPeriod = permissions.canCreatePeriod
     && !locked
     && selectedPeriod !== null
     && selectedCost !== null
     && isSelectedCard
-    && isLastByPeriod
     && contract !== null
     && firstPeriodHasRate(contract)
     // The LL-D1 correction; `canvasParityPeriodWrap: true` restores the uncapped gate.
@@ -2652,13 +2653,13 @@ export function leaseCommands(args: LeaseCommandArgs): LeaseCommand[] {
     && !locked;
 
   // "Delete" — LL:349. For a period whose name lower-cases to "standard…", ONLY Period 1 may
-  // be deleted. Otherwise Period 1, or the last period BY NAME (see `lastPeriodByName` and
-  // defect LL-D4).
-  const lastByName = contract ? lastPeriodByName(contract) : null;
+  // be deleted. Otherwise Period 1, or the last period. DIVERGENCE (product owner, 27 Oct 2026):
+  // the canvas takes the last BY NAME (`lastPeriodByName`, defect LL-D4); here it is the actual
+  // last, by PERIOD number — the same `last` Add Period continues from.
   const deletable = selectedPeriod === null ? false
     : isStandardPeriodNameLower(selectedPeriod.name)
       ? isPeriodOne(selectedPeriod.period)
-      : isPeriodOne(selectedPeriod.period) || lastByName?.id === selectedPeriod.id;
+      : isPeriodOne(selectedPeriod.period) || last?.id === selectedPeriod.id;
   const del = selectedPeriod !== null
     && permissions.canDeleteRecord
     && isSelectedCard

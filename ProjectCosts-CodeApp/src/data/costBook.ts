@@ -81,6 +81,9 @@ import type {
 import { loadLeaseBook } from "./landLease";
 import { fetchAll } from "./client";
 import { ACTIVE, and, chunk, eq, idIn, lookupEq, lookupIn, money, numberOf } from "./odata";
+import {
+  NO_PENDING_DELETES, isPendingContract, isPendingCost, type PendingDeleteIds,
+} from "./pendingDeletes";
 
 /**
  * `vsb_costtype` — verified against the live environment on 15 Sep.
@@ -1215,15 +1218,21 @@ export interface CapexCategoryTotal {
  */
 async function loadContractCostSums(
   contractIds: readonly string[],
+  pending: PendingDeleteIds = NO_PENDING_DELETES,
 ): Promise<Map<string, number>> {
   if (contractIds.length === 0) return new Map();
+  // The row id is selected only while some cost delete is pending (D51 §11.19): the common read
+  // stays two columns wide.
+  const skipPendingCosts = pending.costIds.size > 0;
   const batches = await Promise.all(
     chunk(contractIds).map((ids) =>
       fetchAll(
         "sum CAPEX cost rows per contract",
         (o) => Vsb_capexcostsService.getAll(o),
         {
-          select: ["_vsb_contract_value", "vsb_cost"],
+          select: skipPendingCosts
+            ? ["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"]
+            : ["_vsb_contract_value", "vsb_cost"],
           filter: and(lookupIn("vsb_contract", ids), ACTIVE),
           // 5000 is Dataverse's ceiling for `odata.maxpagesize`; `fetchAll` still follows the
           // skip token, so this changes the number of round trips and nothing else.
@@ -1237,6 +1246,7 @@ async function loadContractCostSums(
   for (const row of batches.flat()) {
     const contractId = row._vsb_contract_value;
     if (!contractId) continue;
+    if (skipPendingCosts && isPendingCost(pending, row.vsb_capexcostid)) continue;
     sums.set(contractId, (sums.get(contractId) ?? 0) + (row.vsb_cost ?? 0));
   }
   return sums;
@@ -1266,8 +1276,15 @@ async function loadContractCostSums(
  *
  * Cost: still two round trips for a project of Wirmighausen's size — one page of contracts and
  * one page of cost rows (see `loadContractCostSums`) — plus the shared account tree.
+ *
+ * `pending` (D51 §11.19, `./pendingDeletes.ts`): contracts and cost rows whose deferred delete has
+ * not landed yet are left out of the sums, so the Summary does not count what the last Add Cost
+ * from Table Save removed. Default: nothing pending.
  */
-export async function loadCapexTotals(projectId: string): Promise<CapexCategoryTotal[]> {
+export async function loadCapexTotals(
+  projectId: string,
+  pending: PendingDeleteIds = NO_PENDING_DELETES,
+): Promise<CapexCategoryTotal[]> {
   const [accounts, contracts] = await Promise.all([
     loadCostAccounts(),
     fetchAll(
@@ -1288,10 +1305,11 @@ export async function loadCapexTotals(projectId: string): Promise<CapexCategoryT
   const categoryByContract = new Map<string, number>();
   for (const c of contracts) {
     const category = c._vsb_account_value ? categoryOf.get(c._vsb_account_value) : undefined;
-    if (category !== undefined) categoryByContract.set(c.vsb_capexprojectcontractid, category);
+    if (category === undefined || isPendingContract(pending, c.vsb_capexprojectcontractid)) continue;
+    categoryByContract.set(c.vsb_capexprojectcontractid, category);
   }
 
-  const costSums = await loadContractCostSums([...categoryByContract.keys()]);
+  const costSums = await loadContractCostSums([...categoryByContract.keys()], pending);
   const totals = new Map<number, number>();
   for (const [contractId, category] of categoryByContract) {
     totals.set(category, (totals.get(category) ?? 0) + (costSums.get(contractId) ?? 0));

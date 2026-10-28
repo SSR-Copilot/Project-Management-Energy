@@ -24,7 +24,7 @@ const useStyles = makeStyles({
     height: "100vh",
     minHeight: 0,
     // The ground behind the header, rail and content cards.
-    backgroundColor: "#ebebeb",
+    backgroundColor: "#f3f2f1",
   },
   // `minWidth: 0` is load-bearing: without it this row's flex items keep `min-width: auto`
   // and a wide screen pushes the row past the shell, which is a horizontal page scrollbar.

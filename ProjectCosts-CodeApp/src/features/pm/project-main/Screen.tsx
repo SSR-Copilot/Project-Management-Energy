@@ -38,7 +38,7 @@ import {
   NEW_PROJECT_PATH, analyticsAppUrl, powerBiReportUrl,
 } from "@/app/navigation";
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
+  Avatar, Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
   Dropdown, Input, MessageBar, MessageBarBody, Option, Spinner, Table, TableBody,
   TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip, makeStyles, mergeClasses,
   tokens,
@@ -46,7 +46,7 @@ import {
 import {
   ArrowLeftRegular, ArrowPreviousRegular, ArrowRightRegular, ArrowSortDownRegular,
   ArrowSortUpRegular, CheckmarkCircleFilled, CircleFilled, ClockFilled, DismissCircleFilled,
-  DismissRegular, FilterRegular, FilterDismissRegular, SearchRegular,
+  DismissRegular,
 } from "@fluentui/react-icons";
 import {
   CommandBar, CommandSlot, ConfirmDialog, EmptyState, LoadingOverlay, type Command,
@@ -87,6 +87,21 @@ const COLUMN_WIDTH = {
   area: 240, technology: 116, capacity: 160, projectId: 116, approval: 90,
 } as const;
 const GRID_WIDTH = Object.values(COLUMN_WIDTH).reduce((sum, w) => sum + w, 0);
+
+/**
+ * Dataverse `fullname` carries a "# " prefix on synced accounts; the canvas picker reads
+ * Entra ID, which has no such prefix, so it is dropped for display.
+ */
+function personName(label: string): string {
+  return label.replace(/^#\s*/, "");
+}
+
+/** A 16 px classic scroll-bar arrow button for the filter lists, a 10 px dark triangle. */
+const scrollArrow = (path: string) => ({
+  display: "block", width: "16px", height: "16px", backgroundColor: "#f1f1f1",
+  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><path d='${path}' fill='%23606060'/></svg>")`,
+  backgroundRepeat: "no-repeat", backgroundPosition: "center",
+});
 
 const useStyles = makeStyles({
   /**
@@ -139,7 +154,7 @@ const useStyles = makeStyles({
     borderRadius: "4px",
     backgroundColor: palette.white,
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12)",
-    paddingTop: "2px", paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
+    paddingTop: 0, paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
   },
   /** An equal share of the card, never narrower than 250 px; narrower screens wrap pairs. */
   filterColumn: {
@@ -154,19 +169,22 @@ const useStyles = makeStyles({
     paddingLeft: "6px", paddingRight: "3px",
     boxSizing: "border-box",
   },
-  /** The first cell of a column — `Height: =56`, control at `Y: =24`. */
+  /** The first cell of a column — `Height: =56`; the control sits 22 px down. */
   filterCellTop: { height: "56px" },
-  /** The second — `Height: =Parent.Height - 56` = 68, control at `Y: =28`. */
-  filterCellBottom: { height: "68px", "& > div": { marginTop: "4px" } },
-  /** `lbl_..._Filter_*` — 10 pt, `rgb(50, 49, 48)`, in a 24 px line box at `Y: =2`. */
+  /*
+   * The second cell. Measured off the canvas filter card (27 Oct 2026): both rows put the
+   * control 22 px under the cell top, and the card ends 10 px below the second row.
+   */
+  filterCellBottom: { height: "62px" },
+  /** `lbl_..._Filter_*` — 10 pt, `rgb(50, 49, 48)`, in a 22 px line box. */
   filterLabel: {
     display: "flex", alignItems: "baseline", gap: space.s,
     boxSizing: "border-box",
-    height: "24px",
+    height: "22px",
     fontSize: "13.33px",
     lineHeight: "1.2",
     color: "#323130",
-    paddingTop: "2px",
+    paddingTop: "1px",
     whiteSpace: "nowrap",
   },
   /**
@@ -189,11 +207,90 @@ const useStyles = makeStyles({
     "& .fui-Dropdown__button": {
       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
     },
+    /*
+     * The canvas modern drop-down's resting underline: a dark 1 px `#616161` line, where the
+     * shared skin's `border: 0` left only Fluent's faint one. Scoped under the screen class so
+     * it outranks that `canvas.css` rule.
+     */
+    ".canvas-project-overview &.fui-Dropdown": {
+      borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "#616161",
+      borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+      // The modern drop-down draws 29 px tall at `Y: =24` (canvas screenshot, 27 Oct 2026),
+      // leaving a gap above the next caption; the shared 32 px filled the cell.
+      boxSizing: "border-box", height: "29px", minHeight: "29px",
+    },
+    ".canvas-project-overview &.fui-Dropdown .fui-Dropdown__button": {
+      height: "28px", minHeight: "28px", paddingTop: 0, paddingBottom: 0,
+    },
   },
+  /**
+   * The canvas combo-box list: a flat grey panel with a 1 px dark frame, no shadow, at most
+   * 20 rows of 30 px before a classic scroll bar with arrow buttons, no check-mark gutter,
+   * and ONE highlighted row in themePrimary with white text (the hovered or current row).
+   */
+  filterListbox: {
+    /*
+     * 20 rows of 30 px plus the frame, then it scrolls. `!important` because the combo box's
+     * `autoSize` writes the whole free height as an INLINE `max-height`, which beat the class
+     * and let a 21-row list grow without a bar. When less room is free it still shrinks:
+     * the positioner then sets an inline `height` too.
+     */
+    minWidth: 0, maxHeight: "602px !important", overflowX: "hidden", overflowY: "auto", rowGap: 0,
+    paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
+    backgroundColor: "#f5f5f5", boxShadow: "none",
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid",
+    borderLeftStyle: "solid", borderTopColor: "#605e5c", borderRightColor: "#605e5c",
+    borderBottomColor: "#605e5c", borderLeftColor: "#605e5c",
+    borderTopLeftRadius: "2px", borderTopRightRadius: "2px",
+    borderBottomLeftRadius: "2px", borderBottomRightRadius: "2px",
+    // Chromium drops every `::-webkit-scrollbar` rule once the standard properties are set.
+    scrollbarWidth: "auto", scrollbarColor: "auto",
+    "::-webkit-scrollbar": { width: "16px" },
+    "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
+    "::-webkit-scrollbar-thumb": {
+      backgroundColor: "#868686", backgroundClip: "padding-box",
+      borderTopLeftRadius: "5px", borderTopRightRadius: "5px",
+      borderBottomLeftRadius: "5px", borderBottomRightRadius: "5px",
+      borderLeftWidth: "3px", borderRightWidth: "3px", borderTopWidth: 0, borderBottomWidth: 0,
+      borderLeftStyle: "solid", borderRightStyle: "solid",
+      borderLeftColor: "transparent", borderRightColor: "transparent",
+    },
+    "::-webkit-scrollbar-button:vertical:start:decrement": scrollArrow("M0 8h10L5 2z"),
+    "::-webkit-scrollbar-button:vertical:end:increment": scrollArrow("M0 2h10L5 8z"),
+    "::-webkit-scrollbar-button:start:increment": { display: "none" },
+    "::-webkit-scrollbar-button:end:decrement": { display: "none" },
+    "& .fui-Option": {
+      boxSizing: "border-box", height: "30px", minHeight: "30px", flexShrink: 0, alignItems: "center",
+      columnGap: 0, fontSize: "14px", lineHeight: "20px", color: palette.black,
+      paddingTop: 0, paddingBottom: 0, paddingLeft: "11px", paddingRight: "12px",
+      borderTopLeftRadius: 0, borderTopRightRadius: 0,
+      borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+    },
+    "& .fui-Option__checkIcon": { display: "none" },
+    "& .fui-Option::after": { display: "none" },
+    "& .fui-Option:hover": { backgroundColor: palette.themePrimary, color: palette.white },
+    "& .fui-Option[data-activedescendant]": {
+      backgroundColor: palette.themePrimary, color: palette.white,
+    },
+    "&:hover .fui-Option[data-activedescendant]:not(:hover)": {
+      backgroundColor: "transparent", color: palette.black,
+    },
+  },
+  /**
+   * The Capacity operator is the one canvas combo box drawn in the modern style: a white,
+   * rounded, shadowed list with Fluent's own outline on the current row, 30 px rows.
+   */
+  operatorListbox: {
+    "& .fui-Option": { minHeight: "30px", paddingTop: "5px", paddingBottom: "5px", fontSize: "14px" },
+  },
+  /** The error starts over the operator's text, not after the caption. */
+  capacityLabel: { position: "relative" },
+  capacityError: { position: "absolute", left: "116px", top: 0, lineHeight: "16px" },
   /** `pcf_..._ProjectManager` — `X: =12, Width: =Parent.Width - 14`, and NO funnel. */
   filterPerson: {
     flex: 1, minWidth: 0, position: "relative",
-    paddingLeft: "6px", paddingRight: 0,
+    paddingLeft: 0, paddingRight: 0,
   },
   personInput: { width: "100%" },
   /** `txt_..._Capacity` is 100 px; the operator takes the rest, 6 px after it. */
@@ -253,16 +350,46 @@ const useStyles = makeStyles({
   },
   /** Total Rows sits in its own 120 px box before the pager. */
   totalRows: { minWidth: "100px" },
+  /**
+   * The PeoplePicker callout: a white card floating over the grid, 246 px wide, headed
+   * "Suggested People" in the theme colour, one 42 px persona row per person.
+   */
   suggestions: {
-    listStyleType: "none", margin: 0, padding: 0,
-    borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: tokens.colorNeutralStroke2,
-    maxHeight: "220px", overflowY: "auto",
+    position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 1000,
+    width: "246px", maxHeight: "260px", overflowY: "auto",
+    margin: 0, padding: 0, listStyleType: "none",
+    backgroundColor: palette.white,
+    boxShadow: tokens.shadow8,
+  },
+  suggestionsHeader: {
+    display: "block", height: "38px", lineHeight: "38px", paddingLeft: "12px",
+    fontSize: "11px", color: palette.themePrimary,
   },
   suggestion: {
-    display: "flex", flexDirection: "column", alignItems: "flex-start", width: "100%",
-    paddingTop: space.xs, paddingBottom: space.xs,
+    display: "flex", alignItems: "center", columnGap: "8px", width: "100%", height: "42px",
+    paddingLeft: "10px", paddingRight: "8px", minWidth: 0, justifyContent: "flex-start",
+    borderRadius: 0, borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px",
+    borderLeftWidth: "1px", borderTopStyle: "solid", borderRightStyle: "solid",
+    borderBottomStyle: "solid", borderLeftStyle: "solid", borderTopColor: "transparent",
+    borderRightColor: "transparent", borderBottomColor: "transparent",
+    borderLeftColor: "transparent", fontWeight: tokens.fontWeightRegular, textAlign: "left",
+    ":hover": { backgroundColor: "#f3f2f1" },
   },
-  suggestionMail: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase100 },
+  /** The first suggestion is the active one, as in the canvas callout. */
+  suggestionActive: {
+    backgroundColor: "#edebe9",
+    borderTopColor: "#605e5c", borderRightColor: "#605e5c",
+    borderBottomColor: "#605e5c", borderLeftColor: "#605e5c",
+  },
+  suggestionText: { display: "flex", flexDirection: "column", minWidth: 0, lineHeight: "16px" },
+  suggestionName: {
+    fontSize: "14px", color: "#323130",
+    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+  },
+  suggestionMail: {
+    fontSize: "11px", color: "#605e5c",
+    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+  },
   /**
    * The cost-lock dialog's prerequisite list. The canvas stacked four separate labels.
    *
@@ -285,7 +412,15 @@ const useStyles = makeStyles({
     minWidth: "32px", width: "32px", height: "32px", flexShrink: 0,
     borderRadius: "2px",
     backgroundColor: palette.themePrimary, color: palette.white,
-    ":hover:enabled": { backgroundColor: palette.themeLighter, color: palette.themePrimary },
+    // PowerCAT icon button hover: `themeLighter` fill, `themePrimary` glyph, and a 1 px
+    // `themePrimary` frame (canvas pager screenshot, 27 Oct 2026).
+    ":hover:enabled": {
+      backgroundColor: palette.themeLighter, color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    },
     ":disabled": { backgroundColor: palette.neutralLighter, color: palette.neutralTertiaryAlt },
   },
   /**
@@ -362,6 +497,13 @@ export default function ProjectOverviewScreen() {
   const countries = useCountries();
   const areas = useCountryAreas(criteria.filter.countryId);
   const states = useProjectStates();
+  // The canvas Status list is alphabetical (Abandoned, Cluster 1..6, Draft, Inactive/ On-hold),
+  // not in stage order.
+  const statusOptions = useMemo(
+    () => [...(states.data ?? [])].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })),
+    [states.data],
+  );
   const managers = useProjectManagerSearch(managerQuery);
 
   const rows = pageQuery.data?.rows ?? [];
@@ -737,7 +879,6 @@ export default function ProjectOverviewScreen() {
               className={styles.filterControl}
               value={criteria.filter.keyword}
               placeholder="Search for Project Name, Short Name and ID"
-              contentBefore={<SearchRegular />}
               onChange={(_, d) => setFilter({ keyword: d.value })}
               aria-label="Project"
               data-testid="filter-keyword"
@@ -759,7 +900,6 @@ export default function ProjectOverviewScreen() {
                 className={styles.personInput}
                 value={managerQuery}
                 placeholder="Search for project manager"
-                contentBefore={<SearchRegular />}
                 contentAfter={
                   criteria.filter.projectManagerId ? (
                     <Button
@@ -781,22 +921,31 @@ export default function ProjectOverviewScreen() {
               />
               {managerQuery.trim().length >= 2 && !criteria.filter.projectManagerId ? (
                 <ul className={styles.suggestions} aria-label="Suggested people">
-                  {(managers.data ?? []).map((p) => (
+                  <li className={styles.suggestionsHeader} aria-hidden="true">Suggested People</li>
+                  {(managers.data ?? []).map((p, i) => (
                     <li key={p.id}>
                       <Button
                         appearance="subtle"
-                        className={styles.suggestion}
+                        className={mergeClasses(styles.suggestion, i === 0 && styles.suggestionActive)}
                         aria-labelledby={`filter-manager-suggestion-${p.id}-name`}
                         data-testid={`filter-manager-suggestion-${p.id}`}
                         onClick={() => {
                           setFilter({ projectManagerId: p.id });
-                          setManagerQuery(p.label);
+                          setManagerQuery(personName(p.label));
                         }}
                       >
-                        <span id={`filter-manager-suggestion-${p.id}-name`}>{p.label}</span>
-                        {p.mail ? (
-                          <span className={styles.suggestionMail}>{p.mail}</span>
-                        ) : null}
+                        <Avatar name={personName(p.label)} size={24} color="colorful" aria-hidden="true" />
+                        <span className={styles.suggestionText}>
+                          <span
+                            id={`filter-manager-suggestion-${p.id}-name`}
+                            className={styles.suggestionName}
+                          >
+                            {personName(p.label)}
+                          </span>
+                          {p.mail ? (
+                            <span className={styles.suggestionMail}>{p.mail}</span>
+                          ) : null}
+                        </span>
                       </Button>
                     </li>
                   ))}
@@ -816,6 +965,7 @@ export default function ProjectOverviewScreen() {
           >
             <Dropdown
               className={styles.filterControl}
+              listbox={{ className: styles.filterListbox }}
               selectedOptions={criteria.filter.countryId ? [criteria.filter.countryId] : []}
               value={
                 countries.data?.find((c) => c.id === criteria.filter.countryId)?.name ?? ""
@@ -839,12 +989,12 @@ export default function ProjectOverviewScreen() {
           >
             <Dropdown
               className={styles.filterControl}
+              listbox={{ className: styles.filterListbox }}
               // The canvas filtered CountryAreas by the chosen country, so Area means nothing
               // until a Country is picked.
               disabled={!criteria.filter.countryId}
               selectedOptions={criteria.filter.areaId ? [criteria.filter.areaId] : []}
               value={areas.data?.find((a) => a.id === criteria.filter.areaId)?.name ?? ""}
-              placeholder={criteria.filter.countryId ? "" : "Select a country first"}
               onOptionSelect={(_, d) => setFilter({ areaId: d.optionValue ?? null })}
               aria-label="Area/State/Province"
               data-testid="filter-area"
@@ -865,6 +1015,7 @@ export default function ProjectOverviewScreen() {
           >
             <Dropdown
               className={styles.filterControl}
+              listbox={{ className: styles.filterListbox }}
               selectedOptions={
                 criteria.filter.technology === null ? [] : [String(criteria.filter.technology)]
               }
@@ -888,14 +1039,21 @@ export default function ProjectOverviewScreen() {
 
           {/*
             Capacity is two controls in one cell: the 100 px value, then the operator in what
-            is left. Its error message sits on the caption line, as
-            `lbl_..._Filter_Capacity_ErrorMessage` does, not under the input.
+            is left. Its error message sits on the caption line above the
+            operator, as `lbl_..._Filter_Capacity_ErrorMessage` does, not under the input.
           */}
           <div className={mergeClasses(styles.filterCell, styles.filterCellBottom)}>
-            <label className={styles.filterLabel} htmlFor="filter-capacity-input">
+            <label
+              className={mergeClasses(styles.filterLabel, styles.capacityLabel)}
+              htmlFor="filter-capacity-input"
+            >
               Capacity
               {capacityMessage ? (
-                <span id="filter-capacity-error" className={styles.filterError} role="alert">
+                <span
+                  id="filter-capacity-error"
+                  className={mergeClasses(styles.filterError, styles.capacityError)}
+                  role="alert"
+                >
                   {capacityMessage}
                 </span>
               ) : null}
@@ -914,6 +1072,7 @@ export default function ProjectOverviewScreen() {
                 />
                 <Dropdown
                   className={styles.filterControl}
+                  listbox={{ className: styles.operatorListbox }}
                   selectedOptions={
                     criteria.filter.capacityOperator ? [criteria.filter.capacityOperator] : []
                   }
@@ -954,6 +1113,7 @@ export default function ProjectOverviewScreen() {
           >
             <Dropdown
               className={styles.filterControl}
+              listbox={{ className: styles.filterListbox }}
               selectedOptions={
                 criteria.filter.clusterStateId ? [criteria.filter.clusterStateId] : []
               }
@@ -965,7 +1125,7 @@ export default function ProjectOverviewScreen() {
               aria-label="Status"
               data-testid="filter-status"
             >
-              {(states.data ?? []).map((s) => (
+              {statusOptions.map((s) => (
                 <Option key={s.id} value={s.id}>{s.name}</Option>
               ))}
             </Dropdown>
@@ -1065,85 +1225,88 @@ export default function ProjectOverviewScreen() {
         */}
         {showPager ? (
           <>
-            <Button
-              appearance="primary"
-              className={styles.iconButton}
-              icon={<ArrowPreviousRegular />}
-              aria-label="First page"
-              // `ico_Main_Project_Overview_Context_Pagination_FirstPage.Tooltip: ="Navigate to
-              // first page"` (Project Main Screen.pa.yaml:2139) — verbatim.
-              title="Navigate to first page"
-              data-testid="ico_Main_Project_Overview_Context_Pagination_FirstPage"
-              // Canvas (line 2117):
-              //   `DisplayMode: =If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)`
-              // ported as-is; `|| pageQuery.isFetching` only stops a double-dispatch while the
-              // page this app actually fetches is in flight (the canvas pager is event-driven).
-              disabled={currentPage <= 1 || pageQuery.isFetching}
-              onClick={() => setPage(1)}
-            />
-            <Button
-              appearance="primary"
-              className={styles.iconButton}
-              icon={<ArrowLeftRegular />}
-              aria-label="Previous page"
-              // `ico_Main_Project_Overview_Context_Pagination_PageLeft.Tooltip: ="Navigate to
-              // previous page"` (Project Main Screen.pa.yaml:2173) — verbatim.
-              title="Navigate to previous page"
-              data-testid="ico_Main_Project_Overview_Context_Pagination_PageLeft"
-              // Canvas (line 2147): same `Page>1` gate as First Page, ported as-is.
-              disabled={currentPage <= 1 || pageQuery.isFetching}
-              onClick={() => setPage(currentPage - 1)}
-            />
+            <Tooltip content="Navigate to first page" relationship="description" positioning="above">
+              <Button
+                appearance="primary"
+                className={styles.iconButton}
+                icon={<ArrowPreviousRegular />}
+                aria-label="First page"
+                // `ico_Main_Project_Overview_Context_Pagination_FirstPage.Tooltip: ="Navigate to
+                // first page"` (Project Main Screen.pa.yaml:2139) — verbatim.
+                data-testid="ico_Main_Project_Overview_Context_Pagination_FirstPage"
+                // Canvas (line 2117):
+                //   `DisplayMode: =If(First(colFiltersOverview).Page>1,DisplayMode.Edit,DisplayMode.Disabled)`
+                // ported as-is; `|| pageQuery.isFetching` only stops a double-dispatch while the
+                // page this app actually fetches is in flight (the canvas pager is event-driven).
+                disabled={currentPage <= 1 || pageQuery.isFetching}
+                onClick={() => setPage(1)}
+              />
+            </Tooltip>
+            <Tooltip content="Navigate to previous page" relationship="description" positioning="above">
+              <Button
+                appearance="primary"
+                className={styles.iconButton}
+                icon={<ArrowLeftRegular />}
+                aria-label="Previous page"
+                // `ico_Main_Project_Overview_Context_Pagination_PageLeft.Tooltip: ="Navigate to
+                // previous page"` (Project Main Screen.pa.yaml:2173) — verbatim.
+                data-testid="ico_Main_Project_Overview_Context_Pagination_PageLeft"
+                // Canvas (line 2147): same `Page>1` gate as First Page, ported as-is.
+                disabled={currentPage <= 1 || pageQuery.isFetching}
+                onClick={() => setPage(currentPage - 1)}
+              />
+            </Tooltip>
             <Text data-testid="page-label">{labels.page}</Text>
-            <Button
-              appearance="primary"
-              className={styles.iconButton}
-              icon={<ArrowRightRegular />}
-              aria-label="Next page"
-              // `ico_Main_Project_Overview_Context_Pagination_PageRight.Tooltip: ="Navigate to
-              // next page"` (Project Main Screen.pa.yaml:2226) — verbatim.
-              title="Navigate to next page"
-              data-testid="ico_Main_Project_Overview_Context_Pagination_PageRight"
-              /*
-                DIVERGENCE: this app implements the canvas's COMMENTED-OUT formula, not its live
-                one — CONVENTIONS rule 10 in reverse, so it is marked here rather than left to
-                look like a porting slip.
+            <Tooltip content="Navigate to next page" relationship="description" positioning="above">
+              <Button
+                appearance="primary"
+                className={styles.iconButton}
+                icon={<ArrowRightRegular />}
+                aria-label="Next page"
+                // `ico_Main_Project_Overview_Context_Pagination_PageRight.Tooltip: ="Navigate to
+                // next page"` (Project Main Screen.pa.yaml:2226) — verbatim.
+                data-testid="ico_Main_Project_Overview_Context_Pagination_PageRight"
+                /*
+                  DIVERGENCE: this app implements the canvas's COMMENTED-OUT formula, not its live
+                  one — CONVENTIONS rule 10 in reverse, so it is marked here rather than left to
+                  look like a porting slip.
 
-                `ico_Main_Project_Overview_Context_Pagination_PageRight.DisplayMode`
-                (Project Main Screen.pa.yaml:2191-2200) carries both:
+                  `ico_Main_Project_Overview_Context_Pagination_PageRight.DisplayMode`
+                  (Project Main Screen.pa.yaml:2191-2200) carries both:
 
-                  commented out (line 2192):
-                    //If(psf_MainScreen_DetailList_Container_FluentDetailsList.HasNextPage,
-                    //  DisplayMode.Edit,DisplayMode.Disabled)
+                    commented out (line 2192):
+                      //If(psf_MainScreen_DetailList_Container_FluentDetailsList.HasNextPage,
+                      //  DisplayMode.Edit,DisplayMode.Disabled)
 
-                  LIVE (lines 2193-2200):
-                    With(
-                        {varRecPage: First(colFiltersOverview)},
-                        If(
-                            varRecPage.Page < varRecPage.TotalPages,
-                            DisplayMode.Edit,
-                            DisplayMode.Disabled
-                        )
-                    )
+                    LIVE (lines 2193-2200):
+                      With(
+                          {varRecPage: First(colFiltersOverview)},
+                          If(
+                              varRecPage.Page < varRecPage.TotalPages,
+                              DisplayMode.Edit,
+                              DisplayMode.Disabled
+                          )
+                      )
 
-                The live formula derives "is there a next page" from TotalPages, which this app
-                computes from `@odata.count` — and the platform caps that count at 5000 rows. The
-                dead formula asks the grid whether the SERVER handed back a next-page token, which
-                is always the truth for forward-only paging. So the token wins: `page.hasNext`.
+                  The live formula derives "is there a next page" from TotalPages, which this app
+                  computes from `@odata.count` — and the platform caps that count at 5000 rows. The
+                  dead formula asks the grid whether the SERVER handed back a next-page token, which
+                  is always the truth for forward-only paging. So the token wins: `page.hasNext`.
 
-                Consequence, and the reason this is recorded rather than silently "better" (D41):
-                `hasNext` is token-derived while `totalPages` starts out count-derived. Until
-                D44 that let the label read "Page: 25 from 26" (beyond the 5,000-row cap, or with
-                a count above what the walk really found) with Next already disabled. Since D44
-                `loadProjectPage` takes the page count from the walk once it has ended at the
-                data, and never lets it drop below the page served, so on the real last page the
-                label reads "Page: N from N" and Next is disabled. A count can still overstate the
-                pages not reached yet; the total corrects itself on arrival. See D41 and D44 in
-                `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`.
-              */
-              disabled={!(page?.hasNext ?? false) || pageQuery.isFetching}
-              onClick={() => setPage(currentPage + 1)}
-            />
+                  Consequence, and the reason this is recorded rather than silently "better" (D41):
+                  `hasNext` is token-derived while `totalPages` starts out count-derived. Until
+                  D44 that let the label read "Page: 25 from 26" (beyond the 5,000-row cap, or with
+                  a count above what the walk really found) with Next already disabled. Since D44
+                  `loadProjectPage` takes the page count from the walk once it has ended at the
+                  data, and never lets it drop below the page served, so on the real last page the
+                  label reads "Page: N from N" and Next is disabled. A count can still overstate the
+                  pages not reached yet; the total corrects itself on arrival. See D41 and D44 in
+                  `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`.
+                */
+                disabled={!(page?.hasNext ?? false) || pageQuery.isFetching}
+                onClick={() => setPage(currentPage + 1)}
+              />
+            </Tooltip>
           </>
         ) : null}
         {pageQuery.isFetching ? <Spinner size="tiny" aria-label="Loading" /> : null}
@@ -1253,6 +1416,27 @@ const CLEAR_FILTER_TESTID: Record<string, string> = {
   "Status": "ico_Main_Project_Overview_Context_Filter_Status",
 };
 
+/**
+ * The canvas `IconName: "Filter"` / `"ClearFilter"` — Fluent MDL2's outline funnel, which
+ * the v9 icon set does not have (its `Filter` is three bars).
+ */
+function FunnelIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M1.5 2.5h13L9.5 8.5v5l-3-1.5V8.5z" stroke="currentColor" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ClearFunnelIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M1.5 2.5h11L8.5 7.3v5.2l-2-1V7.3z" stroke="currentColor" strokeLinejoin="round" />
+      <path d="M10.5 9.5l4 4m0-4l-4 4" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function ClearFilterButton({
   field, value, onClear,
 }: { field: string; value: unknown; onClear: () => void }) {
@@ -1264,7 +1448,7 @@ function ClearFilterButton({
         className={styles.iconButton}
         appearance="primary"
         disabled={disabled}
-        icon={active ? <FilterDismissRegular /> : <FilterRegular />}
+        icon={active ? <ClearFunnelIcon /> : <FunnelIcon />}
         /*
          * Tosca rule 1, and rule 2's uniqueness point: the tooltip names all SEVEN of these
          * buttons "Clear this filter", which is the identical-fingerprint case the live scan

@@ -28,6 +28,17 @@ from here.
   phased save, Land Lease's header+periods+allocations, OPEX's standard chain) can half-apply
   if a later request in the sequence fails. Where all-or-nothing genuinely matters, the
   documented answer is a Dataverse custom API, not a client-side retry.
+  - *Add Cost from Table, 27 Oct 2026 (D51, proposed):* the bulk save uses native
+    `CreateMultiple` (new rows) and `UpdateMultiple` (existing rows), sent in parallel
+    (`UpsertMultiple` until the D51 §11 performance wave). Each chunk of up to 500 rows is
+    all-or-nothing, but the save as a whole is still not, and its operations now run
+    concurrently rather than as four strict phases. After a partial failure the orchestrator
+    waits for every operation to settle, re-reads the touched contracts and rewrites any total
+    that may be wrong (an existing contract whose own row did not land is always rewritten),
+    then throws `SavePlanError` (`reconciled: true/false`, `failures` listing every failed
+    operation). New rows keep their ids across a retry (D51 §3a), so pressing Save again does
+    not duplicate them. One gap: a new contract created by a failed attempt, then removed from
+    the sheet before the retry, is left behind as an orphan.
 
 ## Open decisions needing sign-off
 
@@ -50,8 +61,79 @@ this is a snapshot, not a live sync):
   date column. Flagged as a schema decision someone needs to own, not fixed in the app layer.
 - **D12** — whether the Cost app should expose "Delete Project" at all; it's currently visible
   but permanently disabled. Depends on D1.
+- **D41–D45, Project Overview pagination.** Built, deployed to DEV (`fceb336`, D46) and confirmed
+  locally by the user, but **not product-approved**. Before touching `data/projects.ts` or
+  `countedPage` in `data/client.ts`, keep these invariants:
+  - the page size travels as `maxPageSize`, never `$top`;
+  - pages are one continuous run (`named ++ blank`);
+  - the count is `RoundUp(TotalRows / 200)`, as in the canvas;
+  - Next follows the skip token.
+
+  The suite pins each of them (UT-PROJPAGE-*, UT-PAGE-*).
+- **D45 G2, inactive projects.** The canvas Project Overview lists inactive projects, because
+  `Filter(Projects, …)` has no state condition. This app filters `statecode eq 0`, so its Total
+  Rows can be lower than the canvas. This is a product question; there is no marker yet.
 - **D13** — two hard-coded address lists (`REPORT_VIEWERS`-equivalent allow-lists) should both
   become environment variables before go-live; only one currently is.
+- **D51, Add Cost from Table bulk save** (27 Oct 2026). Committed in `5d50e2b`, deployed to DEV in
+  `2c7e6aa` (D52), and **not product-approved**.
+  **Current state (27 Oct, after D51 §11.14–§11.16; it supersedes the t = 0 delete order described
+  below):** with `DEFER_CONTRACT_DELETES` and `DEFER_COST_DELETES` on, contract and cost deletes
+  start only after the writes have settled, each in its own gate of 4 (writes share a gate of 16),
+  and on a fully successful write they finish in the background (a `DIVERGENCE`, with toasts and a
+  background totals reconcile on failure). The existence check is skipped on a first attempt.
+  Measured live on DEV: 9.5 s / 70 requests before, 5.2 s / 3 with bulk, then 1.9 s / 5 and
+  1.6 s / 3; the floor is about 1.2–1.9 s per bulk request through the host, and only a fully
+  background save (not built, a product decision) would go lower. Open from the E5 review: the
+  resurrection window, where a CAPEX Edit Cost save (PATCH without `If-Match`) of a contract whose
+  background delete is still pending re-creates it (D51 §11.14). CA-12 is fixed to the canvas
+  `CostCountRows` rule, pending product confirmation (D51 §10 item 11).
+  The earlier record follows.
+  Save keeps four numbered operations (contract writes, cost writes, per-record cost deletes,
+  contract deletes), but since the performance wave (D51 §11) they run concurrently: the deletes
+  and phase 0's existence reads at t = 0, then contracts and the costs of existing contracts
+  (at t = 0 as well when the verify is skipped, §11.12), and the costs of new contracts as soon as
+  the contract step succeeds. Writes go out as `CreateMultiple` / `UpdateMultiple` in parallel (no longer
+  `UpsertMultiple`); a 501 on an action's first chunk falls back to per-row PATCH for that
+  action, remembered per tab in `sessionStorage`. A deleted contract's costs and comments go by
+  the Dataverse cascade. The rollback is `BULK_SAVE = false` in `data/addCostSheet.ts`; treat it
+  like `CANVAS_PARITY_DELETION`, a live product decision. It lifts D36 §1 (no bulk services) for
+  this screen only. `verify` and an adversarial review ran after the second fix wave (D51
+  status); no `verify` result is recorded for the performance wave yet. Measured before it: 9.5 s
+  for 70 requests, 4.1 s for 40 (D51 §11.1); the new path is not yet measured live.
+  `power.config.json` must keep its `environment_<id>` entry (the probable cause of the 501,
+  CONVENTIONS rule 9). Still owed: the live DEV test
+  (`ProjectDocs/app-docs/13-ADDCOST-BULK-SAVE-TEST-PLAN.md`), which must confirm the
+  `identify()` form and the cascade. Open UX question: the screen still shows the raw
+  technical error under the mapped failure message (D51 §3c).
+  New risks from the concurrent order (D51 §11.8):
+  - **Lock contention** between parallel contract updates and cost writes on the same
+    contracts. No plugin or flow exists on these tables today; one added later could deadlock
+    or serialise the save.
+  - **Throttling** from contract-delete cascades running in parallel with the other writes
+    (service protection, HTTP 429).
+  - **Failure details vary with timing.** Whether the new contracts' costs run, and so which
+    operations appear in `SavePlanError.failures`, depends on whether a failure arrived before
+    the contract step succeeded.
+
+  Round-trip and prepare pass (D51 §11.12; committed in `5d50e2b`, verified in the `2c7e6aa` run;
+  its delete-at-t = 0 order is superseded by §11.16, see above): contract and
+  cost deletes now start at t = 0 beside the verify, and a delete answering 404 counts as already
+  gone. A first attempt with no per-row 501 flag skips the upsert verify, so the upserts start at
+  t = 0 too. The Save's client prepare is now `prepareSheetSave`, without the quadratic scans.
+  `diffRows` pairs rows by identity (CA-11), so an unedited Save sends no contract write. An
+  unchanged contract whose stored `vsb_totalcost` already matches gets no write at all. Expected,
+  not yet measured live: about 1.0–1.3 s for 40 requests and 2–2.5 s for 70; per-row deletes now
+  bound the critical path. CA-12 (two new same-named rows under one sub-account in one year passed
+  validation, where the canvas refuses them) has since been fixed to the canvas rule; product
+  confirmation is still open. New risks:
+  - **Lock and 429 pressure.** Deletes at t = 0 overlap the upserts, cascades included. The shared
+    gate of 16 caps the requests in flight.
+  - **404 as success relies on the entity set being right.** A delete sent to the wrong entity
+    set would answer 404 for every id and be counted as "already gone", not as a failure.
+  - **Error classes vary with timing.** A row deleted by someone else ends as `RowsGoneError` when
+    the verify ran (a retry), and as a `SavePlanError` when it was skipped (a first attempt). A
+    skipped, unchanged contract deleted mid-save ends as a reconcile error, not as "gone".
 
 ## Lower-severity, worth knowing
 
@@ -63,7 +145,12 @@ this is a snapshot, not a live sync):
 - **R-11** — live performance is unmeasured; the Fluent UI chunk alone is ~570 kB gzipped, and
   some OPEX save paths do several sequential lookups rather than one batched read.
 - **R-12** — no optimistic-concurrency check between two people or two tabs editing the same
-  record; a save panel is a stale snapshot from when it opened.
+  record; a save panel is a stale snapshot from when it opened. **Upsert resurrection** (D51): if
+  another user deleted a contract or a cost row after the Add Cost from Table sheet loaded, the
+  bulk save upserted its id and re-created it, without the owning BU and without its parent binds.
+  **Mitigated** (D51 §3b): a pre-write existence check refuses the save with nothing written.
+  Residual: a row deleted between that check and the write can still be re-created (only
+  `If-Match` would close it), and inactive rows count as existing.
 - **R-16** — several canvas defects are intentionally reproduced rather than fixed (see
   `ProjectDocs/app-docs/01-BUGS-FOUND.md` for the full register, including the OPEX and Land Lease defect
   lists — roughly a dozen items each). These need client sign-off before anyone "fixes" them,

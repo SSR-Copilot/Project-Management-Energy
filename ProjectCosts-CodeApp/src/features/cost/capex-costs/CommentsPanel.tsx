@@ -150,8 +150,14 @@ const useStyles = makeStyles({
    * horizontal scrollbar — the "distorted" comments panel. The floor has to be lifted for the
    * hand-laid canvas widths above to mean anything.
    */
+  /*
+   * `alignItems: start`, not the grid default `stretch`: each Fluent `Field` is itself a grid of
+   * `auto` rows. When Year shows its "Required" message it is the tallest cell, and stretch then
+   * grew Type and Month to that height, sharing the extra space between their label and control
+   * rows. Their dropdowns sat lower and taller than Year's, so the row looked misaligned (CA-14).
+   */
   typeRow: {
-    display: "grid", columnGap: "22px", minWidth: 0,
+    display: "grid", columnGap: "22px", minWidth: 0, alignItems: "start",
     "& .fui-Dropdown": { minWidth: "unset", width: "100%" },
   },
   typeOnly: { gridTemplateColumns: "250px" },

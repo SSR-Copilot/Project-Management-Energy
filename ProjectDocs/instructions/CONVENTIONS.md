@@ -42,6 +42,18 @@ development sessions and is recorded here because the README doesn't carry it ye
    regenerate `.power/schemas/appschemas/dataSourcesInfo.ts` from scratch, dropping every
    other previously-registered table rather than appending. Always diff that file immediately
    after running the command and restore the other entries if it happened.
+   **Dataverse actions and functions** (27 Oct 2026, D51): `pac` 2.13.1 cannot add them, and
+   `pac code add-data-source` skips `dataverseOperation` schemas. Use the npm Power Apps CLI
+   (preview): `npx @microsoft/power-apps-cli app add dataverse-api --api-name <Action>`
+   (`pa` 1.2.0; [Microsoft docs](https://learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/add-dataverse-action-function)).
+   It regenerates `dataSourcesInfo.ts` (diff it afterwards; every table must survive) and writes `src/generated/`.
+   **Keep the `environment_<id>` entry** (corrected 27 Oct 2026, D51 §11.2): for an action
+   bound to the abstract `crmbaseentity` (e.g. `CreateMultiple`, `UpdateMultiple`,
+   `UpsertMultiple`) it also adds a binding entry to `power.config.json`
+   (`"environment_<id>": { "entitySetName": "Environment", ... }`). It is not a table and has
+   no schema, but the host routes the bound operation through it. Do **not** remove it: removing
+   it by hand was followed by HTTP 501 from `UpsertMultiple`. `check:power` accepts
+   `environment_*` / `"Environment"` entries; re-run `npm run check:power` after the command.
 
 ## Established since the README was last updated
 
@@ -140,7 +152,10 @@ development sessions and is recorded here because the README doesn't carry it ye
       single-request writes as `WritePlan`s through `data/runPlan.ts`, and keep their
       multi-request flows (ownership re-check, partial-save retry, cascade deactivate,
       multi-phase deletes) in the `data/admin*.ts` modules. No bulk Dataverse services
-      (`CreateMultiple` / `UpdateMultiple` / `UpsertMultiple`).
+      (`CreateMultiple` / `UpdateMultiple` / `UpsertMultiple`). That ban still holds for the
+      admin screens; D51 (proposed, 27 Oct 2026) lifts it for **Add Cost from Table only**,
+      whose Save uses native `CreateMultiple` / `UpdateMultiple` through `data/bulkWrites.ts`
+      (`UpsertMultiple` until the D51 §11 performance wave).
 18. **Date-only values are formatted from LOCAL parts, never `toISOString()`.** Use `dateOnly`
     from `data/odata.ts`. `toISOString().slice(0, 10)` stores the previous day for any user
     east of UTC, which includes India and the Netherlands.
@@ -243,11 +258,16 @@ it. Lint warnings do not fail the gate, but do not add new ones.
 Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failure.
 
 1. **Clean install.** `npm ci`, so the build uses exactly the lockfile.
-2. **Data sources present.** `npm run check:power` must report 81 registered and 0 problems
-   (count as of 22 Oct 2026; it grows as screens register tables).
+2. **Data sources present.** `npm run check:power` must report 89 registered and 0 problems
+   (count as of 28 Oct 2026: 81 tables, the `CreateMultiple`, `UpdateMultiple` and
+   `UpsertMultiple` actions (D51), and the 5 Fabric SQL tables (D54); it grows as screens
+   register tables).
    `.power/` is git-ignored, so on a fresh checkout regenerate it first: re-add each table in
-   `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, then
-   re-run the check.
+   `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, and the
+   `CreateMultiple` and `UpdateMultiple` actions (plus `UpsertMultiple` while its generated
+   files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds). Re-add
+   the SQL tables with the D54 command, then restore the `datasetOverride` the CLI does not
+   write, and re-run the check.
 3. **The full gate.** `npm run verify` must exit 0.
 4. **Hygiene.** `npx -y knip@5`: no new unused files or dependencies. No file may be
    byte-identical to another in `src/`.
