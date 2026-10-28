@@ -15,7 +15,7 @@
 import type { ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
-  ArrowLeftRegular, ArrowSyncRegular, CheckmarkRegular, ClockAlarmRegular, DismissCircleRegular, FlashRegular,
+  ArrowLeftRegular, ArrowResetRegular, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
   InfoRegular, LockClosedRegular, MailRegular, PeopleRegular, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
@@ -55,12 +55,17 @@ const useStyles = makeStyles({
     display: "flex", alignItems: "stretch", flex: "1 1 auto", minWidth: 0, minHeight: "104px", boxSizing: "border-box",
     paddingTop: "7px", paddingBottom: "5px", overflowX: "auto",
   },
-  refresh: { flex: "none", marginTop: "12px", marginRight: "5px", minWidth: "24px", width: "24px", height: "24px", paddingLeft: 0, paddingRight: 0 },
+  // `but_Project_States_CheckList_Refresh`: `Icon: ="ArrowReset"`, IconOnly, 24 high. The canvas draws it as a plain blue
+  // glyph with no box (27 Oct 2026: it was a boxed `ArrowSync`, the developers-only `btn_Refresh` icon).
+  refresh: {
+    flex: "none", marginTop: "12px", marginRight: "5px", minWidth: "24px", width: "24px", height: "24px", paddingLeft: 0, paddingRight: 0,
+    color: palette.themePrimary, fontSize: "20px",
+  },
   // `con_State_Card`: radius 2; selected = Fill ButtonSelectedBg, a 1 px `gblAppColors.BorderColor`
   // (Grayscale30) border and `DropShadow.Light`.
   card: {
     display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-start",
-    flex: "1 1 0", minWidth: "120px", paddingTop: 0, paddingBottom: "4px", paddingLeft: 0, paddingRight: 0,
+    position: "relative", flex: "1 1 0", minWidth: "120px", paddingTop: 0, paddingBottom: "4px", paddingLeft: 0, paddingRight: 0,
     ...edges("transparent"), ...radius("2px"), fontWeight: tokens.fontWeightRegular, backgroundColor: "transparent",
     ":hover": { backgroundColor: "transparent" },
   },
@@ -83,25 +88,39 @@ const useStyles = makeStyles({
   // a white rounded box over it.
   gate: {
     display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 30px", width: "30px", height: "30px",
-    boxSizing: "border-box", fontSize: "16px",
+    boxSizing: "border-box",
+    // The modern IconOnly `but_State_Card_Gate_Approval` draws its glyph at 20 px (27 Oct 2026: it was 16 px, a small faint icon).
+    fontSize: "20px",
   },
   gatePassed: { ...radius("50%"), backgroundColor: STATE_FILL.completed, color: STATE_FILL.notStarted },
-  gatePending: { ...radius("4px"), ...edges(tokens.colorNeutralStroke1), backgroundColor: palette.white, color: LABEL_COLOR },
+  // `but_State_Card_Gate_Approval` is 32 wide (the 30 px circle behind it is hidden by its white fill).
+  gatePending: {
+    ...radius("4px"), ...edges(tokens.colorNeutralStroke1), backgroundColor: palette.white, color: LABEL_COLOR,
+    flex: "0 0 32px", width: "32px", height: "32px",
+  },
   gateInProgress: { color: STATE_FILL.inProgress },
   // `con_State_Card_Data`: the title (Bold, ExtraSmall 9 pt, RGBA(50, 49, 48, 1)) over the state.
   title: {
     display: "flex", flexDirection: "column", alignItems: "center", paddingLeft: "14px", paddingRight: "14px",
     fontSize: "12px", fontWeight: tokens.fontWeightBold, color: "rgb(50, 49, 48)", lineHeight: "16px",
+    // `lbl_State_Card_Data_Title` is 2/3 of a fixed 60 px block and `lbl_State_Card_Data_SubTitle` sits at a fixed Y
+    // under it, so the state text is on one line across the cards whether the name takes one line or two.
+    minHeight: "32px",
   },
   state: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "12px", minHeight: "16px", color: LABEL_COLOR },
-  clock: { color: "rgb(125, 125, 125)" },
+  // `btn_clockAlarm_Icon`: 32 wide at `X: =con_State_Card_Gate.X`, `Y: =40` (under the gate), `RGBA(125, 125, 125)`, outline.
+  // The gate sits 10 px (its line) from the card's right edge and is 30 / 32 wide, so a 32 wide clock starts at its left edge.
+  clock: {
+    position: "absolute", top: "40px", right: "8px", width: "32px", height: "32px", display: "flex",
+    alignItems: "center", justifyContent: "center", color: "rgb(125, 125, 125)", fontSize: "20px", pointerEvents: "none",
+  },
   preLine: { whiteSpace: "pre-line" },
 
   // `con_Checklist_DisplayProject_Body_Content_Buttons`: horizontal, LayoutGap 10, 86 high,
   // PaddingLeft 12, PaddingTop 8, `LayoutOverflowX: Scroll`. Every button is 32 high.
   actions: {
-    display: "flex", alignItems: "flex-start", gap: "10px", minHeight: "56px", flex: "none", boxSizing: "border-box",
-    paddingLeft: "12px", paddingTop: "8px", paddingBottom: "16px", overflowX: "auto",
+    display: "flex", alignItems: "flex-start", gap: "10px", minHeight: "86px", flex: "none", boxSizing: "border-box",
+    paddingLeft: "12px", paddingTop: "8px", overflowX: "auto",
   },
   // PowerCAT `Icon` ActionButtons. Outlined = FillColor white, BorderColor / FontColor / IconColor
   // themePrimary; primary (NextCluster) = FillColor themePrimary, FontColor white.
@@ -126,6 +145,8 @@ const useStyles = makeStyles({
   },
   // The transcribed widths: CancelApproval 250, Return 220, Next 260, Abandon 120, Inactive 200
   // (100 while it reads "Activate").
+  // `FontSize: =16` on CancelApproval, Return_1 and NextCluster (Abandoned and Inactive set none, so they keep the default).
+  text16: { fontSize: "16px" },
   w250: { minWidth: "250px" },
   w220: { minWidth: "220px" },
   w260: { minWidth: "260px" },
@@ -223,8 +244,8 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
               </span>
               <span className={s.state}>
                 <span>{step.stateLabel}</span>
-                {step.clock ? <ClockAlarmRegular className={s.clock} aria-hidden /> : null}
               </span>
+              {step.clock ? <span className={s.clock} aria-hidden="true"><ClockAlarmRegular /></span> : null}
             </Button>
           );
         })}
@@ -236,7 +257,7 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
         */}
       {refresh ? (
         <Tooltip content={UI.refresh} relationship="description" withArrow>
-          <Button appearance="secondary" size="small" className={s.refresh} icon={<ArrowSyncRegular />}
+          <Button appearance="transparent" size="small" className={s.refresh} icon={<ArrowResetRegular />}
             aria-label="RefreshProjectStates" data-testid="but_Project_States_CheckList_Refresh"
             disabled={refresh.disabled} onClick={refresh.onClick} />
         </Tooltip>
@@ -279,14 +300,14 @@ export function ClusterActions({ cancelApprovalVisible, reset, next, info, termi
   return (
     <div className={s.actions}>
       {cancelApprovalVisible ? (
-        <Button appearance="secondary" className={mergeClasses(s.action, s.outlined, s.w250)} icon={<DismissCircleRegular />}
+        <Button appearance="secondary" className={mergeClasses(s.action, s.outlined, s.text16, s.w250)} icon={<DismissRegular />}
           disabled title={EXCLUDED.cancelGateApproval} aria-label={UI.cancelApprovalRequest}
           data-testid="pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval">
           {UI.cancelApprovalRequest}
         </Button>
       ) : null}
       {reset ? (
-        <Button appearance="secondary" className={mergeClasses(s.action, s.outlined, s.w220)} icon={<ArrowLeftRegular />}
+        <Button appearance="secondary" className={mergeClasses(s.action, s.outlined, s.text16, s.w220)} icon={<ArrowLeftRegular />}
           disabled={reset.disabled} aria-label={ARIA.returnToPrevious}
           data-testid="pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Return_1" onClick={reset.onClick}>
           {reset.caption}
@@ -294,7 +315,7 @@ export function ClusterActions({ cancelApprovalVisible, reset, next, info, termi
       ) : null}
       {next ? (
         <Tooltip content={next.tooltip} relationship="description" withArrow>
-          <Button appearance="primary" className={mergeClasses(s.action, !next.disabled && s.primary, s.w260)}
+          <Button appearance="primary" className={mergeClasses(s.action, s.text16, !next.disabled && s.primary, s.w260)}
             disabled={next.disabled} aria-label={ARIA.nextCluster}
             // `IconName`: "TriggerApproval" (a lightning bolt) for an active gate, "CheckMark" otherwise.
             icon={next.icon === "TriggerApproval" ? <FlashRegular /> : <CheckmarkRegular />}

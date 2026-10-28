@@ -39,7 +39,7 @@ import {
 import {
   ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
   ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback, type PickerPerson, useFieldControlClass,
-  useFieldSkin,
+  useFieldSkin, HINTS,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { MODERN_DATE_PICKER_FORMAT } from "@/domain/canvasDate";
@@ -990,6 +990,8 @@ export default function GeneralDataScreen() {
         width="narrow"
         closeTestId="ico_ClusterChange_RightPanel_Header_Close"
         closeLabel={GD_LABELS.closeClusterChange}
+        // `ico_ClusterChange_RightPanel_Header_Close.Tooltip: ="Close"` (the other panels say "Cancel").
+        closeTooltip={HINTS.close}
         onDismiss={() => setClusterPanel(null)}
         footer={
           <PanelButtons

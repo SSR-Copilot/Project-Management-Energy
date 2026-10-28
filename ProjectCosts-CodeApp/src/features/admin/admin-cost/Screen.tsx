@@ -9,7 +9,6 @@
  *   cmp_Admin_Costs_Assumption_NestedCountryPickerColumn  the country rail (Wind / PV)
  *   con_Admin_Costs_Assumptions_RightContent              the right-hand column
  *     Label1                                              "Standard Assumptions / Costs / …"
- *     con_…_CommandBar_ApplyButton_1                      "Apply to All" (`ApplyStrip`, disabled)
  *     Gallery1 over colAdminCostCategories                four sections (`SettingsAccordion`), all folded
  *       DEVEX/CAPEX                                       `DevexCostTree` + `DevexCostDrawer`
  *       Operation & Maintenance / Land Lease / Other      `OpexContractTable` + `ContractPeriodDrawer`
@@ -19,20 +18,19 @@
  * Composition only: rules in `./rules.ts`, queries in `./hooks.ts`, Dataverse I/O in
  * `@/data/adminCost.ts`.
  *
- * Apply / Apply to All are drawn disabled with their info text, as in the canvas
- * (`ApplyStrip`); they make no data calls. Not built: the `vsb_applyandapplyalltracking` history
- * tag (no generated service).
+ * The canvas Apply / Apply to All bars are not built (D61).
  *
  * DIVERGENCE (outcomes): the canvas shows nothing on success and a raw `Notify` on failure; this
  * screen shows short toasts (`useNotify`) for every save / delete outcome — see `MSG` in
  * `./constants.ts`.
  */
 import { useMemo } from "react";
-import { Text, makeStyles, tokens } from "@fluentui/react-components";
+import { makeStyles, tokens } from "@fluentui/react-components";
 import {
   ConfirmDialog, CountryTechnologyPicker, LoadingOverlay, NoticeBar, QueryStates, ScopeHeaderBand,
   SettingsAccordion, useNotify,
   useQueryHealth,
+  VisuallyHidden,
 } from "@/components";
 import { useConfirmDialog, type ConfirmState } from "@/features/shared/useConfirmDialog";
 import { useCountryTechnologySelection } from "@/features/shared/useCountryTechnologySelection";
@@ -63,7 +61,6 @@ import { DevexCostTree } from "./DevexCostTree";
 import { OpexContractTable } from "./OpexContractTable";
 import { DevexCostDrawer } from "./DevexCostDrawer";
 import { ContractPeriodDrawer } from "./ContractPeriodDrawer";
-import { ApplyStrip } from "./ApplyStrip";
 
 const useStyles = makeStyles({
   page: {
@@ -86,12 +83,7 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column",
     overflowY: "auto",
   },
-  title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold, marginTop: "0", marginBottom: "0" },
   sectionError: { marginTop: "8px", marginBottom: "8px" },
-  // ACS:783-817 — the 70 px command container (20 px side margins) holds the 45 px band at Y = 10;
-  // the section list starts 80 px below the breadcrumb band, so 25 px of air under the band
-  // (the accordion's own 10 px top padding is the rest).
-  applyBar: { paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px", paddingBottom: "15px" },
 });
 
 /** `cmp_Admin_ProjectGatest_Approvals_Header_1.Project` — `Name: "Costs"`, verbatim. */
@@ -427,10 +419,9 @@ export default function CostsSettingsScreen() {
 
   return (
     <div className={styles.page}>
-      {/* The app shell's header carries no admin page title, so the screen renders the canvas
-          page title "Costs" (`cmp_Admin_ProjectGatest_Approvals_Header_1`) itself, as the other
-          admin screens do. Outcomes are toasts. */}
-      <Text as="h1" className={styles.title} data-testid="cmp_Admin_ProjectGatest_Approvals_Header_1">{PAGE_TITLE}</Text>
+      {/* The canvas page title "Costs" (`cmp_Admin_ProjectGatest_Approvals_Header_1`) is in the shell header
+          (`app/adminTitles.ts`); the screen keeps a visually hidden h1. Outcomes are toasts. */}
+      <VisuallyHidden as="h1" testId="cmp_Admin_ProjectGatest_Approvals_Header_1">{PAGE_TITLE}</VisuallyHidden>
       {health.staleError !== undefined && health.phase === "ready" ? (
         <NoticeBar intent="warning" action={{ label: "Retry", onClick: health.retryFailed }}>
           {errorText(health.staleError, "The standard assumptions could not be refreshed.", "read standard assumptions")}
@@ -465,9 +456,6 @@ export default function CostsSettingsScreen() {
             <section className={styles.right} aria-label="Standard cost assumptions" data-testid="con_Admin_Costs_Assumptions_RightContent">
               {/* `Label1.Text` — `$"Standard Assumptions / Costs / {Country} / {Technology}"` (`breadcrumbText`). */}
               <ScopeHeaderBand live title={breadcrumbText(selection.countryName, selection.technology)} testId="Label1" />
-              <div className={styles.applyBar}>
-                <ApplyStrip scope="all" />
-              </div>
               {/*
                 `Gallery1` over `colAdminCostCategories`: one `Container5` per category, its header
                 `Container6` (`Label1_2` + the `ico_…_GeneratorType_Up_2` / `_Down_2` chevrons).

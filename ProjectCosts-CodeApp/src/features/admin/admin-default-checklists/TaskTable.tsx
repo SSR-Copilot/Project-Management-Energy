@@ -15,22 +15,22 @@
  * flag button goes through `DisabledReason`, the empty text is `InlineEmpty`, the hidden header is
  * `VisuallyHidden`.
  *
- * DIVERGENCE (icons): the canvas Active button shows `DeactivateOrders` on an Active row and
- * `ActivateOrders` on an Inactive one (the action), and the Completion Date button `CalendarReply` /
- * `Calendar`. Here the Active button shows a check / cross (the state) and the Completion Date
- * button a calendar with / without a check.
+ * Icons as the canvas: the Active button shows `DeactivateOrders` on an Active row and `ActivateOrders` on
+ * an Inactive one (the action: a document with a cross / a tick), and the Completion Date button `CalendarReply`
+ * / `Calendar`. (27 Oct 2026: the earlier port showed the state, a check / cross and a calendar with / without a tick.)
  */
 import {
   Button, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  CalendarCheckmarkRegular, CalendarRegular, CheckmarkCircleRegular, DeleteRegular,
-  DismissCircleRegular, EditRegular,
+  CalendarRegular, CalendarReplyRegular, DeleteRegular, DocumentCheckmarkRegular,
+  DocumentDismissRegular, EditRegular,
 } from "@fluentui/react-icons";
-import { DisabledReason, InlineEmpty, RowActions, VisuallyHidden } from "@/components";
+import { DisabledReason, InlineEmpty, RowActions } from "@/components";
 import type { ChecklistTask } from "@/data/adminDefaultChecklists";
 import { palette } from "@/theme/tokens";
+import { useRowActionStyles } from "@/theme/buttonStyles";
 import { HOLDING_CUT, truncateHolding, yesNo } from "./rules";
 
 const useStyles = makeStyles({
@@ -39,18 +39,28 @@ const useStyles = makeStyles({
   table: { minWidth: "1210px", tableLayout: "fixed" },
   /** `con_Header_TasksInCluster*` — Grayscale40 (#FAFAFA), radius 2, Semibold labels. */
   head: { backgroundColor: palette.Grayscale40 },
-  headCell: { fontWeight: tokens.fontWeightSemibold, height: "32px" },
+  /** Header labels are `Text@0.0.51` Semibold with no `Size`: the modern Text default, 14 px. */
+  headCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "14px", lineHeight: "20px", height: "32px" },
   colDescription: { width: "300px" },
   colHolding: { width: "350px" },
   colFlag: { width: "180px" },
-  colActions: { width: "80px" },
+  /**
+   * `ico_ActivateDeactivate_…` is 90 wide at the Active column's X; `ico_Edit_…` sits right after it
+   * (X = Active.X + 90, Width 34) and `ico_Delete_…` right after that (+ 34, Width 34): the icons belong to
+   * the Active column, not a column of their own.
+   */
+  activeCell: { display: "flex", alignItems: "center" },
+  activeButton: { width: "90px", justifyContent: "flex-start" },
   /**
    * `TemplateSize: =34`; the row rule is the gallery's `BorderColor: RGBA(245, 245, 245, 1)`.
    * Hard-coded: `src/theme/tokens.ts` has no #F5F5F5 token.
    */
   row: { height: "34px", borderBottomColor: "#F5F5F5" },
-  /** Row values: `gblAppSizes.Font.Large` = 12 pt. */
-  value: { fontSize: "16px", lineHeight: "20px", overflowWrap: "anywhere" },
+  /**
+   * Row values: `Size: =gblAppSizes.Font.Large` (12) on a modern `Text@0.0.51`, whose `Size` is used as px
+   * (as the other modern-Text ports do), so 12 px, smaller than the 14 px header. A classic label's 12 would be 16 px.
+   */
+  value: { fontSize: "12px", lineHeight: "16px", overflowWrap: "anywhere" },
   /** Completion Date / Active buttons: `FontColor: If(<Yes / Active>, akzent3, themePrimary)` (L567, L593). */
   flagButton: { minWidth: "0", paddingLeft: "4px", paddingRight: "4px", fontWeight: tokens.fontWeightRegular },
   positive: { color: palette.akzent3, ":hover": { color: palette.akzent3 } },
@@ -89,6 +99,7 @@ export function TaskTable({
   onToggleCompletion, onChangeStatus, onEdit, onDelete,
 }: TaskTableProps) {
   const styles = useStyles();
+  const feedback = useRowActionStyles();
 
   if (tasks.length === 0) {
     // NEW — no canvas equivalent: the canvas gallery simply rendered no rows.
@@ -109,9 +120,6 @@ export function TaskTable({
             <TableHeaderCell className={mergeClasses(styles.headCell, styles.colFlag)}>Gate Relevance</TableHeaderCell>
             <TableHeaderCell className={mergeClasses(styles.headCell, styles.colFlag)}>Completion Date</TableHeaderCell>
             <TableHeaderCell className={mergeClasses(styles.headCell, styles.colFlag)}>Active</TableHeaderCell>
-            <TableHeaderCell className={mergeClasses(styles.headCell, styles.colActions)}>
-              <VisuallyHidden>Actions</VisuallyHidden>
-            </TableHeaderCell>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -153,8 +161,8 @@ export function TaskTable({
                     {/* `ico_EnablelCompletionDate_…` — caption `If(…, "Yes", "No")`. */}
                     <Button
                       appearance="transparent"
-                      className={mergeClasses(styles.flagButton, task.isCompletionDate ? styles.positive : styles.neutral)}
-                      icon={task.isCompletionDate ? <CalendarCheckmarkRegular /> : <CalendarRegular />}
+                      className={mergeClasses(styles.flagButton, !disabled && feedback.interactive, task.isCompletionDate ? styles.positive : styles.neutral)}
+                      icon={task.isCompletionDate ? <CalendarReplyRegular /> : <CalendarRegular />}
                       disabled={disabled}
                       aria-pressed={task.isCompletionDate === true}
                       aria-label={completion}
@@ -168,12 +176,13 @@ export function TaskTable({
                   )}
                 </TableCell>
                 <TableCell>
+                  <div className={styles.activeCell}>
                   <DisabledReason reason={lockReason}>
                     {/* `ico_ActivateDeactivate_…` — caption `=ThisItem.Status` ("Active" / "Inactive"); opens the confirmation. */}
                     <Button
                       appearance="transparent"
-                      className={mergeClasses(styles.flagButton, task.isActive ? styles.positive : styles.neutral)}
-                      icon={task.isActive ? <CheckmarkCircleRegular /> : <DismissCircleRegular />}
+                      className={mergeClasses(styles.flagButton, styles.activeButton, !disabled && feedback.interactive, task.isActive ? styles.positive : styles.neutral)}
+                      icon={task.isActive ? <DocumentDismissRegular /> : <DocumentCheckmarkRegular />}
                       disabled={disabled}
                       aria-label={status}
                       aria-describedby={nameId}
@@ -183,26 +192,25 @@ export function TaskTable({
                       {status}
                     </Button>
                   </DisabledReason>
-                </TableCell>
-                <TableCell>
-                  {/* `ico_Edit_…` / `ico_Delete_…` (`IconName` "Edit" / "Delete"): green when enabled (L503, L537); grey while locked. */}
-                  <RowActions
-                    tone="accent"
-                    actions={[
-                      {
-                        key: "edit", icon: <EditRegular />, label: "Edit", describedBy: nameId,
-                        testId: `ico_Edit_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
-                        disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
-                        onClick: () => onEdit(task),
-                      },
-                      {
-                        key: "delete", icon: <DeleteRegular />, label: "Delete", describedBy: nameId,
-                        testId: `ico_Delete_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
-                        disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
-                        onClick: () => onDelete(task),
-                      },
-                    ]}
-                  />
+                    {/* `ico_Edit_…` / `ico_Delete_…` (`IconName` "Edit" / "Delete"): green when enabled (L503, L537); grey while locked. */}
+                    <RowActions
+                      tone="accent"
+                      actions={[
+                        {
+                          key: "edit", icon: <EditRegular />, label: "Edit", describedBy: nameId,
+                          testId: `ico_Edit_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
+                          disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
+                          onClick: () => onEdit(task),
+                        },
+                        {
+                          key: "delete", icon: <DeleteRegular />, label: "Delete", describedBy: nameId,
+                          testId: `ico_Delete_TasksInClusterDefaultChecklist_AdminScreen-${task.id}`,
+                          disabled, ...(lockReason ? { disabledReason: lockReason } : {}),
+                          onClick: () => onDelete(task),
+                        },
+                      ]}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             );

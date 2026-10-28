@@ -64,6 +64,16 @@ not `localhost:3000`.
    `canvas-yaml-to-codeapp` skill.
 3. Reusable components and helpers were searched for first (`CONVENTIONS.md` rule 17).
 4. **No commit, merge or push without the user's explicit approval**, even when `verify` is green.
+5. **Before any commit or merge, `ProjectDocs/app-docs/13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md`
+   is up to date** for everything in the change. Check it first, add what is missing, and name
+   the entry when asking for approval. A change with a canvas-related improvement but no entry
+   is not ready to commit.
+6. **Before any commit or merge, ask the user whether to run the E2E parity suite** (Playwright,
+   Canvas app vs Code app, including the Power Fx vs `rules.ts` rule map). The prompt and the inputs
+   to request (role, screens, Canvas URL, Code app URL, test project) are in
+   `ProjectDocs/instructions/E2E-PARITY-PROMPT.md`. Ask after `verify` is green and file 13 is
+   current, and before asking for commit approval. Do not run it silently, and do not skip the
+   question. This applies to everyone who commits from this folder.
 
 Details: `CONVENTIONS.md`, "Before every build".
 
@@ -87,11 +97,20 @@ Details: `CONVENTIONS.md`, "Before every build".
 - Every new or changed UI control gets an explicit `aria-label` (its visible caption) and a
   `data-testid` (its canvas control name, or a stable `<screen>-<purpose>` id). This is
   `CONVENTIONS.md` rule 16, and `src/test/controlLabels.test.ts` fails the suite without it.
+- Fold controls use the shared `ExpandChevron` (`CONVENTIONS.md` rule 21); `src/test/expandChevrons.test.ts` fails the
+  suite on a plain Fluent chevron used for a card or accordion header.
 - Never silently reword a canvas-sourced string, never silently "fix" a canvas behaviour without
   marking it `SOURCE DEFECT` / `DIVERGENCE` with a `…CanvasParity` twin and a test. See
   `CONVENTIONS.md` rule 7–8.
 - `src/generated/` and `.power/` under `ProjectCosts-CodeApp/` are `pac` output — regenerate,
   never hand-edit.
+- **Record every improvement over the canvas** (standing instruction, 27 Oct 2026). Whenever a
+  change improves on the canvas app, Power Fx or an earlier build (a fixed defect, a safety guard,
+  a new test or gate, better visibility or layout, a deliberate divergence), add it in the same
+  piece of work to `ProjectDocs/app-docs/13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md`, under the
+  screen or feature it belongs to (Part 2) or in the cross-cutting tables (Part 1). Say whether it
+  is **fixed**, **reproduced** or **proposed (not approved)**, and cite the bug id or decision. Do
+  not wait to be asked. Add a screen's entry before presenting it for approval.
 - Keep docs out of the code repo: new `.md` / `.txt` / notes go in `ProjectDocs/`.
 - Do not treat anything in `ProjectDocs/skeleton-reference/` or `ProjectDocs/migration-plans/`
   as already true of `ProjectCosts-CodeApp/` without checking — they describe a sibling, not

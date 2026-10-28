@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { Button, FluentProvider } from "@fluentui/react-components";
 import { DeleteRegular, EditRegular } from "@fluentui/react-icons";
 import { vsbTheme } from "@/theme/fluent";
+import { useRowActionStyles } from "@/theme/buttonStyles";
 import { DisabledReason } from "./DisabledReason";
 import { RowActions, type RowAction, type RowActionsProps } from "./RowActions";
 
@@ -139,5 +140,27 @@ describe("RowActions", () => {
     const edit = screen.getByTestId("edit");
     expect(edit).toHaveAttribute("aria-describedby", "name-1");
     expect(edit).toHaveAttribute("title", "Edit");
+  });
+
+  it("UT-ROWACT-011 Only an action that can run gets the hover / press feedback classes (not busy, not locked)", () => {
+    function Probe() {
+      const feedback = useRowActionStyles();
+      return <i data-testid="probe" className={feedback.interactive} />;
+    }
+    wrap(<>
+      <Probe />
+      <RowActions actions={[
+        { key: "live", icon: <EditRegular />, label: "Live", onClick: vi.fn(), testId: "live" },
+        { key: "busy", icon: <EditRegular />, label: "Busy", onClick: vi.fn(), testId: "busy", disabled: true },
+        { key: "lock", icon: <EditRegular />, label: "Locked", onClick: vi.fn(), testId: "lock", disabledReason: "In use" },
+      ]} />
+    </>);
+    // Griffel's "___hash" token names a whole merged class set, so it differs on every element; only the atomic classes are compared.
+    const feedback = screen.getByTestId("probe").className.split(/\s+/).filter((c) => c && !c.startsWith("___"));
+    expect(feedback.length).toBeGreaterThan(0);
+    const has = (id: string) => feedback.every((c) => screen.getByTestId(id).className.split(/\s+/).includes(c));
+    expect(has("live")).toBe(true);
+    expect(has("busy")).toBe(false);
+    expect(has("lock")).toBe(false);
   });
 });

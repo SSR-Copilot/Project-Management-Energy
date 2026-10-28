@@ -21,7 +21,7 @@
  */
 import { Switch, makeStyles } from "@fluentui/react-components";
 import { shownError } from "@/features/shared/useTouched";
-import { FormPanel, PanelButtons, PanelMessages, TextField } from "@/components";
+import { FormPanel, HINTS, PanelButtons, PanelMessages, TextField } from "@/components";
 import type { TaskForm } from "@/data/adminDefaultChecklists";
 import { MAX_TEXT_LENGTH, validateTask } from "./rules";
 
@@ -74,6 +74,8 @@ export function TaskEditorDrawer({
       // never shown, so the shared default label stays).
       closeTestId="pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar_1"
       footer={<PanelButtons look="brand" disabled={!(valid && !readOnly)} saving={saving} onSave={onSave} savingLabel="Saving…"
+        // The canvas Save hint is the copy-pasted "Filter projects details list view." (SOURCE DEFECT): "Save".
+        saveTooltip={HINTS.save}
         saveTestId="pcf_but_Admin_Checklist_Form_Buttons_Save"
         cancelTestId="pcf_but_Admin_Admin_Checklist_Form_Buttons_Cancel" />}
     >

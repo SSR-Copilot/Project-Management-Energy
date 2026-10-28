@@ -36,6 +36,7 @@ import {
   LoadingOverlay,
   PanelButtons,
   useCommandRowStyles,
+  ExpandChevron,
 } from "@/components";
 /*
  * The CANVAS field kit, not the Fluent one.
@@ -696,7 +697,7 @@ export default function ContractsScreen() {
                         : [...prev, contract.id],
                     )}
                   >
-                    {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                    <ExpandChevron open={open} />
                   </button>
                 </div>
 

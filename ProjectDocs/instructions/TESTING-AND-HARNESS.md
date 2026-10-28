@@ -85,6 +85,14 @@ Confirm the active `pac` profile before pushing: `pac auth list`, look for the `
 app is bound to `VSBCloud_Dev` (`https://vsbclouddev.crm4.dynamics.com/`, environment
 `be41add6-6f60-ebb0-9c73-2480d6bc615d`, app id `807a2fba-665c-40f3-b158-ffe822aa7da4`).
 
+### E2E parity suite (Playwright), on request before every commit
+
+A browser suite that runs the same scenarios on the Canvas app and the Code app, and maps each
+canvas Power Fx rule to its `rules.ts` function. It is not part of `npm run verify` (it needs a
+signed-in browser and live data). Before every commit or merge the user is asked whether to run it.
+The prompt, the inputs to ask for and the rule are in `ProjectDocs/instructions/E2E-PARITY-PROMPT.md`.
+It is the answer to the G-WALK gap listed below.
+
 ## The reference harness — five layers, nine gates
 
 `ProjectDocs/app-docs/VSBCloud-Harness-Plan.md` defines this for the *skeleton's* 23-

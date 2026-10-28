@@ -7,7 +7,6 @@
  *
  *   cmp_AdminContraacts_NestedCountryPickerColumn  country rail (`testIdPrefix`)
  *   con_AdminContract_Selected_Country_Technology  scope heading + the two Add buttons
- *   con_AdminContract_ApplyAll_Apply_Tracking      the disabled "Apply to All" bar
  *   gal_AdminContracts_StandardAssumptions_Updated contract cards (`ContractCard`)
  *   con_AdminContracrt_RightPanel_NewEditContract  the New / Edit panel (`ContractPanel`)
  *   cmp_PopUp_Confirmation_Delete_Contract_Or_Period_1  delete confirmation
@@ -64,7 +63,6 @@ import {
   useCapexAccounts, useContractDevCo, useDeleteContract, useFetchContract,
   useSaveContract, useStandardContracts,
 } from "./hooks";
-import { APPLY_ALL_FILL, APPLY_ALL_INFO, APPLY_ALL_LABEL, ApplyBar } from "./ApplyBar";
 import { ContractCard } from "./ContractCard";
 import { ContractPanel } from "./ContractPanel";
 import { DevCoCostForm } from "./DevCoCostForm";
@@ -86,9 +84,6 @@ const useStyles = makeStyles({
   // Cards touch each other (gallery `TemplatePadding: 0`, ACS:833); `minWidth: 0` keeps long
   // content from widening the column.
   list: { display: "flex", flexDirection: "column", gap: "0", paddingLeft: "20px", paddingRight: "20px", minWidth: "0" },
-  // ACS:612-653: an 80 px block with the 45 px bar at Y=10, so 10 px above and 25 px below it;
-  // the column gap is 12 px, hence the -2 / +13 px margins.
-  applyAll: { paddingLeft: "20px", paddingRight: "20px", minWidth: "0", marginTop: "-2px", marginBottom: "13px" },
 });
 
 /**
@@ -452,17 +447,6 @@ export default function ContractsSettingsScreen() {
             </>
           )}
         />
-
-        {/* `con_AdminContract_ApplyAll_Apply_Tracking` (ACS:612-724), drawn disabled: no calls, no writes. */}
-        {selection ? (
-          <div className={styles.applyAll} data-testid="con_AdminContract_ApplyAll_Apply_Tracking">
-            <ApplyBar
-              fill={APPLY_ALL_FILL} label={APPLY_ALL_LABEL} accessibleName={APPLY_ALL_LABEL}
-              infoText={APPLY_ALL_INFO} buttonWidth={140} filledIcon testId="con_AdminContract_ApplyAll_Inner_Warning_Button"
-              buttonTestId="btn_AdminContract_ApplyAll"
-            />
-          </div>
-        ) : null}
 
         {selection && (devCoError || capexError) ? (
           <NoticeBar

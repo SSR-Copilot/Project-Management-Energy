@@ -6,7 +6,7 @@
  * The parent menu item only opens the menu. Each child is disabled when that
  * sub-account already has a contract in the scope (the canvas `ItemEnabled: CountIf(…) = 0`)
  * or when creating is not permitted.
- * "Apply" is drawn disabled with its info text, as in the canvas (`ApplyStrip`).
+ * The canvas "Apply" strip is not built (D61).
  *
  * The row is repeated per accordion section (canvas `Gallery1`), so each canvas name carries the
  * section key as a suffix (CONVENTIONS rule 16).
@@ -17,7 +17,6 @@ import {
 import { AddFilled, MoreHorizontalRegular } from "@fluentui/react-icons";
 import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import type { MenuItemView } from "./rules";
-import { ApplyStrip } from "./ApplyStrip";
 
 /*
  * The canvas row is 70 px high with the tinted Apply band 45 px high at Y = 10
@@ -115,7 +114,6 @@ export function CategoryCommandRow({ title, sectionKey, kind, menuItems = [], ca
         </Menu>
         </div>
       )}
-      <ApplyStrip scope="section" sectionKey={sectionKey} />
     </Toolbar>
   );
 }

@@ -19,7 +19,7 @@
  */
 import { useId } from "react";
 import { Input, Text, makeStyles, tokens } from "@fluentui/react-components";
-import { FormPanel, InlineEmpty } from "@/components";
+import { FormPanel, HINTS, InlineEmpty } from "@/components";
 import {
   DURATION_FIELDS, HEADING, MSG, PANEL_FIELD_PART, PANEL_TEST_ID, RATE_FIELDS, TYPOGRAPHY, technologyLabel,
   technologyName, type MatrixKind,
@@ -30,16 +30,21 @@ import { cellKey, type PanelColumn, type PanelState } from "./rules";
 const ERROR_BORDER = tokens.colorPaletteRedBorder2;
 
 const useStyles = makeStyles({
-  section: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, marginBottom: tokens.spacingVerticalXL },
+  /** Content starts 16 px from the panel edge: the canvas labels and headings carry `PaddingLeft: 16` and the form has no side padding (AMS:1190, 1141). */
+  panel: { "& .canvas-panel-body.canvas-panel-body": { paddingLeft: "16px" } },
+  section: { display: "flex", flexDirection: "column", gap: "0", marginBottom: tokens.spacingVerticalXL },
   scroller: { overflowX: "auto", maxWidth: "100%" },
-  grid: { display: "grid", alignItems: "center", columnGap: "8px", rowGap: "8px" },
-  // Canvas sizes and weights (`TYPOGRAPHY`; same ExtraLarge step as the matrix).
-  heading: { ...TYPOGRAPHY.panelHeading },
-  rowLabel: { ...TYPOGRAPHY.panelLabel },
+  /** Rows are 40 px (AMS:1196, 1897); one column per technology is a 80 px gallery template (AMS:1332). */
+  grid: { display: "grid", alignItems: "center", columnGap: "0", rowGap: "0", gridAutoRows: "40px" },
+  // Canvas sizes and weights (`TYPOGRAPHY`; modern Text, px).
+  heading: { ...TYPOGRAPHY.panelHeading, minHeight: "30px", display: "flex", alignItems: "center" },
+  rowLabel: { ...TYPOGRAPHY.panelLabel, paddingRight: "16px" },
   techLabel: { ...TYPOGRAPHY.panelLabel, textAlign: "center" },
-  input: { width: "60px", minWidth: "40px", "& input": { textAlign: "center" } },
-  // Canvas Small (AMS:1914, 2372).
+  /** `Width: Min(TemplateWidth, 60)` at `X: 10` inside the 80 px template, so the input is centred under its label. */
+  input: { width: "60px", minWidth: "60px", justifySelf: "center", "& input": { textAlign: "center" } },
+  // Canvas Small, 14 px high (AMS:1909, 1914, 2372).
   message: { color: tokens.colorPaletteRedForeground1, ...TYPOGRAPHY.panelMessage },
+  messageSlot: { minHeight: "14px" },
 });
 
 export interface EditMilestonesPanelProps {
@@ -65,6 +70,7 @@ export function EditMilestonesPanel({
   open, countryName, state, canEdit, saving, error, duplicates, onChange, onSave, onClose,
 }: EditMilestonesPanelProps) {
   const title = MSG.panelTitle(countryName);
+  const styles = useStyles();
 
   return (
     <FormPanel
@@ -72,6 +78,7 @@ export function EditMilestonesPanel({
       title={title}
       ariaLabel={title}
       width={540}
+      panelClassName={styles.panel}
       busy={saving}
       dirty={state.touched}
       discardText={{
@@ -86,6 +93,8 @@ export function EditMilestonesPanel({
       // Shared footer (Cancel in the canvas brand outline); Cancel goes through the dirty guard.
       actions={{
         onSave, canSave: canEdit && state.canSave, saving,
+        // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
+        saveTooltip: HINTS.save,
         saveTestId: "pcf_but_Admin_MilestoneAssumption_Form_Buttons_Save",
         cancelTestId: "pcf_but_Admin_MilestoneAssumption_Form_Buttons_Cancel",
       }}
@@ -149,7 +158,7 @@ function MatrixSection({ kind, heading, rows, columns, state, errors, disabled, 
           */}
           <div
             className={styles.grid}
-            style={{ gridTemplateColumns: `160px repeat(${columns.length}, 64px)` }}
+            style={{ gridTemplateColumns: `144px repeat(${columns.length}, 80px)` }}
             role="group"
             aria-labelledby={headingId}
             data-testid={ids.gallery}
@@ -176,7 +185,7 @@ function MatrixSection({ kind, heading, rows, columns, state, errors, disabled, 
         </div>
       )}
       {/* `lbl_Admin_MilestoneAssumption_Form_Fields_<Section>_InvalidMessage`: the canvas message first, then any range message. */}
-      <div id={messageId} aria-live="polite" data-testid={ids.message}>
+      <div id={messageId} className={styles.messageSlot} aria-live="polite" data-testid={ids.message}>
         {errors.map((m) => <Text key={m} as="p" className={styles.message}>{m}</Text>)}
       </div>
     </section>

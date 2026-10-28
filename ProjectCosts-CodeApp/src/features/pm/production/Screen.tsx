@@ -22,13 +22,14 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  ArrowResetRegular, ChevronDownRegular, ChevronUpRegular, DismissRegular, InfoRegular, LockClosedRegular,
+  ArrowResetRegular, DismissRegular, InfoRegular, LockClosedRegular,
   RadioButtonFilled, RadioButtonRegular,
 } from "@fluentui/react-icons";
 import {
   Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, LoadingOverlay,
   FIELD_APPEARANCE, NumericField, PanelButtons, ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback,
   useFieldControlClass, useFieldSkin, useStandardValueClass,
+  ExpandChevron, HINTS,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_PRODUCTION } from "@/data/dataverseNames";
@@ -412,7 +413,7 @@ export default function ProductionScreen() {
                     <span className={mergeClasses(s.chip, s.statusChip, row.status === 0 && s.statusChipActive)} data-testid="lbl_Production_Status">{productionStatusLabel(row.status)}</span>
                   </span>
                   {/* `ico_Production_CardHeader_Down` / `_Up` toggle the fold and select (Y:2381-2440). */}
-                  <Button appearance="transparent" className={s.fold} icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                  <Button appearance="transparent" className={s.fold} icon={<ExpandChevron open={open} />}
                     aria-label={open ? "ico_Production_CardHeader_Up" : "ico_Production_CardHeader_Down"} aria-expanded={open}
                     data-testid={open ? "ico_Production_CardHeader_Up" : "ico_Production_CardHeader_Down"}
                     onClick={() => toggleFold(row.id)} />
@@ -646,7 +647,7 @@ export default function ProductionScreen() {
         <DialogSurface data-testid="con_PopUp_Common_Generators_PreventTotalCapacity_Information_1">
           <DialogBody>
             <DialogTitle action={
-              <Button appearance="transparent" icon={<DismissRegular />} aria-label="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1"
+              <Button appearance="transparent" icon={<DismissRegular />} aria-label="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1" title={HINTS.cancel}
                 data-testid="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1" onClick={() => setConfirm(null)} />
             }>
               <span data-testid="txt_PopUp_Common_Generators_PreventTotalCapacity_Title_1">{PREVENT_LAST_YIELD_DIALOG.title}</span>

@@ -31,13 +31,14 @@ import {
   Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowSyncRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular, EditRegular,
+  AddRegular, ArrowSyncRegular, DeleteRegular, EditRegular,
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, LoadingOverlay,
   DateField, FIELD_APPEARANCE, PanelButtons, WriteFeedback, testIdPart, useFieldControlClass, useFieldSkin,
   useStandardValueClass, type StandardProp,
+  ExpandChevron,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { media, palette, space } from "@/theme/tokens";
@@ -679,7 +680,7 @@ export default function ProjectRevenuesScreen() {
                       <Button
                         className={s.chevron}
                         appearance="transparent"
-                        icon={<ChevronDownRegular />}
+                        icon={<ExpandChevron open={false} />}
                         disabled={blocked}
                         aria-label="ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_2"
                         aria-expanded={false}
@@ -690,7 +691,7 @@ export default function ProjectRevenuesScreen() {
                       <Button
                         className={s.chevron}
                         appearance="transparent"
-                        icon={<ChevronUpRegular />}
+                        icon={<ExpandChevron open />}
                         disabled={blocked}
                         aria-label="ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_1"
                         aria-expanded

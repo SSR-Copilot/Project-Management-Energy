@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import {
   Button, Dropdown, Field, makeStyles, Option, Radio, RadioGroup, Switch, Text, tokens,
 } from "@fluentui/react-components";
-import { FormPanel, PanelMessages, ReadOnlyField, type PanelNotice } from "@/components";
+import { FormPanel, HINTS, PanelMessages, ReadOnlyField, type PanelNotice } from "@/components";
 import { isDirty } from "@/domain/form";
 import { palette, space } from "@/theme/tokens";
 import type { DefaultChecklist } from "@/data/adminGatesApprovals";
@@ -104,6 +104,8 @@ export function ApprovalsPanel({
       closeTestId="pcf_com_Admin_ProjectGates_Approvals_Form_CommandBar"
       actions={{
         onSave: () => onSave(form), canSave: canEdit && canSave(errors), saving,
+        // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
+        saveTooltip: HINTS.save,
         saveTestId: "pcf_but_Admin_ProjectGates_Approvals_Form_Buttons_Save",
         cancelTestId: "pcf_but_Admin_ProjectGates_Approvals_Form_Buttons_Cancel",
       }}

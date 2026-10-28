@@ -139,7 +139,8 @@ export function AppRoutes() {
           <Route path="opex/other" element={<OpexCostsScreen mode="other" />} />
           <Route path="land-lease" element={<LandLeaseScreen />} />
           <Route path="contracts" element={<ContractsScreen />} />
-          <Route path="add-from-table" element={<AddCostsFromTableScreen />} />
+          {/* A right panel over the DEVEX/CAPEX screen (same `?category=`), so the URL stays a deep link. */}
+          <Route path="add-from-table" element={<><CapexCostsScreen /><AddCostsFromTableScreen /></>} />
         </Route>
         <Route path="project" element={<ProjectScreenGate />}>
           <Route path="general" element={<GeneralDataScreen />} />

@@ -3428,3 +3428,186 @@ Rows as the canvas. If it still differs, G2 (inactive projects) is the first thi
 2. **Decide G2**: should the Project Overview list inactive projects, as the canvas does? If yes,
    drop `ACTIVE` from the overview query, and mark it with a test. If no, mark the current filter
    `DIVERGENCE:` and keep it.
+
+## D56 · Add Cost from Table opens as a right panel, not a modal (27 Oct 2026) — PROPOSED
+
+Requested by the user. **Nothing in D56 is product-approved.** The change is uncommitted. **Being in
+the tree is not approval.**
+
+### 1. The canvas
+
+`Add Costs from Table.pa.yaml` shows the spreadsheet as a centred pop-up over a scrim: 90 % x 90 % of
+the screen, a blue 42 px title bar with the project and category name and a close ✕, the Add Row /
+Delete Row / Copy Table toolbar, the grid, and Save / Cancel at the bottom right
+(`Cost App - Add Cost from table screen - After clicking on Add cost from table button.png`).
+
+### 2. DIVERGENCE
+
+The code app opens the same content in the shared right-docked `FormPanel` (`width="grid"`, 95vw), over
+the DEVEX/CAPEX screen, so it behaves like every other feature's panel.
+
+- **Marked** `DIVERGENCE:` in `features/cost/add-costs-from-table/Screen.tsx`.
+- **Unchanged:** title text, the close ✕ and Save / Cancel identities (`aria-label`, `data-testid`),
+  toolbar, grid, validation and save messages, the busy text "Please wait, saving costs...", and all of
+  the save, delete and guard logic (`CANVAS_PARITY_DELETION`, `identityRoundTripFailures`).
+- **Route kept:** `/costs/add-from-table?category=` still works as a deep link; the route now renders
+  the CAPEX screen with the panel on top (`app/routes.tsx`).
+- **Cancel** still closes without a "Discard changes?" prompt (`dirty` is left false on purpose, to
+  keep today's behaviour).
+- **Shared code added:** the `grid` width preset in `components/formPanelContext.ts` (test in
+  `FormPanel.test.tsx`, UT-FORMPANEL-001) and the `.add-cost-table-*` rules in `styles/canvas.css`.
+
+### 3. Verified
+
+`npm run verify` was green after the change (data sources, typecheck, lint, label and canvas-identity
+gates, 3,998 tests, build). The user checked the panel in the browser against VSBCloud_Dev data and
+reported that it looks good. A full add / edit / delete / reload walk was not recorded.
+
+### 4. What the product owner is being asked
+
+1. Approve the right panel in place of the canvas pop-up, and its width (about 95 % of the screen).
+2. Should Cancel ask "Discard changes?" when the table has unsaved edits, as other panels do? (Today it
+   does not, as in the canvas.)
+
+## D57 · The footer version strip is removed from every screen (27 Oct 2026) — PROPOSED
+
+Requested by the user (from a screenshot of the General Data screen). **Not product-approved.** The change is
+uncommitted.
+
+- **Canvas:** the cost screens end in a footer strip, `con_Costs_FooterVersion` / `lbl_Costs_FooterVersion` and
+  `con_Contracts_FooterVersion` / `lbl_Contracts_FooterVersion`, showing `"Version " & gblAppVersion`.
+- **DIVERGENCE:** `components/AppShell.tsx` no longer renders the `<footer>` (the one shared place, so every
+  screen with the left rail loses it, Admin, PM and Cost). The Project Overview never had it. The content area
+  now runs to the bottom of the window.
+- **Version still visible:** in the header (`con_cmp_Header_Version`, "Version 1.0.0.1 (Dev)") and in the user
+  menu (`header-user-version`). `vsb_AppVersion` is still read and passed to the header and to Report a problem.
+- **No tests or ids affected:** nothing asserted the footer, and it carried no `data-testid`. The now unused
+  `layout.footerHeight` token is left in `theme/tokens.ts`.
+- **Asked of the product owner:** approve dropping the strip, since the canvas shows the version twice (header
+  and footer) and the footer takes 32 px of height on every screen.
+
+## D58 · Check List Settings UI parity pass, and the admin page title moved to the header (27 Oct 2026) — PROPOSED
+
+Requested by the user from a screenshot of the live canvas Check List Settings
+(`Admin Project Default Checklists Screen.pa.yaml`). **Not product-approved**; uncommitted.
+
+### 1. What the screenshot and the YAML showed, and what changed
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | Page title "Checklist settings" sits in the shell header beside the back arrow (`cmp_Header.Project.Name`, L90), as on the PM screens | Drawn as an in-page heading at the top of the content | **All six admin screens**: the header shows the canvas `Project.Name` (`app/adminTitles.ts`, UT-ADMINTITLE-001/002). The in-page heading is kept visually hidden for screen readers and tests |
+| 2 | Row values are modern `Text@0.0.51` with `Size: gblAppSizes.Font.Large` (12); header captions have no `Size` (modern default 14), Semibold. The measured screenshot agrees: values about 0.85 x the header | Values 16 px (12 read as pt), header 12 px: the row text was larger than the header | Values **12 px**, header **14 px** Semibold. A modern Text `Size` is px in this app (`pmLayout.ts`, `canvas.css`); a classic `Label` size is pt |
+| 3 | Completion Date button `IconName` `CalendarReply` / `Calendar`; Active button `DeactivateOrders` / `ActivateOrders` (the action) | Calendar with a tick / without; check circle / cross circle (the state) | **Canvas icons** (`CalendarReply` / `Calendar`; document with a cross / a tick). This removes an earlier DIVERGENCE |
+| 4 | The country / technology `TabList` folds tabs that do not fit into a "…" menu (14+ tabs) | A horizontal scrollbar | **"…" overflow menu** in the shared `SettingsTabStrip` (so CAPEX Accounts gets it too). The selected tab folds last. Folding needs a measured width; without one (jsdom) the tabs stay in the old scrollable list |
+| 5 | `ico_Edit_…` sits at Active.X + 90 (Width 34) and `ico_Delete_…` right after it (Width 34), so both follow the Active button directly | Edit and Delete had their own 80 px column, far to the right of Active (user screenshot, 27 Oct) | **In the Active cell**: Active button 90 px, then Edit and Delete beside it. The extra column and its hidden "Actions" header are gone |
+| 6 | Every fold chevron is `Icon.ChevronUp` / `ChevronDown` in `themePrimary` (Land Lease and OPEX cards, 20 x 18, the glyph filling its box) | Check List Settings, the other admin accordions and cards drew Fluent's small grey chevron; the Cost cards drew it blue and large | **One shared `ExpandChevron`** (blue, 1.4x) on every accordion and card header: `SettingsAccordion` (light and grey), `CollapsibleCard` (CAPEX accounts, Contracts), CAPEX year rows, Cost Contracts cards, PM Finance, Revenues, Production and Generators. Land Lease and OPEX keep their own 28 px box (the reference). A new check (UT-EXPAND) fails on any other plain chevron: CONVENTIONS rule 21 |
+| 7 | The Edit / Delete icons set `HoverFillColor` to transparent (L502, L536); the canvas itself gives no fill on hover | No hover or press effect at all on Edit, Delete, Completion Date or Active (a transparent Fluent button shows no fill, and the icons carry their own colour) | **DIVERGENCE (added feedback):** a mid grey fill on hover (#D0D0D0, darkened from #F1F1F1 which was lost against a white row), a darker one while pressed (#C8C6C4) and the pointer cursor, from one shared style (`useRowActionStyles`). Applied in the shared `RowActions`, so every screen's row icons get it, and to the two flag buttons. Not shown on a busy or locked control. UT-ROWACT-011 |
+
+### 2. Checked and found already matching
+
+Font family (`'Open Sans', 'Segoe UI'`: Open Sans is not shipped, so a machine without it shows Segoe UI, as the
+canvas screenshot does), VSB blue `#006eb9`, header band `#FAFAFA` / radius 2, accordion header 42 px `#fdffff` with a
+14.7 px caption (Font.Medium, a classic label), the Add Task / Reorder command bar and its icons, the green
+`akzent3` flag buttons and Edit / Delete icons, 34 px rows, the 20 px indent and the 1210 px table width.
+
+### 3. Not verified
+
+Compared against the canvas screenshot by code and measurement, **not** against a screenshot of the code app. The
+header title position, left rail and spacing need the user's check in the browser.
+
+### 4. Asked of the product owner
+
+Approve the header title on all six admin screens, the "…" tab menu, and the smaller row text.
+
+## D59 · Hover hints on the panel ✕, the dialog ✕ and the Save buttons (27 Oct 2026) — PROPOSED
+
+Requested by the user after a scan of every canvas `Tooltip` property (163 real hints on 299 button / icon controls).
+**Not product-approved**; uncommitted.
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | Every panel ✕ has `Tooltip: ="Cancel"` (33 `ico_…_BodyHeaderCancel` / `…_Header_Cancel` / `…HeaderCancel` icons); `ico_ClusterChange_RightPanel_Header_Close` says "Close" | The shared panel's ✕ had an `aria-label` only: no hover text on any panel | **`FormPanel` ✕ says "Cancel"** on hover (one place, so every panel at once); `closeTooltip` overrides it (General Data's cluster-change panel: "Close") |
+| 2 | `ico_PopUpConfirmation_BodyHeader*` and `ico_PopUpInformation_BodyHeader`: `="Cancel"` | None | **`ConfirmDialog` ✕ says "Cancel"**; the Production "prevent last yield" popup's ✕ too |
+| 3 | 12 Save buttons carry `Tooltip: ="Filter projects details list view."`, pasted from the Project Overview filter icon: Admin Milestones, Checklist, Reorder and Gates panels; PM Checklist panel; three Generators panels; Grid Operator | Grid Operator reproduced it verbatim (sic); the others had no hint | **SOURCE DEFECT, fixed:** these Saves say **"Save"** (`HINTS.save`). A Save with its own canvas hint keeps it ("Save Permit", "Save Milestone data.", "Add Project Member" …). `UT-HINTS-001` fails if a string literal carries the filter text outside the Overview |
+
+The texts live in `components/hints.ts` (`HINTS.cancel` / `close` / `save`), so they read the same everywhere. Hints use the native
+`title` attribute, the mechanism of the panel footer buttons and the pagination icons. Moving every icon-only button to the styled Fluent
+tooltip (it does not show on a disabled control, and the existing tests read `title`) is a separate step, not done here.
+
+Not changed: the footer Cancel buttons (their canvas `Tooltip` is empty), the lock reason on the Check List icons (already there), and the
+other missing texts from the scan (year arrows, "Mark as Resolved.", "Left navigation", "Save general data.", "Reset Distribution [%] …").
+
+**Asked of the product owner:** approve "Save" in place of the pasted text, and the "Cancel" hover on every panel ✕.
+
+## D60 · Cluster Check List: parity pass against a canvas screenshot (27 Oct 2026) — PROPOSED
+
+Requested by the user from two screenshots (canvas and code app) of the PM Cluster Check List. **Not product-approved**; uncommitted.
+Sources: `Project General CheckList Screen.pa.yaml` and `Components/cmp_Project_States.pa.yaml`.
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | Mail / People gate icon: modern IconOnly button, 20 px glyph, in a 30 px circle (Completed) or a 32 px white box | 16 px glyph, faint and small | **20 px**; the pending box is 32 px |
+| 2 | State text (`lbl_State_Card_Data_SubTitle`) sits at a fixed Y under a 2/3-of-60 px title block | Directly under the name, so "Completed" rode up on one-line names (Draft) | **Title block holds two lines**, so the state text lines up across the cards |
+| 3 | Clock alarm (`btn_clockAlarm_Icon`): 32 wide at the gate's X, Y 40, grey outline | Inline beside the state text | **Under the gate**, top right of the card |
+| 4 | Refresh: `but_Project_States_CheckList_Refresh`, `Icon: ="ArrowReset"`, plain | A boxed `ArrowSync` (the developers-only `btn_Refresh` icon) | `ArrowReset`, no box, blue |
+| 5 | Cancel Approval Request, Return and Next Cluster: `FontSize: =16`; Cancel icon `Cancel` (a plain ✕); Abandoned and Inactive set no size | Default size; a circled ✕ | **16 px** text on those three; plain ✕ |
+| 6 | Buttons container `Height: =86` | 56 | **86** (the canvas gap above "Cluster N Checklist") |
+| 7 | Table: Gate 120 · Holding ~390 · Country ~540 · Completion Date 230 · Status 240 = 1520 | The table filled the window: `max-width` is undefined for a table and was ignored, so every column after Holding sat 44 – 88 px too far right | `width: min(100%, 1520px)` |
+| 8 | Rows: `Self.AllItemsCount*36.5`; In Progress / Complete `Width` 80 (the header label), `Height: =26`, radius 4 | 40 px rows; 90 x 30 buttons, radius 2 (about 9 % larger) | **37 px** rows; **80 x 26**, radius 4 |
+| 9 | Approval icon: 24 high, `RGBA(53, 61, 63)`, 4 px before In Progress. Cancel approval: `Icon.Cancel` 12 x 12. Comments: `Icon.Note` 20 x 24, themePrimary with a note, `Grayscale20` without | A 12 px mail icon; a circled ✕; a dark speech bubble | **20 px** mail / people icon in that colour, in a **24 px slot reserved in every row** so a row without the icon keeps its In Progress / Complete buttons under the others' (the canvas places the icon relative to In Progress, never the reverse); plain 12 px ✕; **Note** icon in those colours |
+
+### Finding, not changed: the canvas text is set in Open Sans
+Header and row text in the canvas screenshot is about 5 – 7 % wider than the same text in the code app at the same size. The canvas player loads
+Open Sans; the code app names `'Open Sans'` first but ships no font file, so a machine without it falls back to Segoe UI. This affects **every
+screen**. Bundling Open Sans (SIL OFL, for example the `@fontsource/open-sans` package) would match the canvas widths, but it changes text
+metrics app-wide, so it needs a decision before anyone does it.
+
+### Divergences kept
+The Cancel Approval Request, Gate approval and row ✕ buttons stay visible but disabled (approval flows, D29). The history, comment and approval
+panels are unchanged.
+
+## D61 · The Apply and Apply to All bars are removed from the Admin screens (28 Oct 2026) — PROPOSED
+
+Requested by the user. **Not product-approved**; uncommitted. Supersedes the "drawn disabled" part of D20 and D36 §5.
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | Admin Contract: "Apply to All" bar (`btn_AdminContract_ApplyAll`) and a per-contract "Apply" bar (`btn_Apply_Individual_AdminContracts`), both `DisplayMode.Disabled`, sync call commented out | Both drawn disabled with a tooltip the canvas lacks (`ApplyBar`) | **Removed**: `ApplyBar.tsx`, its call sites, styles and strings |
+| 2 | Admin Cost: "Apply to All" bar and a per-section "Apply" strip (`btn_Admin_Cost_Landlease_ApplyToLandlease(_1)`), both disabled | Both drawn disabled (`ApplyStrip`) | **Removed**: `ApplyStrip.tsx`, its call sites, styles and the `MSG.apply*` strings |
+| 3 | Admin Milestones: Apply All bar item and per-country Apply item, disabled | Not rendered (D20) | Unchanged |
+| 4 | `Apply and Apply All Trackings` table and its action option set | Constants only, never used | **Removed** from `data/dataverseNames.ts`; the table was never registered |
+
+Canvas parity note: the canvas shows these disabled bars. They did nothing, so removing them loses no behaviour, but the screens no
+longer look the same as the canvas there. Tests UT-ADCONTR-936 and UT-ADCOST-910 now assert the bars are absent. To bring them back,
+restore the two files from git history.
+
+## D62 · Admin Milestones: matrix text sizes and column width follow the canvas (28 Oct 2026) — PROPOSED
+
+Requested by the user from a screenshot of the live canvas Milestones screen. **Not product-approved**; uncommitted.
+Sources: `Admin Milestones Screen.pa.yaml` (AMS) and `App.pa.yaml` 1148-1156 (`gblAppSizes.Font`: Small 10, Medium 11, Large 12, ExtraLarge 14).
+The Apply / Apply All controls in the screenshot are NOT taken over (D61).
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | Technology name (`lbl_TechnologyValue_…`): modern `Text@0.0.51`, `Size = ExtraLarge`. A modern Text `Size` is px, so 14 px | 20 px (the ExtraLarge value read as 14 pt) | **14 px** |
+| 2 | "Duration [months] / Success Rate [-]" and every value cell: modern Text, `Size = Large` = 12 px | 16 px | **12 px** |
+| 3 | Header labels: modern Text, default size (14 px), Semibold, in a 32 px #FAFAFA strip | Inherited from the table | **14 px** set explicitly |
+| 4 | `lbl_BlankSubLabels_…` width 110 (Technology 100, Cluster 1-4 80, FID 60, Cluster 5 80, Operational Lifetime 160, Sales Start 80, Sales End 100) | 130, so every column after it sat 20 px too far right | **110**; table minimum width 1010 |
+
+Finding: in the screenshot every column is 12.5 % wider than the YAML (Cluster 90, FID 66, Operational Lifetime 180, Sales End 112) and the text
+is larger by the same factor. That is the canvas player scaling the page to the window, not a design size, so the code app keeps the YAML sizes.
+
+### Edit panel (same decision, second screenshot, 28 Oct 2026)
+
+Source: `con_Admin_MilestoneAssumtion_Form` (AMS:999-2670), measured against the second canvas screenshot (again scaled 12.5 %).
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 5 | Section headings: modern Text, ExtraLarge = 14 px, Bold, 30 px high | 20 px | **14 px** |
+| 6 | Row labels and technology headers (Wind, PV): ExtraLarge = 14 px, Semibold, 40 px rows | 20 px, rows 40 px by gap | **14 px**, rows exactly 40 px |
+| 7 | Validation messages: modern Text, `Small` = 10 px, 14 px slot | 14 px | **10 px**, 14 px slot (small, but it is the canvas size; say if it should stay 14) |
+| 8 | Labels and headings start 16 px from the panel edge (`PaddingLeft: 16`, no side padding); label column 160 with the text 144 wide, so "Final Investment Decision" wraps | Labels 20 px in, 160 px wide text | Content starts at **16 px**; label text **144 px** wide |
+| 9 | One 80 px gallery column per technology (`TemplateSize: 80`), input 60 px at X = 10, so centred under the label | 64 px columns, 8 px gaps | **80 px** columns, 60 px inputs centred |
+| 10 | Input text is clipped in narrow cells ("3…", "0…") because the canvas input has 8 px padding in a 60 px box | n/a | Not reproduced: the values show in full (SOURCE DEFECT, visible-only) |
+
+Not changed: the title bar, Save and Cancel are the shared `FormPanel` footer used by every panel, and already match the canvas look.

@@ -482,3 +482,12 @@
    not the 15 px the DEVEX/CAPEX buttons set). The hint is at `X: =20`. */
 .opex-canvas-panel .canvas-panel-footer { height: 60px; gap: 20px; padding: 0 20px; }
 .opex-canvas-panel .canvas-panel-footer button { width: 96px; min-width: 96px; height: 32px; font-size: 14px; }
+
+/* Add Cost from Table panel (`FormPanel panelClassName="add-cost-table-panel"`): the body hosts a
+   spreadsheet, so it does not scroll itself — the grid wrapper does, and the toolbar and error
+   blocks stay in view above it. */
+.add-cost-table-panel .canvas-panel-body { padding: 0 10px; display: flex; flex-direction: column; overflow: hidden; }
+.add-cost-table { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.add-cost-table-toolbar { display: flex; align-items: center; gap: 5px; min-height: 50px; padding: 5px 0; flex-shrink: 0; }
+.add-cost-table .canvas-error { flex-shrink: 0; max-height: 25%; overflow: auto; }
+.add-cost-table-grid { flex: 1; min-height: 0; overflow: auto; }

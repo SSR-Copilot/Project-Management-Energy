@@ -17,8 +17,8 @@
  *
  * The screen renders inside the app shell's admin navigation (`/admin/capex-accounts`). There is
  * no route guard (as in the canvas, a deep link opens the screen); the admin rail entry is hidden
- * for non-admins. The shell has no per-page title, so the screen renders its own `h1`
- * (`cmp_Admin_CAPEX_Accounts_Header.Project` → `Name: "CAPEX Accounts"`, CA:82 — verbatim).
+ * for non-admins. The shell header shows the title (`app/adminTitles.ts`; `cmp_Admin_CAPEX_Accounts_Header.Project`
+ * → `Name: "CAPEX Accounts"`, CA:82 — verbatim); the screen keeps a visually hidden `h1`.
  *
  * Shared pieces: load states `useQueryHealth` + `QueryStates`, page bars
  * `NoticeBar`, tabs `SettingsTabStrip`, expand set `useToggleSet`, panel state `usePanelState`,
@@ -32,11 +32,12 @@
  * errors are NEW — the canvas showed nothing after a write (no `IfError`, no message control).
  */
 import { useMemo, useState } from "react";
-import { Text, makeStyles, tokens } from "@fluentui/react-components";
+import { makeStyles } from "@fluentui/react-components";
 import {
   CommandBar, ConfirmDialog, EmptyState, LoadingOverlay, NoticeBar, QueryStates, SettingsTabStrip, useNotify,
   type Command,
   useQueryHealth,
+  VisuallyHidden,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
 import { useBusyRunner } from "@/features/shared/useBusyRunner";
@@ -65,11 +66,6 @@ import {
 
 const useStyles = makeStyles({
   screen: { display: "flex", flexDirection: "column", minHeight: "100%", backgroundColor: palette.white },
-  /** Page title (master admin screens: 20/28 semibold). */
-  title: {
-    fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold,
-    paddingTop: "10px", paddingLeft: "20px", paddingRight: "20px",
-  },
   /** Right content: white, vertical, gap 10 (CA:139-154). */
   page: {
     display: "flex", flexDirection: "column", rowGap: "10px",
@@ -441,7 +437,8 @@ export default function CAPEXAccountsSettingsScreen() {
 
   return (
     <div className={styles.screen}>
-      <Text as="h1" className={styles.title}>CAPEX Accounts</Text>
+      {/* The title is in the shell header (`app/adminTitles.ts`); this keeps the page heading for screen readers. */}
+      <VisuallyHidden as="h1">CAPEX Accounts</VisuallyHidden>
       <QueryStates
         health={health}
         loadingLabel="Loading CAPEX accounts…"

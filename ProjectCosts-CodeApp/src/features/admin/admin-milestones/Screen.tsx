@@ -42,7 +42,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Text, makeStyles, tokens } from "@fluentui/react-components";
 import {
   CommandBar, InlineEmpty, LoadingOverlay, NoticeBar, QueryStates, SettingsAccordion, useNotify,
-  useBeforeUnload, useQueryHealth,
+  useBeforeUnload, useQueryHealth, VisuallyHidden,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
 import { usePanelState } from "@/features/shared/usePanelState";
@@ -66,7 +66,6 @@ const useStyles = makeStyles({
     backgroundColor: palette.white, minHeight: "100%", boxSizing: "border-box",
   },
   /** The in-page admin heading, as on the other admin screens. */
-  title: { fontSize: "20px", lineHeight: "28px", fontWeight: tokens.fontWeightSemibold, margin: 0 },
   /** Canvas Medium, `FontWeight.Normal`, black (AMS:814, 822-824, 833). */
   countryName: { ...TYPOGRAPHY.countryName },
   /** The section's stack; its padding is the shared accordion's `panelPadding` (10/10/12). */
@@ -204,10 +203,10 @@ export default function MilestonesSettingsScreen() {
   return (
     <div className={styles.page}>
       {/*
-        The app shell's header is not a heading, so every admin screen names itself with an
-        in-page h1 (canvas `cmp_Admin_Milestones_Header`, `Project.Name`).
+        The shell header shows the title (canvas `cmp_Admin_Milestones_Header`, `Project.Name`; `app/adminTitles.ts`)
+        but is not a heading, so the screen keeps a visually hidden h1.
       */}
-      <Text as="h1" className={styles.title}>{MSG.title}</Text>
+      <VisuallyHidden as="h1">{MSG.title}</VisuallyHidden>
       {editError ? (
         <NoticeBar intent="error" alert onDismiss={() => setEditError(null)}>{editError}</NoticeBar>
       ) : null}

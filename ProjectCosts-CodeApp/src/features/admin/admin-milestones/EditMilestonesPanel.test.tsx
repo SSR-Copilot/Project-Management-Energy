@@ -49,16 +49,17 @@ const style = (text: string, index = 0) =>
   getComputedStyle(screen.getAllByText(text, { exact: true })[index]!);
 
 describe("EditMilestonesPanel — typography", () => {
-  it("UT-ADMILE-026: the panel uses the same ExtraLarge step as the matrix technology label", () => {
+  it("UT-ADMILE-026: the panel headings and labels use the same ExtraLarge size (14px) as the matrix technology label", () => {
     expect(TYPOGRAPHY.panelHeading.fontSize).toBe(TYPOGRAPHY.technology.fontSize);
     expect(TYPOGRAPHY.panelLabel.fontSize).toBe(TYPOGRAPHY.technology.fontSize);
+    expect(TYPOGRAPHY.panelLabel.fontSize).toBe("14px");
   });
 
   it("UT-ADMILE-027: section headings render ExtraLarge Bold (AMS:1140-1143, 1927-1930)", () => {
     renderPanel();
     for (const heading of [HEADING.durations, HEADING.successRates]) {
       const s = style(heading);
-      expect(s.fontSize).toBe(tokens.fontSizeBase500);
+      expect(s.fontSize).toBe("14px");
       expect(s.fontWeight).toBe(tokens.fontWeightBold);
     }
   });
@@ -68,20 +69,20 @@ describe("EditMilestonesPanel — typography", () => {
     // "Cluster 1" is a row label in both matrices; "Wind" / "PV" head both matrices' columns.
     for (const [text, index] of [["Cluster 1", 0], ["Cluster 1", 1], ["Final Investment Decision", 0], ["Wind", 0], ["PV", 1]] as const) {
       const s = style(text, index);
-      expect(s.fontSize).toBe(tokens.fontSizeBase500);
+      expect(s.fontSize).toBe("14px");
       expect(s.fontWeight).toBe(tokens.fontWeightSemibold);
     }
   });
 
-  it("UT-ADMILE-029: section validation messages render canvas Small 10pt (fontSizeBase300) in red (AMS:1914, 2372; GAP-R3-1)", () => {
-    expect(TYPOGRAPHY.panelMessage).toEqual({ fontSize: tokens.fontSizeBase300 });
+  it("UT-ADMILE-029: section validation messages render canvas Small (10px) in red (AMS:1914, 2372; GAP-R3-1)", () => {
+    expect(TYPOGRAPHY.panelMessage).toEqual({ fontSize: "10px" });
     renderPanel({
       [cellKey("de-wind-m", "cluster2")]: "12.5",
       [cellKey("de-pv-s", "cluster1")]: "2",
     });
     for (const message of [MSG.durationInvalid, MSG.rateInvalid]) {
       const s = style(message);
-      expect(s.fontSize).toBe(tokens.fontSizeBase300);
+      expect(s.fontSize).toBe("10px");
       // jsdom lower-cases colour values, so compare case-insensitively.
       expect(s.color.toLowerCase()).toBe(tokens.colorPaletteRedForeground1.toLowerCase());
     }

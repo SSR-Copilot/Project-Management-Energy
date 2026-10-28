@@ -2,7 +2,7 @@
  * One contract card (canvas `gal_AdminContracts_StandardAssumptions_Updated` row
  * `con_Card_Root`, ACS:837-1814): a header (`con_Header`) with the title (`lbl_Title`) and a
  * chevron (`ico_Chevron_Expand_Collapse_AdminContracrs`) that toggles only this card, and, when
- * expanded (`con_Body_Expanded`), Edit / Delete with the disabled "Apply" bar (`con_Action_Bar`),
+ * expanded (`con_Body_Expanded`), Edit / Delete (`con_Action_Bar`),
  * the two info grids (`con_Info_Grid1` / `con_Info_Grid2`), the DevCo tag groups
  * (`con_DevCoCost_Section`, `htmlDevCoCostTagList`) and the comment
  * (`con_Footer_Comment_Section`). Every `data-testid` is the canvas name plus the contract id
@@ -10,8 +10,7 @@
  *
  * Canvas parity: 0 px left inset, blue chevron and `#0078D4` rule, 16 px headings over 15 px
  * semibold values in 30 px rows, the DevCo tags as a header plus a WRAPPING tag container
- * (ACS:1723-1726). The per-card Apply bar is drawn disabled; the "Apply was made by" tracking line
- * (`con_Tracking_ApplySyncIndividual_AdminContract`) is not rendered.
+ * (ACS:1723-1726). The per-card Apply bar is not built (D61).
  *
  * DIVERGENCE: the canvas card has a hand-computed height and clips long text; here the height is
  * intrinsic and long values wrap.
@@ -36,9 +35,6 @@ import { CollapsibleCard } from "@/components";
 import { useBrandButtonStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
 import {
-  APPLY_CONTRACT_FILL, APPLY_CONTRACT_INFO, APPLY_LABEL, ApplyBar,
-} from "./ApplyBar";
-import {
   CARD_TEXT, MARGIN_LABEL, MARGIN_TYPE_LABEL, commentText, formatClosingRef, isInactive, marginValue, marginValueHeading,
   type StandardContract, type TagGroup as TagGroupData,
 } from "./rules";
@@ -57,7 +53,6 @@ const useStyles = makeStyles({
     minHeight: "60px", paddingLeft: "10px", paddingRight: "10px", boxSizing: "border-box",
   },
   cardButton: { minWidth: "115px", width: "115px" },
-  applyBar: { flexGrow: 1, flexShrink: 1, flexBasis: "300px", minWidth: "0" },
   /* Both grids share one column definition per row and no gaps, so their columns line up. */
   grid1: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)", columnGap: "0" },
   grid2: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", columnGap: "0" },
@@ -151,13 +146,6 @@ export function ContractCard({
         >
           {CARD_TEXT.delete}
         </Button>
-        <ApplyBar
-          className={styles.applyBar}
-          fill={APPLY_CONTRACT_FILL} label={APPLY_LABEL} accessibleName={APPLY_LABEL}
-          infoText={APPLY_CONTRACT_INFO} buttonWidth={115} height={50}
-          testId={`con_Apply_Individual_AdminContract-${contract.id}`}
-          buttonTestId={`btn_Apply_Individual_AdminContracts-${contract.id}`}
-        />
       </div>
 
       <div className={styles.grid1} data-testid={`con_Info_Grid1-${contract.id}`}>

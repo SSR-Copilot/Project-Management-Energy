@@ -36,12 +36,13 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, ChevronDownRegular,
-  ChevronUpRegular, DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
+  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, 
+  DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   type Command, CommandBar, ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay,
   PanelButtons, ReadOnlyField, TextField, WriteFeedback, useFieldControlClass, useStandardValueClass,
+  ExpandChevron,
 } from "@/components";
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
@@ -467,13 +468,13 @@ function CategoryCard({ order, cardId, name, status, folded, disabled, onToggleF
           <Button
             appearance="transparent" className={s.chevron} aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_Down_1"
             data-testid="ico_Generators_DisplayProject_Body_Form_GeneratorType_Down_1"
-            icon={<ChevronDownRegular />} disabled={disabled} onClick={onToggleFold}
+            icon={<ExpandChevron open={false} />} disabled={disabled} onClick={onToggleFold}
           />
         ) : (
           <Button
             appearance="transparent" className={s.chevron} aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_Up_1"
             data-testid="ico_Generators_DisplayProject_Body_Form_GeneratorType_Up_1"
-            icon={<ChevronUpRegular />} disabled={disabled} onClick={onToggleFold}
+            icon={<ExpandChevron open />} disabled={disabled} onClick={onToggleFold}
           />
         )}
       </div>
@@ -790,13 +791,13 @@ export default function ProjectFinanceScreen() {
           <StatusChip status={i.status} canvasName="lbl_FinancingInputs_SeniorDebt_Status" />
           {isFolded ? (
             <Button
-              appearance="transparent" className={s.chevron} icon={<ChevronDownRegular />} disabled={locked} onClick={toggleFold}
+              appearance="transparent" className={s.chevron} icon={<ExpandChevron open={false} />} disabled={locked} onClick={toggleFold}
               aria-label="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down"
               data-testid="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down"
             />
           ) : (
             <Button
-              appearance="transparent" className={s.chevron} icon={<ChevronUpRegular />} disabled={locked} onClick={toggleFold}
+              appearance="transparent" className={s.chevron} icon={<ExpandChevron open />} disabled={locked} onClick={toggleFold}
               aria-label="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Up"
               data-testid="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Up"
             />

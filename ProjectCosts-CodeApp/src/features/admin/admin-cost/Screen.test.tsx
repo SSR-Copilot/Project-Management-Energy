@@ -225,25 +225,16 @@ describe("CostsSettingsScreen", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /Edit Period/, hidden: true })).not.toBeInTheDocument());
   });
 
-  it("UT-ADCOST-910 draws Apply to All and each section's Apply disabled with the canvas info text; clicking writes nothing", () => {
+  it("UT-ADCOST-910 draws no Apply to All bar and no per-section Apply strip (D61)", () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
-    const all = screen.getByRole("button", { name: "Apply to All" });
-    expect(all).toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(all);
     const sections = [
       { title: "DEVEX/CAPEX", key: "devex" }, { title: "Operation & Maintenance", key: "oAndM" },
       { title: "Land Lease", key: "landLease" }, { title: "Other OPEX Costs", key: "other" },
     ];
     for (const s of sections) openSection(s.title);
-    for (const s of sections) {
-      const apply = screen.getByTestId(T.sectionApply(s.key));
-      // `btn_Admin_Cost_Landlease_ApplyToLandlease.AccessibleLabel`, verbatim.
-      expect(apply).toHaveAccessibleName("Apply standard costs to all relevant projects, this will override existing standard assumption cost");
-      expect(apply).toHaveAttribute("aria-disabled", "true");
-      fireEvent.click(apply);
-    }
-    expect(screen.getAllByText(MSG.applyInfo)).toHaveLength(5);
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
+    for (const s of sections) expect(screen.queryByTestId(T.sectionApply(s.key))).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Apply standard cost/)).not.toBeInTheDocument();
   });
 
   it("UT-ADCOST-911 closes the panel and says exactly what did not happen when a follow-up step fails", async () => {

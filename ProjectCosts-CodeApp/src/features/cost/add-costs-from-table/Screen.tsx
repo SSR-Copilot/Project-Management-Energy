@@ -1,23 +1,22 @@
 /**
- * Add Cost from Table — composition only, faithful port of the canvas modal.
+ * Add Cost from Table — composition only. The canvas shows it as a modal; here it is the
+ * right-docked `FormPanel` (see the DIVERGENCE note at the render).
  *
  * Every decision still lives in `./rules.ts` (validation, the diff, contract/cost upserts,
  * the past-cost delete guard) or in `src/data/addCostSheet.ts` (the actual Dataverse
  * reads/writes) — unchanged. What changed in this round is the grid/UI layer: instead of a
  * plain HTML table, the actual `react-spreadsheet`-based grid the canvas's `vsb_Dev.SpreadSheet`
- * PCF control used is ported under `./spreadsheet/` and rendered inside a full-screen modal
- * overlay laid out exactly like `Add Costs from Table.pa.yaml`:
- *   scrim -> centered white panel (90% x 90%) -> blue header bar with title + cancel "X" ->
- *   toolbar (Add Row / Delete Row / Copy Table) -> the grid, scrollable -> footer
- *   Cancel/Save buttons.
+ * PCF control used is ported under `./spreadsheet/`. It sits in the panel body under the title
+ * and cancel "X": toolbar (Add Row / Delete Row / Copy Table) -> the grid, scrollable ->
+ * footer Save / Cancel (`Add Costs from Table.pa.yaml`).
  *
  * DELETION BEHAVIOUR is a single switch — `CANVAS_PARITY_DELETION` below.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@fluentui/react-components";
-import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
+import { Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, LoadingOverlay } from "@/components";
+import { EmptyState, FormPanel, LoadingOverlay, PanelButtons } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
@@ -235,77 +234,36 @@ export default function AddCostsFromTableScreen() {
     }
   };
 
-  if (!projectId) {
-    return (
-      <EmptyState title="No project selected"
-        description="Open this table from a project's DEVEX/CAPEX screen." />
-    );
-  }
-  if (!canOpenBulkEdit(permissions)) {
-    return <EmptyState title="Read-only" description={ADDCOST_MSG.noPermission} />;
-  }
-  if (sheetQuery.error) {
-    return (
-      <EmptyState title="Cost data is unavailable"
-        description="This category's contracts and costs could not be loaded." />
-    );
-  }
-  /*
-   * The project itself gates the grid: its start/COD dates ARE the sheet's columns. Rendering
-   * before it lands would build the grid around the current year and hide every earlier year.
-   */
-  if (!sessionLoading && !project) {
-    return (
-      <EmptyState title="Project is unavailable"
-        description="This project's dates could not be read, so the cost table's years cannot be established." />
-    );
-  }
-  if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
-    return <LoadingOverlay mode="inline" label="Loading the cost table…" />;
-  }
-
   const categoryName = CATEGORY_LABELS[category] ?? "";
-  const title = sheetTitle(project?.projectName ?? "", categoryName);
+  const title = project ? sheetTitle(project.projectName ?? "", categoryName) : "Add Cost from Table";
+  const canSave = canSaveBulkEdit(permissions, errors);
 
-  return (
-    <div
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0, 0, 0, 0.7)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-      }}
-    >
-      <div
-        style={{
-          width: "90%", height: "90%", background: "#fff",
-          display: "flex", flexDirection: "column", overflow: "hidden",
-        }}
-      >
-        {/* Header bar */}
-        <div
-          style={{
-            height: 42, minHeight: 42, background: "var(--colorBrandBackground, #0f6cbd)",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "0 15px 0 20px",
-          }}
-        >
-          <span style={{ color: "#fff", fontWeight: 600, fontSize: 14 }}>{title}</span>
-          <Button
-            appearance="transparent"
-            icon={<Dismiss24Regular style={{ color: "#fff" }} />}
-            title="Cancel"
-            aria-label="Cancel"
-            data-testid="ico_PopUpConfirmation_BodyHeader_2"
-            onClick={back}
-          />
-        </div>
-
-        {/* Toolbar */}
-        <div
-          style={{
-            height: 50, minHeight: 50, display: "flex", alignItems: "center", gap: 5,
-            padding: "5px 10px", background: "#fff",
-          }}
-        >
+  /*
+   * The panel is always mounted so the CAPEX screen behind it never flashes; what it holds depends
+   * on the state of the sheet. Each non-grid state is the one the full-screen modal used to show.
+   */
+  let body: ReactNode;
+  if (!projectId) {
+    body = <EmptyState title="No project selected"
+      description="Open this table from a project's DEVEX/CAPEX screen." />;
+  } else if (!canOpenBulkEdit(permissions)) {
+    body = <EmptyState title="Read-only" description={ADDCOST_MSG.noPermission} />;
+  } else if (sheetQuery.error) {
+    body = <EmptyState title="Cost data is unavailable"
+      description="This category's contracts and costs could not be loaded." />;
+  } else if (!sessionLoading && !project) {
+    /*
+     * The project itself gates the grid: its start/COD dates ARE the sheet's columns. Rendering
+     * before it lands would build the grid around the current year and hide every earlier year.
+     */
+    body = <EmptyState title="Project is unavailable"
+      description="This project's dates could not be read, so the cost table's years cannot be established." />;
+  } else if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
+    body = <LoadingOverlay mode="inline" label="Loading the cost table…" />;
+  } else {
+    body = (
+      <div className="add-cost-table">
+        <div className="add-cost-table-toolbar">
           <Button aria-label="Add Row" data-testid="btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Add20Regular />} onClick={() => setAddRowToken((t) => t + 1)}>
             Add Row
           </Button>
@@ -331,8 +289,7 @@ export default function AddCostsFromTableScreen() {
           </div>
         ) : null}
 
-        {/* Grid */}
-        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="add-cost-table-grid">
           <SpreadSheetComp
             data={initialGrid}
             onDataChange={handleDataChange}
@@ -342,28 +299,37 @@ export default function AddCostsFromTableScreen() {
             copyTableToken={copyTableToken}
           />
         </div>
-
-        {/* Footer buttons */}
-        <div
-          style={{
-            height: 50, minHeight: 50, display: "flex", alignItems: "center",
-            justifyContent: "flex-end", gap: 10, padding: "0 20px",
-          }}
-        >
-          <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" onClick={back}>Cancel</Button>
-          <Button
-            aria-label="Save"
-            data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save"
-            appearance="primary"
-            disabled={!canSaveBulkEdit(permissions, errors) || save.isPending}
-            onClick={() => { void doSave(); }}
-          >
-            Save
-          </Button>
-        </div>
       </div>
+    );
+  }
 
-      {save.isPending ? <LoadingOverlay label="Please wait, saving costs..." /> : null}
-    </div>
+  /*
+   * DIVERGENCE: the canvas shows this table as a centred 90 % x 90 % modal over a scrim. Here it is
+   * the right-docked panel every other screen uses (product owner, 26 Oct 2026), at ~95 % of the
+   * screen so the grid keeps the room the modal gave it. Everything inside is unchanged: same
+   * header text, same close and Save / Cancel identities, same busy text. `dirty` stays false on
+   * purpose: the modal's Cancel closed without asking, and so does this.
+   */
+  return (
+    <FormPanel
+      open
+      title={title}
+      width="grid"
+      panelClassName="add-cost-table-panel"
+      closeTestId="ico_PopUpConfirmation_BodyHeader_2"
+      closeLabel="Cancel"
+      onDismiss={back}
+      {...(save.isPending ? { busyLabel: "Please wait, saving costs..." } : {})}
+      footer={(
+        <PanelButtons
+          onSave={() => { void doSave(); }}
+          disabled={!canSave || save.isPending}
+          saveTestId="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save"
+          cancelTestId="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel"
+        />
+      )}
+    >
+      {body}
+    </FormPanel>
   );
 }

@@ -64,6 +64,8 @@ export interface ReorderPanelProps<T> {
   /** `data-testid` of the footer Save / Cancel buttons (`PanelButtons`); kebab defaults. */
   saveTestId?: string;
   cancelTestId?: string;
+  /** The Save button's hover hint (`PanelButtons saveTooltip`). */
+  saveTooltip?: string;
   /** Passed through to `ReorderItems` (`showPosition`, `draggable`, `buttonLabels`, …). */
   listProps?: Partial<Omit<ReorderItemsProps<T>, "items" | "getId" | "getLabel" | "onMove" | "ariaLabel">>;
   /** The working order changed (CL keeps its own `changed` flag in step). */
@@ -73,7 +75,7 @@ export interface ReorderPanelProps<T> {
 export function ReorderPanel<T>({
   open, title, items, getId, getLabel, listAriaLabel, hint, hintClassName, saving, error, warning,
   canSave = (changed) => changed, onSave, onCancel, savingLabel, bodyGap = 16, bodyPaddingBottom = 0, footerGap, listProps,
-  onOrderChange, saveTestId = "reorder-save", cancelTestId = "reorder-cancel",
+  onOrderChange, saveTestId = "reorder-save", cancelTestId = "reorder-cancel", saveTooltip,
 }: ReorderPanelProps<T>) {
   const styles = useStyles();
   const [initial] = useState<readonly T[]>(() => [...items]);
@@ -89,6 +91,7 @@ export function ReorderPanel<T>({
         <PanelButtons
           look="brand" disabled={!canSave(changed)} saving={saving} onSave={() => onSave(working)}
           saveTestId={saveTestId} cancelTestId={cancelTestId}
+          {...(saveTooltip ? { saveTooltip } : {})}
           {...(savingLabel ? { savingLabel } : {})}
           {...(footerGap !== undefined ? { gap: footerGap } : {})}
         />

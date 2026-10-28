@@ -19,9 +19,10 @@ import { matrixCells, type TechnologyGroup } from "./rules";
 
 const useStyles = makeStyles({
   scroller: { overflowX: "auto", maxWidth: "100%" },
-  table: { minWidth: "1030px", tableLayout: "fixed" },
+  table: { minWidth: "1010px", tableLayout: "fixed" },
   headRow: { backgroundColor: palette.Grayscale40 },
-  headCell: { fontWeight: tokens.fontWeightSemibold, height: "32px" },
+  // Canvas header labels are modern Text at the default 14px, Semibold, in a 32px #FAFAFA strip (AMS:318-330, 360).
+  headCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "14px", height: "32px" },
   center: { textAlign: "center", "& > *": { justifyContent: "center" } },
   sticky: {
     position: "sticky", left: 0, zIndex: 1,
@@ -65,7 +66,7 @@ export function AssumptionsMatrix({ countryName, groups, locale }: AssumptionsMa
               <span data-testid="lbl_Technology_MilestonesStandardAssumptions_AdminScreen">{MATRIX_TEXT.technology}</span>
             </TableHeaderCell>
             {/* `lbl_BlankSubLabels_…` has `Text: ""`; "Values" is its accessible name only (no canvas equivalent). */}
-            <TableHeaderCell className={styles.headCell} style={{ width: 130 }} aria-label="Values">
+            <TableHeaderCell className={styles.headCell} style={{ width: 110 }} aria-label="Values">
               <span data-testid="lbl_BlankSubLabels_MilestonesStandardAssumptions_AdminScreen" />
             </TableHeaderCell>
             {MATRIX_COLUMNS.map((c) => (

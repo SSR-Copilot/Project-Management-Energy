@@ -31,12 +31,12 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  ArrowSyncRegular, CommentRegular, DismissCircleRegular, EditRegular, EyeOffRegular, EyeRegular, LockClosedRegular,
-  MailRegular, PeopleRegular,
+  ArrowSyncRegular, DismissRegular, EditRegular, EyeOffRegular, EyeRegular, LockClosedRegular,
+  MailRegular, NoteRegular, PeopleRegular,
 } from "@fluentui/react-icons";
 import {
   ConfirmDialog, DateField, EmptyState, FormPanel, PanelButtons, PanelCancelButton,
-  TextAreaField, WriteFeedback,
+  TextAreaField, WriteFeedback, HINTS,
 } from "@/components";
 import { DATE_PICKER_FORMAT } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
@@ -110,7 +110,9 @@ const useStyles = makeStyles({
   // give way together on a narrower window; below 1060 the table scrolls inside its own box. (1060,
   // not 1100: on a 1366-px screen at 100 % zoom the box is 1097 wide, and 1100 left a 3-px scroll —
   // zoom sweep, 21 Oct 2026.)
-  table: { width: "100%", maxWidth: "1520px", minWidth: "1060px", tableLayout: "fixed" },
+  // `max-width` is undefined for a table (27 Oct 2026: it was ignored, the table filled the window and every column after
+  // Holding Description sat 44 - 88 px right of the canvas), so the cap is in the width itself.
+  table: { width: "min(100%, 1520px)", minWidth: "1060px", tableLayout: "fixed" },
   // With the Country column hidden (70) the widths are fixed: 120 + 390 + 70 + 230 + 240.
   tableHoldingHidden: { width: "1050px", minWidth: "1050px", maxWidth: "1050px" },
   // `con_…_OverviewHeader`: Fill Grayscale40 (#FFFFFF in the PM palette — no visible fill), 32 high;
@@ -121,10 +123,10 @@ const useStyles = makeStyles({
     ":hover": { backgroundColor: PM_GRAYSCALE40 },
     "& th": { fontSize: "13.33px", fontWeight: tokens.fontWeightSemibold, height: "32px", paddingTop: 0, paddingBottom: 0 },
   },
-  // Each row ~40: the 30-high toggle buttons, a 1 px Grayscale30 rule (`rec_…_Separator`), labels
+  // Each row 36.5 (`gal_….Height: =Self.AllItemsCount*36.5`, 37 here): the 26-high toggle buttons, a 1 px Grayscale30 rule (`rec_…_Separator`), labels
   // `gblAppSizes.Font.ExtraSmall` (9 pt); two lines fit.
   bodyRow: {
-    height: "40px",
+    height: "37px",
     borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.Grayscale30,
     "& td": { fontSize: "12px", paddingTop: "2px", paddingBottom: "2px", verticalAlign: "middle" },
   },
@@ -142,11 +144,12 @@ const useStyles = makeStyles({
   colStatus: { width: "240px" },
   headerToggle: { display: "inline-flex", alignItems: "center", gap: space.xxs, "& svg": { color: palette.themePrimary } },
   rowActions: { display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" },
-  // The row toggles: rectangular, ~90 x 30, radius 2, the `ColorFade(Grayscale10, 0.65)` border,
-  // white, ExtraSmall text (canvas 80 x 26, radius 4 — sized to the PO screenshot).
+  // The row toggles: 80 x 26, radius 4 (`but_…_ListRow_InProgress` / `_Complete`: Width = the 80 wide header label,
+  // Height 26, RadiusTopLeft 4), the `ColorFade(Grayscale10, 0.65)` border, white, ExtraSmall text. 27 Oct 2026: they
+  // were 90 x 30, radius 2, and showed about 9 % larger than the canvas beside it.
   rowButton: {
-    minWidth: "90px", width: "90px", height: "30px", paddingLeft: 0, paddingRight: 0, fontSize: "12px", flexShrink: 0,
-    fontWeight: tokens.fontWeightRegular, ...radius("2px"), ...border(ROW_BUTTON_BORDER),
+    minWidth: "80px", width: "80px", height: "26px", paddingLeft: 0, paddingRight: 0, fontSize: "12px", flexShrink: 0,
+    fontWeight: tokens.fontWeightRegular, ...radius("4px"), ...border(ROW_BUTTON_BORDER),
     backgroundColor: palette.white, color: palette.Grayscale10,
   },
   /** `but_…_ListRow_Complete.Fill` — `ColorFade(palette.Green, 0.4)` when highlighted, text Grayscale00. */
@@ -155,8 +158,17 @@ const useStyles = makeStyles({
   inProgressOn: { backgroundColor: palette.themeLight, color: palette.Grayscale00, ":hover": { backgroundColor: palette.themeLight, color: palette.Grayscale00 } },
   /** `but_…_ListRow_History.Fill` — `ColorFade(akzent1, 0.3)`. */
   historyButton: { backgroundColor: "rgb(126, 185, 227)" },
+  // `ico_…_ListRow_Comments`: `Icon.Note`, 20 x 24, themePrimary with a note, `Grayscale20` without.
   notePresent: { color: palette.themePrimary },
-  noteAbsent: { color: tokens.colorNeutralForeground3 },
+  noteAbsent: { color: palette.Grayscale20 },
+  noteIcon: { minWidth: "20px", width: "20px", height: "24px", paddingLeft: 0, paddingRight: 0, fontSize: "20px" },
+  // `ico_…_ListRow_ApprovalMode`: 24 high, `IconColor: =RGBA(53, 61, 63, 1)`, 4 px before the In Progress button.
+  // Its place is reserved in EVERY row (a 24 px slot, `Height: =24`), so a row without the icon keeps its In Progress /
+  // Complete buttons under the others' instead of shifting left (27 Oct 2026).
+  approvalSlot: { flex: "0 0 24px", width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center" },
+  approvalIcon: { fontSize: "20px", color: "rgb(53, 61, 63)" },
+  // `ico_…_ListRow_CancelApproval`: `Icon.Cancel`, 12 x 12, `RGBA(53, 61, 63, 1)`.
+  cancelIcon: { minWidth: "12px", width: "12px", height: "12px", paddingLeft: 0, paddingRight: 0, fontSize: "12px", color: "rgb(53, 61, 63)" },
   // `con_…_ListRow_Container_CompletionDate`: the Edit button (32 x 26) at X = 0, then the date.
   dateCell: { display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" },
   datePicker: { display: "flex", alignItems: "flex-end", gap: space.s },
@@ -504,8 +516,10 @@ export default function CheckListScreen() {
                       <TableCell>
                         {/* ApprovalMode icon · In Progress (or History) · cancel ✕ · Complete · comment. */}
                         <span className={s.rowActions}>
-                          {ra.icon === "Mail" ? <MailRegular aria-hidden /> : null}
-                          {ra.icon === "People" ? <PeopleRegular aria-hidden /> : null}
+                          <span className={s.approvalSlot}>
+                            {ra.icon === "Mail" ? <MailRegular className={s.approvalIcon} aria-hidden /> : null}
+                            {ra.icon === "People" ? <PeopleRegular className={s.approvalIcon} aria-hidden /> : null}
+                          </span>
                           {!cancelVisible ? (
                             <Button size="small" appearance="secondary" aria-label={UI.inProgress}
                               className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn)}
@@ -526,7 +540,7 @@ export default function CheckListScreen() {
                             </Button>
                           )}
                           {cancelVisible ? (
-                            <Button appearance="transparent" size="small" icon={<DismissCircleRegular />}
+                            <Button appearance="transparent" size="small" className={s.cancelIcon} icon={<DismissRegular />}
                               aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
                               disabled title={EXCLUDED.cancelChecklistApproval}
                               data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval" />
@@ -538,8 +552,8 @@ export default function CheckListScreen() {
                           ) : completeButton}
                           {/* `ico_…_ListRow_Comments` — opens the comment form; its tooltip is the note. */}
                           <Tooltip content={row.note ?? ""} relationship="description" withArrow>
-                            <Button appearance="transparent" size="small" icon={<CommentRegular />}
-                              className={rowHasNote(row) ? s.notePresent : s.noteAbsent}
+                            <Button appearance="transparent" size="small" icon={<NoteRegular />}
+                              className={mergeClasses(s.noteIcon, rowHasNote(row) ? s.notePresent : s.noteAbsent)}
                               aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
                               data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
                               disabled={disabledRow}
@@ -719,6 +733,8 @@ export default function CheckListScreen() {
             });
           }}
           onCancel={() => setCommentForm(null)}
+          // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
+          saveTooltip={HINTS.save}
           saveTestId="pcf_btn_CheckList_RightPanel_Checklist_Form_Buttons_Save"
           cancelTestId="pcf_btn__CheckList_RightPanel_Checklist_Form_Buttons_Cancel"
           disabled={busy || !(commentForm?.text ?? "").trim()} />}

@@ -43,6 +43,7 @@ import {
 } from "@fluentui/react-components";
 import { CheckmarkRegular, DeleteFilled, DeleteRegular, DismissRegular, InfoRegular } from "@fluentui/react-icons";
 import { fontFamily, palette } from "@/theme/tokens";
+import { HINTS } from "./hints";
 
 /** Canvas `Size:` is in points; Power Apps renders them at 96/72 px per point. */
 const pt = (size: number) => `${(size * 4) / 3}px`;
@@ -366,7 +367,7 @@ export function ConfirmDialog({
         <div className={styles.header}>
           <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
-          <button type="button" className={styles.close} aria-label="Close"
+          <button type="button" className={styles.close} aria-label="Close" title={HINTS.cancel}
             data-testid="ico_PopUpConfirmation_BodyHeader_3" onClick={onCancel} disabled={locked}>
             <DismissRegular className={styles.closeIcon} />
           </button>

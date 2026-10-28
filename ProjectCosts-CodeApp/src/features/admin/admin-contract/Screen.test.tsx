@@ -749,30 +749,16 @@ describe("Canvas parity pass: list view", () => {
     expect(toolbar.children[2]).toBe(screen.getByRole("button", { name: "Add Construction Contract" }));
   });
 
-  it("UT-ADCONTR-936 the Apply to All and per-contract Apply bars render disabled and call nothing", async () => {
+  it("UT-ADCONTR-936 no Apply to All bar and no per-contract Apply bar are drawn (D61)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Construction Contract - Grid" }));
-    const all = screen.getByRole("button", { name: "Apply to All" });
-    expect(all).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText(
-      "Apply standard contracts to all relevant projects, this will override existing standard assumption contracts",
-    )).toBeInTheDocument();
-    expect(screen.getByTestId("con_AdminContract_ApplyAll_Inner_Warning_Button")).toHaveStyle({ backgroundColor: "rgba(204, 226, 241, 0.5)" });
-    const one = screen.getByTestId("btn_Apply_Individual_AdminContracts-c-con");
-    expect(one).toHaveAccessibleName("Apply");
-    expect(one).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText(
-      "Apply standard cost to relevant projects, this will override existing standard assumption contracts",
-    )).toBeInTheDocument();
-    // No tracking line: its table does not exist, so nothing is rendered.
-    expect(screen.queryByText(/Apply was made by/)).not.toBeInTheDocument();
-    const reads = api.listStandardContracts.mock.calls.length;
-    await user.click(all);
-    await user.click(one);
-    expect(api.listStandardContracts.mock.calls.length).toBe(reads);
-    expect(api.saveStandardContract).not.toHaveBeenCalled();
-    expect(api.deleteStandardContract).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^Apply/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn_AdminContract_ApplyAll")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn_Apply_Individual_AdminContracts-c-con")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Apply standard/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn_Edit_AdminContracts-c-con")).toBeInTheDocument();
+    expect(screen.getByTestId("btn_Delete_AdminContracts-c-con")).toBeInTheDocument();
   });
 
   it("UT-ADCONTR-937 card chrome: blue chevron, 0 left inset, cards touch; fields are 16 px headings over 15 px semibold values", async () => {

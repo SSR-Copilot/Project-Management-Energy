@@ -36,34 +36,34 @@ export function technologyName(value: number | undefined): string {
 }
 
 /**
- * Canvas typography of the screen. `gblAppSizes.Font` (App:1134-1162):
- * Medium 11pt ≈ 14.7px, Large 12pt = 16px, ExtraLarge 14pt ≈ 18.7px — mapped to the nearest
- * Fluent ramp step (300 = 14px, 400 = 16px, 500 = 20px). All weights Regular, default colours.
+ * Canvas typography of the screen. `gblAppSizes.Font` (App:1148-1156): Small 10, Medium 11, Large 12,
+ * ExtraLarge 14. The matrix labels are modern `Text@0.0.51` controls, whose `Size` is in px (28 Oct 2026,
+ * D62); only `lbl_ClusterName_…` is a classic Label (Medium, pt ≈ 14.7px, nearest ramp step 300).
+ * All weights Regular, default colours.
  */
 export const TYPOGRAPHY = {
   /** `lbl_ClusterName_…`: Medium, `FontWeight.Normal`, `gblAppColors.Label.Color` = black (AMS:814, 822-824, 833). */
   countryName: { fontSize: tokens.fontSizeBase300, fontWeight: tokens.fontWeightRegular, color: palette.black },
-  /** `lbl_TechnologyValue_…`: ExtraLarge, Regular (AMS:766, 769). */
-  technology: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightRegular },
-  /** `lbl_SubLabelsValue_…`: Large, Regular, default font colour (AMS:751, 756; no FontColor set). */
-  subLabel: { fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightRegular, color: tokens.colorNeutralForeground1 },
-  /** `lbl_*Value_…`: Large, Regular (AMS:560, 573 … 780, 793). */
-  value: { fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightRegular },
+  /** `lbl_TechnologyValue_…`: modern Text, ExtraLarge = 14px, Regular (AMS:766, 769). */
+  technology: { fontSize: "14px", fontWeight: tokens.fontWeightRegular },
+  /** `lbl_SubLabelsValue_…`: modern Text, Large = 12px, Regular, default font colour (AMS:751, 756; no FontColor set). */
+  subLabel: { fontSize: "12px", fontWeight: tokens.fontWeightRegular, color: tokens.colorNeutralForeground1 },
+  /** `lbl_*Value_…`: modern Text, Large = 12px, Regular (AMS:560, 573 … 780, 793). */
+  value: { fontSize: "12px", fontWeight: tokens.fontWeightRegular },
   /**
    * Edit-panel section headings: ExtraLarge, `'TextCanvas.Weight'.Bold` (AMS:1140-1143,
-   * 1927-1930). Same ExtraLarge step as `technology`.
+   * 1927-1930): modern Text, ExtraLarge = 14px.
    */
-  panelHeading: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightBold },
+  panelHeading: { fontSize: "14px", fontWeight: tokens.fontWeightBold },
   /**
-   * Edit-panel row labels and technology column headers: ExtraLarge, Semibold (AMS:1191-1194 …
-   * 2020; 1899-1902, 2357-2360).
+   * Edit-panel row labels and technology column headers: modern Text, ExtraLarge = 14px, Semibold
+   * (AMS:1191-1194 … 2020; 1899-1902, 2357-2360).
    */
-  panelLabel: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold },
+  panelLabel: { fontSize: "14px", fontWeight: tokens.fontWeightSemibold },
   /**
-   * Edit-panel section validation messages: `gblAppSizes.Font.Small` (AMS:1914, 2372).
-   * Small 10pt ≈ 13.3px, nearest ramp step 300.
+   * Edit-panel section validation messages: modern Text, `gblAppSizes.Font.Small` = 10px (AMS:1914, 2372).
    */
-  panelMessage: { fontSize: tokens.fontSizeBase300 },
+  panelMessage: { fontSize: "10px" },
 } as const;
 
 /** The two edit-panel matrices. */

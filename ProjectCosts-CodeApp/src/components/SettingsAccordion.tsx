@@ -18,6 +18,7 @@ import {
   Accordion, AccordionHeader, AccordionItem, AccordionPanel, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { palette } from "@/theme/tokens";
+import { ExpandChevron } from "./ExpandChevron";
 
 const useStyles = makeStyles({
   item: { backgroundColor: palette.white },
@@ -86,6 +87,9 @@ export function SettingsAccordion({
           >
             <AccordionHeader
               expandIconPosition="end"
+              // The shared fold chevron (blue, 1.4x), as every card header. Fluent rotates its own icon by the
+              // open state; ours swaps up / down instead, so that rotation is switched off.
+              expandIcon={{ children: <ExpandChevron open={open} />, style: { transform: "none" } }}
               {...(light ? { size: "large" as const } : {})}
               className={light
                 ? mergeClasses(styles.lightHeader, border === "always" && styles.headerRule)

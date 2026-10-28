@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type React
 import { useBeforeUnload, useDiscardGuard } from "./discardGuard";
 import type { CloseReason, DiscardText } from "./discardText";
 import { FormPanelContext, formPanelWidth, type FormPanelApi, type FormPanelWidth } from "./formPanelContext";
+import { HINTS } from "./hints";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { PanelMessages, type PanelMessagesProps } from "./PanelMessages";
 import { PanelButtons, type PanelButtonsProps } from "./CanvasFields";
@@ -49,6 +50,8 @@ export interface FormPanelProps {
   closeTestId?: string;
   /** The canvas close icon's `AccessibleLabel`; default "Close panel". */
   closeLabel?: string;
+  /** The canvas close icon's hover `Tooltip`; default "Cancel" (`HINTS.cancel`: 33 canvas ✕ icons say it). */
+  closeTooltip?: string;
   /** Blocks every dismissal while true (a save is running). */
   busy?: boolean;
   /** Implies `busy`; shows the blocking spinner with this text inside the panel. */
@@ -81,7 +84,7 @@ export interface FormPanelProps {
 }
 
 export function FormPanel({
-  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel,
+  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
   coverLabel, ariaLabel, panelClassName,
 }: FormPanelProps) {
@@ -116,7 +119,7 @@ export function FormPanel({
         style={style}>
         <DrawerHeader className="canvas-panel-header">
           <DrawerHeaderTitle action={
-            <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
+            <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"} title={closeTooltip ?? HINTS.cancel}
               data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
               disabled={locked} onClick={() => requestClose("dismiss")} />
           }>

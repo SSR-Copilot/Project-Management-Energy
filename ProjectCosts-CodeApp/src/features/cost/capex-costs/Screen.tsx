@@ -22,7 +22,7 @@ import {
   Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowLeftRegular, ArrowRightRegular, ChevronDownRegular, ChevronUpRegular,
+  AddRegular, ArrowLeftRegular, ArrowRightRegular, 
 } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -36,6 +36,7 @@ import {
   PanelButtons,
   PanelExtraButton,
   useStandardValueClass,
+  ExpandChevron,
 } from "@/components";
 import { costLocation } from "@/app/deepLinks";
 import { useSession } from "@/app/SessionContext";
@@ -914,7 +915,7 @@ export default function CapexCostsScreen() {
                 <span className={styles.yearNumber}>{y}</span>
                 <span className={styles.yearAllocated}>{allocatedLabel(y)}</span>
                 <span className={styles.yearChevron} aria-hidden="true">
-                  {expanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                  <ExpandChevron open={expanded} />
                 </span>
               </button>
               {expanded ? (

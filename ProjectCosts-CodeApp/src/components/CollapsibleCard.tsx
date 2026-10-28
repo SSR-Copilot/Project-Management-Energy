@@ -13,8 +13,8 @@
  */
 import type { ReactNode } from "react";
 import { Button, makeStyles, mergeClasses } from "@fluentui/react-components";
-import { ChevronDownRegular, ChevronUpRegular } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
+import { ExpandChevron } from "./ExpandChevron";
 
 const useStyles = makeStyles({
   card: { backgroundColor: palette.white, display: "flex", flexDirection: "column" },
@@ -30,7 +30,6 @@ const useStyles = makeStyles({
     paddingTop: "10px", paddingBottom: "10px", paddingLeft: "30px", paddingRight: "10px",
     borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.Grayscale20,
   },
-  accountChevron: { color: palette.themePrimary, flexShrink: 0 },
   contractHeader: {
     display: "flex", alignItems: "center", gap: "8px",
     minHeight: "50px", paddingLeft: "16px", paddingRight: "10px",
@@ -87,8 +86,8 @@ export function CollapsibleCard({
         {trailing}
         <Button
           appearance="transparent"
-          className={mergeClasses(account ? styles.accountChevron : undefined, chevronClassName)}
-          icon={expanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+          className={chevronClassName}
+          icon={<ExpandChevron open={expanded} />}
           onClick={onToggle}
           aria-expanded={expanded}
           aria-controls={bodyId}

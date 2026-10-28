@@ -46,13 +46,14 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  CheckmarkRegular, ChevronDownRegular, ChevronLeftRegular, ChevronRightRegular,
-  ChevronDoubleLeftRegular, ChevronUpRegular, DeleteRegular, DismissRegular, EditRegular,
+  CheckmarkRegular, ChevronLeftRegular, ChevronRightRegular,
+  ChevronDoubleLeftRegular, DeleteRegular, DismissRegular, EditRegular,
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   CommandBar, ConfirmDialog, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, ReadOnlyField,
   WriteFeedback, type Command, useFieldControlClass,
+  ExpandChevron, HINTS,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
@@ -1379,7 +1380,7 @@ export default function GeneratorsScreen() {
     return (
       <Button
         appearance="transparent" size="small"
-        icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+        icon={<ExpandChevron open={open} />}
         aria-label={name} aria-expanded={open} data-testid={name}
         disabled={!editable}
         onClick={() => onFold(family, id)}
@@ -1791,6 +1792,8 @@ export default function GeneratorsScreen() {
           <PanelFooter
             primary={PANEL_BUTTONS.save}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Save"
+            // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
+            primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Cancel"
             disabled={!turbineSaveable}
             onCancel={close}
@@ -1963,6 +1966,7 @@ export default function GeneratorsScreen() {
           <PanelFooter
             primary={plantPanelSaveLabel(inverterOtherValue)}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save"
+            primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Cancel"
             reason={inverterRequests ? EXCLUDED.permissionRequest : undefined}
             disabled={!inverterSaveable} onCancel={close} onPrimary={() => void saveInverter()}
@@ -2021,6 +2025,7 @@ export default function GeneratorsScreen() {
           <PanelFooter
             primary={plantPanelSaveLabel(substructureOtherValue)}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save"
+            primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Cancel"
             reason={substructureRequests ? EXCLUDED.permissionRequest : undefined}
             disabled={!substructureSaveable} onCancel={close} onPrimary={() => void saveSubstructure()}

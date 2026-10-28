@@ -761,8 +761,13 @@ export const SCREEN_MSG = {
   numericPlaceholder: "0",
   /** `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsSave.Text` — verbatim. */
   save: "Save",
-  /** `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsSave.Tooltip` — verbatim (sic). */
-  saveTooltip: "Filter projects details list view.",
+  /**
+   * `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsSave.Tooltip` is "Filter projects details list view.", a hint
+   * copy-pasted from the Project Overview filter icon (12 canvas Save buttons carry it).
+   * SOURCE DEFECT: the hint is wrong for a Save button, so it says "Save" (`HINTS.save`; pure module, no import).
+   * Reverting is this one string.
+   */
+  saveTooltip: "Save",
   /** `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsReset.Text` — verbatim. */
   cancel: "Cancel",
   /** `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsReset.Tooltip` — verbatim. */
