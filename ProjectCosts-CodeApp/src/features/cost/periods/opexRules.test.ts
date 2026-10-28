@@ -39,6 +39,7 @@ import {
   countryInflationPercent,
   canAddContractType,
   lastPeriodByName,
+  chainLastPeriod,
   canAddPeriod,
   canAddStandardContract,
   canDeleteCost,
@@ -396,7 +397,7 @@ describe("OPEX — period chains", () => {
     expect(lastPeriodByStartDate(edited).id).toBe("p2");
   });
 
-  it("UT-OPEX-016b Add Period and Delete use the canvas Name sort (O-5 reproduced, 26 Oct 2026)", () => {
+  it("UT-OPEX-016b Add Period is enabled on every row; Delete on the root or the actual last (27 Oct 2026)", () => {
     // The live "Initialized O&M Contract" chain: rows 1-5 loaded with `vsb_name` = description,
     // row 6 added in the app as `<sub-account>-<device>-<description>`. "Operation…" sorts after
     // "Initialized…", so here the Name order and the period order agree on `- 6`.
@@ -414,12 +415,15 @@ describe("OPEX — period chains", () => {
     expect(lastPeriod(groupChains(cardCosts)[0]!).id).toBe("i6");
     expect(lastPeriodByName(cardCosts, added)?.id).toBe("i6");
     expect(canAddPeriod(commandArgs({ mode: "om", selected: added, cardCosts }))).toBe(true);
-    expect(canAddPeriod(commandArgs({ mode: "om", selected: migrated[3]!, cardCosts }))).toBe(false);
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: migrated[3]!, cardCosts }))).toBe(true);
+    // ...and whichever row is selected, the new period follows the chain's last one.
+    expect(chainLastPeriod(cardCosts, migrated[0]!).id).toBe("i6");
+    expect(chainLastPeriod(cardCosts, head).id).toBe("i6");
     expect(canDeleteCost(commandArgs({ selected: added, cardCosts }))).toBe(true);
     expect(canDeleteCost(commandArgs({ selected: migrated[3]!, cardCosts }))).toBe(false);
   });
 
-  it("UT-OPEX-016c '- 9' is the canvas' last period because '- 10' sorts before '- 2' as text", () => {
+  it("UT-OPEX-016c the canvas' Name sort picks '- 9'; both commands now use the actual last, '- 10'", () => {
     const periods = Array.from({ length: 9 }, (_, i) => cost({
       id: `t${i + 2}`, name: `Sub-Dev-Service - ${i + 2}`, parentCostId: "r",
       startDate: `${2030 + i}-01-01`,
@@ -428,10 +432,12 @@ describe("OPEX — period chains", () => {
     expect(lastPeriod(chain10).id).toBe("t10");
     const cardCosts = [root, ...periods];
     expect(lastPeriodByName(cardCosts, periods[8]!)?.id).toBe("t9");
-    // So, as in the canvas, the commands light up on `- 9` and not on the real last period.
-    expect(canAddPeriod(commandArgs({ mode: "om", selected: periods[7]!, cardCosts }))).toBe(true);
-    expect(canAddPeriod(commandArgs({ mode: "om", selected: periods[8]!, cardCosts }))).toBe(false);
-    expect(canDeleteCost(commandArgs({ selected: periods[7]!, cardCosts }))).toBe(true);
+    // The canvas offers Delete on `- 9`; since 27 Oct 2026 only the actual last period, `- 10`.
+    expect(canDeleteCost(commandArgs({ selected: periods[7]!, cardCosts }))).toBe(false);
+    expect(canDeleteCost(commandArgs({ selected: periods[8]!, cardCosts }))).toBe(true);
+    // Add Period is on everywhere and follows the latest-starting period, `- 10`, not `- 9`.
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: periods[8]!, cardCosts }))).toBe(true);
+    expect(chainLastPeriod(cardCosts, periods[0]!).id).toBe("t10");
   });
 
   it("UT-OPEX-016d a selected ROOT competes by Name with its children; a selected child does not see the root", () => {
@@ -591,10 +597,13 @@ describe("OPEX — the two command bars", () => {
     }))).toBe(false);
   });
 
-  it("UT-OPEX-028 O&M Add Period is only enabled on the chain's LAST period", () => {
-    // Ported from skeleton SKEL-OPEX-012.
+  it("UT-OPEX-028 O&M Add Period is enabled on ANY period of the card (divergence, 27 Oct 2026)", () => {
+    // Ported from skeleton SKEL-OPEX-012, whose last-period rule the product owner dropped.
     const cardCosts = [root, p2, p3];
-    expect(canAddPeriod(commandArgs({ mode: "om", selected: p2, cardCosts }))).toBe(false);
+    expect(canAddPeriod(commandArgs({ mode: "om", selected: p2, cardCosts }))).toBe(true);
+    expect(canAddPeriod(commandArgs({
+      mode: "om", selected: { ...p2, isStandardContract: true }, cardCosts,
+    }))).toBe(false);
     expect(canAddPeriod(commandArgs({ mode: "om", selected: p3, cardCosts }))).toBe(true);
     expect(canAddPeriod(commandArgs({
       mode: "om", selected: p3, cardCosts, selectedScopeId: "card-2",

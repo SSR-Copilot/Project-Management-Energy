@@ -316,6 +316,8 @@ export interface LandLeaseCostRow {
 
 export const PAGE_LOCK_TITLE =
   "This page is locked. To unlock it, please complete the following sections:";
+const LOCK_BULLET_GENERAL = "• General";
+const LOCK_BULLET_MILESTONES = "• Milestones";
 
 /**
  * Rule (Validation): `con_Milestones_Page_LockMessage_1.Visible =
@@ -325,12 +327,15 @@ export const PAGE_LOCK_TITLE =
  * Note the asymmetry, faithfully reproduced: the banner is shown on a blank END date but
  * the "Milestones" bullet tests the START date, so a project with an end date and no
  * start date shows no banner at all.
+ *
+ * A New Project (nothing saved in General yet) has no record: `gblRecordSelectedProject` is
+ * blank, so both `IsBlank` predicates are true and both bullets show.
  */
 export function pageLock(project: GeneratorsProject | null): string[] {
-  if (!project) return [];
+  if (!project) return [LOCK_BULLET_GENERAL, LOCK_BULLET_MILESTONES];
   const bullets: string[] = [];
-  if (isBlank(project.projectIdText)) bullets.push("• General");
-  if (isBlank(project.projectStartDate)) bullets.push("• Milestones");
+  if (isBlank(project.projectIdText)) bullets.push(LOCK_BULLET_GENERAL);
+  if (isBlank(project.projectStartDate)) bullets.push(LOCK_BULLET_MILESTONES);
   return bullets;
 }
 

@@ -28,7 +28,7 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Button, Field, Input, MessageBar, MessageBarBody, Text, Tooltip, makeStyles, mergeClasses,
+  Button, Field, Input, MessageBar, MessageBarBody, Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
   ArrowClockwiseRegular, CalendarAddRegular, CheckmarkRegular, DismissRegular, InfoRegular,
@@ -36,9 +36,10 @@ import {
 } from "@fluentui/react-icons";
 import {
   ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, LoadingOverlay, UnsavedChangesGuard, WriteFeedback,
-  useFieldControlClass, useFieldSkin, useStandardValueClass,
+  useCanvasRequiredMark, useFieldControlClass, useFieldSkin, useNoInvalidOutline, useStandardValueClass,
 } from "@/components";
 import { DATE_PICKER_FORMAT, MODERN_DATE_PICKER_FORMAT, type CanvasDateFormat } from "@/domain/canvasDate";
+import type { Lang } from "@/domain/powerFxNumeric";
 import { useSession } from "@/app/SessionContext";
 import { palette, space } from "@/theme/tokens";
 import { CANVAS_TEXT, usePmLayout } from "@/features/pm/general-data/pmLayout";
@@ -46,7 +47,7 @@ import { stepLogText } from "@/features/pm/general-data/rules";
 import {
   MILESTONES_MSG, MILESTONES_SCREEN_TEXT, MILESTONE_FIELD_ERROR, cancelMilestones,
   canSaveMilestones, classifyDerivedMilestones, codChangeBlocksSave, editMilestone,
-  emptyMilestoneDates, farmdownError, formatShortDateTime24, initialForm, invalidMessages,
+  emptyMilestoneDates, farmdownError, formatFarmdown, formatShortDateTime24, initialForm, invalidMessages,
   isMilestoneFieldErrorVisible, isMilestoneFieldVisible, isPageLocked, isRecalculateEnabled,
   isRecalculateVisible, milestoneMeta, needsPlantCostRecalculation, nextDirtyKeys,
   operationalLifetime, planSaveMilestones, recalculateMilestone, repriceGenerators,
@@ -114,6 +115,22 @@ const FORMAT: Partial<Record<DateKey, CanvasDateFormat>> = {
   ApplicationSubmitted: MODERN_DATE_PICKER_FORMAT,
 };
 const formatOf = (k: DateKey): CanvasDateFormat => FORMAT[k] ?? DATE_PICKER_FORMAT;
+/** The pickers that are the classic `DatePicker@0.0.46` (everything not a `ModernDatePicker`). */
+const isClassicPicker = (k: DateKey): boolean => FORMAT[k] === undefined;
+
+/** The classic controls' default outline / placeholder greys (Fluent UI v8 `neutralSecondaryAlt` …). */
+const CLASSIC_BORDER = "#8A8886";
+const CLASSIC_BORDER_DISABLED = "#C8C6C4";
+const CLASSIC_PLACEHOLDER = "#A19F9D";
+/** Plain marker classes for the classic boxes, so the screen-root rules can find them. */
+const CLASSIC = "ms-classic-box";
+const CLASSIC_DISABLED = "ms-classic-box-disabled";
+const outline = (color: string) => ({
+  borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+  borderTopStyle: "solid" as const, borderRightStyle: "solid" as const,
+  borderBottomStyle: "solid" as const, borderLeftStyle: "solid" as const,
+  borderTopColor: color, borderRightColor: color, borderBottomColor: color, borderLeftColor: color,
+});
 
 const COLUMN_1: DateKey[] = [
   "StartDate", "FeasibilityStudies", "ProjectDevelopmentStarted", "ApplicationSubmitted",
@@ -122,10 +139,15 @@ const COLUMN_2: DateKey[] = [
   "LegallyBindingPermits", "FinalInvestmentDecision", "Construction", "OperationsStartDate",
 ];
 
-const EMPTY_FORM: MilestonesForm = {
-  dates: emptyMilestoneDates, standardAssumption: {}, shareOfFarmdown: "",
-  isStandardShareOfFarmdown: false,
-};
+/**
+ * A New Project (nothing saved in General yet): no record, so the form holds what the canvas
+ * shows on a blank `gblRecordSelectedProject` — no dates and the standard farmdown,
+ * `Coalesce('Share of Farmdown', 50)`, in the standard-value style.
+ */
+const emptyForm = (locale: Lang): MilestonesForm => ({
+  dates: emptyMilestoneDates, standardAssumption: {}, shareOfFarmdown: formatFarmdown(50, locale),
+  isStandardShareOfFarmdown: true,
+});
 
 const id = (seg: string) => `dtp_Milestones_DisplayProject_Body_General_Content_${seg}`;
 const butId = (seg: string) => `but_Milestones_DisplayProject_Body_General_Content_${seg}`;
@@ -149,12 +171,72 @@ const SEPARATOR_FILL = "#bdbdbd";
  *  - the separators are 1 px, as wide as the two columns.
  */
 const useStyles = makeStyles({
-  body: { display: "flex", flexDirection: "column", paddingLeft: "10px", paddingTop: "10px", paddingBottom: space.m },
+  /**
+   * The canvas page never scrolls: `…_Body_General_Content.Height = Parent.Height - Buttom.Height`,
+   * so the form fills exactly the space above the bottom bar and only the date card scrolls.
+   */
+  fixedPage: { flex: "1 1 0px", minHeight: 0, overflow: "hidden" },
+  body: {
+    display: "flex", flexDirection: "column", flex: "1 1 0px", minHeight: 0, paddingLeft: "10px", paddingTop: "10px",
+    /*
+     * The `lbl_…_ErrorMessage` labels are classic `Label@2.5.1`: `Color: gblAppColors.Error`
+     * (= `palette.akzent5`), `Size: 9` (12 px), `Height: 16` — one line, cut with an ellipsis —
+     * and no icon; the label's own 5-px padding insets the text from the caption.
+     */
+    "& .fui-Field__validationMessage": {
+      display: "block", minWidth: 0, maxWidth: "100%", paddingLeft: "5px",
+      color: palette.akzent5, fontSize: "12px", lineHeight: "16px",
+      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    },
+    "& .fui-Field__validationMessageIcon": { display: "none" },
+    /*
+     * `useNoInvalidOutline` clears every box's border on the screen root; the classic boxes keep
+     * their grey outline, invalid or not (marker classes, one step more specific).
+     */
+    [`& .${CLASSIC}.fui-Input:not(:focus-within)`]: outline(CLASSIC_BORDER),
+    [`& .${CLASSIC}.fui-Input:hover:not(:focus-within)`]: outline(CLASSIC_BORDER),
+    [`& .${CLASSIC}.${CLASSIC_DISABLED}.fui-Input:not(:focus-within)`]: outline(CLASSIC_BORDER_DISABLED),
+    [`& .${CLASSIC}.${CLASSIC_DISABLED}.fui-Input:hover:not(:focus-within)`]: outline(CLASSIC_BORDER_DISABLED),
+  },
+  /**
+   * The classic `DatePicker@0.0.46` / `TextInput@0.0.54` box (every picker but Project Start and
+   * Cluster 3, and Share of Farmdown) when DISABLED: white with a 1-px outline. Editable, it is
+   * the filled grey box like every other field.
+   */
+  classicBox: {
+    backgroundColor: palette.white,
+    ...outline(CLASSIC_BORDER), ":hover": outline(CLASSIC_BORDER), ":focus-within": outline(CLASSIC_BORDER),
+    "& input::placeholder": { color: CLASSIC_PLACEHOLDER },
+  },
+  /** `DisplayMode.Disabled`: the paler outline, and the text in `DisabledColor` (not the standard blue). */
+  classicDisabled: {
+    backgroundColor: palette.white,
+    ...outline(CLASSIC_BORDER_DISABLED), ":hover": outline(CLASSIC_BORDER_DISABLED),
+    "& input, & input:disabled": { color: CLASSIC_PLACEHOLDER, backgroundColor: "transparent" },
+  },
+  /**
+   * `con_Milestones_DisplayProject_Body_General_Content_Scrollbar` — Width `Parent.Width-20`, below
+   * the lock banner, with the `GroupContainer@1.5.0` defaults it never overrides: `DropShadow.Light`
+   * and a 4-px radius, the frame round the dates that runs down to the bottom bar.
+   */
+  card: {
+    // `LayoutOverflowY: Scroll` — the dates scroll inside the frame, which runs on into the bottom
+    // bar (square bottom corners, no gap) instead of closing above it.
+    display: "flex", flexDirection: "column", flex: "1 1 0px", minHeight: 0, overflowY: "auto",
+    marginRight: "10px", paddingBottom: space.m,
+    borderTopLeftRadius: "4px", borderTopRightRadius: "4px",
+    boxShadow: tokens.shadow4, backgroundColor: palette.white,
+  },
+  /** `con_Milestones_DisplayProject_Body_Content_Buttom` keeps the default `DropShadow.Light` too — the rule above the stamp. */
+  footer: { boxShadow: tokens.shadow4 },
   /** `con_Milestones_Page_LockMessage` — Fill RGB(89,89,89), MinHeight 50, PaddingLeft 20, LayoutGap 10. */
   lock: {
-    display: "flex", alignItems: "center", columnGap: "10px", alignSelf: "flex-start",
-    width: "760px", maxWidth: "100%", boxSizing: "border-box",
+    // `LayoutMaxWidth: Parent.Width-20` — the banner spans the body, not just the two date columns.
+    display: "flex", alignItems: "center", columnGap: "10px", alignSelf: "stretch",
+    marginRight: "10px", boxSizing: "border-box", flexShrink: 0,
     minHeight: "50px", paddingLeft: "20px",
+    // `GroupContainer@1.5.0` with no Radius override: the default 4-px corners.
+    borderRadius: "4px",
     backgroundColor: LOCK_FILL, color: LOCK_TEXT,
   },
   /** `con_Milestones_pagelock_section` — Padding 8. */
@@ -162,7 +244,8 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column", gap: space.xxs, color: LOCK_TEXT,
     paddingTop: "8px", paddingBottom: "8px", paddingLeft: "8px", paddingRight: "8px",
   },
-  lockLine: { color: LOCK_TEXT },
+  /** `Text@0.0.51` at its default size, which renders at 11 pt (14.67 px) on 20-px lines (`Height: 20`). */
+  lockLine: { color: LOCK_TEXT, fontSize: "14.67px", lineHeight: "20px" },
   columns: { display: "flex", flexWrap: "wrap", alignItems: "flex-start" },
   column: {
     display: "flex", flexDirection: "column", boxSizing: "border-box",
@@ -223,19 +306,54 @@ const useStyles = makeStyles({
   /** The date sits in the second column, under the name. */
   auditDate: { gridColumnStart: 2 },
   /**
-   * `pcf_btn_…_Save` / `…_Reset` — PowerCAT `Icon` with `IconType: ActionButton` (96 × 32): a
-   * transparent text button with its icon (CheckMark / Cancel), as the product owner's canvas
-   * screenshot shows; Save first, then Cancel, at the bar's right end.
+   * `pcf_btn_…_Buttons_Save` — `cat_PowerCAT.Icon` ActionButton, Width 96, Height 32, FontSize 16:
+   * `FillColor: themePrimary`, `FontColor: white`; hover `hoverButton` with themePrimary text.
+   * Disabled it is the plain grey icon + caption (the locked page).
    */
-  actionButton: { minWidth: "96px", height: "32px" },
+  saveButton: {
+    width: "96px", minWidth: "96px", height: "32px", fontSize: "16px", fontWeight: 400,
+    ":enabled": {
+      backgroundColor: palette.themePrimary, color: palette.white,
+      "& .fui-Button__icon": { color: palette.white },
+    },
+    ":enabled:hover": {
+      backgroundColor: palette.hoverButton, color: palette.themePrimary,
+      "& .fui-Button__icon": { color: palette.themePrimary },
+    },
+  },
+  /**
+   * `pcf_btn_…_Buttons_Reset` ("Cancel") — Width 96, Height 32: `FillColor: white`, `BorderColor` and
+   * `FontColor: themePrimary`; hover fill and border `hoverButton`.
+   */
+  cancelButton: {
+    // Same 16 px caption as Save (PO, 27 Oct 2026; the YAML sets FontSize on Save only).
+    width: "96px", minWidth: "96px", height: "32px", fontSize: "16px", fontWeight: 400,
+    ":enabled": {
+      backgroundColor: palette.white, color: palette.themePrimary,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      "& .fui-Button__icon": { color: palette.themePrimary },
+    },
+    ":enabled:hover": {
+      backgroundColor: palette.hoverButton, color: palette.themePrimary,
+      borderTopColor: palette.hoverButton, borderRightColor: palette.hoverButton,
+      borderBottomColor: palette.hoverButton, borderLeftColor: palette.hoverButton,
+    },
+  },
   auditLabel: { fontWeight: 600 },
   /** `con_…_Content_Buttons` — fills the bar, LayoutJustifyContent End, LayoutGap 20, PaddingRight 10. */
   buttons: {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end",
     columnGap: "20px", flexWrap: "wrap", paddingRight: "10px",
   },
-  required: { color: palette.Error },
-  requiredText: { color: palette.Error, fontSize: "10.67px" },
+  /** `ibtn_…_Requered_Fileds_1` / its label: `gblAppColors.Error` (= `palette.akzent5`), icon and text alike. */
+  required: {
+    color: palette.akzent5,
+    ":hover": { color: palette.akzent5 }, "& .fui-Button__icon": { color: palette.akzent5 },
+  },
+  requiredText: { color: palette.akzent5, fontSize: "10.67px" },
   multiline: { whiteSpace: "pre-line" },
 });
 
@@ -244,6 +362,8 @@ export default function MilestonesScreen() {
   const l = usePmLayout();
   const skin = useFieldSkin();
   const controlClass = useFieldControlClass();
+  const noInvalidOutline = useNoInvalidOutline();
+  const requiredMark = useCanvasRequiredMark();
   /* A date derived from a standard assumption renders italic theme-blue (GUIDE p16, rule 20). */
   const standardClass = useStandardValueClass();
   const { projectId, locale } = useSession();
@@ -257,7 +377,7 @@ export default function MilestonesScreen() {
   const recalculating = useRecalculationRunning(projectId);
   const writes = useMilestoneWrites(projectId);
 
-  const persisted = useMemo(() => (project ? initialForm(project, locale) : EMPTY_FORM), [project, locale]);
+  const persisted = useMemo(() => (project ? initialForm(project, locale) : emptyForm(locale)), [project, locale]);
   const [edited, setEdited] = useState<MilestonesForm | null>(null);
   const [dirtyKeys, setDirtyKeys] = useState<MilestoneKey[]>([]);
   const [codReview, setCodReview] = useState(false);
@@ -268,11 +388,13 @@ export default function MilestonesScreen() {
   /** `DisplayMode: If(con_Milestones_Page_LockMessage.Visible, Disabled, Edit)`. */
   const editable = !locked && !saving;
   const validation = validateMilestones(form.dates, project?.startCluster, form.shareOfFarmdown, locale);
-  const problems = project ? invalidMessages(validation) : [];
+  // `con_…_Buttons_Reset.Visible: CountRows(Filter(colMilestonesFormValidation, Valid = false)) > 0`
+  // — a New Project's blank dates are invalid too, so "Required fields" shows on the locked page.
+  const problems = invalidMessages(validation);
   const derived = classifyDerivedMilestones(form);
   const lifetime = operationalLifetime(form.dates.OperationsStartDate, form.dates.EndDate);
   const recalcVisible = isRecalculateVisible(project?.technology);
-  const farmdownMessage = project ? farmdownError(form.shareOfFarmdown, locale) : null;
+  const farmdownMessage = farmdownError(form.shareOfFarmdown, locale);
   // `DataSourceInfo` / `RecordInfo` have no SDK equivalent: Dataverse decides (D1, serverEnforcedProvider).
   const perms = { canCreate: true, canEdit: true };
   const saveEnabled = !saving && canSaveMilestones({ perms, project, validation, dirtyKeys, locked });
@@ -349,7 +471,8 @@ export default function MilestonesScreen() {
   const dateField = (k: DateKey) => {
     if (!isMilestoneFieldVisible(k, project?.startCluster)) return null;
     const label = labelFor(k);
-    const error = project && isMilestoneFieldErrorVisible(k, form.dates, project.startCluster)
+    // The error labels' `Visible` reads only the dates, so a New Project shows them too.
+    const error = isMilestoneFieldErrorVisible(k, form.dates, project?.startCluster)
       ? MILESTONE_FIELD_ERROR[k] : undefined;
     const recalcSeg = RECALC_SEGMENT[k];
     const isSales = k === "SalesStartDate" || k === "StartCompleted";
@@ -366,10 +489,16 @@ export default function MilestonesScreen() {
           value={form.dates[k]}
           format={formatOf(k)}
           locale={locale}
-          placeholder={PLACEHOLDER[k]}
+          // `DatePicker@0.0.46` with no `Placeholder` shows the control's own "Select a date...".
+          placeholder={PLACEHOLDER[k] ?? MILESTONES_MSG.datePlaceholder}
           disabled={!editable}
           onChange={(v) => setDate(k, v ?? "")}
           standard={derived[k]}
+          // Editable, a classic picker is the same filled grey box as the modern ones; only
+          // `DisplayMode.Disabled` (the locked page) draws it white with the grey outline.
+          className={isClassicPicker(k) && !editable
+            ? mergeClasses(CLASSIC, s.classicBox, CLASSIC_DISABLED, s.classicDisabled)
+            : undefined}
           // The canvas `AccessibleLabel` is the control name (rule 16); the caption is the Field label.
           name={id(SEGMENT[k])}
         />
@@ -398,7 +527,7 @@ export default function MilestonesScreen() {
   const modifiedOn = formatShortDateTime24(project?.modifiedOn ?? null, locale);
 
   return (
-    <div className={l.page}>
+    <div className={mergeClasses(l.page, s.fixedPage)}>
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="milestones" />
       {revenueSeedWouldRun(project, revenueRows.data) ? (
         <MessageBar intent="info" data-testid="milestones-revenue-seed-not-connected">
@@ -406,10 +535,11 @@ export default function MilestonesScreen() {
         </MessageBar>
       ) : null}
 
-      <div className={mergeClasses(s.body, l.fieldLabels)}>
+      <div className={mergeClasses(s.body, l.fieldLabels, noInvalidOutline.root, requiredMark.root)}>
         {locked ? (
           <div className={s.lock} data-testid="con_Milestones_Page_LockMessage">
-            <LockClosedRegular aria-hidden fontSize={20} color={LOCK_TEXT} />
+            {/* `icon_milestones_lock` — Classic `Icon.Lock` in a 20 × 20 box; Fluent's glyph needs 24 px to match it. */}
+            <LockClosedRegular aria-hidden fontSize={24} color={LOCK_TEXT} />
             <div className={s.lockText}>
               <Text className={s.lockLine}>{MILESTONES_MSG.lockMessage}</Text>
               <Text className={s.lockLine}>{MILESTONES_MSG.lockSection}</Text>
@@ -417,113 +547,120 @@ export default function MilestonesScreen() {
           </div>
         ) : null}
 
-        <div className={s.columns}>
-          <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_1.map(dateField)}</div>
-          <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_2.map(dateField)}</div>
-        </div>
-
-        <div className={s.separator} role="separator" />
-
-        <div className={s.columns}>
-          <div className={s.column}>{dateField("SalesStartDate")}</div>
-          <div className={s.column}>{dateField("StartCompleted")}</div>
-        </div>
-
-        <div className={s.columns}>
-          {/* `…_Sales_FillerCont2` keeps the farmdown card in the second column. */}
-          <div className={s.column} />
-          <div className={mergeClasses(s.column, s.row, s.tallRow)}>
-            <Field
-              className={mergeClasses(s.field, skin.field)}
-              label={{
-                children: (
-                  <>
-                    {milestoneMeta("ShareOfFarmdown").label}
-                    <Tooltip
-                      content={<span className={s.multiline}>{MILESTONES_MSG.farmdownInfo}</span>}
-                      relationship="description"
-                      withArrow
-                    >
-                      <Button
-                        className={s.infoIcon}
-                        appearance="transparent"
-                        icon={<InfoRegular />}
-                        disabled={locked}
-                        aria-label={MILESTONES_MSG.farmdownInfo}
-                        data-testid="Icon1_2"
-                      />
-                    </Tooltip>
-                  </>
-                ),
-              }}
-              required
-              validationState={farmdownMessage ? "error" : "none"}
-              validationMessage={farmdownMessage ?? undefined}
-            >
-              <Input
-                appearance={FIELD_APPEARANCE}
-                value={form.shareOfFarmdown}
-                disabled={!editable}
-                onChange={(_, d) => {
-                  setEdited({ ...form, shareOfFarmdown: d.value, isStandardShareOfFarmdown: false });
-                  markFarmdownDirty();
-                }}
-                className={controlClass(editable ? "edit" : "disabled", standardClass(derived.ShareOfFarmdown))}
-                aria-label="txt_Milestones_DisplayProject_Body_General_Content_Share_of_Farmdown"
-                data-testid="txt_Milestones_DisplayProject_Body_General_Content_Share_of_Farmdown"
-              />
-            </Field>
-            <Tooltip content={MILESTONES_MSG.farmdownReset} relationship="label" withArrow>
-              <Button
-                className={s.resetIcon}
-                appearance="transparent"
-                icon={<ArrowClockwiseRegular />}
-                disabled={!editable}
-                onClick={() => {
-                  setEdited({ ...form, ...resetShareOfFarmdown(locale) });
-                  markFarmdownDirty();
-                }}
-                aria-label="but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset"
-                data-testid="but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset"
-              />
-            </Tooltip>
+        <div className={s.card}>
+          <div className={s.columns}>
+            <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_1.map(dateField)}</div>
+            <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_2.map(dateField)}</div>
           </div>
-        </div>
 
-        <div className={s.separator} role="separator" />
+          <div className={s.separator} role="separator" />
 
-        <div className={s.columns}>
-          <div className={mergeClasses(s.column, s.row, s.tallRow)}>
-          <Field className={mergeClasses(s.field, skin.field)} label={MILESTONES_MSG.operationalLifetime}>
-            <div className={s.lifetime}>
-              {/* `DisplayMode: =DisplayMode.View` — the text in black in the grey box. */}
-              <Input
-                appearance={FIELD_APPEARANCE}
-                className={controlClass("view")}
-                readOnly
-                aria-readonly="true"
-                value={lifetime.yearsText}
-                aria-label="txt_Milestones_DisplayProject_Body_General_Content_Years"
-                data-testid="txt_Milestones_DisplayProject_Body_General_Content_Years"
-              />
-              <Input
-                appearance={FIELD_APPEARANCE}
-                className={controlClass("view")}
-                readOnly
-                aria-readonly="true"
-                value={lifetime.monthsText}
-                aria-label="txt_Milestones_DisplayProject_Body_General_Content_Months"
-                data-testid="txt_Milestones_DisplayProject_Body_General_Content_Months"
-              />
+          <div className={s.columns}>
+            <div className={s.column}>{dateField("SalesStartDate")}</div>
+            <div className={s.column}>{dateField("StartCompleted")}</div>
+          </div>
+
+          <div className={s.columns}>
+            {/* `…_Sales_FillerCont2` keeps the farmdown card in the second column. */}
+            <div className={s.column} />
+            <div className={mergeClasses(s.column, s.row, s.tallRow)}>
+              <Field
+                className={mergeClasses(s.field, skin.field)}
+                label={{
+                  children: (
+                    <>
+                      {milestoneMeta("ShareOfFarmdown").label}
+                      <Tooltip
+                        content={<span className={s.multiline}>{MILESTONES_MSG.farmdownInfo}</span>}
+                        relationship="description"
+                        withArrow
+                      >
+                        <Button
+                          className={s.infoIcon}
+                          appearance="transparent"
+                          icon={<InfoRegular />}
+                          disabled={locked}
+                          aria-label={MILESTONES_MSG.farmdownInfo}
+                          data-testid="Icon1_2"
+                        />
+                      </Tooltip>
+                    </>
+                  ),
+                }}
+                required
+                validationState={farmdownMessage ? "error" : "none"}
+                validationMessage={farmdownMessage ?? undefined}
+              >
+                <Input
+                  appearance={FIELD_APPEARANCE}
+                  value={form.shareOfFarmdown}
+                  disabled={!editable}
+                  onChange={(_, d) => {
+                    setEdited({ ...form, shareOfFarmdown: d.value, isStandardShareOfFarmdown: false });
+                    markFarmdownDirty();
+                  }}
+                  className={controlClass(
+                    editable ? "edit" : "disabled",
+                    editable
+                      ? standardClass(derived.ShareOfFarmdown)
+                      : mergeClasses(CLASSIC, s.classicBox, CLASSIC_DISABLED, s.classicDisabled),
+                  )}
+                  aria-label="txt_Milestones_DisplayProject_Body_General_Content_Share_of_Farmdown"
+                  data-testid="txt_Milestones_DisplayProject_Body_General_Content_Share_of_Farmdown"
+                />
+              </Field>
+              <Tooltip content={MILESTONES_MSG.farmdownReset} relationship="label" withArrow>
+                <Button
+                  className={s.resetIcon}
+                  appearance="transparent"
+                  icon={<ArrowClockwiseRegular />}
+                  disabled={!editable}
+                  onClick={() => {
+                    setEdited({ ...form, ...resetShareOfFarmdown(locale) });
+                    markFarmdownDirty();
+                  }}
+                  aria-label="but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset"
+                  data-testid="but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset"
+                />
+              </Tooltip>
             </div>
-          </Field>
           </div>
-          <div className={s.column}>{dateField("EndDate")}</div>
+
+          <div className={s.separator} role="separator" />
+
+          <div className={s.columns}>
+            <div className={mergeClasses(s.column, s.row, s.tallRow)}>
+            <Field className={mergeClasses(s.field, skin.field)} label={MILESTONES_MSG.operationalLifetime}>
+              <div className={s.lifetime}>
+                {/* `DisplayMode: =DisplayMode.View` — the text in black in the grey box. */}
+                <Input
+                  appearance={FIELD_APPEARANCE}
+                  className={controlClass("view")}
+                  readOnly
+                  aria-readonly="true"
+                  value={lifetime.yearsText}
+                  aria-label="txt_Milestones_DisplayProject_Body_General_Content_Years"
+                  data-testid="txt_Milestones_DisplayProject_Body_General_Content_Years"
+                />
+                <Input
+                  appearance={FIELD_APPEARANCE}
+                  className={controlClass("view")}
+                  readOnly
+                  aria-readonly="true"
+                  value={lifetime.monthsText}
+                  aria-label="txt_Milestones_DisplayProject_Body_General_Content_Months"
+                  data-testid="txt_Milestones_DisplayProject_Body_General_Content_Months"
+                />
+              </div>
+            </Field>
+            </div>
+            <div className={s.column}>{dateField("EndDate")}</div>
+          </div>
         </div>
       </div>
 
       {/* `con_Milestones_DisplayProject_Body_Content_Buttom`: the record stamp, then the buttons (End). */}
-      <div className={l.bottomBar}>
+      <div className={mergeClasses(l.bottomBar, s.footer)}>
         <div className={s.audit}>
           <div className={s.auditBlock}>
             <span className={s.auditLabel} data-testid={`${FOOTER}Creator_1`}>{MILESTONES_MSG.createdBy}</span>
@@ -570,7 +707,7 @@ export default function MilestonesScreen() {
           <Tooltip content={MILESTONES_MSG.saveTooltip} relationship="description" withArrow>
             <Button
               appearance="subtle"
-              className={s.actionButton}
+              className={s.saveButton}
               icon={<CheckmarkRegular />}
               disabled={!saveEnabled}
               onClick={onSave}
@@ -584,7 +721,7 @@ export default function MilestonesScreen() {
             <Button
               appearance="subtle"
               icon={<DismissRegular />}
-              className={s.actionButton}
+              className={s.cancelButton}
               disabled={saving || dirtyKeys.length === 0}
               onClick={onCancel}
               aria-label="pcf_btn_Milestones_DisplayProject_Body_Buttons_Reset"

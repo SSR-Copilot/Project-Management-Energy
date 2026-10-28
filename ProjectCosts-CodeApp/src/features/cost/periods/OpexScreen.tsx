@@ -53,9 +53,9 @@ import {
   OPEX_AGGREGATION, OPEX_AGGREGATION_LABEL, OPEX_COMMAND_ICONS, OPEX_COMMAND_LABELS,
   OPEX_DISTRIBUTION_FREQUENCY, OPEX_MODE_NAMES, OPEX_MSG, OPEX_PANEL_LABELS, THRESHOLD_TYPE,
   addPeriodRecordType, alignWithProjectDurationDefault, areaFieldVisible, areaFieldVisibleIntended,
-  areaWithRegion, canSaveOpexCost, chainHead, childrenOf, costName, costsInScope,
+  areaWithRegion, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
   countryInflationPercent, defaultCurrencyCode,
-  defaultSubaccount, deleteDialogText, deviceTypeList, durationBadge, externalContractDefault,
+  defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
   inheritStartDateStandard, italyZone, matchesStandardAssumption, nextPeriodDescriptionPanel,
   omDurationBadge, opexColumns, opexCommands,
@@ -867,11 +867,13 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
 
     if (key === "newOpexProjectCost") {
       // `:607-630` / `:2990-3026` — the parent is the chain HEAD whichever period was selected,
-      // the next is the selected row itself, and `locResetStartDate` is `IsBlank(next)`. On a card
-      // that does not own the selection both are Blank, which is how O&M creates a cost type.
+      // and `locResetStartDate` is `IsBlank(next)`. On a card that does not own the selection
+      // both are Blank, which is how O&M creates a cost type. DIVERGENCE (27 Oct 2026): the next
+      // is the chain's LAST period, not the selected row, so the new period's description and
+      // start date follow on from the end of the chain whichever row was selected.
       const owns = selection.scopeId === card.id && selectedCost !== null;
       const parent = owns ? chainHead(cardCosts, selectedCost) : null;
-      const next = owns ? selectedCost : null;
+      const next = owns ? chainLastPeriod(cardCosts, selectedCost) : null;
       openPanel({
         card, selected: null, parent, next, resetStartDate: next === null,
         codDate: projectContext.codDate, startDateStandard: false, period: null,
@@ -1186,10 +1188,16 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       <ConfirmDialog
         open={deleting !== null}
         title={DELETE_DIALOG.title}
-        description={deleteDialogText(deleting)}
+        // `cmp_OpexCosts_PopUpConfirmation_DeleteCost` (`Opex Costs Screen.pa.yaml:8846-8926`),
+        // matched to the canvas at the product owner's request (27 Oct 2026): its own wording —
+        // O-3 included, so a root reads "… cost?" although the confirm removes its periods too —
+        // and a `cmp_PopUp_Confirmation` with `IconConfirmButton: ="Delete"`: the themePrimary
+        // Confirm with a bin, not a red danger button, and the same buttons row as Land Lease.
+        description={deleteDialogTextCanvasParity(deleting)}
         confirmText={DELETE_DIALOG.confirm}
         cancelText={DELETE_DIALOG.cancel}
-        destructive
+        confirmIcon="delete"
+        canvasFooter
         busy={save.isPending}
         onCancel={() => setDeleting(null)}
         onConfirm={confirmDelete}

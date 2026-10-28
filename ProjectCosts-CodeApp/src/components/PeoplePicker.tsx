@@ -11,6 +11,7 @@
  * box is disabled until someone is removed. Every control carries an `aria-label` and a
  * `data-testid` derived from `testId` (rule 16).
  */
+import { useState } from "react";
 import { Avatar, Button, Field, Input, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
 import { useFieldSkin } from "./fieldSkin";
@@ -50,6 +51,8 @@ const outline = (color: string) => ({
   borderTopColor: color, borderRightColor: color, borderBottomColor: color, borderLeftColor: color,
 });
 
+const noBorder = outline("transparent");
+
 const useStyles = makeStyles({
   root: { position: "relative", display: "flex", flexDirection: "column", rowGap: tokens.spacingVerticalXS, minWidth: 0 },
   /** The PCF box: 1-px dark outline, chips and the search input on one wrapping line. */
@@ -65,7 +68,6 @@ const useStyles = makeStyles({
     ":focus-within": outline(tokens.colorCompoundBrandStroke),
   },
   boxDisabled: { ...outline(tokens.colorNeutralStrokeDisabled), cursor: "not-allowed" },
-  boxError: outline(tokens.colorPaletteRedBorder2),
   /** The persona chip: grey pill, initials circle, name, ✕. */
   chip: {
     display: "inline-flex", alignItems: "center", columnGap: "4px", maxWidth: "100%", minWidth: 0,
@@ -76,52 +78,78 @@ const useStyles = makeStyles({
     fontSize: "14px",
   },
   chipName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 },
-  chipRemove: { minWidth: "20px", width: "20px", height: "20px", "& svg": { fontSize: "12px" } },
-  /** The search input, borderless inside the box. */
+  chipRemove: { minWidth: "20px", width: "20px", height: "20px" },
+  /**
+   * The search input, borderless inside the box. The `Field` marks it invalid, and Fluent's red
+   * invalid border (`:not(:focus-within)`) out-ranks a plain class, so it is cleared on the same
+   * selectors. No inner padding / min-height either, so the hint sits ~7 px in from the outline and
+   * the box stays 32 px tall, as the PCF renders it (PO, 22 Oct 2026: New Project).
+   */
   search: {
-    flex: "1 1 60px", minWidth: "60px",
+    flex: "1 1 60px", minWidth: "60px", minHeight: "26px",
+    paddingLeft: 0, paddingRight: 0,
     backgroundColor: "transparent",
-    borderTopColor: "transparent", borderRightColor: "transparent",
-    borderBottomColor: "transparent", borderLeftColor: "transparent",
+    ...noBorder,
     "::after": { content: "unset" },
-    ":hover": { borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent" },
-    ":focus-within": { borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent" },
+    ":hover": noBorder,
+    ":focus-within": noBorder,
+    ":not(:focus-within)": noBorder,
+    ":hover:not(:focus-within)": noBorder,
+    // Fluent's focus / hover / pressed states each repaint the border; with no border width there
+    // is never a second box inside the PCF's outline.
+    borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0,
+    "& input": { paddingLeft: "2px", paddingRight: "2px", outlineStyle: "none" },
   },
   /** At `MaxPeople` the PCF shows no search text box; ours stays (disabled) but takes no room. */
   searchFull: { flex: "0 0 0px", minWidth: 0, width: 0, paddingLeft: 0, paddingRight: 0, overflow: "hidden" },
+  /** The box and its suggestions callout, which is positioned against it. */
+  anchor: { position: "relative", width: "100%" },
   /**
-   * The PCF's suggestion callout (canvas screenshot, 27 Oct 2026): a white card floating under
-   * the box, headed "Suggested People" in the theme colour, one 42 px persona row per person
-   * (initials circle, name, mail), the first row marked as the active one.
+   * The PCF's suggestions callout (Fluent v8 `PeoplePicker`): floats over the form under the box,
+   * as wide as it, white with a shadow — it never pushes the fields below it down.
    */
-  list: {
-    position: "absolute", top: "100%", left: 0, zIndex: 1000, marginTop: "4px",
-    display: "flex", flexDirection: "column", width: "246px", maxHeight: "300px", overflowY: "auto",
-    backgroundColor: tokens.colorNeutralBackground1, boxShadow: tokens.shadow8,
+  callout: {
+    position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 1000,
+    display: "flex", flexDirection: "column",
+    paddingBottom: "4px",
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: tokens.shadow16, borderRadius: tokens.borderRadiusMedium,
   },
-  listHeader: {
-    height: "38px", lineHeight: "38px", paddingLeft: "12px", flexShrink: 0,
-    fontSize: "11px", color: tokens.colorBrandForeground1,
+  /** "Suggested People", in the theme blue. */
+  calloutHeader: {
+    paddingTop: "10px", paddingBottom: "6px", paddingLeft: "12px", paddingRight: "12px",
+    fontSize: tokens.fontSizeBase200, lineHeight: tokens.lineHeightBase200,
+    color: tokens.colorBrandForeground1,
   },
+  /** One persona row: initials avatar, then the name over the mail, both cut with an ellipsis. */
   suggestion: {
-    display: "flex", alignItems: "center", justifyContent: "flex-start", columnGap: "8px",
-    width: "100%", height: "42px", minHeight: "42px", flexShrink: 0,
-    paddingLeft: "10px", paddingRight: "8px", borderRadius: 0, textAlign: "left",
-    fontWeight: tokens.fontWeightRegular,
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    ...outline("transparent"),
-    ":hover": { backgroundColor: "#f3f2f1" },
+    display: "flex", alignItems: "center", columnGap: "8px", width: "100%", minHeight: "48px",
+    paddingTop: "4px", paddingBottom: "4px", paddingLeft: "12px", paddingRight: "12px",
+    borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0,
+    backgroundColor: "transparent", textAlign: "left", cursor: "pointer",
+    fontFamily: "inherit", color: tokens.colorNeutralForeground1,
+    ":hover": { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
-  suggestionActive: { backgroundColor: "#edebe9", ...outline("#605e5c") },
-  suggestionText: { display: "flex", flexDirection: "column", minWidth: 0, lineHeight: "16px" },
+  suggestionActive: {
+    backgroundColor: tokens.colorNeutralBackground1Selected,
+    ":hover": { backgroundColor: tokens.colorNeutralBackground1Selected },
+  },
+  /** Up to 7 people (48-px rows) in view; more matches scroll inside the callout. */
+  suggestionList: { maxHeight: `${7 * 48}px`, overflowY: "auto" },
+  suggestionText: { display: "flex", flexDirection: "column", minWidth: 0 },
   suggestionName: {
-    fontSize: "14px", color: "#323130", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    fontSize: tokens.fontSizeBase300, lineHeight: tokens.lineHeightBase300,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
   },
   suggestionMail: {
-    fontSize: "11px", color: "#605e5c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    fontSize: tokens.fontSizeBase200, lineHeight: tokens.lineHeightBase200,
+    color: tokens.colorNeutralForeground3,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
   },
 });
+
+/** The PCF callout's header text. */
+const SUGGESTIONS_HEADER = "Suggested People";
 
 const caption = (p: PickerPerson): string => `${p.displayName} (${p.mail})`;
 
@@ -132,6 +160,17 @@ export function PeoplePicker({
   const s = useStyles();
   const skin = useFieldSkin();
   const full = value.length >= maxPeople;
+  /** The callout opens on focus / typing and closes on blur, Escape or a pick. */
+  const [open, setOpen] = useState(false);
+  /** The highlighted suggestion — the first one, as the PCF opens. */
+  const [active, setActive] = useState(0);
+  const shown = open && !disabled && !full && suggestions.length > 0;
+  const current = Math.min(active, suggestions.length - 1);
+  const pick = (p: PickerPerson) => {
+    onChange(onPick(p));
+    onTermChange("");
+    setOpen(false);
+  };
   return (
     <div className={s.root}>
       <Field
@@ -141,7 +180,9 @@ export function PeoplePicker({
         validationState={errorMessage ? "error" : "none"}
         validationMessage={errorMessage}
       >
-        <div className={mergeClasses(s.box, disabled && s.boxDisabled, errorMessage && s.boxError)}>
+        <div className={s.anchor}>
+        {/* The PCF keeps its dark outline when invalid: only the message below shows the error. */}
+        <div className={mergeClasses(s.box, disabled && s.boxDisabled)}>
           {value.map((p) => (
             <span key={p.id} className={s.chip} title={caption(p)}>
               <Avatar name={p.displayName || p.mail} size={24} color="colorful" aria-hidden="true" />
@@ -166,31 +207,49 @@ export function PeoplePicker({
             disabled={disabled || full}
             aria-label={ariaLabel ?? label}
             data-testid={testId}
-            onChange={(_, d) => onTermChange(d.value)}
+            onChange={(_, d) => { onTermChange(d.value); setOpen(true); setActive(0); }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setOpen(false)}
+            onKeyDown={(e) => {
+              if (!shown) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setActive((current + 1) % suggestions.length); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setActive((current - 1 + suggestions.length) % suggestions.length); }
+              else if (e.key === "Enter") { e.preventDefault(); pick(suggestions[current]!); }
+              else if (e.key === "Escape") { setOpen(false); }
+            }}
           />
         </div>
-      </Field>
-      {!disabled && !full && suggestions.length > 0 ? (
-        <div className={s.list} role="listbox" aria-label={label}>
-          <span className={s.listHeader} aria-hidden="true">Suggested People</span>
-          {suggestions.map((p, i) => (
-            <Button
-              key={p.id}
-              appearance="subtle"
-              className={mergeClasses(s.suggestion, i === 0 && s.suggestionActive)}
-              aria-label={caption(p)}
-              data-testid={`${testId}-suggestion-${p.id}`}
-              onClick={() => { onChange(onPick(p)); onTermChange(""); }}
-            >
-              <Avatar name={p.displayName || p.mail} size={24} color="colorful" aria-hidden="true" />
-              <span className={s.suggestionText}>
-                <span className={s.suggestionName}>{p.displayName || p.mail}</span>
-                {p.mail ? <span className={s.suggestionMail}>{p.mail}</span> : null}
-              </span>
-            </Button>
-          ))}
+        {shown ? (
+          <div className={s.callout}>
+            <span className={s.calloutHeader}>{SUGGESTIONS_HEADER}</span>
+            <div role="listbox" aria-label={label} className={s.suggestionList}>
+              {suggestions.map((p, i) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="option"
+                  aria-selected={i === current}
+                  className={mergeClasses(s.suggestion, i === current && s.suggestionActive)}
+                  aria-label={caption(p)}
+                  title={caption(p)}
+                  data-testid={`${testId}-suggestion-${p.id}`}
+                  // Keeps the focus in the search box, so its blur does not close the callout first.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => pick(p)}
+                >
+                  <Avatar name={p.displayName || p.mail} size={32} color="colorful" aria-hidden="true" />
+                  <span className={s.suggestionText}>
+                    <span className={s.suggestionName}>{p.displayName || p.mail}</span>
+                    <span className={s.suggestionMail}>{p.mail}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         </div>
-      ) : null}
+      </Field>
     </div>
   );
 }

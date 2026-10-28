@@ -127,8 +127,8 @@ const useStyles = makeStyles({
       fontSize: "12px", lineHeight: "16px", color: palette.akzent5, fontWeight: 600, paddingLeft: "4px",
     },
     // An invalid box gets no red frame and no rest underline; focus keeps Fluent's blue bar
-    // (canvas Grid Connection screenshot, 27 Oct 2026).
-    "& .fui-Field .fui-Input.fui-Input, & .fui-Field .fui-Input.fui-Input:hover": {
+    // (canvas Grid Connection screenshot, 27 Oct 2026). A disabled box keeps its frame above.
+    "& .fui-Field .fui-Input.fui-Input:not(:has(input:disabled)), & .fui-Field .fui-Input.fui-Input:not(:has(input:disabled)):hover": {
       borderTopColor: "transparent", borderRightColor: "transparent", borderLeftColor: "transparent",
       borderBottomColor: "transparent",
     },

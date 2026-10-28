@@ -69,6 +69,8 @@ export default function App() {
   return (
     <AppShell
       showRail={showRail}
+      // The PM screens (Add and Edit Project) show no "Version …" strip, like the canvas (PO, 27 Oct 2026).
+      showFooter={showRail && !onProjectScreen}
       contentScrolls={onProjectScreen || onAdminScreen}
       {...(pageTitle ? { pageTitle } : {})}
       {...(onProjectScreen && project?.clusterStateName ? { projectStatus: project.clusterStateName } : {})}

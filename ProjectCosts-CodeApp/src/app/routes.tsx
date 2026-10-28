@@ -12,7 +12,7 @@
  * cost screens, so the existing PM → Cost link keeps working unchanged.
  */
 import { lazy, Suspense } from "react";
-import { Navigate, Outlet, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
@@ -24,7 +24,10 @@ const OpexCostsScreen = lazy(() => import("@/features/cost/opex-costs/Screen"));
 const LandLeaseScreen = lazy(() => import("@/features/cost/land-lease/Screen"));
 const AddCostsFromTableScreen = lazy(() => import("@/features/cost/add-costs-from-table/Screen"));
 
-/* Project Management — UI built, not connected to Dataverse yet (`data/notConnected.ts`). */
+/*
+ * Project Management — each screen's `hooks.ts` says what it reads and writes; anything not wired
+ * yet is listed in `data/notConnected.ts`.
+ */
 const GeneralDataScreen = lazy(() => import("@/features/pm/general-data/Screen"));
 const MilestonesScreen = lazy(() => import("@/features/pm/milestones/Screen"));
 const GeneratorsScreen = lazy(() => import("@/features/pm/generators/Screen"));
@@ -84,19 +87,30 @@ export function CostProjectGate() {
 }
 
 /**
- * Project Management screens open with or without a selected project. With NO project the
- * canvas is in New Project mode (`addProject` blanks `gblRecordSelectedProject`): General Data
- * is the New Project form, and every other section still opens, behind its "This page is
- * locked" banner and with Save disabled, because its lock is computed from the empty project.
+ * The New Project screens: General Data with NO project is the New Project form (`addProject`
+ * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Team / Grid Operator open on
+ * their page-lock banner ("• General" not saved yet) instead of asking for a project.
+ */
+const NEW_PROJECT_PATHS = new Set([
+  "/project/general", "/project/milestones", "/project/generators", "/project/team", "/project/grid-operator",
+]);
+
+/**
+ * Project Management screens need a selected project, exactly like the cost screens — except the
+ * New Project screens above.
  */
 export function ProjectScreenGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
   if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open the project again." action={action} />;
-  if (!projectId) return <Outlet />;
+  if (!projectId) {
+    if (NEW_PROJECT_PATHS.has(pathname)) return <Outlet />;
+    return <EmptyState title="Select a project" description="Open a project from the project list." action={action} />;
+  }
   if (error) return <EmptyState title="The project could not be loaded"
     description="Return to the project list and try again." action={action} />;
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"
@@ -120,8 +134,8 @@ export function AppRoutes() {
           The two Project Management destinations the overview's command bar navigates to
           (`NEW_PROJECT_PATH`, `projectGeneralDataPath`). They stay stable links and redirect to
           the PM route shape, `/project/general[?projectId=]` — General Data with no project is
-          the New Project screen. The screen's UI is built but not connected to Dataverse yet
-          (`features/pm/general-data/hooks.ts`), so it creates nothing.
+          the New Project screen. It saves through `useGeneralDataWrites`
+          (`features/pm/general-data/hooks.ts`), which creates the project in Dataverse.
 
           `projects/new` is declared BEFORE `projects/:projectId/general` so the literal wins;
           React Router ranks static segments above dynamic ones, but the order also makes the

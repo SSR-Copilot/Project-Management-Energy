@@ -59,7 +59,8 @@ export const usePmLayout = makeStyles({
   stampLabel: { fontWeight: 600 },
   /** A canvas outline `ModernButton` (`BorderColor` / `Color` = `themePrimary`). */
   outlineButton: {
-    minWidth: "96px",
+    // `ModernButton@1.0.0` with no Width / Height: the control's default 96 × 32.
+    width: "96px", minWidth: "96px",
     // Only while enabled: a disabled button keeps Fluent's disabled colours.
     ":enabled": {
       color: palette.themePrimary,
@@ -68,7 +69,7 @@ export const usePmLayout = makeStyles({
     },
   },
   /** The 96-px button minimum (`pcf_btn_…_Save_2.Width`). */
-  button: { minWidth: "96px" },
+  button: { width: "96px", minWidth: "96px" },
   /** A `ModernText` field caption: Semibold, `gblAppSizes.Font.ExtraLarge` (14). */
   fieldLabels: {
     "& .fui-Field__label": { fontWeight: 600, fontSize: "14px" },

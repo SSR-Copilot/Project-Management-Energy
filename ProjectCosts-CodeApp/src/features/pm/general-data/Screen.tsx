@@ -39,7 +39,7 @@ import {
 import {
   ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
   ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback, type PickerPerson, useFieldControlClass,
-  useFieldSkin,
+  useCanvasRequiredMark, useFieldSkin, useNoInvalidOutline,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { MODERN_DATE_PICKER_FORMAT } from "@/domain/canvasDate";
@@ -105,8 +105,19 @@ const useStyles = makeStyles({
   title: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold, paddingLeft: "20px", paddingTop: space.s },
   body: {
     display: "flex", flexDirection: "column", paddingTop: "8px", paddingBottom: "8px", paddingRight: "20px",
-    /* The canvas `*` (`lbl_…_Requered`, X 5, Width 16) hangs in the cell gutter, left of the caption at X 20. */
-    "& .fui-Field .fui-Field__label .fui-Label__required": { width: "15px", marginLeft: "-15px", paddingRight: 0, flexShrink: 0 },
+    /* The canvas `*` (`lbl_…_Requered`) is `useCanvasRequiredMark` on this root. */
+    /*
+     * The `lbl_…_ErrorMessage` labels are classic `Label@2.5.1`: `Color: gblAppColors.Error`
+     * (= `palette.akzent5`), `Size: gblAppSizes.Font.ExtraExtraSmall` (8 pt = 10.67 px),
+     * `Height: 16`, `Wrap: false` — one line — and no icon; the label's own 5-px padding insets
+     * the text from the caption.
+     */
+    "& .fui-Field__validationMessage": {
+      display: "block", minWidth: 0, maxWidth: "100%", paddingLeft: "5px",
+      color: palette.akzent5, fontSize: "10.67px", lineHeight: "16px",
+      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+    },
+    "& .fui-Field__validationMessageIcon": { display: "none" },
   },
   /** `con_…_PGroup` — PaddingTop / PaddingBottom 10. */
   section: { display: "flex", flexDirection: "column" },
@@ -121,7 +132,9 @@ const useStyles = makeStyles({
     },
   },
   /** `con_…_ClusterChange*` — the Acquisition cells are 81 high (92 with an error). */
-  acquisitionRow: { "& > *": { minHeight: "81px" } },
+  acquisitionRow: { paddingTop: "5px", "& > *": { minHeight: "76px" } },
+  /** `PGroup_5Row_2.Height: If(AcquisitionDate_ErrorMessage_1.Visible, 92, 81)`, PaddingTop 5. */
+  acquisitionRowError: { "& > *": { minHeight: "87px" } },
   placement: {
     display: "flex", flexWrap: "wrap", alignItems: "stretch",
     width: "calc(100% - 20px)",
@@ -134,14 +147,28 @@ const useStyles = makeStyles({
    */
   placementRow: {},
   fullWidthCombo: { width: "100%", minWidth: 0 },
-  latLngRow: { minHeight: "120px" },
+  latLngRow: {
+    minHeight: "120px",
+    // `lbl_…_Latitude_ErrMessage` / `_Longitude_ErrMessage` are `AutoHeight: true`: they wrap.
+    "& .fui-Field .fui-Field__validationMessage": { whiteSpace: "normal", overflow: "visible", lineHeight: "13px" },
+  },
   /**
    * `map_con_GeneralData_DisplayProject_Body_General_Content_Map` (FillPortions 2) — no map library
    * yet (D25); the placeholder takes the map's place and height, ~580 wide as on the live canvas (20 Oct 2026).
    */
+  /*
+   * `con_con_..._Content_Map` (ManualLayout, FillPortions 2) holds the map at 90 % of its width and
+   * height, centred (`X/Y: (Parent - Self) / 2`), so it never touches the Placement rule above or
+   * the fields beside it (PO, 22 Oct 2026).
+   */
+  mapCell: {
+    // FillPortions 3 : 2 of the whole row (basis 0).
+    flex: "2 1 0px", minWidth: "240px", maxWidth: "100%", minHeight: "260px",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
   map: {
-    // FillPortions 3 : 2 of the whole row (basis 0), so the map is ~580 wide beside ~870 of fields.
-    flex: "2 1 0px", minWidth: "240px", maxWidth: "min(580px, 100%)", minHeight: "240px",
+    boxSizing: "border-box", width: "90%", height: "90%",
+    borderRadius: "4px",
     backgroundColor: palette.neutralLighter,
     borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
     borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
@@ -151,8 +178,11 @@ const useStyles = makeStyles({
   /** Product owner's measure of the live canvas (20 Oct 2026): the grid ~910 wide, Add + note 810. */
   shareGroup: {
     boxSizing: "border-box", width: "100%", maxWidth: "950px", overflowX: "auto",
-    paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px",
+    // `con_…_SEGroup.Height` = bar + header + rows + 50 with PaddingTop 10: 40 px free under the table.
+    paddingLeft: "20px", paddingRight: "20px", paddingTop: "10px", paddingBottom: "40px",
   },
+  /** `con_GeneralData_DisplayProject_Body_Content_Buttom` keeps the default `DropShadow.Light` — the rule above the buttons. */
+  footer: { boxShadow: tokens.shadow4 },
   /** `con_…_ShareholdingEntities_CommandBar` — Height 40: Add (80 × 28) and the info strip (38 high). */
   shareBar: { display: "flex", alignItems: "center", minHeight: "40px", maxWidth: "810px" },
   shareTableBox: { maxWidth: "910px" },
@@ -164,7 +194,8 @@ const useStyles = makeStyles({
    */
   addButton: {
     flex: "0 0 80px", height: "28px", justifyContent: "flex-start", paddingLeft: "5px", paddingRight: 0,
-    color: palette.themePrimary, "& .fui-Button__icon": { color: palette.themePrimary },
+    // Only while enabled: at 100 % ownership (`DisplayMode.Disabled`) it greys out like the canvas.
+    ":enabled": { color: palette.themePrimary, "& .fui-Button__icon": { color: palette.themePrimary } },
   },
   /** `con_AdminContract_Apply_All_Last_Tracking_1` — Fill `RGBA(204, 226, 241, 0.5)`. */
   shareNote: {
@@ -196,7 +227,13 @@ const useStyles = makeStyles({
   /** `con_…_Body_Content_Buttons` — PaddingLeft 20, LayoutGap 20, fills the bar. */
   buttons: { flex: 1, display: "flex", alignItems: "center", columnGap: "20px", flexWrap: "wrap", paddingLeft: "20px" },
   /** `con_…_Body_Buttons_Reset` (130 wide): the info button and "Required fields", `gblAppColors.Error`. */
-  required: { color: palette.akzent5, cursor: "default", display: "inline-flex", alignItems: "center", gap: space.xxs, minWidth: "130px", fontSize: "10.67px" },
+  required: {
+    color: palette.akzent5, cursor: "default", display: "inline-flex", alignItems: "center", gap: space.xxs, minWidth: "130px", fontSize: "10.67px",
+    // `ibtn_…_Requered_Fileds.Color: gblAppColors.Error` — the info icon in the same colour as the text.
+    "& .fui-Button": { color: palette.akzent5 },
+    "& .fui-Button:hover": { color: palette.akzent5 },
+    "& .fui-Button__icon": { color: palette.akzent5 },
+  },
   blocked: { color: palette.neutralSecondary, fontSize: tokens.fontSizeBase200, maxWidth: "48ch" },
   /** `con_…_Body_Content_ProjectInfo` — PaddingRight 20; the labels right-aligned. */
   stampBox: { paddingRight: "20px", alignItems: "flex-end" },
@@ -254,6 +291,8 @@ export default function GeneralDataScreen() {
   const s = useStyles();
   const l = usePmLayout();
   const skin = useFieldSkin();
+  const noInvalidOutline = useNoInvalidOutline();
+  const requiredMark = useCanvasRequiredMark();
   const controlClass = useFieldControlClass();
   const { projectId, locale, envVars } = useSession();
   const isNewProject = !projectId;
@@ -536,7 +575,7 @@ export default function GeneralDataScreen() {
         Information starts at the top of the screen. The caption stays in `GD_LABELS.general`.
       */}
 
-      <div className={mergeClasses(s.body, l.fieldLabels)}>
+      <div className={mergeClasses(s.body, l.fieldLabels, noInvalidOutline.root, requiredMark.root)}>
 
       {/* ═════════════════════════════════════════════════════════ Basic Information */}
       <section className={s.section} aria-label={GD_LABELS.basicInformation}>
@@ -652,7 +691,7 @@ export default function GeneralDataScreen() {
         {acquired ? (
           <>
             <GroupHeader title={GD_LABELS.acquisitionInformation} testId="lbl_GeneralData_DisplayProject_Body_General_Content_Basic_Aquisition_Details" />
-            <div className={mergeClasses(s.row, s.acquisitionRow)}>
+            <div className={mergeClasses(s.row, s.acquisitionRow, errors.acquisitionDate && s.acquisitionRowError)}>
               <ChoiceField
                 label={GD_LABELS.startCluster} required error={errors.startCluster}
                 ariaLabel="drp_GeneralData_DisplayProject_Body_General_Content_ClusterChange"
@@ -800,7 +839,9 @@ export default function GeneralDataScreen() {
               />
             </div>
           </div>
-          <div className={s.map} aria-hidden="true" data-testid="map_con_GeneralData_DisplayProject_Body_General_Content_Map" />
+          <div className={s.mapCell}>
+            <div className={s.map} aria-hidden="true" data-testid="map_con_GeneralData_DisplayProject_Body_General_Content_Map" />
+          </div>
         </div>
       </section>
 
@@ -876,7 +917,7 @@ export default function GeneralDataScreen() {
 
       {/* ═════════════════════════════════════════════════════ buttons + record stamp */}
       {/* `con_…_Body_Content_Buttom`: the buttons first (`con_…_Body_Content_Buttons`), the record stamp right. */}
-      <div className={l.bottomBar}>
+      <div className={mergeClasses(l.bottomBar, s.footer)}>
         <div className={s.buttons}>
           <Button
             icon={<DismissRegular />} className={l.outlineButton}
