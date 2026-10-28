@@ -860,7 +860,8 @@ export default function GeneratorsScreen() {
     }));
 
   /* ── the command bar ── */
-  const locked = project !== null && isPageLocked(project);
+  // New Project mode (no project yet) opens locked, as the canvas does.
+  const locked = !projectId || (project !== null && isPageLocked(project));
   const editable = !locked;
   const cmdState = commandBarState({
     canEdit: perms.canEdit,
@@ -1620,7 +1621,7 @@ export default function GeneratorsScreen() {
   }
 
   const bodyVisible = isBodyVisible(project);
-  const lockBullets = locked ? pageLock(project) : [];
+  const lockBullets = !locked ? [] : projectId ? pageLock(project) : ["• General", "• Milestones"];
   const typeDirty = (f: string) => typeForm.dirty.has(f);
   const simple = simpleFamily ? SIMPLE_PANEL[simpleFamily] : null;
 

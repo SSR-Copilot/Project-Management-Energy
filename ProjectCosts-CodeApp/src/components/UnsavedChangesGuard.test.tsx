@@ -99,5 +99,9 @@ describe("UT-LEAVE UnsavedChangesGuard", () => {
     expect(isLeaving({ pathname: "/a", search: "?x=1" }, { pathname: "/b", search: "?x=1" })).toBe(true);
     expect(isLeaving({ pathname: "/a", search: "?x=1" }, { pathname: "/a", search: "?x=2" })).toBe(true);
     expect(isLeaving({ pathname: "/a", search: "?x=1" }, { pathname: "/a", search: "?x=1" })).toBe(false);
+    // A tab switch on the same screen is not a leave; another project still is.
+    expect(isLeaving({ pathname: "/a", search: "?projectId=1&tab=operator" }, { pathname: "/a", search: "?projectId=1&tab=connection" })).toBe(false);
+    expect(isLeaving({ pathname: "/a", search: "?projectId=1" }, { pathname: "/a", search: "?projectId=1&tab=connection" })).toBe(false);
+    expect(isLeaving({ pathname: "/a", search: "?projectId=1&tab=operator" }, { pathname: "/a", search: "?projectId=2&tab=operator" })).toBe(true);
   });
 });

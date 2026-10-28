@@ -190,11 +190,15 @@ describe("UT-ROUTES — Project Management", () => {
     }, 30_000);
   });
 
-  it("UT-ROUTES-018 a project screen without a project asks for one", async () => {
-    session = {};
-    renderAt("/project/milestones");
-    expect(await screen.findByText("Select a project")).toBeTruthy();
-    expect(screen.queryByTestId("not-connected-notice")).toBeNull();
+  // New Project mode, as the canvas: every section opens with no project, behind its lock
+  // banner, instead of a "Select a project" page.
+  PROJECT_SCREENS.filter((slug) => slug !== "general").forEach((slug) => {
+    it(`UT-ROUTES-018 /project/${slug} without a project opens locked`, async () => {
+      session = {};
+      renderAt(`/project/${slug}`);
+      expect(await screen.findByText(/This page is locked/, {}, { timeout: 20_000 })).toBeTruthy();
+      expect(screen.queryByText("Select a project")).toBeNull();
+    }, 30_000);
   });
 
   it("UT-ROUTES-019 General Data without a project is the New Project screen", async () => {

@@ -12,7 +12,7 @@
  * cost screens, so the existing PM → Cost link keeps working unchanged.
  */
 import { lazy, Suspense } from "react";
-import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
@@ -84,22 +84,19 @@ export function CostProjectGate() {
 }
 
 /**
- * Project Management screens need a selected project, exactly like the cost screens — with one
- * exception the canvas makes: General Data with NO project is the New Project screen
- * (`addProject` blanks `gblRecordSelectedProject` and navigates there).
+ * Project Management screens open with or without a selected project. With NO project the
+ * canvas is in New Project mode (`addProject` blanks `gblRecordSelectedProject`): General Data
+ * is the New Project form, and every other section still opens, behind its "This page is
+ * locked" banner and with Save disabled, because its lock is computed from the empty project.
  */
 export function ProjectScreenGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
   if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open the project again." action={action} />;
-  if (!projectId) {
-    if (pathname === "/project/general") return <Outlet />;
-    return <EmptyState title="Select a project" description="Open a project from the project list." action={action} />;
-  }
+  if (!projectId) return <Outlet />;
   if (error) return <EmptyState title="The project could not be loaded"
     description="Return to the project list and try again." action={action} />;
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"

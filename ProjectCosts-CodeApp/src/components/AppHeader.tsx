@@ -67,6 +67,7 @@ const useStyles = makeStyles({
     maxWidth: "28ch",
   },
   right: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
+  help: { fontWeight: tokens.fontWeightRegular, "& .fui-Button__icon": { color: tokens.colorNeutralForeground3 } },
   /*
    * `pcf_cmpHeader_User_ContextMenu_Info` is a `cat_PowerCAT.ContextMenu`, whose rows are
    * ordinary items: #3f3f3f text with a themePrimary icon, sampled off
@@ -338,6 +339,8 @@ export function AppHeader({
               iconPosition="after"
               aria-label="Help"
               data-testid="header-help"
+              // The canvas command-bar caption is regular weight with a grey chevron.
+              className={styles.help}
             >
               Help
             </Button>
