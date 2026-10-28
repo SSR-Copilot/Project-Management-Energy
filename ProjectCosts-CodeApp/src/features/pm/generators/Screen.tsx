@@ -1621,7 +1621,7 @@ export default function GeneratorsScreen() {
   }
 
   const bodyVisible = isBodyVisible(project);
-  const lockBullets = locked ? pageLock(project) : [];
+  const lockBullets = !locked ? [] : projectId ? pageLock(project) : ["• General", "• Milestones"];
   const typeDirty = (f: string) => typeForm.dirty.has(f);
   const simple = simpleFamily ? SIMPLE_PANEL[simpleFamily] : null;
 

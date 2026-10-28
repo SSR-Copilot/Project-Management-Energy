@@ -552,3 +552,13 @@ describe("D35 — the shared leave guard", () => {
     expect(GRID_LEAVE_DIALOG).toEqual({ title: "Unsaved data", description: "You have unsaved data. Do you really want to leave current form without saving?", confirm: "Yes", cancel: "Cancel" });
   });
 });
+
+describe("UT-GRID-RANGE — grid voltage stays inside the Dataverse column range", () => {
+  it("rejects a value above 100000000000 and accepts the bounds", () => {
+    expect(validateVoltage("32424242242424240")).toEqual({ valid: false, message: MSG.voltageRange });
+    expect(validateVoltage("-100000000001").message).toBe(MSG.voltageRange);
+    expect(validateVoltage("100000000000")).toEqual({ valid: true });
+    expect(validateVoltage("-100000000000")).toEqual({ valid: true });
+    expect(validateVoltage("110")).toEqual({ valid: true });
+  });
+});

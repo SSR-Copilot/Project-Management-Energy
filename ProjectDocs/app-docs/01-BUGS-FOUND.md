@@ -512,7 +512,8 @@ rather than fixed-and-forgotten; see **D38 §8**.
 ## Part 1c — In the OPEX screen (O&M and Other OPEX)
 
 Found while porting `OpexCostScreenCode.txt` (8,932 lines) into
-`features/periods/opexRules.ts`. Line references are into that file unless stated. Every one is
+`features/periods/opexRules.ts` (now `features/cost/periods/opexRules.ts`, 26 Oct 2026). Line
+references are into that file unless stated. Every one is
 reproduced bug-for-bug with a `…CanvasParity` twin where our corrected behaviour differs, and
 each is pinned by a `UT-OPEX-###` test.
 
@@ -523,14 +524,14 @@ each is pinned by a `UT-OPEX-###` test.
 | **O-3** | The delete dialog branches on `IsBlank(locSelectedOpexCost)` where `OnConfirm` branches on its `'Parent Cost'`, so the cascade warning is unreachable while the confirm cascades. The dead branch also interpolates a record it just asserted is blank, and omits the space before `"Cost"`. | `:8843-8847` vs `:8861-8874` | reproduced |
 | **O-4** | The **O&M** card badge judges ONE row for a whole device card (`Last(Sort(Sort(cardCosts,'Start Date'),Description))`), so a second cost type on the same device is ignored; its "lands but not aligned" arm returns `""` where the sub-account badge returns `Duration Match`. | `:5222-5297` | reproduced as a separate `omDurationBadge` |
 | **O-4b** | The O&M row warning icon never references `ThisItem` in its condition, so it renders on **every** row of a device card whenever the card's last row misaligns. | `:4682-4757` | reproduced |
-| **O-5** | `locLastPeriod` sorts by `Name`, which is text — `… - 10` sorts before `… - 2`. From the tenth period onward, Add Period and Delete enable against the wrong row. | `:557-566`, `:2806-2821`, `:2905-2914` | corrected (start-date order) until 26 Oct 2026; **reproduced again** for the Add Period and Delete gates at the product owner's request ("code app must behave like canvas") — `lastPeriodByName` in `opexRules.ts`. The chain display and warning icon keep period order. |
+| **O-5** | `locLastPeriod` sorts by `Name`, which is text — `… - 10` sorts before `… - 2`. From the tenth period onward, Add Period and Delete enable against the wrong row. | `:557-566`, `:2806-2821`, `:2905-2914` | corrected (start-date order) until 26 Oct 2026; **reproduced again** for the Add Period and Delete gates at the product owner's request ("code app must behave like canvas") — `lastPeriodByName` in `opexRules.ts`. The chain display and warning icon keep period order. *(26 Oct 2026: that remainder is an unmarked divergence, open in **D47** §4.)* |
 | **O-6** | The start-date picker's device branch reads years off `varLastRelatedPeriod` but **months off `locSelectedOpexCostParent`** — a different record, blank in that branch's own precondition. The months are silently dropped. | `:5862-5864` | reproduced; `startDateDefault` returns `defectiveMonths` so the loss is visible |
 | **O-7** | The two period-numbering formulas disagree. The row-select one anchors on the **first** `" - "` and loses the rest of the stem (`"A - B - 2"` → `"A - 3"`); the panel's version is correct. | `:4620-4641` vs `:5630-5663` | both reproduced separately |
 | **O-8** | Other-OPEX *Add Period*'s duplicate guard compares `DeviceTypeInProject` on both sides, and both are blank in that mode — so `Blank() = Blank()` matches **every** Other-OPEX row in the project. The guard is project-wide rather than card-scoped. | `:456-466` | reproduced |
 | **O-9** | The Inflation Profile cell's else-branch fires when inflation is simply **off**, rendering an empty string — "no inflation" and "inflation 0.0 %" are indistinguishable. | `:1829-1847`, `:4116-4134` | reproduced |
 | **O-10** | The **O&M** standard loader chains period 3+ off `Last(Sort(collection, Description, Asc))` where the Other-OPEX loader uses `Period`. From ten periods on, O&M computes the start off the wrong row. | `:3184-3186` | reproduced |
-| **O-11** | The Duration **years** dropdown labels test the 1-based `Sequence` index while the caption uses the 0-based value, so the list reads `"0 year", "1 years", "2 years"…`. The months list is correct. | `:6078-6084` | reproduced |
-| **O-12** | The start-date error's `.Text` and `.Visible` are inverted with respect to each other — the label renders empty when a date *is* chosen and hides when it is missing. Cosmetic; the Save gate is independent. Also present in the skeleton. | `:5807-5812` | corrected + parity twin |
+| **O-11** | The Duration **years** dropdown labels test the 1-based `Sequence` index while the caption uses the 0-based value, so the list reads `"0 year", "1 years", "2 years"…`. The months list is correct. | `:6078-6084` | **Amended 26 Oct 2026 (the code wins).** "Reproduced" until `33c1a9d` (23 Oct). The canvas `Items` (`Opex Costs Screen.pa.yaml` L6085-6091) tests `Value-1 = 1`, so the list is correct, "0 years", "1 year". Only `DefaultSelectedItems` (L6066-6084) has the defect, as in Land Lease's LL-D2. The code now renders the correct list and does **not** reproduce the preselected-label quirk. Whether the canvas ever shows that label is open (**D48** §4). |
+| **O-12** | The start-date error's `.Text` and `.Visible` are inverted with respect to each other — the label renders empty when a date *is* chosen and hides when it is missing. Cosmetic; the Save gate is independent. Also present in the skeleton. | `:5807-5812` | corrected + parity twin until 23 Oct 2026. Since `33c1a9d` the panel no longer renders `startDateError`, so the message is never shown, as in the canvas. The corrected function and its twin remain, unused by the screen (**D48** §2). |
 | **O-13** | `locSelectedRecordTypeAddPeriod` keys off `Left(deviceRow.Name, 3) = "WTG"` rather than the resolved device type, so a generator row named anything else loses its `EUR/WTG` field. | `:2927-2934` | reproduced |
 
 Lesser smells, recorded but not given ids: `colOtherOpexPeriods` is never cleared inside its own
@@ -543,7 +544,7 @@ hand-save payload.
 ## Part 1d — In the Land Lease screen
 
 Found while porting `LandLeaseCostScreenCode.txt` (6,132 lines, cited `LL:`) into
-`features/periods/landLeaseRules.ts`, diffed against the **newer** `Land Lease Costs Screen.pa.yaml`
+`features/periods/landLeaseRules.ts` (now `features/cost/periods/landLeaseRules.ts`), diffed against the **newer** `Land Lease Costs Screen.pa.yaml`
 export (cited `PA:`). Each is pinned by a `UT-LAND-###` test.
 
 | id | what the canvas does | where | our handling |
@@ -774,6 +775,201 @@ on a fresh page. The canvas pages one collection: `RoundUp(TotalRows / 200)`
 **Also found, not fixed:** the code app hides inactive projects (`statecode eq 0`), while the
 canvas lists them. That makes the code app's count lower; it needs a product decision. Full record:
 **D45**.
+
+### CA-5 · OPEX O&M merged two devices that share a name (fixed 26 Oct 2026, `4fc8cff`)
+
+**A code-app defect, not a canvas defect.** The canvas filters a card's rows with
+`DeviceTypeInProject = ThisItem`, which matches by device **row**.
+- **The code app keyed on the name.** It keyed O&M cards, row filtering and saves on the
+  device's `vsb_name`, which is not unique.
+- **What happened.** On project "0 Test Lucas", two "Dummy-Siemens Gamesa 5-7" cards each showed
+  both devices' periods. A save or Add Standard Contract from the second card bound to the first
+  device, because `resolveDeviceType` resolves by name.
+
+**Fix.**
+- `CostPeriod.deviceId` is read from `_vsb_devicetypeinproject_value` (`data/costBook.ts`).
+- Cards are keyed on the device row id (`OpexScreen.tsx`).
+- `saveOpexPeriod` and `addOpexStandardContract` bind to the card's id when it has one
+  (`data/periodWrites.ts`).
+- A period that has not been read back falls back to the one device carrying its name. A name
+  shared by two devices resolves to neither, so the period stays on an orphan card.
+
+**Tests:** UT-OPEXUI-027b, UT-OPEXUI-027c. **Not verified** against live data.
+
+### CA-6 · DEVEX/CAPEX opened on the project's start year, not the canvas year (fixed 26 Oct 2026, `4fc8cff`)
+
+**A code-app defect.** The code app had no equivalent of the `App.OnStart` seed of
+`gblSelectedProjectYear` (`App.pa.yaml` L205). It therefore opened on the cost-allowed start year,
+so a 2015 project opened on 2015 and showed different costs from the canvas, which opens on this
+year or on a future start year. A screen test pinned the wrong year.
+
+**Fix:** `panelRules.ts` `onStartSelectedYear`. **Tests:** the `onStartSelectedYear` block in
+`panelRules.test.ts` (no `UT-` ids) and the updated `Screen.test.tsx` case. Record: **D50**.
+
+### CA-7 · Land Lease "Allocate to all WTGs" off refilled from every contract (fixed 26 Oct 2026, `5c64900`)
+
+**A code-app defect.**
+- **The canvas.** Switching the toggle off falls back to the contract's own stored allocations,
+  `colAllocatedWtgsInSelectedLandLeaseCost` (`cmb_…_AllocationWtg_1.DefaultSelectedItems`, LL:3905).
+- **The code app.** It passed **every** contract's allocation rows. So a brand-new contract was
+  refilled with every generator allocated anywhere in the project.
+- **The fix.** The rows are now filtered to `panel.cost.id` (`LandLeaseScreen.tsx`).
+
+**No test pins it.** Record: **D49** §2.
+
+### CA-8 · Land Lease Start Date was disabled on later periods (fixed 26 Oct 2026, `5c64900`)
+
+**A code-app defect.** `dte_…_StartDate_1` sets no `DisplayMode` (LL:2336), so the canvas keeps a
+later period's Start Date editable. The code app had locked it with the header fields that
+`headerEditable` locks.
+
+**Test:** UT-LLUI-009, inverted to `not.toBeDisabled()`. Record: **D49** §2.
+
+### CA-9 · Add Cost from Table left some contract totals stale (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
+
+**A code-app defect in the legacy save path.**
+- **What happened.** `saveAddCostSheet` recomputed `vsb_totalcost` only for the contracts named by
+  `contractUpserts`. Where a group's rows pointed at different contracts, one contract's total was
+  not recomputed and went stale.
+- **The fix.** The bulk planner (`savePlan.ts` `buildSavePlan`) computes totals from the final
+  state (existing rows, then upserts, minus deletes) for every touched surviving contract. On a
+  partial failure, `executeSavePlan` re-reads and rewrites the totals that differ.
+- **Scope.** The fix is on the bulk path (`BULK_SAVE = true`). Setting the flag to `false` brings
+  the legacy behaviour back.
+
+**Tests:** UT-ACSAVE-006, UT-ACSAVE-019. **Not verified** against live data. Record: **D51** §7.
+
+### CA-10 · Add Cost from Table deletes could fail silently (rule 14) (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
+
+**A code-app defect.** `saveAddCostSheet` deleted cost and contract rows through the raw generated
+`delete()` (`data/addCostSheet.ts`, formerly lines 255, 327 and 329). That method discards the
+`IOperationResult`, so a Dataverse refusal (403, a cascade restriction) looked like success
+(CONVENTIONS rule 14).
+
+**Fix:** the legacy path now uses `deleteRecord` (`data/client.ts`). The bulk path's phases 3 and 4
+use it too, attempt every id, and report the failed ids.
+
+**Correction (second fix wave, 27 Oct 2026, uncommitted).** The first fix did not cover every
+legacy write failure. The legacy path's per-contract `vsb_totalcost` update called
+`Vsb_capexprojectcontractsService.update` without `unwrap` (rule 3), so a refused total update
+resolved like success and left a stale total. It now goes through `unwrap`.
+
+**Tests:** UT-ACSHEET-LEGACY-001…003 (refused deletes, `addCostSheet.test.ts`);
+UT-ACSHEET-BULK-022, 023 (refused and accepted total update, `addCostSheet.bulk.test.ts`).
+
+**Not fixed:** `deleteComment` in `data/comments.ts` still uses the raw `delete()` (CG-051,
+`ProjectDocs/Capex Cost Screen/15-GAP-ANALYSIS.md`). Record: **D51** §1.
+
+### CA-11 · Add Cost from Table reported almost every row as changed (fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
+
+**A code-app defect.**
+- **What happened.** `diffRows` (`features/cost/add-costs-from-table/rules.ts`) paired each sheet
+  row with its pre-edit self through a map keyed on `rowId`. `Row_ID` is positional, and every
+  contract row under one sub-account shares one `Row_ID`, for every year. So each row was compared
+  with whichever row of its sub-account came last, and nearly every row counted as changed. On the
+  15,000-row bench (`prepare.bench.test.ts`) it reported **14,416 of 14,650** rows; **3,487** really
+  differ.
+- **What it cost.** Final data was never wrong: the planner (`savePlan.ts` `buildSavePlan`)
+  compares every cell with the stored cost rows, so unchanged cells were skipped as no-ops. But
+  every falsely "changed" row made its contract a write target, which inflated the contract writes
+  of every Save, an unedited one included.
+- **The fix.** `diffRows` pairs rows by identity (`rowIdentity`: the contract and year, or account
+  number, account name, description and year for a row without a contract), through
+  `IdentityIndex`. An identity that two current rows, or two original rows, share cannot be paired
+  safely, so every current row carrying it is reported as changed (the ambiguity fallback: at most
+  a redundant write, never a lost edit). `prepareSheetSave` (`spreadsheet/adapter.ts`) calls it.
+
+**Tests:** UT-ADDCOST-074…078 (`rules.test.ts`, 078 a property test), UT-ADDCOST-079…083
+(`adapter.test.ts`, through a real grid round trip), UT-ADDPERF-001 (the 3,487 count). **Not
+verified** against live data. Record: **D51** §11.12.
+
+### CA-12 · Two new same-named contracts under one sub-account pass validation (found 27 Oct 2026, fixed 27 Oct 2026, committed `5d50e2b`, on DEV in `2c7e6aa`)
+
+**A code-app divergence from the canvas, not marked in the code.** Found while fixing CA-11.
+- **The canvas.** `tmr__CheckChanges_Add_Costs_To_Dataverse.OnTimerEnd`
+  (`Add Costs from Table.pa.yaml`, line 30) counts, per row, the rows that share **all** of `Name`,
+  `CurrentYear`, `row_ID`, `Number` and `Description` (`CostCountRows`). `locDuplication` flags
+  every row with `CostCountRows > 1`, with " :- There cannot be two contracts with the same name
+  under the same sub-account." So two rows with the same name under one sub-account in one year,
+  which share a `row_ID`, are refused.
+- **The code app.** `validateDuplicateContracts` (`rules.ts`) groups by account name, account
+  number, description and year, and flags a group only when it holds **more than one distinct**
+  `rowId`. That is the reverse condition. Because every contract row under one sub-account shares
+  one `Row_ID`, two such rows are never flagged, and Save stays enabled (UT-ADDCOST-077 pins this).
+  The condition fires only when one sub-account appears at two places in the grid, which
+  `validateDuplicateSubaccounts` reports anyway. The doc comment marks only the year in the key as
+  a deviation, and the canvas key has the year too.
+- **What happens on Save.** Both rows resolve to one (sub-account, name) group, so the planner
+  makes one new contract.
+  - Where both rows have a value in the same month, `buildSavePlan` throws `SheetConflictError`
+    ("… has more than one row for <year>") and nothing is written.
+  - Where their months do not overlap, nothing stops the save: both rows' cells are written to the
+    one new contract. This is from reading the code; no test covers it.
+
+**Status: fixed (canvas parity), uncommitted.**
+- **The fix.** `validateDuplicateContracts` now ports the canvas `CostCountRows` rule exactly: it
+  flags every row that shares Name, year, `rowId`, Number and Description with another row. The
+  message is unchanged: `ADDCOST_MSG.duplicateContract`.
+- **Nothing the old condition caught is lost.** The old one-name, two-Row_IDs case is still refused
+  by `validateDuplicateSubaccounts`, as the canvas `locDuplicateSubaccounts` refuses it.
+- **Tests:** UT-ADDCOST-007, 069, 077 and 084–088.
+- **Product impact, to confirm.** A project that already holds two stored contracts with the same
+  name under one sub-account, with costs in the same year, now opens with Save disabled. The canvas
+  refuses it too.
+- **Not ported:** the canvas message prefix (`UniqueID & " : "`). That gap predates this fix.
+
+Record: **D51** §11.12–§11.13.
+
+### CA-13 · After an Add Cost from Table Save, DEVEX/CAPEX showed the pre-save data, then deleted rows came back (found 27 Oct 2026, fixed 27 Oct 2026, committed `94eb07d`, on DEV, D53)
+
+**A code-app defect.**
+- **What happened.** A successful Save (`add-costs-from-table/Screen.tsx` `doSave`) navigates
+  straight back to `/costs/capex`. Two things then showed the wrong state:
+  - **Stale book (1–3 s).** `useSaveAddCostSheet` (`costing/useCostBook.ts`) invalidated the CAPEX
+    keys with the default `refetchType: "active"`. The CAPEX screen was unmounted at that moment,
+    so its queries were inactive: they were only marked stale, nothing was fetched. On mount the
+    screen rendered the cached PRE-save book and refetched in the background.
+  - **Deleted rows reappeared (5–20 s on DEV).** With `DEFER_CONTRACT_DELETES` /
+    `DEFER_COST_DELETES` (D51 §11.14–§11.16) the deletes were still running when that mount
+    refetch read, so removed contracts and cleared cells came back until `followBackgroundDeletes`
+    invalidated again after the background settled.
+- **The fix (D51 §11.19).**
+  - `src/data/pendingDeletes.ts`: a registry of the deferred contract and cost ids, filled when
+    the Save resolves and released when the background settles (success or failure). The CAPEX
+    book, the Summary totals and the sheet reload leave those rows out.
+  - `features/cost/costing/savedSheetPatch.ts` `applySavedSheetToBook`: the cached book is patched
+    with what the Save applied (`SavedSheetChanges`, returned by `saveAddCostSheetBulk` as
+    `applied`) in `onSuccess`, before `mutateAsync` resolves, so before `back()`.
+  - The CAPEX book and totals are invalidated with `refetchType: "all"`, so the confirming read
+    starts at save time.
+- **Scope.** Bulk path only for the patch; the legacy path (`BULK_SAVE = false`) returns `{}` and
+  is only refetched. The Contracts screen's DevCo queries are not filtered.
+- **Review fixes (D51 §11.19).** The save's own retry re-read and reconcile read now honour the
+  registry too (the reconcile keeps this Save's own deletes); a first book or totals load in flight
+  is cancelled before the post-save invalidation; a created contract is patched in only under a
+  sub-account of the book's own category.
+
+**Tests:** UT-PENDDEL-001…005, 010…012, 020…022, 030, 031; UT-SHEETPATCH-001…016; UT-ACSAVE-040…044;
+UT-ACSHEET-BULK-069…075; UT-ACSHEET-QUERY-009…017; UT-ACSHEET-CACHE-001; UT-BOOK-075, 076. **Not verified** against live
+data. Record: **D51** §11.19.
+
+### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, uncommitted)
+
+**A code-app defect** (layout). The canvas has no "Required" text here; it is this app's own
+message for an unset payment-date year.
+- **What happened.** On a "Comments to payment date" comment with no year, the Type, Year and
+  Month dropdowns were not on one line. Type and Month sat lower and were taller than Year, and
+  "Required" looked detached from its field. The user reported it with a screenshot on 28 Oct.
+- **Root cause.** The three boxes are Fluent `Field`s in one CSS grid row (`typeRow` in
+  `features/cost/capex-costs/CommentsPanel.tsx`). That grid kept the default
+  `align-items: stretch`, and a vertical Fluent `Field` is itself a grid of `auto` rows. The
+  "Required" message gives Year an extra row, so it was the tallest cell. Stretch then grew Type
+  and Month to the same height and shared the extra space between their label and control rows,
+  which pushed their dropdowns down.
+- **The fix.** `alignItems: "start"` on `typeRow`. Each field keeps its natural height, the three
+  dropdowns share one line, and "Required" sits directly under Year without moving anything else.
+- **Tests.** None automated: jsdom does no layout, so a unit test cannot see the alignment. The
+  fix needs a visual check in the running app.
 
 ---
 

@@ -323,7 +323,8 @@ export default function ProductionScreen() {
   };
 
   /* ── the page lock and the summary. */
-  const lockBullets = pageLock(project);
+  // New Project mode (no project yet) opens locked on every condition, as the canvas does.
+  const lockBullets = projectId ? pageLock(project) : ["• General", "• Milestones", "• Generator"];
   const locked = lockBullets.length > 0;
   const summary = summaryValues(project, lang);
 

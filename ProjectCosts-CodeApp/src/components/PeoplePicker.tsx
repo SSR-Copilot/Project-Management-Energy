@@ -54,7 +54,7 @@ const outline = (color: string) => ({
 const noBorder = outline("transparent");
 
 const useStyles = makeStyles({
-  root: { display: "flex", flexDirection: "column", rowGap: tokens.spacingVerticalXS, minWidth: 0 },
+  root: { position: "relative", display: "flex", flexDirection: "column", rowGap: tokens.spacingVerticalXS, minWidth: 0 },
   /** The PCF box: 1-px dark outline, chips and the search input on one wrapping line. */
   box: {
     boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center",
@@ -71,10 +71,11 @@ const useStyles = makeStyles({
   /** The persona chip: grey pill, initials circle, name, ✕. */
   chip: {
     display: "inline-flex", alignItems: "center", columnGap: "4px", maxWidth: "100%", minWidth: 0,
-    height: "24px", paddingLeft: "2px",
+    // The PCF persona: 24 px tall, 14 px name (canvas screenshot, 27 Oct 2026).
+    height: "24px", paddingLeft: "1px",
     borderRadius: "12px",
     backgroundColor: tokens.colorNeutralBackground3,
-    fontSize: tokens.fontSizeBase200,
+    fontSize: "14px",
   },
   chipName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 },
   chipRemove: { minWidth: "20px", width: "20px", height: "20px" },
@@ -184,7 +185,7 @@ export function PeoplePicker({
         <div className={mergeClasses(s.box, disabled && s.boxDisabled)}>
           {value.map((p) => (
             <span key={p.id} className={s.chip} title={caption(p)}>
-              <Avatar name={p.displayName || p.mail} size={20} color="colorful" aria-hidden="true" />
+              <Avatar name={p.displayName || p.mail} size={24} color="colorful" aria-hidden="true" />
               <span className={s.chipName}>{p.displayName || p.mail}</span>
               <Button
                 appearance="transparent"

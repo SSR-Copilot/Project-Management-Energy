@@ -1411,6 +1411,38 @@ describe("loadCapexTotals", () => {
     expect(totals.every((t) => t.total === 0)).toBe(true);
     expect(queriedBy["sum CAPEX cost rows per contract"]).toBeUndefined();
   });
+
+  it("UT-BOOK-075 a contract whose deferred delete is pending is neither summed nor fetched (D51 §11.19)", async () => {
+    rowsByLabel = {
+      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX contract totals": [contract(NTES, "81000_0"), contract(DESC, "81000_0")],
+      "sum CAPEX cost rows per contract": [costRow(NTES, 42)],
+    };
+    const totals = await loadCapexTotals(PROJECT_ID, {
+      contractIds: new Set([DESC.toLowerCase()]), costIds: new Set(),
+    });
+    expect(totals.find((t) => t.category === DEVEX)?.total).toBe(42);
+    const costOptions = queriedBy["sum CAPEX cost rows per contract"]?.[0] as { filter: string; select: string[] };
+    expect(costOptions.filter).not.toContain(DESC);
+    // No cost id pending: the read stays two columns wide.
+    expect(costOptions.select).toEqual(["_vsb_contract_value", "vsb_cost"]);
+  });
+
+  it("UT-BOOK-076 a pending cost row is left out of its contract's sum; only then is the row id selected", async () => {
+    const PENDING_COST = "a0000002-0000-4000-8000-000000000002";
+    rowsByLabel = {
+      "list CAPEX accounts for the cost book": rows,
+      "list CAPEX contract totals": [contract(NTES, "81000_0")],
+      "sum CAPEX cost rows per contract": [
+        { ...costRow(NTES, 100), vsb_capexcostid: "a0000001-0000-4000-8000-000000000001" },
+        { ...costRow(NTES, 900), vsb_capexcostid: PENDING_COST.toUpperCase() },
+      ],
+    };
+    const totals = await loadCapexTotals(PROJECT_ID, { contractIds: new Set(), costIds: new Set([PENDING_COST]) });
+    expect(totals.find((t) => t.category === DEVEX)?.total).toBe(100);
+    const costOptions = queriedBy["sum CAPEX cost rows per contract"]?.[0] as { select: string[] };
+    expect(costOptions.select).toEqual(["vsb_capexcostid", "_vsb_contract_value", "vsb_cost"]);
+  });
 });
 
 /* ════════════════════════════════════════════════════════ delete a line ══ */

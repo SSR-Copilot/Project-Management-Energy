@@ -75,9 +75,13 @@
 /* `Container7` — 4 wide, `Height: =Parent.Height/2` of the 70-high suite bar. */
 .canvas-pm-header .canvas-project-suite { gap: 0; }
 .canvas-pm-header .canvas-project-state { height: 35px; }
-/* `con_cmp_Header_HeaderText` at x 20 (16 after the 4 px bar); status line 4 px into its foot. */
+/* Status line 4 px into the title's foot. */
+/* `con_cmp_Header_HeaderText`: Text@0.0.51, `Size: =20`, Semibold, at `X: =20` (16 px after the
+   4 px state bar: 76 px from the back button's left edge, as on the canvas), 20 px type. */
 .canvas-project-heading { display: flex; flex-direction: column; min-width: 0; padding-left: 16px; }
-.canvas-pm-project-title { padding: 0; font-size: 24px; line-height: 32px; font-weight: 600; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `Y: =(Parent.Height-Self.Height)/2-4`: a lone title sits 5 px above the bar's middle here. */
+.canvas-project-heading:not(:has(.canvas-project-status)) { margin-bottom: 10px; }
+.canvas-pm-project-title { padding: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-project-status { display: inline-flex; align-items: center; gap: 4px; margin-top: -2px; }
 .canvas-project-status-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
 .canvas-project-status-text { color: rgb(50, 49, 48); font-size: 13.33px; font-weight: 300; line-height: 18px; }
@@ -482,3 +486,7 @@
    not the 15 px the DEVEX/CAPEX buttons set). The hint is at `X: =20`. */
 .opex-canvas-panel .canvas-panel-footer { height: 60px; gap: 20px; padding: 0 20px; }
 .opex-canvas-panel .canvas-panel-footer button { width: 96px; min-width: 96px; height: 32px; font-size: 14px; }
+
+/* Every field's validation message as the canvas error labels draw it: semibold, in the
+   canvas error red (`akzent5`), PO 27 Oct 2026. The app uses no warning / success messages. */
+.fui-Field .fui-Field__validationMessage { color: #d20532; font-weight: 600; }

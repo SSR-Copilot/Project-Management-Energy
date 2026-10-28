@@ -24,10 +24,12 @@ import { useBlocker, type BlockerFunction } from "react-router-dom";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { isLeaving, type LeaveDialogText } from "./leaveGuard";
 
-export function UnsavedChangesGuard({ when, dialog }: {
+export function UnsavedChangesGuard({ when, dialog, canvasLook = false }: {
   /** The screen's dirty condition — the canvas `If(<dirty>, <dialog>, <navigate>)` test. */
   when: boolean;
   dialog: LeaveDialogText;
+  /** Opt-in: the canvas pop-up's look (dark scrim, flat card, 120 px Yes, no footer rule). */
+  canvasLook?: boolean;
 }) {
   const shouldBlock = useCallback<BlockerFunction>(
     ({ currentLocation, nextLocation }) => when && isLeaving(currentLocation, nextLocation),
@@ -58,6 +60,10 @@ export function UnsavedChangesGuard({ when, dialog }: {
       description={dialog.description}
       confirmText={dialog.confirm}
       cancelText={dialog.cancel}
+      canvasFooter={canvasLook}
+      footerDivider={!canvasLook}
+      darkScrim={canvasLook}
+      {...(canvasLook ? { confirmWidth: 120 } : {})}
       onConfirm={() => blocker.proceed?.()}
       onCancel={() => blocker.reset?.()}
     />

@@ -50,6 +50,8 @@ const pt = (size: number) => `${(size * 4) / 3}px`;
 const useStyles = makeStyles({
   /** `con_PopUpConfirmation_2` — the scrim. `Fill: =RGBA(0, 0, 0, 0.1)`, not Fluent's 40 %. */
   backdrop: { backgroundColor: "rgba(0, 0, 0, 0.10)" },
+  /** `darkScrim`: the canvas pop-up's heavy grey veil (Team delete screenshot, 27 Oct 2026). */
+  backdropDark: { backgroundColor: "rgba(0, 0, 0, 0.7)" },
   /**
    * `con_PopUpConfirmation_Body_2` — the surface itself, with Fluent's own padding removed.
    *
@@ -309,6 +311,10 @@ export interface ConfirmDialogProps {
    * and 16 px icons. Off by default, so every existing caller keeps its look.
    */
   canvasFooter?: boolean;
+  /** With `canvasFooter`: draw the divider above the buttons (default). The Team pop-up has none. */
+  footerDivider?: boolean;
+  /** Optional (Team): the canvas pop-up's dark grey scrim instead of the faint one. */
+  darkScrim?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -321,7 +327,7 @@ export function ConfirmDialog({
   confirmIcon = "checkmark", cancelIcon = "dismiss",
   confirmWidth = 96,
   boxHeight, textHeight,
-  error, lockWhileBusy = false, canvasFooter = false,
+  error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
@@ -361,7 +367,7 @@ export function ConfirmDialog({
         className={mergeClasses(styles.surface, isInfo && styles.surfaceInfo, canvasFooter && styles.surfaceCanvas)}
         style={surfaceStyle}
         aria-label={title}
-        backdrop={{ className: styles.backdrop }}
+        backdrop={{ className: mergeClasses(styles.backdrop, darkScrim && styles.backdropDark) }}
       >
         <div className={styles.header}>
           <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas)}>{title}</h2>
@@ -390,7 +396,7 @@ export function ConfirmDialog({
         </div>
 
         {/* Confirm sits LEFT of Cancel: `Confirm.X = Cancel.X - Self.Width - 20`. */}
-        <div className={mergeClasses(styles.actions, canvasFooter && styles.actionsDivider)}>
+        <div className={mergeClasses(styles.actions, canvasFooter && footerDivider && styles.actionsDivider)}>
           <button
             type="button"
             className={mergeClasses(

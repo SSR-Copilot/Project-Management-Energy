@@ -348,7 +348,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     expect(input).toHaveFocus();
     // Keyboard only: reopen with typing, ArrowDown, Enter.
     await user.keyboard("ü");
-    await screen.findByRole("listbox", { name: "Suggested Notifications", ...all });
+    // The inline listbox is still mounted (collapsed), so wait for it to EXPAND: the debounced
+    // search for the new text must answer before ArrowDown has an option to move to.
+    await waitFor(() => expect(input).toHaveAttribute("aria-expanded", "true"));
     await user.keyboard("{ArrowDown}{Enter}");
     expect(await within(screen.getByLabelText("Selected Notifications")).findByText("Anna Müller")).toBeInTheDocument();
     noWrites();

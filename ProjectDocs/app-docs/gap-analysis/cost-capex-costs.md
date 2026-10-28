@@ -35,6 +35,16 @@
   UX-6** affect **PM Revenues** as well as CAPEX, so the "ⓘ is CAPEX-only" premise was false;
   **UX-7**'s blast radius was overstated and is in fact **zero visible change**. **UX-8** moved from
   open question to confirmed defect, and **UX-12** was added as a consequence of UX-4.
+- **Amended 26 Oct 2026 (the code wins).** Rows **D1** and **B1** are wrong as written:
+  - **The gap.** The code never seeded `gblSelectedProjectYear` as `App.OnStart` does (`App.pa.yaml`
+    L205): `Year(If('Start Cluster' <> Greenfield, If(Year('Acquisition date') > Year(Today()),
+    'Acquisition date', Today()), If(Year('Project Start Date') > Year(Today()),
+    'Project Start Date', Today())))`. So `defaultSelectedYear`'s `Coalesce` fell through to
+    `locCostAllowedStartYear`, and a 2015 project opened on 2015, where the canvas opens on this year.
+  - **The fix.** Commit `4fc8cff` (Sourabh Kumar) adds `panelRules.ts` `onStartSelectedYear`, so
+    D1 and B1 are now COVERED in fact. The `defaultSelectedYear` note in B1 is still true: the clamp
+    moves a finished project back into its own window.
+  - **Records.** CA-6 in `01-BUGS-FOUND.md` and **D50**.
 - State: the screen is **built and connected** (reads and writes), unlike the 16 Admin/PM reports
   in this folder, which were written against unconnected screens. Rows therefore judge live
   behaviour as expressed in code, not just a captured requirement.

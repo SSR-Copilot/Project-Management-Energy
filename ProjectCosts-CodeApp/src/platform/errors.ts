@@ -111,6 +111,25 @@ export class RecordGoneError extends DataError {
 export const RECORD_GONE_TEXT =
   "This record was deleted by someone else, so your change was not saved. Refresh the screen and try again.";
 
+/**
+ * The innermost Dataverse reason in an error's `cause` chain, as one support line:
+ * `HTTP 400: <Dataverse message> (request <id>)`. Wrapping errors (bulk save phases, chunks) name
+ * WHERE a write failed; this names WHY, which is otherwise only visible in the network trace.
+ */
+export function rootCauseDetail(error: unknown): string | undefined {
+  let innermost: DataError | undefined;
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current; depth += 1) {
+    if (current instanceof DataError) innermost = current;
+    current = (current as { cause?: unknown }).cause;
+  }
+  if (!innermost) return undefined;
+  const sdk = innermost.cause as Record<string, unknown> | undefined;
+  const requestId = typeof sdk?.["requestId"] === "string" ? ` (request ${sdk["requestId"]})` : "";
+  const status = innermost.status === undefined ? "" : `HTTP ${innermost.status}: `;
+  return `${status}${describe(innermost.cause)}${requestId}`;
+}
+
 /** True when `error`, or anything in its `cause` chain (depth 4), is a `RecordGoneError`. */
 export function isRecordGone(error: unknown): boolean {
   let current: unknown = error;
