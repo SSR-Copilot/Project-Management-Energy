@@ -452,6 +452,7 @@ export default function TeamScreen() {
         footerDivider={false}
         darkScrim
         confirmWidth={120}
+        compact
         onConfirm={() => void onDelete()}
         onCancel={() => setDeleteOpen(false)}
       />

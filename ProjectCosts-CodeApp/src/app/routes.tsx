@@ -88,11 +88,13 @@ export function CostProjectGate() {
 
 /**
  * The New Project screens: General Data with NO project is the New Project form (`addProject`
- * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Team / Grid Operator open on
- * their page-lock banner ("• General" not saved yet) instead of asking for a project.
+ * blanks `gblRecordSelectedProject` and navigates there), and every other section opens on
+ * its page-lock banner ("• General" not saved yet) instead of asking for a project.
  */
 const NEW_PROJECT_PATHS = new Set([
   "/project/general", "/project/milestones", "/project/generators", "/project/team", "/project/grid-operator",
+  // Every other section opens locked too in the canvas's New Project mode (PO, 28 Oct 2026).
+  "/project/planning", "/project/production", "/project/checklist", "/project/revenues", "/project/finance",
 ]);
 
 /**
