@@ -64,11 +64,6 @@ const useStyles = makeStyles({
    */
   // The first command's icon at x 198, right after the 204 px brand block (canvas, 28 Oct 2026).
   commandSlot: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingLeft: 0 },
-  pageTitle: {
-    fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400,
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-    maxWidth: "28ch",
-  },
   right: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
   help: { fontWeight: tokens.fontWeightRegular, "& .fui-Button__icon": { color: tokens.colorNeutralForeground3 } },
   /*
@@ -309,7 +304,13 @@ export function AppHeader({
               ) : null}
             </span>
           ) : (
-            <Text className={`${styles.pageTitle} canvas-project-title`} title={pageTitle}>{pageTitle}</Text>
+            /*
+             * Cost: the same `con_cmp_Header_HeaderText` as the PM header above (20 px, Semibold),
+             * as the same kind of element: a plain span carrying only `.canvas-project-title`. It was a
+             * Fluent `Text` with a Griffel `pageTitle` (16 px, 28ch cap) that beat the stylesheet's
+             * 20 px, so the Cost name rendered smaller and in Fluent's grey (CA-21).
+             */
+            <span className="canvas-project-title" title={pageTitle}>{pageTitle}</span>
           )}
         </div>
       ) : null}
