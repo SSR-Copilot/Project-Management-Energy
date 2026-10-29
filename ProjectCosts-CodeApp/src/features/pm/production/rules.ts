@@ -187,6 +187,8 @@ export interface ProductionProject {
   projectIdText: string | null;
   projectName: string | null;
   countryId: string | null;
+  /** `gblRecordSelectedProject.Country.Name` — what `Assumptions Revenues SQL` is filtered on. */
+  countryName: string | null;
   technology: number | null;
   totalCapacity: number | null;
   endDate: string | null;
@@ -915,8 +917,8 @@ export function canSaveYield(args: {
 /**
  * `ClearCollect(col…SeasonalityValues, ForAll(Sequence(12), {ID, Month, Value: LookUp(standard,
  * Month = n).<WTG|PV>, TextValue: Text(…, "#0.0", Language()), IsStandard: true}))` (Y:568, 4147).
- * A month missing from the standard (or the whole Fabric source, which is not connected — D2) is
- * blank, as the canvas `LookUp` is.
+ * A month missing from the standard (or every month, when the Fabric read failed) is blank, as the
+ * canvas `LookUp` is.
  */
 export function buildSeasonalityRows(
   standard: readonly StandardSeasonalityRow[], technology: Technology, lang: Lang = "en-US",
@@ -1131,9 +1133,9 @@ export function syncRevenueNegativePrices(args: { activeYields: readonly EnergyY
 /* ═══════════════════════════════════════════════════ Fabric / locale parsing ════ */
 
 /**
- * The Fabric values (`Assumptions Revenues SQL` — not connected, D2) arrive as strings and the
- * canvas reads them with `Switch(langRoot, "en", Value(v), Value(Substitute(v, ".", ",")))`.
- * Kept for when the source is connected.
+ * The Fabric values (`Assumptions Revenues SQL`) arrive as strings and the canvas reads them with
+ * `Switch(langRoot, "en", Value(v), Value(Substitute(v, ".", ",")))` — i.e. always as a
+ * dot-decimal number, whatever the user's language.
  */
 export function parseFabricNumber(raw: string | number | null | undefined, lang: Lang): number {
   if (raw === null || raw === undefined || raw === "") return 0;
@@ -1141,6 +1143,40 @@ export function parseFabricNumber(raw: string | number | null | undefined, lang:
   const normalised = decimalSeparator(lang) === "," ? raw.replace(/\./g, ",") : raw;
   const n = parseNumber(normalised, lang);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** One row of `Assumptions Revenues SQL` as the connector returns it (`AssumptionsRevenueModel`). */
+export interface RevenueAssumptionSqlRow {
+  valuetype?: string | null;
+  category?: string | null;
+  pv?: string | null;
+  wind?: string | null;
+}
+
+/**
+ * `colStandardSeasonalityYeild` and `colStandardNegativePricePV` (`OnVisible`, connected 28 Oct
+ * 2026), from the country's rows:
+ *   seasonality    `{Month: Value(category), PV: Value(pv) * 100, WTG: Value(wind) * 100}`
+ *   negativeprices `{Year: Value(category), PV: Round(Value(pv) * 100, 1), Wind: Round(Value(wind) * 100, 1)}`
+ * each `SortByColumns(…, "category")`. A row whose category is not a number is dropped (the canvas
+ * `Value` gave a blank month / year that no `LookUp` could match).
+ */
+export function parseStandardAssumptions(rows: readonly RevenueAssumptionSqlRow[]): {
+  seasonality: StandardSeasonalityRow[];
+  negativePrices: StandardNegativePriceRow[];
+} {
+  const n = (v: string | null | undefined) => parseFabricNumber(v, "en-US");
+  const keyed = (type: string) => rows
+    .filter((r) => r.valuetype === type)
+    .map((r) => ({ r, key: Number((r.category ?? "").trim()) }))
+    .filter((x) => (x.r.category ?? "").trim() !== "" && Number.isFinite(x.key))
+    .sort((a, b) => a.key - b.key);
+  return {
+    seasonality: keyed("seasonality").map(({ r, key }) => ({ month: key, pv: n(r.pv) * 100, wtg: n(r.wind) * 100 })),
+    negativePrices: keyed("negativeprices").map(({ r, key }) => ({
+      year: key, pv: pfxRound(n(r.pv) * 100, 1), wind: pfxRound(n(r.wind) * 100, 1),
+    })),
+  };
 }
 
 /* ══════════════════════════════════════════════════════════════ the save plans ════ */
@@ -1795,14 +1831,14 @@ export const UI = {
 } as const;
 
 /**
- * NEW — no canvas equivalent. The two texts the code app adds: the load-error state (rule 19) and
- * the notice that the Fabric standard assumptions are not connected (D2).
+ * NEW — no canvas equivalent. The texts the code app adds: the load-error state (rule 19) and the
+ * warning shown when the Fabric standard assumptions could not be read.
  */
 export const PRODUCTION_SCREEN_TEXT = {
   loadFailedTitle: "Production data is unavailable",
   loadFailedDescription: "The energy yields of this project could not be loaded. Reload the page to try again.",
-  fabricNotConnected:
-    "The standard seasonality and negative-price assumptions come from Fabric SQL (Assumptions Revenues SQL), which is not connected yet. Enter the values by hand.",
+  fabricUnavailable:
+    "The standard seasonality and negative-price values could not be read from Fabric SQL (Assumptions Revenues SQL). Enter the values by hand.",
   saveError: "Energy yield could not be saved",
 } as const;
 

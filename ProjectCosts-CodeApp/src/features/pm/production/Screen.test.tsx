@@ -16,7 +16,7 @@ import {
 import type { SaveYieldRequest } from "./hooks";
 
 const baseProject: ProductionProject = {
-  id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", technology: 952850000,
+  id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5,
   grossYield: 12_000, windSpeed: 7, irradiation: null, netYieldP50: 20_400, netYieldP75: 18_000, netYieldP90: 17_000,
   standardCostCreated: true, owningBusinessUnitId: "bu-1",
@@ -34,6 +34,8 @@ const state = vi.hoisted(() => ({
   project: null as unknown,
   yields: [] as unknown[],
   error: undefined as unknown,
+  standard: { seasonality: [] as unknown[], negativePrices: [] as unknown[] },
+  standardError: undefined as unknown,
   saveYield: vi.fn(async (_req: unknown) => true),
   deleteYield: vi.fn(async (_row: unknown) => true),
   changeStatus: vi.fn(async (_row: unknown) => true),
@@ -48,7 +50,7 @@ vi.mock("./hooks", () => ({
   CAN_EDIT_SELECTED_PROJECT: true,
   useProductionProject: () => ({ ...ok(state.project), error: state.error }),
   useEnergyYields: () => ok(state.yields),
-  useRevenueAssumptions: () => ({ ...ok({ seasonality: [], negativePrices: [] }), connected: false }),
+  useRevenueAssumptions: () => ({ ...ok(state.standard), error: state.standardError }),
   useStoredSeasonality: () => ok({ recordId: "s1", months: [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12], standardValuesJson: null }),
   useStoredNegativePrices: () => ok([]),
   useProductionWrites: () => ({
@@ -78,6 +80,8 @@ afterEach(() => {
   state.deleteYield.mockClear();
   state.changeStatus.mockClear();
   state.error = undefined;
+  state.standard = { seasonality: [], negativePrices: [] };
+  state.standardError = undefined;
 });
 
 const bar = () => screen.getByRole("toolbar", { name: COMMAND_BAR_LABEL });
@@ -152,9 +156,37 @@ describe("Project Production Screen (connected)", () => {
     expect((screen.getByTestId("rad_ProductionDataWTG_Assesment") as HTMLFieldSetElement).disabled).toBe(true);
     expect((screen.getByTestId("txt_ProductionDataWTG_GrossYield") as HTMLInputElement).value).toBe("12,000");
     expect(screen.getByTestId("txt_ProductionDataWTG_GrossYield").getAttribute("aria-label")).toBe("txt_ProductionDataWTG_GrossYield");
-    // The stored seasonality (8 × 11 + 12) is shown, with the Fabric notice.
+    // The stored seasonality (8 × 11 + 12) is shown; Fabric read fine, so no warning.
     expect((screen.getByTestId("txt_ProductionSeasonalityYieldWTG_MonthValue-12") as HTMLInputElement).value).toBe("12.0");
-    expect(screen.getByTestId("production-fabric-notice").textContent).toBe(PRODUCTION_SCREEN_TEXT.fabricNotConnected);
+    // `txt_…_TotalValue` is the read-only canvas box under "Total Sum [%]", in the Distribution column.
+    const total = screen.getByTestId("txt_ProductionSeasonalityWTG_TotalValue") as HTMLInputElement;
+    expect(total.value).toBe("100");
+    expect(total.readOnly).toBe(true);
+    expect(screen.queryByTestId("production-fabric-notice")).toBeNull();
+  });
+
+  it("UT-PROD-920 the Fabric standards seed a new yield's seasonality months and negative-price years", async () => {
+    state.standard = {
+      seasonality: [{ month: 1, pv: 6.5, wtg: 8 }, { month: 2, pv: 7, wtg: 7.5 }],
+      negativePrices: [{ year: 2028, pv: 5, wind: 4.6 }],
+    };
+    renderScreen();
+    fireEvent.click(command("Add Production WTG"));
+    fireEvent.click(await screen.findByTestId("tgl_ProductionDataWTG_ConsiderSeasonality"));
+    expect((await screen.findByTestId("txt_ProductionSeasonalityYieldWTG_MonthValue-1") as HTMLInputElement).value).toBe("8.0");
+    expect((screen.getByTestId("txt_ProductionSeasonalityYieldWTG_MonthValue-2") as HTMLInputElement).value).toBe("7.5");
+    fireEvent.click(screen.getByTestId("tgl_ProductionDataWTG_ConsiderNegativePrice"));
+    // COD 2028-09-01: the curve starts in 2028 and reads the Wind column.
+    expect((await screen.findByTestId("txt_ProductionNegativePriceWTG_YearValue-2028") as HTMLInputElement).value).toBe("4.6");
+    expect(screen.queryByTestId("production-fabric-notice")).toBeNull();
+  });
+
+  it("UT-PROD-921 a failed Fabric read shows the warning once a toggle is on", async () => {
+    state.standardError = new Error("no connection");
+    renderScreen();
+    fireEvent.click(command("Add Production WTG"));
+    fireEvent.click(await screen.findByTestId("tgl_ProductionDataWTG_ConsiderSeasonality"));
+    expect((await screen.findByTestId("production-fabric-notice")).textContent).toBe(PRODUCTION_SCREEN_TEXT.fabricUnavailable);
   });
 
   it("UT-PROD-907 the panel's Cancel closes at once, without a leave confirmation", async () => {

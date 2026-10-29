@@ -26,7 +26,7 @@
  *   - `ariaLabel`: the drawer's accessible name (defaults to `title`).
  *   - `panelClassName`: extra class on the drawer surface, for screen-scoped chrome overrides.
  */
-import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle } from "@fluentui/react-components";
+import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle, Tooltip } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useBeforeUnload, useDiscardGuard } from "./discardGuard";
@@ -78,12 +78,14 @@ export interface FormPanelProps {
   ariaLabel?: string;
   /** Extra class on the drawer surface, for screen-scoped chrome overrides (Contracts). Default none. */
   panelClassName?: string;
+  /** Opt-in: the ✕'s hover text — the canvas command bar's `ItemDisplayName` (e.g. "Home", "Cancel"). */
+  closeTooltip?: string;
 }
 
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName,
+  coverLabel, ariaLabel, panelClassName, closeTooltip,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -115,11 +117,17 @@ export function FormPanel({
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}
         style={style}>
         <DrawerHeader className="canvas-panel-header">
-          <DrawerHeaderTitle action={
+          <DrawerHeaderTitle action={closeTooltip ? (
+            <Tooltip content={closeTooltip} relationship="description" positioning="below">
+              <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
+                data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
+                disabled={locked} onClick={() => requestClose("dismiss")} />
+            </Tooltip>
+          ) : (
             <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
               data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
               disabled={locked} onClick={() => requestClose("dismiss")} />
-          }>
+          )}>
             {title}
           </DrawerHeaderTitle>
         </DrawerHeader>

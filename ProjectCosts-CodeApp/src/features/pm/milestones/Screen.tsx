@@ -51,13 +51,13 @@ import {
   isMilestoneFieldErrorVisible, isMilestoneFieldVisible, isPageLocked, isRecalculateEnabled,
   isRecalculateVisible, milestoneMeta, needsPlantCostRecalculation, nextDirtyKeys,
   operationalLifetime, planSaveMilestones, recalculateMilestone, repriceGenerators,
-  requiredFieldsContent, resetShareOfFarmdown, revenueSeedWouldRun, sameDate, validateMilestones,
+  requiredFieldsContent, resetShareOfFarmdown, sameDate, validateMilestones,
   LEAVE_DIALOG, shouldConfirmLeave,
   type MilestoneKey, type MilestonesForm, type RecalcKey,
 } from "./rules";
 import {
-  loadRepricing, useIndividualVolumeContractCount, useMilestoneAssumption, useMilestoneLabels,
-  useMilestoneProject, useMilestoneWrites, useRecalculationRunning, useRevenueRowCount,
+  loadRepricing, loadRevenueSeed, useIndividualVolumeContractCount, useMilestoneAssumption,
+  useMilestoneLabels, useMilestoneProject, useMilestoneWrites, useRecalculationRunning,
 } from "./hooks";
 
 type DateKey = Exclude<MilestoneKey, "ShareOfFarmdown">;
@@ -373,7 +373,7 @@ export default function MilestonesScreen() {
   const project = projectQ.data;
   const assumptionQ = useMilestoneAssumption(project?.countryId, project?.technologyValue);
   const individualVolumes = useIndividualVolumeContractCount(projectId);
-  const revenueRows = useRevenueRowCount(projectId);
+
   const recalculating = useRecalculationRunning(projectId);
   const writes = useMilestoneWrites(projectId);
 
@@ -381,6 +381,8 @@ export default function MilestonesScreen() {
   const [edited, setEdited] = useState<MilestonesForm | null>(null);
   const [dirtyKeys, setDirtyKeys] = useState<MilestoneKey[]>([]);
   const [codReview, setCodReview] = useState(false);
+  /** The last save could not read Fabric SQL, so it created no default revenue contract. */
+  const [seedFailed, setSeedFailed] = useState(false);
   const form = edited ?? persisted;
 
   const saving = writes.progress !== null;
@@ -418,6 +420,8 @@ export default function MilestonesScreen() {
     const p = project;
     const f = form;
     const fid = f.dates.FinalInvestmentDecision;
+    let fabricFailed = false;
+    setSeedFailed(false);
     const done = await writes.run({
       progress: MILESTONES_MSG.saving,
       // `Notify(Concat(colProcessingSteps, $"{Value} {Char(10)}"), Success)` (Y:501-508).
@@ -425,13 +429,16 @@ export default function MilestonesScreen() {
       plan: async () => {
         const repricing = fid && needsPlantCostRecalculation(p.dates.FinalInvestmentDecision, fid)
           ? await loadRepricing(p.id!, fid) : null;
+        // The canvas seeds from the record it has just patched, so the saved dates.
+        const seed = await loadRevenueSeed(p, f.dates);
+        fabricFailed = seed.fabricFailed;
         return planSaveMilestones({
-          project: p, form: f, language: locale, revenueDraft: null,
+          project: p, form: f, language: locale, revenueDraft: seed.draft,
           repricedGenerators: repricing ? repriceGenerators(repricing.generators, repricing.index) : null,
         });
       },
     });
-    if (done !== null) { setEdited(null); setDirtyKeys([]); }
+    if (done !== null) { setEdited(null); setDirtyKeys([]); setSeedFailed(fabricFailed); }
   };
 
   /** `pcf_btn_…_Save.OnChange` (Y:4774-4802) — the COD guard, then the save. */
@@ -529,9 +536,9 @@ export default function MilestonesScreen() {
   return (
     <div className={mergeClasses(l.page, s.fixedPage)}>
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="milestones" />
-      {revenueSeedWouldRun(project, revenueRows.data) ? (
-        <MessageBar intent="info" data-testid="milestones-revenue-seed-not-connected">
-          <MessageBarBody>{MILESTONES_SCREEN_TEXT.revenueSeedNotConnected}</MessageBarBody>
+      {seedFailed ? (
+        <MessageBar intent="warning" data-testid="milestones-revenue-seed-fabric-failed">
+          <MessageBarBody>{MILESTONES_SCREEN_TEXT.revenueSeedFabricFailed}</MessageBarBody>
         </MessageBar>
       ) : null}
 

@@ -453,6 +453,18 @@ export const showCooperationPartner = (cooperation: number | null): boolean =>
 export const showCooperationDetails = (cooperation: number | null): boolean =>
   cooperation === YNU.yes || cooperation === YNU.unknown;
 
+/**
+ * What the canvas actually SHOWS (PO, 28 Oct 2026: replicate the canvas for now).
+ *
+ * SOURCE DEFECT: `con_…_CooperationForm` is a wrapping AutoLayout fixed at `Height: =360`
+ * (Y:798). With `Yes`, Cooperation (70) + Partner (94) + Details (178) + padding (20 + 20) is 382,
+ * so Details wraps into a second column that the 380-wide form clips: it is never seen. Only
+ * `Unknown`, where Partner is hidden, leaves room for it. `showCooperationDetails` keeps the
+ * formula's intent.
+ */
+export const showCooperationDetailsCanvasParity = (cooperation: number | null): boolean =>
+  cooperation === YNU.unknown;
+
 /** `txt_…_CooperationDetails.DisplayMode` (Y:949) — Details are EDITABLE only for `Unknown`. */
 export const cooperationDetailsEditable = (cooperation: number | null): boolean =>
   cooperation === YNU.unknown;
@@ -539,6 +551,18 @@ export function validateHeightLimitCanvasParity(text: string, language: Lang = "
   return { valid: false, message: MSG.heightDecimals };
 }
 
+/**
+ * What the screen uses, as the canvas behaves (PO, 28 Oct 2026: "make it same as canvas"): Save
+ * follows the OnChange `Valid` flag (`validateHeightLimit`: two decimals AND 0…99999), while the
+ * message shown is the canvas error label's (`validateHeightLimitCanvasParity`), so an
+ * out-of-range whole number disables Save with no message, as in the canvas.
+ */
+export function heightLimitValidity(text: string, language: Lang = "en-US"): FieldValidity {
+  const valid = validateHeightLimit(text, language).valid;
+  const { message } = validateHeightLimitCanvasParity(text, language);
+  return message ? { valid, message } : { valid };
+}
+
 export type PlanningValidity = Record<PlanningField, FieldValidity>;
 
 const OK: FieldValidity = { valid: true };
@@ -552,7 +576,7 @@ export function validatePlanning(form: PlanningForm, language: Lang = "en-US"): 
     cooperation: OK, cooperationPartner: OK, cooperationDetails: OK, legalPlanningId: OK,
     planningBasisCategory: OK, permitProcedureId: OK, planningBasisDetails: OK,
     repowering: OK, securedAccess: OK, repoweringDetails: OK, isHeightLimitation: OK,
-    heightLimitation: form.isHeightLimitation ? validateHeightLimit(form.heightLimitation, language) : OK,
+    heightLimitation: form.isHeightLimitation ? heightLimitValidity(form.heightLimitation, language) : OK,
   };
 }
 

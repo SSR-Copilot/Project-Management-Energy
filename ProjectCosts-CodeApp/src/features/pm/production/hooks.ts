@@ -23,8 +23,9 @@
  *    the energy-yield, seasonality, negative-price, revenue or the generated cost tables.
  *  - NOT CALLED: `SynchroniseRecalculationCapexStandardCost` — commented out in the canvas (Y:9062).
  *
- * NOT CONNECTED: `Assumptions Revenues SQL` — a Fabric SQL source (D2). `useRevenueAssumptions`
- * returns no rows and `connected: false`; the standard seasonality and negative-price values stay blank.
+ * `Assumptions Revenues SQL` (Fabric SQL, D54) — `useRevenueAssumptions` reads the country's standard
+ * seasonality and negative prices (connected 28 Oct 2026). When the read fails the standards stay
+ * blank and the panel says so; the yield can still be saved with typed values.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/data/dataverseNames";
@@ -32,8 +33,8 @@ import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import {
-  listEnergyYields, listProjectRevenues, listStoredNegativePrices, loadGenerationInputs, loadProductionProject,
-  loadStoredSeasonality,
+  listEnergyYields, listProjectRevenues, listStandardRevenueAssumptions, listStoredNegativePrices,
+  loadGenerationInputs, loadProductionProject, loadStoredSeasonality,
 } from "@/data/production";
 import {
   PRODUCTION_SCREEN_TEXT, UI, planDeleteYield, planRollUp, planSaveYield, planStandardContracts, planStatusChange,
@@ -92,9 +93,17 @@ export interface StandardAssumptions {
   negativePrices: StandardNegativePriceRow[];
 }
 
-/** `colStandardSeasonalityYeild` / `colStandardNegativePricePV` — Fabric SQL, NOT connected (D2). */
-export function useRevenueAssumptions(): ScreenData<StandardAssumptions> {
-  return { data: { seasonality: [], negativePrices: [] }, isLoading: false, error: undefined, connected: false };
+const NO_STANDARDS: StandardAssumptions = { seasonality: [], negativePrices: [] };
+
+/** `colStandardSeasonalityYeild` / `colStandardNegativePricePV` — the project country's Fabric SQL rows. */
+export function useRevenueAssumptions(countryName: string | null | undefined): ScreenData<StandardAssumptions> {
+  const q = useQuery({
+    queryKey: qk.production("", "standardAssumptions", countryName ?? ""),
+    queryFn: () => listStandardRevenueAssumptions(countryName!),
+    enabled: Boolean(countryName),
+    staleTime: 30 * 60 * 1000,
+  });
+  return out(q, NO_STANDARDS);
 }
 
 /** The edited yield's stored seasonality row (`locSelected{WTG|PV}SeasonalityYieldRecord`). */

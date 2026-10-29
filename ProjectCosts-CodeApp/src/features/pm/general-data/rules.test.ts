@@ -17,7 +17,7 @@ import { Vsb_projectstatetrackingsvsb_approvalclusterstate } from "@/generated/m
 import {
   APPROVAL_STATE_DRAFT, MSG, PROJECT_COL, PROJECT_LOOKUP, emptyGeneralDataForm, budgetingRenameMessage,
   validationMessages, requiredFieldsContent, fieldErrors, canSave, isAreaRequired, isTerrainSizeRequired,
-  isMunicipalityRequired, franceSearchIsSuppressed, applyGermanMunicipality, applyFrenchMunicipality,
+  isMunicipalityRequired, municipalitySearchIsSuppressed, applyGermanMunicipality, applyFrenchMunicipality,
   countryOptions, countryDisplayMode, fieldModes, fieldModesCanvas709, ownershipFraction, remainingPct,
   isShareholdingComplete, shareholderPanelErrors, applyShareholderDraft, canSaveShareholderPanel,
   canSaveShareholderPanelCanvasParity, shareholderPanelFull, canAddShareholder,
@@ -311,10 +311,12 @@ describe("UT-GDATA field validation", () => {
       p: project({ countryId: "c-de", countryName: "Germany", countryKey: "25" }) }))).toContain(MSG.municipalityGermany);
   });
 
-  it("UT-GDATA-019 French municipality search suppressed below 3 chars (Len, no trim)", () => {
-    expect(franceSearchIsSuppressed("pa")).toBe(true);
-    expect(franceSearchIsSuppressed("par")).toBe(false);
-    expect(franceSearchIsSuppressed("  pa")).toBe(false);
+  it("UT-GDATA-019 municipality search suppressed below 3 chars (Len, no trim)", () => {
+    expect(municipalitySearchIsSuppressed("pa")).toBe(true);
+    expect(municipalitySearchIsSuppressed("par")).toBe(false);
+    expect(municipalitySearchIsSuppressed("  pa")).toBe(false);
+    // Germany passes the trimmed text, so padding does not count.
+    expect(municipalitySearchIsSuppressed("  pa".trim())).toBe(true);
   });
 
   it("UT-GDATA-020 German municipality sets tax factor; French clears it", () => {

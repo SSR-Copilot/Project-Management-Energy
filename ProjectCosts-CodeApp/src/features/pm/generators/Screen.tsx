@@ -119,6 +119,9 @@ const HEIGHT_TAG_FILL = "rgb(248, 212, 158)";
 const LOCK_FILL = "rgb(89, 89, 89)";
 const LOCK_TEXT = "rgb(255, 255, 255)";
 
+/** The gallery's `X: 20` inset, carried by each card's header and details (see `gallery`). */
+const CARD_INSET = "20px";
+
 /*
  * Layout transcribed from the canvas containers (UI layout pass, 20 Oct 2026):
  *  - `con_Generators_DisplayProject_Body_Form`: vertical; the command bar is the shell's slot;
@@ -133,7 +136,8 @@ const useStyles = makeStyles({
   /** The command bar's first icon starts on the left edge of the content under it (PO, 21 Oct 2026); `CommandBar` has no inset of its own. Main bar: over "Total Capacity" (the capacity block's 20 px inset). */
   commandBar: { paddingLeft: "20px" },
   /** The expanded card's "Add Generator" bar: over "Supplier" (the detail grid's 20 px inset). */
-  cardCommandBar: { paddingLeft: "20px" },
+  // The first detail column is flush with the card padding (see `detailCellFirst`), so no inset of its own.
+  cardCommandBar: {},
   page: { display: "flex", flexDirection: "column", flex: "1 0 auto", minWidth: 0, paddingBottom: "15px" },
   /** `con_…_PlantWtgCapacity` — 280 wide, 70 high, the caption and input inset 20. */
   capacity: {
@@ -151,35 +155,89 @@ const useStyles = makeStyles({
     paddingTop: "8px", paddingBottom: "8px", paddingLeft: "8px", paddingRight: "8px",
   },
   lockTitle: { fontWeight: 600, color: LOCK_TEXT },
-  gallery: { display: "flex", flexDirection: "column", minWidth: 0, marginLeft: "20px", marginRight: "20px" },
-  /** `con_…_Card` — Width `Parent.Width - 10`. */
-  card: { display: "flex", flexDirection: "column", minWidth: 0, marginRight: "10px" },
+  /**
+   * `gal_…` sits at X 20, but the card's blue header rule runs edge to edge (PO, 28 Oct 2026): the
+   * list has no margin, and its 20-px inset moves into the card header and details (`CARD_INSET`).
+   */
+  gallery: { display: "flex", flexDirection: "column", minWidth: 0 },
+  /** `con_…_Card` — the canvas `Width: Parent.Width - 10` gap is dropped so the rule runs end to end. */
+  card: { display: "flex", flexDirection: "column", minWidth: 0 },
   /** `con_…_CardHeader` — Height 42, the separator 1 px at Y 41. */
   cardHeader: {
     display: "flex", alignItems: "center", columnGap: space.s, minHeight: "42px",
+    paddingLeft: CARD_INSET,
     borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: CARD_RULE,
   },
   /** `img_…_RowSelectionDot` — 18 × 18 at X 10; the title starts at X 40. */
   cardDot: { flexShrink: 0, marginLeft: "1px", width: "30px" },
   cardTitle: { flex: 1, minWidth: 0, display: "flex", "& > span": { flex: 1, minWidth: 0 } },
   /** `ico_…_Up` / `_Down` — 20 × 18, 32 from the right edge. */
-  cardFold: { flexShrink: 0, marginRight: "12px" },
+  // 8, not the canvas 12: the 28-px button (`foldButton`) keeps the glyph centred 22 px from the edge, as the 20-px canvas icon is.
+  cardFold: { flexShrink: 0, marginRight: "8px" },
+  /**
+   * `ico_…_Up` / `_Down` — a `Classic/Icon` (`Icon.ChevronUp` / `ChevronDown`) whose glyph spans the
+   * full 20-px width of its box. Fluent's chevron path fills only ~68 % of its em box, so the icon is
+   * 28 px to draw a ~20-px glyph. `Color: gblAppColors.Icon.Color` = themePrimary, `DisabledColor` =
+   * Grayscale10 (App.pa.yaml:1321-1323).
+   */
+  foldIcon: { fontSize: "28px", width: "28px", height: "28px", color: palette.themePrimary },
+  /** Fluent caps an icon-only small button at `max-width: 24px` with 1-px padding; lift it for the 28-px icon. */
+  foldButton: {
+    minWidth: "28px", maxWidth: "none", width: "28px", height: "28px",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+  },
+  foldIconDisabled: { color: palette.Grayscale10 },
   /** `con_…_CardDetails` — PaddingLeft / PaddingRight 20, LayoutGap 10. */
   cardDetails: {
     display: "flex", flexDirection: "column", rowGap: "10px",
-    paddingLeft: "20px", paddingRight: "20px", paddingTop: space.s, paddingBottom: space.s,
+    paddingLeft: `calc(${CARD_INSET} + 20px)`, paddingRight: "20px", paddingTop: space.s, paddingBottom: space.s,
   },
   /** Four `Parent.Width / 4` columns of 64-px cells, filled column by column. */
   detailGrid: {
-    display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoRows: "80px",
+    display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gridAutoRows: "64px",
     [media.belowMd]: { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" },
   },
-  detailGridTwoRows: { gridTemplateRows: "repeat(2, 80px)", gridAutoFlow: "column" },
+  detailGridTwoRows: { gridTemplateRows: "repeat(2, 64px)", gridAutoFlow: "column" },
+  /**
+   * `con_…_PvModule_CardDetails`: a horizontal auto-layout (LayoutGap 20) of `Width: 260` columns,
+   * each two 64-px cells stacked with LayoutGap 2.
+   */
+  /**
+   * Replace Generator / Replace PV Module Type: "Replace from" and "Replace to" side by side, each
+   * under its heading rule (canvas screenshots, 28 Oct 2026). WTG: 280 + 314 px, 120 apart; PV: 310 + 310, 40 apart.
+   */
+  replaceGrid: {
+    display: "grid", gridTemplateColumns: "280px 314px", columnGap: "120px", alignItems: "start",
+    [media.belowMd]: { gridTemplateColumns: "minmax(0, 1fr)", rowGap: space.l },
+  },
+  replaceGridPv: { gridTemplateColumns: "310px 310px", columnGap: "40px" },
+  replaceColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
+  /** The column heading: semibold, over a 1-px rule that runs a little past the fields. */
+  replaceHeading: {
+    fontSize: "15px", fontWeight: tokens.fontWeightSemibold, color: "#323130",
+    paddingBottom: "6px", marginRight: "-20px",
+    borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "#8a8886",
+  },
+  pvGrid: {
+    display: "grid", gridTemplateRows: "repeat(2, 64px)", gridAutoFlow: "column", gridAutoColumns: "260px",
+    columnGap: "20px", rowGap: "2px", maxWidth: "100%", overflowX: "auto",
+  },
+  /**
+   * `con_…_{Storage,Hydrogen,Substation}_CardDetails_Context`: one horizontal auto-layout row
+   * (LayoutGap 20) of `Width: Parent.Width/4` cells.
+   */
+  simpleGrid: {
+    display: "grid", gridAutoFlow: "column", gridAutoColumns: "25%", gridTemplateRows: "64px",
+    columnGap: "20px", maxWidth: "100%",
+    [media.belowMd]: { gridAutoFlow: "row", gridAutoColumns: "auto", gridTemplateRows: "none", gridAutoRows: "64px" },
+  },
   /** One read-only card field: the 20-px caption at X 20, the value box 5 px under it. */
   detailCell: {
     display: "flex", flexDirection: "column", rowGap: "5px", minWidth: 0,
     paddingLeft: "20px", paddingRight: "20px", fontSize: "14px",
   },
+  /** Column 1's caption and box sit at X 0 and span the column (`Width: Parent.Width - Self.X*2`, X unset). */
+  detailCellFirst: { paddingLeft: 0, paddingRight: 0 },
   /** The canvas card captions are Semibold. */
   detailLabel: {
     lineHeight: "20px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
@@ -187,19 +245,30 @@ const useStyles = makeStyles({
   },
   /** The canvas read-only `TextInput` (the `.canvas-field > input` look). */
   detailValue: {
-    display: "flex", alignItems: "center", minHeight: "40px", boxSizing: "border-box",
-    paddingLeft: "16px", paddingRight: "16px", borderRadius: "4px",
+    display: "flex", alignItems: "center", minHeight: "32px", boxSizing: "border-box",
+    paddingLeft: "12px", paddingRight: "12px", borderRadius: "4px",
     backgroundColor: "#f4f4f4", color: "#242424",
     overflow: "hidden", whiteSpace: "nowrap",
   },
-  /** The turbine grid: Semibold header captions, rows on the canvas light-grey fill. */
+  /** The turbine grid (`FluentDetailsList`, Width 850): Semibold header captions. */
   turbineHead: { fontWeight: tokens.fontWeightSemibold },
-  turbineRow: { backgroundColor: palette.Grayscale30 },
+  turbineTable: { tableLayout: "fixed", width: "850px", maxWidth: "100%" },
+  /**
+   * `columns_Items` `ColWidth` plus the list's cell padding: the name `Max(850 - 570, 40)`, Total
+   * Height 155, Effective Capacity 255, then the 18- / 16-px edit and delete icons side by side.
+   */
+  turbineColName: { width: "296px" },
+  turbineColHeight: { width: "171px" },
+  turbineColCapacity: { width: "279px" },
+  turbineColIcon: { width: "34px" },
+  /** `AlternateRowColor: gblAppTheme.palette.Grayscale30` — every other row, starting with the first. */
+  turbineRow: { "&:nth-child(odd)": { backgroundColor: palette.Grayscale30 } },
   /** Numbers are right-aligned in the canvas card boxes (`Align.Right`). */
   detailValueNumeric: { justifyContent: "flex-end" },
   title: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.s },
   /** `txt_…_GeneratorType` takes the header's width; the chips sit right of it. */
-  titleText: { flex: "1 1 auto", fontWeight: tokens.fontWeightSemibold },
+  /** `txt_…_GeneratorType` is a `Text@0.0.51` with no `Weight`: regular. */
+  titleText: { flex: "1 1 auto", fontWeight: tokens.fontWeightRegular },
   /** `con_…_RequestState` / `lbl_Generator_GeneratorStatus` — a 24-px chip, Medium / ExtraSmall. */
   chip: {
     display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -227,7 +296,28 @@ const useStyles = makeStyles({
   note: { fontSize: tokens.fontSizeBase200, color: palette.Error },
   pager: { display: "flex", alignItems: "center", gap: space.s, fontSize: tokens.fontSizeBase200 },
   panelBody: { display: "flex", flexDirection: "column", gap: space.m },
+  /**
+   * `con_…_Filter_CountryAvailability`, under the toggle: `ico_…_Filter_Message` (18 px, X 15,
+   * Success / Warning) and the message 20 px right of it.
+   */
+  filterAvailability: { display: "flex", alignItems: "center", columnGap: "20px", minHeight: "32px", paddingLeft: "15px" },
+  /** `cmb_Supplier` & co.: `Width: Parent.Width - Self.X*2 - 80` — 314 px in the 450-px panel. */
+  typeField: { width: "314px", maxWidth: "100%" },
+  /** `ComboBox@0.0.51` in `DisplayMode.Disabled`: a white box with a light outline, not the filled skin. */
+  comboDisabled: {
+    backgroundColor: palette.white,
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: palette.Grayscale20, borderRightColor: palette.Grayscale20,
+    borderBottomColor: palette.Grayscale20, borderLeftColor: palette.Grayscale20,
+  },
   prefixRow: { display: "flex", alignItems: "center", gap: space.s },
+  /** The Add Generator fields: `Width: Parent.Width/2 + Self.X + 20` — 265 px in the 450-px panel. */
+  turbineField: { width: "265px", maxWidth: "100%" },
+  /** `lbl_…_GeneratorName_Prefix`: 180 wide, `Align.Right`, at X 20 — the input follows it. */
+  namePrefix: { flex: "0 0 auto", width: "180px", textAlign: "right", fontSize: "14px", color: "#323130" },
+  /** `txt_…_GeneratorName`: `Width: 80`. */
+  nameIndex: { flex: "0 0 80px", width: "80px" },
   dropdown: { minWidth: "0px", width: "100%" },
   pmError: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
   footerPrimary: { height: "32px", minWidth: "96px", fontSize: "15px" },
@@ -244,16 +334,22 @@ const useStyles = makeStyles({
 /**
  * A `.canvas-field` text input: caption, red `*`, value, inline error. `ariaLabel` is the canvas
  * `AccessibleLabel` where it sets one (the control name), else the caption (rule 16).
+ *
+ * No red outline (no `data-invalid`): no control on the canvas screen sets a `ValidationState`, so
+ * an invalid box never turns red; only its `lbl_…_ErrorMessage` shows (28 Oct 2026).
  */
 function InputField({
-  label, name, ariaLabel, value, onChange, required, disabled, error, maxLength, readOnly,
+  label, name, ariaLabel, value, onChange, required, disabled, error, maxLength, readOnly, className,
+  disabledLook,
 }: {
   label: string; name: string; ariaLabel?: string; value: string; onChange?: (v: string) => void;
   required?: boolean; disabled?: boolean; error?: string | null; maxLength?: number;
-  readOnly?: boolean;
+  readOnly?: boolean; className?: string;
+  /** `true`: the canvas `DisplayMode.Disabled` box (white, outlined, grey text), not the filled `View` one. */
+  disabledLook?: boolean;
 }) {
   return (
-    <label className="canvas-field" data-invalid={error ? true : undefined}>
+    <label className={mergeClasses("canvas-field", className)} data-display={disabledLook ? "disabled" : undefined}>
       <span data-required={required}>{label}</span>
       <input
         value={value}
@@ -272,22 +368,25 @@ function InputField({
 
 interface SelectOption { value: string; label: string }
 
-/** A `.canvas-field` combobox — a sibling caption, never a wrapping `<label>`. */
+/** A `.canvas-field` combobox — a sibling caption, never a wrapping `<label>`; no red outline (see `InputField`). */
 function SelectField({
-  label, name, ariaLabel, value, options, onChange, required, disabled, error, placeholder,
+  label, name, ariaLabel, value, options, onChange, required, disabled, error, placeholder, className,
+  disabledClassName,
 }: {
   label: string; name: string; ariaLabel?: string; value: string | null; options: readonly SelectOption[];
   onChange: (v: string) => void; required?: boolean; disabled?: boolean;
-  error?: string | null; placeholder?: string;
+  error?: string | null; placeholder?: string; className?: string;
+  /** Replaces the filled disabled skin (e.g. `comboDisabled`). */
+  disabledClassName?: string;
 }) {
   const s = useStyles();
   const controlClass = useFieldControlClass();
   const selected = options.find((o) => o.value === value);
   return (
-    <div className="canvas-field" data-invalid={error ? true : undefined}>
+    <div className={mergeClasses("canvas-field", className)}>
       <span data-required={required}>{label}</span>
       <Dropdown
-        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"))}
+        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"), disabled && disabledClassName)}
         appearance={FIELD_APPEARANCE}
         aria-label={ariaLabel ?? label}
         data-testid={name}
@@ -315,7 +414,7 @@ function MultiSelectField({
   const controlClass = useFieldControlClass();
   const text = options.filter((o) => values.includes(o.value)).map((o) => o.label).join(", ");
   return (
-    <div className="canvas-field" data-invalid={error ? true : undefined}>
+    <div className="canvas-field">
       <span data-required={required}>{label}</span>
       <Dropdown
         className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"))}
@@ -392,10 +491,20 @@ interface GalleryRow {
 const isNumericValue = (v: ReactNode): boolean =>
   typeof v === "number" || (typeof v === "string" && /^-?[\d.,\s]+%?$/.test(v.trim()) && v.trim() !== "");
 
+/** The 4-column grid column of cell `i`: row by row, or column by column when there are two rows. */
+const detailColumn = (i: number, count: number, rowFlow: boolean): number =>
+  rowFlow || count <= 4 ? i % 4 : Math.floor(i / 2);
+
 /** A gallery: one card per row; an expanded card shows its detail captions and values. */
 function Gallery({
-  name, columns, rows, disabled, selectLabel, rowFlow = false,
+  name, columns, rows, disabled, selectLabel, rowFlow = false, layout,
 }: {
+  /**
+   * The canvas auto-layout cards, where every cell is flush in its column and every value is
+   * `Align.Left` (numbers included): `"pv"` — 260-px columns of two (`pvGrid`); `"simple"` — BESS /
+   * Hydrogen / Substation, one row of quarter-width cells (`simpleGrid`). Omitted: the 4-column grid.
+   */
+  layout?: "pv" | "simple";
   /** `null` is an empty slot — the canvas leaves a cell of the 4-column grid blank. */
   name: string; columns: readonly (string | null)[]; rows: GalleryRow[]; disabled: boolean;
   /** Fill the detail grid row by row (the WTG card's 2 × 4 layout) instead of column by column. */
@@ -426,14 +535,18 @@ function Gallery({
           {r.open ? (
             <div className={s.cardDetails}>
               {r.before}
-              <div className={mergeClasses(s.detailGrid, columns.length > 4 && !rowFlow && s.detailGridTwoRows)}>
+              <div className={
+                layout === "pv" ? s.pvGrid
+                : layout === "simple" ? s.simpleGrid
+                : mergeClasses(s.detailGrid, columns.length > 4 && !rowFlow && s.detailGridTwoRows)
+              }>
                 {columns.map((c, i) => (
                   c === null
                     ? <div key={`${i}-empty`} aria-hidden="true" />
                     : (
-                      <div key={`${i}-${c}`} className={s.detailCell}>
+                      <div key={`${i}-${c}`} className={mergeClasses(s.detailCell, (layout !== undefined || detailColumn(i, columns.length, rowFlow) === 0) && s.detailCellFirst)}>
                         <span className={s.detailLabel}>{c}</span>
-                        <div className={mergeClasses(s.detailValue, isNumericValue(r.cells[i]) && s.detailValueNumeric)}>
+                        <div className={mergeClasses(s.detailValue, layout === undefined && isNumericValue(r.cells[i]) && s.detailValueNumeric)}>
                           {r.cells[i]}
                         </div>
                       </div>
@@ -720,6 +833,9 @@ export default function GeneratorsScreen() {
   const panelModel = modelOf(panelType);
   // The duplicate-name check is project-wide (`colGeneratorsInProjectsTemporary`).
   const projectIndices = turbinesQ.data.filter((t) => t.id !== panelTurbine?.id).map((t) => t.index);
+  const turbineNameError = validateTurbineName(turbineForm.nameIndex, {
+    existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
+  });
   const turbineHeight = turbinePanelTotalHeight({
     form: turbineForm, storedTotalHeight: panelTurbine?.totalHeight, rotorDiameter: panelModel?.rotorDiameter,
   });
@@ -875,7 +991,9 @@ export default function GeneratorsScreen() {
     deletePermission: perms.deletePermission,
     editPermission: perms.editPermission,
     pvEditPermission: perms.pvEditPermission,
-  }, { exposeInverterSubstructure: true });
+  });
+  // G9 withdrawn (28 Oct 2026): Add Inverter / Add Substructure stay `ItemVisible: false`, as in the
+  // canvas, so "Add Others" holds only BESS / Hydrogen / Substation again.
   const familySelected = {
     storage: selectedStorage !== null, hydrogen: selectedHydrogen !== null, substation: selectedSubstation !== null,
   };
@@ -891,11 +1009,7 @@ export default function GeneratorsScreen() {
         label: cmdState[key].label,
         ...(icon ? { icon } : {}),
         ...(parentKey ? { parentKey } : {}),
-        // "Add Others" keeps its canvas `ItemEnabled`, but it is now also the menu holding the
-        // G9 Add Inverter / Add Substructure, so it opens whenever one of those can be used.
-        enabled: key === "addOthers"
-          ? commandEnabled("addOthers") || commandEnabled("addInverterType") || commandEnabled("addSubstructureType")
-          : commandEnabled(key),
+        enabled: commandEnabled(key),
       };
     });
 
@@ -1379,8 +1493,11 @@ export default function GeneratorsScreen() {
     const name = open ? FOLD_ICON[family].up : FOLD_ICON[family].down;
     return (
       <Button
-        appearance="transparent" size="small"
-        icon={open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+        appearance="transparent" size="small" className={s.foldButton}
+        icon={{
+          className: mergeClasses(s.foldIcon, !editable && s.foldIconDisabled),
+          children: open ? <ChevronUpRegular /> : <ChevronDownRegular />,
+        }}
         aria-label={name} aria-expanded={open} data-testid={name}
         disabled={!editable}
         onClick={() => onFold(family, id)}
@@ -1477,16 +1594,18 @@ export default function GeneratorsScreen() {
             </div>
           ) : null}
           <Table
-            size="small" aria-label={WTG_CARD_LABELS.turbineGrid}
+            size="small" aria-label={WTG_CARD_LABELS.turbineGrid} className={s.turbineTable}
             data-testid="pcf_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList"
           >
             <TableHeader>
               <TableRow>
-                {/* PO, 20 Oct 2026: the canvas leaves the name and action columns unlabelled. */}
-                <TableHeaderCell className={s.turbineHead}>{WTG_CARD_LABELS.generatorNameHeader}</TableHeaderCell>
-                <TableHeaderCell className={s.turbineHead}>{TURBINE_TABLE_LABELS.totalHeight}</TableHeaderCell>
-                <TableHeaderCell className={s.turbineHead}>{TURBINE_TABLE_LABELS.effectiveCapacity}</TableHeaderCell>
-                <TableHeaderCell className={s.turbineHead} colSpan={2}>{WTG_CARD_LABELS.actionsHeader}</TableHeaderCell>
+                {/* As the canvas (28 Oct 2026): the name and the icon columns have no header
+                    (`ColDisplayName: ""`); the PO's "Generator Name" / "Actions" captions are withdrawn. */}
+                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColName)}>{WTG_CARD_LABELS.turbineNameColumn}</TableHeaderCell>
+                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColHeight)}>{TURBINE_TABLE_LABELS.totalHeight}</TableHeaderCell>
+                <TableHeaderCell className={mergeClasses(s.turbineHead, s.turbineColCapacity)}>{TURBINE_TABLE_LABELS.effectiveCapacity}</TableHeaderCell>
+                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.editIconColumn} />
+                <TableHeaderCell className={s.turbineColIcon} aria-label={WTG_CARD_LABELS.deleteIconColumn} />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1582,30 +1701,30 @@ export default function GeneratorsScreen() {
     switch (dialog?.kind) {
       case "deleteType": {
         const turbineType = modelOf(dialog.type)?.turbineType ?? dialog.type.generatorDisplayName;
-        return { title: DIALOG_LABELS.deleteGeneratorType, text: DIALOG_TEXT.deleteGeneratorType(turbineType), confirm: DIALOG_LABELS.delete, destructive: true };
+        return { title: DIALOG_LABELS.deleteGeneratorType, text: DIALOG_TEXT.deleteGeneratorType(turbineType), confirm: DIALOG_LABELS.delete };
       }
       case "deleteTurbine":
-        return { title: DIALOG_LABELS.deleteGenerator, text: DIALOG_TEXT.deleteGenerator(dialog.turbine.name), confirm: DIALOG_LABELS.delete, destructive: true };
+        return { title: DIALOG_LABELS.deleteGenerator, text: DIALOG_TEXT.deleteGenerator(dialog.turbine.name), confirm: DIALOG_LABELS.delete };
       case "toggleStatus": {
         const d = changeStatusDialog(dialog.type.status);
         const turbineType = modelOf(dialog.type)?.turbineType ?? dialog.type.generatorDisplayName;
-        return { title: d.title, text: DIALOG_TEXT.changeStatus(turbineType), confirm: d.confirm, destructive: false };
+        return { title: d.title, text: DIALOG_TEXT.changeStatus(turbineType), confirm: d.confirm };
       }
       case "deleteSimple": {
         const r = dialog.row;
         switch (dialog.family) {
-          case "pv": return { title: DIALOG_LABELS.deletePvModuleType, text: DIALOG_TEXT.deletePvModuleType(r.moduleLabel), confirm: DIALOG_LABELS.delete, destructive: true };
-          case "inverter": return { title: DIALOG_LABELS.deleteInverterType, text: DIALOG_TEXT.deleteInverterType(r.name), confirm: DIALOG_LABELS.delete, destructive: true };
-          case "substructure": return { title: DIALOG_LABELS.deleteSubstructureType, text: DIALOG_TEXT.deleteSubstructureType(r.name), confirm: DIALOG_LABELS.delete, destructive: true };
-          case "storage": return { title: DIALOG_LABELS.deleteBess, text: DIALOG_TEXT.deleteBess(r.name), confirm: DIALOG_LABELS.delete, destructive: true };
-          case "hydrogen": return { title: DIALOG_LABELS.deleteHydrogen, text: DIALOG_TEXT.deleteHydrogen(r.name), confirm: DIALOG_LABELS.delete, destructive: true };
-          case "substation": return { title: DIALOG_LABELS.deleteSubstation, text: DIALOG_TEXT.deleteSubstation(r.name), confirm: DIALOG_LABELS.delete, destructive: true };
+          case "pv": return { title: DIALOG_LABELS.deletePvModuleType, text: DIALOG_TEXT.deletePvModuleType(r.moduleLabel), confirm: DIALOG_LABELS.delete };
+          case "inverter": return { title: DIALOG_LABELS.deleteInverterType, text: DIALOG_TEXT.deleteInverterType(r.name), confirm: DIALOG_LABELS.delete };
+          case "substructure": return { title: DIALOG_LABELS.deleteSubstructureType, text: DIALOG_TEXT.deleteSubstructureType(r.name), confirm: DIALOG_LABELS.delete };
+          case "storage": return { title: DIALOG_LABELS.deleteBess, text: DIALOG_TEXT.deleteBess(r.name), confirm: DIALOG_LABELS.delete };
+          case "hydrogen": return { title: DIALOG_LABELS.deleteHydrogen, text: DIALOG_TEXT.deleteHydrogen(r.name), confirm: DIALOG_LABELS.delete };
+          case "substation": return { title: DIALOG_LABELS.deleteSubstation, text: DIALOG_TEXT.deleteSubstation(r.name), confirm: DIALOG_LABELS.delete };
         }
         return null;
       }
       case "heightType":
       case "heightTurbine":
-        return { title: DIALOG_LABELS.heightExceededTitle, text: DIALOG_TEXT.heightExceeded(dialog.name), confirm: DIALOG_LABELS.yes, destructive: false };
+        return { title: DIALOG_LABELS.heightExceededTitle, text: DIALOG_TEXT.heightExceeded(dialog.name), confirm: DIALOG_LABELS.yes };
       default:
         return null;
     }
@@ -1653,6 +1772,8 @@ export default function GeneratorsScreen() {
       <div className={s.capacity}>
         <ReadOnlyField
           label={TOTAL_CAPACITY_LABEL}
+          labelWeight="semibold"
+          align="right"
           value={project?.totalCapacity ?? ""}
           testId="txt_Generators_DisplayProject_Body_Form_PlantWtgCapacity"
           ariaLabel="txt_Generators_DisplayProject_Body_Form_PlantWtgCapacity"
@@ -1673,7 +1794,7 @@ export default function GeneratorsScreen() {
           />
           <Gallery
             name="gal_Generators_DisplayProject_Body_Form_PvModule" selectLabel={SELECT_DOT.pv}
-            disabled={!editable} rows={pvRows}
+            disabled={!editable} rows={pvRows} layout="pv"
             columns={[
               PV_FIELD_LABELS.supplier, PV_FIELD_LABELS.capacity,
               PV_FIELD_LABELS.degradation1stYear, PV_FIELD_LABELS.degradationRemainingYears,
@@ -1700,17 +1821,17 @@ export default function GeneratorsScreen() {
           />
           <Gallery
             name="gal_Generators_DisplayProject_Body_Form_Storage_1" selectLabel={SELECT_DOT.storage}
-            disabled={!editable} rows={storageRows}
+            disabled={!editable} rows={storageRows} layout="simple"
             columns={[STORAGE_CARD_LABELS.powerCapacity, STORAGE_CARD_LABELS.energyCapacity, STORAGE_CARD_LABELS.supplier]}
           />
           <Gallery
             name="gal_Generators_DisplayProject_Body_Form_Hydrogen" selectLabel={SELECT_DOT.hydrogen}
-            disabled={!editable} rows={hydrogenRows}
+            disabled={!editable} rows={hydrogenRows} layout="simple"
             columns={[HYDROGEN_CARD_LABELS.capacity, HYDROGEN_CARD_LABELS.supplier]}
           />
           <Gallery
             name="gal_Generators_DisplayProject_Body_Form_Substation_2" selectLabel={SELECT_DOT.substation}
-            disabled={!editable} rows={substationRows}
+            disabled={!editable} rows={substationRows} layout="simple"
             columns={[SUBSTATION_CARD_LABELS.capacity, SUBSTATION_CARD_LABELS.supplier]}
           />
         </>
@@ -1733,23 +1854,32 @@ export default function GeneratorsScreen() {
         }
       >
         <div className={s.panelBody}>
-          <Text data-testid="lbl_GeneratorData_RightPanel_Form_Filter_Message">
-            {typeFilterMessage(inCountry, project?.countryName)}
-          </Text>
+          {/* `con_…_Filter_Country`: the toggle first, then the availability row under it (Y 50). */}
           <Switch
             checked={inCountry}
             label={TYPE_PANEL_LABELS.countryFilter} aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
             data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
             onChange={(_, d) => { setInCountry(d.checked); setTypeForm(emptyTypeForm()); }}
           />
+          <div className={s.filterAvailability}>
+            <InfoRegular
+              aria-hidden="true" fontSize={18} data-testid="ico_GeneratorData_RightPanel_Form_Filter_Message"
+              color={inCountry ? palette.Success : palette.Warning}
+            />
+            <Text data-testid="lbl_GeneratorData_RightPanel_Form_Filter_Message">
+              {typeFilterMessage(inCountry, project?.countryName)}
+            </Text>
+          </div>
           <SelectField
             label={TYPE_PANEL_LABELS.supplier} name="cmb_Supplier" ariaLabel="cmb_Supplier" required
+            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems}
             value={typeForm.supplier} options={plainOptions(cascade.suppliers)}
             error={typeFieldBlankMessage(typeDirty("supplier"), typeForm.supplier === null)}
             onChange={(v) => touchType("supplier", v)}
           />
           <SelectField
             label={TYPE_PANEL_LABELS.turbineType} name="cmb_Supplier_1" ariaLabel="cmb_Supplier_1" required
+            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
             disabled={!typeForm.supplier}
             value={typeForm.turbineType} options={plainOptions(cascade.turbineTypes)}
             error={typeFieldBlankMessage(typeDirty("turbineType"), typeForm.turbineType === null)}
@@ -1759,6 +1889,7 @@ export default function GeneratorsScreen() {
           {!dummy ? (
             <SelectField
               label={TYPE_PANEL_LABELS.hubHeight} name="cmb_Supplier_2" ariaLabel="cmb_Supplier_2" required
+              className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
               disabled={!typeForm.turbineType}
               value={typeForm.hubHeight === null ? null : String(typeForm.hubHeight)}
               options={plainOptions(cascade.hubHeights)}
@@ -1768,7 +1899,7 @@ export default function GeneratorsScreen() {
           ) : (
             <InputField
               label={TYPE_PANEL_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required
+              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required className={s.typeField}
               maxLength={256} value={typeForm.revisedHubHeight}
               error={typeForm.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(typeForm.revisedHubHeight) : null}
               onChange={(v) => touchType("revisedHubHeight", v)}
@@ -1777,6 +1908,7 @@ export default function GeneratorsScreen() {
           <InputField
             label={TYPE_PANEL_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator"
             ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required maxLength={6}
+            className={s.typeField}
             disabled={effectiveHubHeight === null} value={typeForm.numberOfGenerators}
             error={numberOfGeneratorsMessage(typeForm.numberOfGenerators)}
             onChange={(v) => touchType("numberOfGenerators", v)}
@@ -1803,24 +1935,30 @@ export default function GeneratorsScreen() {
         <div className={s.panelBody}>
           <InputField
             label={TURBINE_PANEL_LABELS.generatorType} name="txt_GeneratorData_RightPanel_Form_Fields_GeneratorType"
-            readOnly value={panelModel?.turbineType ?? ""}
+            readOnly value={panelModel?.turbineType ?? ""} className={s.turbineField}
           />
-          <div className={s.prefixRow}>
-            <Text data-testid="lbl_GeneratorData_RightPanel_Form_Fields_GeneratorName_Prefix">
-              {turbinePanelPrefix(panelTurbine, project?.shortName)}
-            </Text>
-            <InputField
-              label={TURBINE_PANEL_LABELS.generatorName} name="txt_GeneratorData_RightPanel_Form_Fields_GeneratorName"
-              required value={turbineForm.nameIndex}
-              error={validateTurbineName(turbineForm.nameIndex, {
-                existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
-              })}
-              onChange={(v) => touchTurbine("nameIndex", v)}
-            />
+          {/* `lbl_…_GeneratorName` on top; under it the 180-px right-aligned prefix, then the 80-px index input. */}
+          <div className="canvas-field">
+            <span data-required="true">{TURBINE_PANEL_LABELS.generatorName}</span>
+            <div className={s.prefixRow}>
+              <Text className={s.namePrefix} data-testid="lbl_GeneratorData_RightPanel_Form_Fields_GeneratorName_Prefix">
+                {turbinePanelPrefix(panelTurbine, project?.shortName)}
+              </Text>
+              <label className={mergeClasses("canvas-field", s.nameIndex)}>
+                <input
+                  value={turbineForm.nameIndex}
+                  aria-label={TURBINE_PANEL_LABELS.generatorName}
+                  data-testid="txt_GeneratorData_RightPanel_Form_Fields_GeneratorName"
+                  aria-invalid={turbineNameError ? true : undefined}
+                  onChange={(e) => touchTurbine("nameIndex", e.target.value)}
+                />
+              </label>
+            </div>
+            {turbineNameError ? <span className="canvas-field-error" role="alert">{turbineNameError}</span> : null}
           </div>
           <InputField
             label={TURBINE_PANEL_LABELS.effectiveCapacity} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_Capacity"
-            required maxLength={256} value={turbineForm.effectiveCapacity}
+            required maxLength={256} value={turbineForm.effectiveCapacity} className={s.turbineField}
             error={turbineForm.effectiveCapacity.trim() === "" ? null : validateEffectiveCapacity(
               turbineForm.effectiveCapacity, panelModel?.specificCapacity ?? null)}
             onChange={(v) => touchTurbine("effectiveCapacity", v)}
@@ -1834,7 +1972,7 @@ export default function GeneratorsScreen() {
           {applyAll.capacity ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
           <InputField
             label={TURBINE_PANEL_LABELS.foundationPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Foundation_Plinth"
-            maxLength={256} value={turbineForm.foundationPlinth}
+            maxLength={256} value={turbineForm.foundationPlinth} className={s.turbineField}
             error={validateFoundationPlinth(turbineForm.foundationPlinth.trim())}
             onChange={(v) => touchTurbine("foundationPlinth", v)}
           />
@@ -1846,8 +1984,9 @@ export default function GeneratorsScreen() {
           />
           {applyAll.plinth ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
           <InputField
+            // `lbl_…_Effective_HubHeight_Required.Visible: false` — no `*`, though the value is still checked.
             label={TURBINE_PANEL_LABELS.hubHeightExclPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_HubHeight"
-            required maxLength={256} value={turbineForm.effectiveHubHeight}
+            maxLength={256} value={turbineForm.effectiveHubHeight} className={s.turbineField}
             error={turbineForm.effectiveHubHeight.trim() === "" ? null : validateEffectiveHubHeight(turbineForm.effectiveHubHeight)}
             onChange={(v) => touchTurbine("effectiveHubHeight", v)}
           />
@@ -1860,7 +1999,8 @@ export default function GeneratorsScreen() {
           {applyAll.hubHeight ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
           <InputField
             label={TURBINE_PANEL_LABELS.totalHeight} name="txt_GeneratorData_RightPanel_Form_Fields_Total_Height"
-            readOnly value={turbineHeight === null ? "" : String(turbineHeight)}
+            readOnly disabledLook className={s.turbineField}
+            value={turbineHeight === null ? "" : String(turbineHeight)}
           />
           {turbineHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
         </div>
@@ -2068,7 +2208,7 @@ export default function GeneratorsScreen() {
       <FormPanel
         open={panel?.kind === "replaceWtg"}
         title={replaceGeneratorTitle(selectedTypeModel?.turbineType ?? selectedType?.generatorDisplayName)}
-        width="narrow" onDismiss={close}
+        width={830} onDismiss={close}
         footer={
           <PanelFooter
             primary={REPLACE_LABELS.replace}
@@ -2082,71 +2222,90 @@ export default function GeneratorsScreen() {
           />
         }
       >
-        <div className={s.panelBody}>
-          <Text weight="semibold">{REPLACE_LABELS.replaceFrom}</Text>
-          <InputField
-            label={REPLACE_LABELS.supplier} name="cmb_Supplier_6" ariaLabel="cmb_Supplier"
-            readOnly value={selectedTypeModel?.supplier ?? ""}
-          />
-          <InputField
-            label={REPLACE_LABELS.turbineType} name="cmb_Supplier_7" ariaLabel="cmb_Supplier_1"
-            readOnly value={selectedTypeModel?.turbineType ?? ""}
-          />
-          <InputField
-            label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2"
-            readOnly value={fmtHubHeight(selectedTypeModel?.hubHeight)}
-          />
-          <InputField
-            label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" readOnly value={String(replaceCount)}
-          />
-          <Text weight="semibold">{REPLACE_LABELS.replaceTo}</Text>
-          <Text>{typeFilterMessage(replaceWtg.inCountry, project?.countryName)}</Text>
-          {/* canvas-identity-ignore: 1.21.753-only control */}
-          <Switch
-            checked={replaceWtg.inCountry}
-            label={REPLACE_LABELS.countryFilter} aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
-            data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_1"
-            onChange={(_, d) => setReplaceWtg(emptyReplaceWtg(d.checked))}
-          />
-          <SelectField
-            label={REPLACE_LABELS.supplier} name="cmb_Supplier_3" ariaLabel="cmb_Supplier" required
-            value={replaceWtg.supplier} options={plainOptions(replaceCascade.suppliers)}
-            onChange={(v) => setReplaceWtg({ ...emptyReplaceWtg(replaceWtg.inCountry), supplier: v })}
-          />
-          <SelectField
-            label={REPLACE_LABELS.turbineType} name="cmb_Supplier_4" ariaLabel="cmb_Supplier_1" required
-            disabled={!replaceWtg.supplier} value={replaceWtg.turbineType} options={plainOptions(replaceCascade.turbineTypes)}
-            onChange={(v) => setReplaceWtg({ ...replaceWtg, turbineType: v, hubHeight: null, revisedHubHeight: "" })}
-          />
-          {!replaceDummy ? (
+        <div className={s.replaceGrid}>
+          <div className={s.replaceColumn}>
+            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceFrom}</Text>
+            {/* The "from" side is the disabled canvas controls: comboboxes keep their chevron. */}
             <SelectField
-              label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_5" ariaLabel="cmb_Supplier_2" required
-              disabled={!replaceWtg.turbineType}
-              value={replaceWtg.hubHeight === null ? null : String(replaceWtg.hubHeight)}
-              options={plainOptions(replaceCascade.hubHeights)}
-              onChange={(v) => setReplaceWtg({ ...replaceWtg, hubHeight: Number(v), revisedHubHeight: "" })}
+              label={REPLACE_LABELS.supplier} name="cmb_Supplier_6" ariaLabel="cmb_Supplier" required disabled
+              disabledClassName={s.comboDisabled}
+              value={selectedTypeModel?.supplier ? "from" : null}
+              options={selectedTypeModel?.supplier ? [{ value: "from", label: selectedTypeModel.supplier }] : []}
+              onChange={() => {}}
             />
-          ) : (
+            <SelectField
+              label={REPLACE_LABELS.turbineType} name="cmb_Supplier_7" ariaLabel="cmb_Supplier_1" required disabled
+              disabledClassName={s.comboDisabled}
+              value={selectedTypeModel?.turbineType ? "from" : null}
+              options={selectedTypeModel?.turbineType ? [{ value: "from", label: selectedTypeModel.turbineType }] : []}
+              onChange={() => {}}
+            />
             <InputField
-              label={REPLACE_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_2"
-              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required maxLength={256}
-              value={replaceWtg.revisedHubHeight}
-              error={replaceWtg.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(replaceWtg.revisedHubHeight) : null}
-              onChange={(v) => setReplaceWtg({ ...replaceWtg, revisedHubHeight: v })}
+              label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required
+              readOnly disabledLook value={fmtHubHeight(selectedTypeModel?.hubHeight)}
             />
-          )}
-          <InputField
-            label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_1"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" readOnly value={String(replaceCount)}
-          />
-          {replaceHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
+            <InputField
+              label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required
+              readOnly disabledLook value={String(replaceCount)}
+            />
+          </div>
+          <div className={s.replaceColumn}>
+            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceTo}</Text>
+            {/* canvas-identity-ignore: 1.21.753-only control */}
+            <Switch
+              checked={replaceWtg.inCountry}
+              label={REPLACE_LABELS.countryFilter} aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
+              data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_1"
+              onChange={(_, d) => setReplaceWtg(emptyReplaceWtg(d.checked))}
+            />
+            <div className={s.filterAvailability}>
+              <InfoRegular aria-hidden="true" fontSize={18} color={replaceWtg.inCountry ? palette.Success : palette.Warning} />
+              <Text>{typeFilterMessage(replaceWtg.inCountry, project?.countryName)}</Text>
+            </div>
+            <SelectField
+              label={REPLACE_LABELS.supplier} name="cmb_Supplier_3" ariaLabel="cmb_Supplier" required
+              placeholder={TYPE_PANEL_LABELS.findItems}
+              value={replaceWtg.supplier} options={plainOptions(replaceCascade.suppliers)}
+              onChange={(v) => setReplaceWtg({ ...emptyReplaceWtg(replaceWtg.inCountry), supplier: v })}
+            />
+            <SelectField
+              label={REPLACE_LABELS.turbineType} name="cmb_Supplier_4" ariaLabel="cmb_Supplier_1" required
+              placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+              disabled={!replaceWtg.supplier} value={replaceWtg.turbineType} options={plainOptions(replaceCascade.turbineTypes)}
+              onChange={(v) => setReplaceWtg({ ...replaceWtg, turbineType: v, hubHeight: null, revisedHubHeight: "" })}
+            />
+            {!replaceDummy ? (
+              <SelectField
+                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_5" ariaLabel="cmb_Supplier_2" required
+                placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+                disabled={!replaceWtg.turbineType}
+                value={replaceWtg.hubHeight === null ? null : String(replaceWtg.hubHeight)}
+                options={plainOptions(replaceCascade.hubHeights)}
+                onChange={(v) => setReplaceWtg({ ...replaceWtg, hubHeight: Number(v), revisedHubHeight: "" })}
+              />
+            ) : (
+              <InputField
+                label={REPLACE_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_2"
+                ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required maxLength={256}
+                value={replaceWtg.revisedHubHeight}
+                error={replaceWtg.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(replaceWtg.revisedHubHeight) : null}
+                onChange={(v) => setReplaceWtg({ ...replaceWtg, revisedHubHeight: v })}
+              />
+            )}
+            <InputField
+              label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_1"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required
+              readOnly disabledLook value={String(replaceCount)}
+            />
+            {replaceHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
+          </div>
         </div>
       </FormPanel>
 
       {/* ── G6: Replace PV Module Type (solution 1.21.753; names and labels as for Replace Generator) ── */}
       <FormPanel
-        open={panel?.kind === "replacePv"} title={replacePvTitle(selectedPv?.moduleLabel)} width="narrow" onDismiss={close}
+        open={panel?.kind === "replacePv"} title={replacePvTitle(selectedPv?.moduleLabel)} width={700} onDismiss={close}
         footer={
           <PanelFooter
             primary={REPLACE_LABELS.replace}
@@ -2158,72 +2317,80 @@ export default function GeneratorsScreen() {
           />
         }
       >
-        <div className={s.panelBody}>
-          <Text weight="semibold">{REPLACE_LABELS.replaceFrom}</Text>
-          <InputField
-            label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_1"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label" readOnly value={selectedPv?.moduleLabel ?? ""}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_1"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.capacity) : ""}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_1"
-            ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier" readOnly
-            value={selectedPv ? pvCardValues(selectedPv).supplier : ""}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.degradation1stYear) : ""}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.degradationRemainingYears) : ""}
-          />
-          <Text weight="semibold">{REPLACE_LABELS.replaceTo}</Text>
-          <InputField
-            label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_2"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label"
-            required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.moduleLabel}
-            error={replacePvErrors.moduleLabel} onChange={(v) => touchReplacePv("moduleLabel", v)}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_2"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW"
-            required maxLength={PV_CAPACITY_MAX_LENGTH} value={replacePvForm.capacity}
-            error={replacePvErrors.capacity} onChange={(v) => touchReplacePv("capacity", v)}
-          />
-          <SelectField
-            label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_2"
-            ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier"
-            required placeholder={PV_SUPPLIER_PLACEHOLDER} value={replacePvForm.supplier}
-            options={pvOptions.map((o) => ({ value: o.id, label: o.displayName ?? "" }))}
-            onChange={(v) => touchReplacePv("supplier", v)}
-          />
-          {replacePvOther ? (
-            // The 1.21.753 corpora name the caption (`lbl_…_OtherSupplier_2`) but not the input: a stable id.
+        <div className={mergeClasses(s.replaceGrid, s.replaceGridPv)}>
+          <div className={s.replaceColumn}>
+            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceFrom}</Text>
             <InputField
-              label={PV_OTHER_SUPPLIER_LABEL} name="generators-replace-pv-other-supplier"
-              required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.otherSupplier ?? ""}
-              error={replacePvErrors.otherSupplier} onChange={(v) => touchReplacePv("otherSupplier", v)}
+              label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_1"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label" required
+              readOnly disabledLook value={selectedPv?.moduleLabel ?? ""}
             />
-          ) : null}
-          <InputField
-            label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_2"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear"
-            maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradation1stYear}
-            error={replacePvErrors.degradation1stYear} onChange={(v) => touchReplacePv("degradation1stYear", v)}
-          />
-          <InputField
-            label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_2"
-            ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears"
-            maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradationRemainingYears}
-            error={replacePvErrors.degradationRemainingYears} onChange={(v) => touchReplacePv("degradationRemainingYears", v)}
-          />
+            <InputField
+              label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_1"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW" required readOnly disabledLook
+              value={selectedPv ? pvPrefill(selectedPv.capacity) : ""}
+            />
+            <SelectField
+              label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_1"
+              ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier" required disabled
+              disabledClassName={s.comboDisabled}
+              value={selectedPv ? "from" : null}
+              options={selectedPv ? [{ value: "from", label: pvCardValues(selectedPv).supplier }] : []}
+              onChange={() => {}}
+            />
+            <InputField
+              label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear" readOnly disabledLook
+              value={selectedPv ? pvPrefill(selectedPv.degradation1stYear) : ""}
+            />
+            <InputField
+              label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears" readOnly disabledLook
+              value={selectedPv ? pvPrefill(selectedPv.degradationRemainingYears) : ""}
+            />
+          </div>
+          <div className={s.replaceColumn}>
+            <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceTo}</Text>
+            <InputField
+              label={PV_FIELD_LABELS.moduleLabel} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label_2"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_Label"
+              required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.moduleLabel}
+              error={replacePvErrors.moduleLabel} onChange={(v) => touchReplacePv("moduleLabel", v)}
+            />
+            <InputField
+              label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_2"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW"
+              required maxLength={PV_CAPACITY_MAX_LENGTH} value={replacePvForm.capacity}
+              error={replacePvErrors.capacity} onChange={(v) => touchReplacePv("capacity", v)}
+            />
+            <SelectField
+              label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_2"
+              ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier"
+              required placeholder={PV_SUPPLIER_PLACEHOLDER} value={replacePvForm.supplier}
+              options={pvOptions.map((o) => ({ value: o.id, label: o.displayName ?? "" }))}
+              onChange={(v) => touchReplacePv("supplier", v)}
+            />
+            {replacePvOther ? (
+              // The 1.21.753 corpora name the caption (`lbl_…_OtherSupplier_2`) but not the input: a stable id.
+              <InputField
+                label={PV_OTHER_SUPPLIER_LABEL} name="generators-replace-pv-other-supplier"
+                required maxLength={PV_MODULE_LABEL_MAX_LENGTH} value={replacePvForm.otherSupplier ?? ""}
+                error={replacePvErrors.otherSupplier} onChange={(v) => touchReplacePv("otherSupplier", v)}
+              />
+            ) : null}
+            <InputField
+              label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_2"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear"
+              maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradation1stYear}
+              error={replacePvErrors.degradation1stYear} onChange={(v) => touchReplacePv("degradation1stYear", v)}
+            />
+            <InputField
+              label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_2"
+              ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears"
+              maxLength={PV_DEGRADATION_MAX_LENGTH} value={replacePvForm.degradationRemainingYears}
+              error={replacePvErrors.degradationRemainingYears} onChange={(v) => touchReplacePv("degradationRemainingYears", v)}
+            />
+          </div>
         </div>
       </FormPanel>
 
@@ -2234,8 +2401,9 @@ export default function GeneratorsScreen() {
         description={confirmText?.text ?? ""}
         confirmText={confirmText?.confirm ?? DIALOG_LABELS.delete}
         cancelText={DIALOG_LABELS.cancel}
-        destructive={confirmText?.destructive ?? false}
-        confirmIcon={confirmText?.destructive ? "delete" : "checkmark"}
+        // As the canvas `cmp_PopUp_Confirmation` here (screenshot 28 Oct 2026): a blue "✓ Delete",
+        // 128 wide, on the flat rounded card with no divider — not the red "destructive" button.
+        confirmIcon="checkmark" confirmWidth={128} canvasFooter footerDivider={false}
         onCancel={closeDialog}
         onConfirm={() => void onConfirm()}
       />

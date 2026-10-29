@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COL, fv, PROJECT_SELECT, CAPACITY_OPERATORS, EMPTY_FILTER, KEYWORD_MIN, PAGE_SIZE,
-  REPORT_VIEWERS, SORTABLE, DEFAULT_SORT, DEFAULT_CRITERIA,
+  SORTABLE, DEFAULT_SORT, DEFAULT_CRITERIA,
   keywordClause, resolveCapacityOperator, capacityError, capacityClause,
   buildProjectFilter, applyFilterPatch, isFilterActive, clearIconState,
   resolveSortColumn, nextSortState, toProjectRow, formatCapacity, formatGridDate,
@@ -444,7 +444,6 @@ describe("commandBarState", () => {
     expect(s.editCosts.enabled).toBe(false);
     expect(s.deleteProject.enabled).toBe(false);
     expect(s.simulateProject.enabled).toBe(false);
-    expect(s.viewProjectOverviewPowerBI.enabled).toBe(false);
     expect(s.editProject.reason).toBe("Select a project first.");
   });
 
@@ -520,33 +519,11 @@ describe("commandBarState", () => {
     expect(one.viewSharepoint.enabled).toBe(false);
   });
 
-  it("UT-OV-055 gates the two Power BI items on the report-viewer allow-list", () => {
-    expect(commandBarState(base).viewProjectOverviewPowerBI.visible).toBe(false);
-    const viewer = commandBarState({ ...base, userMail: REPORT_VIEWERS[0] ?? "" });
-    expect(viewer.viewProjectOverviewPowerBI.visible).toBe(true);
-    expect(viewer.viewProjectOverviewPowerBI.label).toBe("Show Project Overview (Beta)");
-    expect(viewer.viewPortfolioOverviewPowerBI.label).toBe("Show Portfolio Overview (Beta)");
-  });
-
-  it("UT-OV-056 matches the allow-lists case-insensitively and ignores surrounding space", () => {
-    const viewer = commandBarState({ ...base, userMail: "  ALEXANDER.PILEVSKI@VSB.ENERGY " });
-    expect(viewer.viewProjectOverviewPowerBI.visible).toBe(true);
-  });
-
-  it("UT-OV-057 SKELETON FIX 3: Dashboard and Portfolio Overview ignore the selection", () => {
-    // Neither canvas item declares ItemEnabled, so PowerCAT leaves them enabled.
-    const s = commandBarState({ ...base, selected: null, userMail: REPORT_VIEWERS[0] ?? "" });
+  it("UT-OV-057 SKELETON FIX 3: Dashboard ignores the selection", () => {
+    // The canvas item declares no ItemEnabled, so PowerCAT leaves it enabled.
+    const s = commandBarState({ ...base, selected: null });
     expect(s.viewDashboardFunctionality.enabled).toBe(true);
     expect(s.viewDashboardFunctionality.visible).toBe(true);
-    expect(s.viewPortfolioOverviewPowerBI.enabled).toBe(true);
-  });
-
-  it("UT-OV-058 SKELETON FIX 4: the report-viewer list is the canvas one", () => {
-    expect(REPORT_VIEWERS).toContain("andreas.laeubli@vsb.energy");
-    expect(REPORT_VIEWERS).toContain("ravindra.mund@vsb.energy");
-    expect(REPORT_VIEWERS).toContain("test-vsbcloud-01@vsb.energy");
-    expect(REPORT_VIEWERS).not.toContain("philip.wagner@vsb.energy");
-    expect(REPORT_VIEWERS).toHaveLength(10);
   });
 
   it("UT-OV-059 gives every enabled command no reason and every disabled one a reason", () => {

@@ -20,8 +20,10 @@
  *  - `ForaProjecttriggerFabricDEVEX/CAPEXrecalculation` and its `Fabric Sync Jobs` insert are
  *    commented out in the canvas (Y:475-501) and are not called (`FABRIC_SYNC_NOTE`).
  *
- * NOT CONNECTED: the default `Project Revenues` seed — its assumptions are the Fabric SQL source
- * `Assumptions Revenues SQL` (D2). `planSaveMilestones` still takes a draft for when it is.
+ * The default `Project Revenues` seed (connected 28 Oct 2026): `loadRevenueSeed` reads the Fabric
+ * SQL source `Assumptions Revenues SQL` (D54) when the save starts, as the canvas did inside its
+ * save formula. A failed Fabric read does not stop the milestone save; the seed is skipped and
+ * the screen says so.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_PLANT } from "@/data/dataverseNames";
@@ -32,12 +34,14 @@ import { listProjectStates } from "@/data/generalData";
 import { loadMilestoneAssumptionValues } from "@/data/costBook";
 import {
   countIndividualVolumeContracts, countProjectRevenues, isMilestoneRecalculationRunning,
-  listProjectGeneratorsForRepricing, loadMilestoneProject, loadPriceInflation,
+  listProjectGeneratorsForRepricing, listRevenueAssumptions, loadMilestoneProject, loadPriceInflation,
 } from "@/data/milestones";
+import { findCurrency, loadFirstRevenueSubaccount } from "@/data/revenues";
 import { projectSaveErrorText } from "@/features/pm/general-data/rules";
 import {
-  accumulatedIndex, milestoneLabels,
-  type MilestoneAssumptionRow, type MilestoneProject, type ProjectGenerator,
+  accumulatedIndex, buildDefaultRevenue, milestoneLabels, revenueSeedWouldRun,
+  type MilestoneAssumptionRow, type MilestoneDates, type MilestoneProject, type ProjectGenerator,
+  type ProjectRevenueDraft, type RevenueAssumptionRow,
 } from "./rules";
 
 /** Entity sets this screen reads and writes. */
@@ -50,6 +54,8 @@ export const TABLES: readonly string[] = [
   ES.estimationPriceInflations,
   ES.generatorTypeInProjects,
   ES_PLANT.generators,
+  ES.currencies,
+  ES.revenueSubaccounts,
   ES.fabricSyncJobs,
   ES.fabricJobTypes,
 ];
@@ -99,15 +105,6 @@ export function useIndividualVolumeContractCount(projectId: string | undefined):
   return out(q, 0);
 }
 
-/** Any `Project Revenues` row (0 or 1) — the revenue-seed notice. */
-export function useRevenueRowCount(projectId: string | undefined): ScreenData<number> {
-  const q = useQuery({
-    queryKey: qk.projectRevenueCount(projectId ?? ""),
-    queryFn: () => countProjectRevenues(projectId!),
-    enabled: Boolean(projectId),
-  });
-  return out(q, 0);
-}
 
 /** `Icon3.Visible` — a Fabric milestone recalculation is running for the project. */
 export function useRecalculationRunning(projectId: string | undefined): ScreenData<boolean> {
@@ -136,6 +133,43 @@ export async function loadRepricing(
   return index === null ? null : { generators, index };
 }
 
+/** What the save seeds; `fabricFailed` when `Assumptions Revenues SQL` could not be read. */
+export interface RevenueSeed {
+  draft: ProjectRevenueDraft | null;
+  fabricFailed: boolean;
+}
+
+/**
+ * The default revenue contract (rules 20-28, Y:509-1129), read when the save starts. The gate is
+ * checked first with a fresh `Project Revenues` count, so nothing is read from Fabric for a
+ * project that already has a contract. `Currency: LookUp(Currencies, 'Currency Code' = "EUR")`
+ * (Y:771-774) and `Subaccount: First(colRevenueSubaccounts)` (Y:1022).
+ */
+export async function loadRevenueSeed(project: MilestoneProject, dates: MilestoneDates): Promise<RevenueSeed> {
+  const none: RevenueSeed = { draft: null, fabricFailed: false };
+  if (!project.id || !project.countryName || !revenueSeedWouldRun(project, 0)) return none;
+  const existingRevenueCount = await countProjectRevenues(project.id);
+  if (existingRevenueCount !== 0) return none;
+  let assumptions: RevenueAssumptionRow[];
+  try {
+    assumptions = await listRevenueAssumptions(project.countryName);
+  } catch {
+    return { draft: null, fabricFailed: true };
+  }
+  const [currency, subaccount] = await Promise.all([findCurrency("EUR"), loadFirstRevenueSubaccount()]);
+  return {
+    draft: buildDefaultRevenue({
+      project, dates, assumptions, existingRevenueCount,
+      currencyId: currency?.id ?? null,
+      subaccountId: subaccount?.id ?? null,
+      // `gblRecordSelectedProject.'Besitzer (Unternehmenseinheit)'` (Y:1089), which the save has
+      // just set to the country's business unit (rule 18).
+      owningBusinessUnitId: project.countryBusinessUnitId,
+    }),
+    fabricFailed: false,
+  };
+}
+
 /**
  * Runs the save and refreshes the project here, General Data's copy of it, the session's project
  * header (`gblProjectHeaderData`) and the recalculation notice.
@@ -145,7 +179,7 @@ export function useMilestoneWrites(projectId: string | undefined) {
   return usePlanWrite({
     invalidate: [
       qk.milestoneProject(id), qk.generalDataProject(id), qk.project(id),
-      qk.milestoneRecalculationRunning(id),
+      qk.milestoneRecalculationRunning(id), qk.projectRevenueCount(id), qk.revenuesAll(id),
     ],
     action: "change this project's milestones",
     errorText: projectSaveErrorText,
