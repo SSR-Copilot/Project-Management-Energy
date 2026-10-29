@@ -57,7 +57,7 @@ import {
   toggleCountryInflation, changeInflationStartYear, sameInflationArea,
   countryInflationValueCanvasParity, resyncNegativePrice, fmtCardDate, fmtTariffCell,
   fmtSiteQualityCell, fmtHedgeCell, inflationCell, inflationCellCaption, showsAreaCell, sortContracts,
-  contractCardFields, contractCardTitle, cardTariffPriceCaption, toggleContractFold, unfoldContract,
+  contractCardFields, contractCardBodyHeight, contractCardTitle, cardTariffPriceCaption, toggleContractFold, unfoldContract,
   CONTRACT_CARD_CONTROL, type CardField, type ContractCardContext,
   touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode, showsCountryInflationToggle,
   hedgePercentForCheck, engineEndDate, fmtTwoDecimals,
@@ -1652,6 +1652,15 @@ describe("UT-REV the contract card gallery (D33 V6)", () => {
     const f = contractCardFields(card({ contractDurationYears: null, contractDurationMonths: 0 }), ctx());
     expect([val(f, "contractDuration", 0).text, val(f, "contractDuration", 1).text]).toEqual(["", "0 month"]);
     expect(CONTRACT_CARD_CONTROL.gallery).toBe("gal_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_1");
+  });
+
+  it("UT-REV-156 the card body keeps room for 5, 4 or 3 tile rows (CardBody_Fields_Main_6.Height)", () => {
+    expect(contractCardBodyHeight(card(), ctx())).toBe(410);
+    expect(contractCardBodyHeight(card({ label: CHOICE_FINANCE.revenueLabel.ppa }), ctx())).toBe(320);
+    expect(contractCardBodyHeight(card({ label: CHOICE_FINANCE.revenueLabel.ppa, inflationStartYear: null }), ctx())).toBe(250);
+    expect(contractCardBodyHeight(card(), ctx({ technology: "PV" }))).toBe(320);
+    expect(contractCardBodyHeight(card({ inflationStartYear: 0 }), ctx({ country: "Italy" }))).toBe(250);
+    expect(contractCardBodyHeight(card(), ctx({ country: "Italy" }))).toBe(320);
   });
 });
 

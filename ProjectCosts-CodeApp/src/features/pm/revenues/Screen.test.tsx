@@ -163,7 +163,10 @@ describe("UT-REV Screen (connected)", () => {
     expect(type.textContent).toBe("");
     expect(input("txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Description_1").getAttribute("aria-label"))
       .toBe("txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Description_1");
-    expect(input("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Currency_1").value).toBe("Euro");
+    // A disabled DropDown showing the currency NAME, as the canvas (L7346-7375).
+    const currency = button("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Currency_1");
+    expect(currency.textContent).toBe("Euro");
+    expect(currency.disabled).toBe(true);
     expect(button("pcf_ProjectRevenues_RightPanel_NewEditCost_BodyButtons_Save_1").disabled).toBe(true);
   });
 

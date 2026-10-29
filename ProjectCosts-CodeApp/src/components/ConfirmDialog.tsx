@@ -326,6 +326,8 @@ export interface ConfirmDialogProps {
   darkScrim?: boolean;
   /** Optional (Team / Planning): the PM canvas pop-up's size — 459 x 242, 36 px header, 30 px buttons. */
   compact?: boolean;
+  /** Optional (PM Revenues): the white box's width in px, measured off the live canvas (490). Default 450. */
+  width?: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -339,7 +341,7 @@ export function ConfirmDialog({
   confirmWidth = 96,
   boxHeight, textHeight,
   error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false, compact = false,
-  onConfirm, onCancel,
+  width, onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
   const locked = lockWhileBusy && busy;
@@ -350,7 +352,10 @@ export function ConfirmDialog({
    * Left out, neither emits a declaration, so the class values (`surface`/`surfaceInfo`'s
    * height and the band's `flex-grow`) stand exactly as before.
    */
-  const surfaceStyle = boxHeight === undefined ? undefined : { height: `${boxHeight}px` };
+  const surfaceStyle = boxHeight === undefined && width === undefined ? undefined : {
+    ...(boxHeight === undefined ? {} : { height: `${boxHeight}px` }),
+    ...(width === undefined ? {} : { width: `${width}px` }),
+  };
   const bodyStyle = textHeight === undefined
     ? undefined
     : { height: `${textHeight}px`, flexGrow: 0 };

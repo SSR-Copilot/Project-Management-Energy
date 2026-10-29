@@ -2581,6 +2581,25 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
   return out;
 }
 
+/** `con_…_CardBody_Fields_Currency_1.Height` — every field tile is 70 high. */
+export const CARD_TILE_HEIGHT = 70;
+
+/**
+ * `con_…_CardBody_Fields_Main_6.Height` (Y:883-906): the unfolded card body keeps room for a fixed
+ * number of tile rows, whatever it shows — 5 (+60) for a German wind FiT, else 4 (+40) with an
+ * Inflation Start Year > 0, else 3 (+40). A card with fewer tiles leaves blank space under them, as
+ * on the canvas (the card is `CardHeader.Height + CardBody_Fields_6.Height`, Y:868-873).
+ */
+export function contractCardBodyHeight(
+  c: Pick<StoredRevenueContract, "label" | "inflationStartYear">,
+  ctx: Pick<ContractCardContext, "country" | "technology">,
+): number {
+  if (ctx.country === "Germany" && ctx.technology === "Wind" && revenueLabelText(c.label) === "FiT") {
+    return CARD_TILE_HEIGHT * 5 + 60;
+  }
+  return (c.inflationStartYear ?? 0) > 0 ? CARD_TILE_HEIGHT * 4 + 40 : CARD_TILE_HEIGHT * 3 + 40;
+}
+
 /**
  * The fold chevrons' `OnSelect` (Y:2864-2878, 2910-2924) flip the card's `IsFolded` (and make the
  * card the selected contract — the caller does that). Every card starts unfolded

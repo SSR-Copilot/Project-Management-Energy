@@ -41,7 +41,7 @@ describe("FormPanel defaults (the plain panel every cost / PM screen uses)", () 
     expect(formPanelWidth("cost")).toBe(750);
     expect(formPanelWidth("period")).toBe(660);
     expect(formPanelWidth("comments")).toBe(600);
-    expect(formPanelWidth("twoColumn")).toBe(860);
+    expect(formPanelWidth("twoColumn")).toBe(760);
     expect(formPanelWidth("fieldsAndSide")).toBe(680);
     expect(formPanelWidth("threeColumn")).toBe(1040);
   });
