@@ -17,13 +17,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@fluentui/react-components";
 import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, LoadingOverlay } from "@/components";
+import { EmptyState, LoadingOverlay, WriteStatus } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
 import { CATEGORY_LABELS, resolveCategory } from "@/features/cost/capex-costs/rules";
 import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/useCostBook";
-import { toSaveFailure } from "@/data/addCostSheet";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
+import { costWriteStatusLabel } from "@/domain/writeGuard";
+import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data/addCostSheet";
+import { emitSaveLog } from "@/data/saveLog";
 import { rootCauseDetail } from "@/platform/errors";
 import {
   ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
@@ -31,7 +34,7 @@ import {
 } from "./rules";
 import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
-import { saveButtonDisabled, saveRequestRows } from "./saveRetry";
+import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 
 /**
  * Canvas-exact deletion, ON — the client's explicit choice.
@@ -67,6 +70,10 @@ export default function AddCostsFromTableScreen() {
 
   const sheetQuery = useAddCostSheet(category);
   const save = useSaveAddCostSheet(category);
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("Add Costs from Table");
 
   const currentYear = new Date().getFullYear();
   const codDate = project?.milestones?.operationsStartCod;
@@ -230,15 +237,11 @@ export default function AddCostsFromTableScreen() {
       canvasParityDeletion: CANVAS_PARITY_DELETION,
       now: () => performance.now(),
     });
-    const t = prepared.timings;
-    const ms = (n: number) => n.toFixed(1);
-    // One line, so a slow Save can be pinned on the client side or the network side at a glance.
-    console.info(
-      `Add Cost from Table prepare: ${ms(t.total)} ms (round-trip check ${ms(t.roundTripCheck)}, `
-      + `align ${ms(t.align)}, diff ${ms(t.diff)}, deletions ${ms(t.deletions)}, `
-      + `orphans ${ms(t.orphans)}; last edit's grid read-back ${ms(readBackMs.current)}, `
-      + `validation ${ms(validationMs.current)}; ${currentRows.length} rows)`,
-    );
+    // One line (plus a collapsed group, D59), so a slow Save can be pinned on the client side or
+    // the network side at a glance.
+    const readBack = readBackMs.current;
+    const validation = validationMs.current;
+    emitSaveLog(() => prepareLogReport(prepared.timings, readBack, validation, currentRows.length));
     if (prepared.kind === "lost") {
       setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
       return;
@@ -277,9 +280,13 @@ export default function AddCostsFromTableScreen() {
       // deliberately NOT cleared here: a retry must reuse the ids this attempt sent. Part of
       // this attempt may have landed, so the retry plans against a fresh read, not the snapshot.
       for (const id of sentIdentities) sentInFailedAttempts.current.add(id);
-      setSaveError(saveFailureText(toSaveFailure(error)));
-      // The full chain (phase → chunk → Dataverse fault) for support; the screen shows one line.
-      console.error("Add Cost from Table save failed", error);
+      const failure = toSaveFailure(error);
+      const userText = saveFailureText(failure);
+      // CA-15: the sheet's banner while it is mounted; the error toast if the user has left.
+      reportFailure(userText, setSaveError);
+      // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
+      // then the raw error object in its own collapsed group (D59); the screen shows one line.
+      emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
     }
   };
 
@@ -309,11 +316,19 @@ export default function AddCostsFromTableScreen() {
     );
   }
   if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
-    return <LoadingOverlay mode="inline" label="Loading the cost table…" />;
+    /*
+     * No canvas control (the canvas screen sets no `LoadingSpinner`): the code app's own inline
+     * "Loading the cost table…" spinner (restored by D60 after D58 had left this body empty, so
+     * opening the sheet showed a blank screen through the chunk download, the sheet fetch and the
+     * grid build). The grid needs `initialGrid`, so nothing else can render yet.
+     */
+    return <LoadingOverlay mode="inline" label="Loading the cost table…" testId="add-costs-loading" />;
   }
 
   const categoryName = CATEGORY_LABELS[category] ?? "";
   const title = sheetTitle(project?.projectName ?? "", categoryName);
+  // D58: no scrim while saving, so the sheet and its edit/leave controls lock instead.
+  const locked = sheetLocked({ isPending: save.isPending });
 
   return (
     <div
@@ -343,6 +358,7 @@ export default function AddCostsFromTableScreen() {
             title="Cancel"
             aria-label="Cancel"
             data-testid="ico_PopUpConfirmation_BodyHeader_2"
+            disabled={locked}
             onClick={back}
           />
         </div>
@@ -354,13 +370,13 @@ export default function AddCostsFromTableScreen() {
             padding: "5px 10px", background: "#fff",
           }}
         >
-          <Button aria-label="Add Row" data-testid="btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Add20Regular />} onClick={() => setAddRowToken((t) => t + 1)}>
+          <Button aria-label="Add Row" data-testid="btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Add20Regular />} disabled={locked} onClick={() => setAddRowToken((t) => t + 1)}>
             Add Row
           </Button>
-          <Button aria-label="Delete Row" data-testid="btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Delete20Regular />} onClick={() => setDeleteRowToken((t) => t + 1)}>
+          <Button aria-label="Delete Row" data-testid="btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Delete20Regular />} disabled={locked} onClick={() => setDeleteRowToken((t) => t + 1)}>
             Delete Row
           </Button>
-          <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} onClick={() => setCopyTableToken((t) => t + 1)}>
+          <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} disabled={locked} onClick={() => setCopyTableToken((t) => t + 1)}>
             Copy Table
           </Button>
         </div>
@@ -382,7 +398,7 @@ export default function AddCostsFromTableScreen() {
         ) : null}
 
         {/* Grid */}
-        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }} data-testid="add-costs-grid" inert={locked}>
           <SpreadSheetComp
             data={initialGrid}
             onDataChange={handleDataChange}
@@ -400,7 +416,18 @@ export default function AddCostsFromTableScreen() {
             justifyContent: "flex-end", gap: 10, padding: "0 20px",
           }}
         >
-          <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" onClick={back}>Cancel</Button>
+          {/*
+            * DIVERGENCE (D58): replaces `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable`
+            * (`cmp_PopUp_Loading_1`, `Visible: =locIsVisiblePopUpSpinner`,
+            * `InformationText: =locSpinnerInformationText`) with one non-blocking status line in
+            * the footer, same verbatim text. Save stays guarded by `saveButtonDisabled`.
+            */}
+          {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+          <WriteStatus testId="add-costs-write-status" label={costWriteStatusLabel({
+            ownLabel: save.isPending ? "Please wait, saving costs..." : null,
+            ownPending: save.isPending, writeInFlight,
+          })} />
+          <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" disabled={locked} onClick={back}>Cancel</Button>
           <Button
             aria-label="Save"
             data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save"
@@ -408,7 +435,8 @@ export default function AddCostsFromTableScreen() {
             // Not while the sheet reloads (`saveButtonDisabled` says why).
             disabled={saveButtonDisabled({
               canSave: canSaveBulkEdit(permissions, errors),
-              isPending: save.isPending,
+              // CA-15: also while a Cost write started elsewhere is still running.
+              isPending: save.isPending || writeInFlight,
               isFetching: sheetQuery.isFetching,
             })}
             onClick={() => { void doSave(); }}
@@ -417,8 +445,6 @@ export default function AddCostsFromTableScreen() {
           </Button>
         </div>
       </div>
-
-      {save.isPending ? <LoadingOverlay label="Please wait, saving costs..." /> : null}
     </div>
   );
 }

@@ -33,7 +33,15 @@ export default function App() {
    */
   const currentUser = useCurrentUser();
 
-  if (loading) return <LoadingOverlay mode="blocking" label="Please wait..." />;
+  const onCostScreen = pathname.startsWith("/costs/");
+  /*
+   * No canvas control; code-app shell spinner. On the Cost routes the shell renders while the
+   * session loads (D58) and `CostProjectGate` (`app/routes.tsx`) shows its own inline "Loading
+   * project…" spinner (`cost-project-loading`, D60), so the rail and header stay visible, no Cost
+   * screen mounts or starts a query before the project exists, and the body is never blank. Every
+   * other route (the project list, PM, Admin, `/`) keeps the blocking overlay unchanged.
+   */
+  if (loading && !onCostScreen) return <LoadingOverlay mode="blocking" label="Please wait..." />;
 
   /*
    * The header name is the DATAVERSE one, falling back to the host's. `User().FullName` — what
@@ -45,7 +53,6 @@ export default function App() {
   const userEmail = currentUser.data?.mail ?? session?.userPrincipalName;
   const userLanguage = languageLabel(navigator.language);
 
-  const onCostScreen = pathname.startsWith("/costs/");
   /*
    * The Project Management and administration screens carry the rail too (`LeftNav` picks the
    * item set from the path). PM screens show the selected project in the header like the cost

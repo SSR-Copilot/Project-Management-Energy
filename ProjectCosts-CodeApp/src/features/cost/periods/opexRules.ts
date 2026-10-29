@@ -1166,6 +1166,27 @@ export function visibleCommands(mode: OpexMode): OpexCommandKey[] {
     ];
 }
 
+/**
+ * `opexCommands`' gates with the D58 write guard applied: `disabled` (the shared
+ * `writeCommandsDisabled`, `@/domain/writeGuard`) turns every one off.
+ *
+ * DIVERGENCE (D58, PROPOSED): replaces `cmp_OpexCosts_PopUpLoading`. The canvas pop-up
+ * (`Visible: =locIsVisiblePopUpSpinner`) covered the whole screen while a write ran, which is
+ * what stopped a second Save, Delete or Add Standard Contract from starting. Every OPEX command
+ * starts a write or opens the panel for one, so all five are guarded; expanding a card and
+ * selecting a row stay enabled.
+ */
+export function guardOpexCommands(gates: OpexCommandGates, disabled: boolean): OpexCommandGates {
+  if (!disabled) return gates;
+  return {
+    newOpexProjectCostType: false,
+    newOpexProjectCost: false,
+    addStandardContract: false,
+    editOpexProjectCost: false,
+    deleteOpexProjectCost: false,
+  };
+}
+
 /* ════════════════════════════════════════════════════════════ the inflation ══ */
 
 /**

@@ -11,17 +11,18 @@
  * nor a QueryClient.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
 import type { CostBook, CostPeriod } from "@/features/cost/costing/model";
 import { DELETE_DIALOG, OPEX_MSG, deleteDialogSingleText } from "./opexRules";
+import { COST_WRITE_MSG } from "@/domain/writeGuard";
 
 /* ───────────────────────────────────────────────────────────────── fixtures */
 
-const save = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false };
-const addStandard = { mutate: vi.fn(), isPending: false };
+const save = { mutate: vi.fn(), mutateAsync: vi.fn((_book: unknown) => Promise.resolve()), isPending: false };
+const addStandard = { mutate: vi.fn(), mutateAsync: vi.fn((_args: unknown) => Promise.resolve()), isPending: false };
 let book: CostBook | undefined;
 let loading = false;
 /**
@@ -97,6 +98,13 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
 vi.mock("@/app/SessionContext", () => ({
   useSession: () => ({ project, projectId: "p", locale: "en-GB", loading: false }),
 }));
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+let writeInFlight = false;
+const reportFailure = vi.fn((text: string, show?: (t: string) => void) => { show?.(text); });
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => writeInFlight,
+  useWriteFailureReport: () => reportFailure,
+}));
 vi.mock("@/features/cost/contracts/hooks", () => ({
   useProjectExtras: () => ({ data: { countryId: "country-de", technology: 1 } }),
 }));
@@ -149,6 +157,7 @@ describe("OpexScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loading = false;
+    writeInFlight = false;
     save.isPending = false;
     addStandard.isPending = false;
     // WTG types first, in the matching GENERATOR's `Created On` order; PV types appended.
@@ -602,8 +611,8 @@ describe("OpexScreen", () => {
         .getByTestId("opex-addStandardContract"),
     );
 
-    expect(addStandard.mutate).toHaveBeenCalledTimes(1);
-    expect(addStandard.mutate.mock.calls[0]?.[0]).toMatchObject({
+    expect(addStandard.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(addStandard.mutateAsync.mock.calls[0]?.[0]).toMatchObject({
       mode: "other",
       group: "Technical Commercial Management Agreement (TCMA)",
       countryId: "country-de",
@@ -648,7 +657,7 @@ describe("OpexScreen", () => {
     // …and the save/seed commands send the device NAME, which is what `resolveDeviceType` and
     // the cost book's grouping both key on.
     fireEvent.click(scope.getByTestId("opex-addStandardContract"));
-    expect(addStandard.mutate.mock.calls[0]?.[0]).toMatchObject({ group: "WTG V150-6.0" });
+    expect(addStandard.mutateAsync.mock.calls[0]?.[0]).toMatchObject({ group: "WTG V150-6.0" });
   });
 
   it("UT-OPEXUI-027b two devices with the SAME name each show only their own periods", () => {
@@ -698,7 +707,7 @@ describe("OpexScreen", () => {
     const second = screen.getAllByText("Dummy-Siemens Gamesa 5-7")[1]!.closest("section") as HTMLElement;
     fireEvent.click(within(second).getByText("Dummy-Siemens Gamesa 5-7"));
     fireEvent.click(within(second).getByTestId("opex-addStandardContract"));
-    expect(addStandard.mutate.mock.calls.at(-1)?.[0])
+    expect(addStandard.mutateAsync.mock.calls.at(-1)?.[0])
       .toMatchObject({ group: "WTG-SG", deviceId: "dev-b" });
   });
 
@@ -787,5 +796,217 @@ describe("OpexScreen", () => {
       project.countryName = "Germany";
       delete (project as { areaStateProvince?: string }).areaStateProvince;
     }
+  });
+
+  /* ── D58: no spinner; a status line and a write guard instead ────────── */
+
+  /** The card's toolbar commands — every one starts a write or opens the panel for one. */
+  const WRITE_COMMAND_IDS = [
+    "opex-newOpexProjectCostType", "opex-newOpexProjectCost", "opex-addStandardContract",
+    "opex-editOpexProjectCost", "opex-deleteOpexProjectCost",
+  ];
+  const writeCommands = (title: string) =>
+    WRITE_COMMAND_IDS.flatMap((id) => within(card(title)).queryAllByTestId(id));
+
+  /** D60: the blocking write spinner is the only `role="dialog"` once the panel has closed. */
+  const expectBlocking = (text: string) => {
+    const overlay = screen.getByTestId("opex-write-status");
+    expect(overlay).toHaveAttribute("role", "dialog");
+    expect(overlay).toHaveAttribute("aria-modal", "true");
+    expect(overlay).toHaveTextContent(text);
+    expect(overlay.querySelector(".fui-Spinner")).not.toBeNull();
+    expect(screen.getAllByRole("dialog")).toEqual([overlay]);
+  };
+  const expectIdle = () => {
+    const status = screen.getByTestId("opex-write-status");
+    expect(status).toHaveAttribute("role", "status");
+    expect(status).toBeEmptyDOMElement();
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+  };
+
+  it("UT-OPEX-NOSPIN-005 the first load renders the cards with the inline spinner, no error", () => {
+    loading = true;
+    book = undefined;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+
+    const inline = screen.getByTestId("opex-loading");
+    expect(inline).toHaveAttribute("role", "status");
+    expect(inline).toHaveAttribute("aria-busy", "true");
+    expect(inline.querySelector(".fui-Spinner")).not.toBeNull();
+    expect(inline).toHaveTextContent("Loading Operation & Maintenance…");
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    // A load in progress is neither "unavailable" nor a project without generators.
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    // The chrome is there — the device cards and their command bars — but no row, and every
+    // write command is disabled while the book loads.
+    expect(screen.getByText("WTG V150-6.0")).toBeInTheDocument();
+    expect(screen.queryByTestId("opex-select-om-1")).not.toBeInTheDocument();
+    const commands = writeCommands("WTG V150-6.0");
+    expect(commands.length).toBeGreaterThan(0);
+    for (const c of commands) expect(c).toBeDisabled();
+    // Expanding a card is read-only and stays enabled.
+    expect(screen.getByTestId("opex-card-dev-pv")).toBeEnabled();
+  });
+
+  it("UT-OPEX-NOSPIN-006 with no generators, the first load shows no 'no generators' text", () => {
+    loading = true;
+    book = undefined;
+    deviceTypes = [[], []];
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEX-NOSPIN-007 a delete shows its canvas text on the blocking spinner and guards the writes", async () => {
+    let finish: () => void = () => {};
+    save.mutateAsync.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-deleteOpexProjectCost"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+
+    // `mutateAsync` since CA-15, so a failure after the screen was left still reaches the toast.
+    expect(save.mutateAsync).toHaveBeenCalledTimes(1);
+    // The dialog closed first; the blocking spinner names the write, verbatim.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expectBlocking(OPEX_MSG.deletingCost);
+    expect(screen.getByRole("status")).toHaveTextContent("Deleting OPEX cost...");
+    // Every write command is off; selecting a row and expanding a card are not.
+    expect(screen.getByTestId("opex-select-om-1")).toBeEnabled();
+    expect(screen.getByTestId("opex-card-dev-pv")).toBeEnabled();
+    // Selecting a row still works, but Edit / Delete — which its own gate would now offer —
+    // stay off while the delete runs.
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    expect(screen.getByTestId("opex-select-om-1")).toBeChecked();
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+
+    // Settling clears the spinner and the guard.
+    await act(async () => { finish(); });
+    expectIdle();
+    expect(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+  });
+
+  it("UT-OPEX-NOSPIN-008 Add Standard Contract shows its text on the blocking spinner and blocks a second import", () => {
+    book = makeBook([]);
+    addStandard.mutateAsync.mockImplementationOnce(() => new Promise<void>(() => {}));
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    const tcma = "Technical Commercial Management Agreement (TCMA)";
+    const command = within(card(tcma)).getByTestId("opex-addStandardContract");
+    expect(command).toBeEnabled();
+    fireEvent.click(command);
+
+    expect(addStandard.mutateAsync).toHaveBeenCalledTimes(1);
+    expectBlocking(OPEX_MSG.loadingStandardContract);
+    expect(within(card(tcma)).getByTestId("opex-addStandardContract")).toBeDisabled();
+    fireEvent.click(within(card(tcma)).getByTestId("opex-addStandardContract"));
+    expect(addStandard.mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("UT-OPEX-NOSPIN-009 a pending book mutation alone also disables the write commands", () => {
+    save.isPending = true;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    // With om-1 selected its own gates offer Add Period, Edit and Delete; the guard wins.
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+    expect(screen.getByTestId("opex-write-status")).toBeEmptyDOMElement();
+  });
+
+  it("UT-OPEX-NOSPIN-010 a panel save closes the panel first, then shows the blocking spinner", async () => {
+    let finish: () => void = () => {};
+    save.mutateAsync.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Save" }));
+
+    expect(save.mutateAsync).toHaveBeenCalledTimes(1);
+    // The panel is gone: the spinner is the only dialog left.
+    expectBlocking(OPEX_MSG.savingCost);
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+
+    await act(async () => { finish(); });
+    expectIdle();
+  });
+
+  it("UT-OPEX-BUSY-001 the blocking spinner stays up through other clicks and goes only when the write resolves", async () => {
+    let finish: () => void = () => {};
+    save.mutateAsync.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Save" }));
+    expectBlocking(OPEX_MSG.savingCost);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(screen.getByTestId("opex-card-dev-pv"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-deleteOpexProjectCost"));
+    expectBlocking(OPEX_MSG.savingCost);
+    await act(async () => { finish(); });
+    expectIdle();
+  });
+
+  it("UT-OPEX-BUSY-002 the blocking spinner also goes when the write REJECTS, and the error banner shows", async () => {
+    let fail: (e: Error) => void = () => {};
+    save.mutateAsync.mockImplementationOnce(() => new Promise<void>((_r, reject) => { fail = reject; }));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-deleteOpexProjectCost"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+    expectBlocking(OPEX_MSG.deletingCost);
+    await act(async () => { fail(new Error("HTTP 403")); });
+    expectIdle();
+    expect(screen.getByRole("alert")).toHaveTextContent("HTTP 403");
+  });
+
+  it("UT-OPEX-BUSY-003 Other OPEX shows its own inline loading text", () => {
+    loading = true;
+    book = undefined;
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    expect(screen.getByTestId("opex-loading")).toHaveTextContent("Loading Other OPEX Costs…");
+    expect(screen.getByTestId("opex-loading").querySelector(".fui-Spinner")).not.toBeNull();
+  });
+
+  /* ── CA-15: a write that outlives the screen ────────────────────────── */
+
+  it("UT-OPEX-FLIGHT-001 a Cost write still in flight elsewhere greys the write commands and says so", () => {
+    writeInFlight = true;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    const commands = writeCommands("WTG V150-6.0");
+    expect(commands.length).toBeGreaterThan(0);
+    for (const c of commands) expect(c).toBeDisabled();
+    expect(screen.getByTestId("opex-write-status"))
+      .toHaveTextContent(COST_WRITE_MSG.writeRunningElsewhere);
+    // Read-only actions stay live.
+    expect(screen.getByTestId("opex-select-om-1")).toBeChecked();
+    expect(screen.getByTestId("opex-card-dev-pv")).toBeEnabled();
+  });
+
+  it("UT-OPEX-FLIGHT-002 a failed delete goes through the reporter with the screen's own text", async () => {
+    save.mutateAsync.mockImplementationOnce(() => Promise.reject(new Error("HTTP 403")));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-deleteOpexProjectCost"));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+    });
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(reportFailure.mock.calls[0]?.[0]).toBe("HTTP 403");
+    // Mounted, so the reporter put it on the screen's banner.
+    expect(screen.getByRole("alert")).toHaveTextContent("HTTP 403");
+    expect(screen.getByTestId("opex-write-status")).toBeEmptyDOMElement();
+  });
+
+  it("UT-OPEX-FLIGHT-003 a failed Add Standard Contract goes through the reporter too", async () => {
+    book = makeBook([]);
+    addStandard.mutateAsync.mockImplementationOnce(() => Promise.reject(new Error("refused")));
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    const tcma = "Technical Commercial Management Agreement (TCMA)";
+    await act(async () => {
+      fireEvent.click(within(card(tcma)).getByTestId("opex-addStandardContract"));
+    });
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(reportFailure.mock.calls[0]?.[0]).toBe("refused");
+    expect(screen.getByRole("alert")).toHaveTextContent("refused");
   });
 });

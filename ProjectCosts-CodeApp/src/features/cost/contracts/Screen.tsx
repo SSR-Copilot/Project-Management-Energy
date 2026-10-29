@@ -14,7 +14,7 @@
  *   right panel: target       `con_Contracts_RightPanel_NewEdit_PaymentTarget`
  *   two delete confirmations  `cmp_OpexCosts_PopUpConfirmation_Delete{Contracts,PaymentTarget}`
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button, MessageBar, MessageBarBody, MessageBarTitle, Text, mergeClasses,
@@ -33,9 +33,10 @@ import {
   CostField,
   EmptyState,
   FormPanel,
-  LoadingOverlay,
   PanelButtons,
   useCommandRowStyles,
+  LoadingOverlay,
+  WriteStatus,
 } from "@/components";
 /*
  * The CANVAS field kit, not the Fluent one.
@@ -51,13 +52,16 @@ import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
 import { parseNumber, round } from "@/domain/numeric";
 import { numberFormat } from "@/domain/locale";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { DataError } from "@/platform/errors";
 import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges";
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
   canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
-  contractCardTitle, contractCommands, contractErrors, longAbbreviatedDate,
+  contractCardTitle, contractCommands, contractErrors, contractSelectionAfterDelete,
+  gatedContractCommands, longAbbreviatedDate,
   contractName, costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
@@ -204,7 +208,7 @@ export default function ContractsScreen() {
   const [panelTouched, setPanelTouched] = useState(false);
   const [recalculated, setRecalculated] = useState(false);
   const [confirm, setConfirm] = useState<"none" | "contract" | "target">("none");
-  /** Which `locContractSpinnerInformationText` the overlay is showing, or `null` for none. */
+  /** Which `locContractSpinnerInformationText` the write-status line is showing, or `null` for none. */
   const [savingLabel, setSavingLabel] = useState<string | null>(null);
   const [banner, setBanner] = useState<string>();
 
@@ -231,6 +235,32 @@ export default function ContractsScreen() {
   const deleteContractMutation = useDeleteContract(projectId);
   const saveTargetMutation = useSavePaymentTarget(projectId);
   const deleteTargetMutation = useDeletePaymentTarget(projectId);
+
+  /** The first read of the contracts and the CAPEX accounts has not answered yet. */
+  const loading = contractsQuery.isLoading || accountsQuery.isLoading;
+  const busy =
+    saveContractMutation.isPending || deleteContractMutation.isPending ||
+    saveTargetMutation.isPending || deleteTargetMutation.isPending;
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("Contracts");
+  /** `writeCommandsDisabled` (D58): the interaction guard that replaced the spinner overlay. */
+  const writesDisabled = writeCommandsDisabled({ loading, writePending: busy, writeInFlight });
+
+  /**
+   * The selection as of the LATEST render, for a delete that settles later (CA-17): the user may
+   * have picked another card or target while it ran, and the closure only knows the old one.
+   */
+  const selectionNow = useRef({ contractId: selectedContractId, targetId: selectedTargetId });
+  useEffect(() => {
+    selectionNow.current = { contractId: selectedContractId, targetId: selectedTargetId };
+  }, [selectedContractId, selectedTargetId]);
+  const clearDeletedSelection = (deleted: { contractId?: string; targetId?: string }) => {
+    const next = contractSelectionAfterDelete(selectionNow.current, deleted);
+    setSelectedContractId(next.contractId);
+    setSelectedTargetId(next.targetId);
+  };
 
   /**
    * Seeds a new Development or Construction contract's margin from the standard assumption.
@@ -395,13 +425,13 @@ export default function ContractsScreen() {
       editContarct: "Edit",
       deleteContarct: "Delete",
     };
-    return contractCommands({
+    return gatedContractCommands(contractCommands({
       canCreate: privileges.canCreate,
       canWrite: privileges.canWrite,
       canDelete: privileges.canDelete,
       hasSelection: Boolean(selectedContract),
-    }).map((c) => ({ key: c.key, label: c.label, icon: icons[c.key], enabled: c.enabled }));
-  }, [privileges, selectedContract]);
+    }), writesDisabled).map((c) => ({ key: c.key, label: c.label, icon: icons[c.key], enabled: c.enabled }));
+  }, [privileges, selectedContract, writesDisabled]);
 
   const openNewContract = (contractType: ContractType, kind: PanelKind) => {
     setEditing(false);
@@ -456,13 +486,15 @@ export default function ContractsScreen() {
 
   /* ── saves ──────────────────────────────────────────────────────────── */
 
+  /** The banner text, or (CA-15) the toast's detail once the screen has been left. */
   const handleError = (error: unknown, action: string) => {
     const message = permissionMessage(error, action);
-    if (message) { setBanner(message); return; }
-    setBanner(
+    if (message) { reportFailure(message, setBanner); return; }
+    reportFailure(
       error instanceof DataError
         ? `Error: BoP Contract could not be saved correctly. ${error.message}`
         : `Error: BoP Contract could not be saved correctly.`,
+      setBanner,
     );
   };
 
@@ -480,6 +512,7 @@ export default function ContractsScreen() {
      * panel afterwards, in the same `UpdateContext` that clears the spinner (`:7490`). CAPEX,
      * OPEX and Land Lease all close it up front, and the client asked for that order everywhere,
      * so the panel is dismissed here instead — the spinner is never drawn over the panel.
+     * Since D58 the "spinner" is the `WriteStatus` line (no overlay); the order is unchanged.
      */
     setSavingLabel(form.contractType === CONTRACT_TYPE.ProjectRights
       ? MSG.spinnerSavingRightsContract : MSG.spinnerSavingContract);
@@ -571,11 +604,15 @@ export default function ContractsScreen() {
     );
   }
 
-  if (contractsQuery.isLoading || accountsQuery.isLoading) {
-    return <LoadingOverlay mode="inline" label="Loading contracts…" />;
-  }
+  /*
+   * DIVERGENCE (D58): while the first read is in flight the canvas screen showed its own
+   * `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen`), and this app an inline
+   * "Loading contracts…" spinner. Both are gone: the screen chrome (the command bar, every
+   * write command greyed out by `writeCommandsDisabled`) renders with an EMPTY body — no
+   * spinner, and no "No contracts yet" either, because nothing is known yet.
+   */
   // A failed read must not look like a project with no contracts (same state as Capex / Opex).
-  if (contractsQuery.error || accountsQuery.error) {
+  if (!loading && (contractsQuery.error || accountsQuery.error)) {
     return (
       <EmptyState
         title="Cost data is unavailable"
@@ -583,10 +620,6 @@ export default function ContractsScreen() {
       />
     );
   }
-
-  const busy =
-    saveContractMutation.isPending || deleteContractMutation.isPending ||
-    saveTargetMutation.isPending || deleteTargetMutation.isPending;
 
   const currency = currencyCode(project ?? {});
   const errors = contractErrors(form, tree, locale);
@@ -614,13 +647,27 @@ export default function ContractsScreen() {
           </MessageBarBody>
         </MessageBar>
       ) : null}
+      {/*
+        * `cmp_Contracts_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
+        * =locIsContractVisiblePopUpSpinner`, `InformationText: =locContractSpinnerInformationText`):
+        * the blocking spinner with the verbatim `MSG.spinner*` text shows for as long as the write
+        * runs (D60); `writeCommandsDisabled` also stops a second write.
+        */}
+      {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+      <WriteStatus testId="contracts-write-status" label={costWriteStatusLabel({
+        ownLabel: busy ? savingLabel ?? MSG.spinnerSavingContract : null,
+        ownPending: busy, writeInFlight,
+      })} />
 
       {/* `.canvas-contract-commandbar`: the first icon over the cards' radio column (21 Oct 2026). */}
       <div className="canvas-contract-commandbar">
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel="Contract actions" />
       </div>
 
-      {contracts.length === 0 ? (
+      {loading ? (
+        // D60: an inline spinner while loading, and never "No contracts yet" before the data lands.
+        <LoadingOverlay mode="inline" label="Loading contracts…" testId="contracts-loading" />
+      ) : contracts.length === 0 ? (
         <EmptyState
           title="No contracts yet"
           description="Use Add Development Contract, Add Construction Contract or Add Project Rights Contract to create one."
@@ -707,6 +754,7 @@ export default function ContractsScreen() {
                       currency={currency}
                       targets={targets.byContract.get(contract.id) ?? []}
                       selectedTargetId={selectedTargetId}
+                      writesDisabled={writesDisabled}
                       onSelectTarget={setSelectedTargetId}
                       onAddTarget={() => {
                         setSelectedContractId(contract.id);
@@ -1085,11 +1133,12 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedContract) return;
+          const deletedId = selectedContract.id;
           setSavingLabel(MSG.spinnerDeletingContract);
           try {
-            await deleteContractMutation.mutateAsync(selectedContract.id);
-            setSelectedContractId(undefined);
-            setSelectedTargetId(undefined);
+            await deleteContractMutation.mutateAsync(deletedId);
+            // CA-17: a card picked while the delete ran is kept; the deleted one is not.
+            clearDeletedSelection({ contractId: deletedId });
           } catch (error) {
             handleError(error, "delete this contract");
           } finally {
@@ -1112,10 +1161,12 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedTargetId) return;
+          const deletedId = selectedTargetId;
           setSavingLabel(MSG.spinnerDeletingPaymentTarget);
           try {
-            await deleteTargetMutation.mutateAsync(selectedTargetId);
-            setSelectedTargetId(undefined);
+            await deleteTargetMutation.mutateAsync(deletedId);
+            // CA-17: a target picked while the delete ran is kept; the deleted one is not.
+            clearDeletedSelection({ targetId: deletedId });
           } catch (error) {
             handleError(error, "delete this payment target");
           } finally {
@@ -1123,9 +1174,6 @@ export default function ContractsScreen() {
           }
         }}
       />
-
-      {/* The canvas names the operation in the spinner; `savingLabel` carries which one. */}
-      {busy ? <LoadingOverlay label={savingLabel ?? MSG.spinnerSavingContract} /> : null}
     </div>
   );
 }
@@ -1352,13 +1400,15 @@ function DevCoAccountPicker({
 
 /** The body of a contract card: its figures and its payment-target table. */
 function ContractCardBody({
-  contract, currency, targets, selectedTargetId,
+  contract, currency, targets, selectedTargetId, writesDisabled,
   onSelectTarget, onAddTarget, onEditTarget, onDeleteTarget,
 }: {
   contract: BopContract;
   currency: string;
   targets: readonly PaymentTarget[];
   selectedTargetId: string | undefined;
+  /** `writeCommandsDisabled` (D58): Add Period, Edit and Delete grey out while a write runs. */
+  writesDisabled: boolean;
   onSelectTarget: (id: string) => void;
   onAddTarget: () => void;
   onEditTarget: (t: PaymentTarget) => void;
@@ -1451,7 +1501,7 @@ function ContractCardBody({
         <div className={mergeClasses("canvas-contract-targets-bar", commandRow.row)}>
           <Button aria-label={MSG.addPeriod} data-testid={`contracts-add-target-${contract.id}`}
             className={commandRow.command}
-            appearance="transparent" icon={<AddRegular />} onClick={onAddTarget}>
+            appearance="transparent" icon={<AddRegular />} disabled={writesDisabled} onClick={onAddTarget}>
             {MSG.addPeriod}
           </Button>
           <Button
@@ -1460,7 +1510,7 @@ function ContractCardBody({
             className={commandRow.command}
             appearance="transparent"
             icon={<EditRegular />}
-            disabled={!selectedTarget}
+            disabled={!selectedTarget || writesDisabled}
             onClick={() => { if (selectedTarget) onEditTarget(selectedTarget); }}
           >
             {MSG.edit}
@@ -1471,7 +1521,7 @@ function ContractCardBody({
             className={commandRow.command}
             appearance="transparent"
             icon={<DeleteRegular />}
-            disabled={!selectedTarget}
+            disabled={!selectedTarget || writesDisabled}
             onClick={() => { if (selectedTarget) onDeleteTarget(selectedTarget); }}
           >
             {MSG.delete}

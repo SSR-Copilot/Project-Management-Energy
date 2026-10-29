@@ -13,9 +13,12 @@ import {
   contractName, paymentTargetName, devCoCostName, contractCardTitle, panelTitle,
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
+  gatedContractCommands, contractSelectionAfterDelete,
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -650,6 +653,28 @@ describe("contractCommands", () => {
   });
 });
 
+describe("writeCommandsDisabled / gatedContractCommands (D58)", () => {
+  it("UT-CONTRACTS-NOSPIN-001 write commands are enabled only when nothing is loading or pending", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+    expect(writeCommandsDisabled({ loading: true, writePending: true })).toBe(true);
+  });
+
+  it("UT-CONTRACTS-NOSPIN-002 a pending write greys out every command-bar command", () => {
+    const cmds = contractCommands({ canCreate: true, canWrite: true, canDelete: true, hasSelection: true });
+    expect(cmds.every((c) => c.enabled)).toBe(true);
+    const gated = gatedContractCommands(cmds, true);
+    expect(gated.map((c) => c.key)).toEqual(cmds.map((c) => c.key));
+    expect(gated.every((c) => !c.enabled)).toBe(true);
+  });
+
+  it("UT-CONTRACTS-NOSPIN-003 with no write pending the commands keep their own gates", () => {
+    const cmds = contractCommands({ canCreate: true, canWrite: true, canDelete: true, hasSelection: false });
+    expect(gatedContractCommands(cmds, false)).toEqual(cmds);
+  });
+});
+
 describe("sortContracts", () => {
   it("UT-CON-069 sorts by contract type then description", () => {
     const list = [
@@ -794,5 +819,29 @@ describe("contract card body (canvas parity)", () => {
     expect(MSG.closingDate).toBe("Closing Date");
     expect(MSG.contractClosingDate).toBe("Contract Closing Date");
     expect(CONTRACT_TYPE_NAME[CONTRACT_TYPE.Development]).toBe("Development Contract");
+  });
+});
+
+describe("contractSelectionAfterDelete (CA-17)", () => {
+  it("UT-CONTRACTS-SEL-010 the deleted contract's selection is cleared, its target with it", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-1" }, { contractId: "c-1" }))
+      .toEqual({ contractId: undefined, targetId: undefined });
+  });
+
+  it("UT-CONTRACTS-SEL-011 another contract picked while the delete ran is kept", () => {
+    const picked = { contractId: "c-2", targetId: "t-9" };
+    expect(contractSelectionAfterDelete(picked, { contractId: "c-1" })).toEqual(picked);
+  });
+
+  it("UT-CONTRACTS-SEL-012 a deleted payment target is cleared; its contract stays selected", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-1" }, { targetId: "t-1" }))
+      .toEqual({ contractId: "c-1", targetId: undefined });
+  });
+
+  it("UT-CONTRACTS-SEL-013 another target (or none) picked while a target delete ran is kept", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-2" }, { targetId: "t-1" }))
+      .toEqual({ contractId: "c-1", targetId: "t-2" });
+    const none = { contractId: undefined, targetId: undefined };
+    expect(contractSelectionAfterDelete(none, { contractId: "c-1" })).toEqual(none);
   });
 });

@@ -1,4 +1,5 @@
 import { DatasetParser } from "../services/DatasetParser";
+import { setWriteItemDisabled } from "./ActionDropdown";
 /**
  * Handles the DOM manipulation and layout construction of the main hierarchical grid.
  */
@@ -65,6 +66,11 @@ export class GridRenderer {
     _commentTooltipElement = null;
     _boundMonthDropdownWindowClick;
     _onActionTriggered;
+    // CA-16 (this app's port, not vendor): `WriteActionsDisabled` from the last render(). While
+    // true, every menu item that starts a write (Add New Cost, Add Standard Contract, Set as
+    // paid/unpaid, Comments, and the row menu's Edit / Comments / Delete) renders greyed and
+    // disabled, because the screen ignores those actions while a write runs (D58).
+    _writeActionsDisabled = false;
     /**
      * @param container        Root div handed over by index.ts (the PCF container).
      * @param expandedRowIds   Shared (by reference) expand-state set owned by index.ts
@@ -127,7 +133,7 @@ export class GridRenderer {
     }
     /**
      * Full re-render entry point, called by index.ts on every updateView and on
-     * PCF_RE_RENDER. Flow: tear down floating UI -> loading guard -> parse dataset to
+     * PCF_RE_RENDER. Flow: tear down floating UI -> parse dataset to
      * tree (fallback to sample data when empty) -> apply UI-only filters
      * (CostPaidByFilter, ShowEmptyAccounts) -> attach standard contract options ->
      * size columns -> headers (cluster timeline + column row) -> body rows
@@ -146,14 +152,16 @@ export class GridRenderer {
         this.closeMonthDropdown();
         this.closeAddDropdown();
         this.hideCommentTooltip();
+        // CA-16: read before anything can return early, so the shared row menu (which is not
+        // rebuilt per render) always follows the latest state.
+        this._writeActionsDisabled = context.parameters.WriteActionsDisabled?.raw === true;
+        this._actionDropdown.setWriteActionsDisabled?.(this._writeActionsDisabled);
         const dataset = context.parameters.DevexCapexCostSummary;
-        // Canvas datasets arrive asynchronously; rendering before load completes would
-        // briefly flash the sample fallback data, so bail out with a loading message.
-        if (dataset.loading) {
-            this.renderLoading();
-            this._isRendering = false;
-            return;
-        }
+        // DIVERGENCE (D58): the vendor control bailed out here with `renderLoading()`
+        // ("Loading project budget...") while `dataset.loading` was true. In this app the
+        // dataset is built synchronously by `PcfGrid.tsx`, whose `loading` is always false, so
+        // that branch and the method were dead code and were removed with the Cost spinners.
+        // The screen itself renders no grid at all until the cost book has loaded.
         let accounts = DatasetParser.parseDatasetToTree(dataset);
         const showPlanned = context.parameters.ShowPlannedCost?.raw || false;
         // Remembered for the ResizeObserver's column re-fit (it has no context).
@@ -1126,7 +1134,9 @@ export class GridRenderer {
         const standardContracts = subaccount.standardContractOptions;
         const dropdown = document.createElement("div");
         dropdown.className = "pcf-add-dropdown open";
-        const addNewCostButton = this.createAddDropdownButton("add", "Add New Cost", false, () => {
+        // CA-16: every item here starts a write (or opens its editor), so all follow the guard.
+        const writesOff = this._writeActionsDisabled;
+        const addNewCostButton = this.createAddDropdownButton("add", "Add New Cost", writesOff, () => {
             this._onActionTriggered("Add", subaccount.id);
             this.closeAddDropdown();
         });
@@ -1134,13 +1144,13 @@ export class GridRenderer {
         if (standardContracts.length > 1) {
             const wrapper = document.createElement("div");
             wrapper.className = "pcf-add-dropdown-item-wrap";
-            const standardButton = this.createAddDropdownButton("standard", "Add Standard Contract", false);
+            const standardButton = this.createAddDropdownButton("standard", "Add Standard Contract", writesOff);
             standardButton.classList.add("pcf-add-dropdown-parent");
             wrapper.appendChild(standardButton);
             const subMenu = document.createElement("div");
             subMenu.className = "pcf-add-submenu";
             standardContracts.forEach(option => {
-                subMenu.appendChild(this.createAddDropdownButton("standard", option.name, false, () => {
+                subMenu.appendChild(this.createAddDropdownButton("standard", option.name, writesOff, () => {
                     this._onActionTriggered("AddStandardContract", subaccount.id, option.id);
                     this.closeAddDropdown();
                 }));
@@ -1150,7 +1160,7 @@ export class GridRenderer {
         }
         else if (standardContracts.length === 1) {
             const option = standardContracts[0];
-            dropdown.appendChild(this.createAddDropdownButton("standard", "Add Standard Contract", false, () => {
+            dropdown.appendChild(this.createAddDropdownButton("standard", "Add Standard Contract", writesOff, () => {
                 this._onActionTriggered("AddStandardContract", subaccount.id, option.id);
                 this.closeAddDropdown();
             }));
@@ -1177,17 +1187,21 @@ export class GridRenderer {
     }
     /**
      * Shared factory for Add-dropdown items. `onClick` is optional because the submenu
-     * parent item is hover-only; the `disabled` flag is currently always false but kept
-     * for the (shelved) disabled-standard-item design mentioned in showAddDropdown.
+     * parent item is hover-only. `disabled` is true only while a write runs (CA-16, this app's
+     * port; the shelved disabled-standard-item design in showAddDropdown stays unbuilt).
      */
     createAddDropdownButton(icon, label, disabled, onClick) {
         const button = document.createElement("button");
         button.className = "pcf-add-dropdown-item";
-        button.disabled = disabled;
+        setWriteItemDisabled(button, disabled);
         button.innerHTML = `<span class="pcf-add-dropdown-icon">${this.getAddDropdownIcon(icon)}</span><span>${label}</span>`;
         if (onClick) {
             button.onclick = (e) => {
                 e.stopPropagation();
+                // CA-16: belt and braces; a disabled button gets no click in a browser anyway.
+                if (button.disabled) {
+                    return;
+                }
                 onClick();
             };
         }
@@ -1284,8 +1298,13 @@ export class GridRenderer {
                 <span class="pcf-paid-action-icon">${this.getPaidActionIcon()}</span>
                 <span>${isPaid ? "Set as unpaid" : "Set as paid"}</span>
             `;
+            // CA-16: greyed and disabled while a write runs (the screen would ignore it).
+            setWriteItemDisabled(actionButton, this._writeActionsDisabled);
             actionButton.onclick = (ev) => {
                 ev.stopPropagation();
+                if (actionButton.disabled) {
+                    return;
+                }
                 this.closeMonthDropdown();
                 // month is converted to 1-based here because Canvas expects
                 // SelectedCostMonth as the human month number (1..12).
@@ -1302,8 +1321,12 @@ export class GridRenderer {
                 <span class="pcf-paid-action-icon">${this.getCommentActionIcon()}</span>
                 <span>Comments</span>
             `;
+            setWriteItemDisabled(commentButton, this._writeActionsDisabled);
             commentButton.onclick = (ev) => {
                 ev.stopPropagation();
+                if (commentButton.disabled) {
+                    return;
+                }
                 this.closeMonthDropdown();
                 this._onActionTriggered("Comment", contract.id);
             };
@@ -1408,30 +1431,22 @@ export class GridRenderer {
         const event = new CustomEvent("PCF_RE_RENDER");
         this._container.dispatchEvent(event);
     }
-    /** Placeholder while the Canvas dataset is still loading; clears the header too so
-     *  stale column captions from a previous render don't sit above the message. */
-    renderLoading() {
-        this._thead.innerHTML = "";
-        this._tbody.innerHTML = `
-            <tr>
-                <td colspan="100%">
-                    <div style="text-align:center; padding: 40px; color: #9ca3af; font-style:italic;">
-                        Loading project budget...
-                    </div>
-                </td>
-            </tr>
-        `;
-    }
-    /** Shown only when even the test fallback yields nothing (or filters removed
-     *  everything) — points the maker at the missing collection binding. */
+    /**
+     * Shown when there are NO rows after the filters (Show Empty Accounts off, the Cost Paid
+     * By filter, or a category with no accounts) — this is an empty grid, not a load.
+     *
+     * DIVERGENCE (D58): the vendor control drew a spinning `.pcf-spinner` with "Loading data…"
+     * here, which on an empty grid spun forever and told the user something was still coming.
+     * It is now a static message. The text is NEW — the canvas has no empty-gallery text to
+     * transcribe (rule 7). The `.pcf-loading-state` class is kept for its centred layout
+     * because the vendored stylesheet must stay byte-identical to the vendor's
+     * (`styles/pcfCascade.test.ts`); `.pcf-spinner` is simply no longer used.
+     */
     renderEmptyState(colSpan) {
         this._tbody.innerHTML = `
             <tr>
                 <td colspan="${colSpan}">
-                    <div class="pcf-loading-state">
-                        <div class="pcf-spinner" role="status" aria-label="Loading data"></div>
-                        <div>Loading data…</div>
-                    </div>
+                    <div class="pcf-loading-state" role="status" data-testid="capex-grid-empty-state">No costs to display.</div>
                 </td>
             </tr>
         `;

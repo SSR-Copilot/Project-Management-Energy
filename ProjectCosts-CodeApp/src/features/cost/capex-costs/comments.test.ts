@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  COMMENT_TYPE, canSaveComments, commentBreadcrumb, commentCosts, commentDateLabel, commentEditable,
+  COMMENTS_SAVING, COMMENT_TYPE, canSaveComments, commentBreadcrumb, commentCosts,
+  commentDateLabel, commentEditable,
   commentHeading, commentMonthOptions, commentName, commentPanelTitle, commentThreads,
   commentTypeLabel, commentTypeValue, commentYearOptions,
   gridCommentFlags, gridCommentIndicators, paymentDateComplete, paymentDateCommentsAllowed,
   planDeleteRoot, renumberThreads, reopenThread, resolveThread, sortComments,
   threadLatestActivity, truncateComment, type CapexComment,
 } from "./comments";
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 const comment = (over: Partial<CapexComment> = {}): CapexComment => ({
   id: "c1", text: "hello", contractId: "contract-1", costId: null,
@@ -616,5 +619,21 @@ describe("commentName for a reply", () => {
       .toBe("Comment -  - Azure VSB Cloud Flow Service User");
     expect(commentName(1, "Singh Rajput, Shakti (external)"))
       .toBe("Comment - 1 - Singh Rajput, Shakti (external)");
+  });
+});
+
+/** D58 — the comments panel's write guard, which replaced the "Saving comments..." scrim. */
+describe("writeCommandsDisabled for the comments panel (D58)", () => {
+  it("UT-CMT-NOSPIN-001 greys the write controls for the whole commit", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+  });
+
+  it("UT-CMT-NOSPIN-002 greys them while the comments are still loading", () => {
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+  });
+
+  it("UT-CMT-NOSPIN-003 enables them once loaded and idle, and keeps the canvas text", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    expect(COMMENTS_SAVING).toBe("Saving comments...");
   });
 });

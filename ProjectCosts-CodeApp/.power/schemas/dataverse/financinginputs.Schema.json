@@ -1,0 +1,1376 @@
+{
+  "name": "vsb_financinginput",
+  "title": "Financing Inputs",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "x-ms-dataverse-entity": true,
+      "x-ms-dataverse-entityset": "vsb_financinginputs",
+      "x-ms-dataverse-primary-id": "vsb_financinginputid",
+      "x-ms-dataverse-primary-name": "vsb_name",
+      "properties": {
+        "createdby": {
+          "type": "string",
+          "title": "Created By",
+          "x-ms-dataverse-attribute": "createdby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedBy",
+          "x-ms-read-only": true
+        },
+        "createdbyname": {
+          "type": "string",
+          "title": "createdbyname",
+          "x-ms-dataverse-attribute": "createdbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdbyyominame": {
+          "type": "string",
+          "title": "createdbyyominame",
+          "x-ms-dataverse-attribute": "createdbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "createdon": {
+          "type": "string",
+          "title": "Created On",
+          "x-ms-dataverse-attribute": "createdon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "CreatedOn",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfby": {
+          "type": "string",
+          "title": "Created By (Delegate)",
+          "x-ms-dataverse-attribute": "createdonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfbyname": {
+          "type": "string",
+          "title": "createdonbehalfbyname",
+          "x-ms-dataverse-attribute": "createdonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdonbehalfbyyominame": {
+          "type": "string",
+          "title": "createdonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "createdonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "importsequencenumber": {
+          "type": "string",
+          "title": "Import Sequence Number",
+          "x-ms-dataverse-attribute": "importsequencenumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "ImportSequenceNumber"
+        },
+        "modifiedby": {
+          "type": "string",
+          "title": "Modified By",
+          "x-ms-dataverse-attribute": "modifiedby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedBy",
+          "x-ms-read-only": true
+        },
+        "modifiedbyname": {
+          "type": "string",
+          "title": "modifiedbyname",
+          "x-ms-dataverse-attribute": "modifiedbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedbyyominame": {
+          "type": "string",
+          "title": "modifiedbyyominame",
+          "x-ms-dataverse-attribute": "modifiedbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "modifiedon": {
+          "type": "string",
+          "title": "Modified On",
+          "x-ms-dataverse-attribute": "modifiedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ModifiedOn",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfby": {
+          "type": "string",
+          "title": "Modified By (Delegate)",
+          "x-ms-dataverse-attribute": "modifiedonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfbyname": {
+          "type": "string",
+          "title": "modifiedonbehalfbyname",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedonbehalfbyyominame": {
+          "type": "string",
+          "title": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "overriddencreatedon": {
+          "type": "string",
+          "title": "Record Created On",
+          "x-ms-dataverse-attribute": "overriddencreatedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "OverriddenCreatedOn"
+        },
+        "ownerid": {
+          "type": "string",
+          "title": "Owner",
+          "x-ms-dataverse-attribute": "ownerid",
+          "x-ms-dataverse-type": "OwnerType",
+          "x-ms-schema-name": "OwnerId",
+          "required": true
+        },
+        "owneridname": {
+          "type": "string",
+          "title": "owneridname",
+          "x-ms-dataverse-attribute": "owneridname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owneridtype": {
+          "type": "string",
+          "title": "owneridtype",
+          "x-ms-dataverse-attribute": "owneridtype",
+          "x-ms-dataverse-type": "EntityNameType",
+          "x-ms-schema-name": "OwnerIdType",
+          "required": true
+        },
+        "owneridyominame": {
+          "type": "string",
+          "title": "owneridyominame",
+          "x-ms-dataverse-attribute": "owneridyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningbusinessunit": {
+          "type": "string",
+          "title": "Owning Business Unit",
+          "x-ms-dataverse-attribute": "owningbusinessunit",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningBusinessUnit"
+        },
+        "owningbusinessunitname": {
+          "type": "string",
+          "title": "owningbusinessunitname",
+          "x-ms-dataverse-attribute": "owningbusinessunitname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwningBusinessUnitName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningteam": {
+          "type": "string",
+          "title": "Owning Team",
+          "x-ms-dataverse-attribute": "owningteam",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningTeam",
+          "x-ms-read-only": true
+        },
+        "owninguser": {
+          "type": "string",
+          "title": "Owning User",
+          "x-ms-dataverse-attribute": "owninguser",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningUser",
+          "x-ms-read-only": true
+        },
+        "statecode": {
+          "type": "string",
+          "title": "Status",
+          "x-ms-dataverse-attribute": "statecode",
+          "x-ms-dataverse-type": "StateType",
+          "x-ms-schema-name": "statecode",
+          "required": true,
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "7e6ca590-9b02-f011-bae4-000d3a2b66a0",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status",
+          "x-ms-optionSetType": "State"
+        },
+        "statecodename": {
+          "type": "string",
+          "title": "statecodename",
+          "x-ms-dataverse-attribute": "statecodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statecodeName",
+          "x-ms-read-only": true
+        },
+        "statuscode": {
+          "type": "string",
+          "title": "Status Reason",
+          "x-ms-dataverse-attribute": "statuscode",
+          "x-ms-dataverse-type": "StatusType",
+          "x-ms-schema-name": "statuscode",
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            1,
+            2
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "886ca590-9b02-f011-bae4-000d3a2b66a0",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status Reason",
+          "x-ms-optionSetType": "Status"
+        },
+        "statuscodename": {
+          "type": "string",
+          "title": "statuscodename",
+          "x-ms-dataverse-attribute": "statuscodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statuscodeName",
+          "x-ms-read-only": true
+        },
+        "timezoneruleversionnumber": {
+          "type": "string",
+          "title": "Time Zone Rule Version Number",
+          "x-ms-dataverse-attribute": "timezoneruleversionnumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "TimeZoneRuleVersionNumber"
+        },
+        "utcconversiontimezonecode": {
+          "type": "string",
+          "title": "UTC Conversion Time Zone Code",
+          "x-ms-dataverse-attribute": "utcconversiontimezonecode",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "UTCConversionTimeZoneCode"
+        },
+        "versionnumber": {
+          "type": "string",
+          "title": "Version Number",
+          "x-ms-dataverse-attribute": "versionnumber",
+          "x-ms-dataverse-type": "BigIntType",
+          "x-ms-schema-name": "VersionNumber",
+          "x-ms-read-only": true
+        },
+        "vsb_bank": {
+          "type": "string",
+          "title": "Bank",
+          "x-ms-dataverse-attribute": "vsb_bank",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_Bank",
+          "maxLength": 100
+        },
+        "vsb_bankmargin": {
+          "type": "string",
+          "title": "Bank Margin [%]",
+          "x-ms-dataverse-attribute": "vsb_bankmargin",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_BankMargin"
+        },
+        "vsb_bankmarginconstructionphase": {
+          "type": "string",
+          "title": "Bank Margin - Construction Phase [%]",
+          "x-ms-dataverse-attribute": "vsb_bankmarginconstructionphase",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_BankMarginConstructionPhase"
+        },
+        "vsb_bankmarginoperationalphase": {
+          "type": "string",
+          "title": "Bank Margin - Operational Phase [%]",
+          "x-ms-dataverse-attribute": "vsb_bankmarginoperationalphase",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_BankMarginOperationalPhase"
+        },
+        "vsb_bankrate": {
+          "type": "string",
+          "title": "Bank Rate",
+          "x-ms-dataverse-attribute": "vsb_bankrate",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_BankRate"
+        },
+        "vsb_baserate": {
+          "type": "string",
+          "title": "Base Rate",
+          "x-ms-dataverse-attribute": "vsb_baserate",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_BaseRate",
+          "enum": [
+            "Euribor 1M",
+            "Euribor 3M",
+            "Euribor 6M",
+            "Wibor 1M",
+            "Wibor 3M",
+            "Wibor 6M"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001,
+            952850002,
+            952850003,
+            952850004,
+            952850005
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "5ba95363-4d14-f011-998a-6045bd882926",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Base Rate Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_baseratename": {
+          "type": "string",
+          "title": "vsb_baseratename",
+          "x-ms-dataverse-attribute": "vsb_baseratename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_baserateName",
+          "x-ms-read-only": true
+        },
+        "vsb_commitmentfee": {
+          "type": "string",
+          "title": "Commitment Fee",
+          "x-ms-dataverse-attribute": "vsb_commitmentfee",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_CommitmentFee",
+          "enum": [
+            "Percentage of Margin",
+            "Percentage"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "e3ffab19-3e2a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Commitment Fee Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_commitmentfeename": {
+          "type": "string",
+          "title": "vsb_commitmentfeename",
+          "x-ms-dataverse-attribute": "vsb_commitmentfeename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_commitmentfeeName",
+          "x-ms-read-only": true
+        },
+        "vsb_commitmentfeeperiodmonth": {
+          "type": "string",
+          "title": "Commitment Fee Period (Month)",
+          "x-ms-dataverse-attribute": "vsb_commitmentfeeperiodmonth",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_CommitmentFeePeriodMonth"
+        },
+        "vsb_commitmentfeeperiodyear": {
+          "type": "string",
+          "title": "Commitment Fee Period (Year)",
+          "x-ms-dataverse-attribute": "vsb_commitmentfeeperiodyear",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_CommitmentFeePeriodYear"
+        },
+        "vsb_commitmentfeevalue": {
+          "type": "string",
+          "title": "Commitment Fee Value",
+          "x-ms-dataverse-attribute": "vsb_commitmentfeevalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_CommitmentFeeValue"
+        },
+        "vsb_costofguarantee": {
+          "type": "string",
+          "title": "Cost of Guarantee [%]",
+          "x-ms-dataverse-attribute": "vsb_costofguarantee",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_CostofGuarantee"
+        },
+        "vsb_costsofdecommissioning": {
+          "type": "string",
+          "title": "Costs of Decommissioning",
+          "x-ms-dataverse-attribute": "vsb_costsofdecommissioning",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_CostsofDecommissioning",
+          "enum": [
+            "Per Turbine",
+            "Total"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d4d0fed6-1666-f011-bec2-7c1e52130792",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Costs of Decommissioning",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_costsofdecommissioningname": {
+          "type": "string",
+          "title": "vsb_costsofdecommissioningname",
+          "x-ms-dataverse-attribute": "vsb_costsofdecommissioningname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_costsofdecommissioningName",
+          "x-ms-read-only": true
+        },
+        "vsb_costsofdecommissioningvalue": {
+          "type": "string",
+          "title": "Costs of Decommissioning Value",
+          "x-ms-dataverse-attribute": "vsb_costsofdecommissioningvalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_CostsofDecommissioningValue"
+        },
+        "vsb_dateofexpiry": {
+          "type": "string",
+          "title": "Date of Expiry ",
+          "x-ms-dataverse-attribute": "vsb_dateofexpiry",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "vsb_DateofExpiry"
+        },
+        "vsb_dateofissue": {
+          "type": "string",
+          "title": "Date of Issue",
+          "x-ms-dataverse-attribute": "vsb_dateofissue",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "vsb_DateofIssue"
+        },
+        "vsb_decommissioningstandardassumptionjson": {
+          "type": "string",
+          "title": "Decommissioning Standard Assumption JSON",
+          "x-ms-dataverse-attribute": "vsb_decommissioningstandardassumptionjson",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "vsb_DecommissioningStandardAssumptionJSON",
+          "maxLength": 2000
+        },
+        "vsb_drawdown": {
+          "type": "string",
+          "title": "Drawdown",
+          "x-ms-dataverse-attribute": "vsb_drawdown",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_Drawdown",
+          "enum": [
+            "Equity First",
+            "Pro Rata"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "c9968d91-352a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Drawdown Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_drawdownname": {
+          "type": "string",
+          "title": "vsb_drawdownname",
+          "x-ms-dataverse-attribute": "vsb_drawdownname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_drawdownName",
+          "x-ms-read-only": true
+        },
+        "vsb_dscrcontracted": {
+          "type": "string",
+          "title": "DSCR Contracted",
+          "x-ms-dataverse-attribute": "vsb_dscrcontracted",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_DSCRContracted",
+          "maxLength": 100
+        },
+        "vsb_dscrcontracteddecimal": {
+          "type": "string",
+          "title": "DSCR Contracted Decimal",
+          "x-ms-dataverse-attribute": "vsb_dscrcontracteddecimal",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_DSCRContractedDecimal"
+        },
+        "vsb_dscruncontracted": {
+          "type": "string",
+          "title": "DSCR Uncontracted",
+          "x-ms-dataverse-attribute": "vsb_dscruncontracted",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_DSCRUncontracted",
+          "maxLength": 100
+        },
+        "vsb_dscruncontracteddecimal": {
+          "type": "string",
+          "title": "DSCR Uncontracted Decimal",
+          "x-ms-dataverse-attribute": "vsb_dscruncontracteddecimal",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_DSCRUncontractedDecimal"
+        },
+        "vsb_dsradrsfstandardassumptionsjson": {
+          "type": "string",
+          "title": "DSRA/DRSF Standard Assumptions JSON",
+          "x-ms-dataverse-attribute": "vsb_dsradrsfstandardassumptionsjson",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_DSRADRSFStandardAssumptionsJSON",
+          "maxLength": 4000
+        },
+        "vsb_dsradsrforiginalstatusactive": {
+          "type": "string",
+          "title": "DSRA/DSRF Original Status Active?",
+          "x-ms-dataverse-attribute": "vsb_dsradsrforiginalstatusactive",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_DSRADSRFOriginalStatusActive",
+          "enum": [
+            "Yes",
+            "No"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d5846704-e3dc-f011-8544-7c1e525250c9",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "DSRA/DSRF Original Status Active?",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_dsradsrforiginalstatusactivename": {
+          "type": "string",
+          "title": "vsb_dsradsrforiginalstatusactivename",
+          "x-ms-dataverse-attribute": "vsb_dsradsrforiginalstatusactivename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_dsradsrforiginalstatusactiveName",
+          "x-ms-read-only": true
+        },
+        "vsb_durationoffuturedebtservicemmyy": {
+          "type": "string",
+          "title": "Duration of future debt service (MMYY)",
+          "x-ms-dataverse-attribute": "vsb_durationoffuturedebtservicemmyy",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_DurationoffuturedebtserviceMMYY",
+          "maxLength": 100
+        },
+        "vsb_durationofsaving": {
+          "type": "string",
+          "title": "Duration of Saving (MMYY)",
+          "x-ms-dataverse-attribute": "vsb_durationofsaving",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_DurationofSaving",
+          "maxLength": 100
+        },
+        "vsb_endofdebtservicesavings": {
+          "type": "string",
+          "title": "End of debt service savings",
+          "x-ms-dataverse-attribute": "vsb_endofdebtservicesavings",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "vsb_Endofdebtservicesavings"
+        },
+        "vsb_energyyielddebtsizing": {
+          "type": "string",
+          "title": "Energy Yield (Debt Sizing)",
+          "x-ms-dataverse-attribute": "vsb_energyyielddebtsizing",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_EnergyYieldDebtSizing",
+          "enum": [
+            "p50",
+            "p75",
+            "p90"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001,
+            952850002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "a416c51a-362a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Energy Yield (Debt Sizing)",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_energyyielddebtsizingname": {
+          "type": "string",
+          "title": "vsb_energyyielddebtsizingname",
+          "x-ms-dataverse-attribute": "vsb_energyyielddebtsizingname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_energyyielddebtsizingName",
+          "x-ms-read-only": true
+        },
+        "vsb_financialclose": {
+          "type": "string",
+          "title": "Financial Close",
+          "x-ms-dataverse-attribute": "vsb_financialclose",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "vsb_FinancialClose"
+        },
+        "vsb_financingcategory": {
+          "type": "string",
+          "title": "Financing Category",
+          "x-ms-dataverse-attribute": "vsb_financingcategory",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "vsb_FinancingCategory"
+        },
+        "vsb_financingcategoryname": {
+          "type": "string",
+          "title": "vsb_financingcategoryname",
+          "x-ms-dataverse-attribute": "vsb_financingcategoryname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_FinancingCategoryName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "vsb_financinginputid": {
+          "type": "string",
+          "title": "Financing Input",
+          "x-ms-dataverse-attribute": "vsb_financinginputid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "vsb_FinancingInputId",
+          "x-ms-dataverse-primary-id": true,
+          "required": true,
+          "x-ms-keyType": "primary"
+        },
+        "vsb_fixedamount": {
+          "type": "string",
+          "title": "Fixed Amount ",
+          "x-ms-dataverse-attribute": "vsb_fixedamount",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_FixedAmount",
+          "enum": [
+            "% of Capex",
+            "Fixed Value"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "aa62d3ee-3a2a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Fixed Amount Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_fixedamountname": {
+          "type": "string",
+          "title": "vsb_fixedamountname",
+          "x-ms-dataverse-attribute": "vsb_fixedamountname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_fixedamountName",
+          "x-ms-read-only": true
+        },
+        "vsb_fixedamountvalue": {
+          "type": "string",
+          "title": "Fixed Amount Value",
+          "x-ms-dataverse-attribute": "vsb_fixedamountvalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_FixedAmountValue"
+        },
+        "vsb_fixedinterestratemonth": {
+          "type": "string",
+          "title": "Fixed Interest Rate (Month)",
+          "x-ms-dataverse-attribute": "vsb_fixedinterestratemonth",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_FixedInterestRateMonth"
+        },
+        "vsb_fixedinterestrateyear": {
+          "type": "string",
+          "title": "Fixed Interest Rate (Year)",
+          "x-ms-dataverse-attribute": "vsb_fixedinterestrateyear",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_FixedInterestRateYear"
+        },
+        "vsb_freeequity": {
+          "type": "string",
+          "title": "Free Equity",
+          "x-ms-dataverse-attribute": "vsb_freeequity",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_FreeEquity",
+          "enum": [
+            "Percentage",
+            "Fixed Value"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "71cf94f1-4c14-f011-998a-7c1e525f5dcd",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Free Equity Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_freeequityname": {
+          "type": "string",
+          "title": "vsb_freeequityname",
+          "x-ms-dataverse-attribute": "vsb_freeequityname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_freeequityName",
+          "x-ms-read-only": true
+        },
+        "vsb_freeequityvalue": {
+          "type": "string",
+          "title": "Free Equity Value",
+          "x-ms-dataverse-attribute": "vsb_freeequityvalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_FreeEquityValue"
+        },
+        "vsb_frequencyofrepayment": {
+          "type": "string",
+          "title": "Frequency of Repayment",
+          "x-ms-dataverse-attribute": "vsb_frequencyofrepayment",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_FrequencyofRepayment"
+        },
+        "vsb_gearing": {
+          "type": "string",
+          "title": "Gearing",
+          "x-ms-dataverse-attribute": "vsb_gearing",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_Gearing",
+          "enum": [
+            "Debt Sizing",
+            "Fixed Amount"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "9ef8a9c4-362a-f011-8c4d-000d3a441b1c",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Gearing Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_gearingname": {
+          "type": "string",
+          "title": "vsb_gearingname",
+          "x-ms-dataverse-attribute": "vsb_gearingname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_gearingName",
+          "x-ms-read-only": true
+        },
+        "vsb_hedging": {
+          "type": "string",
+          "title": "Hedging [%]",
+          "x-ms-dataverse-attribute": "vsb_hedging",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_Hedging"
+        },
+        "vsb_isdeactivatedbybutton": {
+          "type": "string",
+          "title": "Is Deactivated By Button",
+          "x-ms-dataverse-attribute": "vsb_isdeactivatedbybutton",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_IsDeactivatedByButton",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8e216011-3920-f011-998a-7c1e5262011f",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Is Deactivated By Button",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_isdeactivatedbybuttonname": {
+          "type": "string",
+          "title": "vsb_isdeactivatedbybuttonname",
+          "x-ms-dataverse-attribute": "vsb_isdeactivatedbybuttonname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_isdeactivatedbybuttonName",
+          "x-ms-read-only": true
+        },
+        "vsb_isfolded": {
+          "type": "string",
+          "title": "IsFolded",
+          "x-ms-dataverse-attribute": "vsb_isfolded",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_IsFolded",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "fb811fba-5547-f011-8779-7c1e5283b769",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "IsFolded",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_isfoldedname": {
+          "type": "string",
+          "title": "vsb_isfoldedname",
+          "x-ms-dataverse-attribute": "vsb_isfoldedname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_isfoldedName",
+          "x-ms-read-only": true
+        },
+        "vsb_isstandardvalue": {
+          "type": "string",
+          "title": "Is Standard Value",
+          "x-ms-dataverse-attribute": "vsb_isstandardvalue",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_IsStandardValue",
+          "maxLength": 4000
+        },
+        "vsb_kfwtranche": {
+          "type": "string",
+          "title": "KfW Tranche",
+          "x-ms-dataverse-attribute": "vsb_kfwtranche",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_KfWTranche",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8c7bdfd0-342a-f011-8c4d-000d3a441b1c",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "KfW Tranche",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_kfwtranchename": {
+          "type": "string",
+          "title": "vsb_kfwtranchename",
+          "x-ms-dataverse-attribute": "vsb_kfwtranchename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_kfwtrancheName",
+          "x-ms-read-only": true
+        },
+        "vsb_kfwtranchevalue": {
+          "type": "string",
+          "title": "KfW-Tranche Value",
+          "x-ms-dataverse-attribute": "vsb_kfwtranchevalue",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_KfWTrancheValue",
+          "maxLength": 100
+        },
+        "vsb_margin": {
+          "type": "string",
+          "title": "Margin [%]",
+          "x-ms-dataverse-attribute": "vsb_margin",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_Margin"
+        },
+        "vsb_name": {
+          "type": "string",
+          "title": "Name",
+          "x-ms-dataverse-attribute": "vsb_name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_Name",
+          "x-ms-dataverse-primary-name": true,
+          "required": true,
+          "maxLength": 850
+        },
+        "vsb_otherbankname": {
+          "type": "string",
+          "title": "Other Bank Name",
+          "x-ms-dataverse-attribute": "vsb_otherbankname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_OtherBankName",
+          "maxLength": 100
+        },
+        "vsb_percentageoffuturedebtservice": {
+          "type": "string",
+          "title": "Percentage of future debt service [%]",
+          "x-ms-dataverse-attribute": "vsb_percentageoffuturedebtservice",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_Percentageoffuturedebtservice"
+        },
+        "vsb_project": {
+          "type": "string",
+          "title": "Project",
+          "x-ms-dataverse-attribute": "vsb_project",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "vsb_Project"
+        },
+        "vsb_projectname": {
+          "type": "string",
+          "title": "vsb_projectname",
+          "x-ms-dataverse-attribute": "vsb_projectname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_ProjectName",
+          "x-ms-read-only": true,
+          "maxLength": 8
+        },
+        "vsb_repaymentprofile": {
+          "type": "string",
+          "title": "Repayment Profile",
+          "x-ms-dataverse-attribute": "vsb_repaymentprofile",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_RepaymentProfile",
+          "enum": [
+            "Straight Line",
+            "DSCR Sculpted",
+            "Individual"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001,
+            952850002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "a2f9b77c-3c2a-f011-8c4d-000d3a441b1c",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Repayment Profile",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_repaymentprofilename": {
+          "type": "string",
+          "title": "vsb_repaymentprofilename",
+          "x-ms-dataverse-attribute": "vsb_repaymentprofilename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_repaymentprofileName",
+          "x-ms-read-only": true
+        },
+        "vsb_seniordebtstandardassumptionjson": {
+          "type": "string",
+          "title": "Senior Debt Standard Assumption JSON",
+          "x-ms-dataverse-attribute": "vsb_seniordebtstandardassumptionjson",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_SeniorDebtStandardAssumptionJSON",
+          "maxLength": 4000
+        },
+        "vsb_shareholderloanvalue": {
+          "type": "string",
+          "title": "Shareholder Loan Value",
+          "x-ms-dataverse-attribute": "vsb_shareholderloanvalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_ShareholderLoanValue"
+        },
+        "vsb_spotcurvedebtsizing": {
+          "type": "string",
+          "title": "Spot Curve (Debt Sizing)",
+          "x-ms-dataverse-attribute": "vsb_spotcurvedebtsizing",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_SpotCurveDebtSizing",
+          "enum": [
+            "Low Curve",
+            "Average Low/Central Curve",
+            "Central Curve"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001,
+            952850002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "68735895-362a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Spot Curve Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_spotcurvedebtsizingname": {
+          "type": "string",
+          "title": "vsb_spotcurvedebtsizingname",
+          "x-ms-dataverse-attribute": "vsb_spotcurvedebtsizingname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_spotcurvedebtsizingName",
+          "x-ms-read-only": true
+        },
+        "vsb_startdateofsaving": {
+          "type": "string",
+          "title": "Start Date of Saving",
+          "x-ms-dataverse-attribute": "vsb_startdateofsaving",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "vsb_StartDateofSaving"
+        },
+        "vsb_startrepaymentmonth": {
+          "type": "string",
+          "title": "Start Repayment (Month)",
+          "x-ms-dataverse-attribute": "vsb_startrepaymentmonth",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_StartRepaymentMonth"
+        },
+        "vsb_startrepaymentyear": {
+          "type": "string",
+          "title": "Start Repayment (Year)",
+          "x-ms-dataverse-attribute": "vsb_startrepaymentyear",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_StartRepaymentYear"
+        },
+        "vsb_stepupbankmargin": {
+          "type": "string",
+          "title": "Step Up Bank Margin",
+          "x-ms-dataverse-attribute": "vsb_stepupbankmargin",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_StepUpBankMargin",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "0c54be55-4b2a-f011-8c4d-7c1e525f5dcd",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Step Up Bank Margin",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_stepupbankmarginname": {
+          "type": "string",
+          "title": "vsb_stepupbankmarginname",
+          "x-ms-dataverse-attribute": "vsb_stepupbankmarginname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_stepupbankmarginName",
+          "x-ms-read-only": true
+        },
+        "vsb_swapafterfixedperiod": {
+          "type": "string",
+          "title": "Swap After Fixed Period",
+          "x-ms-dataverse-attribute": "vsb_swapafterfixedperiod",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_SwapAfterFixedPeriod",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "a90dbf7a-4b2a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Swap After Fixed Period",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_swapafterfixedperiodname": {
+          "type": "string",
+          "title": "vsb_swapafterfixedperiodname",
+          "x-ms-dataverse-attribute": "vsb_swapafterfixedperiodname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_swapafterfixedperiodName",
+          "x-ms-read-only": true
+        },
+        "vsb_swapmargin": {
+          "type": "string",
+          "title": "Swap Margin [%]",
+          "x-ms-dataverse-attribute": "vsb_swapmargin",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_SwapMargin"
+        },
+        "vsb_swaprate": {
+          "type": "string",
+          "title": "Swap Rate",
+          "x-ms-dataverse-attribute": "vsb_swaprate",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_SwapRate"
+        },
+        "vsb_tenordurationmonth": {
+          "type": "string",
+          "title": "Tenor Duration Month",
+          "x-ms-dataverse-attribute": "vsb_tenordurationmonth",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_TenorDurationMonth"
+        },
+        "vsb_tenordurationyear": {
+          "type": "string",
+          "title": "Tenor Duration Year",
+          "x-ms-dataverse-attribute": "vsb_tenordurationyear",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "vsb_TenorDurationYear"
+        },
+        "vsb_trackstatusactive": {
+          "type": "string",
+          "title": "Track Status Active?",
+          "x-ms-dataverse-attribute": "vsb_trackstatusactive",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_TrackStatusActive",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "6701495b-984a-f011-8779-7ced8d1451c5",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Track Status Active?",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_trackstatusactivename": {
+          "type": "string",
+          "title": "vsb_trackstatusactivename",
+          "x-ms-dataverse-attribute": "vsb_trackstatusactivename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_trackstatusactiveName",
+          "x-ms-read-only": true
+        },
+        "vsb_tranchestatus": {
+          "type": "string",
+          "title": "Tranche Status",
+          "x-ms-dataverse-attribute": "vsb_tranchestatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_TrancheStatus",
+          "enum": [
+            "Standard Assumption",
+            "Term Sheet",
+            "Credit Agreement"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001,
+            952850002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "f24ad221-342a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Senior Debt Tranche Status ",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_tranchestatusname": {
+          "type": "string",
+          "title": "vsb_tranchestatusname",
+          "x-ms-dataverse-attribute": "vsb_tranchestatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_tranchestatusName",
+          "x-ms-read-only": true
+        },
+        "vsb_typedsradrsf": {
+          "type": "string",
+          "title": "Type (DSRA/DRSF)",
+          "x-ms-dataverse-attribute": "vsb_typedsradrsf",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_TypeDSRADRSF",
+          "enum": [
+            "DSRF",
+            "DSRA"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "6c89131c-1ed4-f011-8543-6045bd9b2eb9",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Type (DSRA/DSRF)",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_typedsradrsfname": {
+          "type": "string",
+          "title": "vsb_typedsradrsfname",
+          "x-ms-dataverse-attribute": "vsb_typedsradrsfname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_typedsradrsfName",
+          "x-ms-read-only": true
+        },
+        "vsb_uniquekeystring": {
+          "type": "string",
+          "title": "UniqueKeyString",
+          "x-ms-dataverse-attribute": "vsb_uniquekeystring",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_UniqueKeyString",
+          "maxLength": 250
+        },
+        "vsb_upfrontfee": {
+          "type": "string",
+          "title": "Upfront Fee",
+          "x-ms-dataverse-attribute": "vsb_upfrontfee",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_UpfrontFee",
+          "enum": [
+            "Percentage of Debt",
+            "Fixed"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "c0f2cda7-3d2a-f011-8c4d-7c1e52737837",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Upfront Fee",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_upfrontfeename": {
+          "type": "string",
+          "title": "vsb_upfrontfeename",
+          "x-ms-dataverse-attribute": "vsb_upfrontfeename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_upfrontfeeName",
+          "x-ms-read-only": true
+        },
+        "vsb_upfrontfeevalue": {
+          "type": "string",
+          "title": "Upfront Fee Value",
+          "x-ms-dataverse-attribute": "vsb_upfrontfeevalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_UpfrontFeeValue"
+        },
+        "vsb_vatfacilityamount": {
+          "type": "string",
+          "title": "VAT Facility Amount",
+          "x-ms-dataverse-attribute": "vsb_vatfacilityamount",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_VATFacilityAmount",
+          "enum": [
+            "Calculated",
+            "Individual"
+          ],
+          "x-ms-enum-values": [
+            952850000,
+            952850001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "4ec0eba6-4d14-f011-998a-6045bd977c0d",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "VAT Facility Amount Options",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_vatfacilityamountname": {
+          "type": "string",
+          "title": "vsb_vatfacilityamountname",
+          "x-ms-dataverse-attribute": "vsb_vatfacilityamountname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_vatfacilityamountName",
+          "x-ms-read-only": true
+        },
+        "vsb_vatfacilityamountvalue": {
+          "type": "string",
+          "title": "VAT Facility Amount Value",
+          "x-ms-dataverse-attribute": "vsb_vatfacilityamountvalue",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_VATFacilityAmountValue"
+        }
+      },
+      "required": [
+        "createdbyyominame",
+        "createdonbehalfbyyominame",
+        "modifiedbyyominame",
+        "modifiedonbehalfbyyominame",
+        "ownerid",
+        "owneridname",
+        "owneridtype",
+        "owneridyominame",
+        "owningbusinessunitname",
+        "statecode",
+        "vsb_financinginputid",
+        "vsb_name"
+      ]
+    }
+  }
+}

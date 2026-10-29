@@ -1,0 +1,52 @@
+{
+  "name": "UpsertMultiple",
+  "title": "UpsertMultiple",
+  "type": "Microsoft.PowerApps/dataverseOperation",
+  "properties": {
+    "displayName": "UpsertMultiple",
+    "swagger": {
+      "swagger": "2.0",
+      "info": {
+        "title": "UpsertMultiple",
+        "version": "1.0"
+      },
+      "basePath": "/api/data/v9.2",
+      "paths": {
+        "/{entitySetName}/Microsoft.Dynamics.CRM.UpsertMultiple": {
+          "post": {
+            "operationId": "UpsertMultiple",
+            "parameters": [
+              {
+                "name": "entitySetName",
+                "in": "path",
+                "required": true,
+                "type": "string",
+                "format": "dataverse-entity-set-name",
+                "x-ms-dataverse-type": "StringType",
+                "x-ms-csdl-type": "Edm.String"
+              },
+              {
+                "name": "Targets",
+                "in": "body",
+                "required": true,
+                "type": "array",
+                "x-ms-dataverse-type": "LookupCollectionType",
+                "x-ms-csdl-type": "Collection(mscrm.crmbaseentity)"
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Success",
+                "schema": {
+                  "type": "object",
+                  "x-ms-dataverse-type": "LookupType",
+                  "x-ms-csdl-type": "mscrm.UpsertMultipleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

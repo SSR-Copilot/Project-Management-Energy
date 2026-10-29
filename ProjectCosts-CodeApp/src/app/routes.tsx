@@ -74,7 +74,12 @@ export function CostProjectGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
-  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
+  /*
+   * No canvas control; code-app route spinner. D58 had turned the Cost gate's "Loading project…"
+   * spinner into an empty placeholder, which left a blank screen (D60 restores it). The gate still
+   * holds back every Cost screen (and its queries) until the session and the project are loaded.
+   */
+  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" testId="cost-project-loading" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open Costs for a selected project." action={action} />;
   if (!projectId) return <EmptyState title="Select a project to open Costs"
@@ -83,7 +88,17 @@ export function CostProjectGate() {
     description="Return to the project list and try again." action={action} />;
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"
     description="The project could not be found or you do not have access to it." action={action} />;
-  return <Outlet />;
+  /*
+   * No canvas control; code-app route spinner. The Cost subtree keeps its own Suspense boundary,
+   * so the lazy Cost chunk (Add Cost from Table, Contracts, ...) shows a spinner while it downloads
+   * instead of the blank screen D58's empty fallback left (D60). Same text as the shared one
+   * (`AppRoutes`).
+   */
+  return (
+    <Suspense fallback={<LoadingOverlay mode="inline" label="Loading screen…" testId="cost-screen-loading" />}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 /**

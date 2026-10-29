@@ -24,7 +24,16 @@ vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   },
 }));
 
-const { saveComment } = await import("./comments");
+/**
+ * The SDK client `deleteRecord` (`./client`) talks to. Like the real one it never throws: a
+ * refusal is `{ success: false }`, which the generated `delete()` discards (CA-18).
+ */
+const deleteRecordAsync = vi.fn(async (_table: string, _id: string): Promise<unknown> => ({ success: true, data: undefined }));
+vi.mock("@microsoft/power-apps/data", () => ({
+  getClient: () => ({ deleteRecordAsync: (t: string, id: string) => deleteRecordAsync(t, id) }),
+}));
+
+const { saveComment, deleteComment } = await import("./comments");
 const { COMMENT_TYPE } = await import("@/features/cost/capex-costs/comments");
 
 const base = {
@@ -156,5 +165,21 @@ describe("saveComment — edit", () => {
     // An update must not try to re-own the row.
     expect(updatedPayload()["owningbusinessunit@odata.bind"]).toBeUndefined();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteComment (CA-18, rule 14)", () => {
+  beforeEach(() => { deleteRecordAsync.mockClear(); });
+
+  it("UT-CMTDEL-005 deletes the row from vsb_capexcommentses and resolves on success", async () => {
+    await expect(deleteComment("c1")).resolves.toBeUndefined();
+    expect(deleteRecordAsync).toHaveBeenCalledWith("vsb_capexcommentses", "c1");
+  });
+
+  it("UT-CMTDEL-006 REJECTS when Dataverse refuses, instead of resolving like a success", async () => {
+    deleteRecordAsync.mockResolvedValueOnce({
+      success: false, data: undefined, error: { message: "Principal user is missing prvDeletevsb_capexcomments", status: 403 },
+    });
+    await expect(deleteComment("c1")).rejects.toThrow(/prvDeletevsb_capexcomments/);
   });
 });

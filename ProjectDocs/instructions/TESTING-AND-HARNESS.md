@@ -40,9 +40,17 @@ the full run and passed on their own. There are 84 data sources (`check:power`: 
 0 problems). `typecheck`, `build`, and `lint` (warnings only) are all clean. knip lists 12 unused
 files, as expected (D52). The run on `2c7e6aa` itself had 4,293 tests. The previous recorded run
 was 26 Oct on `fceb336`: 3,998 tests in 148 files, 81 data sources.
-UT-ADGATE-910 (`features/admin/admin-gates-approvals/Screen.test.tsx`) is a known timing flake
-under a full run and passes when its file runs alone. A run that fails only on it is aborted,
-not red: re-run that file, then run `npm run build`, because the aborted verify skipped it. (`ProjectDocs/app-docs/APP-README.md` still says "247 tests" and
+UT-ADGATE-910 (`features/admin/admin-gates-approvals/Screen.test.tsx`) was a known timing flake
+under a full run. It is **fixed (29 Oct 2026, uncommitted; `01-BUGS-FOUND.md` CA-19)**.
+
+The cause: in jsdom, tabster never activates a modalizer for a Fluent dialog that has just opened.
+250 ms later it marks every open dialog and drawer `aria-hidden` for good. So a default
+(accessible-only) role query on an open dialog works only if it runs within those 250 ms.
+
+In a jsdom screen test, query an open Fluent dialog or drawer with `{ hidden: true }`, as
+UT-ADGATE-905/906/910/914/915/916 do. Do not raise the timeout. If a full run still fails on a
+single jsdom timing test, the run is aborted, not red. Re-run that file, then run
+`npm run build`, because the aborted verify skipped it. (`ProjectDocs/app-docs/APP-README.md` still says "247 tests" and
 `appId: null` — both stale; see `ProjectDocs/instructions/PROJECT-MAP.md` on doc drift. Prefer a fresh run over
 any number quoted in a doc, including this one, if it matters to the task at hand.)
 

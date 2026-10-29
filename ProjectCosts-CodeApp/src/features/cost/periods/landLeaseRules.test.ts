@@ -28,6 +28,7 @@ import {
   securedCell, allocationCell, otpCell, inflationProfileCell, toLeaseGridRow,
   isStandardPeriodName, isStandardPeriodNameLower,
   toggleLeaseSelection, toggleLeaseSelectionCanvasParity, NO_LEASE_SELECTION,
+  leaseSelectionAfterWrite,
   writesContractHeader, headerEditable, landLeaseCostName, leasePanelTitle, nextPeriodName,
   resolveStartDate, resetStartDateVisible, resetStartDate,
   defaultDurationMonths, defaultDurationYears, defaultAggregation, defaultCurrencyCode,
@@ -48,6 +49,7 @@ import {
   buildCostPayload, buildPeriodPayload, buildAllocationPayload, planLeaseSave, bindParent,
   planLeaseDelete, deleteDialog,
   isStandardLocked, leaseCommands, leaseCommandGates,
+  guardLeaseCommands,
   leaseAssumptionQuery, mapAssumptionPeriod, mapAssumptionPeriodStrict, mapAggregation,
   mapSecured, mapAllWtgAllocated, roundTwoDecimals, resolveStandardInflationProfile,
   planStandardAllocation, standardPeriodStarts, planStandardImport,
@@ -55,6 +57,8 @@ import {
   type LeaseProjectContext, type LandLeaseForm, type GeneratorOption, type LeaseCommandArgs,
   type LeaseWrite,
 } from "./landLeaseRules";
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /** `LeaseWrite` is a discriminated union; a delete carries no payload. Narrow, don't cast. */
 function payloadOf(w: LeaseWrite | undefined): Record<string, unknown> {
@@ -1930,5 +1934,78 @@ describe("Land Lease — the panel form", () => {
     expect(buildCostPayload({
       form: f, ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
     })[LEASE_COST_COL.isStartDateStandardAssumption]).toBe(true);
+  });
+});
+
+/* ── D58: the write guard that replaced `cmp_LandLease_PopUpLoading` ─────────────────── */
+
+describe("writeCommandsDisabled / guardLeaseCommands (D58)", () => {
+  const commands = leaseCommands({
+    subaccountId: "sub-1", isSelectedCard: false, selectedPeriod: null, selectedCost: null,
+    contract: null, costsInSubaccount: [], hasMatchingAssumption: true, permissions: perms,
+  });
+
+  it("UT-LEASE-NOSPIN-001 a pending write disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+  });
+
+  it("UT-LEASE-NOSPIN-002 the first load disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+    expect(writeCommandsDisabled({ loading: true, writePending: true })).toBe(true);
+  });
+
+  it("UT-LEASE-NOSPIN-003 nothing pending and loaded leaves the commands to their own gates", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    // Add Contract Type and Add Standard Contract are on for an empty, unselected card.
+    expect(commands.filter((c) => c.enabled).map((c) => c.key))
+      .toEqual(["newLandLeaseContractKey", "AddLandLeaseStandardContractKey"]);
+    expect(guardLeaseCommands(commands, false)).toEqual(commands);
+  });
+
+  it("UT-LEASE-NOSPIN-004 the guard turns all five commands off and keeps their captions", () => {
+    const guarded = guardLeaseCommands(commands, true);
+    expect(guarded.map((c) => c.enabled)).toEqual([false, false, false, false, false]);
+    expect(guarded.map((c) => c.label)).toEqual(commands.map((c) => c.label));
+    expect(guarded.map((c) => c.key)).toEqual(commands.map((c) => c.key));
+    // The input is not mutated.
+    expect(commands.some((c) => c.enabled)).toBe(true);
+  });
+});
+
+describe("leaseSelectionAfterWrite (CA-17)", () => {
+  const a = { subaccountId: "sub-1", periodId: "p-1", costId: "c-1" };
+  const b = { subaccountId: "sub-2", periodId: "p-7", costId: "c-7" };
+
+  it("UT-LEASE-SEL-001 the selection the write started with is cleared, as on the canvas (LL:5895)", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: { ...a } })).toEqual(NO_LEASE_SELECTION);
+    expect(leaseSelectionAfterWrite({ atStart: NO_LEASE_SELECTION, current: { ...NO_LEASE_SELECTION } }))
+      .toEqual(NO_LEASE_SELECTION);
+  });
+
+  it("UT-LEASE-SEL-002 a row picked while the write ran is kept", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: b })).toBe(b);
+    expect(leaseSelectionAfterWrite({ atStart: NO_LEASE_SELECTION, current: b })).toBe(b);
+  });
+
+  it("UT-LEASE-SEL-003 a row picked mid-delete is cleared when the delete removed its period", () => {
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: { subaccountId: "sub-1", periodId: "p-2", costId: "c-1" },
+      deleted: { periodIds: ["p-1", "p-2"], costIds: [] },
+    })).toEqual(NO_LEASE_SELECTION);
+  });
+
+  it("UT-LEASE-SEL-004 …or its contract, and is kept when neither was deleted", () => {
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: { subaccountId: "sub-1", periodId: "p-9", costId: "c-1" },
+      deleted: { periodIds: ["p-1"], costIds: ["c-1"] },
+    })).toEqual(NO_LEASE_SELECTION);
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: b, deleted: { periodIds: ["p-1"], costIds: ["c-1"] },
+    })).toBe(b);
+  });
+
+  it("UT-LEASE-SEL-005 a deselect made mid-write stays deselected", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: { ...NO_LEASE_SELECTION } }))
+      .toEqual(NO_LEASE_SELECTION);
   });
 });

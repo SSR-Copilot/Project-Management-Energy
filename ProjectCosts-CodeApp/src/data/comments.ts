@@ -7,7 +7,7 @@
  */
 import { Vsb_capexcommentsesService } from "@/generated/services/Vsb_capexcommentsesService";
 import { unwrap } from "@/platform/errors";
-import { fetchAll } from "./client";
+import { deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, bind, lookupIn, numberOf } from "./odata";
 import { chunk } from "./odata";
 import { COMMENT_TYPE, commentName, type CapexComment } from "@/features/cost/capex-costs/comments";
@@ -215,6 +215,16 @@ export async function saveComment(args: SaveCommentArgs): Promise<string> {
   return created.vsb_capexcommentsid;
 }
 
+/**
+ * Deletes one comment row, and REJECTS when Dataverse refuses (CA-18).
+ *
+ * Through `deleteRecord`, not the generated `Vsb_capexcommentsesService.delete()`: that one
+ * discards the `IOperationResult` and the SDK never throws, so a refusal (a 403 from row-level
+ * security, a cascade restriction) resolved exactly like a success. Every caller then ran its next
+ * phase anyway — the CAPEX panel Delete removed the cost rows and the contract while the comment
+ * stayed, and the panel log showed the step as done (`ProjectDocs/instructions/CONVENTIONS.md`
+ * rule 14). Now the throw stops the caller where it happened, as a refused cost delete already does.
+ */
 export async function deleteComment(id: string): Promise<void> {
-  await Vsb_capexcommentsesService.delete(id);
+  await deleteRecord("delete CAPEX comment", "vsb_capexcommentses", id);
 }

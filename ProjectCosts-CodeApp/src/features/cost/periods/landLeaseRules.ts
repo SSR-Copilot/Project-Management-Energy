@@ -1004,6 +1004,34 @@ export function toggleLeaseSelectionCanvasParity(
   return { subaccountId: row.subaccountId, periodId: row.periodId, costId: row.costId };
 }
 
+/**
+ * The selection once a successful write ends (CA-17).
+ *
+ * The canvas clears it after every Land Lease save, standard import and delete
+ * (`UpdateContext({locSelectedLandLeaseCost: Blank(), locSelectedLandLeasePeriod: Blank()})`,
+ * LL:5895, `clearsSelectionAfterSave`). Its pop-up scrim made selecting DURING a write
+ * impossible, so the selection it cleared was always the one the write started with.
+ *
+ * DIVERGENCE (D58, CA-17): since D58 selection stays enabled while a write runs. The selection
+ * the write started with is still cleared, as on the canvas; a row the user picked mid-write is
+ * KEPT, unless the write deleted that row's period or its contract (`deleted`).
+ */
+export function leaseSelectionAfterWrite(args: {
+  atStart: LeaseSelection;
+  current: LeaseSelection;
+  deleted?: { periodIds?: readonly string[]; costIds?: readonly string[] };
+}): LeaseSelection {
+  const { atStart, current } = args;
+  const unchanged = current.subaccountId === atStart.subaccountId
+    && current.periodId === atStart.periodId && current.costId === atStart.costId;
+  if (unchanged) return { ...NO_LEASE_SELECTION };
+  const periodGone = current.periodId !== null
+    && (args.deleted?.periodIds ?? []).includes(current.periodId);
+  const costGone = current.costId !== null
+    && (args.deleted?.costIds ?? []).includes(current.costId);
+  return periodGone || costGone ? { ...NO_LEASE_SELECTION } : current;
+}
+
 /* ═══════════════════════════════════════════════════ rule 2 · Period 1 owns it ══ */
 
 /**
@@ -2672,6 +2700,22 @@ export function leaseCommands(args: LeaseCommandArgs): LeaseCommand[] {
     { key: "EditLandLeasePeriodKey", label: LEASE_COMMAND_LABELS.EditLandLeasePeriodKey, icon: "Edit", enabled: edit },
     { key: "deleteLandLeasePeriodKey", label: LEASE_COMMAND_LABELS.deleteLandLeasePeriodKey, icon: "Delete", enabled: del },
   ];
+}
+
+/**
+ * `leaseCommands` with the D58 write guard applied: `disabled` (the shared
+ * `writeCommandsDisabled`, `@/domain/writeGuard`) turns every command off.
+ *
+ * DIVERGENCE (D58, PROPOSED): replaces `cmp_LandLease_PopUpLoading`. The canvas pop-up
+ * (`Visible: =locIsVisiblePopUpSpinner`) covered the whole screen while a write ran, which is
+ * what stopped a second Save, Delete or standard import from starting. Every Land Lease command
+ * starts a write or opens the panel for one, so all five are guarded; expanding a card and
+ * selecting a row stay enabled.
+ */
+export function guardLeaseCommands(
+  commands: readonly LeaseCommand[], disabled: boolean,
+): LeaseCommand[] {
+  return disabled ? commands.map((c) => ({ ...c, enabled: false })) : [...commands];
 }
 
 /** A keyed view of `leaseCommands`, for a screen that wants one gate at a time. */
