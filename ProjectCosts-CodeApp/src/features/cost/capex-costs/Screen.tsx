@@ -83,7 +83,14 @@ import {
   onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
   savingCostLabel,
 } from "./panelRules";
-import { writeCommandsDisabled } from "@/domain/writeGuard";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
+
+/**
+ * CA-15 — while the screen is mounted a failed CAPEX write is already shown, by the banner built
+ * from `writes.*.error`; the reporter is only needed for the toast once the screen is gone.
+ */
+const SHOWN_BY_WRITE_BANNER = () => undefined;
 
 const MONTH_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -196,7 +203,11 @@ export default function CapexCostsScreen() {
   const scoped = category;
   const { data: book, isLoading, error, save, projectId } = useCostBook(scoped);
   const totals = useCapexTotals(isSummaryTab(category));
-  const writes = useCapexWrites(scoped);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("DEVEX/CAPEX");
+  const writes = useCapexWrites(scoped, {
+    onWriteError: (e) => reportFailure(e instanceof Error ? e.message : String(e), SHOWN_BY_WRITE_BANNER),
+  });
   const { project } = useSession();
   const isoCurrencyCode = project?.isoCurrencyCode;
   /** `Coalesce(gblRecordSelectedProjectCountry.'ISO Currency Code', "EUR")`, once. */
@@ -207,9 +218,11 @@ export default function CapexCostsScreen() {
   const busy = writes.setPaid.isPending || writes.saveLine.isPending || writes.deleteLine.isPending;
   /** The Comments panel's whole-commit flag, reported up so the grid cannot reopen it mid-save. */
   const [commentsSaving, setCommentsSaving] = useState(false);
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
   /** D57 decision 2b — every write-starting command is greyed or ignored while this holds. */
   const writesDisabled = writeCommandsDisabled({
-    loading: isLoading, writePending: busy || commentsSaving,
+    loading: isLoading, writePending: busy || commentsSaving, writeInFlight,
   });
   const writeError = writes.setPaid.error ?? writes.saveLine.error ?? writes.deleteLine.error;
 
@@ -386,8 +399,11 @@ export default function CapexCostsScreen() {
    * can still be running (or have failed) after a switch puts the next tab on its first load.
    */
   const writeFeedback = <>
-    <WriteStatus testId="capex-write-status"
-      label={capexWriteStatusLabel({ pending: busy, standardName, savingLabel, commentsSaving })} />
+    {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+    <WriteStatus testId="capex-write-status" label={costWriteStatusLabel({
+      ownLabel: capexWriteStatusLabel({ pending: busy, standardName, savingLabel, commentsSaving }),
+      ownPending: busy || commentsSaving, writeInFlight,
+    })} />
     {actionError ? <div className="canvas-error" role="alert">{actionError}</div> : null}
     {writeError ? (
       <div className="canvas-error" role="alert">{(writeError as Error).message}</div>
@@ -818,7 +834,9 @@ export default function CapexCostsScreen() {
       <PcfGrid key={category} accounts={categoryAccounts}
         lines={book.lines} year={year} showEmpty={showEmpty} showPlanned={showPlanned}
         payer={payer} clusterDates={boundaries} standardOptions={pcfStandardOptions}
-        commentFlags={commentFlags} onAction={onAction} />
+        commentFlags={commentFlags} onAction={onAction}
+        // CA-16: the grid greys its write menu items while `gridActionAllowed` would ignore them.
+        writeActionsDisabled={writesDisabled} />
     </>}
 
     <FormPanel open={!!edit} width="cost" onDismiss={closePanel}
@@ -1025,6 +1043,10 @@ export default function CapexCostsScreen() {
     </FormPanel>
 
     <CommentsPanel
+      // CA-15 / CA-18: a refused comment write shows on this screen's error banner, and the next
+      // commit clears it, so a successful retry does not leave the old error up.
+      onSaveError={setActionError}
+      onSaveStart={() => setActionError(null)}
       open={!!commentFor}
       contractId={commentFor}
       contractDescription={book.lines.find(c => c.id === commentFor)?.description ?? ""}

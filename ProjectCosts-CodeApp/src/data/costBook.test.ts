@@ -68,10 +68,12 @@ vi.mock("./client", () => ({
    *
    * Recorded into `deleted` with the same `cost:` / `contract:` prefixes the generated-service
    * mocks below use, so the ordering assertions in UT-BOOK-039..041 read unchanged. Comments
-   * still delete through `Vsb_capexcommentsesService`, which is why that mock stays live.
+   * delete through `deleteRecord` too since CA-18, recorded under `comment:`.
    */
   deleteRecord: async (_operation: string, tableName: string, recordId: string) => {
-    deleted.push(`${tableName === "vsb_capexcosts" ? "cost" : "contract"}:${recordId}`);
+    const prefix = tableName === "vsb_capexcosts" ? "cost"
+      : tableName === "vsb_capexcommentses" ? "comment" : "contract";
+    deleted.push(`${prefix}:${recordId}`);
   },
 }));
 
@@ -132,9 +134,9 @@ vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
     getAll: async () => ({ success: true, data: [] }),
     create: async () => ({ success: true, data: { vsb_capexcommentsid: "comment-new" } }),
     update: async () => ({ success: true, data: {} }),
+    // The raw generated `delete()` discards a refusal; since CA-18 nothing may reach it.
     delete: async (id: string) => {
-      deleted.push(`comment:${id}`);
-      return { success: true, data: {} };
+      throw new Error(`raw Vsb_capexcommentsesService.delete(${id}) called; use deleteRecord`);
     },
   },
 }));

@@ -75,12 +75,17 @@ vi.mock("./client", () => ({
       ? [...comments].map(([id, c]) => ({ vsb_capexcommentsid: id, _vsb_capexcontract_value: c.contract, vsb_commenttype: c.type }))
       : [];
   }),
-  deleteRecord: async (_operation: string, tableName: string, id: string) => request(`delete:${tableName}:${id}`, () => {
-    if (refuse.has(`delete:${id}`)) throw new Error(`delete ${id} denied`);
-    const table = tableName === "vsb_capexcosts" ? costs : contracts;
-    if (!table.has(id)) throw new Error(`delete ${id}: does not exist`);
-    table.delete(id);
-  }),
+  // Comments delete through `deleteRecord` too since CA-18; their events keep the `delete:comment:`
+  // name the ordering assertions read.
+  deleteRecord: async (_operation: string, tableName: string, id: string) => request(
+    tableName === "vsb_capexcommentses" ? `delete:comment:${id}` : `delete:${tableName}:${id}`, () => {
+      if (refuse.has(`delete:${id}`)) throw new Error(`delete ${id} denied`);
+      const table: Map<string, unknown> = tableName === "vsb_capexcosts" ? costs
+        : tableName === "vsb_capexcommentses" ? comments : contracts;
+      if (!table.has(id)) throw new Error(`delete ${id}: does not exist`);
+      table.delete(id);
+    },
+  ),
 }));
 
 vi.mock("@/generated/services/Vsb_capexprojectcontractsService", () => ({
@@ -134,12 +139,19 @@ const bulk = (action: "create" | "update") => async (_es: string, targets: Recor
 vi.mock("@/generated/services/CreateMultipleService", () => ({ CreateMultipleService: { CreateMultiple: bulk("create") } }));
 vi.mock("@/generated/services/UpdateMultipleService", () => ({ UpdateMultipleService: { UpdateMultiple: bulk("update") } }));
 
+/**
+ * The generated comment `delete()` as the real one behaves: it DISCARDS the result, so a refusal
+ * resolves like a success. Nothing may reach it (CA-18); if `deleteComment` went back to it, the
+ * refused deletes of UT-CMTDEL-001…004 would resolve and those tests fail.
+ */
 vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   Vsb_capexcommentsesService: {
-    delete: async (id: string) => request(`delete:comment:${id}`, () => {
-      comments.delete(id);
-      return { success: true, data: {} };
-    }),
+    delete: async (id: string): Promise<void> => {
+      await request(`delete:comment:${id}`, () => {
+        if (!refuse.has(`delete:${id}`)) comments.delete(id);
+        return refuse.has(`delete:${id}`) ? fail(`delete ${id} denied`, 403) : { success: true, data: {} };
+      });
+    },
   },
 }));
 
@@ -557,6 +569,83 @@ describe("deleteCostLineBulk", () => {
     const starts = events.filter((e) => e.startsWith("start:delete:"));
     expect(starts.map((e) => e.split(":").at(-1))).toEqual(["c1", "c2", "c3", CONTRACT]);
     expect(costs.size).toBe(0);
+  });
+});
+
+/* ═══════════════════════════════════════ a refused comment delete (CA-18) ══ */
+
+describe("a refused comment delete stops the next phase (CA-18, rule 14)", () => {
+  const payments = [cost("c1", 1, 1), cost("c2", 2, 1)];
+  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]));
+  const seedComments = () => {
+    comments.set("k1", { contract: CONTRACT, type: COMMENT_TYPE.general });
+    comments.set("k2", { contract: CONTRACT, type: COMMENT_TYPE.paymentDate });
+  };
+
+  it("UT-CMTDEL-001 bulk Delete: every comment is attempted, no cost row or contract is deleted, the step is FAILED", async () => {
+    seed(payments);
+    seedComments();
+    refuse.add("delete:k1");
+    await expect(deleteCostLineBulk(line(payments))).rejects.toThrow(/1 delete\(s\) on vsb_capexcommentses failed/);
+    expect(sent("delete:comment:")).toHaveLength(2);
+    expect(sent("delete:vsb_capexcosts:")).toEqual([]);
+    expect(sent("delete:vsb_capexprojectcontracts:")).toEqual([]);
+    expect([...comments.keys()]).toEqual(["k1"]);
+    expect(costs.size).toBe(2);
+    expect(contracts.has(CONTRACT)).toBe(true);
+    expect(lastSummary()).toMatch(/^CAPEX panel delete \(bulk\) FAILED after [\d,]+ ms, 3 requests; comments read 1 req [\d,]+ ms; comment deletes FAILED /);
+    expect(infoLines()).toEqual(expect.arrayContaining([
+      "Steps completed: comments read",
+      "Steps failed: comment deletes",
+      "Not sent: cost deletes; contract delete",
+    ]));
+  });
+
+  it("UT-CMTDEL-002 per-row Delete: stops at the refused comment; nothing after it is sent", async () => {
+    seed(payments);
+    seedComments();
+    refuse.add("delete:k1");
+    await expect(deleteCostLineLegacy(line(payments))).rejects.toThrow(/delete k1 denied/);
+    expect(sent("delete:")).toEqual(["start:delete:comment:k1"]);
+    expect(costs.size).toBe(2);
+    expect(contracts.has(CONTRACT)).toBe(true);
+    expect(lastSummary()).toMatch(/^CAPEX panel delete \(per-row\) FAILED after [\d,]+ ms, 2 requests; .*comment deletes FAILED .*; error: .*delete k1 denied/);
+    expect(infoLines()).toContain("Steps failed: comment deletes");
+  });
+
+  it("UT-CMTDEL-003 bulk relink Save: a refused payment-date comment delete fails the save and sends no month delete", async () => {
+    const stored = [cost("c1", 1, 100, true), cost("c2", 2, 100), cost("c3", 3, 100)];
+    seed(stored);
+    seedComments();
+    refuse.add("delete:k2");
+    await expect(saveCostLineBulk({
+      ...args(stored, months(2, () => 100)), resetPaidAndPaymentDateComments: true,
+    }, true)).rejects.toThrow(/1 delete\(s\) on vsb_capexcommentses failed/);
+    expect(sent("delete:comment:")).toEqual(["start:delete:comment:k2"]);
+    expect(sent("delete:vsb_capexcosts:")).toEqual([]);
+    expect(costs.has("c3")).toBe(true);
+    expect(comments.has("k2")).toBe(true);
+    expect(infoLines()).toEqual(expect.arrayContaining([
+      "Steps failed: payment-date comments",
+      "Not sent: cost deletes",
+    ]));
+  });
+
+  it("UT-CMTDEL-004 per-row relink Save: a refused payment-date comment delete stops before the month writes", async () => {
+    const stored = [cost("c1", 1, 100, true), cost("c2", 2, 100), cost("c3", 3, 100)];
+    seed(stored);
+    seedComments();
+    refuse.add("delete:k2");
+    await expect(saveCostLineLegacy({
+      ...args(stored, months(2, () => 100)), resetPaidAndPaymentDateComments: true,
+    })).rejects.toThrow(/delete k2 denied/);
+    expect(sent("cost:")).toEqual(["start:cost:update:c1"]); // the paid reset only
+    expect(sent("delete:vsb_capexcosts:")).toEqual([]);
+    expect(costs.has("c3")).toBe(true);
+    expect(infoLines()).toEqual(expect.arrayContaining([
+      "Steps failed: payment-date comments",
+      "Not sent: costs; cost deletes",
+    ]));
   });
 });
 

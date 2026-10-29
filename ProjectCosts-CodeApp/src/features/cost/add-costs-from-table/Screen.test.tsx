@@ -48,6 +48,11 @@ vi.mock("@/app/SessionContext", () => {
   return { useSession: () => session };
 });
 
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => false,
+  useWriteFailureReport: () => (text: string, show?: (t: string) => void) => { show?.(text); },
+}));
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useAddCostSheet: () => ({
     data: sheet.data, isFetching: sheet.isFetching, isLoading: sheet.isLoading ?? false, error: null, refetch,

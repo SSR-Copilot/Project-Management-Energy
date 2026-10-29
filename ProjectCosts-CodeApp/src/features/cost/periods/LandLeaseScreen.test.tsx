@@ -69,7 +69,16 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
   useLeaseWrites: () => ({ mutateAsync, isPending: false }),
 }));
 
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+let writeInFlight = false;
+const reportFailure = vi.fn((text: string, show?: (t: string) => void) => { show?.(text); });
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => writeInFlight,
+  useWriteFailureReport: () => reportFailure,
+}));
+
 import LandLeaseScreen from "./LandLeaseScreen";
+import { COST_WRITE_MSG } from "@/domain/writeGuard";
 
 /* ── fixtures ─────────────────────────────────────────────────────────────── */
 
@@ -146,6 +155,7 @@ describe("LandLeaseScreen", () => {
     vi.clearAllMocks();
     loading = false;
     loadError = null;
+    writeInFlight = false;
     technology = TECHNOLOGY.wind;
     book = {
       subaccounts: SUBACCOUNTS,
@@ -487,5 +497,104 @@ describe("LandLeaseScreen", () => {
 
     await act(async () => { finish(); });
     expect(screen.getByTestId("land-lease-write-status")).toBeEmptyDOMElement();
+  });
+  /* ── CA-15 / CA-17: writes that outlive the screen, selection made mid-write ─ */
+
+  /** Holds the next write open; returns the function that lets it succeed. */
+  const holdNextWrite = () => {
+    let finish: () => void = () => {};
+    mutateAsync.mockImplementationOnce(
+      () => new Promise((r) => { finish = () => r({ createdIds: {} }); }),
+    );
+    return async () => { await act(async () => { finish(); }); };
+  };
+  /** Edit Period 2 and press Save (a wind contract needs its allocation for the gate). */
+  const editP2 = () => {
+    fireEvent.click(screen.getByTestId("lease-select-p2"));
+    fireEvent.click(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey"));
+  };
+  const clickSave = () => fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  const saveP2 = () => { editP2(); clickSave(); };
+
+  it("UT-LEASE-FLIGHT-001 a Cost write in flight from another screen greys every command and says so", () => {
+    writeInFlight = true;
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    for (const c of writeCommands("Locations")) expect(c).toBeDisabled();
+    expect(screen.getByTestId("land-lease-write-status"))
+      .toHaveTextContent(COST_WRITE_MSG.writeRunningElsewhere);
+    // Selecting stays live.
+    expect(screen.getByTestId("lease-select-p1")).toBeChecked();
+  });
+
+  it("UT-LEASE-FLIGHT-002 a failed save goes through the reporter with the screen's own text", async () => {
+    mutateAsync.mockImplementationOnce(async () => { throw new Error("HTTP 403"); });
+    book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    editP2();
+    await act(async () => { clickSave(); });
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    const text = reportFailure.mock.calls[0]?.[0] as string;
+    expect(text).toContain("HTTP 403");
+    // Mounted: the reporter put the same text on the screen's banner.
+    expect(screen.getByText(text, { exact: false })).toBeInTheDocument();
+  });
+
+  it("UT-LEASE-SEL-010 a row selected while a save runs is still selected when it ends", async () => {
+    const finish = holdNextWrite();
+    book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    saveP2();
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    expect(screen.getByTestId("lease-select-p1")).toBeChecked();
+    await finish();
+    expect(screen.getByTestId("lease-select-p1")).toBeChecked();
+  });
+
+  it("UT-LEASE-SEL-011 the selection the save started with is still cleared (LL:5895)", async () => {
+    const finish = holdNextWrite();
+    book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    saveP2();
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("lease-select-p2")).toBeChecked();
+    await finish();
+    expect(screen.getByTestId("lease-select-p2")).not.toBeChecked();
+  });
+
+  it("UT-LEASE-SEL-012 mid-delete: a row of another contract is kept, a row of the deleted one is not", async () => {
+    book.costs = [cost({ id: "cost-1" }), cost({ id: "cost-2", description: "Parcel 9", name: "Wirmighausen-Locations-Parcel 9" })];
+    book.periods = [...book.periods, period({ id: "p3", projectCostId: "cost-2", name: "Parcel 9" })];
+    const deleteP1 = () => {
+      fireEvent.click(screen.getByTestId("lease-select-p1"));
+      fireEvent.click(within(card("Locations")).getByTestId("lease-deleteLandLeasePeriodKey"));
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByText("Delete"));
+      // The delete really started (and is held open by `holdNextWrite`).
+      expect(screen.getByTestId("land-lease-write-status")).toHaveTextContent("Deleting Land Lease cost...");
+    };
+
+    let finish = holdNextWrite();
+    const view = render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    deleteP1();
+    fireEvent.click(screen.getByTestId("lease-select-p3"));
+    await finish();
+    expect(screen.getByTestId("lease-select-p3")).toBeChecked();
+    view.unmount();
+
+    finish = holdNextWrite();
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    deleteP1();
+    // Period 2 belongs to the contract the delete removes.
+    fireEvent.click(screen.getByTestId("lease-select-p2"));
+    await finish();
+    expect(screen.getByTestId("lease-select-p2")).not.toBeChecked();
   });
 });

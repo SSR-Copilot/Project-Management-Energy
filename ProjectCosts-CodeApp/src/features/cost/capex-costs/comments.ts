@@ -535,6 +535,14 @@ export const commentEditable = (thread: Pick<CommentThread, "resolved">): boolea
  */
 export const COMMENTS_SAVING = "Saving comments...";
 
+/**
+ * NEW TEXT (CA-15 / CA-18) — no canvas source: the canvas comments Save ignores a failed `Patch`
+ * or `Remove` (no `Notify`). The CAPEX banner (and, once the screen is gone, the toast detail)
+ * for a comments commit that a refused save or delete stopped part-way.
+ */
+export const commentsSaveFailed = (detail: string): string =>
+  `Error: the comments could not be saved completely. ${detail}`.trim();
+
 /*
  * Whether the panel's write-starting controls are greyed (D57, decision 2b) is the shared
  * `writeCommandsDisabled` (`@/domain/writeGuard`), fed the comments' load and the commit.

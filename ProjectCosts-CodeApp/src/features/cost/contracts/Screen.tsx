@@ -14,7 +14,7 @@
  *   right panel: target       `con_Contracts_RightPanel_NewEdit_PaymentTarget`
  *   two delete confirmations  `cmp_OpexCosts_PopUpConfirmation_Delete{Contracts,PaymentTarget}`
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button, MessageBar, MessageBarBody, MessageBarTitle, Text, mergeClasses,
@@ -51,14 +51,16 @@ import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
 import { parseNumber, round } from "@/domain/numeric";
 import { numberFormat } from "@/domain/locale";
-import { writeCommandsDisabled } from "@/domain/writeGuard";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { DataError } from "@/platform/errors";
 import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges";
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
   NOTE_MAX_LENGTH, TOTAL_COSTS_TYPE,
   canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
-  contractCardTitle, contractCommands, contractErrors, gatedContractCommands, longAbbreviatedDate,
+  contractCardTitle, contractCommands, contractErrors, contractSelectionAfterDelete,
+  gatedContractCommands, longAbbreviatedDate,
   contractName, costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
@@ -238,8 +240,26 @@ export default function ContractsScreen() {
   const busy =
     saveContractMutation.isPending || deleteContractMutation.isPending ||
     saveTargetMutation.isPending || deleteTargetMutation.isPending;
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("Contracts");
   /** `writeCommandsDisabled` (D57): the interaction guard that replaced the spinner overlay. */
-  const writesDisabled = writeCommandsDisabled({ loading, writePending: busy });
+  const writesDisabled = writeCommandsDisabled({ loading, writePending: busy, writeInFlight });
+
+  /**
+   * The selection as of the LATEST render, for a delete that settles later (CA-17): the user may
+   * have picked another card or target while it ran, and the closure only knows the old one.
+   */
+  const selectionNow = useRef({ contractId: selectedContractId, targetId: selectedTargetId });
+  useEffect(() => {
+    selectionNow.current = { contractId: selectedContractId, targetId: selectedTargetId };
+  }, [selectedContractId, selectedTargetId]);
+  const clearDeletedSelection = (deleted: { contractId?: string; targetId?: string }) => {
+    const next = contractSelectionAfterDelete(selectionNow.current, deleted);
+    setSelectedContractId(next.contractId);
+    setSelectedTargetId(next.targetId);
+  };
 
   /**
    * Seeds a new Development or Construction contract's margin from the standard assumption.
@@ -465,13 +485,15 @@ export default function ContractsScreen() {
 
   /* ── saves ──────────────────────────────────────────────────────────── */
 
+  /** The banner text, or (CA-15) the toast's detail once the screen has been left. */
   const handleError = (error: unknown, action: string) => {
     const message = permissionMessage(error, action);
-    if (message) { setBanner(message); return; }
-    setBanner(
+    if (message) { reportFailure(message, setBanner); return; }
+    reportFailure(
       error instanceof DataError
         ? `Error: BoP Contract could not be saved correctly. ${error.message}`
         : `Error: BoP Contract could not be saved correctly.`,
+      setBanner,
     );
   };
 
@@ -631,8 +653,11 @@ export default function ContractsScreen() {
         * (`MSG.spinner*`) shows as one non-blocking status line, with no spinner and no scrim;
         * `writeCommandsDisabled` stops a second write instead of the overlay.
         */}
-      <WriteStatus label={busy ? savingLabel ?? MSG.spinnerSavingContract : null}
-        testId="contracts-write-status" />
+      {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+      <WriteStatus testId="contracts-write-status" label={costWriteStatusLabel({
+        ownLabel: busy ? savingLabel ?? MSG.spinnerSavingContract : null,
+        ownPending: busy, writeInFlight,
+      })} />
 
       {/* `.canvas-contract-commandbar`: the first icon over the cards' radio column (21 Oct 2026). */}
       <div className="canvas-contract-commandbar">
@@ -1108,11 +1133,12 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedContract) return;
+          const deletedId = selectedContract.id;
           setSavingLabel(MSG.spinnerDeletingContract);
           try {
-            await deleteContractMutation.mutateAsync(selectedContract.id);
-            setSelectedContractId(undefined);
-            setSelectedTargetId(undefined);
+            await deleteContractMutation.mutateAsync(deletedId);
+            // CA-17: a card picked while the delete ran is kept; the deleted one is not.
+            clearDeletedSelection({ contractId: deletedId });
           } catch (error) {
             handleError(error, "delete this contract");
           } finally {
@@ -1135,10 +1161,12 @@ export default function ContractsScreen() {
         onConfirm={async () => {
           setConfirm("none");
           if (!selectedTargetId) return;
+          const deletedId = selectedTargetId;
           setSavingLabel(MSG.spinnerDeletingPaymentTarget);
           try {
-            await deleteTargetMutation.mutateAsync(selectedTargetId);
-            setSelectedTargetId(undefined);
+            await deleteTargetMutation.mutateAsync(deletedId);
+            // CA-17: a target picked while the delete ran is kept; the deleted one is not.
+            clearDeletedSelection({ targetId: deletedId });
           } catch (error) {
             handleError(error, "delete this payment target");
           } finally {

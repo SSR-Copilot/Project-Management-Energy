@@ -20,6 +20,7 @@ import type { CostAccount, CostLine } from "../costing/model";
 import type { GridCallback } from "./pcf/ui/GridRenderer";
 import { CATEGORY_LABELS, SUMMARY_TAB_NAME } from "./rules";
 import { MSG, PAID_CONFIRM_TITLE } from "./panelRules";
+import { COST_WRITE_MSG } from "@/domain/writeGuard";
 
 const ACCOUNTS: CostAccount[] = [
   { id: "acc-1", number: "80000", name: "Turbine / PV Supply Agreement", category: 0 },
@@ -85,7 +86,9 @@ let deletePending = false;
 /** `setPaid.error` — a failed Paid write, for the error banner. */
 let paidError: Error | null = null;
 /** The props the (mocked) comments panel was last rendered with. */
-let commentsPanelProps: { onSavingChange?: (saving: boolean) => void; writeStatus?: boolean } = {};
+let commentsPanelProps: {
+  onSavingChange?: (saving: boolean) => void; writeStatus?: boolean; onSaveError?: (text: string) => void;
+} = {};
 /** The cost book's first load, and its failure (D57 decision 4a, rule 19). */
 let bookLoading = false;
 let bookError: Error | null = null;
@@ -100,11 +103,14 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
   }),
   useCapexTotals: () => ({ data: totalsLoading ? undefined : [], isLoading: totalsLoading }),
   useCapexCategories: () => ({ data: capexCategories }),
-  useCapexWrites: () => ({
-    setPaid: { ...setPaid, isPending: paidPending, error: paidError },
-    deleteLine: { ...deleteLine, isPending: deletePending },
-    saveLine: { ...saveLine, isPending: savePending },
-  }),
+  useCapexWrites: (_category?: number, options?: { onWriteError?: (error: unknown) => void }) => {
+    capexWriteOptions = options;
+    return {
+      setPaid: { ...setPaid, isPending: paidPending, error: paidError },
+      deleteLine: { ...deleteLine, isPending: deletePending },
+      saveLine: { ...saveLine, isPending: savePending },
+    };
+  },
   useStandardAssumptions: () => ({
     assumptions: [], activeWtgCount: 0, totalCapacity: 0,
     countryId: undefined, technology: undefined, isLoading: false,
@@ -138,12 +144,24 @@ vi.mock("@/app/SessionContext", () => ({
 
 /** The real grid is a hand-rolled PCF renderer; the screen only needs its callback. */
 let onAction: GridCallback = () => {};
+/** CA-16 — the `writeActionsDisabled` the grid was last rendered with. */
+let gridWriteActionsDisabled: boolean | undefined;
 vi.mock("./PcfGrid", () => ({
-  PcfGrid: (props: { onAction: GridCallback }) => {
+  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean }) => {
     onAction = props.onAction;
+    gridWriteActionsDisabled = props.writeActionsDisabled;
     return <div data-testid="pcf-grid" />;
   },
 }));
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+let writeInFlight = false;
+const reportFailure = vi.fn((text: string, show?: (t: string) => void) => { show?.(text); });
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => writeInFlight,
+  useWriteFailureReport: () => reportFailure,
+}));
+/** The options `useCapexWrites` was last called with — the screen's `onWriteError`. */
+let capexWriteOptions: { onWriteError?: (error: unknown) => void } | undefined;
 vi.mock("./CommentsPanel", () => ({
   CommentsPanel: (props: typeof commentsPanelProps) => { commentsPanelProps = props; return null; },
 }));
@@ -212,6 +230,9 @@ beforeEach(() => {
   bookLoading = false;
   bookError = null;
   totalsLoading = false;
+  writeInFlight = false;
+  gridWriteActionsDisabled = undefined;
+  capexWriteOptions = undefined;
   vi.clearAllMocks();
   document.querySelectorAll('[data-testid="open-add"]').forEach((n) => n.remove());
 });
@@ -755,6 +776,50 @@ describe("the write guard (D57)", () => {
     })).toBeEnabled();
     fireGrid("Delete", "l1");
     expect(screen.getByText(MSG.deleteTitle)).toBeInTheDocument();
+  });
+
+  /* ── CA-15 / CA-16 ─────────────────────────────────────────────────────── */
+
+  it("UT-CAPEX-FLIGHT-001 a Cost write still in flight elsewhere greys the write commands and says so", () => {
+    lines = [individualContract()];
+    writeInFlight = true;
+    mount();
+    expect(screen.getByRole("button", {
+      name: "btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable",
+    })).toBeDisabled();
+    expect(writeStatus()).toHaveTextContent(COST_WRITE_MSG.writeRunningElsewhere);
+    // The grid's write actions are ignored, as for the screen's own write.
+    fireGrid("Delete", "l1");
+    expect(screen.queryByText(MSG.deleteTitle)).not.toBeInTheDocument();
+    // Read-only commands stay live.
+    expect(screen.getByRole("switch", { name: "tgl_Costs_ProjectCostbtn_ShowEmptyAccounts" }))
+      .toBeEnabled();
+  });
+
+  it("UT-CAPEX-FLIGHT-002 a failed CAPEX write reaches the reporter with its message, banner kept on screen", () => {
+    mount();
+    expect(capexWriteOptions?.onWriteError).toBeTypeOf("function");
+    capexWriteOptions?.onWriteError?.(new Error("HTTP 412"));
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(reportFailure.mock.calls[0]?.[0]).toBe("HTTP 412");
+    // The mounted screen shows it through `writes.*.error`; the reporter's screen arm is a no-op.
+    expect(reportFailure.mock.calls[0]?.[1]).toBeTypeOf("function");
+  });
+
+  it("UT-CAPEX-FLIGHT-004 a refused comment write from the panel shows on the screen's error banner (CA-18)", () => {
+    mount();
+    expect(commentsPanelProps.onSaveError).toBeTypeOf("function");
+    act(() => { commentsPanelProps.onSaveError?.("Error: the comments could not be saved completely. HTTP 403"); });
+    expect(screen.getByRole("alert")).toHaveTextContent("Error: the comments could not be saved completely. HTTP 403");
+  });
+  it("UT-CAPEX-FLIGHT-003 the PCF grid is told to grey its write items exactly while the guard holds (CA-16)", () => {
+    lines = [individualContract()];
+    const view = mount();
+    expect(gridWriteActionsDisabled).toBe(false);
+    view.unmount();
+    deletePending = true;
+    mount();
+    expect(gridWriteActionsDisabled).toBe(true);
   });
 });
 

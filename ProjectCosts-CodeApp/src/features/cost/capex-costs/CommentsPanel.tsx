@@ -31,10 +31,11 @@ import { space } from "@/theme/tokens";
 import { useSession } from "@/app/SessionContext";
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCapexComments, useCommentWrites } from "../costing/useCostBook";
+import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
 import type { Payment } from "../costing/model";
 import {
   COMMENTS_SAVING, COMMENT_MAX_LENGTH, COMMENT_TYPE, MONTH_NAMES, PAYMENT_DATE_NOT_ALLOWED, canSaveComments,
-  commentBreadcrumb, commentEditable, commentHeading, commentMonthOptions, commentPanelTitle,
+  commentBreadcrumb, commentEditable, commentHeading, commentsSaveFailed, commentMonthOptions, commentPanelTitle,
   commentThreads, commentTypeLabel, commentTypeValue, commentYearOptions,
   paymentDateCommentsAllowed, paymentDateComplete,
   reopenThread, resolveThread, sortComments, truncateComment,
@@ -228,17 +229,36 @@ export interface CommentsPanelProps {
   onSavingChange?: (saving: boolean) => void;
   /** Render the panel's own "Saving comments..." line (default). Off when the host shows it. */
   writeStatus?: boolean;
+  /**
+   * CA-15 / CA-18 — shows a failed commit on the HOST screen's error banner (CAPEX passes its
+   * `actionError` setter). The panel itself is already closed when the writes run. Without it, or
+   * once the host has unmounted, the failure becomes the app-wide error toast.
+   */
+  onSaveError?: (text: string) => void;
+  /**
+   * Called when a commit starts, before any write. CAPEX clears its error banner here, so a
+   * failure shown through `onSaveError` does not outlive a later, successful commit.
+   */
+  onSaveStart?: () => void;
 }
 
 export function CommentsPanel(props: CommentsPanelProps) {
   const {
     open, contractId, contractDescription, breadcrumb, payments, distribution, onDismiss,
-    onSavingChange, writeStatus = true,
+    onSavingChange, writeStatus = true, onSaveError, onSaveStart,
   } = props;
   const styles = useStyles();
-  const { session } = useSession();
+  const { session, projectId } = useSession();
   const query = useCapexComments(contractId ? [contractId] : []);
   const writes = useCommentWrites();
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /**
+   * CA-15 / CA-18 — the comments Save closes the panel BEFORE it writes, so a failure has no panel
+   * left to show it in (before CA-15 it was shown nowhere at all): it goes to the host's banner
+   * (`onSaveError`) while the screen is mounted, else to the error toast.
+   */
+  const reportFailure = useWriteFailureReport("DEVEX/CAPEX comments");
 
   const [working, setWorking] = useState<Working[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
@@ -275,7 +295,9 @@ export function CommentsPanel(props: CommentsPanelProps) {
    */
   const [saving, setSaving] = useState(false);
   /** D57 decision 2b — Save, Add Comment and every card action, while loading or saving. */
-  const writesDisabled = writeCommandsDisabled({ loading: query.isLoading, writePending: saving });
+  const writesDisabled = writeCommandsDisabled({
+    loading: query.isLoading, writePending: saving, writeInFlight,
+  });
 
   /**
    * Seed the editable copy ONCE per opening.
@@ -480,6 +502,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
      * (decision 7a).
      */
     setSaving(true);
+    onSaveStart?.();
     onSavingChange?.(true);
     onDismiss();
     try {
@@ -536,6 +559,12 @@ export function CommentsPanel(props: CommentsPanelProps) {
         });
       }
       // NOTES 4 of the integration spec: re-fetch so the grid's red dots refresh.
+      writes.invalidate();
+    } catch (e) {
+      // CA-15 / CA-18: a refused save or delete (`deleteComment` throws since CA-18) stops the
+      // remaining writes. Part of the commit may have landed, so the threads are refetched as on
+      // success, and the failure is shown — never swallowed (rule 3).
+      reportFailure(commentsSaveFailed(e instanceof Error ? e.message : String(e)), onSaveError);
       writes.invalidate();
     } finally {
       setSaving(false);

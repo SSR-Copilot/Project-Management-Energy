@@ -1157,6 +1157,36 @@ export function gatedContractCommands(
   return commands.map((c) => (writesDisabled ? { ...c, enabled: false } : { ...c }));
 }
 
+/** The screen's selection: one contract card and, inside it, at most one payment target. */
+interface ContractSelection {
+  contractId: string | undefined;
+  targetId: string | undefined;
+}
+
+/**
+ * The selection once a successful delete ends (CA-17).
+ *
+ * A contract delete has always cleared the contract and its target, and a payment-target delete
+ * the target. Before D57 the pop-up scrim made selecting during the delete impossible, so the
+ * selection cleared was always the deleted row.
+ *
+ * DIVERGENCE (D57, CA-17): selection stays enabled while a write runs, so only what still points
+ * at a deleted row is cleared — the contract (and with it any target, which belongs to it) when
+ * the contract is gone, the target when that target is gone. A row picked mid-delete is kept.
+ */
+export function contractSelectionAfterDelete(
+  current: ContractSelection,
+  deleted: { contractId?: string; targetId?: string },
+): ContractSelection {
+  if (current.contractId !== undefined && current.contractId === deleted.contractId) {
+    return { contractId: undefined, targetId: undefined };
+  }
+  if (current.targetId !== undefined && current.targetId === deleted.targetId) {
+    return { contractId: current.contractId, targetId: undefined };
+  }
+  return current;
+}
+
 /* ══════════════════════════════════════════════════════════════════ helpers */
 
 function pad2(n: number): string {

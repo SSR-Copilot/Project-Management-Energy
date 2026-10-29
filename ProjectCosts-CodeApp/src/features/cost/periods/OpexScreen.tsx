@@ -42,7 +42,8 @@ import {
 } from "@fluentui/react-icons";
 import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
-import { writeCommandsDisabled } from "@/domain/writeGuard";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import {
   useAddStandardContract, useCostBook, useCountryInflation, useCountryInflationAreas,
@@ -687,6 +688,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const { data: book, isLoading, error, save } = useCostBook();
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport(mode === "om" ? "O&M" : "Other OPEX");
   const areas = useCountryInflationAreas(extras.data?.countryId);
   /** `colOpexAccounts` / `colOpexSubaccounts` — real rows, not the constants this file carried. */
   const catalog = useOpexCatalog();
@@ -868,6 +873,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const writeDisabled = writeCommandsDisabled({
     loading: isLoading,
     writePending: busyLabel !== null || save.isPending || addStandard.isPending,
+    writeInFlight,
   });
 
   const onCommand = (card: OpexCard, key: OpexCommandKey) => {
@@ -929,7 +935,9 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     if (key === "addStandardContract") {
       setBanner(null);
       setBusyLabel(OPEX_MSG.loadingStandardContract);
-      addStandard.mutate({
+      // `mutateAsync`, not `mutate(…, { onError })`: TanStack drops per-call callbacks once the
+      // screen unmounts, and a failure after the user left must still reach the toast (CA-15).
+      void addStandard.mutateAsync({
         mode,
         group: card.group,
         deviceId: card.deviceId,
@@ -949,10 +957,9 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
             area: null,
           },
         ) ?? undefined,
-      }, {
-        onError: (e: unknown) => setBanner(e instanceof Error ? e.message : String(e)),
-        onSettled: () => setBusyLabel(null),
-      });
+      })
+        .catch((e: unknown) => reportFailure(e instanceof Error ? e.message : String(e), setBanner))
+        .finally(() => setBusyLabel(null));
     }
   };
 
@@ -1082,7 +1089,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setBanner(OPEX_MSG.saveFailed("Save", message));
+      reportFailure(OPEX_MSG.saveFailed("Save", message), setBanner);
     } finally {
       setBusyLabel(null);
     }
@@ -1098,13 +1105,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // the book diff issue a second, now-404 delete for every child. `plan.ids` is still what the
     // selection is cleared against.
     setBusyLabel(OPEX_MSG.deletingCost);
-    save.mutate(
-      { ...book, periods: book.periods.filter((p) => p.id !== deleting.id) },
-      {
-        onError: (e: unknown) => setBanner(e instanceof Error ? e.message : String(e)),
-        onSettled: () => setBusyLabel(null),
-      },
-    );
+    // `mutateAsync` so a failure after the screen was left still reaches the toast (CA-15).
+    void save.mutateAsync({ ...book, periods: book.periods.filter((p) => p.id !== deleting.id) })
+      .catch((e: unknown) => reportFailure(e instanceof Error ? e.message : String(e), setBanner))
+      .finally(() => setBusyLabel(null));
     if (plan.ids.includes(selection.selectedId ?? "")) setSelection(NO_SELECTION);
     setDeleting(null);
   };
@@ -1145,7 +1149,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
         * blocking spinner pop-up over the screen. The same verbatim `OPEX_MSG` text shows here as
         * one non-animated status line, and the write guard disables the write commands instead.
         */}
-      <WriteStatus label={busyLabel} testId="opex-write-status" />
+      {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+      <WriteStatus testId="opex-write-status" label={costWriteStatusLabel({
+        ownLabel: busyLabel, ownPending: save.isPending || addStandard.isPending, writeInFlight,
+      })} />
 
       <div className={styles.cardList}>
         {cards.map((card) => (

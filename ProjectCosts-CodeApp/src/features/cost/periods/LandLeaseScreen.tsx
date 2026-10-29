@@ -48,8 +48,9 @@ import {
 } from "@fluentui/react-icons";
 import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
-import { writeCommandsDisabled } from "@/domain/writeGuard";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { serverEnforcedProvider } from "@/platform/privileges";
 /*
  * `gblAreaWithRegion` is a property of the PROJECT, not of either period screen: `App.OnStart`
@@ -77,7 +78,7 @@ import {
   leaseFieldErrors, leasePanelTitle, leaseSaveError, orderedSubaccounts,
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
-  toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
+  leaseSelectionAfterWrite, toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
   type GeneratorOption, type LandLeaseForm, type LeaseAllocationRow, type LeaseContract,
   type LeaseCostRow, type LeasePeriodRow, type LeaseProjectContext, type LeaseSubaccountCard,
 } from "./landLeaseRules";
@@ -685,6 +686,10 @@ export default function LandLeaseScreen() {
   const countryInflation = useCountryInflation(extras.data?.countryId);
   const assumptions = useLeaseAssumptions(extras.data?.countryId, extras.data?.technology);
   const writes = useLeaseWrites(projectId);
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("Land Lease");
 
   /** `IsFolded`, but only for the cards the user has actually toggled. */
   const [folds, setFolds] = useState<Record<string, boolean>>({});
@@ -812,6 +817,7 @@ export default function LandLeaseScreen() {
   const writeDisabled = writeCommandsDisabled({
     loading: isLoading,
     writePending: busy !== null || writes.isPending,
+    writeInFlight,
   });
 
   /* ── commands ─────────────────────────────────────────────────────────── */
@@ -902,13 +908,15 @@ export default function LandLeaseScreen() {
     // `refused` is the canvas' `If(CountRows(recFilteredStandardContractsForProject) = 0, …)`
     // with no else arm: the command simply does nothing and says nothing.
     if (plan.refused || plan.writes.length === 0) return;
+    const selectionAtStart = selection;
     setBusy(LEASE_MSG.loadingStandardContract);
     setError(null);
     try {
       await writes.mutateAsync(plan.writes);
-      setSelection(NO_LEASE_SELECTION);
+      // CA-17: a row selected while the import ran is kept (`leaseSelectionAfterWrite`).
+      setSelection((current) => leaseSelectionAfterWrite({ atStart: selectionAtStart, current }));
     } catch (e) {
-      setError(leaseSaveError.contract("Add Standard Contract", messageOf(e)));
+      reportFailure(leaseSaveError.contract("Add Standard Contract", messageOf(e)), setError);
     } finally {
       setBusy(null);
     }
@@ -930,7 +938,7 @@ export default function LandLeaseScreen() {
 
   /* ── save ─────────────────────────────────────────────────────────────── */
 
-  const saveDisabled = !form || !panel || writes.isPending || !canSaveLandLease({
+  const saveDisabled = !form || !panel || writes.isPending || writeInFlight || !canSaveLandLease({
     form,
     selectedCost: panel?.cost ?? null,
     selectedPeriod: panel?.period ?? null,
@@ -974,6 +982,7 @@ export default function LandLeaseScreen() {
      * Only the panel moves. Clearing the SELECTION stays below, where the canvas keeps it —
      * that is a separate, later `UpdateContext` (LL:5895).
      */
+    const selectionAtStart = selection;
     setBusy(LEASE_MSG.savingContract);
     setError(null);
     closePanel();
@@ -985,13 +994,13 @@ export default function LandLeaseScreen() {
       // an OData `$id` content reference would have nothing to resolve inside.
       await writes.mutateAsync(plan.writes);
       // `UpdateContext({locSelectedLandLeaseCost: Blank(), locSelectedLandLeasePeriod: Blank()})`
-      // — `clearsSelectionAfterSave`, LL:5895.
-      setSelection(NO_LEASE_SELECTION);
+      // — `clearsSelectionAfterSave`, LL:5895; a row selected mid-save is kept (CA-17).
+      setSelection((current) => leaseSelectionAfterWrite({ atStart: selectionAtStart, current }));
     } catch (e) {
       const source = plan.writesHeader ? "Land Lease Project Costs" : "Land Lease Periods";
-      setError(plan.writesHeader
+      reportFailure(plan.writesHeader
         ? leaseSaveError.contract(source, messageOf(e))
-        : leaseSaveError.period(source, messageOf(e)));
+        : leaseSaveError.period(source, messageOf(e)), setError);
     } finally {
       setBusy(null);
     }
@@ -1004,16 +1013,21 @@ export default function LandLeaseScreen() {
   const confirmDelete = async () => {
     if (!deleting) return;
     const plan = planLeaseDelete(deleting.contract, deleting.period, allocations);
+    const selectionAtStart = selection;
     setDeleting(null);
     setBusy(plan.kind === "contract" ? LEASE_MSG.deletingContract : LEASE_MSG.deletingPeriod);
     setError(null);
     try {
       await writes.mutateAsync(plan.writes);
-      setSelection(NO_LEASE_SELECTION);
+      // CA-17: kept if picked mid-delete, unless it pointed at a deleted period or contract.
+      setSelection((current) => leaseSelectionAfterWrite({
+        atStart: selectionAtStart, current,
+        deleted: { periodIds: plan.periodIds, costIds: plan.costIds },
+      }));
     } catch (e) {
-      setError(plan.kind === "contract"
+      reportFailure(plan.kind === "contract"
         ? leaseSaveError.contract("Delete Land Lease", messageOf(e))
-        : leaseSaveError.period("Delete Period", messageOf(e)));
+        : leaseSaveError.period("Delete Period", messageOf(e)), setError);
     } finally {
       setBusy(null);
     }
@@ -1062,7 +1076,10 @@ export default function LandLeaseScreen() {
         * blocking spinner pop-up over the screen. The same verbatim `LEASE_MSG` text shows here as
         * one non-animated status line, and the write guard disables the write commands instead.
         */}
-      <WriteStatus label={busy} testId="land-lease-write-status" />
+      {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+      <WriteStatus testId="land-lease-write-status" label={costWriteStatusLabel({
+        ownLabel: busy, ownPending: writes.isPending, writeInFlight,
+      })} />
 
       <div className={styles.cardList}>
         {cards.map((card) => (

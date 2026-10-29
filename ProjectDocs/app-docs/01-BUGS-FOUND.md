@@ -971,7 +971,7 @@ message for an unset payment-date year.
 - **Tests.** None automated: jsdom does no layout, so a unit test cannot see the alignment. The
   fix needs a visual check in the running app.
 
-### CA-15 · Cost module: leaving a screen mid-write loses the write's error, and the write guard reads open on return (found 29 Oct 2026, **open**)
+### CA-15 · Cost module: leaving a screen mid-write loses the write's error, and the write guard reads open on return (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
 **A code-app defect, introduced by D57** (the spinners removed).
 - **What happens.**
@@ -985,10 +985,47 @@ message for an unset payment-date year.
     on the same rows.
 - **Severity.** Medium. The non-transactional multi-writes (Land Lease header → allocations →
   period, the OPEX child cascade) can interleave.
-- **Fix (not built).** A per-project "write in flight" flag that outlives the screen, plus a
+- **Fix (planned).** A per-project "write in flight" flag that outlives the screen, plus a
   global error toast for writes whose screen is gone. Record: **D57 §3 item 2**.
+- **Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).**
+  - *The flag.* Every Cost write hook carries the TanStack `mutationKey`
+    `costWriteKey(projectId, family)` (`domain/writeGuard.ts`): CAPEX, comments, O&M / Other OPEX
+    (book save, Add Standard Contract), Land Lease, Contracts (4 hooks) and Add Cost from Table.
+    `useCostWriteInFlight(projectId)` (`features/cost/costing/useCostWriteFlight.ts`) is
+    `useIsMutating` over the project prefix, so it counts a write whose screen has unmounted. It
+    feeds `writeCommandsDisabled` (new `writeInFlight` input) on CAPEX, the Comments panel, O&M /
+    Other OPEX, Land Lease and Contracts, and Add Cost from Table's `saveButtonDisabled`. Every
+    family blocks every other one, as the canvas scrim did.
+  - *The status line.* A screen with no write of its own, while a write started elsewhere runs,
+    shows `COST_WRITE_MSG.writeRunningElsewhere`, "Please wait, a change started on another screen
+    is still being saved..." (**NEW text**, no canvas source; `costWriteStatusLabel`).
+  - *The error.* `useWriteFailureReport(screen)` sends the screen's own error text to its banner
+    while the screen is mounted, and to the app-wide error toast once it is gone
+    (`writeFailureSurface`, `leftScreenFailureToast`). Toast title "A change on the <screen> screen
+    could not be saved." (**NEW**); detail: the text the banner would have shown. CAPEX reports
+    through a new hook-level `onWriteError` option on `useCapexWrites` (TanStack drops per-call
+    `mutate` callbacks after unmount). OPEX's delete and Add Standard Contract moved from
+    `mutate(…, { onError })` to `mutateAsync().catch()` for the same reason.
+  - *Comments* (also closes the CA-18 follow-up below). The comments Save closes its panel before
+    writing and had no error display at all (its rejection was unhandled). A refused save or delete
+    now shows `commentsSaveFailed` (**NEW**, "Error: the comments could not be saved completely.
+    <cause>") on the CAPEX error banner (`onSaveError`), or the toast once CAPEX is gone, and the
+    threads are refetched.
+  - *Tests.* UT-WGUARD-FLIGHT-001…010, UT-COSTFLIGHT-001…017, UT-CAPEX-FLIGHT-001…004, 010, 011,
+    UT-OPEX-FLIGHT-001…003, UT-LEASE-FLIGHT-001, 002, UT-CONTRACTS-FLIGHT-001, UT-CMT-FAIL-001…003.
+    UT-OPEX-NOSPIN-007 and 008 now drive `mutateAsync`.
+  - *Known limit.* Between two mutations of one comments commit the in-flight count is briefly 0.
+    The CAPEX screen still holds its own `commentsSaving` flag, but a CAPEX screen re-opened at that
+    instant could read open for a moment.
+  - *Known limit (independent review, 29 Oct).* Add Cost from Table's DEFERRED background deletes
+    (`followBackgroundDeletes`, D51 §11.14) are not covered: their mutation settles before they
+    finish, so `writeInFlight` is false while they run. This is the existing D51 §11.14 window, not
+    a regression.
+  - *Review fix.* The CAPEX comments error banner was never cleared, so it stayed up after a
+    successful retry. `CommentsPanel` now calls `onSaveStart` before its first write, and CAPEX
+    clears its banner there (UT-CMT-FAIL-004; removing the call fails it).
 
-### CA-16 · CAPEX PCF grid: write actions look enabled during a write (found 29 Oct 2026, **open**)
+### CA-16 · CAPEX PCF grid: write actions look enabled during a write (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
 **A code-app defect, D57.** While a write runs, the grid's Add, Edit, Delete, Add Standard, Paid
 and Comment actions are ignored by the React callback (`gridActionAllowed`). The vendored DOM menus
@@ -996,14 +1033,38 @@ and Comment actions are ignored by the React callback (`gridActionAllowed`). The
 wrong data). Fix: pass the pending flag into the renderer and grey the items. Check their
 identities by hand, because the label gate does not cover that file. Record: **D57 §3 item 3**.
 
-### CA-17 · Land Lease and Contracts: a selection made during a write is cleared when the write ends (found 29 Oct 2026, **open**)
+**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).** The CAPEX screen passes its
+`writesDisabled` to `PcfGrid` as `writeActionsDisabled`, which reaches the renderer as the new
+`WriteActionsDisabled` parameter (this app's port only; the vendor control has none). While it
+holds, Add New Cost, Add Standard Contract and its submenu entries, Set as paid/unpaid, Comments,
+and the row menu's Edit / Comments / Delete are `disabled` with `aria-disabled="true"`. They are
+greyed by the vendored stylesheet's own rules (`.pcf-add-dropdown-item:disabled`,
+`.pcf-dropdown-item-disabled`); the stylesheet is unchanged, so `pcfCascade.test.ts` still holds.
+Each item's click handler also returns early when disabled; `gridActionAllowed` stays as the second
+line. The shared helper is `setWriteItemDisabled` (`pcf/ui/ActionDropdown.js`). Identities checked
+by hand: these items carry no `data-testid` or `aria-label` (they never did), their captions are
+unchanged and pinned by the new test, and the grid ids listed in
+`09-tosca-automation-conventions.md` (`capex-month-cell-…`, `capex-comment-…`) are untouched.
+Tests: UT-CAPEXPCF-WRITE-001…005 (`capex-costs/pcfWriteActions.test.ts`), UT-CAPEX-FLIGHT-003.
+
+### CA-17 · Land Lease and Contracts: a selection made during a write is cleared when the write ends (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
 **A code-app defect, made reachable by D57.** The success paths clear the selection, as they always
 did. Before D57 the scrim made selecting during a write impossible; now selection stays enabled
 (decision 2b), so a row picked mid-write is dropped when the write finishes. Severity: low. Fix: keep
 the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
 
-### CA-18 · `deleteComment` swallows a refused delete (rule 14) (found 29 Oct 2026, **open**)
+**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`), marked `DIVERGENCE (D57, CA-17)`.**
+- *Land Lease* (`leaseSelectionAfterWrite`, `landLeaseRules.ts`). The save, the standard import
+  and the delete capture the selection they started with. On success that same selection is
+  still cleared, as on the canvas (LL:5895). A row picked mid-write is kept, unless the delete
+  removed its period or its contract.
+- *Contracts* (`contractSelectionAfterDelete`, `contracts/rules.ts`). Only what still points at a
+  deleted row is cleared: the contract and its target when the contract is gone, the target when
+  that target is gone. The screen reads the latest selection through a ref when the delete settles.
+- *Tests.* UT-LEASE-SEL-001…005, 010…012; UT-CONTRACTS-SEL-001, 002, 010…013.
+
+### CA-18 · `deleteComment` swallows a refused delete (rule 14) (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
 **A code-app defect, recorded in D56 §7 and never logged here.**
 - **What happens.** `deleteComment` (`data/comments.ts`) calls the raw generated `delete()`, which
@@ -1018,8 +1079,39 @@ the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
 - **Fix.** Route it through `deleteRecord` (`data/client.ts`), as every other delete path does
   (CONVENTIONS rule 14, KNOWN-RISKS "Several delete paths discard the SDK's failure result
   silently"). Then add a test with a refusing fake.
+- **Fixed (29 Oct 2026, uncommitted).** `deleteComment` now calls
+  `deleteRecord("delete CAPEX comment", "vsb_capexcommentses", id)`. No caller needed a code
+  change: each already awaits it inside its `SaveLog` step, so the throw stops the next phase.
+  - The bulk Delete's `deleteMany` attempts every comment, then throws; no cost row and no
+    contract delete is sent.
+  - The per-row Delete stops at the first refusal.
+  - The relink reset (bulk and per-row) fails the Save, and no month delete is sent.
+  - In each case the log marks the comment step FAILED and lists the later steps as "Not sent".
+  - The Add Cost from Table legacy delete (`addCostSheet.ts`) also benefits.
+  - The Comments panel now stops its later saves at a refused delete. It still shows no error
+    text, the same as for a refused `saveComment` (a gap that predates this fix, left alone).
+  - Comments panel now shows the error (fixed with CA-15): a refused delete or save shows
+    `commentsSaveFailed` on the CAPEX banner, or the toast once CAPEX is gone (UT-CMT-FAIL-001…003).
+  - No new user text.
+  - Tests: UT-CMTDEL-001…004 (`data/capexWrites.bulk.test.ts`, refusing fake) and
+    UT-CMTDEL-005, 006 (`data/comments.test.ts`, refusing SDK client).
+  - The fakes in `costBook.test.ts`, `addCostSheet.test.ts` and `capexWrites.bulk.test.ts` now
+    route `vsb_capexcommentses` deletes through `deleteRecord`. The raw generated comment
+    `delete()` either throws there or discards a refusal, as the real one does.
+  - Mutation check: going back to the raw `delete()` turns UT-CMTDEL-001…004 red. The file was
+    restored byte-identically (hash checked).
+  - **Behaviour change (independent review, 29 Oct).** `deleteRecord` rejects a **404**, where the raw
+    delete "succeeded" silently. So if another user already deleted a comment, these now fail part
+    way:
+    - the next CAPEX panel Delete (comments phase);
+    - the relink paid reset;
+    - a comments Save.
 
-### CA-19 · Test reliability: UT-ADGATE-910 fails intermittently under the full suite (seen repeatedly since 27 Oct 2026, **open**)
+    The contract update and the paid reset may already have landed; a retry after a reload works.
+    This is correct under rule 14. Add Cost from Table's bulk path instead treats a 404 as "already
+    gone" (D51 §11.12); aligning the panel with that is a product choice, not done here.
+
+### CA-19 · Test reliability: UT-ADGATE-910 fails intermittently under the full suite (seen repeatedly since 27 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
 **A test defect, not an app defect.**
 - **What happens.** `features/admin/admin-gates-approvals/Screen.test.tsx` UT-ADGATE-910 ("Reset
@@ -1037,6 +1129,30 @@ the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
 - **Fix.** Find the equivalent race in 910 (probably the confirm dialog's async open) and wait on
   the right condition. Do not raise the timeout. Record: TESTING-AND-HARNESS.md ("known timing
   flake").
+- **Root cause (traced 29 Oct 2026).** This is not a short `aria-hidden` flicker. In jsdom, which
+  has no layout, tabster finds no visible focusable control in a freshly opened Fluent dialog.
+  1. Fluent therefore focuses the dialog surface itself.
+  2. Tabster registers the surface's modalizer only after that focus. It never activates a
+     modalizer whose own element has focus, so no modalizer is active, for the drawer or for the
+     alert dialog.
+  3. With none active, tabster's deferred `_hiddenUpdate` (a 250 ms timer) marks every modalizer
+     `aria-hidden="true"`, the open alert dialog included, and that never reverts.
+  4. A default role query therefore works only within those 250 ms. Under load, the
+     `within(dialog).findByRole("button", …)` ran later and waited out its 5 s, which is where the
+     7 s came from.
+
+  Reproduced: three concurrent heavy runs failed 2 of 2; an added 600 ms wait made it fail
+  even alone. Not an app defect: in a browser the dialog's first button is focusable, so the
+  modalizer activates.
+- **Fixed (29 Oct 2026, uncommitted, test only).** UT-ADGATE-910 queries the panel button, the
+  alert dialog and its confirm button with `{ hidden: true }`. The test pins behaviour, so it
+  waits for the controls to exist rather than for tabster's a11y state. Other tests in the file
+  already do the same (905, 915, 916). UT-ADGATE-906 and 914 open the same dialog and got the
+  same change. No timeout was raised and no app code changed.
+  - With the 600 ms wait added, the fixed test passes.
+  - The file alone: 5 of 5 runs, 33/33 each.
+  - Three concurrent `npx vitest run src/features/admin src/features/cost/capex-costs/Screen.test.tsx
+    src/features/pm/project-main/Screen.test.tsx` runs, twice: 6 of 6 green, 826/826 each.
 
 ---
 

@@ -1004,6 +1004,34 @@ export function toggleLeaseSelectionCanvasParity(
   return { subaccountId: row.subaccountId, periodId: row.periodId, costId: row.costId };
 }
 
+/**
+ * The selection once a successful write ends (CA-17).
+ *
+ * The canvas clears it after every Land Lease save, standard import and delete
+ * (`UpdateContext({locSelectedLandLeaseCost: Blank(), locSelectedLandLeasePeriod: Blank()})`,
+ * LL:5895, `clearsSelectionAfterSave`). Its pop-up scrim made selecting DURING a write
+ * impossible, so the selection it cleared was always the one the write started with.
+ *
+ * DIVERGENCE (D57, CA-17): since D57 selection stays enabled while a write runs. The selection
+ * the write started with is still cleared, as on the canvas; a row the user picked mid-write is
+ * KEPT, unless the write deleted that row's period or its contract (`deleted`).
+ */
+export function leaseSelectionAfterWrite(args: {
+  atStart: LeaseSelection;
+  current: LeaseSelection;
+  deleted?: { periodIds?: readonly string[]; costIds?: readonly string[] };
+}): LeaseSelection {
+  const { atStart, current } = args;
+  const unchanged = current.subaccountId === atStart.subaccountId
+    && current.periodId === atStart.periodId && current.costId === atStart.costId;
+  if (unchanged) return { ...NO_LEASE_SELECTION };
+  const periodGone = current.periodId !== null
+    && (args.deleted?.periodIds ?? []).includes(current.periodId);
+  const costGone = current.costId !== null
+    && (args.deleted?.costIds ?? []).includes(current.costId);
+  return periodGone || costGone ? { ...NO_LEASE_SELECTION } : current;
+}
+
 /* ═══════════════════════════════════════════════════ rule 2 · Period 1 owns it ══ */
 
 /**

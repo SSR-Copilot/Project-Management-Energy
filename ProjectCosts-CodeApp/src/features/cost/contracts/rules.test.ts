@@ -13,7 +13,7 @@ import {
   contractName, paymentTargetName, devCoCostName, contractCardTitle, panelTitle,
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
-  gatedContractCommands,
+  gatedContractCommands, contractSelectionAfterDelete,
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
@@ -819,5 +819,29 @@ describe("contract card body (canvas parity)", () => {
     expect(MSG.closingDate).toBe("Closing Date");
     expect(MSG.contractClosingDate).toBe("Contract Closing Date");
     expect(CONTRACT_TYPE_NAME[CONTRACT_TYPE.Development]).toBe("Development Contract");
+  });
+});
+
+describe("contractSelectionAfterDelete (CA-17)", () => {
+  it("UT-CONTRACTS-SEL-010 the deleted contract's selection is cleared, its target with it", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-1" }, { contractId: "c-1" }))
+      .toEqual({ contractId: undefined, targetId: undefined });
+  });
+
+  it("UT-CONTRACTS-SEL-011 another contract picked while the delete ran is kept", () => {
+    const picked = { contractId: "c-2", targetId: "t-9" };
+    expect(contractSelectionAfterDelete(picked, { contractId: "c-1" })).toEqual(picked);
+  });
+
+  it("UT-CONTRACTS-SEL-012 a deleted payment target is cleared; its contract stays selected", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-1" }, { targetId: "t-1" }))
+      .toEqual({ contractId: "c-1", targetId: undefined });
+  });
+
+  it("UT-CONTRACTS-SEL-013 another target (or none) picked while a target delete ran is kept", () => {
+    expect(contractSelectionAfterDelete({ contractId: "c-1", targetId: "t-2" }, { targetId: "t-1" }))
+      .toEqual({ contractId: "c-1", targetId: "t-2" });
+    const none = { contractId: undefined, targetId: undefined };
+    expect(contractSelectionAfterDelete(none, { contractId: "c-1" })).toEqual(none);
   });
 });

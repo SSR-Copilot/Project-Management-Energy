@@ -5239,10 +5239,14 @@ Every other spinner text stays, because the status line shows it.
    screen mid-write lets the write finish, but its error has no screen left to show it on, and a
    screen re-opened while that write still runs has a fresh mutation observer, so its guard reads
    open. Closing this needs a per-project "write in flight" flag and a global error toast (not built).
+   *Fixed 29 Oct 2026 (uncommitted), see CA-15:* `useCostWriteInFlight` + `costWriteKey`, the NEW
+   "another screen" status line, and the NEW error toast via `useWriteFailureReport`.
 3. **The PCF grid's write actions are ignored, not greyed**, while a write runs (the menus still
-   look enabled; the guard sits in the React callback).
+   look enabled; the guard sits in the React callback). *Fixed 29 Oct 2026 (uncommitted), see
+   CA-16.*
 4. **A selection made during a write is cleared when the write ends** (Land Lease, Contracts
-   delete), as the success paths always did.
+   delete), as the success paths always did. *Fixed 29 Oct 2026 (uncommitted), see CA-17:* only
+   the selection the write started with, or one pointing at a deleted row, is cleared.
 5. **CAPEX refreshes the tab the write was made on** (`useCapexWrites` records the category in
    `onMutate`), so switching tab mid-save no longer leaves the first tab stale. The status line and
    error banners also render during a tab's first load, and "Saving comments..." survives the

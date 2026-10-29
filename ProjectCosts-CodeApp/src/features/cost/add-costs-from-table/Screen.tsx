@@ -23,6 +23,8 @@ import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
 import { CATEGORY_LABELS, resolveCategory } from "@/features/cost/capex-costs/rules";
 import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/useCostBook";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
+import { costWriteStatusLabel } from "@/domain/writeGuard";
 import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data/addCostSheet";
 import { emitSaveLog } from "@/data/saveLog";
 import { rootCauseDetail } from "@/platform/errors";
@@ -68,6 +70,10 @@ export default function AddCostsFromTableScreen() {
 
   const sheetQuery = useAddCostSheet(category);
   const save = useSaveAddCostSheet(category);
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("Add Costs from Table");
 
   const currentYear = new Date().getFullYear();
   const codDate = project?.milestones?.operationsStartCod;
@@ -276,7 +282,8 @@ export default function AddCostsFromTableScreen() {
       for (const id of sentIdentities) sentInFailedAttempts.current.add(id);
       const failure = toSaveFailure(error);
       const userText = saveFailureText(failure);
-      setSaveError(userText);
+      // CA-15: the sheet's banner while it is mounted; the error toast if the user has left.
+      reportFailure(userText, setSaveError);
       // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
       // then the raw error object in its own collapsed group (D58); the screen shows one line.
       emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
@@ -414,7 +421,11 @@ export default function AddCostsFromTableScreen() {
             * `InformationText: =locSpinnerInformationText`) with one non-blocking status line in
             * the footer, same verbatim text. Save stays guarded by `saveButtonDisabled`.
             */}
-          <WriteStatus label={save.isPending ? "Please wait, saving costs..." : null} testId="add-costs-write-status" />
+          {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+          <WriteStatus testId="add-costs-write-status" label={costWriteStatusLabel({
+            ownLabel: save.isPending ? "Please wait, saving costs..." : null,
+            ownPending: save.isPending, writeInFlight,
+          })} />
           <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" disabled={locked} onClick={back}>Cancel</Button>
           <Button
             aria-label="Save"
@@ -423,7 +434,8 @@ export default function AddCostsFromTableScreen() {
             // Not while the sheet reloads (`saveButtonDisabled` says why).
             disabled={saveButtonDisabled({
               canSave: canSaveBulkEdit(permissions, errors),
-              isPending: save.isPending,
+              // CA-15: also while a Cost write started elsewhere is still running.
+              isPending: save.isPending || writeInFlight,
               isFetching: sheetQuery.isFetching,
             })}
             onClick={() => { void doSave(); }}

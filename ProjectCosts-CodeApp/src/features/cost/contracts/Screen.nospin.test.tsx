@@ -11,11 +11,12 @@
  * The data hooks and the session are mocked; what is under test is the screen's wiring.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { CONTRACT_TYPE, MSG, type BopContract } from "./rules";
+import { COST_WRITE_MSG } from "@/domain/writeGuard";
 
 const PROJECT_ID = "11111111-2222-3333-4444-555555555555";
 const CONTRACT = {
@@ -23,12 +24,23 @@ const CONTRACT = {
   isMarginStandardAssumption: false,
 } as unknown as BopContract;
 const TARGET = { id: "t-1", contractId: "c-1", description: "First", paymentDate: "01/2027", totalCostsContract: 50 };
+/** A second card, for CA-17: picked while a delete of the first one runs. */
+const CONTRACT_2 = {
+  id: "c-2", description: "Substation", contractType: CONTRACT_TYPE.Construction, margin: false,
+  isMarginStandardAssumption: false,
+} as unknown as BopContract;
 
 interface State {
   contractsLoading: boolean;
   contractsError: unknown;
   /** Which mutation is pending, if any. */
   pending: "none" | "saveContract" | "deleteContract" | "saveTarget" | "deleteTarget";
+  /** The contract cards the screen lists. */
+  contracts: BopContract[];
+  /** CA-15 — the project-wide "a Cost write is in flight" flag. */
+  writeInFlight: boolean;
+  /** What every `mutateAsync` returns; a test holds it open to act mid-write. */
+  gate: Promise<void> | null;
 }
 let state: State;
 
@@ -50,10 +62,10 @@ vi.mock("@/platform/privileges", async (importOriginal) => ({
 vi.mock("./hooks", () => {
   const query = (data: unknown, isLoading = false, error: unknown = null) => ({ data, isLoading, error });
   const mutation = (key: State["pending"]) => () => ({
-    mutateAsync: vi.fn(async () => undefined), isPending: state.pending === key,
+    mutateAsync: vi.fn(() => state.gate ?? Promise.resolve()), isPending: state.pending === key,
   });
   return {
-    useContracts: () => query(state.contractsLoading ? undefined : [CONTRACT], state.contractsLoading, state.contractsError),
+    useContracts: () => query(state.contractsLoading ? undefined : state.contracts, state.contractsLoading, state.contractsError),
     usePaymentTargets: () => ({ byContract: new Map([["c-1", [TARGET]]]) }),
     useCapexAccounts: () => query([]),
     useDevCoCapexContracts: () => query([]),
@@ -68,6 +80,11 @@ vi.mock("./hooks", () => {
     useDeletePaymentTarget: mutation("deleteTarget"),
   };
 });
+
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => state.writeInFlight,
+  useWriteFailureReport: () => (text: string, show?: (t: string) => void) => { show?.(text); },
+}));
 
 import ContractsScreen from "./Screen";
 
@@ -93,7 +110,7 @@ function selectAndExpand() {
 }
 
 beforeEach(() => {
-  state = { contractsLoading: false, contractsError: null, pending: "none" };
+  state = { contractsLoading: false, contractsError: null, pending: "none", contracts: [CONTRACT], writeInFlight: false, gate: null };
 });
 
 describe("Contracts screen without spinners (D57)", () => {
@@ -164,5 +181,47 @@ describe("Contracts screen without spinners (D57)", () => {
       expect(screen.getByTestId("contracts-write-status").textContent).not.toBe("");
       view.unmount();
     }
+  });
+});
+
+describe("Contracts screen: CA-15 and CA-17", () => {
+  it("UT-CONTRACTS-FLIGHT-001 a Cost write in flight from another screen greys every write command and says so", () => {
+    state.writeInFlight = true;
+    mount();
+    selectAndExpand();
+    for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
+    expect(screen.getByTestId("contracts-add-target-c-1")).toBeDisabled();
+    expect(screen.getByTestId("contracts-write-status")).toHaveTextContent(COST_WRITE_MSG.writeRunningElsewhere);
+    // Selection stays usable.
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).toBeChecked();
+  });
+
+  /** Selects c-1, opens Delete Contract and confirms it, with every `mutateAsync` held open. */
+  async function deleteFirstContract(): Promise<() => Promise<void>> {
+    let finish: () => void = () => {};
+    state.gate = new Promise<void>((r) => { finish = r; });
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1"));
+    fireEvent.click(command("deleteContarct"));
+    const dialog = screen.getByRole("alertdialog");
+    await act(async () => { fireEvent.click(within(dialog).getByTestId("confirm-dialog-confirm")); });
+    return async () => { await act(async () => { finish(); }); };
+  }
+
+  it("UT-CONTRACTS-SEL-001 a card picked while the delete runs stays selected when it ends", async () => {
+    state.contracts = [CONTRACT, CONTRACT_2];
+    mount();
+    const settle = await deleteFirstContract();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-2"));
+    await settle();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-2")).toBeChecked();
+  });
+
+  it("UT-CONTRACTS-SEL-002 the deleted card's own selection is still cleared, as before", async () => {
+    state.contracts = [CONTRACT, CONTRACT_2];
+    mount();
+    const settle = await deleteFirstContract();
+    await settle();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).not.toBeChecked();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-2")).not.toBeChecked();
   });
 });

@@ -28,6 +28,7 @@ import {
   securedCell, allocationCell, otpCell, inflationProfileCell, toLeaseGridRow,
   isStandardPeriodName, isStandardPeriodNameLower,
   toggleLeaseSelection, toggleLeaseSelectionCanvasParity, NO_LEASE_SELECTION,
+  leaseSelectionAfterWrite,
   writesContractHeader, headerEditable, landLeaseCostName, leasePanelTitle, nextPeriodName,
   resolveStartDate, resetStartDateVisible, resetStartDate,
   defaultDurationMonths, defaultDurationYears, defaultAggregation, defaultCurrencyCode,
@@ -1968,5 +1969,43 @@ describe("writeCommandsDisabled / guardLeaseCommands (D57)", () => {
     expect(guarded.map((c) => c.key)).toEqual(commands.map((c) => c.key));
     // The input is not mutated.
     expect(commands.some((c) => c.enabled)).toBe(true);
+  });
+});
+
+describe("leaseSelectionAfterWrite (CA-17)", () => {
+  const a = { subaccountId: "sub-1", periodId: "p-1", costId: "c-1" };
+  const b = { subaccountId: "sub-2", periodId: "p-7", costId: "c-7" };
+
+  it("UT-LEASE-SEL-001 the selection the write started with is cleared, as on the canvas (LL:5895)", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: { ...a } })).toEqual(NO_LEASE_SELECTION);
+    expect(leaseSelectionAfterWrite({ atStart: NO_LEASE_SELECTION, current: { ...NO_LEASE_SELECTION } }))
+      .toEqual(NO_LEASE_SELECTION);
+  });
+
+  it("UT-LEASE-SEL-002 a row picked while the write ran is kept", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: b })).toBe(b);
+    expect(leaseSelectionAfterWrite({ atStart: NO_LEASE_SELECTION, current: b })).toBe(b);
+  });
+
+  it("UT-LEASE-SEL-003 a row picked mid-delete is cleared when the delete removed its period", () => {
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: { subaccountId: "sub-1", periodId: "p-2", costId: "c-1" },
+      deleted: { periodIds: ["p-1", "p-2"], costIds: [] },
+    })).toEqual(NO_LEASE_SELECTION);
+  });
+
+  it("UT-LEASE-SEL-004 …or its contract, and is kept when neither was deleted", () => {
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: { subaccountId: "sub-1", periodId: "p-9", costId: "c-1" },
+      deleted: { periodIds: ["p-1"], costIds: ["c-1"] },
+    })).toEqual(NO_LEASE_SELECTION);
+    expect(leaseSelectionAfterWrite({
+      atStart: a, current: b, deleted: { periodIds: ["p-1"], costIds: ["c-1"] },
+    })).toBe(b);
+  });
+
+  it("UT-LEASE-SEL-005 a deselect made mid-write stays deselected", () => {
+    expect(leaseSelectionAfterWrite({ atStart: a, current: { ...NO_LEASE_SELECTION } }))
+      .toEqual(NO_LEASE_SELECTION);
   });
 });

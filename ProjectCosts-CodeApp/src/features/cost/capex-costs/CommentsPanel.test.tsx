@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
-import { COMMENT_TYPE, type CapexComment } from "./comments";
+import { COMMENT_TYPE, commentsSaveFailed, type CapexComment } from "./comments";
 import type { Payment } from "../costing/model";
 
 let data: CapexComment[] | undefined;
@@ -22,6 +22,11 @@ const saveMutation = { mutateAsync: vi.fn(async () => "new-id"), isPending: fals
 const removeMutation = { mutateAsync: vi.fn(async () => undefined), isPending: false };
 const invalidate = vi.fn();
 
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => false,
+  useWriteFailureReport: () => (text: string, show?: (t: string) => void) => { show?.(text); },
+}));
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useCapexComments: () => ({ data, isLoading }),
   useCommentWrites: () => ({ save: saveMutation, remove: removeMutation, invalidate }),
@@ -377,5 +382,53 @@ describe("CommentsPanel", () => {
       sequenceNumber: null,
       authorFullName: "Shakti Singh Rajput",
     }));
+  });
+  /* ── CA-15 / CA-18: a refused comment write is shown, never swallowed ──── */
+
+  it("UT-CMT-FAIL-001 a refused delete stops the commit and reaches the host's error banner", async () => {
+    data = [comment({ id: "old-1", text: "To delete" })];
+    removeMutation.mutateAsync = vi.fn(async () => { throw new Error("HTTP 403 Forbidden"); });
+    const onSaveError = vi.fn();
+    const onSavingChange = vi.fn();
+    mount({ onSaveError, onSavingChange });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Comment" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), {
+      target: { value: "Added General Comment" },
+    });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSaveError).toHaveBeenCalledTimes(1));
+    expect(onSaveError).toHaveBeenCalledWith(commentsSaveFailed("HTTP 403 Forbidden"));
+    // The refusal stopped the remaining writes; the threads are re-read; the flag is released.
+    expect(saveMutation.mutateAsync).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(onSavingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("UT-CMT-FAIL-002 a refused save reaches the host's error banner too", async () => {
+    saveMutation.mutateAsync = vi.fn(async () => { throw new Error("refused"); });
+    const onSaveError = vi.fn();
+    mount({ onSaveError });
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), { target: { value: "A reply" } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSaveError).toHaveBeenCalledWith(commentsSaveFailed("refused")));
+  });
+
+  it("UT-CMT-FAIL-004 a commit calls onSaveStart before its first write, so the host can clear an old error", async () => {
+    const order: string[] = [];
+    saveMutation.mutateAsync = vi.fn(async () => { order.push("write"); return "saved-id"; });
+    const onSaveStart = vi.fn(() => { order.push("start"); });
+    mount({ onSaveStart });
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), { target: { value: "A reply" } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(saveMutation.mutateAsync).toHaveBeenCalled());
+    expect(onSaveStart).toHaveBeenCalledTimes(1);
+    expect(order[0]).toBe("start");
+  });
+
+  it("UT-CMT-FAIL-003 the NEW banner text names the failure and keeps the cause", () => {
+    expect(commentsSaveFailed("HTTP 403")).toBe("Error: the comments could not be saved completely. HTTP 403");
   });
 });

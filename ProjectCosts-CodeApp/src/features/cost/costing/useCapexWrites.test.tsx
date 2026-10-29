@@ -90,3 +90,43 @@ describe("useCapexWrites — the written tab is the one refreshed (D57)", () => 
     await vi.waitFor(() => expect(failed.bookCategories()).toEqual([3]));
   });
 });
+
+describe("useCapexWrites — a failure after the screen unmounted still reaches the caller (CA-15)", () => {
+  it("UT-CAPEX-FLIGHT-010 Paid, Delete and Save failures reach onWriteError even after unmount", async () => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const onWriteError = vi.fn();
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fails: Array<() => void> = [];
+    const failing = () => new Promise<void>((_, reject) => { fails.push(() => reject(new Error("refused"))); });
+    repo.setCostPaid.mockImplementationOnce(failing);
+    repo.deleteCostLine.mockImplementationOnce(failing);
+    repo.saveCostLine.mockImplementationOnce(failing);
+
+    const hook = renderHook(() => useCapexWrites(1, { onWriteError }), { wrapper });
+    act(() => {
+      hook.result.current.setPaid.mutate({ lineId: "l1", year: 2026, month: 1, paid: true });
+      hook.result.current.deleteLine.mutate(LINE);
+      hook.result.current.saveLine.mutate({ line: LINE, accountId: "a", isNew: false, payments: [] });
+    });
+    await vi.waitFor(() => expect(fails).toHaveLength(3));
+    hook.unmount();
+    await act(async () => { for (const fail of fails) fail(); });
+    await vi.waitFor(() => expect(onWriteError).toHaveBeenCalledTimes(3));
+    expect(onWriteError.mock.calls.every(([e]) => (e as Error).message === "refused")).toBe(true);
+  });
+
+  it("UT-CAPEX-FLIGHT-011 every CAPEX write carries the project's Cost write key", async () => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(() => useCapexWrites(1), { wrapper });
+    act(() => { hook.result.current.setPaid.mutate({ lineId: "l1", year: 2026, month: 1, paid: true }); });
+    await vi.waitFor(() => expect(client.isMutating({ mutationKey: ["cost-write", "p-1"] })).toBe(1));
+    await act(async () => { release(); });
+    await vi.waitFor(() => expect(client.isMutating({ mutationKey: ["cost-write", "p-1"] })).toBe(0));
+  });
+});

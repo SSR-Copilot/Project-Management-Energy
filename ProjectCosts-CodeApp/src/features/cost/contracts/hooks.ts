@@ -16,6 +16,7 @@ import { qk, contractInvalidations } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
 import type { ContractWrite, PaymentTargetWrite } from "@/data/contracts";
 import { loadProjectExtras } from "@/data/project";
+import { costWriteKey } from "@/domain/writeGuard";
 import {
   applySelection, applyUsage, buildAccountTree, sortContracts,
   type AccountNode, type BopContract, type ContractType, type PaymentTarget,
@@ -181,6 +182,8 @@ export interface SaveContractArgs {
 export function useSaveContract(projectId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    // CA-15: counted by `useCostWriteInFlight` even after the Contracts screen is gone.
+    mutationKey: costWriteKey(projectId, "contracts"),
     mutationFn: async ({ write, accounts }: SaveContractArgs) => {
       const repo = costRepository();
       const saved = await repo.saveContract(write);
@@ -206,6 +209,7 @@ export function useSaveContract(projectId: string | undefined) {
 export function useDeleteContract(projectId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (id: string) => costRepository().deleteContract(projectId as string, id),
     onSuccess: async () => {
       if (!projectId) return;
@@ -221,6 +225,7 @@ export function useDeleteContract(projectId: string | undefined) {
 export function useSavePaymentTarget(projectId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (write: PaymentTargetWrite) =>
       costRepository().savePaymentTarget(projectId as string, write),
     onSuccess: () =>
@@ -231,6 +236,7 @@ export function useSavePaymentTarget(projectId: string | undefined) {
 export function useDeletePaymentTarget(projectId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (id: string) =>
       costRepository().deletePaymentTarget(projectId as string, id),
     onSuccess: () =>

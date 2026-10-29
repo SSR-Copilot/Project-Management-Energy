@@ -44,6 +44,12 @@ export function PcfGrid(props: {
    */
   commentFlags?: ReadonlyMap<string, GridCommentIndicators>;
   onAction: GridCallback;
+  /**
+   * CA-16 — the screen's `writeCommandsDisabled`. The renderer greys and disables its write menu
+   * items (Add New Cost, Add Standard Contract, Edit, Comments, Delete, Set as paid/unpaid) while
+   * it holds, instead of offering items the screen's `gridActionAllowed` silently ignores.
+   */
+  writeActionsDisabled?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const current = useRef(props);
@@ -76,6 +82,8 @@ export function PcfGrid(props: {
       grid.render({ mode: { allocatedWidth: Math.max(element.clientWidth, 1), allocatedHeight: Math.max(element.clientHeight, 300) },
         parameters: { DevexCapexCostSummary: dataset(currentRows.current), StandardContractOptions: standardDataset(p.standardOptions),
           StartYear: { raw: p.year }, ShowEmptyAccounts: { raw: p.showEmpty }, ShowPlannedCost: { raw: p.showPlanned }, CostPaidByFilter: { raw: p.payer },
+          // CA-16: not a vendor parameter; read by this app's port of the renderer only.
+          WriteActionsDisabled: { raw: p.writeActionsDisabled === true },
           // The cluster timeline header. `gblClusterDurations` in the canvas; a project with a
           // gap in its milestone chain sends `null`, and the PCF simply omits that band.
           ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [

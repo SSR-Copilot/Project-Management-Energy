@@ -1,4 +1,5 @@
 import { DatasetParser } from "../services/DatasetParser";
+import { setWriteItemDisabled } from "./ActionDropdown";
 /**
  * Handles the DOM manipulation and layout construction of the main hierarchical grid.
  */
@@ -65,6 +66,11 @@ export class GridRenderer {
     _commentTooltipElement = null;
     _boundMonthDropdownWindowClick;
     _onActionTriggered;
+    // CA-16 (this app's port, not vendor): `WriteActionsDisabled` from the last render(). While
+    // true, every menu item that starts a write (Add New Cost, Add Standard Contract, Set as
+    // paid/unpaid, Comments, and the row menu's Edit / Comments / Delete) renders greyed and
+    // disabled, because the screen ignores those actions while a write runs (D57).
+    _writeActionsDisabled = false;
     /**
      * @param container        Root div handed over by index.ts (the PCF container).
      * @param expandedRowIds   Shared (by reference) expand-state set owned by index.ts
@@ -146,6 +152,10 @@ export class GridRenderer {
         this.closeMonthDropdown();
         this.closeAddDropdown();
         this.hideCommentTooltip();
+        // CA-16: read before anything can return early, so the shared row menu (which is not
+        // rebuilt per render) always follows the latest state.
+        this._writeActionsDisabled = context.parameters.WriteActionsDisabled?.raw === true;
+        this._actionDropdown.setWriteActionsDisabled?.(this._writeActionsDisabled);
         const dataset = context.parameters.DevexCapexCostSummary;
         // DIVERGENCE (D57): the vendor control bailed out here with `renderLoading()`
         // ("Loading project budget...") while `dataset.loading` was true. In this app the
@@ -1124,7 +1134,9 @@ export class GridRenderer {
         const standardContracts = subaccount.standardContractOptions;
         const dropdown = document.createElement("div");
         dropdown.className = "pcf-add-dropdown open";
-        const addNewCostButton = this.createAddDropdownButton("add", "Add New Cost", false, () => {
+        // CA-16: every item here starts a write (or opens its editor), so all follow the guard.
+        const writesOff = this._writeActionsDisabled;
+        const addNewCostButton = this.createAddDropdownButton("add", "Add New Cost", writesOff, () => {
             this._onActionTriggered("Add", subaccount.id);
             this.closeAddDropdown();
         });
@@ -1132,13 +1144,13 @@ export class GridRenderer {
         if (standardContracts.length > 1) {
             const wrapper = document.createElement("div");
             wrapper.className = "pcf-add-dropdown-item-wrap";
-            const standardButton = this.createAddDropdownButton("standard", "Add Standard Contract", false);
+            const standardButton = this.createAddDropdownButton("standard", "Add Standard Contract", writesOff);
             standardButton.classList.add("pcf-add-dropdown-parent");
             wrapper.appendChild(standardButton);
             const subMenu = document.createElement("div");
             subMenu.className = "pcf-add-submenu";
             standardContracts.forEach(option => {
-                subMenu.appendChild(this.createAddDropdownButton("standard", option.name, false, () => {
+                subMenu.appendChild(this.createAddDropdownButton("standard", option.name, writesOff, () => {
                     this._onActionTriggered("AddStandardContract", subaccount.id, option.id);
                     this.closeAddDropdown();
                 }));
@@ -1148,7 +1160,7 @@ export class GridRenderer {
         }
         else if (standardContracts.length === 1) {
             const option = standardContracts[0];
-            dropdown.appendChild(this.createAddDropdownButton("standard", "Add Standard Contract", false, () => {
+            dropdown.appendChild(this.createAddDropdownButton("standard", "Add Standard Contract", writesOff, () => {
                 this._onActionTriggered("AddStandardContract", subaccount.id, option.id);
                 this.closeAddDropdown();
             }));
@@ -1175,17 +1187,21 @@ export class GridRenderer {
     }
     /**
      * Shared factory for Add-dropdown items. `onClick` is optional because the submenu
-     * parent item is hover-only; the `disabled` flag is currently always false but kept
-     * for the (shelved) disabled-standard-item design mentioned in showAddDropdown.
+     * parent item is hover-only. `disabled` is true only while a write runs (CA-16, this app's
+     * port; the shelved disabled-standard-item design in showAddDropdown stays unbuilt).
      */
     createAddDropdownButton(icon, label, disabled, onClick) {
         const button = document.createElement("button");
         button.className = "pcf-add-dropdown-item";
-        button.disabled = disabled;
+        setWriteItemDisabled(button, disabled);
         button.innerHTML = `<span class="pcf-add-dropdown-icon">${this.getAddDropdownIcon(icon)}</span><span>${label}</span>`;
         if (onClick) {
             button.onclick = (e) => {
                 e.stopPropagation();
+                // CA-16: belt and braces; a disabled button gets no click in a browser anyway.
+                if (button.disabled) {
+                    return;
+                }
                 onClick();
             };
         }
@@ -1282,8 +1298,13 @@ export class GridRenderer {
                 <span class="pcf-paid-action-icon">${this.getPaidActionIcon()}</span>
                 <span>${isPaid ? "Set as unpaid" : "Set as paid"}</span>
             `;
+            // CA-16: greyed and disabled while a write runs (the screen would ignore it).
+            setWriteItemDisabled(actionButton, this._writeActionsDisabled);
             actionButton.onclick = (ev) => {
                 ev.stopPropagation();
+                if (actionButton.disabled) {
+                    return;
+                }
                 this.closeMonthDropdown();
                 // month is converted to 1-based here because Canvas expects
                 // SelectedCostMonth as the human month number (1..12).
@@ -1300,8 +1321,12 @@ export class GridRenderer {
                 <span class="pcf-paid-action-icon">${this.getCommentActionIcon()}</span>
                 <span>Comments</span>
             `;
+            setWriteItemDisabled(commentButton, this._writeActionsDisabled);
             commentButton.onclick = (ev) => {
                 ev.stopPropagation();
+                if (commentButton.disabled) {
+                    return;
+                }
                 this.closeMonthDropdown();
                 this._onActionTriggered("Comment", contract.id);
             };

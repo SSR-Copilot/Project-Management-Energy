@@ -636,9 +636,9 @@ const gatedCostDelete = (tableName: string, id: string) =>
   panelDeleteGate(() => deleteRecord("delete CAPEX cost", tableName, id));
 
 /**
- * One gated comment delete. NOTE: `deleteComment` is the raw generated `delete()` (CA-10, "Not
- * fixed"), so a refused comment delete resolves like a success; `deleteMany` cannot see it, and
- * the phase that follows is not stopped by it. Same as the per-row path.
+ * One gated comment delete. `deleteComment` goes through `deleteRecord` (CA-18, rule 14), so a
+ * refused comment delete REJECTS: `deleteMany` attempts every id, then throws, and the phase that
+ * follows is not sent. Same as the per-row path.
  */
 const gatedCommentDelete = (_tableName: string, id: string) =>
   panelDeleteGate(() => deleteComment(id));
@@ -840,10 +840,9 @@ const DELETE_STEPS = ["comments read", "comment deletes", "cost deletes", "contr
 /**
  * The same three phases in the same order — comments, then cost rows, then the contract — with the
  * deletes INSIDE a phase sent 4 at a time on the panel's delete gate (D56). Every id of a phase is
- * attempted (`deleteMany`); a refused COST delete stops the next phase, so the contract is never
- * deleted while one of its cost rows is still there. A refused COMMENT delete cannot be seen (see
- * `gatedCommentDelete`), exactly as in the per-row loop. Otherwise the contract is never deleted
- * while a child of it is still there, exactly as the per-row loop's first throw stopped it.
+ * attempted (`deleteMany`); a refused COMMENT or COST delete stops the next phase (CA-18 for the
+ * comments, see `gatedCommentDelete`), so the contract is never deleted while a child of it is
+ * still there, exactly as the per-row loop's first throw stopped it.
  */
 export async function deleteCostLineBulk(line: CostLine): Promise<void> {
   // No gate tail: a Delete sends nothing through the shared write gate (`SaveLog`).
