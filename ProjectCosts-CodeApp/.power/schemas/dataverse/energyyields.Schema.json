@@ -1,0 +1,668 @@
+{
+  "name": "vsb_energyyield",
+  "title": "Energy Yields",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "x-ms-dataverse-entity": true,
+      "x-ms-dataverse-entityset": "vsb_energyyields",
+      "x-ms-dataverse-primary-id": "vsb_energyyieldid",
+      "x-ms-dataverse-primary-name": "vsb_name",
+      "properties": {
+        "createdby": {
+          "type": "string",
+          "title": "Created By",
+          "x-ms-dataverse-attribute": "createdby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedBy",
+          "x-ms-read-only": true
+        },
+        "createdbyname": {
+          "type": "string",
+          "title": "createdbyname",
+          "x-ms-dataverse-attribute": "createdbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdbyyominame": {
+          "type": "string",
+          "title": "createdbyyominame",
+          "x-ms-dataverse-attribute": "createdbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "createdon": {
+          "type": "string",
+          "title": "Created On",
+          "x-ms-dataverse-attribute": "createdon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "CreatedOn",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfby": {
+          "type": "string",
+          "title": "Created By (Delegate)",
+          "x-ms-dataverse-attribute": "createdonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfbyname": {
+          "type": "string",
+          "title": "createdonbehalfbyname",
+          "x-ms-dataverse-attribute": "createdonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdonbehalfbyyominame": {
+          "type": "string",
+          "title": "createdonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "createdonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "importsequencenumber": {
+          "type": "string",
+          "title": "Import Sequence Number",
+          "x-ms-dataverse-attribute": "importsequencenumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "ImportSequenceNumber"
+        },
+        "modifiedby": {
+          "type": "string",
+          "title": "Modified By",
+          "x-ms-dataverse-attribute": "modifiedby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedBy",
+          "x-ms-read-only": true
+        },
+        "modifiedbyname": {
+          "type": "string",
+          "title": "modifiedbyname",
+          "x-ms-dataverse-attribute": "modifiedbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedbyyominame": {
+          "type": "string",
+          "title": "modifiedbyyominame",
+          "x-ms-dataverse-attribute": "modifiedbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "modifiedon": {
+          "type": "string",
+          "title": "Modified On",
+          "x-ms-dataverse-attribute": "modifiedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ModifiedOn",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfby": {
+          "type": "string",
+          "title": "Modified By (Delegate)",
+          "x-ms-dataverse-attribute": "modifiedonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfbyname": {
+          "type": "string",
+          "title": "modifiedonbehalfbyname",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedonbehalfbyyominame": {
+          "type": "string",
+          "title": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "overriddencreatedon": {
+          "type": "string",
+          "title": "Record Created On",
+          "x-ms-dataverse-attribute": "overriddencreatedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "OverriddenCreatedOn"
+        },
+        "ownerid": {
+          "type": "string",
+          "title": "Owner",
+          "x-ms-dataverse-attribute": "ownerid",
+          "x-ms-dataverse-type": "OwnerType",
+          "x-ms-schema-name": "OwnerId",
+          "required": true
+        },
+        "owneridname": {
+          "type": "string",
+          "title": "owneridname",
+          "x-ms-dataverse-attribute": "owneridname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owneridtype": {
+          "type": "string",
+          "title": "owneridtype",
+          "x-ms-dataverse-attribute": "owneridtype",
+          "x-ms-dataverse-type": "EntityNameType",
+          "x-ms-schema-name": "OwnerIdType",
+          "required": true
+        },
+        "owneridyominame": {
+          "type": "string",
+          "title": "owneridyominame",
+          "x-ms-dataverse-attribute": "owneridyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningbusinessunit": {
+          "type": "string",
+          "title": "Owning Business Unit",
+          "x-ms-dataverse-attribute": "owningbusinessunit",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningBusinessUnit"
+        },
+        "owningbusinessunitname": {
+          "type": "string",
+          "title": "owningbusinessunitname",
+          "x-ms-dataverse-attribute": "owningbusinessunitname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwningBusinessUnitName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningteam": {
+          "type": "string",
+          "title": "Owning Team",
+          "x-ms-dataverse-attribute": "owningteam",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningTeam",
+          "x-ms-read-only": true
+        },
+        "owninguser": {
+          "type": "string",
+          "title": "Owning User",
+          "x-ms-dataverse-attribute": "owninguser",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningUser",
+          "x-ms-read-only": true
+        },
+        "statecode": {
+          "type": "string",
+          "title": "Status",
+          "x-ms-dataverse-attribute": "statecode",
+          "x-ms-dataverse-type": "StateType",
+          "x-ms-schema-name": "statecode",
+          "required": true,
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8a64a902-e579-ef11-ac21-000d3a2ee5c6",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status",
+          "x-ms-optionSetType": "State"
+        },
+        "statecodename": {
+          "type": "string",
+          "title": "statecodename",
+          "x-ms-dataverse-attribute": "statecodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statecodeName",
+          "x-ms-read-only": true
+        },
+        "statuscode": {
+          "type": "string",
+          "title": "Status Reason",
+          "x-ms-dataverse-attribute": "statuscode",
+          "x-ms-dataverse-type": "StatusType",
+          "x-ms-schema-name": "statuscode",
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            1,
+            2
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "9464a902-e579-ef11-ac21-000d3a2ee5c6",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status Reason",
+          "x-ms-optionSetType": "Status"
+        },
+        "statuscodename": {
+          "type": "string",
+          "title": "statuscodename",
+          "x-ms-dataverse-attribute": "statuscodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statuscodeName",
+          "x-ms-read-only": true
+        },
+        "timezoneruleversionnumber": {
+          "type": "string",
+          "title": "Time Zone Rule Version Number",
+          "x-ms-dataverse-attribute": "timezoneruleversionnumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "TimeZoneRuleVersionNumber"
+        },
+        "utcconversiontimezonecode": {
+          "type": "string",
+          "title": "UTC Conversion Time Zone Code",
+          "x-ms-dataverse-attribute": "utcconversiontimezonecode",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "UTCConversionTimeZoneCode"
+        },
+        "versionnumber": {
+          "type": "string",
+          "title": "Version Number",
+          "x-ms-dataverse-attribute": "versionnumber",
+          "x-ms-dataverse-type": "BigIntType",
+          "x-ms-schema-name": "VersionNumber",
+          "x-ms-read-only": true
+        },
+        "vsb_allocation": {
+          "type": "string",
+          "title": "Allocation",
+          "x-ms-dataverse-attribute": "vsb_allocation",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_Allocation",
+          "enum": [
+            "Each turbine",
+            "Whole plant"
+          ],
+          "x-ms-enum-values": [
+            200,
+            100
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "b0bbabc0-497b-ef11-ac20-7c1e525222f9",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Yield Allocation",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_allocationname": {
+          "type": "string",
+          "title": "vsb_allocationname",
+          "x-ms-dataverse-attribute": "vsb_allocationname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_allocationName",
+          "x-ms-read-only": true
+        },
+        "vsb_considernegativeprices": {
+          "type": "string",
+          "title": "Consider Negative Prices",
+          "x-ms-dataverse-attribute": "vsb_considernegativeprices",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_ConsiderNegativePrices",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "4a631658-3d19-f111-8341-000d3aadfe93",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Consider Negative Prices",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_considernegativepricesname": {
+          "type": "string",
+          "title": "vsb_considernegativepricesname",
+          "x-ms-dataverse-attribute": "vsb_considernegativepricesname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_considernegativepricesName",
+          "x-ms-read-only": true
+        },
+        "vsb_considerseasonality": {
+          "type": "string",
+          "title": "Consider Seasonality",
+          "x-ms-dataverse-attribute": "vsb_considerseasonality",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_ConsiderSeasonality",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "85746369-3d19-f111-8341-0022488989c5",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Consider Seasonality",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_considerseasonalityname": {
+          "type": "string",
+          "title": "vsb_considerseasonalityname",
+          "x-ms-dataverse-attribute": "vsb_considerseasonalityname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_considerseasonalityName",
+          "x-ms-read-only": true
+        },
+        "vsb_description": {
+          "type": "string",
+          "title": "Description",
+          "x-ms-dataverse-attribute": "vsb_description",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_Description",
+          "maxLength": 400
+        },
+        "vsb_energyyieldassessment": {
+          "type": "string",
+          "title": "Energy Yield Assessment",
+          "x-ms-dataverse-attribute": "vsb_energyyieldassessment",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_EnergyYieldAssessment",
+          "enum": [
+            "Internal",
+            "External"
+          ],
+          "x-ms-enum-values": [
+            200,
+            300
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d5758db9-467b-ef11-ac20-7c1e525222f9",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Yield Assessment",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_energyyieldassessmentname": {
+          "type": "string",
+          "title": "vsb_energyyieldassessmentname",
+          "x-ms-dataverse-attribute": "vsb_energyyieldassessmentname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_energyyieldassessmentName",
+          "x-ms-read-only": true
+        },
+        "vsb_energyyieldid": {
+          "type": "string",
+          "title": "Energy Yield",
+          "x-ms-dataverse-attribute": "vsb_energyyieldid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "vsb_EnergyYieldId",
+          "x-ms-dataverse-primary-id": true,
+          "required": true,
+          "x-ms-keyType": "primary"
+        },
+        "vsb_grossyieldmwh": {
+          "type": "string",
+          "title": "Gross Yield [MWh]",
+          "x-ms-dataverse-attribute": "vsb_grossyieldmwh",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_GrossYieldMWh"
+        },
+        "vsb_irradiationkwhkwp": {
+          "type": "string",
+          "title": "Irradiation [kWh/kWp]",
+          "x-ms-dataverse-attribute": "vsb_irradiationkwhkwp",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_IrradiationkWhkWp"
+        },
+        "vsb_name": {
+          "type": "string",
+          "title": "Name",
+          "x-ms-dataverse-attribute": "vsb_name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_Name",
+          "x-ms-dataverse-primary-name": true,
+          "maxLength": 100
+        },
+        "vsb_netyieldp50mwh": {
+          "type": "string",
+          "title": "Net Yield p50 [MWh]",
+          "x-ms-dataverse-attribute": "vsb_netyieldp50mwh",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_NetYieldp50MWh"
+        },
+        "vsb_netyieldp75mwh": {
+          "type": "string",
+          "title": "Net Yield p75 [MWh]",
+          "x-ms-dataverse-attribute": "vsb_netyieldp75mwh",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_NetYieldp75MWh"
+        },
+        "vsb_netyieldp90mwh": {
+          "type": "string",
+          "title": "Net Yield p90 [MWh]",
+          "x-ms-dataverse-attribute": "vsb_netyieldp90mwh",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_NetYieldp90MWh"
+        },
+        "vsb_productionallocation": {
+          "type": "string",
+          "title": "Production Allocation ",
+          "x-ms-dataverse-attribute": "vsb_productionallocation",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_ProductionAllocation",
+          "enum": [
+            "Input Irradation",
+            "Input Gross Yield"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "ce535dc9-05be-ef11-b8e8-000d3a45aeee",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Production Allocation ",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_productionallocationname": {
+          "type": "string",
+          "title": "vsb_productionallocationname",
+          "x-ms-dataverse-attribute": "vsb_productionallocationname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_productionallocationName",
+          "x-ms-read-only": true
+        },
+        "vsb_productionlossesp50": {
+          "type": "string",
+          "title": "Production losses/p50?",
+          "x-ms-dataverse-attribute": "vsb_productionlossesp50",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_Productionlossesp50",
+          "enum": [
+            "Input losses",
+            "Input Net Yield p50"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "f3ce3902-06be-ef11-b8e8-000d3a45aeee",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Production losses/p50?",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_productionlossesp50name": {
+          "type": "string",
+          "title": "vsb_productionlossesp50name",
+          "x-ms-dataverse-attribute": "vsb_productionlossesp50name",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_productionlossesp50Name",
+          "x-ms-read-only": true
+        },
+        "vsb_productionuncertaintyp75andp90": {
+          "type": "string",
+          "title": "Production Uncertainty/ p75 and p90?",
+          "x-ms-dataverse-attribute": "vsb_productionuncertaintyp75andp90",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "vsb_ProductionUncertaintyp75andp90",
+          "enum": [
+            "Input Uncertainty",
+            "Input Net Yield p75/p90"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d638aa26-06be-ef11-b8e8-6045bd9289f5",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Production Uncertainty/ p75 and p90?",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "vsb_productionuncertaintyp75andp90name": {
+          "type": "string",
+          "title": "vsb_productionuncertaintyp75andp90name",
+          "x-ms-dataverse-attribute": "vsb_productionuncertaintyp75andp90name",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_productionuncertaintyp75andp90Name",
+          "x-ms-read-only": true
+        },
+        "vsb_project": {
+          "type": "string",
+          "title": "Project",
+          "x-ms-dataverse-attribute": "vsb_project",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "vsb_Project"
+        },
+        "vsb_projectname": {
+          "type": "string",
+          "title": "vsb_projectname",
+          "x-ms-dataverse-attribute": "vsb_projectname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "vsb_ProjectName",
+          "x-ms-read-only": true,
+          "maxLength": 8
+        },
+        "vsb_totallosses": {
+          "type": "string",
+          "title": "Total losses [%]",
+          "x-ms-dataverse-attribute": "vsb_totallosses",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_Totallosses"
+        },
+        "vsb_type": {
+          "type": "string",
+          "title": "Type",
+          "x-ms-dataverse-attribute": "vsb_type",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "vsb_Type",
+          "enum": [
+            "WTG",
+            "PV"
+          ],
+          "x-ms-enum-values": [
+            100,
+            200
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "94cae6fd-497b-ef11-ac20-6045bd942d3b",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Yield Type",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "vsb_typename": {
+          "type": "string",
+          "title": "vsb_typename",
+          "x-ms-dataverse-attribute": "vsb_typename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "vsb_typeName",
+          "x-ms-read-only": true
+        },
+        "vsb_uncertainty": {
+          "type": "string",
+          "title": "Uncertainty [%] ",
+          "x-ms-dataverse-attribute": "vsb_uncertainty",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_Uncertainty"
+        },
+        "vsb_windspeedathubheight": {
+          "type": "string",
+          "title": "Wind Speed at Hub Height",
+          "x-ms-dataverse-attribute": "vsb_windspeedathubheight",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "vsb_WindSpeedatHubHeight"
+        }
+      },
+      "required": [
+        "createdbyyominame",
+        "createdonbehalfbyyominame",
+        "modifiedbyyominame",
+        "modifiedonbehalfbyyominame",
+        "ownerid",
+        "owneridname",
+        "owneridtype",
+        "owneridyominame",
+        "owningbusinessunitname",
+        "statecode",
+        "vsb_energyyieldid"
+      ]
+    }
+  }
+}
