@@ -1465,6 +1465,10 @@ Texts: the canvas loading texts ("Loading, Please wait...", "Project Planning wi
 - Already registered and reused: `vsb_project`, `vsb_projectstate`, `vsb_projectrevenue` (D26), `vsb_energyyield` (D28), `vsb_countryinflationprofile`, `transactioncurrencies` (the canvas `Currencies`, D24).
 - Column names come from the generated models (`Vsb_projectrevenuesModel`, `Vsb_balancingpricesModel`, `Vsb_revenueindividualhedgevolumesModel`); `dataverse-attributes.json` has none of the three revenue tables. All 14 `Is … Standard Assumption?` columns exist. Binds: `vsb_Project`, `vsb_Subaccount` (`/vsb_revenuesubaccounts`), `vsb_Currency` (`/transactioncurrencies`), `vsb_RevenueContract`, `owningbusinessunit`.
 
+**Update 29 Oct 2026 (D57):** `Assumptions Revenues SQL` is now connected for this screen and the
+notice below is removed. The visual parity pass in D57 also corrects several layout values recorded
+here (panel 760, not 860; the dark header rule is themePrimary; the add-button border is 2 px).
+
 **Not connected (product decision D2):** `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`, as D26/D28 found), not a Dataverse table. The standard-assumption engine (`applyRevenueEngine`, the old in-Screen `applyAssumptions` moved to `rules.ts`) therefore runs over no rows: nothing is standard, no price, duration, inflation or hedged volume is derived, and the description is the bare "<type> <country>". A NEW notice (`REVENUE_SCREEN_TEXT.assumptionsNotConnected`) shows in the contract panel. Every engine rule stays tested. `Tarrif Price Standard Assumptions` is only in commented-out formulas and is not read. The other sources (Energy Yields, Country Inflation Profiles, Revenue Subaccounts, Currencies) are Dataverse tables and are connected.
 
 **Live reads** (`data/revenues.ts`): the project (with `'Cluster State'.Order` from `vsb_projectstates`; `countryCode` is the country GUID — `Country.Country` is the primary key in Power Fx, the old "code" note was wrong); the project's contracts and balancing prices (`createdon asc`); the edited contract's individual volumes; the negative-price yield check (`$top=1`, active, Consider Negative Prices); `First(Sort('Revenue Subaccounts', Order))`; the EUR / PLN currency; the project country's inflation profiles; at Save time, the contracts overlapping the new term (`le` / `ge` date-only filters, the edited row excluded).
@@ -4953,7 +4957,9 @@ connection reference was created, changed or duplicated.
    (`pa app push --solution-id 44aa38f9-…`, which changes the solution), the bindings do not
    reach another environment. In each target environment, the variables' current values and the
    reference's connection must be set as well (deployment settings).
-3. **No screen consumes the tables yet.**
+3. **No screen consumes the tables yet.** *(Update 29 Oct 2026: Milestones and Production read
+   `assumptionsrevenue` (`listRevenueAssumptions`), and so does Revenues (D57). Finance still does
+   not.)*
    - Finance (Debt, Banks, KfW), Revenues, Production and Milestones (Revenue) still return
      `notConnected()`.
    - Contracts still reads the Dataverse BoP copy, under provisional decision D2.
@@ -5160,3 +5166,95 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 2. Approve skipping unchanged months (§3).
 3. Accept the refusal of a row someone else deleted (§4).
 4. After the §6 numbers: keep the awaited refetch (§5), or build a book patch and stop waiting.
+
+## D57 · PM Revenues: Fabric standard assumptions connected, and a live-canvas visual parity pass (29 Oct 2026)
+
+**Status:** on branch `pm-revenue`. The first part was committed as `0e33fe9`. The dialog, panel
+and Fabric changes listed below are uncommitted. The user confirmed in DEV that the Fabric
+assumptions now fill the contract panel. Supersedes the "not connected" parts of D33 and closes
+D54 open item 3 for Revenues.
+
+### 1. Fabric SQL connected (`Assumptions Revenues SQL`)
+- **Hook.** `useRevenueAssumptions(countryName)` (`features/pm/revenues/hooks.ts`) now reads
+  `[dbo].[AssumptionsRevenue]`. It is read only and cached for 30 minutes under
+  `qk.revenuesReference("assumptions", country)`. It returned `notConnected([])` before.
+- **Loader.** `data/revenues.ts` `listRevenueAssumptionRows` calls the Milestones loader
+  (`data/milestones.ts` `listRevenueAssumptions`); nothing is copied (rule 17).
+  - Italy reads every `Italy*` row (`startswith(country,'Italy')`, 1.21.753). Every other country
+    reads `country eq '<name>'`. The loader re-checks the slice in case the connector ignores the
+    filter.
+  - A blank `category` becomes `""`, as the canvas `category = …` comparisons see it.
+- **Engine.** `applyRevenueEngine` and the other rules in `rules.ts` are unchanged; they now run over
+  real rows. Picking a Type fills the description, currency, start date, durations, end date, price,
+  p90, inflation and hedged %, and marks them standard.
+- **Removed.** The panel notice and `REVENUE_SCREEN_TEXT.assumptionsNotConnected`.
+- **Open.** A failed Fabric read is silent: the panel stays empty and no message shows. The user
+  still has to decide whether to add an error line.
+
+### 2. Visual parity pass
+**Method.** The real `Screen.tsx` was rendered in headless Edge with fixture hooks: a scratchpad
+Vite harness, not part of the repo. Each scenario was compared pixel by pixel with the live-canvas
+screenshots the user supplied. Where no screenshot existed, it was checked against the YAML
+(`Project Revenues Screen.pa.yaml`, `Components/cmp_PopUp_*.pa.yaml`). The live canvas wins over
+the 1.21.709 YAML where they differ.
+
+| Area | Change (canvas value) |
+|---|---|
+| Contract cards | Tiles `(Parent.Width-60)/4` (400 at 1717): caption 32 + box 32 in a 70 tile, gaps 20 / 20, boxes #F5F5F5. The body reserves 3 / 4 / 5 tile rows (`contractCardBodyHeight`, `CardBody_Fields_Main_6.Height`). No card left padding (ManualLayout). The cards end 16 px from the page edge (page PaddingRight 6 + card margin 10). Header rule themePrimary #006EB9 (YAML `Icon.HoverColor`; the dark rule read off the 20 Oct screenshot was wrong). Chevron glyph 20 x 10 (Classic Icon 45 x 30, padding 5/10/5/5). Title Medium 14.67 Semibold. Header hover `#E3E3E322`. Edit / Delete inset 7 px in #0078D4 (PowerCAT CommandBar). |
+| Page | The heading, tabs and Add Contract stay fixed and the gallery scrolls on its own (`Height: =Parent.Height-Self.Y`). Add Contract / Add Balancing Price: a 2-px border (`BorderThickness: =2`; the 1 px was wrong), 32 high, unchanged on hover, press and focus. Selected tab #242424, no focus box. |
+| Contract panel (`twoColumn`) | 760 wide (`Min(760, …)`; the 860 was wrong). Header 42. Fields 30 from each edge, 260 + 40 + 400; each section has a 10-px gutter for the hanging `*`. Field pitch 76. Boxes #F5F5F5, 32 high. Disabled Currency (now a disabled Dropdown) and End Date are white with a 1-px grey outline. Start date placeholder "Select a date...". Duration pickers 100 / 140, 20 apart. `*` is `palette.Error` #B22727, Bold, Medium, raised and hanging 10 px left, before the toggles too. "Provide Hedge Volume in" is Regular. Unselected radio #616161. Sync icons are PowerCAT `Refresh` (`ArrowClockwise`) in themePrimary / #0078D4. Footer: no divider; a disabled Save is a plain ✓ Save in #595959. |
+| Balancing panel | 360 wide (was 450). Header 46. Captions RGBA(89,89,89), `*` after the caption. Pickers and price white with a 1-px RGBA(170,170,170) outline. Computed dates RGBA(237,235,233), Semibold. ONE Contract Duration caption over two pickers 20 apart (there were two captions). |
+| Balancing grid | Full page width (min 1100, scrolls narrower); the header stays on one line. No line under the rows and no hover tint. Row Edit / Delete in themePrimary, ~24 px apart. |
+| Dropdown lists (both panels) | Square, a 1-px grey outline, no shadow, 27-px rows, no check mark, the selected row solid themePrimary. 20 rows show (0 … 19 Years), then the list scrolls (`!important` over Fluent's inline max-height; `rowGap: 0`). |
+| Field errors | `lbl_…_ErrorMessage_1`: #B22727, Semibold, `ExtraExtraSmall` 8 pt, PaddingTop 3 (was Fluent #D20532, 12 px). |
+| Pop-ups | Delete contract / delete balancing / Individual Volumes: `cmp_PopUp_Confirmation`, 490 wide, header 40, title 12 pt, dark scrim, no ring on ✕. Delete is the themePrimary confirm with ✓: the live canvas ignores `IconRightButton: ="Trash"`. "Hedged Volume more than 100%": `cmp_PopUp_Information`, 450 wide, 12-pt text, ONE themePrimary OK, 90 wide. |
+| Panels close | Only through ✕, Cancel or Escape. A click outside a Revenues panel no longer closes it. |
+
+### 3. Shared components (additive, opt-in; every other screen is unchanged)
+- **`ConfirmDialog`.**
+  - `classicPopUp`: the PM `cmp_PopUp_Confirmation` look (490 wide, 40-high header, 12-pt title,
+    ring-less ✕).
+  - `variant="information"`: `cmp_PopUp_Information`, one OK button and no Cancel.
+- **`FormPanel`.** `keepOpenOnOutsideClick` ignores Fluent's `backdropClick` close; Escape and ✕
+  still close the panel.
+- **`formPanelContext`.** `twoColumn` 860 → 760. Only the Revenues contract panel uses it.
+
+### 4. DIVERGENCEs and decisions for the user
+1. **Font.** The canvas draws Open Sans; the code app falls back to Segoe UI, so text is 4–8 %
+   narrower. An app-wide Open Sans (`@fontsource/open-sans`) was tried and **reverted on request**.
+   A Revenues-only version was not built. The package is still in `package.json`, unused.
+2. **Card captions.** 14.67 px (the canvas Medium) was set during the font attempt. With Segoe UI,
+   16 px matches the canvas width better. Decision owed.
+3. **Keyboard focus.** The add buttons, tabs and panel / dialog ✕ show no focus ring (the canvas
+   has none), so a keyboard user loses the focus cue. Option: a ring for keyboard focus only.
+4. **Fabric read failure.** Silent (§1).
+5. The D33 open questions stand: 1.21.753 vs 1.21.709 (it now affects real Italian data), the
+   balancing owner, the custom-inflation flag, the price fallback, and the regeneration of
+   individual volumes.
+
+### 5. Not yet compared with the canvas
+- The saving / deleting overlay (`cmp_PopUp_Loading`).
+- The "Hedged Volume more than 100%" and Individual Volumes pop-ups as rendered (built from the
+  component YAML). Whether the information pop-up's OK carries an icon: the YAML sets an
+  `IconColor` but no icon name.
+- The values the engine derives against the canvas, for an Italian, a German wind FiT and a Polish
+  project.
+
+### 6. Tests and checks
+- **New.**
+  - UT-REV-156: the reserved card body height.
+  - UT-REV-DATA-001 / 002 (`data/revenues.assumptions.test.ts`): the Fabric `$select` / `$filter`,
+    the Italy slice and the blank category.
+  - UT-SETPANEL-023: `keepOpenOnOutsideClick`.
+- **Updated.**
+  - UT-REV-903: the notice is gone.
+  - The Screen test for the Currency dropdown.
+  - UT-FORMPANEL-001: `twoColumn` = 760.
+- **Last run.** Typecheck, lint and the canvas-identity gate (0 findings) passed. The affected files
+  passed: 258 tests (Revenues, FormPanel, ConfirmDialog, the two assumption loaders, routes). The
+  full `npm run verify` (with the build) has **not** been run since these changes.
+
+### 7. Incident (repaired)
+A PowerShell rewrite of `features/pm/revenues/Screen.tsx` read the file as ANSI and wrote it back as
+UTF-8, which garbled 67 non-ASCII characters (`…`, `—`, `✓`, …). The conversion was reversed
+exactly: the same 535 non-ASCII characters as `0e33fe9`, no U+FFFD, and no other change.

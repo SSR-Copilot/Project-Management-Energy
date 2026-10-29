@@ -345,4 +345,32 @@ describe("FormPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Inner close" }));
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("UT-SETPANEL-023 keepOpenOnOutsideClick: a backdrop click keeps the panel open; ✕ and Escape still close", async () => {
+    const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
+    const kept = vi.fn();
+    const { unmount } = render(
+      <FluentProvider theme={vsbTheme}>
+        <FormPanel open title="T" onDismiss={kept} keepOpenOnOutsideClick><input aria-label="Name" /></FormPanel>
+      </FluentProvider>,
+    );
+    expect(backdrop()).not.toBeNull();
+    fireEvent.click(backdrop()!);
+    expect(kept).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name", hidden: true }), { key: "Escape" });
+    expect(kept).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Close panel", hidden: true }));
+    expect(kept).toHaveBeenCalledTimes(2);
+    unmount();
+
+    // Default: the same backdrop click dismisses.
+    const dismissed = vi.fn();
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <FormPanel open title="T" onDismiss={dismissed}><input aria-label="Name" /></FormPanel>
+      </FluentProvider>,
+    );
+    fireEvent.click(backdrop()!);
+    expect(dismissed).toHaveBeenCalledTimes(1);
+  });
 });

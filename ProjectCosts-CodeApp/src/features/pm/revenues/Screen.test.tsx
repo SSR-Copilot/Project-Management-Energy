@@ -153,11 +153,11 @@ describe("UT-REV Screen (connected)", () => {
     expect(screen.getByTestId("gal_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_1")).toBeTruthy();
   });
 
-  it("UT-REV-903 Add Contract opens with an empty Type, the Fabric notice and Save disabled", async () => {
+  it("UT-REV-903 Add Contract opens with an empty Type, no Fabric notice (connected) and Save disabled", async () => {
     renderScreen();
     fireEvent.click(button("btn_Revenue_AddContract"));
     expect(await screen.findByText("Add Revenue Contract")).toBeTruthy();
-    expect(screen.getByTestId("revenues-assumptions-not-connected").textContent).toContain(REVENUE_SCREEN_TEXT.assumptionsNotConnected);
+    expect(screen.queryByTestId("revenues-assumptions-not-connected")).toBeNull();
     const type = screen.getByTestId("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Label_1");
     expect(type.getAttribute("aria-label")).toBe("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Label_1");
     expect(type.textContent).toBe("");

@@ -7,7 +7,7 @@ All 16 Admin/PM screens are redeveloped and connected. These are the questions t
 | # | Question | Now |
 |---|---|---|
 | X1 | **"Unsaved changes" leave guard.** General Data, Milestones, Production, Planning, Grid Operator and Finance lack the canvas "Unsaved data" dialog when you navigate away. It needs one shared app-shell change (a router that can block navigation). Build it? | **Implemented 20 Oct 2026 (D35)**: shared `UnsavedChangesGuard` on General Data, Milestones, Planning, Grid Operator; Production wired with the canvas outcome (never asks); Finance has no canvas dialog |
-| X2 | **Fabric SQL sources (D2).** Revenue assumptions (Milestones seed, Production seasonality/negative prices, Revenues standards) and debt assumptions (Finance) are Fabric SQL, so standard values are missing and users type values by hand. Acceptable until Fabric is connected, or disable the affected toggles/buttons? | Hand entry plus a notice |
+| X2 | **Fabric SQL sources (D2).** Revenue assumptions (Milestones seed, Production seasonality/negative prices, Revenues standards) and debt assumptions (Finance) are Fabric SQL, so standard values are missing and users type values by hand. Acceptable until Fabric is connected, or disable the affected toggles/buttons? | Hand entry plus a notice. **29 Oct 2026:** `Assumptions Revenues SQL` is connected for Milestones, Production and Revenues (D57); Finance (debt sources) still hand entry |
 | X3 | **Approval / permission flows.** Gate and checklist approval requests and cancellations (Checklist), and the module-permission request and cancellation (Generators), are disabled. When should they be connected, as flows or custom APIs? `PerformRequestofCheckListApprovalCancellation` is not in the export. | Disabled, with a reason tooltip |
 | X4 | **Test timeout.** Raise Vitest's per-test timeout from 5 s to 30 s, so that `npm run verify` stops failing on one random slow UI test on the OneDrive checkout? | 5 s |
 | X5 | **Overview visuals.** Close the six small differences from the canvas: grey funnel boxes, tick/cross approval icons, the selected-row tick, the outlined Project Manager box, the boxed pager, and the header version line with its (i) icon? | Not done |
@@ -89,7 +89,10 @@ All 16 Admin/PM screens are redeveloped and connected. These are the questions t
 | V3 | Custom-inflation flag written with the corrected test? | Fixed |
 | V4 | Price fallback: nearest year, or the canvas comparison? | Nearest year |
 | V5 | Individual volumes are regenerated (typed values lost) when the start date or duration changes (canvas). Keep that? | Kept |
-| V6 | Table layout, or rebuild the canvas card gallery? | Table |
+| V6 | Table layout, or rebuild the canvas card gallery? | ~~Table~~ **Card gallery (answered, D33); live-canvas parity pass 29 Oct 2026 (D57)** |
+| V7 | **New (D57).** Font: keep Segoe UI (text 4–8 % narrower than the canvas Open Sans), or load Open Sans for Revenues only? Card captions 16 px or 14.67 px? | Segoe UI, 14.67 px |
+| V8 | **New (D57).** Keyboard focus: the add buttons, tabs and ✕ show no focus ring (as the canvas). Add a ring for keyboard focus only? | No ring |
+| V9 | **New (D57).** A failed Fabric read leaves the contract panel empty without a message. Show an error line? | Silent |
 
 ## Finance (D34)
 

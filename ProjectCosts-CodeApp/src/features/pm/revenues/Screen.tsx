@@ -207,6 +207,8 @@ const useStyles = makeStyles({
   cardHeader: {
     display: "flex", alignItems: "center", height: "50px", backgroundColor: "#fdffff",
     borderBottom: `1px solid ${palette.themePrimary}`,
+    // `btn_…_CardHeader_TransparentButton_1` covers the header: `HoverFill: =ColorValue("#E3E3E322")`.
+    ":hover": { backgroundImage: "linear-gradient(rgba(227, 227, 227, 0.133), rgba(227, 227, 227, 0.133))" },
   },
   // `lbl_…_CardHeader_LabelWithDescription_1`: `Size: =gblAppSizes.Font.Medium` (11 pt), Semibold.
   cardTitle: { fontSize: "14.67px", fontWeight: 600, flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
@@ -300,7 +302,6 @@ const useStyles = makeStyles({
   // The right section: the two toggles 38 apart, the radios 34, the hedge box under them.
   panelColumnRight: { gap: "6px" },
   column: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
-  notice: { flexShrink: 0 },
   // A toggle's red `*` (`lbl_…_InflationProfileToggleAsterisk_1`): `palette.Error` #B22727, Bold,
   // Medium, in a 10-wide box hanging LEFT of the section edge, so the toggles line up.
   req: {
@@ -356,6 +357,10 @@ const useStyles = makeStyles({
       order: -1, alignSelf: "flex-start", width: "10px", marginLeft: "-10px", paddingLeft: 0, paddingRight: 0,
       paddingTop: "5px", fontSize: "14.67px", fontWeight: 700, lineHeight: 1, color: "#b22727",
     },
+    // `lbl_…_ErrorMessage_1`: `palette.Error`, Semibold, `ExtraExtraSmall` (8 pt), PaddingTop 3.
+    "&.canvas-panel .fui-Field__validationMessage": {
+      color: "#b22727", fontWeight: 600, fontSize: "10.67px", lineHeight: "14px", paddingTop: "3px",
+    },
     // "Provide Hedge Volume in": Regular black, its `*` as the field captions'.
     "&.canvas-panel .canvas-radio-group legend > span": { fontWeight: 400, color: "#000000", fontSize: "14.67px" },
     "&.canvas-panel .canvas-radio-group legend > span[data-required=\"true\"]::before": {
@@ -376,9 +381,11 @@ const useStyles = makeStyles({
   // outline, no shadow, 27-px rows in 14 px, no check mark, the selected row solid themePrimary with
   // white text. Fluent portals the list out of the panel, so it is set on the `listbox` slot.
   // 20 rows show (0 Year … 19 Years), then it scrolls: 20 x 27 + the 2-px outline.
+  // `!important`: Fluent's positioning writes its own inline `max-height` (the space left below).
+  // `rowGap: 0`: Fluent's listbox puts 2 px between options, which made the rows 29 apart.
   canvasListbox: {
-    borderRadius: 0, boxShadow: "none", padding: 0, border: "1px solid rgb(138, 136, 134)",
-    maxHeight: `${20 * 27 + 2}px`, boxSizing: "border-box", overflowY: "auto",
+    borderRadius: 0, boxShadow: "none", padding: 0, border: "1px solid rgb(138, 136, 134)", rowGap: 0,
+    maxHeight: `${20 * 27 + 2}px !important`, boxSizing: "border-box", overflowY: "auto",
   },
   canvasOption: {
     height: "27px", minHeight: "27px", boxSizing: "border-box", lineHeight: "27px",
@@ -426,6 +433,10 @@ const useStyles = makeStyles({
     },
     "&.canvas-panel :is(.fui-Input, .fui-Dropdown)": {
       backgroundColor: "#ffffff", border: "1px solid rgb(170, 170, 170)", minHeight: "32px", boxSizing: "border-box",
+    },
+    // The balancing error labels are the contract panel's: Error, Semibold, 8 pt, PaddingTop 3.
+    "&.canvas-panel .fui-Field__validationMessage": {
+      color: "#b22727", fontWeight: 600, fontSize: "10.67px", lineHeight: "14px", paddingTop: "3px",
     },
     "&.canvas-panel .fui-Input:has(input:disabled)": { backgroundColor: "rgb(237, 235, 233)" },
     "&.canvas-panel .fui-Input:has(input:disabled) input": {
@@ -556,9 +567,6 @@ const BALANCING_COL = ["colName", "colWide", "colDate", "colWide", "colDate", "c
 const toIso = (d: Date | null): string => (d ? dateOnly(d) : "");
 const fromIso = (v: string): Date | null => (v ? new Date(`${v}T00:00:00`) : null);
 
-/** The canvas `cmp_PopUp_Confirmation` box on this screen: 490 wide (live canvas, 29 Oct 2026). */
-const DIALOG_WIDTH = 490;
-
 /** `Choices('Revenue Labels')` — the option-set labels, as `revenueLabelText` spells them. */
 const REVENUE_LABELS = ["FiT", "PPA"] as const;
 
@@ -581,7 +589,7 @@ export default function ProjectRevenuesScreen() {
   const projectQ = useRevenueProject(projectId);
   const project = projectQ.data;
   const region = useItalyRegion(project);
-  const assumptions = useRevenueAssumptions();
+  const assumptions = useRevenueAssumptions(project?.countryName ?? null);
   const contractsQ = useRevenueContracts(projectId);
   const periodsQ = useBalancingPrices(projectId);
   const productionQ = useNegativePriceProduction(projectId);
@@ -1031,6 +1039,8 @@ export default function ProjectRevenuesScreen() {
         // scrolling columns (live-canvas screenshots, 29 Oct 2026).
         width="twoColumn"
         panelClassName={s.contractPanelSkin}
+        // The canvas panel closes only through ✕ / Cancel, never on a click outside it.
+        keepOpenOnOutsideClick
         onDismiss={closeContract}
         footer={
           <PanelButtons
@@ -1047,9 +1057,6 @@ export default function ProjectRevenuesScreen() {
       >
         {form ? (
           <div className={s.panelBody}>
-            <MessageBar intent="info" className={s.notice} data-testid="revenues-assumptions-not-connected">
-              <MessageBarBody>{REVENUE_SCREEN_TEXT.assumptionsNotConnected}</MessageBarBody>
-            </MessageBar>
             <div className={s.panel}>
               {/* `con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent` — scrolls on its own. */}
               <div className={s.panelColumn} data-testid="con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent">
@@ -1393,6 +1400,7 @@ export default function ProjectRevenuesScreen() {
         // `con_…_RightPanel_NewEditCost_Body_2`: 360 wide on the live canvas (29 Oct 2026).
         width={360}
         panelClassName={s.balancingPanelSkin}
+        keepOpenOnOutsideClick
         onDismiss={closeBalancing}
         footer={
           <PanelButtons
@@ -1486,7 +1494,7 @@ export default function ProjectRevenuesScreen() {
         // The live canvas Delete is the themePrimary confirm button with the check mark (29 Oct 2026);
         // the popup's `IconRightButton: ="Trash"` is not what it renders. 490 wide on a dark scrim.
         darkScrim
-        width={DIALOG_WIDTH}
+        classicPopUp
         busy={busy}
         onCancel={() => setConfirm("none")}
         onConfirm={async () => {
@@ -1505,7 +1513,7 @@ export default function ProjectRevenuesScreen() {
         cancelText={DIALOG.cancel}
         // The same `cmp_PopUp_Confirmation` as the contract delete: themePrimary, check mark.
         darkScrim
-        width={DIALOG_WIDTH}
+        classicPopUp
         busy={busy}
         onCancel={() => { setConfirm("none"); setSelectedPeriodId(null); }}
         onConfirm={async () => {
@@ -1523,7 +1531,7 @@ export default function ProjectRevenuesScreen() {
         confirmText={DIALOG.confirm}
         cancelText={DIALOG.cancel}
         darkScrim
-        width={DIALOG_WIDTH}
+        classicPopUp
         onCancel={() => setConfirm("none")}
         onConfirm={() => { setConfirm("none"); if (form) void saveContract(form); }}
       />
@@ -1532,9 +1540,11 @@ export default function ProjectRevenuesScreen() {
         open={hedgeError !== null}
         title={DIALOG.hedgeOver100Title}
         description={hedgeError ?? ""}
-        variant="info"
+        // `cmp_ProjectRevenues_PopUp_Information` is a `cmp_PopUp_Information`: 450 wide, one OK.
+        variant="information"
+        confirmText="OK"
+        confirmWidth={90}
         darkScrim
-        width={DIALOG_WIDTH}
         onCancel={() => setHedgeError(null)}
         onConfirm={() => setHedgeError(null)}
       />

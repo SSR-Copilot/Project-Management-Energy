@@ -52,8 +52,8 @@
  *
  * CONNECTED 20 Oct 2026 (D33). The write plans (`planSaveContract`, `planDeleteContract`,
  * `planSaveBalancing`, `planDeleteBalancing`) and the column maps live at the end of this file.
- * `Assumptions Revenues SQL` is Fabric SQL (D2/D26/D28) and stays unconnected, so every engine
- * function below runs over an EMPTY row set until it is (`REVENUE_SCREEN_TEXT.assumptionsNotConnected`).
+ * `Assumptions Revenues SQL` is Fabric SQL (D54), read only for the project country's slice
+ * (connected 29 Oct 2026); every engine function below runs over those rows.
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, isDecimalWithPlaces, isValidCurrency,
@@ -2784,14 +2784,11 @@ export const shiftOfCodCell = (v: number | null): string => (v === null ? "-" : 
 /* ═══════════════════════════════════════════════════════════════ NEW texts ═════ */
 
 /**
- * NEW — no canvas equivalent. The load-error state (CONVENTIONS rule 19), the Fabric notice
- * (D2: `Assumptions Revenues SQL` is a Fabric SQL source, not connected) and the plan refusals.
+ * NEW — no canvas equivalent. The load-error state (CONVENTIONS rule 19) and the plan refusals.
  */
 export const REVENUE_SCREEN_TEXT = {
   loadFailedTitle: "Revenue data is unavailable",
   loadFailedDescription: "The revenue contracts or balancing prices of this project could not be loaded. Reload the page to try again.",
-  assumptionsNotConnected:
-    "The standard revenue assumptions come from Fabric SQL (Assumptions Revenues SQL), which is not connected yet. Enter the values by hand.",
   noProject: "The project is not loaded.",
   noSubaccount: "No Revenue Subaccount exists.",
   noCurrency: "The contract currency could not be found.",
