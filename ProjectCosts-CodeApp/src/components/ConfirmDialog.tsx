@@ -84,6 +84,15 @@ const useStyles = makeStyles({
    * instance that knows its real `BoxHeight` passes `boxHeight`, which overrides it.
    */
   surfaceInfo: { height: "320px" },
+  /**
+   * `compact` (opt-in, Team / Planning): the PM canvas pop-up's own size, measured off the
+   * "Delete permit?" screenshot (28 Oct 2026) — a 459 x 242 card, a 36 px header, 30 px buttons
+   * with a 90 px Cancel.
+   */
+  surfaceCompact: { width: "459px", height: "242px" },
+  headerCompact: { height: "36px", minHeight: "36px" },
+  buttonCompact: { height: "30px" },
+  cancelCompact: { width: "90px" },
   /** `con_PopUpConfirmation_BodyHeader_2` — `Height: =42`, themePrimary, title at `X: =20`. */
   header: {
     display: "flex", alignItems: "center", columnGap: "10px",
@@ -315,6 +324,8 @@ export interface ConfirmDialogProps {
   footerDivider?: boolean;
   /** Optional (Team): the canvas pop-up's dark grey scrim instead of the faint one. */
   darkScrim?: boolean;
+  /** Optional (Team / Planning): the PM canvas pop-up's size — 459 x 242, 36 px header, 30 px buttons. */
+  compact?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -327,7 +338,7 @@ export function ConfirmDialog({
   confirmIcon = "checkmark", cancelIcon = "dismiss",
   confirmWidth = 96,
   boxHeight, textHeight,
-  error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false,
+  error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false, compact = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
@@ -364,12 +375,15 @@ export function ConfirmDialog({
       onOpenChange={(_, data) => { if (!data.open && !locked) onCancel(); }}
     >
       <DialogSurface
-        className={mergeClasses(styles.surface, isInfo && styles.surfaceInfo, canvasFooter && styles.surfaceCanvas)}
+        className={mergeClasses(
+          styles.surface, isInfo && styles.surfaceInfo, canvasFooter && styles.surfaceCanvas,
+          compact && styles.surfaceCompact,
+        )}
         style={surfaceStyle}
         aria-label={title}
         backdrop={{ className: mergeClasses(styles.backdrop, darkScrim && styles.backdropDark) }}
       >
-        <div className={styles.header}>
+        <div className={mergeClasses(styles.header, compact && styles.headerCompact)}>
           <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
           <button type="button" className={styles.close} aria-label="Close"
@@ -401,7 +415,7 @@ export function ConfirmDialog({
             type="button"
             className={mergeClasses(
               styles.button, destructive ? styles.destructive : styles.confirm,
-              canvasFooter && styles.buttonCanvas,
+              canvasFooter && styles.buttonCanvas, compact && styles.buttonCompact,
             )}
             style={{ width: confirmWidth }}
             onClick={onConfirm}
@@ -424,7 +438,10 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            className={mergeClasses(styles.button, styles.cancel, canvasFooter && styles.buttonCanvas)}
+            className={mergeClasses(
+              styles.button, styles.cancel, canvasFooter && styles.buttonCanvas,
+              compact && styles.buttonCompact, compact && styles.cancelCompact,
+            )}
             onClick={onCancel}
             disabled={busy}
             aria-label={cancelText}

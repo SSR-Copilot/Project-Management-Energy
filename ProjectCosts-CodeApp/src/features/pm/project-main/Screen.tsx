@@ -35,7 +35,7 @@ import { memo, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { appTabUrl, projectAppUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import {
-  NEW_PROJECT_PATH, analyticsAppUrl, powerBiReportUrl,
+  NEW_PROJECT_PATH, analyticsAppUrl,
 } from "@/app/navigation";
 import {
   Avatar, Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
@@ -83,7 +83,9 @@ import {
  * ("Weighted Capacity [MWp]"); the live grid shows neither, so neither is rendered.
  */
 const COLUMN_WIDTH = {
-  select: 44, accent: 20, name: 365, shortName: 116, status: 116, manager: 220, country: 116,
+  // Measured off the canvas grid (28 Oct 2026): the radio 6 px further in, the bar 11 px.
+  // name 360, so a row is the canvas's 1610 px wide (it measured 1615).
+  select: 50, accent: 17, name: 360, shortName: 116, status: 116, manager: 220, country: 116,
   area: 240, technology: 116, capacity: 160, projectId: 116, approval: 90,
 } as const;
 const GRID_WIDTH = Object.values(COLUMN_WIDTH).reduce((sum, w) => sum + w, 0);
@@ -170,7 +172,12 @@ const useStyles = makeStyles({
     boxSizing: "border-box",
   },
   /** The first cell of a column — `Height: =56`; the control sits 22 px down. */
-  filterCellTop: { height: "56px" },
+  // Measured off the canvas (28 Oct 2026): the top row's caption 2 px and its box 4 px higher than
+  // the shared caption puts them, and the second row 52 px below the first's caption, as measured.
+  filterCellTop: {
+    height: "55px", marginTop: "-1px",
+    "& > :first-child": { height: "19px", paddingTop: 0 },
+  },
   /*
    * The second cell. Measured off the canvas filter card (27 Oct 2026): both rows put the
    * control 22 px under the cell top, and the card ends 10 px below the second row.
@@ -292,20 +299,42 @@ const useStyles = makeStyles({
     flex: 1, minWidth: 0, position: "relative",
     paddingLeft: 0, paddingRight: 0,
   },
-  personInput: { width: "100%" },
+  // The PeoplePicker box (canvas, 28 Oct 2026): its hint 9 px inside the frame; the blue focus
+  // frame is in canvas.css, beside the rule that draws the frame.
+  personInput: {
+    width: "100%", paddingLeft: "6px",
+    "& input": { paddingLeft: "2px" },
+    "::after": { display: "none" },
+  },
+  /** The persona chip: a grey pill with the initials circle, the name and a small ✕. */
+  managerChip: {
+    display: "inline-flex", alignItems: "center", columnGap: "6px", height: "24px",
+    paddingLeft: "2px", paddingRight: "2px", borderRadius: "12px",
+    backgroundColor: palette.neutralLighter, fontSize: "14px", color: "#323130", whiteSpace: "nowrap",
+  },
+  managerChipName: { maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis" },
+  managerChipRemove: { minWidth: "20px", width: "20px", height: "20px", "& svg": { fontSize: "12px" } },
   /** `txt_..._Capacity` is 100 px; the operator takes the rest, 6 px after it. */
   capacityValue: { width: "100px", flexGrow: 0, flexShrink: 0 },
   capacityGroup: { display: "flex", gap: "6px", flex: 1, minWidth: 0 },
 
-  gridWrap: { flex: 1, minHeight: 0, overflow: "auto" },
+  // The canvas draws a 1 px rule under the column headings across the WHOLE card, past the
+  // grid's own width: a background line at the foot of the 44 px heading row.
+  gridWrap: {
+    flex: 1, minHeight: 0, overflow: "auto",
+    backgroundImage: "linear-gradient(#e1dfdd, #e1dfdd)", backgroundRepeat: "no-repeat",
+    backgroundSize: "100% 1px", backgroundPosition: "0 43px", backgroundAttachment: "local",
+  },
   /** The sum of `COLUMN_WIDTH`, fixed, so every column keeps the width the canvas gives it. */
-  table: { tableLayout: "fixed", width: `${GRID_WIDTH}px` },
+  // No separator under any row (the last one showed a line); rows are told apart by the stripe.
+  table: { tableLayout: "fixed", width: `${GRID_WIDTH}px`, "& tbody tr": { borderBottomWidth: 0 } },
   accentCell: { width: "6px", paddingLeft: 0, paddingRight: 0 },
-  accent: { display: "block", width: "4px", height: "22px", borderRadius: "2px" },
-  selectCell: { width: "44px" },
+  accent: { display: "block", width: "4px", height: "22px", borderRadius: "2px", marginLeft: "5px" },
+  selectCell: { width: "50px", paddingLeft: "14px" },
   /** `ColHorizontalAlign: "Right"` — the cell AND its header, so the figures line up under it. */
+  // The figures sit flush with the column's right edge on the canvas.
   numeric: {
-    textAlign: "right", fontVariantNumeric: "tabular-nums",
+    textAlign: "right", fontVariantNumeric: "tabular-nums", paddingRight: 0,
     "& .fui-TableHeaderCell__button": { justifyContent: "flex-end" },
   },
   /** `ColHorizontalAlign: "Center"` — the Approval glyph. */
@@ -339,9 +368,7 @@ const useStyles = makeStyles({
     minHeight: "32px",
     paddingLeft: "10px",
     paddingTop: space.xs,
-    borderTopWidth: "1px",
-    borderTopStyle: "solid",
-    borderTopColor: tokens.colorNeutralStroke2,
+    // No rule above Total Rows on the canvas.
   },
   /** An empty or failed grid fills the same space the rows would have. */
   bodyMessage: {
@@ -351,12 +378,13 @@ const useStyles = makeStyles({
   /** Total Rows sits in its own 120 px box before the pager. */
   totalRows: { minWidth: "100px" },
   /**
-   * The PeoplePicker callout: a white card floating over the grid, 246 px wide, headed
+   * The PeoplePicker callout: a white card floating over the grid, the box's width, headed
    * "Suggested People" in the theme colour, one 42 px persona row per person.
    */
   suggestions: {
-    position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 1000,
-    width: "246px", maxHeight: "260px", overflowY: "auto",
+    // As wide as the text box above it (PO, 28 Oct 2026).
+    position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 1000,
+    width: "auto", maxHeight: "260px", overflowY: "auto",
     margin: 0, padding: 0, listStyleType: "none",
     backgroundColor: palette.white,
     boxShadow: tokens.shadow8,
@@ -402,7 +430,8 @@ const useStyles = makeStyles({
     paddingLeft: space.l,
     lineHeight: "1.6",
   },
-  approval: { display: "inline-flex", alignItems: "center", fontSize: "20px" },
+  // Level with the row text: the glyph sat 3 px above it.
+  approval: { display: "inline-flex", alignItems: "center", fontSize: "21px", position: "relative", top: "3px" },
   /**
    * `cat_PowerCAT.Icon` with `IconType: IconButon`: a 32 x 32 box filled `themePrimary` with
    * a white glyph, `HoverFillColor: themeLighter` / `HoverFontColor: themePrimary`. Disabled
@@ -421,7 +450,11 @@ const useStyles = makeStyles({
       borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
       borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
     },
-    ":disabled": { backgroundColor: palette.neutralLighter, color: palette.neutralTertiaryAlt },
+    // Disabled, the canvas funnel is a white glyph on the light grey square (sampled, 28 Oct 2026).
+    ":disabled": { backgroundColor: palette.neutralLighter, color: palette.white },
+    // Fluent greys the icon itself when disabled, past the button's colour.
+    "&:disabled .fui-Button__icon": { color: palette.white },
+    "&:disabled svg": { color: palette.white },
   },
   /**
    * The details list's selection circle: an empty ring, or a filled `themePrimary` disc with a
@@ -505,6 +538,9 @@ export default function ProjectOverviewScreen() {
     [states.data],
   );
   const managers = useProjectManagerSearch(managerQuery);
+  // The chip shows only while a person is picked AND named: removing it clears the name at once,
+  // so the chip goes with it instead of lingering until the filter catches up.
+  const managerPicked = Boolean(criteria.filter.projectManagerId) && managerQuery !== "";
 
   const rows = pageQuery.data?.rows ?? [];
   const selected = rows.find((r) => r.id === selectedId);
@@ -550,7 +586,6 @@ export default function ProjectOverviewScreen() {
       "addProject", "editProject", "editCosts", "deleteProject", "simulateProject",
       "viewDashboardFunctionality",
       "viewSharepoint", "viewTeams",
-      "viewProjectOverviewPowerBI", "viewPortfolioOverviewPowerBI",
     ];
     return order
       .map((key) => gates[key])
@@ -737,28 +772,6 @@ export default function ProjectOverviewScreen() {
         launch(selected?.spoTeamsUrl ?? undefined, SPO_MSG.noTeams);
         return;
 
-      case "viewProjectOverviewPowerBI":
-        launch(
-          powerBiReportUrl({
-            reportId: envVars.vsb_ProjectOverviewPowerBIReportID,
-            tenantId: envVars.vsb_PowerBITenantID ?? session?.tenantId,
-            projectId: selected?.id,
-          }),
-          REPORT_UNAVAILABLE,
-        );
-        return;
-
-      // No `filter` and no selection gate: the portfolio report is not project-scoped.
-      case "viewPortfolioOverviewPowerBI":
-        launch(
-          powerBiReportUrl({
-            reportId: envVars.vsb_PortfolioOverviewPowerBIReportID,
-            tenantId: envVars.vsb_PowerBITenantID ?? session?.tenantId,
-          }),
-          REPORT_UNAVAILABLE,
-        );
-        return;
-
       // `Launch(gblPowerBIDashboardLink)` — a whole link from the environment variable, not
       // a report id, and nothing about it is project-scoped.
       case "viewDashboardFunctionality":
@@ -898,21 +911,29 @@ export default function ProjectOverviewScreen() {
               <Input
                 id="filter-manager-input"
                 className={styles.personInput}
-                value={managerQuery}
-                placeholder="Search for project manager"
-                contentAfter={
-                  criteria.filter.projectManagerId ? (
-                    <Button
-                      appearance="transparent"
-                      size="small"
-                      icon={<DismissRegular />}
-                      aria-label="Clear project manager"
-                      data-testid="filter-manager-clear"
-                      onClick={() => {
-                        setManagerQuery("");
-                        setFilter({ projectManagerId: null });
-                      }}
-                    />
+                // Picked, the person shows as the PeoplePicker persona chip inside the box —
+                // initials, name and its own ✕ — as on the canvas (28 Oct 2026).
+                value={managerPicked ? "" : managerQuery}
+                readOnly={managerPicked}
+                placeholder={managerPicked ? undefined : "Search for project manager"}
+                contentBefore={
+                  managerPicked ? (
+                    <span className={styles.managerChip}>
+                      <Avatar name={managerQuery} size={20} color="colorful" aria-hidden="true" />
+                      <span className={styles.managerChipName}>{managerQuery}</span>
+                      <Button
+                        appearance="transparent"
+                        size="small"
+                        className={styles.managerChipRemove}
+                        icon={<DismissRegular />}
+                        aria-label="Clear project manager"
+                        data-testid="filter-manager-clear"
+                        onClick={() => {
+                          setManagerQuery("");
+                          setFilter({ projectManagerId: null });
+                        }}
+                      />
+                    </span>
                   ) : undefined
                 }
                 onChange={(_, d) => setManagerQuery(d.value)}
@@ -990,9 +1011,8 @@ export default function ProjectOverviewScreen() {
             <Dropdown
               className={styles.filterControl}
               listbox={{ className: styles.filterListbox }}
-              // The canvas filtered CountryAreas by the chosen country, so Area means nothing
-              // until a Country is picked.
-              disabled={!criteria.filter.countryId}
+              // Always enabled, as on the canvas: its Items are CountryAreas filtered by the chosen
+              // country, so with no country it opens an empty list (28 Oct 2026).
               selectedOptions={criteria.filter.areaId ? [criteria.filter.areaId] : []}
               value={areas.data?.find((a) => a.id === criteria.filter.areaId)?.name ?? ""}
               onOptionSelect={(_, d) => setFilter({ areaId: d.optionValue ?? null })}
@@ -1423,7 +1443,9 @@ const CLEAR_FILTER_TESTID: Record<string, string> = {
 function FunnelIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M1.5 2.5h13L9.5 8.5v5l-3-1.5V8.5z" stroke="currentColor" strokeLinejoin="round" />
+      {/* Traced off the canvas glyph (28 Oct 2026): a 16 px V down to a 4 px neck, then an outlined
+          stem closed at the foot. */}
+      <path d="M0.5 2.5h15L9.5 9.5v5h-3v-5z" stroke="currentColor" strokeLinejoin="miter" />
     </svg>
   );
 }
@@ -1431,8 +1453,8 @@ function FunnelIcon() {
 function ClearFunnelIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M1.5 2.5h11L8.5 7.3v5.2l-2-1V7.3z" stroke="currentColor" strokeLinejoin="round" />
-      <path d="M10.5 9.5l4 4m0-4l-4 4" stroke="currentColor" strokeLinecap="round" />
+      <path d="M0.5 2.5h15L9.5 9.5v5h-3v-5z" stroke="currentColor" strokeLinejoin="miter" />
+      <path d="M11.5 10.5l4 4m0-4l-4 4" stroke="currentColor" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1443,7 +1465,9 @@ function ClearFilterButton({
   const styles = useStyles();
   const { active, disabled } = clearIconState(value);
   return (
-    <Tooltip content={active ? "Clear this filter" : "Nothing to clear"} relationship="label">
+    // `ico_…_Filter_*.Tooltip: ="Filter projects details list view."` — one text for every funnel,
+    // set or not (canvas, Project Main Screen.pa.yaml:930). The button keeps its own aria-label.
+    <Tooltip content="Filter projects details list view." relationship="description">
       <Button
         className={styles.iconButton}
         appearance="primary"
@@ -1517,7 +1541,8 @@ const ProjectGridRow = memo(function ProjectGridRow({
       <TableCell>{row.statusName || "-"}</TableCell>
       <TableCell>{row.managerName || "-"}</TableCell>
       <TableCell>{row.countryName || "-"}</TableCell>
-      <TableCell>{row.areaName || "-"}</TableCell>
+      {/* Blank, not "-", when a project has no area — as the canvas grid shows it. */}
+      <TableCell>{row.areaName || ""}</TableCell>
       <TableCell>{row.technology || "-"}</TableCell>
       <TableCell className={styles.numeric}>
         {formatCapacity(row.totalCapacity, locale) || "-"}

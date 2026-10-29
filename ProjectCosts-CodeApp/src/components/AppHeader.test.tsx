@@ -54,13 +54,13 @@ describe("AppHeader environment info icon", () => {
     expect(environmentInfoColor(undefined)).toBeUndefined();
   });
 
-  it("UT-HEADER-004 the icon renders beside the version only where it has a colour", () => {
+  it("UT-HEADER-004 no (i) icon renders beside the version: its canvas Visible is a literal false", () => {
     const { unmount } = render(
       <FluentProvider theme={vsbTheme}>
         <AppHeader hasError={false} onReportProblem={() => undefined} environmentName="Dev" appVersion="1.0.0.1" />
       </FluentProvider>,
     );
-    expect(screen.getByTestId("ico_cmp_Header_Info")).toBeInTheDocument();
+    expect(screen.queryByTestId("ico_cmp_Header_Info")).toBeNull();
     expect(screen.getByText("Version 1.0.0.1 (Dev)")).toBeInTheDocument();
     unmount();
     render(

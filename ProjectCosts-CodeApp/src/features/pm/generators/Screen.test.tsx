@@ -11,7 +11,7 @@ import { vsbTheme } from "@/theme/fluent";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import type { WritePlan } from "@/data/writePlan";
 import {
-  EXCLUDED, GENERATOR_TYPE_SAVED_BANNER, PV_MSG, REPLACE_MSG, SUBSTRUCTURE_MSG, WRITE_MSG,
+  EXCLUDED, GENERATOR_TYPE_SAVED_BANNER, PV_MSG, REPLACE_MSG, WRITE_MSG,
   type CatalogModel, type GeneratorTypeRow, type SimpleTypeRow, type TurbineRow,
 } from "./rules";
 
@@ -123,11 +123,7 @@ afterEach(() => {
 
 const commandBar = () => screen.getByRole("toolbar", { name: "pcf_Generators_DisplayProject_Body_Form_CommandBar" });
 const command = (name: string) => within(commandBar()).getByRole("button", { name }) as HTMLButtonElement;
-/** A command inside the "Add Others" drop-down (PowerCAT `ItemParentKey: "addOthers"`). */
-const otherCommand = async (name: string) => {
-  fireEvent.click(command("Add Others"));
-  return await screen.findByRole("menuitem", { name });
-};
+
 const jobAt = (i: number): Job => (state.run.mock.calls[i] as unknown as [Job])[0];
 const planOf = async (job: Job): Promise<WritePlan> => (typeof job.plan === "function" ? job.plan() : job.plan);
 
@@ -142,11 +138,11 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(screen.queryByTestId("not-connected-notice")).toBeNull();
     const labels = within(commandBar()).getAllByRole("button").map((b) => b.getAttribute("aria-label"));
     // The canvas top level; BESS / Hydrogen / Substation are `ItemParentKey: "addOthers"` while
-    // nothing of theirs is selected, and the G9 Add Inverter / Add Substructure sit there too.
+    // nothing of theirs is selected. Add Inverter / Add Substructure are `ItemVisible: false` (G9 withdrawn).
     expect(labels).toEqual(["Add WTG Type", "Add PV Module Type", "Add Others"]);
     fireEvent.click(command("Add Others"));
     const items = (await screen.findAllByRole("menuitem")).map((m) => m.getAttribute("aria-label"));
-    expect(items).toEqual(["Add Inverter", "Add Substructure", "BESS", "Hydrogen", "Substation"]);
+    expect(items).toEqual(["BESS", "Hydrogen", "Substation"]);
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(command("Add WTG Type").disabled).toBe(false);
     expect(screen.getByTestId("txt_Generators_DisplayProject_Body_Form_PlantWtgCapacity").getAttribute("aria-label"))
@@ -295,46 +291,12 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(typeof second.success === "function" ? second.success(follow) : second.success).toBe(REPLACE_MSG.wtgReplaced);
   });
 
-  it("UT-GEN-910 Add Inverter (G9): the hidden canvas panel saves the inverter and Plant PV Cost", async () => {
+  it("UT-GEN-910 Add Inverter / Add Substructure are not offered (canvas `ItemVisible: false`, G9 withdrawn)", async () => {
     renderScreen();
-    fireEvent.click(await otherCommand("Add Inverter"));
-    const save = () => screen.getByTestId("pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save") as HTMLButtonElement;
-    await waitFor(() => expect(save().disabled).toBe(true));
-    fireEvent.change(screen.getByTestId("txt_GeneratorData_RightPanel_Form_Inverter_Fields_Label"), { target: { value: "INV A" } });
-    await pick("cmb_GeneratorData_RightPanel_Form_Inverter_Fields_Supplier", "SMA String");
-    fireEvent.change(screen.getByTestId("txt_GeneratorData_RightPanel_Form_Inverter_Fields_Warranty"), { target: { value: "20" } });
-    fireEvent.change(screen.getByTestId("txt_GeneratorData_RightPanel_Form_Inverter_Fields_NumberOfInverters"), { target: { value: "10" } });
-    fireEvent.change(screen.getByTestId("txt_GeneratorData_RightPanel_Form_Inverter_Fields_NominalPower"), { target: { value: "250" } });
-    await waitFor(() => expect(save().disabled).toBe(false));
-    fireEvent.click(save());
-    await waitFor(() => expect(state.run).toHaveBeenCalled());
-    const job = jobAt(0);
-    expect(job.progress).toBe("Inverter 'INV A' will be saved, please wait...");
-    expect(job.success).toBe(WRITE_MSG.inverterSaved);
-    const plan = await planOf(job);
-    expect(plan.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual(["create:vsb_invertertypeinprojects", "update:vsb_projects"]);
-    expect(plan.writes[0]!.data).toMatchObject({
-      "vsb_Inverter@odata.bind": "/vsb_inverters(inv1)", vsb_selectedinvertertypes: "952850000", vsb_numberofinverters: 10,
-    });
-  });
-
-  it("UT-GEN-911 Add Substructure (G9): the panel with a PV capacity, the information popup without one", async () => {
-    renderScreen({ ...baseProject, plantPvCapacity: 0 });
-    fireEvent.click(await otherCommand("Add Substructure"));
-    expect(await screen.findByText(SUBSTRUCTURE_MSG.infoText)).toBeTruthy();
-    fireEvent.click(screen.getByTestId("pcf_PopUpInformation_BodyButtons_Ok"));
-    cleanup();
-    renderScreen();
-    fireEvent.click(await otherCommand("Add Substructure"));
-    const save = () => screen.getByTestId("pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save") as HTMLButtonElement;
-    fireEvent.change(await screen.findByTestId("txt_GeneratorData_RightPanel_Form_Substructure_Fields_Label"), { target: { value: "S1" } });
-    await pick("cmb_GeneratorData_RightPanel_Form_Substructure_Fields_Supplier", "Schletter Tracker");
-    await waitFor(() => expect(save().disabled).toBe(false));
-    fireEvent.click(save());
-    await waitFor(() => expect(state.run).toHaveBeenCalled());
-    const plan = await planOf(jobAt(0));
-    // Tracker (defaulted from the supplier) × 200 × 10 MWp.
-    expect(plan.writes[0]!.data).toMatchObject({ vsb_selectedsubstructuretypes: "952850001", vsb_substructurecost: 2000 });
+    fireEvent.click(command("Add Others"));
+    const items = (await screen.findAllByRole("menuitem")).map((m) => m.getAttribute("aria-label"));
+    expect(items).not.toContain("Add Inverter");
+    expect(items).not.toContain("Add Substructure");
   });
 
   it("UT-GEN-912 the PV delete removes the O&M costs and the PV unit before the type (G2)", async () => {

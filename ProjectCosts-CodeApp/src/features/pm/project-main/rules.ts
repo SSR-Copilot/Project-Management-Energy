@@ -456,8 +456,6 @@ export type CommandKey =
   | "simulateProject"
   | "viewSharepoint"
   | "viewTeams"
-  | "viewProjectOverviewPowerBI"
-  | "viewPortfolioOverviewPowerBI"
   | "viewDashboardFunctionality";
 
 export interface CommandState {
@@ -470,29 +468,6 @@ export interface CommandState {
   /** Why it is disabled, for a tooltip. Undefined when enabled. */
   reason?: string;
 }
-
-/**
- * `colReportViewers`, transcribed from `Project Main Screen.OnVisible`.
- *
- * SKELETON FIX 4 — the skeleton's list had philip.wagner, ext-chhitiz.buchasia and
- * ext-matthias.vierkoetter, which are not in the canvas, and was missing andreas.laeubli,
- * ravindra.mund and test-vsbcloud-01. This is the canvas list.
- *
- * A hard-coded address list gating a feature belongs in an environment variable before
- * go-live; recorded in ProjectDocs/app-docs/02-OPEN-DECISIONS.md.
- */
-export const REPORT_VIEWERS: readonly string[] = [
-  "alexander.pilevski@vsb.energy",
-  "andreas.laeubli@vsb.energy",
-  "andriy.chevychalov@vsb.energy",
-  "dominik.simon@vsb.energy",
-  "christoph.sperling@vsb.energy",
-  "thomas.lorenz@vsb.energy",
-  "benjamin.goepfert@vsb.energy",
-  "ravindra.mund@vsb.energy",
-  "test-vsbcloud-01@vsb.energy",
-  "test-vsbcloud-02@vsb.energy",
-];
 
 const SELECT_FIRST = "Select a project first.";
 
@@ -516,7 +491,6 @@ export interface CommandBarContext {
   /** `RecordInfo(record, EditPermission)` — per record, from the server. */
   canEditSelected: boolean;
   userMail: string | null;
-  reportViewers?: readonly string[];
 }
 
 /**
@@ -529,14 +503,10 @@ export interface CommandBarContext {
  */
 export function commandBarState(ctx: CommandBarContext): Record<CommandKey, CommandState> {
   const {
-    selected, canCreate, canEditSelected, userMail,
-    reportViewers = REPORT_VIEWERS,
+    selected, canCreate, canEditSelected,
   } = ctx;
 
   const has = Boolean(selected);
-  const mail = (userMail ?? "").trim().toLowerCase();
-  const inList = (list: readonly string[]) =>
-    list.some((v) => v.trim().toLowerCase() === mail);
   const bothSpoUrls = Boolean(selected?.spoSharepointUrl && selected?.spoTeamsUrl);
   const isCroatia = selected?.countryName === "Croatia";
 
@@ -586,15 +556,8 @@ export function commandBarState(ctx: CommandBarContext): Record<CommandKey, Comm
       "View Teams", "View",
       has ? "This project has no Teams site yet." : SELECT_FIRST,
     ),
-    st(
-      "viewProjectOverviewPowerBI", inList(reportViewers), has,
-      "Show Project Overview (Beta)", "View", SELECT_FIRST,
-    ),
-    // SKELETON FIX 3 — no ItemEnabled in the canvas, so always enabled.
-    st(
-      "viewPortfolioOverviewPowerBI", inList(reportViewers), true,
-      "Show Portfolio Overview (Beta)", "View",
-    ),
+    // "Show Project Overview (Beta)" / "Show Portfolio Overview (Beta)" are REMOVED (PO, 28 Oct
+    // 2026): the live canvas does not offer them, so neither does this app.
     st("viewDashboardFunctionality", true, true, "Dashboard", "BIDashboard"),
   ]) as Record<CommandKey, CommandState>;
 }

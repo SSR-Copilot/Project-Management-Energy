@@ -599,10 +599,11 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
-  it("UT-OVUI-014 disables the Area filter until a Country is chosen", async () => {
+  it("UT-OVUI-014 keeps the Area filter enabled with no Country, as the canvas does", async () => {
+    // The canvas dropdown has no DisplayMode: with no country its filtered Items are just empty.
     render(<Harness><ProjectOverviewScreen /></Harness>);
     await screen.findByText("Contr. Endpoint Testproject");
-    expect(screen.getByTestId("filter-area")).toBeDisabled();
+    expect(screen.getByTestId("filter-area")).toBeEnabled();
   });
 
   it("UT-OVUI-015 shows the empty state, with a clear-filters action, when nothing matches", async () => {

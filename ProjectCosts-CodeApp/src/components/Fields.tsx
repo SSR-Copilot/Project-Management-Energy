@@ -323,6 +323,8 @@ export interface ReadOnlyFieldProps {
   error?: string;
   /** Settings: `"plain"` = Fluent's default input (see `TextField`). Default `"canvas"`. */
   skin?: "canvas" | "plain";
+  /** See `TextField`: the canvas label's `Weight` (Generators' Total Capacity is Semibold). */
+  labelWeight?: "regular" | "semibold";
 }
 
 /**
@@ -331,15 +333,16 @@ export interface ReadOnlyFieldProps {
  * be the greyed disabled look).
  */
 export function ReadOnlyField({
-  label, value, testId, ariaLabel, standard, align, required, disabled, error, skin: skinName = "canvas",
+  label, value, testId, ariaLabel, standard, align, required, disabled, error, skin: skinName = "canvas", labelWeight,
 }: ReadOnlyFieldProps) {
+  const styles = useStyles();
   const skin = useFieldSkin();
   const controlClass = useFieldControlClass();
   const standardClass = useStandardValueClass();
   const plain = skinName === "plain";
   const isDisabled = disabled ?? plain;
   const fieldProps = {
-    label,
+    label: labelWeight === "semibold" ? { children: label, className: styles.semibold } : label,
     ...(required ? { required: true } : {}),
     ...(error ? { validationState: "error" as const, validationMessage: error } : {}),
   };

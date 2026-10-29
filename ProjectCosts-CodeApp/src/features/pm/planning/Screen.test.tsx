@@ -149,8 +149,10 @@ describe("UT-PLAN Screen (connected)", () => {
     expect(screen.getByText(LLA_TYPE_LABEL.personam)).toBeTruthy();
     expect(screen.getByText(LLA_TYPE_LABEL.rem)).toBeTruthy();
     const headers = screen.getAllByRole("columnheader").slice(0, 4).map((h) => h.textContent);
-    expect(headers).toEqual([
-      AQUISITION_GRID_COLUMNS.types, AQUISITION_GRID_COLUMNS.secured, AQUISITION_GRID_COLUMNS.required, AQUISITION_GRID_COLUMNS.percentage,
+    // The first header cell is the canvas header block: the section name over "Types".
+    expect(headers[0]).toBe(`${LLA_TYPE_LABEL.personam}${AQUISITION_GRID_COLUMNS.types}`);
+    expect(headers.slice(1)).toEqual([
+      AQUISITION_GRID_COLUMNS.secured, AQUISITION_GRID_COLUMNS.required, AQUISITION_GRID_COLUMNS.percentage,
     ]);
     expect(screen.getByText("75")).toBeTruthy();
     fireEvent.click(screen.getByTestId(`pcf_but_${C}_AquisitionStatus_UnderLaw_Edit`));
@@ -205,8 +207,9 @@ describe("UT-PLAN Screen (connected)", () => {
     expect((submission as HTMLInputElement).value).toBe("Wed, Apr 1, 2026");
     const approval = screen.getByTestId(`dte_${P}_NewEditPermitBodyContent_ApprovalDate`);
     expect((approval as HTMLInputElement).value).toBe("Mon, Feb 1, 2027");
-    expect(screen.getByTestId("planning-permit-submission-date-tag").textContent).toBe("Plan");
-    expect(screen.getByTestId("planning-permit-approval-date-tag").textContent).toBe("Actual");
+    // The canvas shows no Plan / Actual tag beside the date; the radios carry the choice.
+    expect(screen.queryByTestId("planning-permit-submission-date-tag")).toBeNull();
+    expect(screen.queryByTestId("planning-permit-approval-date-tag")).toBeNull();
   });
 
   it("UT-PLAN-908 a failed read shows the load-error state (rule 19)", () => {

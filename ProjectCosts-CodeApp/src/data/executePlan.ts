@@ -38,7 +38,7 @@
  */
 import { getClient } from "@microsoft/power-apps/data";
 import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo";
-import { isRecordGone, unwrap } from "@/platform/errors";
+import { isRecordGone, unwrap, unwrapDelete } from "@/platform/errors";
 import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
 import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
 
@@ -203,7 +203,8 @@ export async function executePlan(
         invalidatePageTokens(write.entitySet);
       } else {
         primaryKeyOf(write.entitySet);
-        unwrap(await client.deleteRecordAsync(write.entitySet, id!), label);
+        // Already gone counts as deleted (`unwrapDelete`).
+        unwrapDelete(await client.deleteRecordAsync(write.entitySet, id!), label);
         invalidatePageTokens(write.entitySet);
       }
       done += 1;

@@ -10,9 +10,9 @@
  * Reused, not repeated: the project states come from `data/generalData.ts` (`listProjectStates`)
  * and the assumption row from `data/costBook.ts` (`loadMilestoneAssumptionValues`).
  *
- * NOT read: `Assumptions Revenues SQL` — a Fabric SQL source (`References/DataSources.json`:
- * `[dbo].[AssumptionsRevenue]` on a Fabric datawarehouse), so the default revenue seed stays
- * unconnected (D2, D26).
+ * `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]` on
+ * `Lakehouse_Gold`), registered as `AssumptionsRevenueService` (D54). It is read only, for the
+ * default revenue seed (`listRevenueAssumptions`, connected 28 Oct 2026).
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
@@ -22,15 +22,17 @@ import { Vsb_generatortypeinprojectsService } from "@/generated/services/Vsb_gen
 import { Vsb_generatorsService } from "@/generated/services/Vsb_generatorsService";
 import { Vsb_fabricjobtypesService } from "@/generated/services/Vsb_fabricjobtypesService";
 import { Vsb_fabricsyncjobsService } from "@/generated/services/Vsb_fabricsyncjobsService";
+import { AssumptionsRevenueService } from "@/generated/services/AssumptionsRevenueService";
 import { technologyLabel, technologyValue } from "@/domain/technology";
 import { PROJECT_COL } from "@/features/pm/general-data/rules";
 import {
   FABRIC_JOB_STATUS, FABRIC_JOB_TYPE_MILESTONES, GENERATOR_TYPE_COL, HEDGE_TYPE_INDIVIDUAL_VOLUMES,
+  isInRevenueSlice,
   type MilestoneDates, type MilestoneProject, type PriceInflationRow, type ProjectGenerator,
-  type StandardAssumptionFlags,
+  type RevenueAssumptionRow, type StandardAssumptionFlags,
 } from "@/features/pm/milestones/rules";
 import { fetchAll, fetchPage } from "./client";
-import { and, chunk, eq, guid, idIn, lookupEq, numberOf, or } from "./odata";
+import { and, chunk, eq, guid, idIn, lookupEq, numberOf, or, startsWith } from "./odata";
 
 /** `<col>@OData.Community.Display.V1.FormattedValue` — a lookup's name or a choice's label. */
 const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
@@ -172,6 +174,28 @@ export async function countProjectRevenues(projectId: string): Promise<number> {
     { select: ["vsb_projectrevenueid"], filter: lookupEq("vsb_project", projectId), top: 1 },
   );
   return rows.length;
+}
+
+/**
+ * `recCountryAssumptions` — the country's slice of `Assumptions Revenues SQL` (Fabric SQL, read
+ * only). 1.21.753: an Italian project reads every `Italy*` row (`isInRevenueSlice`, which also
+ * re-checks the rows in case the connector does not apply the filter).
+ */
+export async function listRevenueAssumptions(countryName: string): Promise<RevenueAssumptionRow[]> {
+  const rows = await fetchAll(
+    "read the revenue assumptions (Fabric SQL)",
+    (o) => AssumptionsRevenueService.getAll(o),
+    {
+      select: ["country", "valuetype", "category", "pv", "wind"],
+      filter: countryName === "Italy" ? startsWith("country", "Italy") : eq("country", countryName),
+    },
+  );
+  return rows
+    .map((r) => ({
+      country: r.country ?? "", valuetype: r.valuetype ?? "",
+      category: r.category ?? null, pv: r.pv ?? null, wind: r.wind ?? null,
+    }))
+    .filter((r) => isInRevenueSlice(r.country, countryName));
 }
 
 /* ═════════════════════════════════════════════════════════════ FID re-pricing ══ */

@@ -18,7 +18,7 @@
 import { useState } from "react";
 import {
   Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
-  Field, Input, MessageBar, MessageBarBody, MessageBarTitle, Switch, Text, Tooltip,
+  Field, Input, MessageBar, MessageBarBody, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
@@ -64,9 +64,20 @@ const useStyles = makeStyles({
   },
   // The right content: a white vertical autolayout, no padding and no gap.
   page: { display: "flex", flexDirection: "column", flex: "1 0 auto", minWidth: 0, backgroundColor: palette.white },
-  // `con_Milestones_Page_LockMessage_2`: Fill RGBA(89,89,89,1), PaddingLeft 20, white text.
-  lockBanner: { backgroundColor: "rgb(89, 89, 89)", color: palette.white, paddingLeft: "20px", "& svg": { color: palette.white } },
-  lockList: { display: "flex", flexDirection: "column", gap: space.xxs },
+  /**
+   * `con_Milestones_Page_LockMessage_2` (Y:278-400): the FIRST thing in the right content, above the
+   * command bar — a horizontal auto-layout, Fill RGBA(89, 89, 89, 1), PaddingLeft 20, LayoutGap 10,
+   * items centred; `icon_milestones_lock_2` is a white 20-px `Icon.Lock`.
+   */
+  lockBanner: {
+    display: "flex", alignItems: "center", columnGap: "10px",
+    paddingLeft: "20px", backgroundColor: "rgb(89, 89, 89)", color: palette.white,
+  },
+  /** `con_Milestones_pagelock_section_2`: vertical, Padding 8; the title and bullets are Regular weight, white. */
+  lockList: {
+    display: "flex", flexDirection: "column", gap: space.xxs, color: palette.white,
+    paddingTop: "8px", paddingBottom: "8px", paddingLeft: "8px", paddingRight: "8px",
+  },
   // `con_Production_DisplayProject_Body_Form_FirstRow` / `_ThirdRow`: horizontal, wrapping,
   // PaddingTop 20, `Min(Parent.Width, 1200)` wide.
   summaryRow: { display: "flex", flexWrap: "wrap", width: "100%", maxWidth: "1200px", paddingTop: "20px", boxSizing: "border-box" },
@@ -177,10 +188,12 @@ const useStyles = makeStyles({
   cellMonth: { flex: "0 1 100px", minWidth: "64px", paddingBottom: space.xs },
   cellValue: { flex: "1 1 180px", minWidth: "120px", maxWidth: "180px" },
   cellReset: { flex: "0 0 auto" },
-  total: {
-    display: "flex", justifyContent: "space-between", fontWeight: tokens.fontWeightBold,
-    width: "100%", maxWidth: "330px", paddingLeft: "10px", paddingRight: "10px", boxSizing: "border-box",
-  },
+  /**
+   * `con_ProductionSeasonality{WTG|PV}_TotalDetails` (Y:4755-4801): "Total Sum [%]" (`ModernText`,
+   * 160 wide) over a read-only `ModernTextInput` (`DisplayMode.View`, 160 wide, 4 px below), both at
+   * the X of the Distribution column — so it sits in a `cellRow` behind an empty month cell.
+   */
+  totalValue: { flex: "0 0 160px", width: "160px", "& .fui-Input": { width: "100%" } },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
   // `InfoButtonCanvas2`: 30 x 30, 10 right of the Irradiation input.
   info: { display: "flex", alignItems: "flex-end", gap: "10px" },
@@ -218,9 +231,10 @@ export default function ProductionScreen() {
 
   const projectQ = useProductionProject(projectId);
   const yieldsQ = useEnergyYields(projectId);
-  const standard = useRevenueAssumptions().data;
-  const writes = useProductionWrites(projectId);
   const project = projectQ.data;
+  const standardQ = useRevenueAssumptions(project?.countryName);
+  const standard = standardQ.data;
+  const writes = useProductionWrites(projectId);
   const yields = yieldsQ.data;
 
   /** `undefined` = the first row (`First(colEnergyYieldsInProject)`); `null` = nothing selected. */
@@ -350,6 +364,16 @@ export default function ProductionScreen() {
 
   return (
     <div className={s.page} data-testid="Project Production Screen">
+      {locked ? (
+        <div className={s.lockBanner} role="status" data-testid="con_Milestones_Page_LockMessage_2">
+          <LockClosedRegular aria-hidden fontSize={20} color={palette.white} />
+          <span className={s.lockList}>
+            <span>{PAGE_LOCK_TITLE}</span>
+            {lockBullets.map((b) => <span key={b}>{b}</span>)}
+          </span>
+        </div>
+      ) : null}
+
       {/* The canvas command bar sits in the screen BODY (`…_DisplayProject_Body_…CommandBar`), not the header. */}
       <div className={s.commandRow}>
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
@@ -357,14 +381,6 @@ export default function ProductionScreen() {
 
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="production" />
 
-      {locked ? (
-        <MessageBar intent="warning" icon={<LockClosedRegular />} className={s.lockBanner} data-testid="con_Milestones_Page_LockMessage_2">
-          <MessageBarBody>
-            <MessageBarTitle>{PAGE_LOCK_TITLE}</MessageBarTitle>
-            <span className={s.lockList}>{lockBullets.map((b) => <span key={b}>{b}</span>)}</span>
-          </MessageBarBody>
-        </MessageBar>
-      ) : null}
 
       {/* `con_Production_DisplayProject_Body_Form` — the project's stored roll-up, read-only. */}
       <div className={s.summaryRow}>
@@ -550,9 +566,9 @@ export default function ProductionScreen() {
             <Switch label={UI.panel.considerNegativePrices} aria-label={UI.panel.considerNegativePrices}
               data-testid={`tgl_${prefix}_ConsiderNegativePrice`} checked={form.considerNegativePrices}
               onChange={(_, d) => toggleNegativePrices(d.checked)} />
-            {form.considerSeasonality || form.considerNegativePrices ? (
-              <MessageBar intent="info" data-testid="production-fabric-notice">
-                <MessageBarBody>{PRODUCTION_SCREEN_TEXT.fabricNotConnected}</MessageBarBody>
+            {(form.considerSeasonality || form.considerNegativePrices) && standardQ.error ? (
+              <MessageBar intent="warning" data-testid="production-fabric-notice">
+                <MessageBarBody>{PRODUCTION_SCREEN_TEXT.fabricUnavailable}</MessageBarBody>
               </MessageBar>
             ) : null}
           </div>
@@ -583,9 +599,15 @@ export default function ProductionScreen() {
                   </div>
                 );
               })}
-              <div className={s.total}>
-                <span>{UI.totalSum}</span>
-                <span data-testid={`txt_ProductionSeasonality${technology}_TotalValue`}>{fmtPercentTotal(seasonalityTotal(seasonRows, lang))}</span>
+              <div className={s.cellRow}>
+                <span className={s.cellMonth} aria-hidden="true" />
+                <Field className={mergeClasses(s.totalValue, skin.field)} label={UI.totalSum}>
+                  <Input readOnly value={fmtPercentTotal(seasonalityTotal(seasonRows, lang))}
+                    appearance={FIELD_APPEARANCE}
+                    className={controlClass("view")}
+                    aria-label={UI.totalSum}
+                    data-testid={`txt_ProductionSeasonality${technology}_TotalValue`} />
+                </Field>
               </div>
               {seasonalityTotalError(seasonRows, lang) ? <span className={s.error} role="alert">{MSG.seasonalityTotal}</span> : null}
             </div>
