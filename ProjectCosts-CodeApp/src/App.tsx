@@ -33,7 +33,15 @@ export default function App() {
    */
   const currentUser = useCurrentUser();
 
-  if (loading) return <LoadingOverlay mode="blocking" label="Please wait..." />;
+  const onCostScreen = pathname.startsWith("/costs/");
+  /*
+   * DIVERGENCE (D57): no canvas control; code-app shell spinner. The Cost routes no longer get
+   * the blocking "Please wait..." overlay while the session loads: the shell renders, and
+   * `CostProjectGate` (`app/routes.tsx`) holds an empty `cost-project-loading` placeholder, so no
+   * Cost screen mounts or starts a query before the project exists. Every other route (the
+   * project list, PM, Admin, `/`) keeps the blocking overlay unchanged.
+   */
+  if (loading && !onCostScreen) return <LoadingOverlay mode="blocking" label="Please wait..." />;
 
   /*
    * The header name is the DATAVERSE one, falling back to the host's. `User().FullName` — what
@@ -45,7 +53,6 @@ export default function App() {
   const userEmail = currentUser.data?.mail ?? session?.userPrincipalName;
   const userLanguage = languageLabel(navigator.language);
 
-  const onCostScreen = pathname.startsWith("/costs/");
   /*
    * The Project Management and administration screens carry the rail too (`LeftNav` picks the
    * item set from the path). PM screens show the selected project in the header like the cost

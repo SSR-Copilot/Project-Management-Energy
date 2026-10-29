@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { CostLine } from "../costing/model";
 import {
-  LOADING_COST, LOADING_DATA,
   PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
   PAID_CONFIRM_TITLE,
   RECALCULATE_ALLOCATED_COST, SAVING_COST, SAVING_COSTS,
-  allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
-  distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
+  allocatedCostLabel, capexWriteStatusLabel, clusterCheckboxState, confirmButtonWidth,
+  defaultSelectedYear,
+  distributionLocked, enabledClusters, gridActionAllowed, isoToMonthYear, monthYearLabel,
+  monthYearToIso,
   onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
   savingCostLabel, standardContractLoadingLabel,
 } from "./panelRules";
+import { COMMENTS_SAVING } from "./comments";
+// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /** A minimal individual/absolute contract; each test overrides only what it is about. */
 const line = (patch: Partial<CostLine> = {}): CostLine => ({
@@ -211,9 +215,12 @@ describe("previousYearFloor", () => {
 });
 
 describe("spinner text", () => {
+  /*
+   * `LOADING_COST` ("Please wait, loading cost ...") and `LOADING_DATA` ("Please wait, loading
+   * data...") were pinned here too. D57 removed the two load spinners that showed them, so both
+   * constants — and their two assertions — went with them.
+   */
   it("matches the canvas strings", () => {
-    expect(LOADING_COST).toBe("Please wait, loading cost ...");
-    expect(LOADING_DATA).toBe("Please wait, loading data...");
     expect(standardContractLoadingLabel("Grid Connection Fee"))
       .toBe("Please wait, loading standard contract : 'Grid Connection Fee' ...");
   });
@@ -228,6 +235,67 @@ describe("spinner text", () => {
     expect(SAVING_COSTS).toBe("Please wait, saving costs...");
     expect(savingCostLabel("individual")).toBe("Please wait, saving the cost...");
     expect(savingCostLabel("equal")).toBe("Please wait, saving costs...");
+  });
+});
+
+/** D57 — no spinners; the write guard and the status line that replaced the overlay. */
+describe("write guard and status line (D57)", () => {
+  it("UT-CAPEX-NOSPIN-001 greys the write commands while a write is pending", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+  });
+
+  it("UT-CAPEX-NOSPIN-002 greys them while the cost book is still loading", () => {
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+  });
+
+  it("UT-CAPEX-NOSPIN-003 enables them once loaded with nothing pending", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+  });
+
+  it("UT-CAPEX-NOSPIN-004 ignores every write-starting grid action while disabled", () => {
+    for (const action of [
+      "Add", "Edit", "Delete", "AddStandardContract", "SetCostPaidUnpaid", "Comment",
+    ]) {
+      expect(gridActionAllowed(action, true)).toBe(false);
+      expect(gridActionAllowed(action, false)).toBe(true);
+    }
+  });
+
+  it("UT-CAPEX-NOSPIN-005 lets any other grid action through even while disabled", () => {
+    expect(gridActionAllowed("ExpandCollapse", true)).toBe(true);
+  });
+
+  it("UT-CAPEX-NOSPIN-006 shows nothing when no write is pending", () => {
+    expect(capexWriteStatusLabel({
+      pending: false, standardName: "Grid Connection Fee", savingLabel: SAVING_COST,
+    })).toBeNull();
+  });
+
+  it("UT-CAPEX-NOSPIN-007 keeps the overlay's precedence: standard, then panel save, then costs", () => {
+    expect(capexWriteStatusLabel({
+      pending: true, standardName: "Grid Connection Fee", savingLabel: SAVING_COST,
+    })).toBe("Please wait, loading standard contract : 'Grid Connection Fee' ...");
+    expect(capexWriteStatusLabel({ pending: true, standardName: null, savingLabel: SAVING_COST }))
+      .toBe("Please wait, saving the cost...");
+    // The Paid toggle and Delete latch no label of their own.
+    expect(capexWriteStatusLabel({ pending: true, standardName: null, savingLabel: null }))
+      .toBe("Please wait, saving costs...");
+  });
+
+  it("UT-CAPEX-NOSPIN-016 a comments commit alone shows the verbatim 'Saving comments...'", () => {
+    expect(capexWriteStatusLabel({
+      pending: false, standardName: null, savingLabel: null, commentsSaving: true,
+    })).toBe(COMMENTS_SAVING);
+    expect(COMMENTS_SAVING).toBe("Saving comments...");
+  });
+
+  it("UT-CAPEX-NOSPIN-017 a cost write outranks a comments commit, and neither means no line", () => {
+    expect(capexWriteStatusLabel({
+      pending: true, standardName: null, savingLabel: SAVING_COST, commentsSaving: true,
+    })).toBe("Please wait, saving the cost...");
+    expect(capexWriteStatusLabel({
+      pending: false, standardName: null, savingLabel: null, commentsSaving: false,
+    })).toBeNull();
   });
 });
 

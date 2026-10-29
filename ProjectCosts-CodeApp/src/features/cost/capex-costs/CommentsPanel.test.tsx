@@ -6,7 +6,8 @@
  * `ProjectDocs/Existing Solution/UI Screenshots/Cost App - Comment Panel contract Row - *.png` and the two
  * things the client reported wrong: the Year/Month gate that stops a payment-date comment being
  * saved with no cost row (the invisible-comment defect behind the missing red dot), and the
- * "Saving comments..." overlay.
+ * "Saving comments..." indicator — a blocking overlay until D57, now a non-blocking
+ * `WriteStatus` line with the write controls greyed instead.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -67,6 +68,7 @@ describe("CommentsPanel", () => {
     // UT-CMT-058 swaps in a promise that never settles; restore the default so later tests do
     // not inherit it.
     saveMutation.mutateAsync = vi.fn(async () => "new-id");
+    removeMutation.mutateAsync = vi.fn(async () => undefined);
     isLoading = false;
     data = [comment()];
   });
@@ -161,13 +163,20 @@ describe("CommentsPanel", () => {
       .toHaveAttribute("aria-disabled", "true");
   });
 
-  it("UT-CMT-058 the saving overlay covers the whole commit, not one mutation at a time", async () => {
-    data = [];
+  it("UT-CMT-058 the saving status covers the whole commit, not one mutation at a time", async () => {
+    data = [comment({ id: "old-1", text: "To delete" })];
     let release = () => {};
+    // Two sequential writes (a delete, then a save), so the status must survive the gap between.
+    let releaseDelete = () => {};
+    removeMutation.mutateAsync = vi.fn(
+      () => new Promise<undefined>((resolve) => { releaseDelete = () => resolve(undefined); }),
+    );
     saveMutation.mutateAsync = vi.fn(
       () => new Promise<string>((resolve) => { release = () => resolve("new-id"); }),
     );
-    mount();
+    const onSavingChange = vi.fn();
+    mount({ onSavingChange });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Comment" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), {
       target: { value: "Added General Comment" },
@@ -175,14 +184,86 @@ describe("CommentsPanel", () => {
     expect(screen.queryByText("Saving comments...")).toBeNull();
 
     fireEvent.click(saveButton());
-    // The overlay is driven by one panel-level flag, so it is up while the save is in flight
+    // The status is driven by one panel-level flag, so it is up while the save is in flight
     // even though `mutation.isPending` is mocked false throughout.
     const label = await screen.findByText("Saving comments...");
-    // And it lives OUTSIDE the drawer: its blocking mode is a viewport-fixed scrim, which the
-    // Saving screenshot shows centred over the grid rather than inside the panel.
+    expect(screen.getByTestId("capex-comments-write-status")).toBe(label);
+    expect(label).toHaveAttribute("role", "status");
+    // It lives OUTSIDE the drawer, which has already closed (decision 7a), and it is not a
+    // blocking overlay: no modal scrim, no spinner.
     expect(label.closest(".canvas-panel")).toBeNull();
     expect(label.closest(".canvas-panel-body")).toBeNull();
+    // (`LoadingOverlay`'s blocking scrim was `role="dialog" aria-modal aria-busy`; the drawer
+    // itself is modal too, and is still open here only because `onDismiss` is a mock.)
+    expect(document.querySelector('[aria-modal="true"][aria-busy="true"]')).toBeNull();
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+    expect(onSavingChange).toHaveBeenLastCalledWith(true);
+
+    // Between the delete and the save the status stays up.
+    releaseDelete();
+    await waitFor(() => expect(saveMutation.mutateAsync).toHaveBeenCalled());
+    expect(screen.getByText("Saving comments...")).toBeTruthy();
+
     release();
+    await waitFor(() => expect(screen.queryByText("Saving comments...")).toBeNull());
+    expect(onSavingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("UT-CMT-NOSPIN-004 while loading, shows an empty list with no spinner, no text and Add greyed", () => {
+    // Contract A opens with its thread on screen and seeded into the panel's working copy…
+    data = [comment({ id: "a-1", text: "Thread of contract A", contractId: "contract-1" })];
+    const view = mount();
+    expect(screen.getByText("Thread of contract A")).toBeTruthy();
+    // …then the same panel is re-rendered for contract B while B's comments are still loading.
+    // The working copy still holds A's thread until B's rows seed it; it must not show.
+    isLoading = true;
+    data = undefined;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <CommentsPanel
+          open contractId="contract-2"
+          contractDescription="Gesamt (CAPEX_after_FID) (59018_0_47110101)"
+          breadcrumb="Wind Turbine / Panels / Turbine / PV Supply Agreement"
+          payments={PAYMENTS} distribution="individual" onDismiss={vi.fn()}
+        />
+      </FluentProvider>,
+    );
+    expect(screen.queryByText("Thread of contract A")).toBeNull();
+    expect(screen.queryByTestId("btn_Read_Comment_Edit-a-1")).toBeNull();
+    expect(screen.getByTestId("capex-comments-list")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("capex-comments-list").childElementCount).toBe(0);
+    expect(screen.queryByText("Loading comments...")).toBeNull();
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add Comment" })).toBeDisabled();
+  });
+
+  it("UT-CMT-NOSPIN-005 while a commit runs, a still-open panel offers no write control", async () => {
+    let release = () => {};
+    saveMutation.mutateAsync = vi.fn(
+      () => new Promise<string>((resolve) => { release = () => resolve("new-id"); }),
+    );
+    // `onDismiss` is a mock here, so the panel stays open through the save — the state the
+    // screen's own guard (`gridActionAllowed`) refuses to reach by reopening it. This pins the
+    // panel's half of the guard: the saved thread's actions and Add Comment are all greyed.
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Add Comment" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), {
+      target: { value: "Added" },
+    });
+    fireEvent.click(saveButton());
+    await screen.findByText("Saving comments...");
+
+    expect(screen.getByRole("button", { name: "Add Comment" })).toBeDisabled();
+    for (const id of [
+      "btn_Read_Comment_Reply-c1", "btn_Read_Comment_Check-c1",
+      "btn_Read_Comment_Edit-c1", "btn_Read_Comment_Delete-c1",
+    ]) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+    }
+    expect(saveButton()).toBeDisabled();
+    release();
+    await waitFor(() => expect(screen.queryByText("Saving comments...")).toBeNull());
+    expect(screen.getByRole("button", { name: "Add Comment" })).toBeEnabled();
   });
 
   it("UT-CMT-073 a saved payment-date comment reads 'Comments to payment date : January , 2026'", () => {

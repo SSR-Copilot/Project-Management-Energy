@@ -18,13 +18,14 @@ import { useEffect } from "react";
 import { MemoryRouter } from "react-router-dom";
 import type { AddCostSheetData } from "@/data/addCostSheet";
 import { CHOICE, rowIdentity, type ExistingContract, type SheetRow } from "./rules";
-import { saveButtonDisabled, saveRequestRows } from "./saveRetry";
+import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 import type { SheetGrid } from "./spreadsheet/SpreadSheet";
 
 /* ── the doubles ──────────────────────────────────────────────────────────── */
 
-interface SheetState { data: AddCostSheetData | undefined; isFetching: boolean }
+interface SheetState { data: AddCostSheetData | undefined; isFetching: boolean; isLoading?: boolean }
 let sheet: SheetState;
+let savePending = false;
 const refetch = vi.fn(async () => undefined);
 const mutateAsync = vi.fn(async (_args: unknown) => undefined);
 let reportGrid: ((g: SheetGrid) => void) | null = null;
@@ -49,9 +50,9 @@ vi.mock("@/app/SessionContext", () => {
 
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useAddCostSheet: () => ({
-    data: sheet.data, isFetching: sheet.isFetching, isLoading: false, error: null, refetch,
+    data: sheet.data, isFetching: sheet.isFetching, isLoading: sheet.isLoading ?? false, error: null, refetch,
   }),
-  useSaveAddCostSheet: () => ({ mutateAsync, isPending: false, error: null, reset: () => undefined }),
+  useSaveAddCostSheet: () => ({ mutateAsync, isPending: savePending, error: null, reset: () => undefined }),
 }));
 
 vi.mock("./spreadsheet/SpreadSheet", async (importOriginal) => {
@@ -117,6 +118,7 @@ const renderScreen = () => render(
 
 beforeEach(() => {
   sheet = { data: freshData(), isFetching: false };
+  savePending = false;
   mutateAsync.mockReset();
   mutateAsync.mockResolvedValue(undefined);
   refetch.mockClear();
@@ -233,5 +235,62 @@ describe("Add Cost from Table Save wiring", () => {
     await clickSave();
     expect(sentArgs(1).refreshBeforePlan).toBe(false);
     expect(sentArgs(1).changedRows).toEqual([]);
+  });
+});
+
+/* ── no spinners (D57) ────────────────────────────────────────────────────── */
+
+describe("Add Cost from Table without spinners (D57)", () => {
+  it("UT-ADDCOST-NOSPIN-001 while the sheet loads: an empty aria-busy placeholder, no spinner, no grid", () => {
+    sheet = { data: undefined, isFetching: true, isLoading: true };
+    renderScreen();
+    const placeholder = screen.getByTestId("add-costs-loading");
+    expect(placeholder.getAttribute("aria-busy")).toBe("true");
+    expect(placeholder.textContent).toBe("");
+    expect(screen.queryByText("Loading the cost table…")).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByTestId("pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save")).toBeNull();
+  });
+
+  it("UT-ADDCOST-NOSPIN-002 while saving: the verbatim status line, no overlay, Save disabled", () => {
+    savePending = true;
+    renderScreen();
+    const status = screen.getByTestId("add-costs-write-status");
+    expect(status).toHaveTextContent("Please wait, saving costs...");
+    expect(status.getAttribute("role")).toBe("status");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(saveButton()).toHaveProperty("disabled", true);
+  });
+
+  it("UT-ADDCOST-NOSPIN-003 with no save pending the status line is empty", () => {
+    renderScreen();
+    expect(screen.getByTestId("add-costs-write-status").textContent).toBe("");
+    expect(saveButton()).toHaveProperty("disabled", false);
+  });
+
+  it("UT-ADDCOST-NOSPIN-004 sheetLocked holds exactly while a save is pending", () => {
+    expect(sheetLocked({ isPending: true })).toBe(true);
+    expect(sheetLocked({ isPending: false })).toBe(false);
+  });
+
+  const lockable = [
+    "btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable",
+    "btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable",
+    "btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3",
+    "pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel",
+    "ico_PopUpConfirmation_BodyHeader_2",
+  ];
+
+  it("UT-ADDCOST-NOSPIN-005 while saving: Add Row, Delete Row, Copy Table, Cancel and X are disabled, the grid is inert", () => {
+    savePending = true;
+    renderScreen();
+    for (const id of lockable) expect(screen.getByTestId(id), id).toHaveProperty("disabled", true);
+    expect(screen.getByTestId("add-costs-grid").hasAttribute("inert")).toBe(true);
+  });
+
+  it("UT-ADDCOST-NOSPIN-006 with no save pending the same controls and the grid are live", () => {
+    renderScreen();
+    for (const id of lockable) expect(screen.getByTestId(id), id).toHaveProperty("disabled", false);
+    expect(screen.getByTestId("add-costs-grid").hasAttribute("inert")).toBe(false);
   });
 });

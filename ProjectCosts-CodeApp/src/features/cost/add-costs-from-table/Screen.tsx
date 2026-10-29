@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@fluentui/react-components";
 import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, LoadingOverlay } from "@/components";
+import { EmptyState, WriteStatus } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
@@ -31,7 +31,7 @@ import {
 } from "./rules";
 import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
-import { saveButtonDisabled, saveRequestRows } from "./saveRetry";
+import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
 
 /**
  * Canvas-exact deletion, ON — the client's explicit choice.
@@ -309,11 +309,18 @@ export default function AddCostsFromTableScreen() {
     );
   }
   if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
-    return <LoadingOverlay mode="inline" label="Loading the cost table…" />;
+    /*
+     * DIVERGENCE (D57): no canvas control (the canvas screen sets no `LoadingSpinner`); this
+     * replaced the code app's own inline "Loading the cost table…" spinner with an empty,
+     * non-spinner placeholder. The grid needs `initialGrid`, so nothing else can render yet.
+     */
+    return <div data-testid="add-costs-loading" aria-busy="true" />;
   }
 
   const categoryName = CATEGORY_LABELS[category] ?? "";
   const title = sheetTitle(project?.projectName ?? "", categoryName);
+  // D57: no scrim while saving, so the sheet and its edit/leave controls lock instead.
+  const locked = sheetLocked({ isPending: save.isPending });
 
   return (
     <div
@@ -343,6 +350,7 @@ export default function AddCostsFromTableScreen() {
             title="Cancel"
             aria-label="Cancel"
             data-testid="ico_PopUpConfirmation_BodyHeader_2"
+            disabled={locked}
             onClick={back}
           />
         </div>
@@ -354,13 +362,13 @@ export default function AddCostsFromTableScreen() {
             padding: "5px 10px", background: "#fff",
           }}
         >
-          <Button aria-label="Add Row" data-testid="btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Add20Regular />} onClick={() => setAddRowToken((t) => t + 1)}>
+          <Button aria-label="Add Row" data-testid="btn_AddRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Add20Regular />} disabled={locked} onClick={() => setAddRowToken((t) => t + 1)}>
             Add Row
           </Button>
-          <Button aria-label="Delete Row" data-testid="btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Delete20Regular />} onClick={() => setDeleteRowToken((t) => t + 1)}>
+          <Button aria-label="Delete Row" data-testid="btn_DeleteRow_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable" appearance="transparent" icon={<Delete20Regular />} disabled={locked} onClick={() => setDeleteRowToken((t) => t + 1)}>
             Delete Row
           </Button>
-          <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} onClick={() => setCopyTableToken((t) => t + 1)}>
+          <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} disabled={locked} onClick={() => setCopyTableToken((t) => t + 1)}>
             Copy Table
           </Button>
         </div>
@@ -382,7 +390,7 @@ export default function AddCostsFromTableScreen() {
         ) : null}
 
         {/* Grid */}
-        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }} data-testid="add-costs-grid" inert={locked}>
           <SpreadSheetComp
             data={initialGrid}
             onDataChange={handleDataChange}
@@ -400,7 +408,14 @@ export default function AddCostsFromTableScreen() {
             justifyContent: "flex-end", gap: 10, padding: "0 20px",
           }}
         >
-          <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" onClick={back}>Cancel</Button>
+          {/*
+            * DIVERGENCE (D57): replaces `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable`
+            * (`cmp_PopUp_Loading_1`, `Visible: =locIsVisiblePopUpSpinner`,
+            * `InformationText: =locSpinnerInformationText`) with one non-blocking status line in
+            * the footer, same verbatim text. Save stays guarded by `saveButtonDisabled`.
+            */}
+          <WriteStatus label={save.isPending ? "Please wait, saving costs..." : null} testId="add-costs-write-status" />
+          <Button aria-label="Cancel" data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Cancel" appearance="outline" disabled={locked} onClick={back}>Cancel</Button>
           <Button
             aria-label="Save"
             data-testid="pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save"
@@ -417,8 +432,6 @@ export default function AddCostsFromTableScreen() {
           </Button>
         </div>
       </div>
-
-      {save.isPending ? <LoadingOverlay label="Please wait, saving costs..." /> : null}
     </div>
   );
 }

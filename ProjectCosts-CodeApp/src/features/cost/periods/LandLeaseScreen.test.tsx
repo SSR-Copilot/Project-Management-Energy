@@ -12,7 +12,7 @@
  * composition.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
@@ -405,5 +405,87 @@ describe("LandLeaseScreen", () => {
     render(<Harness><LandLeaseScreen /></Harness>);
     expect(screen.getByText("Cost data is unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Locations")).not.toBeInTheDocument();
+  });
+
+  /* ── D57: no spinner; a status line and a write guard instead ────────── */
+
+  /** Fluent's `Spinner` — what `LoadingOverlay` drew. */
+  const spinner = () => document.querySelector(".fui-Spinner");
+  const WRITE_COMMAND_IDS = [
+    "lease-newLandLeaseContractKey", "lease-newLandLeasePeriodKey",
+    "lease-AddLandLeaseStandardContractKey", "lease-EditLandLeasePeriodKey",
+    "lease-deleteLandLeasePeriodKey",
+  ];
+  const writeCommands = (name: string) =>
+    WRITE_COMMAND_IDS.map((id) => within(card(name)).getByTestId(id));
+
+  it("UT-LEASE-NOSPIN-005 the first load renders an empty, busy page: no spinner, no error, no rows", () => {
+    loading = true;
+    render(<Harness><LandLeaseScreen /></Harness>);
+
+    expect(spinner()).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+    // Nothing from the book shows until the load has finished.
+    expect(screen.queryByText("Locations")).not.toBeInTheDocument();
+    expect(screen.queryByText("Parcel 12/4")).not.toBeInTheDocument();
+    expect(screen.getByTestId("land-lease-write-status")).toBeEmptyDOMElement();
+  });
+
+  it("UT-LEASE-NOSPIN-006 a delete shows its canvas text as a status line and guards the writes", async () => {
+    let finish: () => void = () => {};
+    mutateAsync.mockImplementationOnce(
+      () => new Promise((r) => { finish = () => r({ createdIds: {} }); }),
+    );
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    fireEvent.click(within(card("Locations")).getByTestId("lease-deleteLandLeasePeriodKey"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByText("Delete"));
+
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    // The dialog closed first; the status line names the write, verbatim, and nothing spins.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("land-lease-write-status"))
+      .toHaveTextContent("Deleting Land Lease cost...");
+    expect(screen.getByRole("status")).toHaveTextContent("Deleting Land Lease cost...");
+    expect(spinner()).toBeNull();
+    // Every write command is off; selecting a row and folding a card are not.
+    for (const c of writeCommands("Locations")) expect(c).toBeDisabled();
+    expect(screen.getByTestId("lease-select-p2")).toBeEnabled();
+    expect(screen.getByTestId("leasecard-Other")).toBeEnabled();
+
+    await act(async () => { finish(); });
+    expect(screen.getByTestId("land-lease-write-status")).toBeEmptyDOMElement();
+    expect(within(card("Locations")).getByTestId("lease-newLandLeaseContractKey")).toBeEnabled();
+  });
+
+  it("UT-LEASE-NOSPIN-007 a panel save closes the panel first, then shows the status line", async () => {
+    let finish: () => void = () => {};
+    mutateAsync.mockImplementationOnce(
+      () => new Promise((r) => { finish = () => r({ createdIds: {} }); }),
+    );
+    // A wind contract needs an allocation before its Save gate opens.
+    book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(screen.getByTestId("lease-select-p2"));
+    fireEvent.click(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey"));
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+    fireEvent.click(saveButton);
+
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("land-lease-write-status"))
+      .toHaveTextContent("Saving Land Lease Contract...");
+    expect(spinner()).toBeNull();
+    for (const c of writeCommands("Locations")) expect(c).toBeDisabled();
+    // A second click on a guarded command starts nothing.
+    fireEvent.click(within(card("Locations")).getByTestId("lease-newLandLeaseContractKey"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await act(async () => { finish(); });
+    expect(screen.getByTestId("land-lease-write-status")).toBeEmptyDOMElement();
   });
 });

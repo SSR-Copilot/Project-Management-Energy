@@ -1139,6 +1139,24 @@ export function contractCommands(args: {
   ];
 }
 
+/**
+ * `contractCommands`, with every command greyed out while the shared `writeCommandsDisabled`
+ * (`@/domain/writeGuard`) holds. The same flag greys the payment-target bar's Add Period, Edit
+ * and Delete.
+ *
+ * DIVERGENCE (D57): the canvas blocked a second write by covering the whole screen with
+ * `cmp_Contracts_PopUpLoading` (`Visible: =locIsContractVisiblePopUpSpinner`) and blocked the
+ * first paint with the screen's `LoadingSpinner: =LoadingSpinner.Data`. Both spinners are gone,
+ * so the guard replaces them. Read-only actions (selecting a contract or a payment target,
+ * folding a card) are NOT gated and stay usable throughout.
+ */
+export function gatedContractCommands(
+  commands: readonly CommandState[],
+  writesDisabled: boolean,
+): CommandState[] {
+  return commands.map((c) => (writesDisabled ? { ...c, enabled: false } : { ...c }));
+}
+
 /* ══════════════════════════════════════════════════════════════════ helpers */
 
 function pad2(n: number): string {

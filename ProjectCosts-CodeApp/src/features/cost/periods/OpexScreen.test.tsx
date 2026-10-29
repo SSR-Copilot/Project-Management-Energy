@@ -11,7 +11,7 @@
  * nor a QueryClient.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
@@ -787,5 +787,119 @@ describe("OpexScreen", () => {
       project.countryName = "Germany";
       delete (project as { areaStateProvince?: string }).areaStateProvince;
     }
+  });
+
+  /* ── D57: no spinner; a status line and a write guard instead ────────── */
+
+  /** Fluent's `Spinner` — what `LoadingOverlay` drew. */
+  const spinner = () => document.querySelector(".fui-Spinner");
+  /** The card's toolbar commands — every one starts a write or opens the panel for one. */
+  const WRITE_COMMAND_IDS = [
+    "opex-newOpexProjectCostType", "opex-newOpexProjectCost", "opex-addStandardContract",
+    "opex-editOpexProjectCost", "opex-deleteOpexProjectCost",
+  ];
+  const writeCommands = (title: string) =>
+    WRITE_COMMAND_IDS.flatMap((id) => within(card(title)).queryAllByTestId(id));
+
+  it("UT-OPEX-NOSPIN-005 the first load renders the cards with an empty body, no spinner, no error", () => {
+    loading = true;
+    book = undefined;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+
+    expect(spinner()).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    // A load in progress is neither "unavailable" nor a project without generators.
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    // The chrome is there — the device cards and their command bars — but no row, and every
+    // write command is disabled while the book loads.
+    expect(screen.getByText("WTG V150-6.0")).toBeInTheDocument();
+    expect(screen.queryByTestId("opex-select-om-1")).not.toBeInTheDocument();
+    const commands = writeCommands("WTG V150-6.0");
+    expect(commands.length).toBeGreaterThan(0);
+    for (const c of commands) expect(c).toBeDisabled();
+    // Expanding a card is read-only and stays enabled.
+    expect(screen.getByTestId("opex-card-dev-pv")).toBeEnabled();
+  });
+
+  it("UT-OPEX-NOSPIN-006 with no generators, the first load shows no 'no generators' text", () => {
+    loading = true;
+    book = undefined;
+    deviceTypes = [[], []];
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEX-NOSPIN-007 a delete shows its canvas text as a status line and guards the writes", () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-deleteOpexProjectCost"));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+
+    expect(save.mutate).toHaveBeenCalledTimes(1);
+    // The dialog closed first; the status line names the write, verbatim, and nothing spins.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("opex-write-status")).toHaveTextContent(OPEX_MSG.deletingCost);
+    expect(screen.getByRole("status")).toHaveTextContent("Deleting OPEX cost...");
+    expect(spinner()).toBeNull();
+    // Every write command is off; selecting a row and expanding a card are not.
+    expect(screen.getByTestId("opex-select-om-1")).toBeEnabled();
+    expect(screen.getByTestId("opex-card-dev-pv")).toBeEnabled();
+    // Selecting a row still works, but Edit / Delete — which its own gate would now offer —
+    // stay off while the delete runs.
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    expect(screen.getByTestId("opex-select-om-1")).toBeChecked();
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+
+    // `onSettled` clears the line and the guard.
+    const options = save.mutate.mock.calls[0]?.[1] as { onSettled: () => void };
+    act(() => options.onSettled());
+    expect(screen.getByTestId("opex-write-status")).toBeEmptyDOMElement();
+    expect(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+  });
+
+  it("UT-OPEX-NOSPIN-008 Add Standard Contract shows its text and blocks a second import", () => {
+    book = makeBook([]);
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    const tcma = "Technical Commercial Management Agreement (TCMA)";
+    const command = within(card(tcma)).getByTestId("opex-addStandardContract");
+    expect(command).toBeEnabled();
+    fireEvent.click(command);
+
+    expect(addStandard.mutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("opex-write-status"))
+      .toHaveTextContent(OPEX_MSG.loadingStandardContract);
+    expect(spinner()).toBeNull();
+    expect(within(card(tcma)).getByTestId("opex-addStandardContract")).toBeDisabled();
+    fireEvent.click(within(card(tcma)).getByTestId("opex-addStandardContract"));
+    expect(addStandard.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("UT-OPEX-NOSPIN-009 a pending book mutation alone also disables the write commands", () => {
+    save.isPending = true;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    // With om-1 selected its own gates offer Add Period, Edit and Delete; the guard wins.
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+    expect(screen.getByTestId("opex-write-status")).toBeEmptyDOMElement();
+  });
+
+  it("UT-OPEX-NOSPIN-010 a panel save closes the panel first, then shows the status line", async () => {
+    let finish: () => void = () => {};
+    save.mutateAsync.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Save" }));
+
+    expect(save.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("opex-write-status")).toHaveTextContent(OPEX_MSG.savingCost);
+    expect(spinner()).toBeNull();
+    for (const c of writeCommands("WTG V150-6.0")) expect(c).toBeDisabled();
+
+    await act(async () => { finish(); });
+    expect(screen.getByTestId("opex-write-status")).toBeEmptyDOMElement();
   });
 });

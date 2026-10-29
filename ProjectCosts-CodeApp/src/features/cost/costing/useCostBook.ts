@@ -399,9 +399,14 @@ export function useCapexWrites(category?: number) {
   const { projectId, project } = useSession();
   const client = useQueryClient();
 
-  const invalidate = async () => {
+  /*
+   * `writtenOn` is the category the write was MADE on, captured in `onMutate` (D57). TanStack
+   * pushes every render's options into a pending mutation, so reading the render-time `category`
+   * here refreshed the tab the user had since switched TO, and left the one written on stale.
+   */
+  const invalidate = async (writtenOn: number | undefined) => {
     await Promise.all([
-      client.invalidateQueries({ queryKey: ["cost-book", projectId, category ?? "none"] }),
+      client.invalidateQueries({ queryKey: ["cost-book", projectId, writtenOn ?? "none"] }),
       client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
       client.invalidateQueries({ queryKey: qk.devCoCapexContracts(projectId ?? "none") }),
       client.invalidateQueries({ queryKey: qk.devCoCapexCosts(projectId ?? "none") }),
@@ -411,15 +416,20 @@ export function useCapexWrites(category?: number) {
     ]);
   };
 
+  /** Runs at mutate time, from that render's options: the category the write is made on. */
+  const writtenOn = () => ({ category });
+
   const setPaid = useMutation({
+    onMutate: writtenOn,
     mutationFn: (args: { lineId: string; year: number; month: number; paid: boolean; costId?: string }) =>
       costRepository().setCostPaid(projectId as string, args),
-    onSuccess: invalidate,
+    onSuccess: (_data, _args, context) => invalidate(context.category),
   });
 
   const saveLine = useMutation({
-    // The click time, for the busy line below (the panel's spinner waits for the refetch too).
-    onMutate: () => ({ startedAt: performance.now() }),
+    // The click time, for the busy line below (the panel's spinner waits for the refetch too),
+    // and the category the save is made on (see `invalidate`).
+    onMutate: () => ({ startedAt: performance.now(), ...writtenOn() }),
     mutationFn: (args: {
       line: CostLine; accountId: string; isNew: boolean;
       payments: { id?: string; year: number; month: number; amount: number | null }[];
@@ -440,18 +450,21 @@ export function useCapexWrites(category?: number) {
      */
     onSuccess: async (_id, _args, context) => {
       const writesDone = performance.now();
-      await invalidate();
+      await invalidate(context ? context.category : category);
       console.info(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
     },
     // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
     // the next panel compares against (`storedPayments`, D56 §3), show what Dataverse holds.
     // Not awaited: the error banner must not wait for the reload.
-    onError: () => { void invalidate().catch(() => undefined); },
+    onError: (_error, _args, context) => {
+      void invalidate(context ? context.category : category).catch(() => undefined);
+    },
   });
 
   const deleteLine = useMutation({
+    onMutate: writtenOn,
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
-    onSuccess: invalidate,
+    onSuccess: (_data, _line, context) => invalidate(context.category),
   });
 
   return { setPaid, saveLine, deleteLine };

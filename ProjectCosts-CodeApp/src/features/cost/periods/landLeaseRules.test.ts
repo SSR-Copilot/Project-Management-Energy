@@ -48,6 +48,7 @@ import {
   buildCostPayload, buildPeriodPayload, buildAllocationPayload, planLeaseSave, bindParent,
   planLeaseDelete, deleteDialog,
   isStandardLocked, leaseCommands, leaseCommandGates,
+  guardLeaseCommands,
   leaseAssumptionQuery, mapAssumptionPeriod, mapAssumptionPeriodStrict, mapAggregation,
   mapSecured, mapAllWtgAllocated, roundTwoDecimals, resolveStandardInflationProfile,
   planStandardAllocation, standardPeriodStarts, planStandardImport,
@@ -55,6 +56,8 @@ import {
   type LeaseProjectContext, type LandLeaseForm, type GeneratorOption, type LeaseCommandArgs,
   type LeaseWrite,
 } from "./landLeaseRules";
+// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /** `LeaseWrite` is a discriminated union; a delete carries no payload. Narrow, don't cast. */
 function payloadOf(w: LeaseWrite | undefined): Record<string, unknown> {
@@ -1930,5 +1933,40 @@ describe("Land Lease — the panel form", () => {
     expect(buildCostPayload({
       form: f, ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
     })[LEASE_COST_COL.isStartDateStandardAssumption]).toBe(true);
+  });
+});
+
+/* ── D57: the write guard that replaced `cmp_LandLease_PopUpLoading` ─────────────────── */
+
+describe("writeCommandsDisabled / guardLeaseCommands (D57)", () => {
+  const commands = leaseCommands({
+    subaccountId: "sub-1", isSelectedCard: false, selectedPeriod: null, selectedCost: null,
+    contract: null, costsInSubaccount: [], hasMatchingAssumption: true, permissions: perms,
+  });
+
+  it("UT-LEASE-NOSPIN-001 a pending write disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+  });
+
+  it("UT-LEASE-NOSPIN-002 the first load disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+    expect(writeCommandsDisabled({ loading: true, writePending: true })).toBe(true);
+  });
+
+  it("UT-LEASE-NOSPIN-003 nothing pending and loaded leaves the commands to their own gates", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    // Add Contract Type and Add Standard Contract are on for an empty, unselected card.
+    expect(commands.filter((c) => c.enabled).map((c) => c.key))
+      .toEqual(["newLandLeaseContractKey", "AddLandLeaseStandardContractKey"]);
+    expect(guardLeaseCommands(commands, false)).toEqual(commands);
+  });
+
+  it("UT-LEASE-NOSPIN-004 the guard turns all five commands off and keeps their captions", () => {
+    const guarded = guardLeaseCommands(commands, true);
+    expect(guarded.map((c) => c.enabled)).toEqual([false, false, false, false, false]);
+    expect(guarded.map((c) => c.label)).toEqual(commands.map((c) => c.label));
+    expect(guarded.map((c) => c.key)).toEqual(commands.map((c) => c.key));
+    // The input is not mutated.
+    expect(commands.some((c) => c.enabled)).toBe(true);
   });
 });

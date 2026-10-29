@@ -12,6 +12,7 @@
  */
 import { round } from "@/domain/numeric";
 import type { CostLine, Payment } from "../costing/model";
+import { COMMENTS_SAVING } from "./comments";
 
 /* ═════════════════════════════════════════════ cluster checkboxes (G12) ══ */
 
@@ -205,8 +206,59 @@ export function previousYearFloor(args: {
 
 /* ═════════════════════════════════════════════════════ spinner text (G21) ══ */
 
-/** `locSpinnerInformationText` — `CapexScreenCode.txt:2434`. */
-export const LOADING_COST = "Please wait, loading cost ...";
+/*
+ * DIVERGENCE (D57): the canvas raised `cmp_Costs_PopUpLoading` (component `cmp_PopUp_Loading`,
+ * `Visible: =locIsVisiblePopUpSpinner`) for every write, and the inline `spn_LoadingSpinnerCost`
+ * (`Visible: =locIsVisibleLoadingCostSpinner`) while the cost book loaded. This app shows no
+ * spinner at all: a write shows its SAME verbatim `InformationText` as a `WriteStatus` line, and a
+ * first load renders the screen chrome with an empty body. The two loading texts the canvas
+ * used, `"Please wait, loading cost ..."` (`locSpinnerInformationText`, `CapexScreenCode.txt:2434`)
+ * and `"Please wait, loading data..."` (`cmp_Costs_PopUpLoading.InformationText`, `:18052`),
+ * therefore have no caller any more and were removed with the spinners.
+ */
+
+/*
+ * Whether the commands that START a write are greyed (D57, decision 2b) is the shared
+ * `writeCommandsDisabled` (`@/domain/writeGuard`). The blocking spinner's scrim was the only thing
+ * that stopped a second Save, Delete, Paid toggle or Add Standard Contract while one was still
+ * running. Read-only actions — the tabs, filters, year navigation and expand/collapse — are never
+ * gated by it.
+ */
+
+/** The grid actions (`GridCallback`'s first argument) that start a write or open an editor. */
+const WRITE_STARTING_GRID_ACTIONS: ReadonlySet<string> = new Set([
+  "Add", "Edit", "Delete", "AddStandardContract", "SetCostPaidUnpaid", "Comment",
+]);
+
+/**
+ * Whether the vendored PCF grid's callback may act (D57). The grid is a DOM-API renderer with no
+ * disabled state of its own, so its write-starting actions are ignored in React while
+ * `writeCommandsDisabled` holds. `Comment` counts: it opens the comments editor, whose own save
+ * is one of the guarded writes. Anything else (an unknown action) is let through untouched.
+ */
+export const gridActionAllowed = (action: string, disabled: boolean): boolean =>
+  !(disabled && WRITE_STARTING_GRID_ACTIONS.has(action));
+
+/**
+ * The `WriteStatus` line — `cmp_Costs_PopUpLoading.InformationText` for the write in flight, or
+ * null when nothing is pending. Same precedence as the overlay it replaces: the standard-contract
+ * path names the assumption it is creating, the panel save says "the cost" / "costs", and
+ * anything else (Paid toggle, Delete) falls back to the plural form.
+ *
+ * With no cost write pending, a running comments commit (`commentsSaving`) shows the comments
+ * Save's own `"Saving comments..."` (`COMMENTS_SAVING`). The screen carries it, not only the
+ * panel, so the line survives the panel unmounting mid-commit (a tab switch re-enters loading).
+ */
+export const capexWriteStatusLabel = (args: {
+  pending: boolean;
+  standardName: string | null;
+  savingLabel: string | null;
+  commentsSaving?: boolean;
+}): string | null => {
+  if (!args.pending) return args.commentsSaving ? COMMENTS_SAVING : null;
+  if (args.standardName) return standardContractLoadingLabel(args.standardName);
+  return args.savingLabel ?? SAVING_COSTS;
+};
 
 /**
  * What the save spinner says — and it is NOT one string.
@@ -238,9 +290,6 @@ export const SAVING_COSTS = "Please wait, saving costs...";
 
 export const savingCostLabel = (distribution: CostLine["distribution"]): string =>
   distribution === "individual" ? SAVING_COST : SAVING_COSTS;
-
-/** `CapexScreenCode.txt:18052` — what the Summary tab shows before its totals land. */
-export const LOADING_DATA = "Please wait, loading data...";
 
 /**
  * `$"Please wait, loading standard contract : '{varStandardContractAssumption.Description}'

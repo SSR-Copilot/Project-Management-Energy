@@ -21,7 +21,8 @@
  *     con_LandLease_WarningOnSaveWithCost             -> the additional-periods warning
  *     …_BodyButtons_1 (Save / Cancel / Hint)          -> `<PanelButtons>` + the hint
  *   cmp_…_PopUpConfirmation_DeletePeriod / …_DeleteLandLeaseCost -> one `<ConfirmDialog>`
- *   cmp_LandLease_PopUpLoading                        -> `<LoadingOverlay>`
+ *   cmp_LandLease_PopUpLoading                        -> `<WriteStatus>` + the write guard
+ *                                                        (D57 DIVERGENCE: no spinner, no scrim)
  *
  * COMPOSITION ONLY. Every decision — column set, cell text, command gating, panel title,
  * field validation, the Save gate, the write plans — lives in `./landLeaseRules.ts`, which is
@@ -45,8 +46,9 @@ import {
   AddFilled, AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteFilled, DeleteRegular, EditRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { serverEnforcedProvider } from "@/platform/privileges";
 /*
@@ -70,7 +72,8 @@ import {
   deleteDialog,
   durationMonthLabel, durationYearLabel, emptyLandLeaseForm, headerEditable, hintVisible,
   inflationProfileLabel, inflationSectionVisible, inflationStartYearDefault, isPeriodOne,
-  landLeaseColumns, landLeaseFormFrom, lastPeriod, leaseAssumptionQuery, leaseCommands, leaseCurrencyLabel,
+  guardLeaseCommands, landLeaseColumns, landLeaseFormFrom, lastPeriod, leaseAssumptionQuery,
+  leaseCommands, leaseCurrencyLabel,
   leaseFieldErrors, leasePanelTitle, leaseSaveError, orderedSubaccounts,
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
@@ -720,10 +723,16 @@ export default function LandLeaseScreen() {
     areaWithRegion: areaWithRegion(project?.countryName ?? null, project?.areaStateProvince ?? null),
   }), [projectId, project, extras.data]);
 
-  const subaccounts = useMemo(() => book.data?.subaccounts ?? [], [book.data]);
-  const costs = useMemo(() => book.data?.costs ?? [], [book.data]);
-  const periods = useMemo(() => book.data?.periods ?? [], [book.data]);
-  const allocations = useMemo(() => book.data?.allocations ?? [], [book.data]);
+  const isLoading = book.isLoading || extras.isLoading;
+  /*
+   * D57: the screen renders while the first load runs instead of returning a spinner, so nothing
+   * from the book may show until both reads have finished — the body stays empty.
+   */
+  const bookData = isLoading ? undefined : book.data;
+  const subaccounts = useMemo(() => bookData?.subaccounts ?? [], [bookData]);
+  const costs = useMemo(() => bookData?.costs ?? [], [bookData]);
+  const periods = useMemo(() => bookData?.periods ?? [], [bookData]);
+  const allocations = useMemo(() => bookData?.allocations ?? [], [bookData]);
   const generators = useMemo(() => generatorQuery.data ?? [], [generatorQuery.data]);
 
   /*
@@ -795,7 +804,15 @@ export default function LandLeaseScreen() {
     [countryInflation.data],
   );
 
-  const isLoading = book.isLoading || extras.isLoading;
+  /**
+   * D57 — the guard that replaced `cmp_LandLease_PopUpLoading`'s screen cover: while the first
+   * load or any write runs, no command that starts a write may fire (the buttons are disabled
+   * too; the check in `onCommand` is the second line).
+   */
+  const writeDisabled = writeCommandsDisabled({
+    loading: isLoading,
+    writePending: busy !== null || writes.isPending,
+  });
 
   /* ── commands ─────────────────────────────────────────────────────────── */
 
@@ -898,6 +915,7 @@ export default function LandLeaseScreen() {
   };
 
   const onCommand = (card: LeaseSubaccountCard, key: string) => {
+    if (writeDisabled) return;
     setError(null);
     if (key === "newLandLeaseContractKey") openAddContract(card);
     else if (key === "newLandLeasePeriodKey") openAddPeriod(card);
@@ -951,6 +969,7 @@ export default function LandLeaseScreen() {
      * dismisses the panel in ONE `UpdateContext`: `{locSpinnerInformationText: "Saving Land
      * Lease Contract...", locIsVisiblePopUpSpinner: true, locIsVisibleRightPanelNewEditPeriod:
      * false}`, before any write. Closing after the await drew the spinner over the panel.
+     * (Since D57 the "spinner" is the `<WriteStatus>` line plus the write guard; same order.)
      *
      * Only the panel moves. Clearing the SELECTION stays below, where the canvas keeps it —
      * that is a separate, later `UpdateContext` (LL:5895).
@@ -1002,9 +1021,15 @@ export default function LandLeaseScreen() {
 
   /* ── render ───────────────────────────────────────────────────────────── */
 
-  if (isLoading) return <LoadingOverlay mode="inline" label="Loading Land Lease…" />;
-  // A failed read must not look like a project with no leases (same state as Capex / Opex).
-  if (book.error || extras.error) {
+  /*
+   * DIVERGENCE (D57): the first load no longer returns `<LoadingOverlay mode="inline">`. The page
+   * renders with an empty body (no card until the book has loaded) and every write command
+   * disabled (`writeCommandsDisabled`), and carries `aria-busy`. The load check still comes
+   * BEFORE the error check, so a load in progress never reads "Cost data is unavailable".
+   *
+   * A failed read must not look like a project with no leases (same state as Capex / Opex).
+   */
+  if (!isLoading && (book.error || extras.error)) {
     return (
       <EmptyState
         title="Cost data is unavailable"
@@ -1025,12 +1050,19 @@ export default function LandLeaseScreen() {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} aria-busy={isLoading || undefined}>
       {error ? (
         <MessageBar intent="error" politeness="assertive">
           <MessageBarBody>{error}</MessageBarBody>
         </MessageBar>
       ) : null}
+      {/*
+        * DIVERGENCE (D57): `cmp_LandLease_PopUpLoading` (`InformationText:
+        * =locSpinnerInformationText`, `Visible: =locIsVisiblePopUpSpinner`) is no longer a
+        * blocking spinner pop-up over the screen. The same verbatim `LEASE_MSG` text shows here as
+        * one non-animated status line, and the write guard disables the write commands instead.
+        */}
+      <WriteStatus label={busy} testId="land-lease-write-status" />
 
       <div className={styles.cardList}>
         {cards.map((card) => (
@@ -1053,6 +1085,7 @@ export default function LandLeaseScreen() {
             onToggle={() => toggleCard(card.id)}
             onSelectRow={(row) => setSelection((s) => toggleLeaseSelection(s, row))}
             onCommand={(key) => onCommand(card, key)}
+            writeDisabled={writeDisabled}
           />
         ))}
       </div>
@@ -1148,8 +1181,6 @@ export default function LandLeaseScreen() {
         onCancel={() => setDeleting(null)}
         onConfirm={() => { void confirmDelete(); }}
       />
-
-      {busy ? <LoadingOverlay label={busy} /> : null}
     </div>
   );
 }
@@ -1159,7 +1190,7 @@ export default function LandLeaseScreen() {
 function SubaccountCard({
   card, columns, contracts, costById, ctx, selection, selectedPeriod, selectedCost,
   selectedContract, costs, hasMatchingAssumption, permissions,
-  onToggle, onSelectRow, onCommand,
+  onToggle, onSelectRow, onCommand, writeDisabled,
 }: {
   card: LeaseSubaccountCard;
   columns: ReturnType<typeof landLeaseColumns>;
@@ -1179,6 +1210,8 @@ function SubaccountCard({
   onToggle: () => void;
   onSelectRow: (row: { periodId: string; costId: string | null; subaccountId: string }) => void;
   onCommand: (key: string) => void;
+  /** D57 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
+  writeDisabled: boolean;
 }) {
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
@@ -1195,7 +1228,7 @@ function SubaccountCard({
     || (a.startDate ?? "").localeCompare(b.startDate ?? ""));
   const isSelectedCard = selection.subaccountId === card.id;
 
-  const commands = leaseCommands({
+  const commands = guardLeaseCommands(leaseCommands({
     subaccountId: card.id,
     isSelectedCard,
     selectedPeriod: isSelectedCard ? selectedPeriod : null,
@@ -1204,7 +1237,7 @@ function SubaccountCard({
     costsInSubaccount: costs.filter((c) => c.subaccountId === card.id),
     hasMatchingAssumption,
     permissions,
-  });
+  }), writeDisabled);
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
   const open = !card.isFolded;
   // `con_…_CostsTableHeader_1.Width: =OTP.X + OTP.Width` — the radio lane plus every column.

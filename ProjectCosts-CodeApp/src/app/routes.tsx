@@ -74,7 +74,12 @@ export function CostProjectGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
-  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
+  /*
+   * DIVERGENCE (D57): no canvas control; code-app route spinner. The "Loading project…" spinner
+   * is gone from the Cost gate; it renders an empty, non-spinner placeholder instead, and still
+   * holds back every Cost screen (and its queries) until the session and the project are loaded.
+   */
+  if (loading) return <div data-testid="cost-project-loading" aria-busy="true" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open Costs for a selected project." action={action} />;
   if (!projectId) return <EmptyState title="Select a project to open Costs"
@@ -83,7 +88,16 @@ export function CostProjectGate() {
     description="Return to the project list and try again." action={action} />;
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"
     description="The project could not be found or you do not have access to it." action={action} />;
-  return <Outlet />;
+  /*
+   * DIVERGENCE (D57): no canvas control; code-app route spinner. The Cost subtree has its own
+   * Suspense boundary with an empty, non-spinner fallback, so a lazy Cost chunk never shows the
+   * shared "Loading screen…" spinner that the other routes keep (`AppRoutes`).
+   */
+  return (
+    <Suspense fallback={<div data-testid="cost-screen-loading" aria-busy="true" />}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 /**

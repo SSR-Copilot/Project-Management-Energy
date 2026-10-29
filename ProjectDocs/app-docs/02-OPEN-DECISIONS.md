@@ -5160,3 +5160,81 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 2. Approve skipping unchanged months (§3).
 3. Accept the refusal of a row someone else deleted (§4).
 4. After the §6 numbers: keep the awaited refetch (§5), or build a book patch and stop waiting.
+
+## D57 · Cost module: no loading or saving spinners (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/RemoveCostSpinners` only.** Not
+deployed. Not product-approved. Brief: `feature-briefs/FEATURE-RemoveCostSpinners.md`.
+(D58 is reserved by the parallel `feature/ReadableBulkSaveLogs` branch.)
+
+### 1. What changed — `DIVERGENCE`
+
+Every canvas Cost screen raises a `cmp_PopUp_Loading` pop-up (10 % scrim, white card, spinner
+`AccessibleLabel "Waiting"`, `InformationText`) while it writes, and CAPEX also shows the inline
+`spn_LoadingSpinnerCost` while it loads. The code app showed these through `LoadingOverlay`. The
+Cost module now shows **no spinner and no scrim**:
+- **Writes** (panel saves and the no-panel actions) show the same verbatim `InformationText` as a
+  plain, non-animated `role="status"` line, the new shared `components/WriteStatus.tsx`. The panel
+  or dialog still closes first (the client's "Panel closes and spinner is shown" order).
+- **A second write cannot start.** The scrim used to block the grid and command bar. Each screen
+  now disables only its write-starting commands while a write is pending, through a pure rule with
+  tests. Read-only actions (filters, year, tabs, selection, folding) stay enabled.
+- **First loads** render the screen chrome (where it exists without data) over an empty
+  `aria-busy="true"` body, with the write commands disabled. The loading check comes before the
+  `Cost data is unavailable` EmptyState, so a load never looks like an error, and a real error
+  still shows it (rule 19).
+- `LoadingOverlay` is unchanged; the PM and Admin screens still use it.
+
+### 2. Sites removed, and the canvas control each one stood for
+
+| # | Code site | Canvas control | Now |
+|---|---|---|---|
+| A1 | `App.tsx` blocking "Please wait..." | none (code-app shell) | skipped on `/costs/*` only; `/`, `/projects`, `/project/*`, `/admin/*` unchanged |
+| A3 | `routes.tsx` `CostProjectGate` "Loading project…" | none | empty `cost-project-loading` placeholder; no Cost screen mounts before the session and project exist |
+| A5 | `routes.tsx` Suspense "Loading screen…" | none | the Cost subtree has its own empty `cost-screen-loading` fallback; the shared one is unchanged |
+| B1 | CAPEX book load, `LOADING_COST` | `spn_LoadingSpinnerCost` (`Visible: =locIsVisibleLoadingCostSpinner`) | tab strip and toolbar over empty `capex-loading` |
+| B2 | CAPEX Summary totals, `LOADING_DATA` | `cmp_Costs_PopUpLoading` ("Please wait, loading data...") | empty `capex-summary-loading` |
+| B3 | CAPEX save / Paid / Delete / Add Standard Contract | `cmp_Costs_PopUpLoading` (`Visible: =locIsVisiblePopUpSpinner`) | `capex-write-status`; guard `writeCommandsDisabled`, `gridActionAllowed` (`panelRules.ts`) |
+| B4 | Comments load "Loading comments..." | none (code-app text) | empty `capex-comments-list`, Add Comment disabled |
+| B5 | Comments save "Saving comments..." | `cmp_Costs_PopUpLoading` (`Capex Costs Screen.pa.yaml:10141`) | `capex-comments-write-status`; guard `commentWritesDisabled` (`comments.ts`) |
+| B6 | PCF `renderLoading` | vendor PCF (dead: `dataset.loading` is always false) | deleted |
+| B7 | PCF `renderEmptyState` spinner + "Loading data…" | vendor PCF | static "No costs to display." (**NEW text**, the canvas has none), `capex-grid-empty-state` |
+| B8 | OPEX load "Loading O&M/Other OPEX…" | `LoadingSpinner: =LoadingSpinner.Data` | device / sub-account cards with no rows, commands disabled |
+| B9 | OPEX save / delete / Add Standard | `cmp_OpexCosts_PopUpLoading` (`Opex Costs Screen.pa.yaml:5380`) | `opex-write-status`; guard `opexWriteCommandsDisabled` (`opexRules.ts`) |
+| B10 | Land Lease load "Loading Land Lease…" | `LoadingSpinner: =LoadingSpinner.Data` | empty `aria-busy` page (its cards come from the book) |
+| B11 | Land Lease save / delete / standard import | `cmp_LandLease_PopUpLoading` (`Land Lease Costs Screen.pa.yaml:6285`) | `land-lease-write-status`; guard `leaseWriteCommandsDisabled` (`landLeaseRules.ts`) |
+| B12 | Contracts load "Loading contracts…" | `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen.pa.yaml:14`) | command bar (disabled) over empty `contracts-loading` |
+| B13 | Contracts save / delete | `cmp_Contracts_PopUpLoading` (`Visible: =locIsContractVisiblePopUpSpinner`, `:7733-7739`) | `contracts-write-status`; guard `writeCommandsDisabled` (`contracts/rules.ts`) |
+| B14 | Add Costs from Table load "Loading the cost table…" | none | empty `add-costs-loading` |
+| B15 | Add Costs from Table save "Please wait, saving costs..." | `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable` (`Add Costs from Table.pa.yaml:388-394`) | `add-costs-write-status` in the footer; Save already guarded by `saveButtonDisabled` |
+
+Constants `LOADING_COST` and `LOADING_DATA` (`panelRules.ts`) had no other user and are deleted.
+Every other spinner text stays, because the status line shows it.
+
+### 3. Known gaps, for the product owner
+
+1. **Add Costs from Table locks the sheet during a save** (`sheetLocked`, `saveRetry.ts`): Add Row,
+   Delete Row, Copy Table, Cancel and ✕ are disabled and the grid wrapper is `inert`, because the
+   overlay used to cover them and an edit typed mid-save was silently lost when the screen closed.
+   `SpreadSheetComp` has no cheap read-only mode.
+2. **Navigation stays live during a write.** The scrim also covered the rail and header. Leaving a
+   screen mid-write lets the write finish, but its error has no screen left to show it on, and a
+   screen re-opened while that write still runs has a fresh mutation observer, so its guard reads
+   open. Closing this needs a per-project "write in flight" flag and a global error toast (not built).
+3. **The PCF grid's write actions are ignored, not greyed**, while a write runs (the menus still
+   look enabled; the guard sits in the React callback).
+4. **A selection made during a write is cleared when the write ends** (Land Lease, Contracts
+   delete), as the success paths always did.
+5. **CAPEX refreshes the tab the write was made on** (`useCapexWrites` records the category in
+   `onMutate`), so switching tab mid-save no longer leaves the first tab stale. The status line and
+   error banners also render during a tab's first load, and "Saving comments..." survives the
+   Comments panel unmounting (the panel's own line is turned off on CAPEX via `writeStatus={false}`).
+6. **`.pcf-spinner` CSS is left in place, unused.** `pcfCascade.test.ts` requires the vendored
+   stylesheet to stay byte-identical to the vendor control's.
+7. **CAPEX counts Comment and Add Cost from Table as write-starting** (they open editors), so both
+   are disabled while a CAPEX write or a comments save runs.
+8. **A failure still shows as the existing banner.** There is no success message, as before.
+
+### 4. What the product owner is being asked
+
+Approve removing the spinners (§2), the status line in place of the pop-up, and the gaps in §3.

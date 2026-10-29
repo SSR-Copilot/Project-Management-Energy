@@ -13,9 +13,12 @@ import {
   contractName, paymentTargetName, devCoCostName, contractCardTitle, panelTitle,
   recalculateForm, contractTotalFromForm,
   currencyCode, costLabel, contractCommands, sortContracts,
+  gatedContractCommands,
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
+// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -647,6 +650,28 @@ describe("contractCommands", () => {
       "Edit",
       "Delete",
     ]);
+  });
+});
+
+describe("writeCommandsDisabled / gatedContractCommands (D57)", () => {
+  it("UT-CONTRACTS-NOSPIN-001 write commands are enabled only when nothing is loading or pending", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+    expect(writeCommandsDisabled({ loading: true, writePending: true })).toBe(true);
+  });
+
+  it("UT-CONTRACTS-NOSPIN-002 a pending write greys out every command-bar command", () => {
+    const cmds = contractCommands({ canCreate: true, canWrite: true, canDelete: true, hasSelection: true });
+    expect(cmds.every((c) => c.enabled)).toBe(true);
+    const gated = gatedContractCommands(cmds, true);
+    expect(gated.map((c) => c.key)).toEqual(cmds.map((c) => c.key));
+    expect(gated.every((c) => !c.enabled)).toBe(true);
+  });
+
+  it("UT-CONTRACTS-NOSPIN-003 with no write pending the commands keep their own gates", () => {
+    const cmds = contractCommands({ canCreate: true, canWrite: true, canDelete: true, hasSelection: false });
+    expect(gatedContractCommands(cmds, false)).toEqual(cmds);
   });
 });
 

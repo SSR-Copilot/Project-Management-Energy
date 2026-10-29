@@ -23,7 +23,8 @@
  *   `inf_OpexCost_AlignWithDuration`                     → the amber info button in the row
  *   `con_OpexCosts_RightPanel_NewEditCost`               → `<FormPanel>` (left/right columns)
  *   `cmp_OpexCosts_PopUpConfirmation_DeleteCost`         → `<ConfirmDialog>`
- *   `cmp_OpexCosts_PopUpLoading`                         → `<LoadingOverlay>`
+ *   `cmp_OpexCosts_PopUpLoading`                         → `<WriteStatus>` + the write guard
+ *                                                          (D57 DIVERGENCE: no spinner, no scrim)
  *
  * Reference screenshots:
  *   `Cost App - O & M Selected Tab - Almost same for Landlease and other Opex also.png`
@@ -39,8 +40,9 @@ import {
   AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteRegular, EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import {
   useAddStandardContract, useCostBook, useCountryInflation, useCountryInflationAreas,
@@ -58,7 +60,7 @@ import {
   defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
   inheritStartDateStandard, italyZone, matchesStandardAssumption, nextPeriodDescriptionPanel,
-  omDurationBadge, opexColumns, opexCommands,
+  guardOpexCommands, omDurationBadge, opexColumns, opexCommands,
   opexFormErrors, panelFieldModes, panelRateLabel, panelRequiredMarkers, panelTitle, planDeleteCost,
   resetStartDateFlag, resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
   showEurPerWtgField, showThresholdColumn, standardAssumptionFilter, startDateDefault,
@@ -680,6 +682,8 @@ export interface OpexScreenProps {
 export default function OpexScreen({ mode }: OpexScreenProps) {
   const styles = useStyles();
   const { project, projectId } = useSession();
+  // D57: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
+  // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
   const { data: book, isLoading, error, save } = useCostBook();
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
@@ -701,7 +705,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const [form, setForm] = useState<OpexForm | null>(null);
   const [deleting, setDeleting] = useState<OpexCost | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
-  /** `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` is showing. */
+  /**
+   * `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` showed. Since D57 it is
+   * the `<WriteStatus>` line, and non-null means a write is pending (the write guard).
+   */
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
 
   /* ── scope, once per render (`OnVisible`, `:9-64`) ─────────────────────── */
@@ -853,7 +860,18 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     setBanner(null);
   };
 
+  /**
+   * D57 — the guard that replaced `cmp_OpexCosts_PopUpLoading`'s screen cover: while the first
+   * load or any write runs, no command that starts a write may fire (the buttons are disabled
+   * too; this is the second line).
+   */
+  const writeDisabled = writeCommandsDisabled({
+    loading: isLoading,
+    writePending: busyLabel !== null || save.isPending || addStandard.isPending,
+  });
+
   const onCommand = (card: OpexCard, key: OpexCommandKey) => {
+    if (writeDisabled) return;
     const cardCosts = costsInScope(allCosts, mode, card.id);
 
     if (key === "newOpexProjectCostType") {
@@ -1042,7 +1060,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // one of the two can be named; the cascade is the phase worth naming when there is one.
     const cascades = selected !== null && childrenOf(allCosts, selected.id).length > 0;
     /*
-     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS.
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS. (Since D57 the "spinner" is the
+     * `<WriteStatus>` line plus the write guard; the order is unchanged.)
      *
      * The canvas Save raises the spinner and dismisses the panel in ONE `UpdateContext` —
      * `{locSpinnerInformationText: "Saving OPEX cost...", locIsVisiblePopUpSpinner: true,
@@ -1092,10 +1111,13 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
 
   /* ── render ───────────────────────────────────────────────────────────── */
 
-  if (isLoading) {
-    return <LoadingOverlay mode="inline" label={`Loading ${OPEX_MODE_NAMES[mode]}…`} />;
-  }
-  if (!book || error) {
+  /*
+   * DIVERGENCE (D57): the first load no longer returns `<LoadingOverlay mode="inline">`. The
+   * cards and their command bars render with an empty body and every write command disabled
+   * (`writeCommandsDisabled`), and the page carries `aria-busy`. The load check still comes
+   * BEFORE the error check, so a load in progress never reads "Cost data is unavailable".
+   */
+  if (!isLoading && (!book || error)) {
     return (
       <EmptyState
         title="Cost data is unavailable"
@@ -1105,8 +1127,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   }
 
   // `lbl_OpexCosts_Content_GeneratorsInProject_Instruction.Visible` (`:309`) — O&M with an empty
-  // device gallery renders this and nothing else.
-  if (mode === "om" && cards.length === 0) {
+  // device gallery renders this and nothing else. Never while loading: no "no rows" text then.
+  if (!isLoading && mode === "om" && cards.length === 0) {
     return (
       <div className={styles.page}>
         <Text className={styles.instruction}>{OPEX_MSG.noGenerators}</Text>
@@ -1115,8 +1137,15 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} aria-busy={isLoading || undefined}>
       {banner ? <div className={styles.banner} role="alert">{banner}</div> : null}
+      {/*
+        * DIVERGENCE (D57): `cmp_OpexCosts_PopUpLoading` (`InformationText:
+        * =locSpinnerInformationText`, `Visible: =locIsVisiblePopUpSpinner`) is no longer a
+        * blocking spinner pop-up over the screen. The same verbatim `OPEX_MSG` text shows here as
+        * one non-animated status line, and the write guard disables the write commands instead.
+        */}
+      <WriteStatus label={busyLabel} testId="opex-write-status" />
 
       <div className={styles.cardList}>
         {cards.map((card) => (
@@ -1163,6 +1192,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
             onSelectRow={(row) =>
               setSelection((current) => toggleRowSelection({ current, row, cardScopeId: card.id }))}
             onCommand={(key) => onCommand(card, key)}
+            writeDisabled={writeDisabled}
           />
         ))}
       </div>
@@ -1202,8 +1232,6 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
         onCancel={() => setDeleting(null)}
         onConfirm={confirmDelete}
       />
-
-      {busyLabel ? <LoadingOverlay label={busyLabel} /> : null}
     </div>
   );
 }
@@ -1232,7 +1260,7 @@ const SELECT_COLUMN_WIDTH = 40;
 
 function OpexCardView({
   card, mode, open, columns, allCosts, project, selection, selectedCost,
-  hasStandardAssumption, onToggle, onSelectRow, onCommand,
+  hasStandardAssumption, onToggle, onSelectRow, onCommand, writeDisabled,
 }: {
   card: OpexCard;
   mode: OpexMode;
@@ -1247,6 +1275,8 @@ function OpexCardView({
   onToggle: () => void;
   onSelectRow: (row: OpexCost) => void;
   onCommand: (key: OpexCommandKey) => void;
+  /** D57 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
+  writeDisabled: boolean;
 }) {
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
@@ -1259,7 +1289,7 @@ function OpexCardView({
     ? omDurationBadge(cardCosts, project)
     : durationBadge(cardCosts, project);
 
-  const gates = opexCommands({
+  const gates = guardOpexCommands(opexCommands({
     mode,
     cardScopeId: card.id,
     selectedScopeId: selection.scopeId,
@@ -1271,7 +1301,7 @@ function OpexCardView({
     // `DataSourceInfo`/`RecordInfo` have no Code-App equivalent; the server refuses what the user
     // may not do. The canvas O&M bar carries no `RecordInfo` check at all (defect O-1).
     permissions: { canCreate: true, canEditRecord: true, canDeleteRecord: true },
-  });
+  }), writeDisabled);
 
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
 

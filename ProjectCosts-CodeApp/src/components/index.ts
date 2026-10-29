@@ -31,6 +31,7 @@ export { TaggedDateField } from "./TaggedDateField";
 export { PeoplePicker } from "./PeoplePicker";
 export type { PeoplePickerProps, PickerPerson } from "./PeoplePicker";
 export { WriteFeedback } from "./WriteFeedback";
+export { WriteStatus } from "./WriteStatus";
 export { UnsavedChangesGuard } from "./UnsavedChangesGuard";
 export { isLeaving } from "./leaveGuard";
 export type { LeaveDialogText } from "./leaveGuard";

@@ -26,13 +26,14 @@ import {
   AddRegular, ArrowReplyRegular, ArrowUndoRegular, CheckmarkCircleRegular, DeleteRegular,
   EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { FormPanel, LoadingOverlay, PanelButtons } from "@/components";
+import { FormPanel, PanelButtons, WriteStatus } from "@/components";
 import { space } from "@/theme/tokens";
 import { useSession } from "@/app/SessionContext";
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCapexComments, useCommentWrites } from "../costing/useCostBook";
 import type { Payment } from "../costing/model";
 import {
-  COMMENT_MAX_LENGTH, COMMENT_TYPE, MONTH_NAMES, PAYMENT_DATE_NOT_ALLOWED, canSaveComments,
+  COMMENTS_SAVING, COMMENT_MAX_LENGTH, COMMENT_TYPE, MONTH_NAMES, PAYMENT_DATE_NOT_ALLOWED, canSaveComments,
   commentBreadcrumb, commentEditable, commentHeading, commentMonthOptions, commentPanelTitle,
   commentThreads, commentTypeLabel, commentTypeValue, commentYearOptions,
   paymentDateCommentsAllowed, paymentDateComplete,
@@ -219,10 +220,21 @@ export interface CommentsPanelProps {
   payments: readonly Payment[];
   distribution: "equal" | "individual";
   onDismiss: () => void;
+  /**
+   * Told when the whole commit starts and ends, so the screen can refuse to reopen the panel (and
+   * its other write commands) mid-save — D57 decision 2b. Called directly from `commit`, not from
+   * an effect, so it still reaches the screen if this panel unmounts while the save runs.
+   */
+  onSavingChange?: (saving: boolean) => void;
+  /** Render the panel's own "Saving comments..." line (default). Off when the host shows it. */
+  writeStatus?: boolean;
 }
 
 export function CommentsPanel(props: CommentsPanelProps) {
-  const { open, contractId, contractDescription, breadcrumb, payments, distribution, onDismiss } = props;
+  const {
+    open, contractId, contractDescription, breadcrumb, payments, distribution, onDismiss,
+    onSavingChange, writeStatus = true,
+  } = props;
   const styles = useStyles();
   const { session } = useSession();
   const query = useCapexComments(contractId ? [contractId] : []);
@@ -262,6 +274,8 @@ export function CommentsPanel(props: CommentsPanelProps) {
    * still for the save — which is the loader the client reports as wrong.
    */
   const [saving, setSaving] = useState(false);
+  /** D57 decision 2b — Save, Add Comment and every card action, while loading or saving. */
+  const writesDisabled = writeCommandsDisabled({ loading: query.isLoading, writePending: saving });
 
   /**
    * Seed the editable copy ONCE per opening.
@@ -454,15 +468,19 @@ export function CommentsPanel(props: CommentsPanelProps) {
   const incomplete = new Set(drafts.filter((d) => d.missingPaymentDate).map((d) => d.id));
 
   const commit = async () => {
-    if (!contractId) return;
+    if (!contractId || saving) return;
     /*
      * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS — the same order every other save on
      * this app follows (`CapexScreenCode.txt:17413`, `OpexCostScreenCode.txt:8695`), and the
      * one the client's reference screenshot names outright: "Panel Closes and Spinner is shown".
      * Dismissing after the writes drew the saving spinner on top of the panel it was saving,
      * which on a thread with several changed comments is the whole visible duration of the save.
+     *
+     * Since D57 the "spinner" is the non-blocking `WriteStatus` line; the order is unchanged
+     * (decision 7a).
      */
     setSaving(true);
+    onSavingChange?.(true);
     onDismiss();
     try {
       for (const id of deletedIds) await writes.remove.mutateAsync(id);
@@ -521,6 +539,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
       writes.invalidate();
     } finally {
       setSaving(false);
+      onSavingChange?.(false);
     }
   };
 
@@ -529,7 +548,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
       <FormPanel open={open} width="comments" title={commentPanelTitle(contractDescription)}
         onDismiss={onDismiss}
         footer={<PanelButtons onSave={() => { void commit(); }} onCancel={onDismiss}
-          disabled={!valid || saving}
+          disabled={!valid || writesDisabled}
           saveTestId="btn_Capex_Comment_Save" cancelTestId="btn_Capex_Comment_Cancel" />}>
         <Text className={styles.breadcrumb} title={breadcrumb}>
           {commentBreadcrumb(breadcrumb)}
@@ -559,10 +578,16 @@ export function CommentsPanel(props: CommentsPanelProps) {
           </div>
         </div>
 
-        {query.isLoading ? <LoadingOverlay mode="inline" label="Loading comments..." /> : null}
-
-        <div className={styles.threads}>
-          {threads.map((thread) => (
+        {/*
+          * DIVERGENCE (D57): this was an inline "Loading comments..." spinner (app text; the
+          * canvas loads `colCapexComments` behind its `cmp_Costs_PopUpLoading`). While the
+          * comments load the list is now simply EMPTY — no spinner, no text, and not the previous
+          * contract's threads, which `working` still holds until the new rows seed it — and
+          * the write controls are greyed by `writeCommandsDisabled`.
+          */}
+        <div className={styles.threads} aria-busy={query.isLoading || undefined}
+          data-testid="capex-comments-list">
+          {(query.isLoading ? [] : threads).map((thread) => (
             <div key={thread.root.id} className={styles.thread}>
               {editingIds.has(thread.root.id) ? (
                 <DraftCard comment={working.find((c) => c.id === thread.root.id) as Working}
@@ -583,7 +608,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
                   onEdit={() => startEdit(thread.root.id)}
                   onDelete={() => deleteWorking(thread.root.id)}
                   onResolve={() => resolve(thread.root.id)} onReopen={() => reopen(thread.root.id)}
-                  onReply={() => addReply(thread)} />
+                  onReply={() => addReply(thread)} disabled={writesDisabled} />
               )}
               {thread.replies.map((reply) => (
                 <div key={reply.id} className={styles.reply}>
@@ -598,7 +623,8 @@ export function CommentsPanel(props: CommentsPanelProps) {
                   ) : (
                     <ReadCard comment={reply} sequenceNumber={null} cost={undefined}
                       onEdit={() => startEdit(reply.id)} onDelete={() => deleteWorking(reply.id)}
-                      onResolve={() => {}} onReopen={() => {}} onReply={() => {}} />
+                      onResolve={() => {}} onReopen={() => {}} onReply={() => {}}
+                      disabled={writesDisabled} />
                   )}
                 </div>
               ))}
@@ -625,16 +651,23 @@ export function CommentsPanel(props: CommentsPanelProps) {
         <div className={styles.addRow}>
           <Button appearance="transparent" className={styles.addButton} icon={<AddRegular />}
             aria-label="Add Comment" data-testid="btn_Add_Comment"
-            onClick={addComment} disabled={!contractId}>Add Comment</Button>
+            onClick={addComment} disabled={!contractId || writesDisabled}>Add Comment</Button>
         </div>
       </FormPanel>
       {/*
-        * Rendered OUTSIDE the drawer on purpose. `LoadingOverlay`'s blocking mode is a
-        * `position: fixed` scrim centred on the viewport — the "Saving comments..." card in the
-        * Saving screenshot sits over the GRID, left of the panel, not inside it. Nested in
-        * `DrawerBody` it was laid out in the panel's own scrolling column instead.
+        * DIVERGENCE (D57): `cmp_Costs_PopUpLoading` with `locSpinnerInformationText: "Saving
+        * comments..."` (`btn_Capex_Comment_Save.OnSelect`, `CapexScreenCode.txt:10141`) was a
+        * blocking spinner pop-up. It is now this non-blocking status line, same text, rendered
+        * OUTSIDE the drawer — the drawer has already closed (7a) — so it sits in the screen's
+        * own flow beside its message area. One panel-level `saving` flag drives it for the whole
+        * commit, so it does not blink between mutations. A host that shows the commit on its own
+        * line (the CAPEX screen's `capex-write-status`, fed by `onSavingChange`) turns this one
+        * off with `writeStatus={false}`, so the text is not announced twice.
         */}
-      {saving ? <LoadingOverlay label="Saving comments..." /> : null}
+      {writeStatus ? (
+        <WriteStatus testId="capex-comments-write-status"
+          label={saving ? COMMENTS_SAVING : null} />
+      ) : null}
     </>
   );
 }
@@ -659,8 +692,12 @@ function ReadCard(props: {
   cost: { year: number; month: number } | undefined;
   onEdit: () => void; onDelete: () => void; onResolve: () => void; onReopen: () => void;
   onReply: () => void;
+  /** `writeCommandsDisabled` — every action on the card is a write or opens an editor (D57). */
+  disabled: boolean;
 }) {
-  const { comment, sequenceNumber, cost, onEdit, onDelete, onResolve, onReopen, onReply } = props;
+  const {
+    comment, sequenceNumber, cost, onEdit, onDelete, onResolve, onReopen, onReply, disabled,
+  } = props;
   const styles = useStyles();
   const isReply = sequenceNumber === null;
   const editable = commentEditable({ resolved: comment.resolved });
@@ -671,19 +708,19 @@ function ReadCard(props: {
         {editable ? (
           <div className={styles.actions}>
             {!isReply ? (
-              <Button appearance="transparent" size="small" className={styles.actionButton}
+              <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
                 icon={<ArrowReplyRegular />} onClick={onReply} aria-label="Reply"
                 data-testid={`btn_Read_Comment_Reply-${comment.id}`} />
             ) : null}
             {!isReply ? (
-              <Button appearance="transparent" size="small" className={styles.actionButton}
+              <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
                 icon={<CheckmarkCircleRegular />} onClick={onResolve}
                 aria-label="Mark as Resolved" data-testid={`btn_Read_Comment_Check-${comment.id}`} />
             ) : null}
-            <Button appearance="transparent" size="small" className={styles.actionButton}
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
               icon={<EditRegular />} onClick={onEdit} aria-label="Edit"
               data-testid={`${isReply ? "btn_Read_Comment_Edit_Reply" : "btn_Read_Comment_Edit"}-${comment.id}`} />
-            <Button appearance="transparent" size="small" className={styles.actionButton}
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
               icon={<DeleteRegular />} onClick={onDelete} aria-label="Delete"
               data-testid={`${isReply ? "btn_Read_Comment_Delete_Reply" : "btn_Read_Comment_Delete"}-${comment.id}`} />
           </div>
@@ -696,7 +733,7 @@ function ReadCard(props: {
            */
           <div className={styles.actions}>
             <Text className={styles.resolvedPill}>Resolved</Text>
-            <Button appearance="transparent" size="small" className={styles.actionButton}
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
               icon={<ArrowUndoRegular />} onClick={onReopen} aria-label="Reset"
               data-testid={`btn_Read_Comment_Reset-${comment.id}`} />
           </div>

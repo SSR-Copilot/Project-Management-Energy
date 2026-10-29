@@ -127,7 +127,7 @@ export class GridRenderer {
     }
     /**
      * Full re-render entry point, called by index.ts on every updateView and on
-     * PCF_RE_RENDER. Flow: tear down floating UI -> loading guard -> parse dataset to
+     * PCF_RE_RENDER. Flow: tear down floating UI -> parse dataset to
      * tree (fallback to sample data when empty) -> apply UI-only filters
      * (CostPaidByFilter, ShowEmptyAccounts) -> attach standard contract options ->
      * size columns -> headers (cluster timeline + column row) -> body rows
@@ -147,13 +147,11 @@ export class GridRenderer {
         this.closeAddDropdown();
         this.hideCommentTooltip();
         const dataset = context.parameters.DevexCapexCostSummary;
-        // Canvas datasets arrive asynchronously; rendering before load completes would
-        // briefly flash the sample fallback data, so bail out with a loading message.
-        if (dataset.loading) {
-            this.renderLoading();
-            this._isRendering = false;
-            return;
-        }
+        // DIVERGENCE (D57): the vendor control bailed out here with `renderLoading()`
+        // ("Loading project budget...") while `dataset.loading` was true. In this app the
+        // dataset is built synchronously by `PcfGrid.tsx`, whose `loading` is always false, so
+        // that branch and the method were dead code and were removed with the Cost spinners.
+        // The screen itself renders no grid at all until the cost book has loaded.
         let accounts = DatasetParser.parseDatasetToTree(dataset);
         const showPlanned = context.parameters.ShowPlannedCost?.raw || false;
         // Remembered for the ResizeObserver's column re-fit (it has no context).
@@ -1408,30 +1406,22 @@ export class GridRenderer {
         const event = new CustomEvent("PCF_RE_RENDER");
         this._container.dispatchEvent(event);
     }
-    /** Placeholder while the Canvas dataset is still loading; clears the header too so
-     *  stale column captions from a previous render don't sit above the message. */
-    renderLoading() {
-        this._thead.innerHTML = "";
-        this._tbody.innerHTML = `
-            <tr>
-                <td colspan="100%">
-                    <div style="text-align:center; padding: 40px; color: #9ca3af; font-style:italic;">
-                        Loading project budget...
-                    </div>
-                </td>
-            </tr>
-        `;
-    }
-    /** Shown only when even the test fallback yields nothing (or filters removed
-     *  everything) — points the maker at the missing collection binding. */
+    /**
+     * Shown when there are NO rows after the filters (Show Empty Accounts off, the Cost Paid
+     * By filter, or a category with no accounts) — this is an empty grid, not a load.
+     *
+     * DIVERGENCE (D57): the vendor control drew a spinning `.pcf-spinner` with "Loading data…"
+     * here, which on an empty grid spun forever and told the user something was still coming.
+     * It is now a static message. The text is NEW — the canvas has no empty-gallery text to
+     * transcribe (rule 7). The `.pcf-loading-state` class is kept for its centred layout
+     * because the vendored stylesheet must stay byte-identical to the vendor's
+     * (`styles/pcfCascade.test.ts`); `.pcf-spinner` is simply no longer used.
+     */
     renderEmptyState(colSpan) {
         this._tbody.innerHTML = `
             <tr>
                 <td colspan="${colSpan}">
-                    <div class="pcf-loading-state">
-                        <div class="pcf-spinner" role="status" aria-label="Loading data"></div>
-                        <div>Loading data…</div>
-                    </div>
+                    <div class="pcf-loading-state" role="status" data-testid="capex-grid-empty-state">No costs to display.</div>
                 </td>
             </tr>
         `;
