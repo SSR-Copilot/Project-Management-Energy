@@ -647,6 +647,8 @@ export default function CapexCostsScreen() {
         payments: reconcilePayments(stored, proposed),
         // The dialog's third bullet is a promise; `saveCostLine` keeps it.
         resetPaidAndPaymentDateComments: relinkResetNeeded,
+        // Lets the bulk path skip a month whose amount did not change (D56 §3).
+        storedPayments: stored,
       });
     } catch {
       // Swallowed on purpose: `writes.saveLine.error` is already rendered as the screen's error

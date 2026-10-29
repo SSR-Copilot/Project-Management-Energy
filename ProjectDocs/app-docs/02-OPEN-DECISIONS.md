@@ -5005,3 +5005,158 @@ connection reference was created, changed or duplicated.
 **Effect.** The connection reference and the environment-variable bindings now travel with
 VSBCloud. In a target environment, the variables' current values and the connection for
 `vsb_VSBCloudFabricSQL` must still be set when the solution is imported.
+
+## D56 · CAPEX Add/Edit Cost panel: bulk Save and parallel Delete (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/OptimizeEditCostSave` only.** Not
+deployed. Not product-approved. The live timings are owed (§6).
+
+### 1. What changed
+
+The DEVEX/CAPEX panel's Save (`saveCostLine`, `data/capexWrites.ts`) and Delete
+(`deleteCostLine`) used one awaited request per row. They now use the Add Cost from Table approach
+(D51): Dataverse `CreateMultiple` / `UpdateMultiple` for the month rows, and concurrent requests
+where the rows do not depend on each other.
+- **Planner** (pure): `features/cost/capex-costs/savePlan.ts` `planPanelCostWrites`. It wraps
+  `capexWriteSet`, which stays the one home of the canvas zero rule.
+- **Sender:** the shared `data/bulkSend.ts`, moved out of `data/addCostSheet.ts` unchanged. Both
+  saves therefore share the per-action 501 fallback, its `sessionStorage` flags, the 16-request
+  write gate and the 4-slot cost-delete gate.
+- **Switches** (`data/capexWrites.ts`): `PANEL_BULK_SAVE` (`false` restores the per-row path,
+  `saveCostLineLegacy` / `deleteCostLineLegacy`, unchanged) and `SKIP_UNCHANGED_COSTS` (§3).
+  Treat both like `BULK_SAVE`: live product decisions.
+- **DEV-only override for measuring:** `sessionStorage.setItem("vsb.capexPanel.legacySave", "1")`
+  in the console of a `pac code run` session sends the next saves per row. It is not read in a
+  deployed build.
+- **No UI change.** The Screen passes one more argument, `storedPayments`.
+- **No change to what is stored:** the same columns, binds, owning business unit on every create
+  (rule 4), the Linked Cluster `null` clear on update, and the average payment as text. The contract
+  payload is now one function (`contractPayload`) that both paths call.
+
+### 2. The request order — `DIVERGENCE`
+
+| Case | Per-row path (canvas order) | Bulk path |
+|---|---|---|
+| New contract, n months | create contract, then n creates | create contract, then 1 `CreateMultiple` |
+| Edit, n months | update contract, then n updates | contract update ∥ 1 `UpdateMultiple` (∥ 1 `CreateMultiple` for new months) |
+| Shrink by k months | … then k deletes, one at a time | after all writes have settled: k deletes, 4 at a time |
+| Relink reset, N paid, C payment-date comments | update contract, N paid updates, 1 read, C deletes, then the months | update contract **first**; then the month `UpdateMultiple`, which carries the paid resets, ∥ 1 read, then C deletes, 4 at a time |
+| Delete contract | comments, then cost rows, then contract, one at a time | the same three phases, each phase's deletes 4 at a time |
+
+The canvas order (contract `Patch` `CapexScreenCode.txt:953`, month `Patch` `:1120`, `Remove`
+`:1166`; relink `OnConfirm` `:19906-19925`) is kept where a row depends on another:
+- a new contract's months wait for the contract, because each binds `vsb_Contract`;
+- the deletes run last and only after every write succeeded, so a failed save leaves extra rows
+  rather than missing money. They are awaited, not deferred as in D51 §11.15, so the schedule never
+  shows a delete Dataverse did not apply;
+- the payment-date comments go before any month delete;
+- in a Delete, each phase must fully succeed before the next starts.
+
+**Failure.** Every concurrent step is awaited to the end, then the error of the first failed step
+in canvas order (contract, months, comments) is thrown. It reaches the existing error banner
+unchanged. After a failure the hook now refetches the book too (it did so only on success), so the
+grid and the next panel's stored months show what Dataverse holds.
+
+**One new partial state.**
+- **Plain edit.** A refused contract update can leave the months written under the contract's old
+  `vsb_totalcost` and `vsb_averagepayment` (UT-CAPEXBULK-015). The per-row path stops before any
+  month.
+- **Relink save.** The contract goes first, so a refused contract update resets no paid flag and
+  deletes no comment (UT-CAPEXBULK-013). That is the review's finding 1.
+- **The reverse case** (contract written, months refused) was already possible on the per-row
+  path.
+
+### 3. Unchanged months are not written — `DIVERGENCE`
+
+With `SKIP_UNCHANGED_COSTS`, an existing month whose stored amount (the book row the panel opened
+with) already equals the new amount gets no write. A month that the relink reset must clear is
+always written.
+- **Canvas:** the individual branch patches every non-blank month. The equal branch rewrites no
+  month at all unless the schedule changed (D38 §6 L-6).
+- **Same rows stored, while the cached book matches Dataverse.** UT-CAPEXBULK-009 checks 300
+  seeded saves, but its fake always agrees with the cache, so it cannot see the risk below.
+- **A 0 is never skipped.** The book reads a stored null `vsb_cost` as 0 (`costBook.ts`), and the
+  canvas zero rule must still update such a row to 0 (UT-CAPEXSAVE-014, UT-CAPEXBULK-019).
+- **Risk.** If another user changed a month after the panel opened, a skipped month keeps their
+  value, where the per-row path overwrote it with ours. On an equal-distribution contract the
+  contract total is still written from our numbers, so the total can then disagree with the
+  months. That is narrower than R-12's last-writer-wins, but not the same. `SKIP_UNCHANGED_COSTS =
+  false` removes it.
+
+### 4. A month deleted by someone else — `DIVERGENCE`
+
+`UpdateMultiple` refuses its whole request when a target row no longer exists: that request
+writes nothing, and the save fails with "Does Not Exist" in the banner. The per-row PATCH, which
+has no `If-Match`, silently re-created the row (R-12 resurrection). The refusal is the safer
+behaviour, but it is new. After the 501 fallback the per-row PATCH, and with it the resurrection,
+comes back for that action. UT-CAPEXBULK-011 pins both halves.
+
+### 5. The refetch after Save — unchanged
+
+`useCapexWrites().saveLine` still awaits the five invalidations before the spinner goes. The
+canvas also lowers its spinner only after
+`Select(btn_Capex_Cost_Reload_PCF_After_Mutation_Code)`. Making it fire-and-forget would need a
+book patch like D51 §11.19, or the pre-save grid would flash. The second console line measures
+the wait, so the decision can rest on a number.
+
+### 6. Measuring (owed by the user, on DEV through `pac code run`)
+
+Each save prints two lines:
+
+```
+CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; costs 1 req 980 ms (update 1 req bulk [980 ms]); cost deletes 0 req 0 ms
+CAPEX panel save busy: 2,034 ms (writes 1,234 ms, refetch 800 ms)
+```
+
+A Delete prints `CAPEX panel delete (…)`. Run each case twice, per row (override set) and bulk
+(override removed): a new contract with 12 months; an edit of 12 months; a shrink that removes 6;
+a relink reset with paid months and payment-date comments. Results: _not yet measured_.
+
+### 7. Open risks
+
+- **Lock contention** between the contract update and its month writes, which now run together.
+  D51 §11.16 measured parallel contract and cost bulk writes at 0.6–1.9 s each without contention;
+  the cascades were the problem there, and here deletes still start only after the writes.
+- **Small saves.** One bulk request measured 0.6–1.9 s through the host (D51 §11.16). A save of one
+  or two months may not get faster. The measurements in §6 decide whether a per-row threshold is
+  worth adding.
+- **Shared 501 flags.** A 501 seen by either screen moves both to per-row for that action, for the
+  rest of the session. That is intended: the 501 belongs to the host route, not to the screen.
+- **Gates.** The panel writes pass the shared 16-request `saveGate`. Its deletes have their own
+  4-slot gate, so they never queue behind Add Cost from Table's background deletes. Peak in flight
+  is 28 of 52. Panel writes also count in the request stats of the Add Cost save line (log only).
+- **Not fixed here:** `deleteComment` still uses the raw generated `delete()` (CA-10, "Not fixed").
+  Both paths call it, so a refused comment delete is invisible and does not stop the next phase.
+
+### 8. Tests and review
+
+- `features/cost/capex-costs/savePlan.test.ts`: UT-CAPEXSAVE-001…014, 020, 021. UT-CAPEXSAVE-012 is a
+  400-seed equivalence with `capexWriteSet`.
+- `data/capexWrites.bulk.test.ts`: UT-CAPEXBULK-001…019, 020, 030, 031, 040…043, 050, 051.
+  - The fake Dataverse has upsert PATCH, an `UpdateMultiple` / `CreateMultiple` that can refuse,
+    deletes that can be refused, and holds to prove concurrency and settling.
+- The existing `costBook.test.ts` round-trip tests (UT-BOOK-025…059) run unchanged, through the
+  bulk path. `addCostSheet.bulk.test.ts` only takes the moved names from `./bulkSend`.
+- **Independent review (29 Oct).** Five findings: four fixed (relink contract first, refetch after
+  a failure, never skip a 0, own delete gate), and the overclaiming comment-delete comments
+  corrected. The bulkSend move was confirmed line for line.
+- **Mutation check, all killed:**
+
+  | Mutation | Killed by (UT-CAPEXBULK- unless shown) |
+  |---|---|
+  | M1 relink contract no longer first | 013, 014 |
+  | M2 `allSettled` → `all` | 016 |
+  | M3 no throw on failure | 004, 005 and others |
+  | M4 reset on a new contract | 017 |
+  | M5 skip a 0 | 019, UT-CAPEXSAVE-014 |
+  | M6 skip a paid reset | 006, 009, UT-CAPEXSAVE-010 |
+  | M7 reset a deleted row | 006, UT-CAPEXSAVE-011 |
+  | M8 no owning BU on a new month | 002 |
+  | M9 contract deleted after a refused cost delete | 042 |
+
+### 9. What the product owner is being asked
+
+1. Approve the bulk path (§2), or keep `PANEL_BULK_SAVE = false`.
+2. Approve skipping unchanged months (§3).
+3. Accept the refusal of a row someone else deleted (§4).
+4. After the §6 numbers: keep the awaited refetch (§5), or build a book patch and stop waiting.

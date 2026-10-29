@@ -15,7 +15,8 @@ import {
 } from "@/data/addCostSheet";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
 import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
-import type { CostBook, CostLine, CostPeriod } from "./model";
+import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
+import { panelBusyLogLine } from "@/data/capexWrites";
 import { applySavedSheetToBook } from "./savedSheetPatch";
 
 /**
@@ -417,17 +418,35 @@ export function useCapexWrites(category?: number) {
   });
 
   const saveLine = useMutation({
+    // The click time, for the busy line below (the panel's spinner waits for the refetch too).
+    onMutate: () => ({ startedAt: performance.now() }),
     mutationFn: (args: {
       line: CostLine; accountId: string; isNew: boolean;
       payments: { id?: string; year: number; month: number; amount: number | null }[];
       /** See `SaveCostLineArgs` — the relink confirmation was accepted. */
       resetPaidAndPaymentDateComments?: boolean;
+      /** See `SaveCostLineArgs` — the months the panel opened with. */
+      storedPayments?: readonly Payment[];
     }) => costRepository().saveCostLine({
       ...args,
       projectId: projectId as string,
       owningBusinessUnitId: project?.owningBusinessUnitId,
     }),
-    onSuccess: invalidate,
+    /*
+     * Still AWAITED (D56 §5): the canvas lowers its spinner only after
+     * `Select(btn_Capex_Cost_Reload_PCF_After_Mutation_Code)` has reloaded the grid
+     * (`CapexScreenCode.txt:17413`), and without a book patch a fire-and-forget refetch would show
+     * the pre-save grid for a moment. The line below measures what that wait costs.
+     */
+    onSuccess: async (_id, _args, context) => {
+      const writesDone = performance.now();
+      await invalidate();
+      console.info(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
+    },
+    // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
+    // the next panel compares against (`storedPayments`, D56 §3), show what Dataverse holds.
+    // Not awaited: the error banner must not wait for the reload.
+    onError: () => { void invalidate().catch(() => undefined); },
   });
 
   const deleteLine = useMutation({

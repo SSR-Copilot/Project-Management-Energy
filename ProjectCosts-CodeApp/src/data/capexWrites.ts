@@ -15,18 +15,35 @@
  * the BU from the caller — and the row simply becomes invisible later to a colleague scoped to a
  * different BU. The canvas does the same thing with
  * `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'`.
+ *
+ * **Two write paths for Save and Delete (D56, PROPOSED).** `PANEL_BULK_SAVE` routes them through
+ * the bulk path: the month rows go out as `CreateMultiple` / `UpdateMultiple` through the same
+ * sender, gates and per-action 501 fallback as Add Cost from Table (`./bulkSend.ts`, D51 §11.3),
+ * and the independent requests run concurrently. `false` restores the per-row path below
+ * (`saveCostLineLegacy`, `deleteCostLineLegacy`), unchanged. Both write the same columns, binds and
+ * owning business unit; only the number and the order of the requests differ.
  */
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { unwrap } from "@/platform/errors";
 import { capexWriteSet, type CostRowInput } from "@/features/cost/capex-costs/writeSet";
 import { byClusterJson, planDeleteContract, startEndJson } from "@/features/cost/capex-costs/rules";
+import {
+  paidIdsToReset, paymentDateCommentIds, planPanelCostWrites,
+} from "@/features/cost/capex-costs/savePlan";
 import { deleteComment, loadComments } from "./comments";
 import { deleteRecord } from "./client";
 import { COMMENT_TYPE } from "@/features/cost/capex-costs/comments";
 import { equalDistributionAmounts } from "@/features/cost/capex-costs/distribution";
-import type { CostLine } from "@/features/cost/costing/model";
+import type { CostLine, Payment } from "@/features/cost/costing/model";
 import { bind } from "./odata";
+import { deleteMany } from "./bulkWrites";
+import type { BulkTableInfo, UpsertTarget } from "./bulkTypes";
+import { CAPEX_COSTS } from "./addCostSheetBulk";
+import {
+  formatRequestDuration, saveGate, upsertRowsByAction,
+} from "./bulkSend";
+import { createGate } from "./concurrency";
 
 /** `vsb_costtype`, verified live: None 952850000 · DevCo 952850001 · SPV 952850002. */
 const COST_TYPE = { devCo: 952850001, spv: 952850002 } as const;
@@ -96,16 +113,142 @@ export interface SaveCostLineArgs extends CapexWriteContext {
    * (`features/capex-costs/rules.ts`) decides whether the dialog is shown at all.
    */
   resetPaidAndPaymentDateComments?: boolean;
+  /**
+   * The months the contract had when the panel opened (`storedLine.payments`). Read only by the
+   * bulk path's unchanged-month skip (`SKIP_UNCHANGED_COSTS`); without it every month is written.
+   */
+  storedPayments?: readonly Payment[];
+}
+
+/* ═══════════════════════════════════════════════════════════ switches ══ */
+
+/**
+ * DIVERGENCE (D56, PROPOSED): the panel's Save and Delete use the bulk path. `false` restores the
+ * per-row path exactly as it was before D56. Treat it like `BULK_SAVE` in `./addCostSheet.ts`: a
+ * live product decision, not dead code.
+ */
+export const PANEL_BULK_SAVE = true;
+
+/**
+ * DIVERGENCE (D56 §3, PROPOSED): the bulk path does not write an existing month whose stored
+ * amount already equals the new one (`planPanelCostWrites`). `false` writes every month, as the
+ * per-row path does.
+ */
+export const SKIP_UNCHANGED_COSTS = true;
+
+/**
+ * Local measuring aid: in a DEV build (`npm run dev` behind `pac code run`), running
+ * `sessionStorage.setItem("vsb.capexPanel.legacySave", "1")` in the console sends the next saves
+ * through the per-row path, so before/after timings come from one build. Never read in a
+ * deployed build.
+ */
+export const LEGACY_SAVE_OVERRIDE_KEY = "vsb.capexPanel.legacySave";
+
+function bulkPathEnabled(): boolean {
+  if (!PANEL_BULK_SAVE) return false;
+  if (!import.meta.env.DEV) return true;
+  try {
+    return globalThis.sessionStorage?.getItem(LEGACY_SAVE_OVERRIDE_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════ timing ══ */
+
+/**
+ * One save's steps for the console line, in the style of Add Cost from Table's save line:
+ * `CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; …`.
+ */
+class SaveLog {
+  private readonly t0 = performance.now();
+  private readonly steps: string[] = [];
+  private readonly path: "bulk" | "per-row";
+  private readonly what: string;
+  requests = 0;
+
+  constructor(path: "bulk" | "per-row", what: string) {
+    this.path = path;
+    this.what = what;
+  }
+
+  /** Times `task` and records it as `<name> <n> req <ms>[ detail]`; also on failure. */
+  async step<T>(
+    name: string, task: () => Promise<T>, count: (result: T | undefined) => number, detail?: () => string,
+  ): Promise<T> {
+    const t = performance.now();
+    let result: T | undefined;
+    let failed = false;
+    try {
+      result = await task();
+      return result;
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      const n = count(result);
+      this.requests += n;
+      const extra = detail?.();
+      this.steps.push(
+        `${name} ${failed ? "FAILED" : `${n} req`} ${formatRequestDuration(performance.now() - t)}` +
+          (extra ? ` (${extra})` : ""),
+      );
+    }
+  }
+
+  note(text: string): void {
+    this.steps.push(text);
+  }
+
+  print(failed = false): void {
+    console.info(panelSaveLogLine({
+      what: this.what, path: this.path, failed, ms: performance.now() - this.t0,
+      requests: this.requests, steps: this.steps,
+    }));
+  }
+}
+
+/** The console line of one panel save or delete. Pure, so the format is pinned by a test. */
+export function panelSaveLogLine(s: {
+  what: string; path: "bulk" | "per-row"; failed: boolean; ms: number; requests: number; steps: readonly string[];
+}): string {
+  const head = `${s.what} (${s.path})${s.failed ? " FAILED after" : ":"} ` +
+    `${Math.round(s.ms).toLocaleString("en-US")} ms, ${s.requests} requests`;
+  return s.steps.length === 0 ? head : `${head}; ${s.steps.join("; ")}`;
 }
 
 /**
- * Creates or updates the contract, then reconciles its cost rows.
- *
- * The cost half goes through `capexWriteSet`, which is where the canvas's "a typed zero is not a
- * blank" rule lives. Nothing here decides that; this function only carries out the plan.
+ * The second console line of a panel save, from the hook: how long the Save kept the spinner up,
+ * split into the writes (the line above) and the refetch the hook awaits afterwards.
  */
-export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
-  const { line, accountId, projectId, owningBusinessUnitId, payments, isNew } = args;
+export function panelBusyLogLine(writesMs: number, refetchMs: number): string {
+  const ms = (n: number) => `${Math.round(n).toLocaleString("en-US")} ms`;
+  return `CAPEX panel save busy: ${ms(writesMs + refetchMs)} (writes ${ms(writesMs)}, refetch ${ms(refetchMs)})`;
+}
+
+/** Runs `task`, printing the save line whether it succeeds or fails. */
+async function logged<T>(log: SaveLog, task: () => Promise<T>): Promise<T> {
+  try {
+    const result = await task();
+    log.print();
+    return result;
+  } catch (error) {
+    log.print(true);
+    throw error;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════ contract payload ══ */
+
+/**
+ * The contract's field bag, shared by both paths so they cannot drift. `linkedCluster` is kept
+ * apart because the create and the update treat its `null` differently (see below).
+ */
+function contractPayload(args: SaveCostLineArgs): {
+  fields: Record<string, unknown>;
+  linkedCluster: Record<string, string | null>;
+} {
+  const { line, payments, isNew } = args;
 
   const isEqual = line.distribution === "equal";
   // `locNumPayments` — the months the contract actually ends up with. The tombstones
@@ -210,87 +353,286 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
       : null,
   };
 
-  let contractId = line.id;
+  return { fields, linkedCluster };
+}
 
-  if (!isNew) {
-    // UPDATE keeps the null. It is the whole point — see `linkedCluster` above.
-    unwrap(
-      await Vsb_capexprojectcontractsService.update(
-        contractId, { ...fields, ...linkedCluster } as never,
-      ),
-      "update CAPEX contract",
-    );
-  } else {
-    const created = unwrap(
-      await Vsb_capexprojectcontractsService.create({
-        ...fields,
-        // CREATE drops it when there is nothing to bind: a brand-new row has no link to clear,
-        // and a null `@odata.bind` in a POST body is a null where OData expects an entity
-        // reference, not a "clear this lookup" instruction. Same split as `saveComment`.
-        ...(line.linkedClusterId ? linkedCluster : {}),
-        "vsb_Project@odata.bind": bind("vsb_projects", projectId),
-        "vsb_Account@odata.bind": bind("vsb_capexaccountlists", accountId),
-        ...(owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
-          : {}),
-      } as never),
-      "create CAPEX contract",
-    );
-    contractId = created.vsb_capexprojectcontractid;
-  }
+/** The owning-business-unit bind every CREATE carries (rule 4), or nothing when it is unknown. */
+function owningBu(owningBusinessUnitId: string | undefined): Record<string, string> {
+  return owningBusinessUnitId
+    ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
+    : {};
+}
 
-  // The relink reset, in the canvas' order: before the cost rows are reconciled, so a month
-  // that survives the save is already unpaid rather than being patched twice.
-  if (args.resetPaidAndPaymentDateComments && !isNew) {
-    for (const payment of line.payments) {
-      if (payment.paid && payment.id) await setCostPaid(payment.id, false);
-    }
-    const existing = await loadComments([contractId]);
-    for (const comment of existing) {
-      if (comment.commentType === COMMENT_TYPE.paymentDate) await deleteComment(comment.id);
-    }
-  }
+async function updateContract(args: SaveCostLineArgs): Promise<void> {
+  const { fields, linkedCluster } = contractPayload(args);
+  // UPDATE keeps the null. It is the whole point — see `linkedCluster` above.
+  unwrap(
+    await Vsb_capexprojectcontractsService.update(
+      args.line.id, { ...fields, ...linkedCluster } as never,
+    ),
+    "update CAPEX contract",
+  );
+}
 
-  const rows: CostRowInput[] = payments.map((p) => ({
-    year: p.year,
-    month: p.month,
-    cost: p.amount === null || p.amount === undefined ? null : p.amount,
-    costId: p.id ?? null,
-  }));
-  const plan = capexWriteSet(rows);
+async function createContract(args: SaveCostLineArgs): Promise<string> {
+  const { fields, linkedCluster } = contractPayload(args);
+  const created = unwrap(
+    await Vsb_capexprojectcontractsService.create({
+      ...fields,
+      // CREATE drops it when there is nothing to bind: a brand-new row has no link to clear,
+      // and a null `@odata.bind` in a POST body is a null where OData expects an entity
+      // reference, not a "clear this lookup" instruction. Same split as `saveComment`.
+      ...(args.line.linkedClusterId ? linkedCluster : {}),
+      "vsb_Project@odata.bind": bind("vsb_projects", args.projectId),
+      "vsb_Account@odata.bind": bind("vsb_capexaccountlists", args.accountId),
+      ...owningBu(args.owningBusinessUnitId),
+    } as never),
+    "create CAPEX contract",
+  );
+  return created.vsb_capexprojectcontractid;
+}
 
-  for (const upsert of plan.upserts) {
-    if (upsert.costId) {
-      unwrap(
-        await Vsb_capexcostsService.update(upsert.costId, { vsb_cost: upsert.cost }),
-        "update CAPEX cost",
-      );
+/** A new month row's columns — the same bag on both paths. */
+function newCostFields(
+  contractId: string, owningBusinessUnitId: string | undefined,
+  cost: { year: number; month: number; cost: number },
+): Record<string, unknown> {
+  return {
+    vsb_cost: cost.cost,
+    vsb_year: cost.year,
+    vsb_month: cost.month,
+    "vsb_Contract@odata.bind": bind("vsb_capexprojectcontracts", contractId),
+    ...owningBu(owningBusinessUnitId),
+  };
+}
+
+/**
+ * Creates or updates the contract, then reconciles its cost rows.
+ *
+ * The cost half goes through `capexWriteSet`, which is where the canvas's "a typed zero is not a
+ * blank" rule lives. Nothing here decides that; this function only carries out the plan.
+ */
+export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
+  return bulkPathEnabled()
+    ? saveCostLineBulk(args, SKIP_UNCHANGED_COSTS)
+    : saveCostLineLegacy(args);
+}
+
+/**
+ * The per-row path: every request awaited before the next, in the canvas' order. The rollback for
+ * `PANEL_BULK_SAVE`; also the "before" of D56's measurements.
+ */
+export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string> {
+  const { line, owningBusinessUnitId, payments, isNew } = args;
+  const log = new SaveLog("per-row", "CAPEX panel save");
+  return logged(log, async () => {
+    let contractId = line.id;
+
+    if (!isNew) {
+      await log.step("contract update", () => updateContract(args), () => 1);
     } else {
-      unwrap(
-        await Vsb_capexcostsService.create({
-          vsb_cost: upsert.cost,
-          vsb_year: upsert.year,
-          vsb_month: upsert.month,
-          "vsb_Contract@odata.bind": bind("vsb_capexprojectcontracts", contractId),
-          ...(owningBusinessUnitId
-            ? { "owningbusinessunit@odata.bind": bind("businessunits", owningBusinessUnitId) }
-            : {}),
-        } as never),
-        "create CAPEX cost",
-      );
+      contractId = await log.step("contract create", () => createContract(args), () => 1);
     }
-  }
 
-  // Deletes last: an interrupted save then leaves extra rows rather than missing money.
-  // Through `deleteRecord`, not the generated service: the generated `delete()` discards the
-  // `IOperationResult` and the SDK never throws, so a refusal would resolve exactly like a
-  // success and the save would report a shrunk schedule that Dataverse never applied
-  // (`ProjectDocs/instructions/CONVENTIONS.md` rule 14).
-  for (const costId of plan.deletes) {
-    await deleteRecord("delete CAPEX cost", "vsb_capexcosts", costId);
-  }
+    // The relink reset, in the canvas' order: before the cost rows are reconciled, so a month
+    // that survives the save is already unpaid rather than being patched twice.
+    if (args.resetPaidAndPaymentDateComments && !isNew) {
+      let paid = 0;
+      await log.step("paid reset", async () => {
+        for (const payment of line.payments) {
+          if (payment.paid && payment.id) { paid += 1; await setCostPaid(payment.id, false); }
+        }
+      }, () => paid);
+      let removed = 0;
+      await log.step("payment-date comments", async () => {
+        const existing = await loadComments([contractId]);
+        for (const comment of existing) {
+          if (comment.commentType === COMMENT_TYPE.paymentDate) { removed += 1; await deleteComment(comment.id); }
+        }
+      }, () => 1 + removed, () => `1 read, ${removed} deleted`);
+    }
 
-  return contractId;
+    const rows: CostRowInput[] = payments.map((p) => ({
+      year: p.year,
+      month: p.month,
+      cost: p.amount === null || p.amount === undefined ? null : p.amount,
+      costId: p.id ?? null,
+    }));
+    const plan = capexWriteSet(rows);
+
+    let created = 0;
+    let updated = 0;
+    await log.step("costs", async () => {
+      for (const upsert of plan.upserts) {
+        if (upsert.costId) {
+          unwrap(
+            await Vsb_capexcostsService.update(upsert.costId, { vsb_cost: upsert.cost }),
+            "update CAPEX cost",
+          );
+          updated += 1;
+        } else {
+          unwrap(
+            await Vsb_capexcostsService.create(newCostFields(contractId, owningBusinessUnitId, upsert) as never),
+            "create CAPEX cost",
+          );
+          created += 1;
+        }
+      }
+    }, () => created + updated, () => `create ${created}, update ${updated}`);
+
+    // Deletes last: an interrupted save then leaves extra rows rather than missing money.
+    // Through `deleteRecord`, not the generated service: the generated `delete()` discards the
+    // `IOperationResult` and the SDK never throws, so a refusal would resolve exactly like a
+    // success and the save would report a shrunk schedule that Dataverse never applied
+    // (`ProjectDocs/instructions/CONVENTIONS.md` rule 14).
+    let deleted = 0;
+    await log.step("cost deletes", async () => {
+      for (const costId of plan.deletes) {
+        await deleteRecord("delete CAPEX cost", "vsb_capexcosts", costId);
+        deleted += 1;
+      }
+    }, () => deleted);
+
+    return contractId;
+  });
+}
+
+/** `vsb_capexcomments`, for `deleteMany`'s labels; the delete itself is `deleteComment`. */
+const CAPEX_COMMENTS: BulkTableInfo = {
+  entitySetName: "vsb_capexcommentses",
+  logicalName: "vsb_capexcomments",
+  primaryKey: "vsb_capexcommentsid",
+};
+
+/**
+ * The panel's own delete gate (month rows and comments), apart from `costDeleteGate`: Add Cost
+ * from Table's deferred background deletes can still hold that one for many seconds after its
+ * Save returned (D51 §11.15), and a panel shrink or Delete right after must not queue behind
+ * them (D56 review, finding 5). Peak in flight stays 16 (writes) + 4 + 4 (the sheet's delete
+ * gates) + 4 (this) = 28, under Dataverse's 52-per-user limit.
+ */
+const PANEL_DELETE_LIMIT = 4;
+const panelDeleteGate = createGate(PANEL_DELETE_LIMIT);
+
+/** One gated cost delete (rule 14). */
+const gatedCostDelete = (tableName: string, id: string) =>
+  panelDeleteGate(() => deleteRecord("delete CAPEX cost", tableName, id));
+
+/**
+ * One gated comment delete. NOTE: `deleteComment` is the raw generated `delete()` (CA-10, "Not
+ * fixed"), so a refused comment delete resolves like a success; `deleteMany` cannot see it, and
+ * the phase that follows is not stopped by it. Same as the per-row path.
+ */
+const gatedCommentDelete = (_tableName: string, id: string) =>
+  panelDeleteGate(() => deleteComment(id));
+
+/**
+ * The bulk path (D56). The requests that do not depend on each other run at once:
+ *
+ *   NEW contract:   contract create ─▶ CreateMultiple(months) ─▶ deletes (none on a create)
+ *   EXISTING one:   ┌ contract update
+ *                   └ CreateMultiple(new months) ∥ UpdateMultiple(changed months)
+ *                   ─▶ (all settled, none failed) ─▶ month deletes, 4 at a time
+ *   RELINK reset:   contract update ─▶ ┌ CreateMultiple ∥ UpdateMultiple(… + paid resets)
+ *                                      └ comments read ─▶ payment-date comment deletes
+ *                   ─▶ (all settled, none failed) ─▶ month deletes
+ *
+ * DIVERGENCE (D56 §2): the canvas runs the contract Patch, then the month Patch, then the
+ * `Remove`s, one after another (`CapexScreenCode.txt:953`, `:1120`, `:1166`). On an existing
+ * contract the contract row and its months are independent rows, so they go together; a new
+ * contract's months still wait for the contract, because each binds `vsb_Contract` to it.
+ * The cost of that: a REFUSED contract update can now leave the months written under the old
+ * contract columns (total, average), where the per-row path stopped before any month. D56 §2.
+ *
+ * A RELINK save keeps the contract first (D56 review, finding 1): the reset clears paid flags and
+ * deletes comments, which the user accepted only for the new link. If the contract update carrying
+ * that link is refused, nothing of the reset may land.
+ *
+ * KEPT from the per-row path:
+ *  - the deletes go LAST and only after everything else succeeded, so an interrupted save leaves
+ *    extra rows rather than missing money, and the schedule never shows a delete Dataverse did not
+ *    apply (they are awaited, not deferred as in D51 §11.15);
+ *  - the payment-date comments go before any month row, because such a comment references its row;
+ *  - a failure is the error of the first failed step in the canvas order (contract, months,
+ *    comments), thrown only once every step has settled, so nothing is still in flight.
+ *
+ * A month row deleted by someone else since the panel opened is REFUSED by `UpdateMultiple`
+ * (its whole request is not written) where the per-row PATCH re-created it (R-12). D56 §4.
+ */
+export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: boolean): Promise<string> {
+  const { line, owningBusinessUnitId, isNew } = args;
+  const reset = Boolean(args.resetPaidAndPaymentDateComments) && !isNew;
+  const plan = planPanelCostWrites({
+    payments: args.payments,
+    stored: args.storedPayments,
+    paidIdsToReset: paidIdsToReset(line.payments, reset),
+    skipUnchanged,
+    newId: () => crypto.randomUUID(),
+  });
+  const log = new SaveLog("bulk", "CAPEX panel save");
+
+  return logged(log, async () => {
+    const costs = async (contractId: string) => {
+      const targets: UpsertTarget[] = [
+        ...plan.creates.map((c) => ({ id: c.id, isNew: true, fields: newCostFields(contractId, owningBusinessUnitId, c) })),
+        ...plan.updates.map((u) => ({
+          id: u.id,
+          isNew: false,
+          fields: {
+            ...(u.cost === undefined ? {} : { vsb_cost: u.cost }),
+            ...(u.resetPaid ? { vsb_costpaid: false } : {}),
+          },
+        })),
+      ];
+      let summary = "";
+      let requests = 0;
+      await log.step("costs", async () => {
+        requests = (await upsertRowsByAction(CAPEX_COSTS, targets, "save CAPEX costs", (s) => { summary = s; })).requests;
+      }, () => requests, () => [
+        summary,
+        plan.paidResets > 0 ? `${plan.paidResets} paid reset` : "",
+        plan.unchanged > 0 ? `${plan.unchanged} unchanged skipped` : "",
+      ].filter(Boolean).join(", "));
+    };
+
+    let contractId = line.id;
+    if (isNew) {
+      contractId = await log.step("contract create", () => saveGate(() => createContract(args)), () => 1);
+      await costs(contractId);
+    } else {
+      const contract = () => log.step("contract update", () => saveGate(() => updateContract(args)), () => 1);
+      const steps: (() => Promise<unknown>)[] = [() => costs(contractId)];
+      if (reset) {
+        await contract();
+        steps.push(() => resetPaymentDateComments(contractId, log));
+      } else {
+        steps.unshift(contract);
+      }
+      const settled = await Promise.allSettled(steps.map((run) => run()));
+      const failed = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
+      if (failed) throw failed.reason;
+    }
+
+    let deletes = 0;
+    await log.step("cost deletes", async () => {
+      deletes = (await deleteMany(CAPEX_COSTS, plan.deletes, gatedCostDelete, {
+        limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost",
+      })).requests;
+    }, () => deletes);
+
+    return contractId;
+  });
+}
+
+/** The relink's `RemoveIf('Capex Comments', … 'Comments to payment date')`, 4 deletes at a time. */
+async function resetPaymentDateComments(contractId: string, log: SaveLog): Promise<void> {
+  let ids: string[] = [];
+  await log.step("payment-date comments", async () => {
+    ids = paymentDateCommentIds(await loadComments([contractId]));
+    await deleteMany(CAPEX_COMMENTS, ids, gatedCommentDelete, {
+      limit: PANEL_DELETE_LIMIT, label: "delete CAPEX comment",
+    });
+  }, () => 1 + ids.length, () => `1 read, ${ids.length} deleted`);
 }
 
 /* ═══════════════════════════════════════════════════════════ delete line ══ */
@@ -327,17 +669,59 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
  * children first makes the outcome the same under either relationship setting.
  */
 export async function deleteCostLine(line: CostLine): Promise<void> {
-  const comments = await loadComments([line.id]);
-  const plan = planDeleteContract(
-    line.id,
-    comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" })),
-  );
+  if (bulkPathEnabled()) await deleteCostLineBulk(line);
+  else await deleteCostLineLegacy(line);
+}
 
-  for (const commentId of plan.commentIds) await deleteComment(commentId);
-  for (const payment of line.payments) {
-    if (payment.id) await deleteRecord("delete CAPEX cost", "vsb_capexcosts", payment.id);
-  }
-  await deleteRecord(
-    "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
-  );
+/** The per-row delete: one request at a time. The rollback for `PANEL_BULK_SAVE`. */
+export async function deleteCostLineLegacy(line: CostLine): Promise<void> {
+  const log = new SaveLog("per-row", "CAPEX panel delete");
+  await logged(log, async () => {
+    const comments = await log.step("comments read", () => loadComments([line.id]), () => 1);
+    const plan = planDeleteContract(
+      line.id,
+      comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" })),
+    );
+
+    await log.step("comment deletes", async () => {
+      for (const commentId of plan.commentIds) await deleteComment(commentId);
+    }, () => plan.commentIds.length);
+    const costIds = line.payments.flatMap((p) => (p.id ? [p.id] : []));
+    await log.step("cost deletes", async () => {
+      for (const id of costIds) await deleteRecord("delete CAPEX cost", "vsb_capexcosts", id);
+    }, () => costIds.length);
+    await log.step("contract delete", () => deleteRecord(
+      "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
+    ), () => 1);
+  });
+}
+
+/**
+ * The same three phases in the same order — comments, then cost rows, then the contract — with the
+ * deletes INSIDE a phase sent 4 at a time on the panel's delete gate (D56). Every id of a phase is
+ * attempted (`deleteMany`); a refused COST delete stops the next phase, so the contract is never
+ * deleted while one of its cost rows is still there. A refused COMMENT delete cannot be seen (see
+ * `gatedCommentDelete`), exactly as in the per-row loop. Otherwise the contract is never deleted
+ * while a child of it is still there, exactly as the per-row loop's first throw stopped it.
+ */
+export async function deleteCostLineBulk(line: CostLine): Promise<void> {
+  const log = new SaveLog("bulk", "CAPEX panel delete");
+  await logged(log, async () => {
+    const comments = await log.step("comments read", () => loadComments([line.id]), () => 1);
+    const plan = planDeleteContract(
+      line.id,
+      comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" })),
+    );
+    await log.step("comment deletes", () => deleteMany(
+      CAPEX_COMMENTS, plan.commentIds, gatedCommentDelete,
+      { limit: PANEL_DELETE_LIMIT, label: "delete CAPEX comment" },
+    ), () => plan.commentIds.length);
+    const costIds = line.payments.flatMap((p) => (p.id ? [p.id] : []));
+    await log.step("cost deletes", () => deleteMany(
+      CAPEX_COSTS, costIds, gatedCostDelete, { limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost" },
+    ), () => costIds.length);
+    await log.step("contract delete", () => deleteRecord(
+      "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
+    ), () => 1);
+  });
 }

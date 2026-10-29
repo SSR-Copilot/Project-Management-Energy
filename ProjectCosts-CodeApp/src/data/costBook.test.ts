@@ -109,6 +109,24 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
     },
   },
 }));
+/*
+ * The panel Save's bulk path (D56) sends the month rows as `CreateMultiple` / `UpdateMultiple`.
+ * A paid reset rides in the update targets, so it is recorded into `costPaidUpdates` exactly as
+ * the per-row `update` mock above records it: UT-BOOK-058/059 read the same either way.
+ */
+vi.mock("@/generated/services/CreateMultipleService", () => ({
+  CreateMultipleService: { CreateMultiple: async () => ({ success: true, data: {} }) },
+}));
+vi.mock("@/generated/services/UpdateMultipleService", () => ({
+  UpdateMultipleService: {
+    UpdateMultiple: async (_es: string, targets: Record<string, unknown>[]) => {
+      for (const t of targets) {
+        if ("vsb_costpaid" in t) costPaidUpdates.push({ id: String(t.vsb_capexcostid), paid: t.vsb_costpaid });
+      }
+      return { success: true, data: {} };
+    },
+  },
+}));
 vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   Vsb_capexcommentsesService: {
     getAll: async () => ({ success: true, data: [] }),

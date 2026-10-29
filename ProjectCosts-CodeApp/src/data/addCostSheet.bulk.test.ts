@@ -282,11 +282,15 @@ for (const name of [
 
 const {
   BULK_SAVE, saveAddCostSheet, saveAddCostSheetBulk, saveAddCostSheetLegacy, toSaveFailure,
-  resetBulkWriteAvailability, BULK_PARALLEL_CHUNKS, DEFER_CONTRACT_DELETES,
-  BACKGROUND_DELETE_FAILED, backgroundDeleteFailureTexts, CONTRACT_DELETE_LIMIT,
-  COST_DELETE_LIMIT, DEFER_COST_DELETES, COST_DELETE_FAILED_RECONCILED,
-  COST_DELETE_FAILED_NOT_RECONCILED, backgroundDeleteLogLine, formatRequestDuration,
+  DEFER_CONTRACT_DELETES, BACKGROUND_DELETE_FAILED, backgroundDeleteFailureTexts,
+  DEFER_COST_DELETES, COST_DELETE_FAILED_RECONCILED,
+  COST_DELETE_FAILED_NOT_RECONCILED, backgroundDeleteLogLine,
 } = await import("./addCostSheet");
+// The shared bulk sender (`./bulkSend.ts`): the same module instance `./addCostSheet` uses.
+const {
+  resetBulkWriteAvailability, BULK_PARALLEL_CHUNKS, CONTRACT_DELETE_LIMIT, COST_DELETE_LIMIT,
+  formatRequestDuration,
+} = await import("./bulkSend");
 const { DataError, RecordGoneError, isRecordGone } = await import("@/platform/errors");
 const { BulkDeleteError, BulkWriteError, upsertMultiple } = await import("./bulkWrites");
 const { RowsGoneError, SavePlanError, executeSavePlan } = await import("./addCostSheetBulk");
