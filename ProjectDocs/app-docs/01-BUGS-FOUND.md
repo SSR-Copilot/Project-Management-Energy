@@ -953,7 +953,7 @@ Record: **D51** §11.12–§11.13.
 UT-ACSHEET-BULK-069…075; UT-ACSHEET-QUERY-009…017; UT-ACSHEET-CACHE-001; UT-BOOK-075, 076. **Not verified** against live
 data. Record: **D51** §11.19.
 
-### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, uncommitted)
+### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, committed `30061f1`, on DEV)
 
 **A code-app defect** (layout). The canvas has no "Required" text here; it is this app's own
 message for an unset payment-date year.
@@ -970,6 +970,73 @@ message for an unset payment-date year.
   dropdowns share one line, and "Required" sits directly under Year without moving anything else.
 - **Tests.** None automated: jsdom does no layout, so a unit test cannot see the alignment. The
   fix needs a visual check in the running app.
+
+### CA-15 · Cost module: leaving a screen mid-write loses the write's error, and the write guard reads open on return (found 29 Oct 2026, **open**)
+
+**A code-app defect, introduced by D57** (the spinners removed).
+- **What happens.**
+  - The `LoadingOverlay` scrim used to cover the rail and the header as well. Without it, the user
+    can navigate away while a CAPEX, OPEX, Land Lease, Contracts or Comments write is still
+    running.
+  - The write still finishes, but its error banner belongs to the screen that was left, so a
+    failure is shown nowhere.
+  - A screen re-opened while that write is still running gets a fresh mutation observer. Its
+    `writeCommandsDisabled` guard therefore reads "no write pending", so a second write can start
+    on the same rows.
+- **Severity.** Medium. The non-transactional multi-writes (Land Lease header → allocations →
+  period, the OPEX child cascade) can interleave.
+- **Fix (not built).** A per-project "write in flight" flag that outlives the screen, plus a
+  global error toast for writes whose screen is gone. Record: **D57 §3 item 2**.
+
+### CA-16 · CAPEX PCF grid: write actions look enabled during a write (found 29 Oct 2026, **open**)
+
+**A code-app defect, D57.** While a write runs, the grid's Add, Edit, Delete, Add Standard, Paid
+and Comment actions are ignored by the React callback (`gridActionAllowed`). The vendored DOM menus
+(`pcf/ui/GridRenderer.js`) still look enabled, so a click silently does nothing. Severity: low (no
+wrong data). Fix: pass the pending flag into the renderer and grey the items. Check their
+identities by hand, because the label gate does not cover that file. Record: **D57 §3 item 3**.
+
+### CA-17 · Land Lease and Contracts: a selection made during a write is cleared when the write ends (found 29 Oct 2026, **open**)
+
+**A code-app defect, made reachable by D57.** The success paths clear the selection, as they always
+did. Before D57 the scrim made selecting during a write impossible; now selection stays enabled
+(decision 2b), so a row picked mid-write is dropped when the write finishes. Severity: low. Fix: keep
+the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
+
+### CA-18 · `deleteComment` swallows a refused delete (rule 14) (found 29 Oct 2026, **open**)
+
+**A code-app defect, recorded in D56 §7 and never logged here.**
+- **What happens.** `deleteComment` (`data/comments.ts`) calls the raw generated `delete()`, which
+  discards the `IOperationResult`. The SDK never throws, so a Dataverse refusal (403, a cascade
+  restriction) resolves like success.
+- **Who calls it.**
+  - the CAPEX panel Delete, which removes comments first (both the bulk and the per-row path);
+  - the relink reset in the panel Save;
+  - the Comments panel.
+- **Effect.** The next phase runs anyway: the cost rows and the contract are deleted while a
+  comment silently remains. The panel logs show the step as done.
+- **Fix.** Route it through `deleteRecord` (`data/client.ts`), as every other delete path does
+  (CONVENTIONS rule 14, KNOWN-RISKS "Several delete paths discard the SDK's failure result
+  silently"). Then add a test with a refusing fake.
+
+### CA-19 · Test reliability: UT-ADGATE-910 fails intermittently under the full suite (seen repeatedly since 27 Oct 2026, **open**)
+
+**A test defect, not an app defect.**
+- **What happens.** `features/admin/admin-gates-approvals/Screen.test.tsx` UT-ADGATE-910 ("Reset
+  Gate asks for confirmation first, then issues one reset") fails under a full `npm run verify`.
+  It takes about 7 s, and the file passes 33/33 when run alone.
+- **Seen in:**
+  - the D51 §11.11 run;
+  - the E5 run;
+  - the D55 run;
+  - the 29 Oct runs on `8dc4553`;
+  - the `feature/ReadableBulkSaveLogs` verify.
+- **Cost.** Each occurrence aborts `verify` before the build, so every gate run needs a manual
+  re-run. UT-ADGATE-915 had the same shape and was fixed on 27 Oct by waiting for
+  `aria-expanded="true"`, a race on a still-mounted listbox.
+- **Fix.** Find the equivalent race in 910 (probably the confirm dialog's async open) and wait on
+  the right condition. Do not raise the timeout. Record: TESTING-AND-HARNESS.md ("known timing
+  flake").
 
 ---
 
