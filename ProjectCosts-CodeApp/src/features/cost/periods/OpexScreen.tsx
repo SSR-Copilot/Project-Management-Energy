@@ -40,7 +40,7 @@ import {
   AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteRegular, EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
@@ -1116,10 +1116,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
-   * DIVERGENCE (D57): the first load no longer returns `<LoadingOverlay mode="inline">`. The
-   * cards and their command bars render with an empty body and every write command disabled
-   * (`writeCommandsDisabled`), and the page carries `aria-busy`. The load check still comes
-   * BEFORE the error check, so a load in progress never reads "Cost data is unavailable".
+   * D59: the first load shows an inline spinner in the body ("Loading Operation & Maintenance…"), with the write
+   * commands disabled (`writeCommandsDisabled`) and `aria-busy` on the page, so the screen never
+   * looks idle while it loads. The load check still comes BEFORE the error check, so a load in
+   * progress never reads "Cost data is unavailable".
    */
   if (!isLoading && (!book || error)) {
     return (
@@ -1144,15 +1144,18 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     <div className={styles.page} aria-busy={isLoading || undefined}>
       {banner ? <div className={styles.banner} role="alert">{banner}</div> : null}
       {/*
-        * DIVERGENCE (D57): `cmp_OpexCosts_PopUpLoading` (`InformationText:
-        * =locSpinnerInformationText`, `Visible: =locIsVisiblePopUpSpinner`) is no longer a
-        * blocking spinner pop-up over the screen. The same verbatim `OPEX_MSG` text shows here as
-        * one non-animated status line, and the write guard disables the write commands instead.
+        * `cmp_OpexCosts_PopUpLoading` (`InformationText: =locSpinnerInformationText`, `Visible:
+        * =locIsVisiblePopUpSpinner`): the blocking spinner with the verbatim `OPEX_MSG` text
+        * shows for as long as the write runs (D59). The write guard also disables the write
+        * commands.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
       <WriteStatus testId="opex-write-status" label={costWriteStatusLabel({
         ownLabel: busyLabel, ownPending: save.isPending || addStandard.isPending, writeInFlight,
       })} />
+      {isLoading ? (
+        <LoadingOverlay mode="inline" label={`Loading ${OPEX_MODE_NAMES[mode]}…`} testId="opex-loading" />
+      ) : null}
 
       <div className={styles.cardList}>
         {cards.map((card) => (

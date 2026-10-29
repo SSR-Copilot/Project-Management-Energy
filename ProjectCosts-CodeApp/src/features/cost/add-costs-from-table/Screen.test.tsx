@@ -246,25 +246,78 @@ describe("Add Cost from Table Save wiring", () => {
 /* ── no spinners (D57) ────────────────────────────────────────────────────── */
 
 describe("Add Cost from Table without spinners (D57)", () => {
-  it("UT-ADDCOST-NOSPIN-001 while the sheet loads: an empty aria-busy placeholder, no spinner, no grid", () => {
+  it("UT-ADDCOST-NOSPIN-001 while the sheet loads: the inline spinner with the verbatim text, no grid", () => {
     sheet = { data: undefined, isFetching: true, isLoading: true };
     renderScreen();
-    const placeholder = screen.getByTestId("add-costs-loading");
-    expect(placeholder.getAttribute("aria-busy")).toBe("true");
-    expect(placeholder.textContent).toBe("");
-    expect(screen.queryByText("Loading the cost table…")).toBeNull();
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    const loading = screen.getByTestId("add-costs-loading");
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    expect(loading.getAttribute("role")).toBe("status");
+    expect(loading.textContent).toBe("Loading the cost table…");
+    expect(loading.querySelector(".fui-Spinner")).not.toBeNull();
     expect(screen.queryByTestId("pcf_Spreadsheet_Costs_ProjectCosts_BodyButtons_Save")).toBeNull();
   });
 
-  it("UT-ADDCOST-NOSPIN-002 while saving: the verbatim status line, no overlay, Save disabled", () => {
+  it("UT-ADDCOST-NOSPIN-002 while saving: the blocking spinner with the verbatim text, Save disabled", () => {
     savePending = true;
     renderScreen();
     const status = screen.getByTestId("add-costs-write-status");
     expect(status).toHaveTextContent("Please wait, saving costs...");
-    expect(status.getAttribute("role")).toBe("status");
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(status.getAttribute("role")).toBe("dialog");
+    expect(status.getAttribute("aria-modal")).toBe("true");
+    expect(status.querySelector(".fui-Spinner")).not.toBeNull();
     expect(saveButton()).toHaveProperty("disabled", true);
+  });
+
+  /** Starts a Save whose promise the test controls; `savePending` mirrors the mutation's `isPending`. */
+  const startPendingSave = async () => {
+    const view = renderScreen();
+    editJanuary("200");
+    let resolve!: () => void;
+    let reject!: (e: Error) => void;
+    mutateAsync.mockImplementationOnce(() => {
+      savePending = true;
+      return new Promise<undefined>((res, rej) => {
+        resolve = () => { savePending = false; res(undefined); };
+        reject = (e: Error) => { savePending = false; rej(e); };
+      });
+    });
+    await clickSave();
+    const rerender = () => view.rerender(
+      <MemoryRouter initialEntries={["/costs/add-from-table?category=1"]}><AddCostsFromTableScreen /></MemoryRouter>,
+    );
+    return { resolve: () => resolve(), reject: (e: Error) => reject(e), rerender };
+  };
+  const expectBlocking = () => {
+    const status = screen.getByTestId("add-costs-write-status");
+    expect(status.getAttribute("role")).toBe("dialog");
+    expect(status).toHaveTextContent("Please wait, saving costs...");
+    expect(status.querySelector(".fui-Spinner")).not.toBeNull();
+  };
+
+  it("UT-ADDCOST-BUSY-001 the blocking spinner stays up through other renders and goes when the save resolves", async () => {
+    const pending = await startPendingSave();
+    pending.rerender();
+    expectBlocking();
+    pending.rerender();
+    expectBlocking();
+    await act(async () => { pending.resolve(); });
+    pending.rerender();
+    const status = screen.getByTestId("add-costs-write-status");
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent).toBe("");
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+  });
+
+  it("UT-ADDCOST-BUSY-002 the blocking spinner also goes when the save REJECTS, and the error banner shows", async () => {
+    const pending = await startPendingSave();
+    pending.rerender();
+    expectBlocking();
+    await act(async () => { pending.reject(new Error("HTTP 403")); });
+    pending.rerender();
+    const status = screen.getByTestId("add-costs-write-status");
+    expect(status.getAttribute("role")).toBe("status");
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
   });
 
   it("UT-ADDCOST-NOSPIN-003 with no save pending the status line is empty", () => {

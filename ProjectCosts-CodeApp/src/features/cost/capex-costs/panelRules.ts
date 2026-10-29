@@ -207,15 +207,19 @@ export function previousYearFloor(args: {
 /* ═════════════════════════════════════════════════════ spinner text (G21) ══ */
 
 /*
- * DIVERGENCE (D57): the canvas raised `cmp_Costs_PopUpLoading` (component `cmp_PopUp_Loading`,
- * `Visible: =locIsVisiblePopUpSpinner`) for every write, and the inline `spn_LoadingSpinnerCost`
- * (`Visible: =locIsVisibleLoadingCostSpinner`) while the cost book loaded. This app shows no
- * spinner at all: a write shows its SAME verbatim `InformationText` as a `WriteStatus` line, and a
- * first load renders the screen chrome with an empty body. The two loading texts the canvas
- * used, `"Please wait, loading cost ..."` (`locSpinnerInformationText`, `CapexScreenCode.txt:2434`)
- * and `"Please wait, loading data..."` (`cmp_Costs_PopUpLoading.InformationText`, `:18052`),
- * therefore have no caller any more and were removed with the spinners.
+ * The canvas raised `cmp_Costs_PopUpLoading` (component `cmp_PopUp_Loading`, `Visible:
+ * =locIsVisiblePopUpSpinner`) for every write, and the inline `spn_LoadingSpinnerCost` (`Visible:
+ * =locIsVisibleLoadingCostSpinner`) while the cost book loaded. D57 first replaced both with a
+ * quiet text line and an empty body; D59 restores them, because the screen then looked idle (and
+ * clickable) while it was busy. A write shows the blocking spinner with its SAME verbatim
+ * `InformationText` (`WriteStatus`), and a load shows an inline spinner with the canvas text:
  */
+
+/** `locSpinnerInformationText` — `CapexScreenCode.txt:2434`. Shown while a category's costs load. */
+export const LOADING_COST = "Please wait, loading cost ...";
+
+/** `cmp_Costs_PopUpLoading.InformationText` — `CapexScreenCode.txt:18052`. The Summary tab's wait. */
+export const LOADING_DATA = "Please wait, loading data...";
 
 /*
  * Whether the commands that START a write are greyed (D57, decision 2b) is the shared

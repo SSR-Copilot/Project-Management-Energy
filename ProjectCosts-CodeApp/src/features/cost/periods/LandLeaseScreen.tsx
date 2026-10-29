@@ -46,7 +46,7 @@ import {
   AddFilled, AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteFilled, DeleteRegular, EditRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
@@ -1036,10 +1036,10 @@ export default function LandLeaseScreen() {
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
-   * DIVERGENCE (D57): the first load no longer returns `<LoadingOverlay mode="inline">`. The page
-   * renders with an empty body (no card until the book has loaded) and every write command
-   * disabled (`writeCommandsDisabled`), and carries `aria-busy`. The load check still comes
-   * BEFORE the error check, so a load in progress never reads "Cost data is unavailable".
+   * D59: the first load shows an inline spinner in the body ("Loading Land Lease…"), with every
+   * write command disabled (`writeCommandsDisabled`) and `aria-busy` on the page. The load check
+   * still comes BEFORE the error check, so a load in progress never reads "Cost data is
+   * unavailable".
    *
    * A failed read must not look like a project with no leases (same state as Capex / Opex).
    */
@@ -1071,15 +1071,18 @@ export default function LandLeaseScreen() {
         </MessageBar>
       ) : null}
       {/*
-        * DIVERGENCE (D57): `cmp_LandLease_PopUpLoading` (`InformationText:
-        * =locSpinnerInformationText`, `Visible: =locIsVisiblePopUpSpinner`) is no longer a
-        * blocking spinner pop-up over the screen. The same verbatim `LEASE_MSG` text shows here as
-        * one non-animated status line, and the write guard disables the write commands instead.
+        * `cmp_LandLease_PopUpLoading` (`InformationText: =locSpinnerInformationText`, `Visible:
+        * =locIsVisiblePopUpSpinner`): the blocking spinner with the verbatim `LEASE_MSG` text
+        * shows for as long as the write runs (D59). The write guard also disables the write
+        * commands.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
       <WriteStatus testId="land-lease-write-status" label={costWriteStatusLabel({
         ownLabel: busy, ownPending: writes.isPending, writeInFlight,
       })} />
+      {isLoading ? (
+        <LoadingOverlay mode="inline" label="Loading Land Lease…" testId="land-lease-loading" />
+      ) : null}
 
       <div className={styles.cardList}>
         {cards.map((card) => (

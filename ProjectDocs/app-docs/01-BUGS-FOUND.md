@@ -1154,6 +1154,36 @@ the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
   - Three concurrent `npx vitest run src/features/admin src/features/cost/capex-costs/Screen.test.tsx
     src/features/pm/project-main/Screen.test.tsx` runs, twice: 6 of 6 green, 826/826 each.
 
+### CA-20 · Cost module: no visible busy state after D57 removed the spinners (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect, introduced by D57.** D57 removed the Cost module's loading spinners as canvas
+overhead, replacing them with a quiet status line and empty placeholders. In use that left the
+screens looking idle while they were busy.
+- **What happened.**
+  - **Saves.** After Save, Delete and the other writes, only a line of text showed. The grid and
+    every command stayed clickable.
+  - **CAPEX tab change.** The tab strip sat over an empty body: nothing loaded, nothing moving.
+  - **Add Cost from Table.** The click opened a blank screen, through the lazy chunk download, the
+    sheet fetch and the grid build.
+  - **Effect.** Users clicked twice or clicked anywhere, and could start work on a screen that had
+    not finished loading (a double submit on the non-transactional multi-writes).
+- **Root causes.**
+  - `WriteStatus` drew only a text span.
+  - The load placeholders were empty `<div>`s on CAPEX, the Summary tab, Contracts and Add Costs from
+    Table.
+  - The Cost route's `Suspense` fallback and `CostProjectGate` were empty.
+  - OPEX and Land Lease rendered empty card lists, and the Comments panel an empty thread list.
+- **The fix (D59).**
+  - **Writes.** `WriteStatus` shows the blocking `LoadingOverlay` (spinner and scrim, with the verbatim
+    canvas text) until the write has finished and the screen has refreshed, on success and on
+    failure.
+  - **Loads.** Inline spinners with the original texts replace every empty placeholder.
+  - **Unchanged.** The write guard from D57 stays.
+- **Tests.** The D57 `UT-*-NOSPIN-*` tests were flipped to pin the spinners (ids kept), and
+  `UT-WSTATUS-001…004`, `UT-SHELL-NOSPIN-001/007` were rewritten. New tests are `UT-*-BUSY-NNN`.
+  **Not verified** in a browser: the first live check on DEV is owed.
+- **Record:** **D59**.
+
 ---
 
 ## Verification notes

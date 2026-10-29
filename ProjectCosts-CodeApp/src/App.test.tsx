@@ -63,14 +63,16 @@ beforeEach(() => {
 });
 
 describe("App shell while the session loads (D57)", () => {
-  it("UT-SHELL-NOSPIN-001 a Cost route shows no 'Please wait...' overlay and mounts no Cost screen", async () => {
+  it("UT-SHELL-NOSPIN-001 a Cost route shows the inline 'Loading project…' spinner (not the blocking overlay) and mounts no Cost screen", async () => {
     mount(`/costs/capex?projectId=${PROJECT_ID}`);
     const placeholder = await screen.findByTestId("cost-project-loading");
     expect(placeholder.getAttribute("aria-busy")).toBe("true");
-    expect(placeholder.textContent).toBe("");
+    // D59: never a blank body while the session loads.
+    expect(placeholder).toHaveTextContent("Loading project…");
+    expect(placeholder.querySelector(".fui-Spinner")).not.toBeNull();
+    // The shell's blocking overlay is still skipped on Cost routes (the rail stays visible).
     expect(screen.queryByText("Please wait...")).toBeNull();
-    expect(screen.queryByText("Loading project…")).toBeNull();
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("heading", { name: "CAPEX screen" })).toBeNull();
     expect(mounted).not.toHaveBeenCalled();
   });
@@ -106,13 +108,14 @@ describe("App shell while the session loads (D57)", () => {
     expect(screen.queryByText("Loading screen…")).toBeNull();
   });
 
-  it("UT-SHELL-NOSPIN-007 a Cost screen's lazy chunk waits behind the empty Cost fallback, not 'Loading screen…'", async () => {
+  it("UT-SHELL-NOSPIN-007 a Cost screen's lazy chunk waits behind a 'Loading screen…' spinner, never a blank body", async () => {
     state = { loading: false, projectId: PROJECT_ID, project: PROJECT };
     mount(`/costs/land-lease?projectId=${PROJECT_ID}`);
     // The first render: the lazy import has not resolved yet.
     const fallback = screen.getByTestId("cost-screen-loading");
     expect(fallback.getAttribute("aria-busy")).toBe("true");
-    expect(screen.queryByText("Loading screen…")).toBeNull();
+    expect(fallback).toHaveTextContent("Loading screen…");
+    expect(fallback.querySelector(".fui-Spinner")).not.toBeNull();
     expect(await screen.findByRole("heading", { name: "Land Lease screen" })).toBeInTheDocument();
   });
 

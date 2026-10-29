@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@fluentui/react-components";
 import { Dismiss24Regular, Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EmptyState, WriteStatus } from "@/components";
+import { EmptyState, LoadingOverlay, WriteStatus } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
@@ -317,11 +317,12 @@ export default function AddCostsFromTableScreen() {
   }
   if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
     /*
-     * DIVERGENCE (D57): no canvas control (the canvas screen sets no `LoadingSpinner`); this
-     * replaced the code app's own inline "Loading the cost table…" spinner with an empty,
-     * non-spinner placeholder. The grid needs `initialGrid`, so nothing else can render yet.
+     * No canvas control (the canvas screen sets no `LoadingSpinner`): the code app's own inline
+     * "Loading the cost table…" spinner (restored by D59 after D57 had left this body empty, so
+     * opening the sheet showed a blank screen through the chunk download, the sheet fetch and the
+     * grid build). The grid needs `initialGrid`, so nothing else can render yet.
      */
-    return <div data-testid="add-costs-loading" aria-busy="true" />;
+    return <LoadingOverlay mode="inline" label="Loading the cost table…" testId="add-costs-loading" />;
   }
 
   const categoryName = CATEGORY_LABELS[category] ?? "";

@@ -1,54 +1,41 @@
 /**
- * The non-animated, non-blocking "a write is running" line (D57, PROPOSED).
+ * The "a write is running" indicator of the Cost screens: a blocking spinner for as long as the
+ * write lasts (D57, restored by D59).
  *
- * DIVERGENCE (D57): the Cost screens replaced the canvas `cmp_*_PopUpLoading` spinner pop-up
- * (`cmp_PopUp_Loading`: a 10 % scrim, a white card, a spinner and `InformationText`) with this one
- * line of text. It shows the SAME verbatim `InformationText` the canvas raised (each caller passes
- * its own `MSG` constant), but no spinner, no scrim and no card, so nothing on the screen is
- * covered. Blocking a second write is the caller's job: each screen disables its write-starting
- * commands through a pure rule in its `rules.ts` while the write is pending.
+ * D57 first replaced the canvas `cmp_*_PopUpLoading` pop-up (`cmp_PopUp_Loading`: a 10 % scrim, a
+ * white card, a spinner and `InformationText`) with a quiet line of text. In use that left the
+ * screen looking idle while a save was still running, so a user could click again or click
+ * anywhere. D59 restores the canvas behaviour: while `label` is set the shared blocking
+ * `LoadingOverlay` (spinner + the SAME verbatim `InformationText`) covers the screen, and it goes
+ * away when the write has finished and the screen's refresh is done. The per-screen write guard
+ * (`writeCommandsDisabled`, `domain/writeGuard.ts`) stays as the second line of defence.
  *
- * `LoadingOverlay` is unchanged and still used by the PM and Admin screens.
+ * `LoadingOverlay` is the same component the PM and Admin screens use; this wrapper only decides
+ * WHEN to show it and keeps the screen's `<screen>-write-status` test id on it.
  */
-import { Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
-import { palette, space } from "@/theme/tokens";
+import { makeStyles } from "@fluentui/react-components";
+import { LoadingOverlay } from "./LoadingOverlay";
 
 const useStyles = makeStyles({
-  root: {
-    display: "block",
-    paddingTop: space.xs, paddingBottom: space.xs,
-    color: palette.neutralSecondary,
-    fontSize: "14px",
-    fontWeight: tokens.fontWeightSemibold,
-    whiteSpace: "pre-line",
+  // Idle: the live region stays mounted, but draws nothing.
+  idle: {
+    position: "absolute", width: "1px", height: "1px", overflow: "hidden",
+    clipPath: "inset(50%)", whiteSpace: "nowrap",
   },
-  // Idle: the region stays mounted but draws no box.
-  empty: { paddingTop: 0, paddingBottom: 0 },
 });
 
 interface WriteStatusProps {
-  /** The canvas `InformationText` for the write in flight; the line is empty without one. */
+  /** The canvas `InformationText` for the write in flight; no overlay without one. */
   label: string | null | undefined;
   /** `<screen>-write-status`. */
   testId: string;
 }
 
-/**
- * The `role="status"` element is ALWAYS mounted and only its text changes: screen readers often
- * ignore a live region that is inserted together with its content.
- */
 export function WriteStatus({ label, testId }: WriteStatusProps) {
   const styles = useStyles();
   const text = label || "";
-  return (
-    <Text
-      as="span"
-      className={mergeClasses(styles.root, !text && styles.empty)}
-      role="status"
-      aria-live="polite"
-      data-testid={testId}
-    >
-      {text}
-    </Text>
-  );
+  if (text) return <LoadingOverlay mode="blocking" label={text} testId={testId} />;
+  // An empty, always-present live region for the idle state (screen readers like a region that
+  // already exists before it gets content).
+  return <span className={styles.idle} role="status" aria-live="polite" data-testid={testId} />;
 }

@@ -35,6 +35,7 @@ import {
   FormPanel,
   PanelButtons,
   useCommandRowStyles,
+  LoadingOverlay,
   WriteStatus,
 } from "@/components";
 /*
@@ -647,11 +648,10 @@ export default function ContractsScreen() {
         </MessageBar>
       ) : null}
       {/*
-        * DIVERGENCE (D57): replaces `cmp_Contracts_PopUpLoading` (`cmp_PopUp_Loading`,
-        * `Visible: =locIsContractVisiblePopUpSpinner`,
-        * `InformationText: =locContractSpinnerInformationText`). The same verbatim text
-        * (`MSG.spinner*`) shows as one non-blocking status line, with no spinner and no scrim;
-        * `writeCommandsDisabled` stops a second write instead of the overlay.
+        * `cmp_Contracts_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
+        * =locIsContractVisiblePopUpSpinner`, `InformationText: =locContractSpinnerInformationText`):
+        * the blocking spinner with the verbatim `MSG.spinner*` text shows for as long as the write
+        * runs (D59); `writeCommandsDisabled` also stops a second write.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
       <WriteStatus testId="contracts-write-status" label={costWriteStatusLabel({
@@ -665,8 +665,8 @@ export default function ContractsScreen() {
       </div>
 
       {loading ? (
-        // The empty body while loading (D57): no spinner, and no "No contracts yet".
-        <div data-testid="contracts-loading" aria-busy="true" />
+        // D59: an inline spinner while loading, and never "No contracts yet" before the data lands.
+        <LoadingOverlay mode="inline" label="Loading contracts…" testId="contracts-loading" />
       ) : contracts.length === 0 ? (
         <EmptyState
           title="No contracts yet"

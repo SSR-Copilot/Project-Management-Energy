@@ -35,11 +35,11 @@ export default function App() {
 
   const onCostScreen = pathname.startsWith("/costs/");
   /*
-   * DIVERGENCE (D57): no canvas control; code-app shell spinner. The Cost routes no longer get
-   * the blocking "Please wait..." overlay while the session loads: the shell renders, and
-   * `CostProjectGate` (`app/routes.tsx`) holds an empty `cost-project-loading` placeholder, so no
-   * Cost screen mounts or starts a query before the project exists. Every other route (the
-   * project list, PM, Admin, `/`) keeps the blocking overlay unchanged.
+   * No canvas control; code-app shell spinner. On the Cost routes the shell renders while the
+   * session loads (D57) and `CostProjectGate` (`app/routes.tsx`) shows its own inline "Loading
+   * project…" spinner (`cost-project-loading`, D59), so the rail and header stay visible, no Cost
+   * screen mounts or starts a query before the project exists, and the body is never blank. Every
+   * other route (the project list, PM, Admin, `/`) keeps the blocking overlay unchanged.
    */
   if (loading && !onCostScreen) return <LoadingOverlay mode="blocking" label="Please wait..." />;
 

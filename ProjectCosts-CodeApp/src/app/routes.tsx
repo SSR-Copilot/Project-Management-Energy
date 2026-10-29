@@ -75,11 +75,11 @@ export function CostProjectGate() {
   const navigate = useNavigate();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
   /*
-   * DIVERGENCE (D57): no canvas control; code-app route spinner. The "Loading project…" spinner
-   * is gone from the Cost gate; it renders an empty, non-spinner placeholder instead, and still
+   * No canvas control; code-app route spinner. D57 had turned the Cost gate's "Loading project…"
+   * spinner into an empty placeholder, which left a blank screen (D59 restores it). The gate still
    * holds back every Cost screen (and its queries) until the session and the project are loaded.
    */
-  if (loading) return <div data-testid="cost-project-loading" aria-busy="true" />;
+  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" testId="cost-project-loading" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open Costs for a selected project." action={action} />;
   if (!projectId) return <EmptyState title="Select a project to open Costs"
@@ -89,12 +89,13 @@ export function CostProjectGate() {
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"
     description="The project could not be found or you do not have access to it." action={action} />;
   /*
-   * DIVERGENCE (D57): no canvas control; code-app route spinner. The Cost subtree has its own
-   * Suspense boundary with an empty, non-spinner fallback, so a lazy Cost chunk never shows the
-   * shared "Loading screen…" spinner that the other routes keep (`AppRoutes`).
+   * No canvas control; code-app route spinner. The Cost subtree keeps its own Suspense boundary,
+   * so the lazy Cost chunk (Add Cost from Table, Contracts, ...) shows a spinner while it downloads
+   * instead of the blank screen D57's empty fallback left (D59). Same text as the shared one
+   * (`AppRoutes`).
    */
   return (
-    <Suspense fallback={<div data-testid="cost-screen-loading" aria-busy="true" />}>
+    <Suspense fallback={<LoadingOverlay mode="inline" label="Loading screen…" testId="cost-screen-loading" />}>
       <Outlet />
     </Suspense>
   );

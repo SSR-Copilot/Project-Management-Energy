@@ -192,16 +192,15 @@ describe("CommentsPanel", () => {
     // The status is driven by one panel-level flag, so it is up while the save is in flight
     // even though `mutation.isPending` is mocked false throughout.
     const label = await screen.findByText("Saving comments...");
-    expect(screen.getByTestId("capex-comments-write-status")).toBe(label);
-    expect(label).toHaveAttribute("role", "status");
-    // It lives OUTSIDE the drawer, which has already closed (decision 7a), and it is not a
-    // blocking overlay: no modal scrim, no spinner.
+    const overlay = screen.getByTestId("capex-comments-write-status");
+    // D59: the blocking spinner (modal scrim, spinner, the verbatim text) is up for the commit.
+    expect(overlay).toHaveAttribute("role", "dialog");
+    expect(overlay).toHaveAttribute("aria-modal", "true");
+    expect(overlay.contains(label)).toBe(true);
+    expect(overlay.querySelector(".fui-Spinner")).not.toBeNull();
+    // It lives OUTSIDE the drawer, which has already closed (decision 7a).
     expect(label.closest(".canvas-panel")).toBeNull();
     expect(label.closest(".canvas-panel-body")).toBeNull();
-    // (`LoadingOverlay`'s blocking scrim was `role="dialog" aria-modal aria-busy`; the drawer
-    // itself is modal too, and is still open here only because `onDismiss` is a mock.)
-    expect(document.querySelector('[aria-modal="true"][aria-busy="true"]')).toBeNull();
-    expect(document.querySelector(".fui-Spinner")).toBeNull();
     expect(onSavingChange).toHaveBeenLastCalledWith(true);
 
     // Between the delete and the save the status stays up.
@@ -209,12 +208,49 @@ describe("CommentsPanel", () => {
     await waitFor(() => expect(saveMutation.mutateAsync).toHaveBeenCalled());
     expect(screen.getByText("Saving comments...")).toBeTruthy();
 
+    // Still blocking in the gap.
+    expect(screen.getByTestId("capex-comments-write-status").querySelector(".fui-Spinner")).not.toBeNull();
+
     release();
     await waitFor(() => expect(screen.queryByText("Saving comments...")).toBeNull());
+    expect(screen.getByTestId("capex-comments-write-status")).toHaveAttribute("role", "status");
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
     expect(onSavingChange).toHaveBeenLastCalledWith(false);
   });
 
-  it("UT-CMT-NOSPIN-004 while loading, shows an empty list with no spinner, no text and Add greyed", () => {
+  it("UT-CMT-BUSY-001 the blocking spinner stays up until the commit REJECTS, then goes", async () => {
+    let fail = (_e: Error) => {};
+    saveMutation.mutateAsync = vi.fn(
+      () => new Promise<string>((_resolve, reject) => { fail = reject; }),
+    );
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Add Comment" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Comment" }), { target: { value: "Added" } });
+    fireEvent.click(saveButton());
+    await screen.findByText("Saving comments...");
+    fireEvent.click(screen.getByRole("button", { name: "Add Comment" })); // an extra interaction
+    const overlay = screen.getByTestId("capex-comments-write-status");
+    expect(overlay).toHaveAttribute("role", "dialog");
+    expect(overlay.querySelector(".fui-Spinner")).not.toBeNull();
+    fail(new Error("boom"));
+    await waitFor(() => expect(screen.queryByText("Saving comments...")).toBeNull());
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+  });
+
+  it("UT-CMT-BUSY-002 while the comments load, an inline spinner with the verbatim text shows", () => {
+    isLoading = true;
+    data = undefined;
+    mount();
+    const loading = screen.getByTestId("capex-comments-loading");
+    expect(loading).toHaveAttribute("role", "status");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading.querySelector(".fui-Spinner")).not.toBeNull();
+    expect(loading).toHaveTextContent("Loading comments...");
+    isLoading = false;
+    data = [comment()];
+  });
+
+  it("UT-CMT-NOSPIN-004 while loading, shows no stale thread, an inline spinner and Add greyed", () => {
     // Contract A opens with its thread on screen and seeded into the panel's working copy…
     data = [comment({ id: "a-1", text: "Thread of contract A", contractId: "contract-1" })];
     const view = mount();
@@ -236,9 +272,10 @@ describe("CommentsPanel", () => {
     expect(screen.queryByText("Thread of contract A")).toBeNull();
     expect(screen.queryByTestId("btn_Read_Comment_Edit-a-1")).toBeNull();
     expect(screen.getByTestId("capex-comments-list")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByTestId("capex-comments-list").childElementCount).toBe(0);
-    expect(screen.queryByText("Loading comments...")).toBeNull();
-    expect(document.querySelector(".fui-Spinner")).toBeNull();
+    // D59: the only child is the inline loading spinner.
+    expect(screen.getByTestId("capex-comments-list").childElementCount).toBe(1);
+    expect(screen.getByTestId("capex-comments-loading")).toHaveTextContent("Loading comments...");
+    expect(document.querySelector(".fui-Spinner")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add Comment" })).toBeDisabled();
   });
 

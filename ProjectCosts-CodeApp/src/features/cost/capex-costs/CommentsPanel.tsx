@@ -26,7 +26,7 @@ import {
   AddRegular, ArrowReplyRegular, ArrowUndoRegular, CheckmarkCircleRegular, DeleteRegular,
   EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { FormPanel, PanelButtons, WriteStatus } from "@/components";
+import { FormPanel, LoadingOverlay, PanelButtons, WriteStatus } from "@/components";
 import { space } from "@/theme/tokens";
 import { useSession } from "@/app/SessionContext";
 import { writeCommandsDisabled } from "@/domain/writeGuard";
@@ -616,6 +616,9 @@ export function CommentsPanel(props: CommentsPanelProps) {
           */}
         <div className={styles.threads} aria-busy={query.isLoading || undefined}
           data-testid="capex-comments-list">
+          {query.isLoading ? (
+            <LoadingOverlay mode="inline" label="Loading comments..." testId="capex-comments-loading" />
+          ) : null}
           {(query.isLoading ? [] : threads).map((thread) => (
             <div key={thread.root.id} className={styles.thread}>
               {editingIds.has(thread.root.id) ? (

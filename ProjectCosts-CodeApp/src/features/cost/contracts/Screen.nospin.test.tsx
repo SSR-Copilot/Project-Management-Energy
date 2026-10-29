@@ -114,16 +114,18 @@ beforeEach(() => {
 });
 
 describe("Contracts screen without spinners (D57)", () => {
-  it("UT-CONTRACTS-NOSPIN-010 while loading: the command bar with every write command disabled, an empty body", () => {
+  it("UT-CONTRACTS-NOSPIN-010 while loading: the command bar with every write command disabled, the inline spinner body", () => {
     state.contractsLoading = true;
     mount();
     for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
     const body = screen.getByTestId("contracts-loading");
     expect(body.getAttribute("aria-busy")).toBe("true");
-    expect(body.textContent).toBe("");
-    expect(screen.queryByText("Loading contracts…")).toBeNull();
+    expect(body.getAttribute("role")).toBe("status");
+    expect(body.textContent).toBe("Loading contracts…");
+    expect(body.querySelector(".fui-Spinner")).not.toBeNull();
     expect(screen.queryByText("No contracts yet")).toBeNull();
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    // No write is running, so no blocking overlay.
+    expect(screen.getByTestId("contracts-write-status").getAttribute("role")).toBe("status");
   });
 
   it("UT-CONTRACTS-NOSPIN-011 a failed read still renders the error state (rule 19)", () => {
@@ -141,14 +143,15 @@ describe("Contracts screen without spinners (D57)", () => {
     expect(screen.getByTestId("contracts-write-status")).toBeEmptyDOMElement();
   });
 
-  it("UT-CONTRACTS-NOSPIN-013 a pending write: the fallback status line, no overlay, write commands disabled", () => {
+  it("UT-CONTRACTS-NOSPIN-013 a pending write: the fallback text on the blocking spinner, write commands disabled", () => {
     state.pending = "saveContract";
     mount();
     selectAndExpand();
     const status = screen.getByTestId("contracts-write-status");
     expect(status).toHaveTextContent(MSG.spinnerSavingContract);
-    expect(status.getAttribute("role")).toBe("status");
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(status.getAttribute("role")).toBe("dialog");
+    expect(status.getAttribute("aria-modal")).toBe("true");
+    expect(status.querySelector(".fui-Spinner")).not.toBeNull();
     for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
     expect(screen.getByTestId("contracts-add-target-c-1")).toBeDisabled();
     expect(screen.getByTestId("contracts-edit-target-c-1")).toBeDisabled();
@@ -181,6 +184,72 @@ describe("Contracts screen without spinners (D57)", () => {
       expect(screen.getByTestId("contracts-write-status").textContent).not.toBe("");
       view.unmount();
     }
+  });
+});
+
+describe("Contracts screen: the busy indicators (D59)", () => {
+  /** Selects c-1, confirms Delete Contract with the write held open on `state.gate`. */
+  async function startPendingDelete(gate: Promise<void>) {
+    state.gate = gate;
+    const view = mount();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1"));
+    fireEvent.click(command("deleteContarct"));
+    // The mutation turns pending as the confirmed delete starts.
+    state.pending = "deleteContract";
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+    });
+    return view;
+  }
+  const expectBlocking = () => {
+    const status = screen.getByTestId("contracts-write-status");
+    expect(status.getAttribute("role")).toBe("dialog");
+    expect(status).toHaveTextContent(MSG.spinnerDeletingContract);
+    expect(status.querySelector(".fui-Spinner")).not.toBeNull();
+  };
+  const expectIdle = () => {
+    const status = screen.getByTestId("contracts-write-status");
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent).toBe("");
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+  };
+
+  it("UT-CONTRACTS-BUSY-001 the blocking spinner stays up through other clicks and goes when the delete resolves", async () => {
+    let finish: () => void = () => {};
+    await startPendingDelete(new Promise<void>((r) => { finish = r; }));
+    expectBlocking();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1"));
+    fireEvent.click(screen.getByTestId("ico_Contracts_List_CardHeader_Down-c-1"));
+    expectBlocking();
+    state.pending = "none";
+    await act(async () => { finish(); });
+    expectIdle();
+  });
+
+  it("UT-CONTRACTS-BUSY-002 the blocking spinner also goes when the delete REJECTS, and the error banner shows", async () => {
+    let fail: (e: Error) => void = () => {};
+    await startPendingDelete(new Promise<void>((_r, reject) => { fail = reject; }));
+    expectBlocking();
+    state.pending = "none";
+    await act(async () => { fail(new Error("HTTP 403")); });
+    expectIdle();
+    expect(screen.getByText("Could not complete that")).toBeInTheDocument();
+  });
+
+  it("UT-CONTRACTS-BUSY-003 while loading it never reads 'No contracts yet', and the list replaces the spinner after", () => {
+    state.contractsLoading = true;
+    state.contracts = [];
+    const view = mount();
+    expect(screen.getByTestId("contracts-loading").querySelector(".fui-Spinner")).not.toBeNull();
+    expect(screen.queryByText("No contracts yet")).toBeNull();
+    state.contractsLoading = false;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={[`/costs/contracts?projectId=${PROJECT_ID}`]}><ContractsScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(screen.queryByTestId("contracts-loading")).toBeNull();
+    expect(screen.getByText("No contracts yet")).toBeInTheDocument();
   });
 });
 

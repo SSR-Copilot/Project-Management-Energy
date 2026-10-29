@@ -5181,6 +5181,10 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 
 ## D57 · Cost module: no loading or saving spinners (29 Oct 2026)
 
+> **SUPERSEDED IN PART by D59 (29 Oct 2026).** In use, removing the spinners left the screens idle
+> or blank while they were busy, so every spinner in the table below is back (the write guard,
+> the status wording and the other D57 changes stay). Read D59 first.
+
 **Status: PROPOSED, uncommitted, on the local branch `feature/RemoveCostSpinners` only.** Not
 deployed. Not product-approved. Brief: `feature-briefs/FEATURE-RemoveCostSpinners.md`.
 (D58 is reserved by the parallel `feature/ReadableBulkSaveLogs` branch.)
@@ -5483,3 +5487,71 @@ each, and this tab keeps sending UpdateMultiple rows one by one while its sessio
 ### 7. What the product owner is being asked
 
 Nothing functional. Confirm the console format, and that names stay out of readable logs.
+
+## D59 · Cost module: busy indicators restored, after D57 removed them (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/RestoreBusyIndicators`.** Not
+deployed. This partly reverses D57 at the user's request.
+
+### 1. What the user reported
+
+After D57 the Cost screens looked idle while they were busy:
+- **Saves.** After a Save the screen showed only a quiet line of text, with no spinner. The grid and
+  every command stayed clickable, so a user could click again or click anywhere.
+- **CAPEX tabs.** A category change showed the tab strip over an empty body: nothing loaded, nothing
+  moving, and controls that could be used.
+- **Add Cost from Table.** The click opened a blank screen, with no sign that it was loading.
+
+### 2. Root causes (all D57)
+
+| # | Cause | Where |
+|---|---|---|
+| 1 | `WriteStatus` drew a text span: no spinner, no scrim, and it was easy to miss. The write guard disables only the commands that start a write, not the grid or navigation. | `components/WriteStatus.tsx` |
+| 2 | The first-load placeholders were empty `<div>`s: `capex-loading`, `capex-summary-loading`, `contracts-loading`, `add-costs-loading`. | the Cost screens |
+| 3 | The Cost route's `Suspense` fallback and `CostProjectGate` were empty `<div>`s, so the lazy chunk download and the project load showed nothing. Opening Add Cost from Table crosses all three: chunk, then sheet fetch, then grid build. | `app/routes.tsx` |
+| 4 | OPEX and Land Lease rendered empty card lists while loading; the Comments panel an empty thread list. | `OpexScreen`, `LandLeaseScreen`, `CommentsPanel` |
+
+### 3. What changed
+
+- **Writes.** `WriteStatus` shows the shared blocking `LoadingOverlay` (spinner, scrim and the same
+  verbatim canvas `InformationText`) for as long as its label is set. The label stays set until the
+  mutation has settled and the screen's refresh is done, so the spinner persists to the end of the
+  operation, on success and on failure. When idle it is an empty `role="status"` span. Every
+  Cost screen uses `WriteStatus`, so Save, Delete, Paid, Add Standard Contract, Import and the
+  Comments Save are all covered.
+- **Loads.** An inline `LoadingOverlay` shows in the body, with the screen chrome around it (tab
+  strip and toolbar, command bar):
+
+  | Screen | Test id | Text |
+  |---|---|---|
+  | CAPEX, first load or a tab change | `capex-loading` | "Please wait, loading cost ..." (`locSpinnerInformationText`, `:2434`) |
+  | CAPEX Summary | `capex-summary-loading` | "Please wait, loading data..." (`:18052`) |
+  | OPEX | `opex-loading` | "Loading Operation & Maintenance…" / "Loading Other OPEX Costs…" |
+  | Land Lease | `land-lease-loading` | "Loading Land Lease…" |
+  | Contracts | `contracts-loading` | "Loading contracts…" |
+  | Add Costs from Table | `add-costs-loading` | "Loading the cost table…" |
+  | Comments panel | `capex-comments-loading` | "Loading comments..." |
+  | Cost project gate | `cost-project-loading` | "Loading project…" |
+  | Cost chunk fallback | `cost-screen-loading` | "Loading screen…" |
+
+  The texts are the originals from before D57 (the canvas ones, or the code app's earlier text).
+  `LOADING_COST` and `LOADING_DATA` are restored in `capex-costs/panelRules.ts`.
+- **Kept from D57.** The shared write guard (`writeCommandsDisabled`) and the "write in flight"
+  state that outlives a screen (CA-15); the load check before the "Cost data is unavailable" error
+  state (rule 19); the shell skipping its blocking overlay on `/costs/*` (the gate's spinner now
+  fills that gap, so the rail and header stay visible); the sheet lock on Add Costs from Table; and
+  the PCF grid's disabled write items and "No costs to display." message.
+- **`LoadingOverlay`.** It gained an optional `testId`, and the inline mode carries
+  `aria-busy="true"`. Existing callers (PM, Admin) render as before.
+
+### 4. DIVERGENCE
+
+D57's divergence from the canvas is withdrawn for every spinner above: the Cost module again shows
+the canvas pop-up spinner during writes and the canvas loading text during loads. What still differs
+from the canvas is that the screens additionally disable their write commands, and the CAPEX tab
+change shows an inline spinner (the canvas used `spn_LoadingSpinnerCost`).
+
+### 5. What the product owner is being asked
+
+Confirm that the blocking spinner during writes, and the inline spinner during loads, are what is
+wanted on every Cost screen. D57 is no longer the intended behaviour for these.

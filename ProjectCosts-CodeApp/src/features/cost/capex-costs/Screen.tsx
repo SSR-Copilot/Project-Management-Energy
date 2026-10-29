@@ -32,6 +32,7 @@ import {
   CostSelect,
   EmptyState,
   FormPanel,
+  LoadingOverlay,
   PanelButtons,
   PanelExtraButton,
   WriteStatus,
@@ -78,6 +79,7 @@ import {
   RECALCULATE_ALLOCATED_COST,
   allocatedCostLabel, capexWriteStatusLabel, clusterCheckboxState, confirmButtonWidth,
   defaultSelectedYear, deleteContractDescription,
+  LOADING_COST, LOADING_DATA,
   distributionLocked, enabledClusters, gridActionAllowed, isoToMonthYear, monthYearLabel,
   monthYearToIso,
   onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
@@ -414,7 +416,8 @@ export default function CapexCostsScreen() {
     return <div className="canvas-cost-screen">
       {tabStrip}
       {isSummaryTab(category) ? null : toolbar}
-      <div data-testid="capex-loading" aria-busy="true" />
+      {/* D59: an inline spinner in the body, so a tab change never shows an empty screen. */}
+      <LoadingOverlay mode="inline" label={LOADING_COST} testId="capex-loading" />
       {writeFeedback}
     </div>;
   }
@@ -808,11 +811,11 @@ export default function CapexCostsScreen() {
 
     {isSummaryTab(category) ? (
       /*
-       * DIVERGENCE (D57): `cmp_Costs_PopUpLoading` showed "Please wait, loading data..." over
-       * the Summary until `colFinatCostDataOptimized` filled (its `InformationText`, `:18052`).
-       * The table area now stays empty, with no spinner, until the totals land.
+       * `cmp_Costs_PopUpLoading` showed "Please wait, loading data..." over the Summary until
+       * `colFinatCostDataOptimized` filled (its `InformationText`, `:18052`). D59 shows the same
+       * text as an inline spinner in the table area until the totals land.
        */
-      totals.isLoading ? <div data-testid="capex-summary-loading" aria-busy="true" /> : (
+      totals.isLoading ? <LoadingOverlay mode="inline" label={LOADING_DATA} testId="capex-summary-loading" /> : (
         <table className="canvas-capex-summary" aria-label="DEVEX/CAPEX Summary"><tbody>
           {categoryNames.map((name, i) => (
             <tr key={name}>
