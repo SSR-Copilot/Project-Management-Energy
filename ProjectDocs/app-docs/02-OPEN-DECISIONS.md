@@ -5169,9 +5169,10 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 
 ## D57 · PM Revenues: Fabric standard assumptions connected, and a live-canvas visual parity pass (29 Oct 2026)
 
-**Status:** on branch `pm-revenue`. The first part was committed as `0e33fe9`. The dialog, panel
-and Fabric changes listed below are uncommitted. The user confirmed in DEV that the Fabric
-assumptions now fill the contract panel. Supersedes the "not connected" parts of D33 and closes
+**Status:** committed on branch `pm-revenue` as `0e33fe9` and `b3a3728` ("Functional Changes on
+Revenue Screen"), and merged into `master` as `f8d5f47` (29 Oct 2026; no conflicts with the
+Application Insights merge `2e5d706`). On the merged `master`, typecheck, lint and the 272 affected
+tests passed. The user confirmed in DEV that the Fabric assumptions now fill the contract panel. Supersedes the "not connected" parts of D33 and closes
 D54 open item 3 for Revenues.
 
 ### 1. Fabric SQL connected (`Assumptions Revenues SQL`)
