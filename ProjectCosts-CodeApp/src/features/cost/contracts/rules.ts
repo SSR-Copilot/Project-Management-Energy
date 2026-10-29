@@ -937,6 +937,48 @@ export function contractErrors(
   return errors;
 }
 
+/* ═══════════════════════════════ which of those errors the panel SHOWS (D61) */
+
+/** The `FieldError.field` names the user has touched in the panel that is open. */
+export type TouchedFields = ReadonlySet<string>;
+
+/** Nothing touched yet: what every panel starts with when it opens. */
+export const NO_FIELDS_TOUCHED: TouchedFields = new Set<string>();
+
+/** `touched` plus `fields`; the SAME set when nothing is new, so a state update can bail out. */
+export function touchFields(touched: TouchedFields, fields: readonly string[]): TouchedFields {
+  const added = fields.filter((f) => !touched.has(f));
+  return added.length === 0 ? touched : new Set([...touched, ...added]);
+}
+
+/**
+ * The message to show under one field: only once the user has touched THAT field.
+ *
+ * DIVERGENCE (D61, CA-23): the canvas computes each `*_ErrorMessage` from the control's own value
+ * (and, for D-4's blank required fields, nothing at all). This app first gated them with ONE flag
+ * for the whole panel, so the first edit anywhere, even ticking a DevCo account, painted an error
+ * under every empty required field the user had not visited. Now an untouched field shows nothing,
+ * whatever its value; the validation itself (`contractErrors`, `canSaveContract`) is unchanged, so
+ * Save stays disabled while any field is invalid. The previous behaviour is kept as
+ * `visibleFieldErrorPanelWide`, so the decision stays reversible and both halves are tested.
+ */
+export function visibleFieldError(
+  errors: readonly FieldError[],
+  touched: TouchedFields,
+  field: string,
+): string | undefined {
+  return touched.has(field) ? errors.find((e) => e.field === field)?.message : undefined;
+}
+
+/** What the panel did before D61: every error once ANYTHING in the panel had been edited. */
+export function visibleFieldErrorPanelWide(
+  errors: readonly FieldError[],
+  panelTouched: boolean,
+  field: string,
+): string | undefined {
+  return panelTouched ? errors.find((e) => e.field === field)?.message : undefined;
+}
+
 /* ═══════════════════════════════════════════════ payment-target validation */
 
 /** `^(0[1-9]|1[0-2])\/\d{4}$` — the canvas format check, anchored as `IsMatch` anchors it. */

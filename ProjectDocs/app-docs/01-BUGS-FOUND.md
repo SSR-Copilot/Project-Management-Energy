@@ -1184,6 +1184,63 @@ screens looking idle while they were busy.
   **Not verified** in a browser: the first live check on DEV is owed.
 - **Record:** **D60**.
 
+### CA-22 · Contracts, DevCo Costs: the checkboxes were two different sizes (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (UI). Reported by the user: in the Add/Edit Contract panel's DevCo Costs picker
+some checkboxes looked big and some small.
+- **What differed.** The picker has two levels, and each drew its own box:
+
+  | Level | Control | Box before |
+  |---|---|---|
+  | Main gallery (the account row) | a drawn SVG in a 32 px button (the canvas `img_Contracts_DevCoCosts_ParentCheckbox`) | about 18.3 px (20 px element, box 22/24 of it) |
+  | Nested gallery (the leaf rows) | a native `<input type="checkbox">` (the canvas `chb_…_CostssRow`) | 16 px |
+
+- **Root cause.** The two sizes were set in two unrelated places (an SVG `width="20"` attribute and
+  a `width: 16px` rule), so nothing tied them together. The canvas itself had the same split: an
+  image with its own padding for the parent, the modern CheckBox control for the leaf.
+- **The fix.** One variable, `--devco-check: 18px`, on `.canvas-devco` (`styles/canvas.css`). The
+  leaf takes `width` and `height` from it; the parent's SVG is `24/22` of it, so the drawn box is
+  exactly that size. The leaf's right margin is `56px - box / 2`, so both columns still centre
+  56 px from the row's right edge, as they did.
+- **Not changed.** The look: the parent stays the drawn glyph (blue, tick, dash, locked grey) and the
+  leaf the native checkbox. Only the size is unified; making the leaf draw the same glyph would be a
+  separate, visual decision.
+- **Tests.** UT-CONCHECK-001…005 (`contracts/devcoCheckboxStyle.test.ts`) read the stylesheet: one
+  variable; the leaf and the SVG both derive from it and nothing else sets either size; the SVG's
+  drawn box equals the variable; the column centres match at 56 px. Reintroducing the 16 px leaf, the
+  20 px SVG or the fixed 48 px margin each fails them.
+- **Not verified** in a browser; the first look on DEV is owed.
+
+### CA-23 · Contracts panel: errors showed under fields the user had not touched (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (UX). Reported by the user: the validation messages in the Add/Edit Contract
+panel should appear only for fields the user has touched, and a required field left empty should not
+show an error until then.
+- **What happened.** The panel held ONE flag, `panelTouched`, and every field's error was gated by
+  it. The first change to anything in the panel, even ticking a DevCo account, or the screen
+  recalculating, set it, and then every empty required field showed "Input must not be blank" at
+  once, including fields the user had never visited.
+- **Root cause.** The granularity of the flag. Divergence D-4 (blank required fields now report why;
+  the canvas showed nothing) made every blank field an error, and the single flag turned them all on
+  together. The Payment Target panel and the Rights panel shared the flag.
+- **The fix (D61).** A per-field set of touched fields replaces the flag (`TouchedFields`,
+  `touchFields`, `visibleFieldError` in `contracts/rules.ts`). A field counts as touched when the
+  user edits it or visits it and leaves it (a new optional `onBlur` on the shared `CostField`). A
+  recalculation, a radio choice, or the reset of the margin boxes touches nothing. The DevCo
+  account error shows once the user has ticked or unticked an account. Opening a panel starts clean.
+  The validation itself and the Save gate are unchanged (the Rights panel's Save now reads whether a
+  field is invalid, not whether its error is on screen).
+- **Consequence to know.** Save stays disabled while any required field is invalid, but a field the
+  user has not touched shows no message, so a greyed Save can have no visible reason. See D61 §4.
+- **Tests.** UT-CONTOUCH-001…007 (the rules, including the old behaviour kept as a twin) and
+  UT-CONPANEL-001…010 (the screen: a fresh panel shows nothing; ticking an account shows nothing;
+  clearing a field shows only that field; leaving it empty touches it; a radio touches nothing;
+  Margin Yes touches nothing; unticking the last account shows its error; reopening resets; the
+  Add Period panel follows the same rule). Five mutations (one flag again, no blur, the margin
+  radio touching its resets, the account toggle not touching, no blur on the period percentage)
+  each fail them.
+- **Not verified** in a browser; the first look on DEV is owed.
+
 ---
 
 ## Verification notes

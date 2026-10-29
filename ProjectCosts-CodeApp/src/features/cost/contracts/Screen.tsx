@@ -66,6 +66,7 @@ import {
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
   contractTotalFromForm, selectedLeafAccounts, toggleParentAccounts,
+  NO_FIELDS_TOUCHED, touchFields, visibleFieldError, type TouchedFields,
   type AccountNode, type BopContract, type CapexCostRow, type ContractForm,
   type ContractType, type ParentCheckState, type PaymentTarget, type PaymentTargetForm,
 } from "./rules";
@@ -202,10 +203,15 @@ export default function ContractsScreen() {
    */
   const [expandedAccountId, setExpandedAccountId] = useState<string>();
   /**
-   * Whether the open panel has been edited yet. Validation is computed from the first
-   * render, but a panel the user has not touched shows none of it — see `errorFor`.
+   * Which fields of the open panel the user has touched (edited, or visited and left). Validation
+   * is computed from the first render, but a field the user has not touched shows no error — see
+   * `errorFor` (D61, CA-23). Reset whenever a panel opens.
    */
-  const [panelTouched, setPanelTouched] = useState(false);
+  const [touched, setTouched] = useState<TouchedFields>(NO_FIELDS_TOUCHED);
+  const touch = useCallback(
+    (...fields: string[]) => setTouched((t) => touchFields(t, fields)),
+    [],
+  );
   const [recalculated, setRecalculated] = useState(false);
   const [confirm, setConfirm] = useState<"none" | "contract" | "target">("none");
   /** Which `locContractSpinnerInformationText` the write-status line is showing, or `null` for none. */
@@ -335,18 +341,21 @@ export default function ContractsScreen() {
       const rows = costRowsForAccounts(
         capexCostRows.data ?? [], devCoContractsQuery.data ?? [], leafIds,
       );
-      setPanelTouched(true);
+      // A recalculation is the app's doing, not the user's: it touches nothing (D61).
       setForm((f) => recalculateForm(f, rows, locale));
       setRecalculated(true);
     },
     [tree, capexCostRows.data, devCoContractsQuery.data, locale],
   );
 
-  /** The payment-target twin of `updateForm`; `panelTouched` gates that panel's errors too. */
+  /**
+   * The payment-target twin of `updateForm`. Every key of the patch is a field the user typed in,
+   * and is also the `field` name of its error, so each one becomes touched.
+   */
   const updateTargetForm = useCallback((patch: Partial<PaymentTargetForm>) => {
-    setPanelTouched(true);
+    touch(...Object.keys(patch));
     setTargetForm((f) => ({ ...f, ...patch }));
-  }, []);
+  }, [touch]);
 
   /** `chb_Contracts_RightPanel_NewEdit_CostssRow.OnCheck` / `.OnUncheck`. */
   const toggleLeafAccount = useCallback(
@@ -355,9 +364,10 @@ export default function ContractsScreen() {
         ? [...new Set([...selectedAccountIds, id])]
         : selectedAccountIds.filter((x) => x !== id);
       setSelectedAccountIds(next);
+      touch("devCoCosts");
       recalculateFor(next);
     },
-    [selectedAccountIds, recalculateFor],
+    [selectedAccountIds, recalculateFor, touch],
   );
 
   /** `img_Contracts_DevCoCosts_ParentCheckbox.OnSelect`. */
@@ -365,25 +375,35 @@ export default function ContractsScreen() {
     (parentId: string) => {
       const next = toggleParentAccounts(tree, parentId, selectedAccountIds);
       setSelectedAccountIds(next);
+      touch("devCoCosts");
       recalculateFor(next);
     },
-    [tree, selectedAccountIds, recalculateFor],
+    [tree, selectedAccountIds, recalculateFor, touch],
   );
 
   /**
    * Applies a patch and, for the changes the canvas recalculated on, the recalculation with
    * it — in a single `setForm`.
+   *
+   * `touches` names the fields the USER changed with this patch; it defaults to every key of the
+   * patch, which is right for a field typed into. A patch that also resets other fields (flipping
+   * Margin or its type blanks the two margin boxes) or that comes from a radio passes `[]`, so a
+   * field the user never visited is not marked touched (D61).
    */
   const updateForm = useCallback(
-    (patch: Partial<ContractForm>, thenRecalculate = false) => {
-      setPanelTouched(true);
+    (
+      patch: Partial<ContractForm>,
+      thenRecalculate = false,
+      touches: readonly string[] = Object.keys(patch),
+    ) => {
+      touch(...touches);
       setForm((f) => {
         const next = { ...f, ...patch };
         return thenRecalculate ? recalculateForm(next, capexCosts, locale) : next;
       });
       if (thenRecalculate) setRecalculated(true);
     },
-    [capexCosts, locale],
+    [capexCosts, locale, touch],
   );
 
   /**
@@ -406,7 +426,7 @@ export default function ContractsScreen() {
       marginFixedValue:
         a?.vsb_marginfixedvalue === undefined ? "" : String(a.vsb_marginfixedvalue),
       isMarginStandardAssumption: Boolean(a),
-    }, true);
+    }, true, []); // the Reset icon is not a field: it touches nothing
   }, [standardAssumption.data, updateForm]);
 
   const contractTotal = useMemo(
@@ -439,7 +459,7 @@ export default function ContractsScreen() {
     setSelectedAccountIds([]);
     setForm(emptyContractForm(contractType));
     setExpandedAccountId(undefined);
-    setPanelTouched(false);
+    setTouched(NO_FIELDS_TOUCHED);
     setRecalculated(false);
     setPanel(kind);
   };
@@ -454,7 +474,7 @@ export default function ContractsScreen() {
         .map((l) => l.accountId),
     );
     setExpandedAccountId(undefined);
-    setPanelTouched(false);
+    setTouched(NO_FIELDS_TOUCHED);
     setRecalculated(false);
     setPanel(
       selectedContract.contractType === CONTRACT_TYPE.ProjectRights ? "rights" : "contract",
@@ -605,11 +625,11 @@ export default function ContractsScreen() {
   }
 
   /*
-   * DIVERGENCE (D58): while the first read is in flight the canvas screen showed its own
-   * `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen`), and this app an inline
-   * "Loading contracts…" spinner. Both are gone: the screen chrome (the command bar, every
-   * write command greyed out by `writeCommandsDisabled`) renders with an EMPTY body — no
-   * spinner, and no "No contracts yet" either, because nothing is known yet.
+   * While the first read is in flight the canvas screen showed its own
+   * `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen`), and this app shows an inline
+   * "Loading contracts…" spinner in the body (D60, restoring what D58 had removed), with the
+   * command bar's write commands greyed out by `writeCommandsDisabled` and no "No contracts
+   * yet", because nothing is known yet.
    */
   // A failed read must not look like a project with no contracts (same state as Capex / Opex).
   if (!loading && (contractsQuery.error || accountsQuery.error)) {
@@ -623,8 +643,10 @@ export default function ContractsScreen() {
 
   const currency = currencyCode(project ?? {});
   const errors = contractErrors(form, tree, locale);
-  const errorFor = (field: string) =>
-    (panelTouched ? errors.find((e) => e.field === field)?.message : undefined);
+  /** The error to SHOW under a field: only once the user has touched that field (D61, CA-23). */
+  const errorFor = (field: string) => visibleFieldError(errors, touched, field);
+  /** Whether a field is invalid, touched or not: the Save gate must not depend on what is shown. */
+  const invalid = (field: string) => errors.some((e) => e.field === field);
   const targetErrors = paymentTargetErrors({
     form: targetForm,
     projectStart: project?.startDate,
@@ -632,8 +654,7 @@ export default function ContractsScreen() {
     ...(selectedTargetId ? { editingTargetId: selectedTargetId } : {}),
     locale,
   });
-  const targetErrorFor = (field: string) =>
-    (panelTouched ? targetErrors.find((e) => e.field === field)?.message : undefined);
+  const targetErrorFor = (field: string) => visibleFieldError(targetErrors, touched, field);
 
   /* ── render ─────────────────────────────────────────────────────────── */
 
@@ -760,7 +781,7 @@ export default function ContractsScreen() {
                         setSelectedContractId(contract.id);
                         setSelectedTargetId(undefined);
                         setTargetForm(EMPTY_TARGET_FORM);
-                        setPanelTouched(false);
+                        setTouched(NO_FIELDS_TOUCHED);
                         setPanel("target");
                       }}
                       onEditTarget={(t) => {
@@ -773,7 +794,7 @@ export default function ContractsScreen() {
                             t.totalCostsContract === undefined ? "" : String(t.totalCostsContract),
                           note: t.note ?? "",
                         });
-                        setPanelTouched(false);
+                        setTouched(NO_FIELDS_TOUCHED);
                         setPanel("target");
                       }}
                       onDeleteTarget={(t) => {
@@ -818,6 +839,7 @@ export default function ContractsScreen() {
               value={form.description}
               error={errorFor("description")}
               onChange={(v) => updateForm({ description: v })}
+              onBlur={() => touch("description")}
             />
 
             <div className="canvas-field" data-invalid={errorFor("closingDate") ? true : undefined}>
@@ -843,8 +865,9 @@ export default function ContractsScreen() {
               planValue={form.costsUntilClosingPlan}
               actualValue={form.costsUntilClosingActual}
               actualError={errorFor("costsUntilClosingActual")}
-              onType={(t) => updateForm({ costsUntilClosingType: t }, true)}
+              onType={(t) => updateForm({ costsUntilClosingType: t }, true, [])}
               onActual={(v) => updateForm({ costsUntilClosingActual: v }, true)}
+              onActualBlur={() => touch("costsUntilClosingActual")}
             />
 
             <ClosingHalf
@@ -856,8 +879,9 @@ export default function ContractsScreen() {
               planValue={form.costsAfterClosingPlan}
               actualValue={form.costsAfterClosingActual}
               actualError={errorFor("costsAfterClosingActual")}
-              onType={(t) => updateForm({ costsAfterClosingType: t }, true)}
+              onType={(t) => updateForm({ costsAfterClosingType: t }, true, [])}
               onActual={(v) => updateForm({ costsAfterClosingActual: v }, true)}
+              onActualBlur={() => touch("costsAfterClosingActual")}
             />
 
             <Choices
@@ -868,7 +892,7 @@ export default function ContractsScreen() {
               onChange={(v) => updateForm({
                 totalCostsType: v === MSG.calculated
                   ? TOTAL_COSTS_TYPE.Calculated : TOTAL_COSTS_TYPE.Overwrite,
-              }, true)}
+              }, true, [])}
             />
             {form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? (
               // `txt_…_TotalCosts_Calculated` is what Recalculate writes, so it is read-only.
@@ -882,6 +906,7 @@ export default function ContractsScreen() {
                 value={form.totalCostsOverwrite}
                 error={errorFor("totalCostsOverwrite")}
                 onChange={(v) => updateForm({ totalCostsOverwrite: v }, true)}
+                onBlur={() => touch("totalCostsOverwrite")}
               />
             )}
 
@@ -904,7 +929,7 @@ export default function ContractsScreen() {
                 marginPercentage: "",
                 marginFixedValue: "",
                 isMarginStandardAssumption: false,
-              }, true)}
+              }, true, [])}
               action={
                 <button
                   type="button"
@@ -931,7 +956,7 @@ export default function ContractsScreen() {
                     marginPercentage: "",
                     marginFixedValue: "",
                     isMarginStandardAssumption: false,
-                  }, true)}
+                  }, true, [])}
                 />
                 {form.marginType === MARGIN_TYPE.Percentage ? (
                   <CostField
@@ -942,7 +967,9 @@ export default function ContractsScreen() {
                     error={errorFor("marginPercentage")}
                     onChange={(v) => updateForm(
                       { marginPercentage: v, isMarginStandardAssumption: false }, true,
+                      ["marginPercentage"],
                     )}
+                    onBlur={() => touch("marginPercentage")}
                   />
                 ) : (
                   <CostField
@@ -953,7 +980,9 @@ export default function ContractsScreen() {
                     error={errorFor("marginFixedValue")}
                     onChange={(v) => updateForm(
                       { marginFixedValue: v, isMarginStandardAssumption: false }, true,
+                      ["marginFixedValue"],
                     )}
+                    onBlur={() => touch("marginFixedValue")}
                   />
                 )}
               </>
@@ -1009,9 +1038,11 @@ export default function ContractsScreen() {
         footer={<PanelButtons
           onSave={() => { void saveContractNow(); }}
           onCancel={() => setPanel("none")}
-          disabled={busy || !form.description.trim() || Boolean(errorFor("description"))
+          // `invalid`, not `errorFor`: whether Save is allowed must not depend on which errors the
+          // user has touched into view (D61).
+          disabled={busy || !form.description.trim() || invalid("description")
             || !form.closingDate
-            || !form.totalCostsOverwrite.trim() || Boolean(errorFor("totalCostsOverwrite"))} />}
+            || !form.totalCostsOverwrite.trim() || invalid("totalCostsOverwrite")} />}
       >
         <CostField
           label={MSG.description}
@@ -1020,6 +1051,7 @@ export default function ContractsScreen() {
           value={form.description}
           error={errorFor("description")}
           onChange={(v) => updateForm({ description: v })}
+          onBlur={() => touch("description")}
         />
         <div className="canvas-field">
           <span data-required="true">{MSG.contractClosingDate}</span>
@@ -1040,7 +1072,8 @@ export default function ContractsScreen() {
           onChange={(v) => updateForm({
             totalCostsOverwrite: v,
             totalCostsType: TOTAL_COSTS_TYPE.Overwrite,
-          })}
+          }, false, ["totalCostsOverwrite"])}
+          onBlur={() => touch("totalCostsOverwrite")}
         />
       </FormPanel>
 
@@ -1068,6 +1101,7 @@ export default function ContractsScreen() {
           value={targetForm.description}
           error={targetErrorFor("description")}
           onChange={(v) => updateTargetForm({ description: v })}
+          onBlur={() => touch("description")}
         />
         {/*
           `vsb_paymentdate` is an nvarchar column and the canvas control is a TextInput with
@@ -1082,6 +1116,7 @@ export default function ContractsScreen() {
           value={targetForm.paymentDate}
           error={targetErrorFor("paymentDate")}
           onChange={(v) => updateTargetForm({ paymentDate: v })}
+          onBlur={() => touch("paymentDate")}
         />
         <CostField
           label={MSG.totalCostsContractPercent}
@@ -1090,6 +1125,7 @@ export default function ContractsScreen() {
           value={targetForm.totalCostsContract}
           error={targetErrorFor("totalCostsContract")}
           onChange={(v) => updateTargetForm({ totalCostsContract: v })}
+          onBlur={() => touch("totalCostsContract")}
         />
         {/*
           The "N % of this contract is still unallocated" line that used to sit here was ours.
@@ -1110,6 +1146,7 @@ export default function ContractsScreen() {
             maxLength={NOTE_MAX_LENGTH}
             aria-label={MSG.notes}
             onChange={(e) => updateTargetForm({ note: e.target.value })}
+            onBlur={() => touch("note")}
             data-testid="target-note"
           />
         </CostField>
@@ -1199,6 +1236,8 @@ function ClosingHalf(props: {
   actualError?: string;
   onType: (t: ContractForm["costsUntilClosingType"]) => void;
   onActual: (v: string) => void;
+  /** The Actual box lost focus (the "touched" signal, D61). */
+  onActualBlur?: () => void;
 }) {
   const isPlan = props.type === CLOSING_DATE_TYPE.Plan;
   return (
@@ -1224,6 +1263,7 @@ function ClosingHalf(props: {
           value={props.actualValue}
           error={props.actualError}
           onChange={props.onActual}
+          onBlur={props.onActualBlur}
         />
       )}
     </>
@@ -1272,7 +1312,9 @@ function ParentCheckbox({
       disabled={state === "locked"}
       onClick={onToggle}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {/* The rendered size comes from `--devco-check` (canvas.css, CA-22); 19.64 = 18 × 24/22 is only
+          the fallback for a page without the stylesheet. */}
+      <svg width="19.64" height="19.64" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <rect
           x="1" y="1" width="22" height="22" rx="2" ry="2"
           fill={fill}

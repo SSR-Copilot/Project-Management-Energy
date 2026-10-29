@@ -424,7 +424,7 @@
  * `gal_Contracts_RightPanel_NewEdit_DevCoCosts` — level-1 cards, `TemplateSize: =32`. The
  * whole list scrolls; the canvas grows the gallery instead, which a panel cannot do.
  */
-.canvas-devco { background: #fff; }
+.canvas-devco { background: #fff; --devco-check: 18px; }
 .canvas-devco-card { background: #fff; }
 /* `con_…_DevCoCosts_CardHeader` — `Height: =32`, description at `X: =20`. */
 .canvas-devco-head { position: relative; display: flex; align-items: center; height: 32px; padding-left: 20px; }
@@ -437,6 +437,13 @@
    so the checkbox column clears the 20 px chevron and its 6 px gutter. */
 .canvas-devco-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; }
 .canvas-devco-check:disabled { cursor: default; }
+/* ONE box size for BOTH checkbox levels (CA-22): the parent in the main gallery is a drawn SVG, the
+   leaf in the nested gallery a native input, and each used to carry its own size (the SVG's box came
+   out about 18.3 px, the input 16), so they looked big and small side by side. Both read
+   `--devco-check` (set on `.canvas-devco`). The SVG draws its box 22 of its 24 units wide, so its
+   element is `24/22` of the box; the leaf's right margin keeps both column centres 56 px from the
+   row's right edge, where the header's chevron places the parent's. */
+.canvas-devco-check svg { display: block; width: calc(var(--devco-check) * 24 / 22); height: calc(var(--devco-check) * 24 / 22); }
 /* `ico_…_DevCoCosts_Down` / `_Up` — 20 x 18 at `X: =Parent.Width-Self.Width-6`. The 14 on
    its left is what puts the checkbox before it at `Parent.Width-32-40`. */
 .canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin: 0 6px 0 14px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
@@ -451,7 +458,7 @@
 .canvas-devco-row { display: flex; align-items: center; height: 30px; padding-left: 28px; }
 .canvas-devco-name { flex: 1; min-width: 0; font-size: 14px; color: #242424; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .canvas-devco-total { flex-shrink: 0; width: 120px; margin-right: 22px; text-align: right; font-size: 14px; color: #242424; font-variant-numeric: tabular-nums; }
-.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; margin: 0 48px 0 8px; accent-color: #0078d4; }
+.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: var(--devco-check); height: var(--devco-check); margin: 0 calc(56px - var(--devco-check) / 2) 0 8px; accent-color: #0078d4; }
 /* `chb_…_CostssRow.FontColor: =If(ThisItem.Used, gblAppColors.Warning, Blank())` — a leaf
    another contract has claimed reads as taken, not as merely unavailable. */
 .canvas-devco-row[data-used="true"] input[type="checkbox"] { accent-color: #ee940c; opacity: 1; }

@@ -5654,3 +5654,61 @@ change shows an inline spinner (the canvas used `spn_LoadingSpinnerCost`).
 
 Confirm that the blocking spinner during writes, and the inline spinner during loads, are what is
 wanted on every Cost screen. D58 is no longer the intended behaviour for these.
+
+## D61 · Contract panel: errors only for fields the user has touched (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `fix/contract-devco-checkbox-validation`.** Not
+deployed. Not product-approved. Records bugs CA-22 (checkbox sizes) and CA-23 (error display).
+
+### 1. What the user asked for
+
+In the Cost module's Contracts screen, the Add/Edit Contract pop-up:
+- the DevCo Costs checkboxes should be one size in the main and the nested gallery;
+- validation messages should show only for fields the user has touched, tracking a dirty state, so
+  nothing shows for a field nobody has used, including a required field that is still empty.
+
+### 2. The canvas, and the divergence
+
+The canvas computes each `*_ErrorMessage` from its own control's value, with no per-field memory,
+and for a blank required field it shows nothing at all (`Visible: =Not(IsBlank(…))`). D-4 already
+diverged from that: a blank required field reports "Input must not be blank". The code app then
+gated every error behind one flag for the whole panel, so the first edit anywhere showed every
+error at once.
+
+**DIVERGENCE (rule 8).** Each field now has its own touched state. This is a deliberate UX change
+beyond the canvas, at the user's request. It is marked in `rules.ts` (`visibleFieldError`), and the
+previous behaviour is kept as `visibleFieldErrorPanelWide`, so the decision is reversible and both
+halves are tested.
+
+### 3. What changed
+
+- **Touched fields.** A field is touched when the user edits it, or visits it and leaves it
+  (`onBlur`, a new optional prop of the shared `CostField`). Not touched by the app's own actions: a
+  recalculation, a radio choice (Plan/Actual, Calculated/Overwrite, Margin Yes/No and its type), the
+  Reset-to-standard icon, or the margin seed from the standard assumption.
+- **DevCo accounts.** Ticking or unticking an account touches the account field, so unticking the
+  last one shows "Input must not be blank" under DevCo Costs; a fresh panel shows nothing.
+- **Reset.** Opening any panel (new contract, edit, add period, edit period) starts with nothing touched.
+- **Scope.** The Development/Construction panel, the Project Rights panel, and the Add/Edit Period
+  panel, which shared the flag.
+- **Unchanged.** `contractErrors`, `paymentTargetErrors` and the Save gates. Save is disabled
+  exactly when it was. The Rights panel's Save now reads "is the field invalid", not "is its error
+  shown", so what is displayed never decides whether Save is allowed.
+- **Checkboxes (CA-22).** One variable, `--devco-check` (18 px), sizes both levels; the column
+  centres stay 56 px from the row's right edge. The glyphs are unchanged.
+
+### 4. Open for the product owner
+
+A consequence of showing less: Save can be disabled while the field that blocks it shows no message,
+for example a new contract with a description and accounts but an untouched closing date. Options:
+1. Leave it (the request as stated). A user finds the field by its required marker.
+2. A tooltip on the disabled Save naming what is missing (new text, no canvas equivalent).
+3. Clicking a disabled Save reveals every error at once and focuses the first invalid field.
+
+The first is implemented. Say if 2 or 3 is wanted.
+
+### 5. Tests
+
+UT-CONTOUCH-001…007 (rules, with the old behaviour as a twin), UT-CONPANEL-001…010 (the screen),
+UT-CONCHECK-001…005 (the stylesheet sizes). Every mutation of the behaviour above fails a test; see
+CA-22 and CA-23.
