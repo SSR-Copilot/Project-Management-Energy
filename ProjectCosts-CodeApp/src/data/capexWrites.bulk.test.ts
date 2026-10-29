@@ -143,6 +143,16 @@ vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   },
 }));
 
+/** For UT-CAPEXLOG-012: the hook, with its query client and session mocked (it is never rendered). */
+const hookClient = vi.hoisted(() => ({ invalidateQueries: vi.fn(async (): Promise<void> => undefined) }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: (options: unknown) => options,
+  useMutation: (options: unknown) => options,
+  useQueryClient: () => ({ ...hookClient, setQueryData: vi.fn(), cancelQueries: vi.fn(async () => undefined) }),
+}));
+vi.mock("@/app/SessionContext", () => ({ useSession: () => ({ projectId: "p-1", project: null }) }));
+vi.mock("@/components/useNotify", () => ({ useNotify: () => ({ error: vi.fn() }) }));
+
 const {
   deleteCostLineBulk, deleteCostLineLegacy, panelBusyLogLine, panelSaveLogLine, saveCostLine,
   saveCostLineBulk, saveCostLineLegacy, LEGACY_SAVE_OVERRIDE_KEY,
@@ -209,7 +219,17 @@ beforeEach(() => {
   resetBulkWriteAvailability();
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  // The readable groups (D58): kept out of the test output, and inspected by UT-CAPEXLOG-*.
+  vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
+  vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
+  vi.spyOn(console, "table").mockImplementation(() => undefined);
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
+
+/** The panel's one-line summaries (`CAPEX panel …`), in the order printed. */
+const summaries = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]))
+  .filter((l) => l.startsWith("CAPEX panel "));
+const lastSummary = () => summaries().at(-1) ?? "";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -365,14 +385,15 @@ describe("saveCostLineBulk", () => {
   });
 
   it("UT-CAPEXBULK-012 prints one save line, also on failure", async () => {
-    const info = vi.mocked(console.info);
     seed([cost("c1", 1, 100)]);
     await saveCostLineBulk(args([cost("c1", 1, 100)], months(1, () => 5)), true);
-    expect(info.mock.calls.at(-1)?.[0]).toMatch(/^CAPEX panel save \(bulk\): [\d,]+ ms, 2 requests; /);
+    expect(summaries()).toHaveLength(1);
+    expect(lastSummary()).toMatch(/^CAPEX panel save \(bulk\): [\d,]+ ms, 2 requests; /);
 
     refuse.add("contract");
     await expect(saveCostLineBulk(args([cost("c1", 1, 100)], months(1, () => 6)), true)).rejects.toThrow();
-    expect(info.mock.calls.at(-1)?.[0]).toMatch(/^CAPEX panel save \(bulk\) FAILED after /);
+    expect(summaries()).toHaveLength(2);
+    expect(lastSummary()).toMatch(/^CAPEX panel save \(bulk\) FAILED after /);
   });
 });
 
@@ -544,14 +565,206 @@ describe("deleteCostLineBulk", () => {
 describe("the console lines", () => {
   it("UT-CAPEXBULK-050 the save line", () => {
     expect(panelSaveLogLine({
-      what: "CAPEX panel save", path: "bulk", failed: false, ms: 1234.4, requests: 3,
-      steps: ["contract update 1 req 410 ms", "costs 1 req 980 ms (update 1 req bulk [980 ms])"],
-    })).toBe("CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; costs 1 req 980 ms (update 1 req bulk [980 ms])");
-    expect(panelSaveLogLine({ what: "CAPEX panel delete", path: "per-row", failed: true, ms: 50, requests: 1, steps: [] }))
-      .toBe("CAPEX panel delete (per-row) FAILED after 50 ms, 1 requests");
+      what: "CAPEX panel save", path: "bulk", failed: false, ms: 1312.4, requests: 2,
+      steps: ["contract update 1 req 1,301 ms", "costs 1 req 1,204 ms (update 1 req bulk [1,204 ms])"],
+      gate: "gate peak 2/16, req avg 1,253 ms max 1,301 ms",
+    })).toBe("CAPEX panel save (bulk): 1,312 ms, 2 requests; contract update 1 req 1,301 ms; "
+      + "costs 1 req 1,204 ms (update 1 req bulk [1,204 ms]); gate peak 2/16, req avg 1,253 ms max 1,301 ms");
+    // D58: "1 request" in the singular; the failure line ends with the readable error.
+    expect(panelSaveLogLine({
+      what: "CAPEX panel delete", path: "per-row", failed: true, ms: 50, requests: 1, steps: [], error: "x refused",
+    })).toBe("CAPEX panel delete (per-row) FAILED after 50 ms, 1 request; error: x refused");
   });
 
   it("UT-CAPEXBULK-051 the busy line", () => {
     expect(panelBusyLogLine(1200, 800.6)).toBe("CAPEX panel save busy: 2,001 ms (writes 1,200 ms, refetch 801 ms)");
+  });
+});
+
+/* ═════════════════════════════════════════════════ readable log (D58) ══ */
+
+describe("the readable panel log (D58)", () => {
+  const groupTitles = () => vi.mocked(console.groupCollapsed).mock.calls.map((c) => String(c[0]));
+  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]));
+  const twelve = () => months(12, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
+
+  it("UT-CAPEXLOG-001 steps are listed in START order, though the months answered before the contract", async () => {
+    const stored = twelve();
+    seed(stored);
+    let release: () => void = () => undefined;
+    contractHold = new Promise<void>((resolve) => { release = resolve; });
+    const save = saveCostLineBulk(args(stored, months(12, () => 150)), true);
+    // `releaseContract` (fired when the bulk request starts) is replaced, so the contract waits.
+    releaseContract = () => undefined;
+    for (let i = 0; i < 60 && !events.includes("end:bulk:update:12"); i += 1) await Promise.resolve();
+    // Let the costs step settle and be recorded before the contract answers.
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    await save;
+    expect(at("end:bulk:update:12")).toBeLessThan(at("end:contract:update"));
+    expect(lastSummary()).toMatch(
+      /^CAPEX panel save \(bulk\): [\d,]+ ms, 2 requests; contract update 1 req [\d,]+ ms; costs 1 req [\d,]+ ms \(update 1 req bulk \[[\d,]+ ms\]\); cost deletes 0 req [\d,]+ ms; gate peak \d+\/16, /,
+    );
+  });
+
+  it("UT-CAPEXLOG-002 singular request, thousands separators on every ms", () => {
+    expect(panelSaveLogLine({ what: "CAPEX panel save", path: "bulk", failed: false, ms: 12_345.6, requests: 1, steps: [] }))
+      .toBe("CAPEX panel save (bulk): 12,346 ms, 1 request");
+    expect(panelBusyLogLine(10_000, 2_500)).toBe("CAPEX panel save busy: 12,500 ms (writes 10,000 ms, refetch 2,500 ms)");
+  });
+
+  it("UT-CAPEXLOG-003 a failed step's requests are counted: a refused UpdateMultiple is still a request", async () => {
+    const stored = months(3, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
+    seed(stored);
+    refuse.add("bulk:update");
+    await expect(saveCostLineBulk(args(stored, months(3, () => 5)), true)).rejects.toThrow(/update refused/);
+    expect(lastSummary()).toMatch(
+      /^CAPEX panel save \(bulk\) FAILED after [\d,]+ ms, 2 requests; contract update 1 req [\d,]+ ms; costs FAILED [\d,]+ ms \(update failed bulk \[[\d,]+ ms\]\); gate peak /,
+    );
+  });
+
+  it("UT-CAPEXLOG-004 the failure line ends with the readable error, GUIDs replaced", async () => {
+    const guid = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    const payments = [cost(guid, 1, 1)];
+    seed(payments);
+    refuse.add(`delete:${guid}`);
+    await expect(deleteCostLineBulk(line(payments))).rejects.toThrow();
+    const summary = lastSummary();
+    expect(summary).toMatch(/^CAPEX panel delete \(bulk\) FAILED after [\d,]+ ms, 2 requests; .*; error: .*<id>/);
+    expect(summary).not.toContain(guid);
+    // The raw error is kept, for support, in its own group (D58 decision 3).
+    expect(groupTitles()).toEqual(["Failure", "Steps (start order)", "Requests", "Raw error (for support)"]);
+    expect(vi.mocked(console.error)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.error).mock.calls[0]?.[0]).toBeInstanceOf(Error);
+    expect(infoLines().filter((l) => !l.startsWith("CAPEX panel ")).join("\n")).not.toContain(guid);
+  });
+
+  it("UT-CAPEXLOG-005 the gate tail is this save's own; another writer only raises the shared peak", async () => {
+    const { gatedWrite } = await import("./bulkSend");
+    const stored = twelve();
+    seed(stored);
+    let releaseOther: () => void = () => undefined;
+    const other = gatedWrite(() => new Promise<void>((resolve) => { releaseOther = resolve; }));
+    contractHold = new Promise<void>((resolve) => { releaseContract = resolve; });
+    await saveCostLineBulk(args(stored, months(12, () => 150)), true);
+    releaseOther();
+    await other;
+    const summary = lastSummary();
+    expect(summary).toMatch(/, 2 requests; /);
+    expect(summary).toMatch(/; gate peak 2\/16, req avg [\d,]+ ms max [\d,]+ ms, shared gate peak 3\/16$/);
+  });
+
+  it("UT-CAPEXLOG-006 a Delete line counts every request and carries no gate tail", async () => {
+    const payments = [cost("c1", 1, 1), cost("c2", 2, 1), cost("c3", 3, 1)];
+    seed(payments);
+    comments.set("k1", { contract: CONTRACT, type: COMMENT_TYPE.general });
+    await deleteCostLineBulk(line(payments));
+    const summary = lastSummary();
+    expect(summary).toMatch(
+      /^CAPEX panel delete \(bulk\): [\d,]+ ms, 6 requests; comments read 1 req [\d,]+ ms; comment deletes 1 req [\d,]+ ms; cost deletes 3 req [\d,]+ ms; contract delete 1 req [\d,]+ ms$/,
+    );
+    expect(summary).not.toContain("gate peak");
+    expect(groupTitles()).toEqual(["Steps (start order)", "Requests"]);
+    expect(infoLines()).toContain("Requests sent: 6 (bulk); none pass the shared write gate");
+  });
+
+  it("UT-CAPEXLOG-007 the delete busy line", () => {
+    expect(panelBusyLogLine(1120, 420, "delete")).toBe("CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)");
+  });
+
+  it("UT-CAPEXLOG-008 the per-row path: its own line, attempts counted, no gate tail", async () => {
+    const stored = [cost("c1", 1, 100), cost("c2", 2, 100), cost("c3", 3, 100)];
+    seed(stored);
+    await saveCostLineLegacy(args(stored, months(2, () => 5)));
+    expect(lastSummary()).toMatch(
+      /^CAPEX panel save \(per-row\): [\d,]+ ms, 4 requests; contract update 1 req [\d,]+ ms; costs 2 req [\d,]+ ms \(create 0, update 2\); cost deletes 1 req [\d,]+ ms$/,
+    );
+    refuse.add("cost:c2");
+    seed(stored);
+    await expect(saveCostLineLegacy(args(stored, months(3, () => 6)))).rejects.toThrow(/cost c2 refused/);
+    // contract update + the refused c2 PATCH after c1's: 3 requests; deletes never sent.
+    expect(lastSummary()).toMatch(/^CAPEX panel save \(per-row\) FAILED after [\d,]+ ms, 3 requests; .*costs FAILED .*; error: .*cost c2 refused/);
+    // The innermost cause is the SDK's plain `{ message, status }` object: read by its message.
+    expect(lastSummary()).toMatch(/; error: Dataverse error \(HTTP 400\): cost c2 refused$/);
+  });
+
+  it("UT-CAPEXLOG-009 success prints Steps and Requests groups; a failure lists what was not sent", async () => {
+    const stored = months(3, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
+    seed(stored);
+    await saveCostLineBulk(args(stored, months(2, () => 5)), true);
+    expect(groupTitles()).toEqual(["Steps (start order)", "Requests"]);
+    expect(infoLines()).toContain("Path: bulk");
+    expect(vi.mocked(console.table).mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ Step: "contract update", Requests: 1, Result: "ok" }),
+      expect.objectContaining({ Step: "costs", Requests: 1, How: expect.stringMatching(/^update 2 rows: 1 request, bulk \[\d+ ms\]$/), Result: "ok" }),
+      expect.objectContaining({ Step: "cost deletes", Requests: 1, How: "1 row, 4 at a time", Result: "ok" }),
+    ]);
+
+    vi.mocked(console.groupCollapsed).mockClear();
+    vi.mocked(console.info).mockClear();
+    seed(stored);
+    refuse.add("bulk:update");
+    await expect(saveCostLineBulk(args(stored, months(2, () => 6)), true)).rejects.toThrow();
+    expect(groupTitles()).toEqual(["Failure", "Steps (start order)", "Requests", "Raw error (for support)"]);
+    expect(infoLines()).toEqual(expect.arrayContaining([
+      "Steps completed: contract update",
+      "Steps failed: costs",
+      "Not sent: cost deletes",
+      "Requests sent before it stopped: 2",
+    ]));
+  });
+
+  it("UT-CAPEXLOG-010 the request count per case, as the header prints it", async () => {
+    // New contract, 12 months: contract create + 1 CreateMultiple.
+    await saveCostLineBulk({
+      ...args([], months(12, () => 100)), line: line([], { id: "panel-minted" }), isNew: true, storedPayments: [],
+    }, true);
+    expect(lastSummary()).toMatch(/, 2 requests; contract create 1 req/);
+    // Edit of 12 months: contract update ∥ 1 UpdateMultiple.
+    seed(twelve());
+    await saveCostLineBulk(args(twelve(), months(12, () => 150)), true);
+    expect(lastSummary()).toMatch(/, 2 requests; /);
+    // Shrink 12 → 6: + 6 deletes.
+    costs = new Map();
+    seed(twelve());
+    await saveCostLineBulk(args(twelve(), months(6, () => 200)), true);
+    expect(lastSummary()).toMatch(/, 8 requests; .*cost deletes 6 req /);
+    // Relink reset, 2 paid months, 1 payment-date comment: contract, then months ∥ (1 read + 1 delete).
+    costs = new Map();
+    const relink = [cost("c1", 1, 100, true), cost("c2", 2, 100, true)];
+    seed(relink);
+    comments.set("k-payment", { contract: CONTRACT, type: COMMENT_TYPE.paymentDate });
+    await saveCostLineBulk({ ...args(relink, months(2, () => 100)), resetPaidAndPaymentDateComments: true }, true);
+    expect(lastSummary()).toMatch(/, 4 requests; contract update 1 req [\d,]+ ms; .*payment-date comments 2 req [\d,]+ ms \(1 read, 1 deleted\)/);
+    expect(lastSummary()).toMatch(/costs 1 req [\d,]+ ms \(update 1 req bulk \[[\d,]+ ms\], 2 paid reset\)/);
+    // Delete with 1 comment and 3 cost rows: 1 read + 1 + 3 + 1 (UT-CAPEXLOG-006).
+  });
+
+  it("UT-CAPEXLOG-012 the hook prints the delete busy line only after the awaited refetch", async () => {
+    const { useCapexWrites } = await import("@/features/cost/costing/useCostBook");
+    const pending: (() => void)[] = [];
+    const refetched = () => { for (const r of pending) r(); };
+    hookClient.invalidateQueries.mockImplementation(() => new Promise<void>((r) => { pending.push(r); }));
+    const { deleteLine } = useCapexWrites() as unknown as {
+      deleteLine: {
+        onMutate: () => { startedAt: number };
+        onSuccess: (d: unknown, l: unknown, c: { startedAt: number }) => Promise<void>;
+      };
+    };
+    const context = deleteLine.onMutate();
+    const done = deleteLine.onSuccess(undefined, undefined, context);
+    await Promise.resolve();
+    expect(infoLines().some((l) => l.startsWith("CAPEX panel delete busy:"))).toBe(false);
+    refetched();
+    await done;
+    expect(infoLines().at(-1)).toMatch(/^CAPEX panel delete busy: [\d,]+ ms \(deletes [\d,]+ ms, refetch [\d,]+ ms\)$/);
+  });
+
+  it("UT-CAPEXLOG-011 an UpdateMultiple 501: the refused request and each PATCH are counted", async () => {
+    const stored = months(3, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
+    seed(stored);
+    notImplemented.add("update");
+    await saveCostLineBulk(args(stored, months(3, () => 7)), true);
+    expect(lastSummary()).toMatch(/, 5 requests; contract update 1 req [\d,]+ ms; costs 4 req [\d,]+ ms \(update 4 req per-row after 501\); /);
   });
 });

@@ -23,7 +23,8 @@ import { serverEnforcedProvider } from "@/platform/privileges";
 import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clusters";
 import { CATEGORY_LABELS, resolveCategory } from "@/features/cost/capex-costs/rules";
 import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/useCostBook";
-import { toSaveFailure } from "@/data/addCostSheet";
+import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data/addCostSheet";
+import { emitSaveLog } from "@/data/saveLog";
 import { rootCauseDetail } from "@/platform/errors";
 import {
   ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
@@ -230,15 +231,11 @@ export default function AddCostsFromTableScreen() {
       canvasParityDeletion: CANVAS_PARITY_DELETION,
       now: () => performance.now(),
     });
-    const t = prepared.timings;
-    const ms = (n: number) => n.toFixed(1);
-    // One line, so a slow Save can be pinned on the client side or the network side at a glance.
-    console.info(
-      `Add Cost from Table prepare: ${ms(t.total)} ms (round-trip check ${ms(t.roundTripCheck)}, `
-      + `align ${ms(t.align)}, diff ${ms(t.diff)}, deletions ${ms(t.deletions)}, `
-      + `orphans ${ms(t.orphans)}; last edit's grid read-back ${ms(readBackMs.current)}, `
-      + `validation ${ms(validationMs.current)}; ${currentRows.length} rows)`,
-    );
+    // One line (plus a collapsed group, D58), so a slow Save can be pinned on the client side or
+    // the network side at a glance.
+    const readBack = readBackMs.current;
+    const validation = validationMs.current;
+    emitSaveLog(() => prepareLogReport(prepared.timings, readBack, validation, currentRows.length));
     if (prepared.kind === "lost") {
       setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
       return;
@@ -277,9 +274,12 @@ export default function AddCostsFromTableScreen() {
       // deliberately NOT cleared here: a retry must reuse the ids this attempt sent. Part of
       // this attempt may have landed, so the retry plans against a fresh read, not the snapshot.
       for (const id of sentIdentities) sentInFailedAttempts.current.add(id);
-      setSaveError(saveFailureText(toSaveFailure(error)));
-      // The full chain (phase → chunk → Dataverse fault) for support; the screen shows one line.
-      console.error("Add Cost from Table save failed", error);
+      const failure = toSaveFailure(error);
+      const userText = saveFailureText(failure);
+      setSaveError(userText);
+      // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
+      // then the raw error object in its own collapsed group (D58); the screen shows one line.
+      emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
     }
   };
 

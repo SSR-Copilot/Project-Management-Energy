@@ -11,8 +11,9 @@ import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useNotify, type Notify } from "@/components/useNotify";
 import {
-  backgroundDeleteFailureTexts, type DeferredCounts, type SaveAddCostSheetResult,
+  backgroundDeleteFailureTexts, bookPatchFailureReport, type DeferredCounts, type SaveAddCostSheetResult,
 } from "@/data/addCostSheet";
+import { emitSaveLog } from "@/data/saveLog";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
 import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
@@ -450,8 +451,16 @@ export function useCapexWrites(category?: number) {
   });
 
   const deleteLine = useMutation({
+    // The click time, for the delete busy line (D58); the refetch is awaited exactly as before.
+    onMutate: () => ({ startedAt: performance.now() }),
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
-    onSuccess: invalidate,
+    onSuccess: async (_data, _line, context) => {
+      const deletesDone = performance.now();
+      await invalidate();
+      console.info(panelBusyLogLine(
+        deletesDone - (context?.startedAt ?? deletesDone), performance.now() - deletesDone, "delete",
+      ));
+    },
   });
 
   return { setPaid, saveLine, deleteLine };
@@ -562,8 +571,8 @@ export function useSaveAddCostSheet(category: number) {
           client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
         } catch (error) {
           // The Save itself succeeded: a patch that throws must not turn it into a failure. The
-          // refetch below still brings the saved state.
-          console.error("Add Cost from Table: patching the DEVEX/CAPEX book failed", error);
+          // refetch below still brings the saved state. Readable line, then the raw error (D58).
+          emitSaveLog(() => bookPatchFailureReport(error));
         }
       }
       void invalidate();
