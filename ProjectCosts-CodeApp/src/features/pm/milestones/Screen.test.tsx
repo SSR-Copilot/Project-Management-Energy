@@ -35,8 +35,8 @@ const state = vi.hoisted(() => ({
   project: null as unknown,
   error: undefined as unknown,
   individualVolumes: 0,
-  revenueRows: 1,
   run: vi.fn(async (_job: unknown) => [] as string[]),
+  loadRevenueSeed: vi.fn(async () => ({ draft: null as unknown, fabricFailed: false })),
   loadRepricing: vi.fn(async () => ({
     generators: [{ id: "g-1", count: 2, wtgPrices: [10, 9, 8, 7, 6], additionalFoundationCost: 1,
       foundationCostIncluded: false, generatorsCost: 0 }],
@@ -54,10 +54,11 @@ vi.mock("./hooks", () => ({
   useMilestoneLabels: () => ok(["Feasibility Studies", "Pre-Permitting", "Permitting", "Pre-Construction", "Construction", "Operation"]),
   useMilestoneAssumption: () => ok(null),
   useIndividualVolumeContractCount: () => ok(state.individualVolumes),
-  useRevenueRowCount: () => ok(state.revenueRows),
+
   useRecalculationRunning: () => ok(false),
   useMilestoneWrites: () => ({ run: state.run, progress: null, error: null, success: null, clear: () => {} }),
   loadRepricing: state.loadRepricing,
+  loadRevenueSeed: state.loadRevenueSeed,
 }));
 
 import MilestonesScreen from "./Screen";
@@ -73,8 +74,9 @@ function renderScreen(project: MilestoneProject = PROJECT) {
 
 afterEach(() => {
   cleanup();
-  state.run.mockClear(); state.loadRepricing.mockClear();
-  state.error = undefined; state.individualVolumes = 0; state.revenueRows = 1;
+  state.run.mockClear(); state.loadRepricing.mockClear(); state.loadRevenueSeed.mockClear();
+  state.loadRevenueSeed.mockResolvedValue({ draft: null, fabricFailed: false });
+  state.error = undefined; state.individualVolumes = 0;
 });
 
 const SAVE = "pcf_btn_Milestones_DisplayProject_Body_Buttons_Save";
@@ -200,10 +202,27 @@ describe("UT-MSTONE Screen (connected, D26)", () => {
     expect(screen.getByText(MILESTONES_SCREEN_TEXT.loadFailedTitle)).toBeTruthy();
   });
 
-  it("UT-MSTONE-909 the revenue-seed notice shows for a Draft project with no revenue rows", () => {
-    state.revenueRows = 0;
-    renderScreen({ ...PROJECT, clusterStateName: "Draft" });
-    expect(screen.getByTestId("milestones-revenue-seed-not-connected").textContent)
-      .toBe(MILESTONES_SCREEN_TEXT.revenueSeedNotConnected);
+  it("UT-MSTONE-909 the save creates the seeded revenue contract last, and no notice shows", async () => {
+    state.loadRevenueSeed.mockResolvedValue({ draft: { data: { vsb_name: "seed" } }, fabricFailed: false });
+    renderScreen();
+    typeDate(dtp("EndDate"), "2060-06-30");
+    await waitFor(() => expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: SAVE }));
+    await waitFor(() => expect(state.run).toHaveBeenCalled());
+    const plan = await lastJob().plan();
+    expect(state.loadRevenueSeed).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ EndDate: "2060-06-30" }));
+    expect(plan.writes.map((w) => [w.op, w.entitySet])).toEqual([["update", ES.projects], ["create", ES.projectRevenues]]);
+    expect(screen.queryByTestId("milestones-revenue-seed-fabric-failed")).toBeNull();
+  });
+
+  it("UT-MSTONE-910 a failed Fabric read still saves the milestones and shows the warning", async () => {
+    state.loadRevenueSeed.mockResolvedValue({ draft: null, fabricFailed: true });
+    state.run.mockImplementationOnce(async (job: unknown) => { await (job as Job).plan(); return []; });
+    renderScreen();
+    typeDate(dtp("EndDate"), "2060-06-30");
+    await waitFor(() => expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: SAVE }));
+    expect((await screen.findByTestId("milestones-revenue-seed-fabric-failed")).textContent)
+      .toBe(MILESTONES_SCREEN_TEXT.revenueSeedFabricFailed);
   });
 });

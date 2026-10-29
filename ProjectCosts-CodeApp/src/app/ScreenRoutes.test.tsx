@@ -192,7 +192,8 @@ describe("UT-ROUTES — Project Management", () => {
 
   it("UT-ROUTES-018 a project screen without a project asks for one", async () => {
     session = {};
-    renderAt("/project/production");
+    // Planning has no New Project mode, so it still asks for a project.
+    renderAt("/project/planning");
     expect(await screen.findByText("Select a project")).toBeTruthy();
     expect(screen.queryByTestId("not-connected-notice")).toBeNull();
   });
@@ -200,6 +201,8 @@ describe("UT-ROUTES — Project Management", () => {
   it.each([
     ["milestones", "con_Milestones_Page_LockMessage"],
     ["generators", "con_Milestones_Page_LockMessage_1"],
+    ["production", "con_Milestones_Page_LockMessage_2"],
+    ["checklist", "con_Milestones_Page_LockMessage_3"],
     ["team", "con_Milestones_Page_LockMessage_4"],
     ["grid-operator", "con_Milestones_Page_LockMessage_6"],
   ])("New Project: /project/%s without a project shows the page lock, not 'Select a project'", async (slug, lockId) => {
@@ -212,7 +215,9 @@ describe("UT-ROUTES — Project Management", () => {
   it("UT-ROUTES-019 General Data without a project is the New Project screen", async () => {
     session = {};
     renderAt("/project/general");
-    expect(await screen.findByRole("heading", { name: "New Project" }, { timeout: 20_000 })).toBeTruthy();
+    // The blank form (the "New Project" title is the app header's, not the screen's — PO, 28 Oct 2026).
+    const name = await screen.findByTestId("txt_GeneralData_DisplayProject_Body_General_Content_ProjectName", {}, { timeout: 20_000 });
+    expect((name as HTMLInputElement).value).toBe("");
   }, 30_000);
 
   it("UT-ROUTES-020 the overview's Edit Project link redirects to the PM route shape", async () => {
@@ -224,7 +229,7 @@ describe("UT-ROUTES — Project Management", () => {
   it("UT-ROUTES-021 the overview's Add Project link opens General Data with no project", async () => {
     session = {};
     renderAt("/projects/new");
-    await screen.findByRole("heading", { name: "New Project" }, { timeout: 20_000 });
+    await screen.findByTestId("txt_GeneralData_DisplayProject_Body_General_Content_ProjectName", {}, { timeout: 20_000 });
     expect(screen.getByTestId("where").textContent).toBe("/project/general");
   }, 30_000);
 });

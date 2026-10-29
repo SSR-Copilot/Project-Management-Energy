@@ -88,11 +88,14 @@ export function CostProjectGate() {
 
 /**
  * The New Project screens: General Data with NO project is the New Project form (`addProject`
- * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Team / Grid Operator open on
- * their page-lock banner ("• General" not saved yet) instead of asking for a project.
+ * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Production /
+ * Cluster Check List / Team / Grid Operator open on their page-lock banner ("• General" not saved
+ * yet) instead of asking for a project. Production and Cluster Check List added 28 Oct 2026: both
+ * screens already had the locked New Project mode, but the gate never let them through.
  */
 const NEW_PROJECT_PATHS = new Set([
-  "/project/general", "/project/milestones", "/project/generators", "/project/team", "/project/grid-operator",
+  "/project/general", "/project/milestones", "/project/generators", "/project/production",
+  "/project/checklist", "/project/team", "/project/grid-operator",
 ]);
 
 /**

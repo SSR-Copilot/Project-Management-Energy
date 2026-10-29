@@ -102,7 +102,7 @@ const SCREEN_TEXT = {
  *  - Shareholding (`con_…_SEGroup`): Padding 20 / 20 / top 10, Width `Min(…/3, 300) * 3`.
  */
 const useStyles = makeStyles({
-  title: { fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold, paddingLeft: "20px", paddingTop: space.s },
+
   body: {
     display: "flex", flexDirection: "column", paddingTop: "8px", paddingBottom: "8px", paddingRight: "20px",
     /* The canvas `*` (`lbl_…_Requered`) is `useCanvasRequiredMark` on this root. */
@@ -564,11 +564,7 @@ export default function GeneralDataScreen() {
     <div className={l.page}>
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="general-data" />
 
-      {isNewProject ? (
-        <Text as="h1" className={s.title} data-testid="con_cmp_Header_HeaderText">
-          {GD_LABELS.newProject}
-        </Text>
-      ) : null}
+      {/* No "New Project" heading here (PO, 28 Oct 2026): the app header above already reads "New Project". */}
       {/*
         DIVERGENCE (PO, 21 Oct 2026): the canvas grey "General" band
         (`lbl_GeneralData_DisplayProject_Body_General_Content_Label`) is removed, so Basic

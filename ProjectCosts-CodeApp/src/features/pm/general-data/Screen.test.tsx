@@ -145,7 +145,8 @@ describe("UT-GDATA General Data screen (connected)", () => {
 
   it("UT-GDATA-906 New Project: blank form; Save waits for the canvas required fields (PO 20 Oct)", () => {
     renderScreen("create");
-    expect(screen.getByText(GD_LABELS.newProject)).toBeTruthy();
+    // The screen has no heading of its own: the app header carries "New Project" (PO, 28 Oct 2026).
+    expect(screen.queryByText(GD_LABELS.newProject)).toBeNull();
     expect((screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_ProjectName") as HTMLInputElement).value).toBe("");
     expect(screen.getByText(GD_LABELS.requiredFields)).toBeTruthy();
     expect(screen.queryByTestId("general-data-save-blocked")).toBeNull();

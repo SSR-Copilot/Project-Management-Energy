@@ -282,6 +282,9 @@
 /* Conditional validation message under a panel field (Add/Edit Period, Add/Edit Costs). */
 /* `lbl_…_Fields_Label_ErrorMessage_*.Color: =gblAppColors.Error` — akzent5, as the `*` above. */
 .canvas-field-error { color: #d20532; font-size: 12px; font-weight: 400; }
+/* A `TextInput@0.0.54` in `DisplayMode.Disabled` (not `View`): white, a light outline, the
+   control's DisabledColor RGBA(161, 159, 157) — e.g. the Add Generator panel's Total Height. */
+.canvas-field[data-display="disabled"] > input:disabled { background: #ffffff; border: 1px solid #e3e3e3; color: #a19f9d; -webkit-text-fill-color: #a19f9d; }
 .canvas-field[data-invalid] > input, .canvas-field[data-invalid] > select,
 .canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; outline-offset: -1px; }
 
