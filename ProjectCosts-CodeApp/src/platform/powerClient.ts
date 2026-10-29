@@ -12,6 +12,7 @@
  */
 import { setConfig, getContext, type IContext } from "@microsoft/power-apps/app";
 import type { Metric } from "@microsoft/power-apps/telemetry";
+import { listenForTraces, trackMetric } from "@/appInsights";
 import { trace } from "./telemetry";
 
 let contextPromise: Promise<IContext> | undefined;
@@ -27,9 +28,11 @@ let contextPromise: Promise<IContext> | undefined;
  */
 export function ensureInitialized(): Promise<IContext> {
   if (!contextPromise) {
+    listenForTraces();
     setConfig({
       logger: {
         logMetric: (metric: Metric) => {
+          trackMetric(metric);
           if (metric.type === "sessionLoadSummary") {
             const d = metric.data;
             trace(
