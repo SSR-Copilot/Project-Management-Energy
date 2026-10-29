@@ -4105,6 +4105,12 @@ past-cost notice).
 
 #### 11.6 Logging and screen
 
+> **Log format superseded by D58 (29 Oct 2026, proposed).** Every line quoted in §11 keeps its
+> prefix and field order, but now shows exact ms with thousands separators (brackets too), "1
+> request" in the singular, steps in start order, and the two cost stages named "upsert costs
+> (existing contracts)" / "(new contracts)". Collapsed groups follow each line. The gate peak
+> and request stats now cover this save only.
+
 - **One `console.info` per save:** total ms, request count, and per-step timings with request
   counts and the path of each upsert group (`bulk`, `per-row after 501`, `per-row since an earlier
   501`). A failed save logs its elapsed time and steps too.
@@ -4250,7 +4256,9 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   `gate peak 9/16, req avg 380 ms max 1200 ms, verify skipped, 2 already gone`: the gate's peak
   in-flight count, the average and maximum time a request held a gate slot (queueing excluded),
   whether the upsert verify ran, and how many deletes found their row already gone
-  (UT-ACSHEET-BULK-040).
+  (UT-ACSHEET-BULK-040). Since D58 the numbers carry separators (`req avg 380 ms max 1,200 ms`)
+  and count this save's writes only; `, shared gate peak N/16` follows when other work wrote at
+  the same time.
 - **`createGate` `peak()` / `reset()`** (`data/concurrency.ts`). Measurement only; scheduling is
   unchanged. `saveGate.reset()` runs at the start of every save (UT-CONC-013, 014).
 
@@ -4286,6 +4294,7 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   new grid still re-hydrates (UT-ADDCOST-070, 071).
 - **The prepare log line.** One `console.info` per Save click:
   `Add Cost from Table prepare: <ms> ms (round-trip check …, align …, diff …, deletions …, orphans …; last edit's grid read-back …, validation …; <n> rows)`.
+  Since D58 each timing carries its unit (`4.2 ms`), and a collapsed "Prepare (client side)" group follows.
 - **Two edge-case behaviour notes** (from the code and UT-ADDCOST-072; output unchanged for every
   sheet the app produces):
   - **Undefined cells.** `gridToJson` no longer copies the cells after the first three, but reads
@@ -4529,7 +4538,8 @@ upsert queued about 4 s behind them, and the combined load slowed each request t
    - A contract-delete failure keeps the §11.14 text.
 4. **Log.** The save line shows `delete costs deferred`. The background line is `Add Cost from Table
    background deletes: costs N req, contracts M req, T ms[, failed][, totals reconciled|totals NOT
-   reconciled]`.
+   reconciled]`. Since D58, `; error: <message>` follows a failure, and a collapsed group lists each
+   batch (timing, requests, 404 read-backs) and the background reconcile's read and write.
 
 **DIVERGENCE (rule 8).** For a few seconds after Save, a cleared cell can still exist on the CAPEX
 screen while its contract's stored total already excludes it. If a background delete fails, the
@@ -4609,7 +4619,8 @@ about 5–6×. Neither paste included the `background deletes …` line; see §1
   - **Defensive addition.** When the deferred deletes begin, a new line is written:
     `Add Cost from Table background deletes started: <costs|contracts> N row(s) at T ms, delete gate
     B/4 busy`. The next live log shows whether they started, and whether they queued behind a
-    request that never answered. The text is for logs only and has no canvas equivalent.
+    request that never answered. The text is for logs only and has no canvas equivalent. Since
+    D58 it reads `… costs 3 rows at 1,903 ms, …` (`1 row` in the singular).
 - **L2 / F5: `committedBefore` is now exact.**
   - **Delete side.** The deleter reports `removed` (rows it deleted itself, excluding confirmed
     404s), and `BulkDeleteError.removedCount` was added. `committedBefore` uses the new
@@ -5108,6 +5119,12 @@ CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; cos
 CAPEX panel save busy: 2,034 ms (writes 1,234 ms, refetch 800 ms)
 ```
 
+Since D58 (proposed), the save line lists its steps in start order, shows exact ms with
+separators throughout, and ends with this save's `gate peak … req avg … max …`. A failed step's
+requests are counted, and `; error: …` follows a failure. Collapsed groups follow the line, and a
+Delete also prints `CAPEX panel delete busy: …`. The example above shows the earlier format,
+which also counted a plain 12-month edit as 3 requests where the code sends 2 (see D58).
+
 A Delete prints `CAPEX panel delete (…)`. Run each case twice, per row (override set) and bulk
 (override removed): a new contract with 12 months; an edit of 12 months; a shrink that removes 6;
 a relink reset with paid months and payment-date comments. Results: _not yet measured_.
@@ -5124,7 +5141,8 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
   rest of the session. That is intended: the 501 belongs to the host route, not to the screen.
 - **Gates.** The panel writes pass the shared 16-request `saveGate`. Its deletes have their own
   4-slot gate, so they never queue behind Add Cost from Table's background deletes. Peak in flight
-  is 28 of 52. Panel writes also count in the request stats of the Add Cost save line (log only).
+  is 28 of 52. Panel writes also counted in the request stats of the Add Cost save line (log
+  only); since D58 each save counts only its own writes.
 - **Not fixed here:** `deleteComment` still uses the raw generated `delete()` (CA-10, "Not fixed").
   Both paths call it, so a refused comment delete is invisible and does not stop the next phase.
 
@@ -5238,3 +5256,226 @@ Every other spinner text stays, because the status line shows it.
 ### 4. What the product owner is being asked
 
 Approve removing the spinners (§2), the status line in place of the pop-up, and the gaps in §3.
+
+## D58 · Readable console logs for both bulk saves (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/ReadableBulkSaveLogs` only.** Not
+deployed. Logging only: no change to what a save writes, its order, its gates, its errors or the
+UI. (D57 is taken by `feature/RemoveCostSpinners`.)
+
+### 1. Why
+
+The two Dataverse bulk saves (Add Cost from Table, D51; the DEVEX/CAPEX Add/Edit Cost panel, D56)
+each printed one dense line per event. The lines mixed units, said "1 requests", listed steps in
+completion order and named both cost stages "upsert costs". Some detail never reached the console
+at all:
+- the background reconcile's read and write timings;
+- the deferred deletes' per-batch timings and 404 read-backs;
+- the error messages on the failure lines.
+
+A refused plan (`SheetConflictError`) logged nothing. The request statistics were module-wide, so
+they could include another save's writes (D56 §7).
+
+### 2. Decisions (accepted by the user on 29 Oct 2026)
+
+| # | Question | Accepted |
+|---|---|---|
+| D1 | Format | One summary line per event (`console.info`), then collapsed groups (`console.groupCollapsed`) with `console.table`; indented plain lines when the console has neither. |
+| D2 | The one-line text | Keep every prefix and the field order; fix the quirks: "1 request", thousands separators on every ms, steps in start order, the stages `upsert costs (existing contracts)` / `upsert costs (new contracts)` (log only: `PHASE_LABEL` and every error text are unchanged), a request count on the failure line, the panel's failed step counted, the panel line ending in the same gate tail. |
+| D3 | Ids and names | Counts only. No ids and no contract, account or project names in readable text; GUIDs are replaced with `<id>` (`messageOf`). The raw error object is kept, but only inside a collapsed "Raw error (for support)" group. |
+| D4 | Gate statistics | Per save: a `RequestMeter` passed through `upsertRowsByAction` and `gatedWrite` to `gated` (measurement only). `, shared gate peak N/16` is added when the shared gate held more. |
+| D5 | Units | The one-liners use exact ms with separators (`formatMs`), brackets included. The groups use `formatRequestDuration` (`980 ms` / `1.4 s`). The prepare timings keep one decimal. One `formatMs`, next to `formatRequestDuration` in `data/bulkSend.ts`, replaces the inline copies (rule 17). |
+| D6 | New events | Only the gaps:<br>- a plan-refusal line;<br>- background reconcile timings;<br>- per-batch delete timings and 404 read-backs;<br>- error text on the A3, A5 and panel failure lines;<br>- a readable book-patch failure;<br>- `CAPEX panel delete busy:`. |
+| D7 | Level | `console.info` for every summary. |
+
+### 3. Where it lives
+
+- `data/saveLog.ts` holds the pure builders and `emitSaveLog`. The emitter never throws and also
+  accepts a builder function, which it runs inside its guard. Tests: UT-SAVELOG-001…023.
+- `data/bulkSend.ts` holds:
+  - `formatMs`;
+  - `RequestMeter` / `createRequestMeter`;
+  - `gatedWrite`;
+  - `UpsertGroupReport` (structured group reports through `upsertRowsByAction`'s `report`);
+  - `bulk501WarningLine`.
+
+  The module-wide `requestStats` is removed, and `saveGate` is no longer exported.
+- `data/concurrency.ts`: the gate's `inFlight()`, measurement only.
+- Add Cost from Table: `data/addCostSheet.ts` builds its reports. In `data/addCostSheetBulk.ts`,
+  `deps.upsert` takes an optional log-only `step` name. Tests: UT-ACSHEET-LOG-001… in
+  `addCostSheet.bulk.test.ts`.
+- Panel: `data/capexWrites.ts` (`SaveLog`, `panelSaveLogLine`, `panelBusyLogLine`). Tests:
+  UT-CAPEXLOG-001…012 in `capexWrites.bulk.test.ts`.
+- **Gate tail on the panel's bulk Save only.** The per-row path and every Delete send nothing
+  through the shared write gate, so a tail there would read a misleading `0/16`. Their Requests
+  group says "none pass the shared write gate" instead.
+
+### 4. Panel request counts (checked against the code, pinned by UT-CAPEXLOG-010, 011, 006)
+
+| Case | Requests in the line |
+|---|---|
+| New contract, 12 months | 2 (contract create + 1 `CreateMultiple`) |
+| Edit of 12 months | 2 (contract update ∥ 1 `UpdateMultiple`) |
+| Shrink 12 → 6 | 8 (2 + 6 deletes) |
+| Relink reset, 2 paid months, 1 payment-date comment | 4 (contract, 1 `UpdateMultiple` carrying the resets, 1 read, 1 comment delete) |
+| Delete, C comments and M cost rows | 2 + C + M |
+| `UpdateMultiple` 501 on 3 months | 5 (contract, the refused request, 3 PATCHes) |
+
+The D56 §6 example ("3 requests" for a plain edit) predates this check. A refused `UpdateMultiple`
+used to print `1 requests`; it now counts the refused request too.
+
+### 5. Before and after
+
+Real output from the test suites, which run against a fake host, so the times are near 0 ms. `##`
+marks a collapsed group and `|` a `console.table` row.
+
+**Add Cost from Table, before (8dc4553):**
+```
+Add Cost from Table save: 10 ms, 4 requests (plan 3 ms, upsert contracts (create 1 req bulk [0 ms], update 1 req bulk [0 ms]) 1 ms, upsert costs (create 1 req bulk [0 ms]) 0 ms, upsert costs (update 1 req bulk [0 ms]) 1 ms, delete costs deferred, delete contracts deferred); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+Add Cost from Table background deletes started: costs 1 row(s) at 9 ms, delete gate 0/4 busy
+Add Cost from Table save failed after 4 ms (plan 0 ms, delete contracts 1 req 1 ms, …); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+```
+
+**Add Cost from Table, after: a successful save with deferred deletes:**
+```
+Add Cost from Table background deletes started: contracts 1 row at 8 ms, delete gate 0/4 busy
+Add Cost from Table background deletes started: costs 1 row at 9 ms, delete gate 0/4 busy
+Add Cost from Table save: 9 ms, 4 requests (plan 3 ms, upsert contracts (create 1 req bulk [0 ms], update 1 req bulk [0 ms]) 1 ms, upsert costs (existing contracts) (update 1 req bulk [0 ms]) 1 ms, upsert costs (new contracts) (create 1 req bulk [0 ms]) 0 ms, delete costs deferred, delete contracts deferred); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+## Plan
+Contracts: 1 created, 1 updated, 1 deleted
+Cost rows: 1 created, 1 updated, 1 deleted
+Changed cells equal to the stored value (nothing written): 0
+Cost deletes planned: 1; only if they still exist (left by a failed attempt): 0
+Contract deletes planned: 1 (their cost rows and comments go by the Dataverse cascade)
+Contract totals planned: 2
+## Steps (start order)
+| plan | 0 ms | 3 ms | – | – | ok
+| upsert contracts | 7 ms | 1 ms | 2 | create 1 row: 1 request, bulk [0 ms]; update 1 row: 1 request, bulk [0 ms] | ok
+| upsert costs (existing contracts) | 7 ms | 1 ms | 1 | update 1 row: 1 request, bulk [0 ms] | ok
+| upsert costs (new contracts) | 8 ms | 0 ms | 1 | create 1 row: 1 request, bulk [0 ms] | ok
+| delete costs | – | – | – | 1 row, deleted after Save returned | in the background
+| delete contracts | – | – | – | 1 contract, deleted after Save returned | in the background
+## Deferred deletes …
+## Requests
+Write requests of this save: 4; at most 3 of 16 in flight at once
+Time per write request (inside the gate, queueing excluded): average 0 ms, slowest 0 ms
+Requests in all, reads and deletes included: 4
+Existence check before writing: skipped (first attempt)
+Deletes whose row was already gone (confirmed by a read-back): 0
+Not counted as requests: the reconcile's cost reads and the per-row fallback's existence check
+Add Cost from Table background deletes: costs 1 req, contracts 1 req, 10 ms
+## Background deletes
+Settled 10 ms after the Save started, 1 ms after it returned
+| delete contracts | 8 ms | 1 ms | 1 | 0 | 0 | ok
+| delete costs | 9 ms | 1 ms | 1 | 0 | 0 | ok
+```
+The batches table's columns are Batch, Started, Took, Requests, 404 read-backs, Already gone and
+Result.
+
+**After: a failed save (`UpdateMultiple` refused).** It now counts every request sent, refused
+ones included, and names the root error:
+```
+Add Cost from Table save failed after 2 ms, 6 requests (plan 0 ms, delete contracts 1 req 1 ms, delete costs 1 req 1 ms, upsert contracts (create 1 req bulk [0 ms], update failed bulk [0 ms]) 0 ms, upsert costs (existing contracts) (update failed bulk [0 ms]) 0 ms, reconcile read 0 ms, reconcile totals (update failed bulk [0 ms]) 0 ms); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone; error: Dataverse error (HTTP 400): update bulk write refused
+## Failure
+Steps completed: plan; delete contracts; delete costs; reconcile read
+Steps failed: upsert contracts; upsert costs (existing contracts); reconcile totals
+Phase: 1
+Something reached Dataverse before the failure: yes (or may have)
+Contract totals: could NOT be reconciled
+Error: SavePlanError: Save failed in phase 1 (upsert contracts); contract totals could NOT be reconciled.
+  caused by … caused by Dataverse error (HTTP 400): update bulk write refused
+## Plan … ## Steps (start order) … ## Requests …
+```
+
+**After: a refused plan (two sheet rows in conflict).** The names stay out of the readable text:
+```
+Add Cost from Table save failed after 0 ms, 0 requests (plan failed 0 ms); gate peak 0/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone; nothing was written; error: SheetConflictError: refused while planning (conflict between sheet rows); the rows' detail is in the raw error group
+## Failure … ## Steps … ## Requests … ## Raw error (for support)
+```
+
+**After: a background cost delete refused, then reconciled:**
+```
+Add Cost from Table background deletes: costs 1 req, contracts 1 req, 3 ms, failed, totals reconciled; error: BulkDeleteError: delete costs: 1 delete(s) on vsb_capexcosts failed, 0 succeeded. First failure: delete costs: 403 refused
+## Background deletes
+| delete contracts | 2 ms | 1 ms | 1 | 0 | 0 | ok
+| delete costs | 2 ms | 0 ms | 1 | 0 | 0 | FAILED
+## Background reconcile
+Contract totals: reconciled (they match what landed)
+Write requests of the background reconcile: 1; at most 1 of 16 in flight at once
+| reconcile read | 3 ms | 0 ms | – | – | ok
+| reconcile totals | 3 ms | 0 ms | 1 | update 2 rows: 1 request, bulk [0 ms] | ok
+## Errors
+Cost delete: BulkDeleteError: delete costs: 1 delete(s) on vsb_capexcosts failed, 0 succeeded. …
+```
+
+**CAPEX panel, before (8dc4553):**
+```
+CAPEX panel save (bulk): 15 ms, 3 requests; contract update 1 req 2 ms; costs 1 req 14 ms (update 1 req bulk [0 ms]); cost deletes 1 req 1 ms
+CAPEX panel save (bulk) FAILED after 1 ms, 1 requests; contract update 1 req 0 ms; costs FAILED 1 ms (update failed bulk [0 ms])
+```
+
+**CAPEX panel, after:**
+```
+CAPEX panel save (bulk): 3 ms, 3 requests; contract update 1 req 1 ms; costs 1 req 0 ms (update 1 req bulk [0 ms]); cost deletes 1 req 0 ms; gate peak 2/16, req avg 0 ms max 1 ms
+## Steps (start order) … ## Requests
+CAPEX panel save (bulk) FAILED after 1 ms, 2 requests; contract update 1 req 0 ms; costs FAILED 0 ms (update failed bulk [0 ms]); gate peak 2/16, req avg 0 ms max 0 ms; error: Dataverse error (HTTP 404): UpdateMultiple refused: vsb_capexcost With Id = <id> Does Not Exist
+## Failure … ## Steps (start order) … ## Requests … ## Raw error (for support)
+CAPEX panel delete (bulk): 1 ms, 6 requests; comments read 1 req 0 ms; comment deletes 1 req 0 ms; cost deletes 3 req 0 ms; contract delete 1 req 0 ms
+CAPEX panel save busy: 2,118 ms (writes 1,312 ms, refetch 806 ms)
+CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)
+```
+The two busy lines come from the line builders' tests (UT-CAPEXBULK-051, UT-CAPEXLOG-007).
+
+**501 fallback (both saves):** `UpdateMultiple answered 501 Not Implemented; upsert costs (update)
+continues row by row. Nothing of it was written by the refused request; 3 rows go out as one PATCH
+each, and this tab keeps sending UpdateMultiple rows one by one while its session flag is set
+(until the tab closes).`
+
+**Review (29 Oct, independent).** No change to save behaviour. Seven findings, all fixed:
+1. Contract and account names reached readable text through `SheetConflictError` and the
+   screen's conflict message. Both are now fixed wording; the detail stays in the raw group
+   (UT-ACSHEET-LOG-013).
+2. Overlapping cost-delete batches inflated each other's counts. They are now counted per call,
+   and the retry batch is logged as `delete costs (left by a failed attempt)`
+   (UT-ACSHEET-LOG-014, 015).
+3. A failed refresh showed 0 requests. It now says `refresh read failed`, and the requests that are
+   not counted are named (UT-ACSHEET-BULK-043, UT-ACSHEET-LOG-016).
+4. New unused exports were removed (knip).
+5. One shared `groupsText`, `reconcileStateOf` and `verifyLines` (rule 17; UT-SAVELOG-030).
+6. Report builders run inside `emitSaveLog`'s guard (UT-SAVELOG-023).
+7. Wording: "Write requests of the background reconcile" (UT-SAVELOG-031); the 501 line's session
+   wording.
+
+**Mutation checks.** All killed:
+- 8 in the first Add Cost round and 8 in the panel round;
+- 9 after the review fixes (N1–N7, M3b, M8b);
+- the shared `groupsText` durations (UT-SAVELOG-030, UT-CAPEXLOG-009).
+
+**Tests.**
+- UT-SAVELOG-001…014, 020…023, 030, 031.
+- UT-ACSHEET-LOG-001…016.
+- UT-CAPEXLOG-001…012.
+- Updated, with the same ids: UT-ACSHEET-BULK-043, 050, 055, 056, 057, 062, 066, 067;
+  UT-CAPEXBULK-012, 050; UT-ACSHEET-QUERY-016.
+
+**Checks (29 Oct).**
+- `npm run verify`: `check:power` 89 registered, 0 problems; typecheck, lint, the label gate and
+  the canvas gate clean; 168 files, 4,478 tests, 4,477 passed.
+- The one failure, UT-ADGATE-910, is the known flake; its file passed 33/33 alone.
+- `npm run build` ran separately and is OK.
+- knip: 20 unused files (baseline), and no new unused exports in the changed files.
+
+### 6. What to look for on the next live Save
+
+- `Add Cost from Table prepare: … ms (…; N rows)`.
+- `Add Cost from Table save: 1,916 ms, 5 requests (… upsert costs (existing contracts) (…) …,
+  upsert costs (new contracts) (…) …); gate peak …, req avg … max …, verify …, N already gone`,
+  then the collapsed groups Plan, Steps (start order), Deferred deletes and Requests.
+- `Add Cost from Table background deletes: costs N req, contracts M req, T ms`, with its batches
+  table.
+- `CAPEX panel save (bulk): …; gate peak …`, then `CAPEX panel save busy: …`. After a Delete:
+  `CAPEX panel delete busy: …`.
+
+### 7. What the product owner is being asked
+
+Nothing functional. Confirm the console format, and that names stay out of readable logs.

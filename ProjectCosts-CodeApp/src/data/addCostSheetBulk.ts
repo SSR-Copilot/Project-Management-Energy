@@ -107,8 +107,13 @@ const CONTRACT_BIND = "vsb_Contract@odata.bind";
 /* ═══════════════════════════════════════════════════════════════════ contract ══ */
 
 export interface SavePlanDeps {
-  /** One upsert of `rows` into `table` (split into `CreateMultiple`/`UpdateMultiple` by the adapter); throws on failure. */
-  upsert: (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string) => Promise<{ requests: number }>;
+  /**
+   * One upsert of `rows` into `table` (split into `CreateMultiple`/`UpdateMultiple` by the adapter); throws on failure.
+   * `step` (optional, LOG ONLY, D58): the step's name in the save log when it differs from `label`
+   * — the two phase-2 stages, `upsert costs (existing contracts)` / `upsert costs (new contracts)`.
+   * `label` stays the phase label, which every error message carries.
+   */
+  upsert: (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, step?: string) => Promise<{ requests: number }>;
   /**
    * Deletes every id, attempting all of them; throws when any failed (A2's `deleteMany`). A row
    * that is already gone (404) must count as deleted: the orchestrator sends the plan's delete
@@ -118,8 +123,9 @@ export interface SavePlanDeps {
    * were confirmed already gone (404). Used only for `committedBefore`, so a batch of nothing but
    * confirmed 404s does not count as "something was saved". Omitted: every id counts as removed.
    * A failure says the same through the error's `removedCount` (`BulkDeleteError`).
+   * `step` (optional, LOG ONLY, D58): the batch's name in the save log, as for `upsert`.
    */
-  deleteMany: (table: BulkTableInfo, ids: readonly string[], label: string) =>
+  deleteMany: (table: BulkTableInfo, ids: readonly string[], label: string, step?: string) =>
     Promise<{ requests: number; removed?: number }>;
   /** Fresh server read of the cost rows of these contracts (for reconciliation). */
   loadCosts: (contractIds: readonly string[]) => Promise<ExistingCost[]>;
@@ -345,6 +351,17 @@ const PHASE_LABEL: Record<SavePhase, string> = {
   4: "delete contracts",
 };
 
+/**
+ * The two phase-2 stages' names, and the retry-only phase-3 batch's, in the save LOG only (D58):
+ * `PHASE_LABEL[2]` / `PHASE_LABEL[3]` stay their labels, so every error message and the screen's
+ * technical line keep "upsert costs" / "delete costs".
+ */
+const STAGE_STEP = {
+  costsA: "upsert costs (existing contracts)",
+  costsB: "upsert costs (new contracts)",
+  costDeletesIfExist: "delete costs (left by a failed attempt)",
+} as const;
+
 /* ══════════════════════════════════════════════════════════════════ operations ══ */
 
 /**
@@ -482,13 +499,14 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
     const { stageA, stageB } = splitCostTargets(contractUpserts, costUpserts);
     const contracts = watch(run("contracts", contractUpserts.length,
       () => deps.upsert(CAPEX_CONTRACTS, contractUpserts, PHASE_LABEL[1])));
-    const costsA = watch(run("costsA", stageA.length, () => deps.upsert(CAPEX_COSTS, stageA, PHASE_LABEL[2])));
+    const costsA = watch(run("costsA", stageA.length,
+      () => deps.upsert(CAPEX_COSTS, stageA, PHASE_LABEL[2], STAGE_STEP.costsA)));
     // Stage B: the new contracts' cost rows, as soon as (1) succeeded — not after the slow (4) —
     // and only while no operation has failed. It overlaps whatever still runs.
     const costsB = contracts.then((c): OpOutcome | Promise<OpOutcome> => {
       if (stageB.length === 0) return { key: "costsB", size: 0, status: "empty" };
       if (c.status !== "ok" || failureSeen) return { key: "costsB", size: stageB.length, status: "skipped" };
-      return run("costsB", stageB.length, () => deps.upsert(CAPEX_COSTS, stageB, PHASE_LABEL[2]));
+      return run("costsB", stageB.length, () => deps.upsert(CAPEX_COSTS, stageB, PHASE_LABEL[2], STAGE_STEP.costsB));
     });
     return { contracts, costsA, costsB };
   };
@@ -529,7 +547,8 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
       return ids.length === 0 ? { key: "costDeletesIfExist", size: 0, status: "empty" }
         : { key: "costDeletesIfExist", size: ids.length, status: "skipped" };
     }
-    return run("costDeletesIfExist", ids.length, () => deps.deleteMany(CAPEX_COSTS, ids, PHASE_LABEL[3]));
+    return run("costDeletesIfExist", ids.length,
+      () => deps.deleteMany(CAPEX_COSTS, ids, PHASE_LABEL[3], STAGE_STEP.costDeletesIfExist));
   }));
   const ifExistDeletesNow = deferCosts ? undefined : startIfExistDeletes();
 

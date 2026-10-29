@@ -368,9 +368,14 @@ const TYPICAL_CALLS = [
   `create:${ES_CONTRACTS}`, `create:${ES_COSTS}`, `update:${ES_CONTRACTS}`, `update:${ES_COSTS}`,
 ].sort();
 
-/** Every `<label> (...)` entry of the save's log line for one label, joined. */
+/**
+ * Every `<label> (...)` entry of the save's log line for one label, joined. A cost stage's log name
+ * (`upsert costs (existing contracts)` / `(new contracts)`, D58) counts as its label; the ms carry
+ * a thousands separator.
+ */
 const logEntries = (line: string, label: string) =>
-  [...line.matchAll(new RegExp(`${label} \\(([^)]*)\\) \\d+ ms`, "g"))].map((m) => m[1]).join(", ");
+  [...line.matchAll(new RegExp(`${label}(?: \\((?:existing|new) contracts\\))? \\(([^)]*)\\) [\\d,]+ ms`, "g"))]
+    .map((m) => m[1]).join(", ");
 
 const verifyReads = () => reads.filter((r) => r.label.startsWith("check existing "));
 
@@ -439,6 +444,11 @@ beforeEach(() => {
   vi.mocked(executeSavePlan).mockClear();
   vi.mocked(upsertMultiple).mockClear();
   resetBulkWriteAvailability();
+  // The save logs' collapsed groups (D58): kept out of the test output. A test that reads them
+  // spies on these itself.
+  vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
+  vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
+  vi.spyOn(console, "table").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -1211,7 +1221,10 @@ describe("saveAddCostSheetBulk — the evaluator's findings F-A, F-B, F-C (D51 �
     await expect(saveAddCostSheetBulk({ ...staleRetry(), refreshBeforePlan: true })).rejects.toThrow("read failed");
     expect(upsertCalls).toEqual([]);
     expect(deleteCalls).toEqual([]);
-    expect(logLine(info)).toMatch(/^Add Cost from Table save failed after \d+ ms \(refresh failed \d+ ms\)/);
+    // Changed (D58): the request count, "nothing was written" and the error follow.
+    expect(logLine(info)).toMatch(
+      /^Add Cost from Table save failed after [\d,]+ ms, refresh read failed \(refresh failed [\d,]+ ms\); .*; nothing was written; error: .*read failed/,
+    );
   });
 
   it("UT-ACSHEET-BULK-044 gone keeps committedBefore: true when a delete landed beside phase 0, false when nothing did", async () => {
@@ -1450,7 +1463,8 @@ describe("saveAddCostSheetBulk — parallel chunks and deferred contract deletes
     expect(outcome.costDeleteError).toBeUndefined();
     expect((outcome.error as InstanceType<typeof BulkDeleteError>).failedIds).toEqual([DOOMED]);
     // The refused delete was still SENT: the log counts it.
-    expect(backgroundLines(info)[0]).toMatch(/: costs 1 req, contracts 1 req, \d+ ms, failed$/);
+    // Changed (D58): the root error follows, ids replaced.
+    expect(backgroundLines(info)[0]).toMatch(/: costs 1 req, contracts 1 req, [\d,]+ ms, failed; error: .*403 refused$/);
     expect(saveLine(info)).toMatch(/^Add Cost from Table save: /);
     // The toast text: the deleter's failed ids when it names them, else every deferred contract.
     expect(backgroundDeleteFailureTexts(outcome, { deferredContracts: 3 })).toEqual([BACKGROUND_DELETE_FAILED(1)]);
@@ -1574,7 +1588,7 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     const outcome = await (result.background as NonNullable<typeof result.background>);
     expect(outcome.costDeleteError).toBeDefined();
     expect(outcome.reconciled).toBe(true);
-    expect(backgroundLines(info)[0]).toMatch(/: costs 16 req, contracts 0 req, \d+ ms, failed, totals reconciled$/);
+    expect(backgroundLines(info)[0]).toMatch(/: costs 16 req, contracts 0 req, [\d,]+ ms, failed, totals reconciled; error: .*403 refused$/);
     expect(backgroundDeleteFailureTexts(outcome, result)).toEqual([COST_DELETE_FAILED_RECONCILED]);
   });
 
@@ -1588,7 +1602,7 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     const outcome = await (result.background as NonNullable<typeof result.background>);
     expect(outcome.costDeleteError).toBeDefined();
     expect(outcome.reconciled === true && outcome.reconcileError === undefined).toBe(false);
-    expect(backgroundLines(info)[0]).toMatch(/, failed, totals NOT reconciled$/);
+    expect(backgroundLines(info)[0]).toMatch(/, failed, totals NOT reconciled; error: /);
     expect(backgroundDeleteFailureTexts(outcome, result)).toEqual([COST_DELETE_FAILED_NOT_RECONCILED]);
   });
 
@@ -1630,13 +1644,14 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     // And the log line, for each ending.
     const n = { costs: 16, contracts: 2 };
     expect(backgroundDeleteLogLine({ requests: 18 }, n, 1234.4))
-      .toBe("Add Cost from Table background deletes: costs 16 req, contracts 2 req, 1234 ms");
+      .toBe("Add Cost from Table background deletes: costs 16 req, contracts 2 req, 1,234 ms");
+    // Changed (D58): a failure names its root error, ids replaced.
     expect(backgroundDeleteLogLine({ requests: 0, error: contractErr, contractDeleteError: contractErr }, n, 5))
-      .toBe("Add Cost from Table background deletes: costs 16 req, contracts 2 req, 5 ms, failed");
+      .toMatch(/^Add Cost from Table background deletes: costs 16 req, contracts 2 req, 5 ms, failed; error: BulkDeleteError: /);
     expect(backgroundDeleteLogLine({ requests: 0, error: costErr, costDeleteError: costErr, reconciled: true }, n, 5))
-      .toMatch(/, 5 ms, failed, totals reconciled$/);
+      .toMatch(/, 5 ms, failed, totals reconciled; error: Error: cost refused$/);
     expect(backgroundDeleteLogLine({ requests: 0, error: costErr, costDeleteError: costErr, reconciled: false }, n, 5))
-      .toMatch(/, 5 ms, failed, totals NOT reconciled$/);
+      .toMatch(/, 5 ms, failed, totals NOT reconciled; error: Error: cost refused$/);
   });
 
   it("UT-ACSHEET-BULK-058 deferCostDeletes: false in the args makes the Save wait for the cleared cells", async () => {
@@ -1731,7 +1746,8 @@ describe("saveAddCostSheetBulk — deferred deletes start after the writes; per-
       changedRows: Array.from({ length: 10 }, (_, i) => row("C1", C1, new Array<number>(12).fill(5), 2026 + i)),
       existingContracts: [contract(C1, "C1")], existingCosts: [], contractDeleteIds: [],
     });
-    expect(saveLine(info)).toMatch(/upsert costs \(create 4 req bulk \[\d+ ms, \d+ ms, \d+ ms, \d+ ms\]\)/);
+    // Changed (D58): the stage's log name; C1 already exists, so its costs are stage A.
+    expect(saveLine(info)).toMatch(/upsert costs \(existing contracts\) \(create 4 req bulk \[\d+ ms, \d+ ms, \d+ ms, \d+ ms\]\)/);
     expect(saveLines(info)).toHaveLength(1);
   });
 });
@@ -1827,7 +1843,8 @@ describe("saveAddCostSheetBulk — exact committedBefore (L2 / F5)", () => {
 });
 
 describe("saveAddCostSheetBulk — the background deletes' log lines (item 1)", () => {
-  const STARTED = /^Add Cost from Table background deletes started: (costs|contracts) 1 row\(s\) at \d+ ms, delete gate (\d)\/4 busy$/;
+  // Changed (D58): "1 row" in the singular, ms with a thousands separator.
+  const STARTED = /^Add Cost from Table background deletes started: (costs|contracts) 1 row at [\d,]+ ms, delete gate (\d)\/4 busy$/;
 
   it("UT-ACSHEET-BULK-066 the hook's call path: the background line is written although nothing ever attaches to background", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
@@ -1852,7 +1869,7 @@ describe("saveAddCostSheetBulk — the background deletes' log lines (item 1)", 
     releaseContracts();
     releaseCosts();
     await vi.waitFor(() => expect(backgroundLines(info)).toHaveLength(1));
-    expect(backgroundLines(info)[0]).toMatch(/^Add Cost from Table background deletes: costs 1 req, contracts 1 req, \d+ ms$/);
+    expect(backgroundLines(info)[0]).toMatch(/^Add Cost from Table background deletes: costs 1 req, contracts 1 req, [\d,]+ ms$/);
   });
 
   it("UT-ACSHEET-BULK-067 a deferred delete that never answers: started lines only, and the next save reports the held gate slot", async () => {
@@ -2042,5 +2059,310 @@ describe("saveAddCostSheetBulk — reads during an earlier Save's background del
     const deps = vi.mocked(executeSavePlan).mock.calls[0]?.[1] as SavePlanDeps;
     const read = await deps.loadCosts([C1]);
     expect(read.map((c) => c.id)).toEqual([COST_JAN, COST_FEB]);
+  });
+});
+
+describe("saveAddCostSheetBulk — the readable save log (D58)", () => {
+  /** Every console line in order: info as is, a group title as `## title`, a table row as `| a | b`. */
+  const captureLog = () => {
+    const out: string[] = [];
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(String(t)); });
+    vi.spyOn(console, "groupCollapsed").mockImplementation((t: unknown) => { out.push(`## ${String(t)}`); });
+    vi.spyOn(console, "table").mockImplementation((rows: unknown) => {
+      for (const r of rows as Record<string, unknown>[]) out.push(`| ${Object.values(r).join(" | ")}`);
+    });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    return out;
+  };
+  /** The lines of one collapsed group (up to the next group or the next summary line). */
+  const group = (out: readonly string[], title: string, after = 0) => {
+    const start = out.findIndex((l, i) => i >= after && l === `## ${title}`);
+    if (start < 0) return [];
+    const rest = out.slice(start + 1);
+    const end = rest.findIndex((l) => l.startsWith("## ") || l.startsWith("Add Cost from Table "));
+    return end < 0 ? rest : rest.slice(0, end);
+  };
+  const holdCreates = () => {
+    let release: () => void = () => undefined;
+    createGate = new Promise<void>((resolve) => { release = resolve; });
+    return () => { createGate = null; release(); };
+  };
+  const entriesOf = (line: string) => /\((.*)\); gate peak/.exec(line)?.[1] ?? "";
+
+  it("UT-ACSHEET-LOG-001 the line lists steps in START order (a held create finishes last but is listed first)", async () => {
+    const out = captureLog();
+    const release = holdCreates();
+    const save = saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    await vi.waitFor(() => expect(callShape()).toContain(`create:${ES_CONTRACTS}`));
+    await new Promise((r) => setTimeout(r, 30));
+    release();
+    await save;
+    const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+    const entries = entriesOf(line);
+    const at = (s: string) => entries.indexOf(s);
+    // Deletes start at t = 0 (flags off), contracts before the existing contracts' costs, the new
+    // contracts' costs once the held contract create answered.
+    expect(at("plan ")).toBe(0);
+    expect(at("delete contracts ")).toBeGreaterThan(0);
+    expect(at("delete contracts ")).toBeLessThan(at("delete costs "));
+    expect(at("upsert contracts (")).toBeLessThan(at("upsert costs (existing contracts) ("));
+    expect(at("upsert costs (existing contracts) (")).toBeLessThan(at("upsert costs (new contracts) ("));
+    // The steps table follows the same order.
+    const steps = group(out, "Steps (start order)").map((l) => l.split(" | ")[0]?.slice(2));
+    expect(steps.indexOf("upsert contracts")).toBeLessThan(steps.indexOf("upsert costs (existing contracts)"));
+    expect(steps.indexOf("upsert costs (existing contracts)")).toBeLessThan(steps.indexOf("upsert costs (new contracts)"));
+  });
+
+  it("UT-ACSHEET-LOG-002 the stage names are log-only: a refused stage-B write keeps \"upsert costs\" in the error", async () => {
+    const out = captureLog();
+    refuseOnce = new Set([`create:${ES_COSTS}`]);
+    const e = await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false })
+      .then(() => null, (err: unknown) => err);
+    expect(e).toBeInstanceOf(SavePlanError);
+    expect((e as Error).message).toMatch(/^Save failed in phase 2 \(upsert costs\); /);
+    expect(String(((e as Error).cause as Error).message)).toMatch(/^upsert costs \(create\)/);
+    const line = out.find((l) => l.startsWith("Add Cost from Table save failed after")) ?? "";
+    expect(line).toMatch(/upsert costs \(new contracts\) \(create failed bulk/);
+  });
+
+  it("UT-ACSHEET-LOG-003 every ms in the line has a thousands separator, brackets included", async () => {
+    const out = captureLog();
+    let t = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => (t += 700));
+    await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+    expect(line).toMatch(/^Add Cost from Table save: \d{1,3}(,\d{3})+ ms, \d+ requests \(/);
+    expect(line).toMatch(/\[\d{1,3}(,\d{3})+ ms\]/);
+    expect(line).toMatch(/req avg \d{1,3}(,\d{3})+ ms max \d{1,3}(,\d{3})+ ms/);
+    // No bare 4+ digit ms anywhere.
+    expect(line).not.toMatch(/\b\d{4,} ms/);
+  });
+
+  it("UT-ACSHEET-LOG-004 a failure line counts every request sent (refused ones included), names its root error, and has a Failure group", async () => {
+    const out = captureLog();
+    refusedActions = new Set(["update"]);
+    const e = await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false })
+      .then(() => null, (err: unknown) => err) as InstanceType<typeof SavePlanError>;
+    expect(e).toBeInstanceOf(SavePlanError);
+    const line = out.find((l) => l.startsWith("Add Cost from Table save failed after")) ?? "";
+    // Every request SENT, the refused ones included (the error's own total counts only the
+    // operations that succeeded): here every bulk call plus every delete (no verify, first attempt).
+    const sent = upsertCalls.length + deleteCalls.length;
+    expect(sent).toBeGreaterThan(e.requests.total);
+    expect(line).toMatch(new RegExp(`^Add Cost from Table save failed after [\\d,]+ ms, ${sent} requests \\(`));
+    expect(group(out, "Requests")).toContain(`Requests of the operations that succeeded (the error's own count): ${e.requests.total}`);
+    expect(line).toMatch(/; error: .*update bulk write refused/);
+    const failure = group(out, "Failure");
+    expect(failure).toContain("Phase: 1");
+    expect(failure.some((l) => l.startsWith("Steps failed: ") && l.includes("upsert contracts"))).toBe(true);
+    expect(failure.some((l) => l.startsWith("Error: SavePlanError: Save failed in phase 1"))).toBe(true);
+  });
+
+  it("UT-ACSHEET-LOG-005 a refused plan (SheetConflictError) logs a failure line saying nothing was written, then rethrows it", async () => {
+    const out = captureLog();
+    const args: Args = { ...typical(), changedRows: [row("C1", C1, months(200)), { ...row("C1", C1, months(300)), rowId: "2" }] };
+    const e = await saveAddCostSheetBulk(args).then(() => null, (err: unknown) => err);
+    expect(e).toBeInstanceOf(SheetConflictError);
+    const line = out.find((l) => l.startsWith("Add Cost from Table save failed after")) ?? "";
+    expect(line).toMatch(/^Add Cost from Table save failed after [\d,]+ ms, 0 requests \(plan failed [\d,]+ ms\); gate peak 0\/16, .*; nothing was written; error: SheetConflictError: refused while planning \(conflict between sheet rows\); the rows' detail is in the raw error group$/);
+    expect(group(out, "Failure")).toContain("Refused while planning: nothing was sent");
+    expect(upsertCalls).toEqual([]);
+  });
+
+  it("UT-ACSHEET-LOG-006 the deferred batches: per-batch timing, requests, 404 read-backs and already-gone rows", async () => {
+    const out = captureLog();
+    deleteNotFound = new Set([COST_FEB]);
+    const result = await saveAddCostSheetBulk(typical());
+    await result.background;
+    const bg = out.find((l) => l.startsWith("Add Cost from Table background deletes:")) ?? "";
+    expect(bg).toMatch(/^Add Cost from Table background deletes: costs 2 req, contracts 1 req, [\d,]+ ms$/);
+    const rows = group(out, "Background deletes", out.indexOf(bg));
+    // Batch | Started | Took | Requests | 404 read-backs | Already gone | Result
+    expect(rows.find((l) => l.startsWith("| delete costs |"))).toMatch(/^\| delete costs \| \d+ ms \| \d+ ms \| 2 \| 1 \| 1 \| ok$/);
+    expect(rows.find((l) => l.startsWith("| delete contracts |"))).toMatch(/^\| delete contracts \| \d+ ms \| \d+ ms \| 1 \| 0 \| 0 \| ok$/);
+  });
+
+  it("UT-ACSHEET-LOG-007 the background reconcile's read and write are timed in the background group, on their own meter", async () => {
+    const out = captureLog();
+    // C1's cleared February delete is refused in the background: the reconcile re-reads and rewrites.
+    refused = new Set([COST_FEB]);
+    const result = await saveAddCostSheetBulk(typical());
+    const saveLine = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+    const saveCount = group(out, "Requests").find((l) => l.startsWith("Write requests of this save: "));
+    await result.background;
+    const bg = out.find((l) => l.startsWith("Add Cost from Table background deletes:")) ?? "";
+    expect(bg).toMatch(/, failed, totals reconciled; error: .*403 refused$/);
+    const rec = group(out, "Background reconcile", out.indexOf(bg));
+    expect(rec).toContain("Contract totals: reconciled (they match what landed)");
+    expect(rec).toContain("Write requests of the background reconcile: 1; at most 1 of 16 in flight at once");
+    expect(rec.some((l) => /^\| reconcile read \| [\d.]+ m?s \| \d+ ms \| – \| – \| ok$/.test(l))).toBe(true);
+    expect(rec.some((l) => /^\| reconcile totals \| [\d.]+ m?s \| \d+ ms \| 1 \| update \d+ rows?: 1 request, bulk \[\d+ ms\] \| ok$/.test(l))).toBe(true);
+    // The reconcile write is not in the save line, nor in its request count.
+    expect(saveLine).not.toContain("reconcile");
+    expect(saveCount).toMatch(/^Write requests of this save: 4; at most [1-4] of 16 in flight at once$/);
+    expect(group(out, "Errors", out.indexOf(bg)).some((l) => l.startsWith("Cost delete: BulkDeleteError: "))).toBe(true);
+  });
+
+  it("UT-ACSHEET-LOG-008 the meter counts this save only: a concurrent write of other work raises only the shared peak", async () => {
+    const out = captureLog();
+    const { gatedWrite } = await import("./bulkSend");
+    let releaseOther: () => void = () => undefined;
+    const other = gatedWrite(() => new Promise<void>((r) => { releaseOther = r; }));
+    try {
+      await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    } finally {
+      releaseOther();
+      await other;
+    }
+    const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+    const peak = Number(/gate peak (\d+)\/16/.exec(line)?.[1]);
+    const shared = Number(/shared gate peak (\d+)\/16/.exec(line)?.[1]);
+    expect(shared).toBeGreaterThan(peak);
+    expect(group(out, "Requests")[0]).toBe(`Write requests of this save: 4; at most ${peak} of 16 in flight at once`);
+    expect(group(out, "Requests")).toContain(`Shared write gate: up to ${shared} of 16 in flight, other work included`);
+  });
+
+  it("UT-ACSHEET-LOG-009 the success groups: plan counts, deferred deletes and the verify state", async () => {
+    const out = captureLog();
+    const result = await saveAddCostSheetBulk(typical());
+    await result.background;
+    const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+    expect(line).toMatch(/, delete costs deferred, delete contracts deferred\); gate peak \d+\/16, req avg [\d,]+ ms max [\d,]+ ms, verify skipped, 0 already gone$/);
+    expect(group(out, "Plan")).toEqual([
+      "Contracts: 1 created, 1 updated, 1 deleted",
+      "Cost rows: 1 created, 1 updated, 1 deleted",
+      "Changed cells equal to the stored value (nothing written): 0",
+      "Cost deletes planned: 1; only if they still exist (left by a failed attempt): 0",
+      "Contract deletes planned: 1 (their cost rows and comments go by the Dataverse cascade)",
+      "Contract totals planned: 2",
+    ]);
+    expect(group(out, "Deferred deletes")[0]).toBe("Cost rows deleted in the background: 1");
+    expect(group(out, "Requests")).toContain("Existence check before writing: skipped (first attempt)");
+    // No GUID anywhere in the readable output.
+    expect(out.join("\n")).not.toMatch(GUID);
+  });
+
+  it("UT-ACSHEET-LOG-010 prepareLogReport: one decimal, singular row, the prepare group", async () => {
+    const { prepareLogReport } = await import("./addCostSheet");
+    const t = { total: 4.24, roundTripCheck: 0.31, align: 0.4, diff: 1234.56, deletions: 0.6, orphans: 1 };
+    const r = prepareLogReport(t, 6.1, 2.44, 1);
+    expect(r.summary).toBe(
+      "Add Cost from Table prepare: 4.2 ms (round-trip check 0.3 ms, align 0.4 ms, diff 1,234.6 ms, deletions 0.6 ms, "
+      + "orphans 1.0 ms; last edit's grid read-back 6.1 ms, validation 2.4 ms; 1 row)",
+    );
+    expect(r.sections.map((s) => s.title)).toEqual(["Prepare (client side)"]);
+    expect(prepareLogReport(t, 0, 0, 1200).summary).toMatch(/; 1,200 rows\)$/);
+  });
+
+  it("UT-ACSHEET-LOG-011 screenSaveFailureReport: the classified kind, the user's text, the readable chain and the raw error", async () => {
+    const { screenSaveFailureReport } = await import("./addCostSheet");
+    const id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    const error = new SavePlanError({
+      phase: 4, cause: new DataError(`delete contracts row ${id}`, undefined, 403), reconciled: true, committedBefore: false,
+      requests: { verify: 0, contracts: 0, costs: 0, costDeletes: 0, contractDeletes: 1, reconcile: 0, total: 1 },
+    });
+    const r = screenSaveFailureReport(error, "phase", `Could not save ${id}`);
+    expect(r.summary).toBe("Add Cost from Table save failed: phase; the screen shows: \"Could not save <id>\"");
+    expect(r.sections.map((s) => s.title)).toEqual(["Failure", "Raw error (for support)"]);
+    expect(r.sections[1]?.raw).toBe(error);
+    expect(r.sections[0]?.lines).toContain("Phase: 4");
+    expect(r.sections[0]?.lines.join("\n")).not.toContain(id);
+    expect(r.sections[0]?.lines.some((l) => /caused by DataError \(HTTP 403\): delete contracts row <id>/.test(l))).toBe(true);
+  });
+
+  it("UT-ACSHEET-LOG-012 bookPatchFailureReport: the save stands; the root error, ids replaced, then the raw error", async () => {
+    const { bookPatchFailureReport } = await import("./addCostSheet");
+    const error = new TypeError("book.lines is not iterable 3f2504e0-4f89-11d3-9a0c-0305e82c3301");
+    const r = bookPatchFailureReport(error);
+    expect(r.summary).toBe(
+      "Add Cost from Table: patching the DEVEX/CAPEX book failed; the save itself succeeded and the refetch brings "
+      + "the saved state: TypeError: book.lines is not iterable <id>",
+    );
+    expect(r.sections[1]?.raw).toBe(error);
+  });
+});
+describe("saveAddCostSheetBulk — the readable save log, review fixes (D58)", () => {
+  const captureLog = () => {
+    const out: string[] = [];
+    const raw: unknown[] = [];
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(String(t)); });
+    vi.spyOn(console, "groupCollapsed").mockImplementation((t: unknown) => { out.push(`## ${String(t)}`); });
+    vi.spyOn(console, "table").mockImplementation((rows: unknown) => {
+      for (const r of rows as Record<string, unknown>[]) out.push(`| ${Object.values(r).join(" | ")}`);
+    });
+    vi.spyOn(console, "error").mockImplementation((e: unknown) => { raw.push(e); });
+    return { out, raw };
+  };
+  /** Two rows writing the same cell of one contract, named so a leak is easy to see. */
+  const conflicting = (): Args => ({
+    ...typical(),
+    changedRows: [
+      { ...row("Wirmighausen Turbine", C1, months(200)), accountName: "Zebra Ledger" },
+      { ...row("Wirmighausen Turbine", C1, months(300)), accountName: "Zebra Ledger", rowId: "2" },
+    ],
+    existingContracts: [contract(C1, "Wirmighausen Turbine"), contract(DOOMED, "Doomed")],
+  });
+
+  it("UT-ACSHEET-LOG-013 a conflict's contract and account names never reach a readable line; the raw group keeps them", async () => {
+    const { out, raw } = captureLog();
+    const e = await saveAddCostSheetBulk(conflicting()).then(() => null, (err: unknown) => err);
+    expect(e).toBeInstanceOf(SheetConflictError);
+    // The error itself does carry the names (that is why they are kept out).
+    expect(`${(e as Error).message} ${(e as InstanceType<typeof SheetConflictError>).detail}`).toMatch(/Wirmighausen|Zebra/);
+    expect(out.join("\n")).not.toMatch(/Wirmighausen|Zebra/);
+    expect(out).toContain("## Raw error (for support)");
+    expect(raw).toEqual([e]);
+    // The screen's report: the conflict's user text names the rows too, so it is left out.
+    const { screenSaveFailureReport } = await import("./addCostSheet");
+    const failure = toSaveFailure(e);
+    const userText = saveFailureText(failure);
+    expect(userText).toMatch(/Wirmighausen|Zebra/);
+    const r = screenSaveFailureReport(e, failure.kind, userText);
+    expect(r.summary).toBe(
+      "Add Cost from Table save failed: conflict; the screen shows the conflict message (it names the rows, so it is left out; see the raw error)",
+    );
+    expect([r.summary, ...r.sections.flatMap((s) => s.lines)].join("\n")).not.toMatch(/Wirmighausen|Zebra/);
+    expect(r.sections[1]?.raw).toBe(e);
+  });
+
+  for (const defer of [false, true]) {
+    it(`UT-ACSHEET-LOG-01${defer ? "5" : "4"} overlapping cost-delete batches are counted per call (deferred ${defer ? "on" : "off"}), the retry batch named in the log only`, async () => {
+      const { out } = captureLog();
+      // A failed attempt created a March row, blank now: on this retry it is `costDeletesIfExist`.
+      const LEFT_BEHIND = "a0000007-0000-4000-8000-000000000007";
+      stored.add(LEFT_BEHIND);
+      // Hold every cost delete so both batches are in flight together.
+      let release: () => void = () => undefined;
+      costDeleteHold = new Promise<void>((r) => { release = r; });
+      const save = saveAddCostSheetBulk({
+        ...typical(), idCache: new Map([[`cost:${C1}|2026|3`, LEFT_BEHIND]]),
+        deferContractDeletes: defer, deferCostDeletes: defer,
+      });
+      await vi.waitFor(() => expect(costDeletesInFlight).toBe(2));
+      costDeleteHold = null;
+      release();
+      const result = await save;
+      await result.background;
+      // Deferred: the batches table under the background line (the save's steps table only has the
+      // deferred placeholder); waited: the save's steps table.
+      const from = defer ? out.indexOf("## Background deletes") : 0;
+      const rows = out.slice(Math.max(0, from)).filter((l) => l.startsWith("| delete costs"));
+      // Batch tables (background) or steps tables (waited): one row per batch, 1 request each.
+      const batch = (name: string) => rows.find((l) => l.startsWith(`| ${name} |`)) ?? "";
+      expect(batch("delete costs")).toMatch(/^\| delete costs \| [^|]+ \| [^|]+ \| 1 \|/);
+      expect(batch("delete costs (left by a failed attempt)")).toMatch(/^\| delete costs \(left by a failed attempt\) \| [^|]+ \| [^|]+ \| 1 \|/);
+      if (!defer) {
+        const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
+        expect(line).toMatch(/delete costs 1 req [\d,]+ ms/);
+        expect(line).toMatch(/delete costs \(left by a failed attempt\) 1 req [\d,]+ ms/);
+      }
+    });
+  }
+
+  it("UT-ACSHEET-LOG-016 the Requests group says what its counts leave out", async () => {
+    const { out } = captureLog();
+    await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    const start = out.indexOf("## Requests");
+    expect(out.slice(start)).toContain("Not counted as requests: the reconcile's cost reads and the per-row fallback's existence check");
   });
 });

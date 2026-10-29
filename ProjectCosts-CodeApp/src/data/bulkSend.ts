@@ -17,7 +17,8 @@
  *    and `costDeleteGate` (`CONTRACT_DELETE_LIMIT`, `COST_DELETE_LIMIT`). They exist ONCE, here, so
  *    both saves and their background work share the same caps under Dataverse's 52-per-user
  *    service-protection limit.
- *  - `requestStats`: the gated write requests' durations, read by the save log.
+ *  - `RequestMeter`: one save's gated write requests (count, durations, peaks), for its log (D58).
+ *  - `formatMs` / `formatRequestDuration`: the save logs' two duration formats.
  *  - `existingIds`: which ids of the two tables still exist (the per-row guard, phase 0, the 404
  *    read-back).
  *
@@ -89,19 +90,34 @@ export type BulkAction = "create" | "update";
  * measured inside the gate (from the moment it holds a slot, so queueing is excluded), for the
  * per-request durations in the save line.
  */
-function bulkTransport(action: BulkAction, onDuration?: (ms: number) => void): BulkUpsertTransport {
+function bulkTransport(
+  action: BulkAction, onDuration?: (ms: number) => void, meter?: RequestMeter,
+): BulkUpsertTransport {
   return action === "create"
-    ? (es, targets) => gated(() => CreateMultipleService.CreateMultiple(es, [...targets]), onDuration)
-    : (es, targets) => gated(() => UpdateMultipleService.UpdateMultiple(es, [...targets]), onDuration);
+    ? (es, targets) => gated(() => CreateMultipleService.CreateMultiple(es, [...targets]), onDuration, meter)
+    : (es, targets) => gated(() => UpdateMultipleService.UpdateMultiple(es, [...targets]), onDuration, meter);
 }
 
 /**
  * One request's duration for the log: `980 ms` under a second, else seconds with one decimal
- * (`10.7 s`), so a slow, contended request stands out in the save line.
+ * (`10.7 s`), so a slow, contended request stands out. The readable form, used in the save logs'
+ * collapsed groups (D58).
  */
 export function formatRequestDuration(ms: number): string {
   const rounded = Math.round(ms);
   return rounded < 1000 ? `${rounded} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+/**
+ * Exact whole milliseconds with an en-US thousands separator (`1,916 ms`): the one unit of the
+ * save logs' one-line summaries (D58), so a pasted line compares directly with the D51/D56
+ * measurement tables. `digits` (default 0) keeps decimals, e.g. the sub-millisecond prepare steps
+ * (`4.2 ms`). The one definition (CONVENTIONS rule 17); never format a log duration inline.
+ */
+export function formatMs(ms: number, digits = 0): string {
+  if (!Number.isFinite(ms)) return "n/a";
+  const value = digits === 0 ? Math.round(ms) : ms;
+  return `${value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })} ms`;
 }
 
 const BULK_ACTION_NAME: Readonly<Record<BulkAction, string>> = {
@@ -189,7 +205,9 @@ const ROW_WRITE_CONCURRENCY = DELETE_CONCURRENCY;
  * and its background share in the same way. The CAPEX panel save passes the same gates.
  */
 export const SAVE_REQUEST_LIMIT = 16;
-export const saveGate = createGate(SAVE_REQUEST_LIMIT);
+// Not exported (D58): every caller writes through `upsertRowsByAction` or `gatedWrite`, which
+// also count the request on that save's `RequestMeter`.
+const saveGate = createGate(SAVE_REQUEST_LIMIT);
 
 /**
  * Contract deletes have their OWN small gate, outside `saveGate`. Each one is a server-side
@@ -212,42 +230,73 @@ export const contractDeleteGate = createGate(CONTRACT_DELETE_LIMIT);
  * slots of their own the deletes can never delay a write.
  *
  * Peak in flight is therefore 16 (writes) + 4 (contract cascades) + 4 (cost deletes) = 24, well
- * under Dataverse's 52-per-user limit. Not counted in `requestStats` either: the log's gate peak
+ * under Dataverse's 52-per-user limit. Not counted in a `RequestMeter` either: the log's gate peak
  * and request stats describe the writes only; the delete counts are their own log entries.
  */
 export const COST_DELETE_LIMIT = 4;
 export const costDeleteGate = createGate(COST_DELETE_LIMIT);
 
-/** Duration of the gated requests of the current save (time inside the gate, not queueing), for the log. */
-const stats = { count: 0, totalMs: 0, maxMs: 0 };
+/**
+ * ONE save's gated write requests, for its log (D58, measurement only: nothing here changes
+ * scheduling). Each save makes its own (`createRequestMeter`) and passes it down
+ * (`upsertRowsByAction`'s `opts.meter`, `gatedWrite`), so its statistics never include another
+ * save's writes or an earlier save's background reconcile (D56 §7), which a module-wide counter
+ * did.
+ *  - `count` / `totalMs` / `maxMs`: this save's finished write requests, timed inside the gate
+ *    (queueing excluded).
+ *  - `peak`: the most of THIS save's write requests in flight at once.
+ *  - `sharedPeak`: the most write requests in flight on the shared `saveGate`, all callers
+ *    together, seen each time one of this save's requests took a slot. Above `peak` only when
+ *    other work (another save's background reconcile, the CAPEX panel) wrote at the same time.
+ */
+export interface RequestMeter {
+  count: number;
+  totalMs: number;
+  maxMs: number;
+  inFlight: number;
+  peak: number;
+  sharedPeak: number;
+}
 
-/** Read-only view of `stats` for the save log; only `gated` and `resetRequestStats` change it. */
-export const requestStats: Readonly<typeof stats> = stats;
-
-export function resetRequestStats(): void {
-  stats.count = 0;
-  stats.totalMs = 0;
-  stats.maxMs = 0;
+export function createRequestMeter(): RequestMeter {
+  return { count: 0, totalMs: 0, maxMs: 0, inFlight: 0, peak: 0, sharedPeak: 0 };
 }
 
 /**
  * `saveGate(task)`, timing the task once it holds a slot. Every write request of a save (never a
  * delete) goes through here. `onDuration` also receives that one request's duration (the bulk
- * requests' per-request entries in the save line).
+ * requests' per-request entries in the save line); `meter`, when given, counts it for that save.
  */
-function gated<T>(task: () => Promise<T>, onDuration?: (ms: number) => void): Promise<T> {
+function gated<T>(task: () => Promise<T>, onDuration?: (ms: number) => void, meter?: RequestMeter): Promise<T> {
   return saveGate(async () => {
     const t0 = performance.now();
+    if (meter) {
+      meter.inFlight += 1;
+      if (meter.inFlight > meter.peak) meter.peak = meter.inFlight;
+      const shared = saveGate.inFlight();
+      if (shared > meter.sharedPeak) meter.sharedPeak = shared;
+    }
     try {
       return await task();
     } finally {
       const ms = performance.now() - t0;
-      stats.count += 1;
-      stats.totalMs += ms;
-      if (ms > stats.maxMs) stats.maxMs = ms;
+      if (meter) {
+        meter.inFlight -= 1;
+        meter.count += 1;
+        meter.totalMs += ms;
+        if (ms > meter.maxMs) meter.maxMs = ms;
+      }
       onDuration?.(ms);
     }
   });
+}
+
+/**
+ * A single write request outside `upsertRowsByAction` (the CAPEX panel's contract create or
+ * update) through the shared `saveGate`, counted on that save's `meter`. Same slot as before.
+ */
+export function gatedWrite<T>(task: () => Promise<T>, meter?: RequestMeter): Promise<T> {
+  return gated(task, undefined, meter);
 }
 
 /**
@@ -288,7 +337,7 @@ const ROW_UPSERT: Readonly<Record<string, (id: string, fields: Readonly<Record<s
  * save may have landed by then, so it cannot be the zero-write `RowsGoneError` itself).
  */
 async function upsertEachRow(
-  table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, guard = false,
+  table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, guard = false, meter?: RequestMeter,
 ): Promise<{ requests: number }> {
   const send = ROW_UPSERT[table.entitySetName];
   if (!send) throw new Error(`${label}: no per-row upsert for ${table.entitySetName}`);
@@ -307,7 +356,7 @@ async function upsertEachRow(
     }
   }
   await forEachLimit(rows, async (row) => {
-    unwrap((await gated(() => send(row.id, row.fields))) as Parameters<typeof unwrap>[0], label);
+    unwrap((await gated(() => send(row.id, row.fields), undefined, meter)) as Parameters<typeof unwrap>[0], label);
   }, ROW_WRITE_CONCURRENCY);
   return { requests: checks + rows.length };
 }
@@ -321,11 +370,29 @@ type GroupPath = "bulk" | "per-row after 501" | "per-row since an earlier 501";
  */
 interface GroupTrack { path?: GroupPath; durations?: number[] }
 
-/** `bulk [980 ms, 10.7 s]` on the bulk path (one entry per request); the path alone otherwise. */
+/**
+ * `bulk [980 ms, 10,740 ms]` on the bulk path (one entry per request, exact ms: the one-line
+ * summary's unit, D58); the path alone otherwise.
+ */
 function groupPathText(track: GroupTrack): string {
   const path = track.path ?? "bulk";
   const durations = path === "bulk" ? track.durations ?? [] : [];
-  return durations.length === 0 ? path : `${path} [${durations.map(formatRequestDuration).join(", ")}]`;
+  return durations.length === 0 ? path : `${path} [${durations.map((ms) => formatMs(ms)).join(", ")}]`;
+}
+
+/**
+ * One action's group as it went, for the save logs' collapsed groups (D58): the structured twin
+ * of the summary text `upsertRowsByAction` reports.
+ */
+export interface UpsertGroupReport {
+  action: BulkAction;
+  rows: number;
+  /** Requests sent; absent when the group failed (a failing group's count is not known). */
+  requests?: number;
+  failed: boolean;
+  path: GroupPath;
+  /** Each bulk request's own server time, in completion order (bulk path only). */
+  durations: readonly number[];
 }
 
 /**
@@ -336,7 +403,7 @@ function groupPathText(track: GroupTrack): string {
  */
 async function sendGroup(
   action: BulkAction, table: BulkTableInfo, rows: readonly UpsertTarget[], label: string,
-  track: GroupTrack, guardPerRowUpdates = false,
+  track: GroupTrack, guardPerRowUpdates = false, meter?: RequestMeter,
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const groupLabel = `${label} (${action})`;
@@ -344,23 +411,34 @@ async function sendGroup(
   if (bulkUnavailable[action]) {
     // Reached in a skipped-verify save only when another operation of THIS save set the flag.
     track.path = "per-row since an earlier 501";
-    return (await upsertEachRow(table, rows, groupLabel, guard)).requests;
+    return (await upsertEachRow(table, rows, groupLabel, guard, meter)).requests;
   }
   track.path = "bulk";
   const durations: number[] = (track.durations = []);
   try {
     // Parallel chunks (`BULK_PARALLEL_CHUNKS`): each one still passes `saveGate` through
     // `bulkTransport`, so the save's in-flight cap is unchanged.
-    return (await upsertMultiple(table, rows, bulkTransport(action, (ms) => { durations.push(ms); }), {
+    return (await upsertMultiple(table, rows, bulkTransport(action, (ms) => { durations.push(ms); }, meter), {
       label: groupLabel, parallel: BULK_PARALLEL_CHUNKS,
     })).requests;
   } catch (error) {
     if (!isBulkNotImplemented(error)) throw error;
     rememberBulk501(action);
-    console.warn(`${BULK_ACTION_NAME[action]} answered 501 Not Implemented; ${groupLabel} continues row by row.`);
+    console.warn(bulk501WarningLine(BULK_ACTION_NAME[action], groupLabel, rows.length));
   }
   track.path = "per-row after 501";
-  return refusedBulkRequests(rows.length) + (await upsertEachRow(table, rows, groupLabel, guard)).requests;
+  return refusedBulkRequests(rows.length) + (await upsertEachRow(table, rows, groupLabel, guard, meter)).requests;
+}
+
+/**
+ * The 501 warning (D58: the original text, then what happens next, in plain words). Shared by both
+ * saves. Pure, so the text is pinned by a test.
+ */
+export function bulk501WarningLine(actionName: string, groupLabel: string, rows: number): string {
+  return `${actionName} answered 501 Not Implemented; ${groupLabel} continues row by row. `
+    + `Nothing of it was written by the refused request; ${rows.toLocaleString("en-US")} `
+    + `${rows === 1 ? "row goes" : "rows go"} out as one PATCH each, and this tab keeps sending `
+    + `${actionName} rows one by one while its session flag is set (until the tab closes).`;
 }
 
 /**
@@ -420,7 +498,8 @@ function dataStatus(error: unknown): number | undefined {
  */
 export async function upsertRowsByAction(
   table: BulkTableInfo, rows: readonly UpsertTarget[], label: string,
-  report?: (summary: string) => void, opts: { guardPerRowUpdates?: boolean } = {},
+  report?: (summary: string, groups: readonly UpsertGroupReport[]) => void,
+  opts: { guardPerRowUpdates?: boolean; meter?: RequestMeter } = {},
 ): Promise<{ requests: number }> {
   toUpsertTargets(table, rows, label);
   const groups: Record<BulkAction, readonly UpsertTarget[]> = {
@@ -431,20 +510,27 @@ export async function upsertRowsByAction(
   const actions = ["create", "update"] as const;
   const settled = await Promise.allSettled(
     actions.map((action) => sendGroup(
-      action, table, groups[action], label, tracks[action], opts.guardPerRowUpdates === true,
+      action, table, groups[action], label, tracks[action], opts.guardPerRowUpdates === true, opts.meter,
     )),
   );
 
-  report?.(actions
-    .map((action, i) => {
-      if (groups[action].length === 0) return null;
-      const s = settled[i] as PromiseSettledResult<number>;
-      return s.status === "fulfilled"
-        ? `${action} ${s.value} req ${groupPathText(tracks[action])}`
-        : `${action} failed ${groupPathText(tracks[action])}`;
-    })
-    .filter((part): part is string => part !== null)
-    .join(", ") || "nothing to send");
+  const reports: UpsertGroupReport[] = [];
+  actions.forEach((action, i) => {
+    if (groups[action].length === 0) return;
+    const s = settled[i] as PromiseSettledResult<number>;
+    const track = tracks[action];
+    const path = track.path ?? "bulk";
+    reports.push({
+      action, rows: groups[action].length, failed: s.status === "rejected", path,
+      durations: path === "bulk" ? [...(track.durations ?? [])] : [],
+      ...(s.status === "fulfilled" ? { requests: s.value } : {}),
+    });
+  });
+  report?.(reports
+    .map((g) => (g.failed
+      ? `${g.action} failed ${groupPathText(tracks[g.action])}`
+      : `${g.action} ${g.requests} req ${groupPathText(tracks[g.action])}`))
+    .join(", ") || "nothing to send", reports);
 
   const failed = actions.flatMap((action, i) => {
     const s = settled[i] as PromiseSettledResult<number>;

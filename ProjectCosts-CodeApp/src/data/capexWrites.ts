@@ -41,9 +41,14 @@ import { deleteMany } from "./bulkWrites";
 import type { BulkTableInfo, UpsertTarget } from "./bulkTypes";
 import { CAPEX_COSTS } from "./addCostSheetBulk";
 import {
-  formatRequestDuration, saveGate, upsertRowsByAction,
+  createRequestMeter, formatMs, gatedWrite, upsertRowsByAction,
+  type RequestMeter, type UpsertGroupReport,
 } from "./bulkSend";
 import { createGate } from "./concurrency";
+import {
+  emitSaveLog, failureSection, gateTail, groupsText, inStartOrder, plural, rawErrorSection, requestsSection,
+  rootMessageOf, stepsSection, type SaveLogStep,
+} from "./saveLog";
 
 /** `vsb_costtype`, verified live: None 952850000 · DevCo 952850001 · SPV 952850002. */
 const COST_TYPE = { devCo: 952850001, spv: 952850002 } as const;
@@ -156,26 +161,76 @@ function bulkPathEnabled(): boolean {
 
 /* ═══════════════════════════════════════════════════════════════ timing ══ */
 
+/** How one step counts its requests (`SaveLog.step`). */
+interface StepOptions<T> {
+  /**
+   * Requests this step SENT, also when it failed (a refused request is still a request). Called
+   * once the step settled. Absent for the one `rest` step (below).
+   */
+  count?: (result: T | undefined) => number;
+  /**
+   * The month writes (`costs`) of a bulk save: their requests pass this save's `RequestMeter`, and
+   * so does every contract write (always exactly 1, `count`). At print time, when every request has
+   * settled, `rest` = meter requests − the counted gated steps' requests. Exact on success AND on
+   * failure (a refused `UpdateMultiple`, a 501 and its per-row fallback), with no race between
+   * the two concurrent write steps. At most one `rest` step per log.
+   */
+  rest?: boolean;
+  /** The request passes the meter (a contract write): its `count` is subtracted from `rest`. */
+  gated?: boolean;
+  /** The one-line summary's parenthesised detail (exact ms). */
+  detail?: () => string;
+  /** The steps table's "How" cell (readable durations). */
+  how?: () => string;
+}
+
+interface RecordedStep {
+  name: string;
+  startMs: number;
+  ms: number;
+  failed: boolean;
+  /** Undefined for the `rest` step until `print`. */
+  requests?: number;
+  rest: boolean;
+  gated: boolean;
+  detail?: string;
+  how?: string;
+}
+
 /**
- * One save's steps for the console line, in the style of Add Cost from Table's save line:
- * `CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; …`.
+ * One panel save's or delete's steps for its console log (D58): the one-line summary
+ * `CAPEX panel save (bulk): 1,312 ms, 2 requests; contract update 1 req 1,301 ms; …; gate peak …`,
+ * then collapsed Steps / Requests (and on failure Failure / Raw error) groups, through
+ * `emitSaveLog`. Steps are listed in START order; every request a step sent is counted, also when
+ * it failed.
+ *
+ * GATE TAIL. Only the bulk SAVE sends its writes through the shared `saveGate` (each counted on
+ * this save's own `meter`, D58 decision 4), so only its line ends in `gate peak …`. The per-row
+ * path and the deletes pass no shared write gate; a tail there would read "0/16" and mislead.
  */
 class SaveLog {
   private readonly t0 = performance.now();
-  private readonly steps: string[] = [];
+  private readonly steps: RecordedStep[] = [];
+  private readonly planned: string[] = [];
   private readonly path: "bulk" | "per-row";
   private readonly what: string;
-  requests = 0;
+  /** This save's gated write requests; read for the `rest` step and the gate tail. */
+  readonly meter: RequestMeter = createRequestMeter();
+  private readonly showsGate: boolean;
 
-  constructor(path: "bulk" | "per-row", what: string) {
+  constructor(path: "bulk" | "per-row", what: string, showsGate = false) {
     this.path = path;
     this.what = what;
+    this.showsGate = showsGate;
   }
 
-  /** Times `task` and records it as `<name> <n> req <ms>[ detail]`; also on failure. */
-  async step<T>(
-    name: string, task: () => Promise<T>, count: (result: T | undefined) => number, detail?: () => string,
-  ): Promise<T> {
+  /** Steps this run means to take, so a failure can list the ones never started as "not sent". */
+  expect(...names: string[]): void {
+    this.planned.push(...names);
+  }
+
+  /** Times `task` and records it; also on failure. */
+  async step<T>(name: string, task: () => Promise<T>, opts: StepOptions<T> = {}): Promise<T> {
     const t = performance.now();
     let result: T | undefined;
     let failed = false;
@@ -186,56 +241,106 @@ class SaveLog {
       failed = true;
       throw error;
     } finally {
-      const n = count(result);
-      this.requests += n;
-      const extra = detail?.();
-      this.steps.push(
-        `${name} ${failed ? "FAILED" : `${n} req`} ${formatRequestDuration(performance.now() - t)}` +
-          (extra ? ` (${extra})` : ""),
-      );
+      this.steps.push({
+        name, startMs: t - this.t0, ms: performance.now() - t, failed,
+        requests: opts.rest ? undefined : opts.count?.(result) ?? 0,
+        rest: opts.rest === true, gated: opts.gated === true,
+        detail: opts.detail?.() || undefined, how: opts.how?.() || undefined,
+      });
     }
   }
 
-  note(text: string): void {
-    this.steps.push(text);
+  /** The recorded steps with every count settled, in start order. */
+  private settled(): (RecordedStep & { requests: number })[] {
+    const counted = this.steps.filter((s) => s.gated).reduce((n, s) => n + (s.requests ?? 0), 0);
+    return inStartOrder(this.steps.map((s) => ({
+      ...s, requests: s.rest ? Math.max(0, this.meter.count - counted) : s.requests ?? 0,
+    })));
   }
 
-  print(failed = false): void {
-    console.info(panelSaveLogLine({
-      what: this.what, path: this.path, failed, ms: performance.now() - this.t0,
-      requests: this.requests, steps: this.steps,
-    }));
+  print(error?: { error: unknown }): void {
+    try {
+      const steps = this.settled();
+      const requests = steps.reduce((n, s) => n + s.requests, 0);
+      const summary = panelSaveLogLine({
+        what: this.what, path: this.path, failed: error !== undefined, ms: performance.now() - this.t0,
+        requests,
+        steps: steps.map((s) => `${s.name} ${s.failed ? "FAILED" : `${s.requests} req`} ${formatMs(s.ms)}`
+          + (s.detail ? ` (${s.detail})` : "")),
+        ...(this.showsGate ? { gate: gateTail(this.meter) } : {}),
+        ...(error ? { error: rootMessageOf(error.error) } : {}),
+      });
+      const recorded = new Set(steps.map((s) => s.name));
+      const rows: SaveLogStep[] = [
+        ...steps.map((s): SaveLogStep => ({
+          label: s.name, startMs: s.startMs, ms: s.ms, requests: s.requests,
+          ...(s.how ? { detail: s.how } : {}), status: s.failed ? "failed" : "ok",
+        })),
+        ...(error ? this.planned.filter((n) => !recorded.has(n)).map((label): SaveLogStep => ({ label, status: "skipped" })) : []),
+      ];
+      const requestsGroup = this.showsGate
+        ? requestsSection(this.meter, [`Path: ${this.path}`])
+        : { title: "Requests", lines: [`Requests sent: ${requests.toLocaleString("en-US")} (${this.path}); none pass the shared write gate`] };
+      emitSaveLog({
+        summary,
+        sections: error
+          ? [
+            failureSection(error.error, rows, [`Requests sent before it stopped: ${requests.toLocaleString("en-US")}`]),
+            stepsSection(rows), requestsGroup, rawErrorSection(error.error),
+          ]
+          : [stepsSection(rows), requestsGroup],
+      });
+    } catch {
+      // Logging must never change the save's outcome.
+    }
   }
-}
-
-/** The console line of one panel save or delete. Pure, so the format is pinned by a test. */
-export function panelSaveLogLine(s: {
-  what: string; path: "bulk" | "per-row"; failed: boolean; ms: number; requests: number; steps: readonly string[];
-}): string {
-  const head = `${s.what} (${s.path})${s.failed ? " FAILED after" : ":"} ` +
-    `${Math.round(s.ms).toLocaleString("en-US")} ms, ${s.requests} requests`;
-  return s.steps.length === 0 ? head : `${head}; ${s.steps.join("; ")}`;
 }
 
 /**
- * The second console line of a panel save, from the hook: how long the Save kept the spinner up,
- * split into the writes (the line above) and the refetch the hook awaits afterwards.
+ * The one-line summary of one panel save or delete. Pure, so the format is pinned by a test.
+ * `steps` are already in start order; `gate` is the bulk save's `gateTail`; `error` (failure
+ * only) the innermost readable message, GUIDs replaced (`rootMessageOf`).
  */
-export function panelBusyLogLine(writesMs: number, refetchMs: number): string {
-  const ms = (n: number) => `${Math.round(n).toLocaleString("en-US")} ms`;
-  return `CAPEX panel save busy: ${ms(writesMs + refetchMs)} (writes ${ms(writesMs)}, refetch ${ms(refetchMs)})`;
+export function panelSaveLogLine(s: {
+  what: string; path: "bulk" | "per-row"; failed: boolean; ms: number; requests: number; steps: readonly string[];
+  gate?: string; error?: string;
+}): string {
+  const parts = [
+    `${s.what} (${s.path})${s.failed ? " FAILED after" : ":"} ${formatMs(s.ms)}, ${plural(s.requests, "request")}`,
+    ...s.steps,
+    ...(s.gate ? [s.gate] : []),
+    ...(s.error !== undefined ? [`error: ${s.error}`] : []),
+  ];
+  return parts.join("; ");
 }
 
-/** Runs `task`, printing the save line whether it succeeds or fails. */
+/**
+ * The second console line of a panel save or delete, from the hook: how long the action kept the
+ * spinner up, split into the writes (the line above) and the refetch the hook awaits afterwards.
+ * `CAPEX panel save busy: 2,118 ms (writes 1,312 ms, refetch 806 ms)`;
+ * `CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)` (D58).
+ */
+export function panelBusyLogLine(writesMs: number, refetchMs: number, kind: "save" | "delete" = "save"): string {
+  return `CAPEX panel ${kind} busy: ${formatMs(writesMs + refetchMs)} `
+    + `(${kind === "save" ? "writes" : "deletes"} ${formatMs(writesMs)}, refetch ${formatMs(refetchMs)})`;
+}
+
+/** Runs `task`, printing the save log whether it succeeds or fails. */
 async function logged<T>(log: SaveLog, task: () => Promise<T>): Promise<T> {
   try {
     const result = await task();
     log.print();
     return result;
   } catch (error) {
-    log.print(true);
+    log.print({ error });
     throw error;
   }
+}
+
+/** A counting deleter: `sent` grows BEFORE each request, so a refused one is counted too. */
+function counting<A extends unknown[], R>(fn: (...a: A) => Promise<R>): { run: (...a: A) => Promise<R>; sent: () => number } {
+  let sent = 0;
+  return { run: (...a: A) => { sent += 1; return fn(...a); }, sent: () => sent };
 }
 
 /* ═══════════════════════════════════════════════════════ contract payload ══ */
@@ -425,31 +530,36 @@ export async function saveCostLine(args: SaveCostLineArgs): Promise<string> {
 export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string> {
   const { line, owningBusinessUnitId, payments, isNew } = args;
   const log = new SaveLog("per-row", "CAPEX panel save");
+  const reset = Boolean(args.resetPaidAndPaymentDateComments) && !isNew;
+  log.expect(isNew ? "contract create" : "contract update", ...(reset ? ["paid reset", "payment-date comments"] : []),
+    "costs", "cost deletes");
   return logged(log, async () => {
     let contractId = line.id;
 
     if (!isNew) {
-      await log.step("contract update", () => updateContract(args), () => 1);
+      await log.step("contract update", () => updateContract(args), { count: () => 1 });
     } else {
-      contractId = await log.step("contract create", () => createContract(args), () => 1);
+      contractId = await log.step("contract create", () => createContract(args), { count: () => 1 });
     }
 
     // The relink reset, in the canvas' order: before the cost rows are reconciled, so a month
     // that survives the save is already unpaid rather than being patched twice.
-    if (args.resetPaidAndPaymentDateComments && !isNew) {
+    if (reset) {
       let paid = 0;
       await log.step("paid reset", async () => {
         for (const payment of line.payments) {
           if (payment.paid && payment.id) { paid += 1; await setCostPaid(payment.id, false); }
         }
-      }, () => paid);
+      }, { count: () => paid });
+      let read = 0;
       let removed = 0;
       await log.step("payment-date comments", async () => {
+        read = 1;
         const existing = await loadComments([contractId]);
         for (const comment of existing) {
           if (comment.commentType === COMMENT_TYPE.paymentDate) { removed += 1; await deleteComment(comment.id); }
         }
-      }, () => 1 + removed, () => `1 read, ${removed} deleted`);
+      }, { count: () => read + removed, detail: () => `1 read, ${removed} deleted`, how: () => `1 read, ${plural(removed, "comment")} deleted` });
     }
 
     const rows: CostRowInput[] = payments.map((p) => ({
@@ -462,8 +572,11 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
 
     let created = 0;
     let updated = 0;
+    // Attempts, counted before each request, so a refused one still counts (D58).
+    let attempts = 0;
     await log.step("costs", async () => {
       for (const upsert of plan.upserts) {
+        attempts += 1;
         if (upsert.costId) {
           unwrap(
             await Vsb_capexcostsService.update(upsert.costId, { vsb_cost: upsert.cost }),
@@ -478,7 +591,11 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
           created += 1;
         }
       }
-    }, () => created + updated, () => `create ${created}, update ${updated}`);
+    }, {
+      count: () => attempts,
+      detail: () => `create ${created}, update ${updated}`,
+      how: () => `${plural(created, "row")} created, ${plural(updated, "row")} updated, one request each`,
+    });
 
     // Deletes last: an interrupted save then leaves extra rows rather than missing money.
     // Through `deleteRecord`, not the generated service: the generated `delete()` discards the
@@ -488,10 +605,10 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
     let deleted = 0;
     await log.step("cost deletes", async () => {
       for (const costId of plan.deletes) {
-        await deleteRecord("delete CAPEX cost", "vsb_capexcosts", costId);
         deleted += 1;
+        await deleteRecord("delete CAPEX cost", "vsb_capexcosts", costId);
       }
-    }, () => deleted);
+    }, { count: () => deleted });
 
     return contractId;
   });
@@ -569,7 +686,11 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
     skipUnchanged,
     newId: () => crypto.randomUUID(),
   });
-  const log = new SaveLog("bulk", "CAPEX panel save");
+  // The bulk SAVE is the only panel log with a gate tail: its writes pass the shared `saveGate`,
+  // each counted on this save's own meter (D58).
+  const log = new SaveLog("bulk", "CAPEX panel save", true);
+  log.expect(isNew ? "contract create" : "contract update", "costs", ...(reset ? ["payment-date comments"] : []), "cost deletes");
+  const meter = log.meter;
 
   return logged(log, async () => {
     const costs = async (contractId: string) => {
@@ -585,22 +706,27 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
         })),
       ];
       let summary = "";
-      let requests = 0;
-      await log.step("costs", async () => {
-        requests = (await upsertRowsByAction(CAPEX_COSTS, targets, "save CAPEX costs", (s) => { summary = s; })).requests;
-      }, () => requests, () => [
-        summary,
+      let groups: readonly UpsertGroupReport[] = [];
+      const extras = () => [
         plan.paidResets > 0 ? `${plan.paidResets} paid reset` : "",
         plan.unchanged > 0 ? `${plan.unchanged} unchanged skipped` : "",
-      ].filter(Boolean).join(", "));
+      ].filter(Boolean);
+      await log.step("costs", async () => {
+        await upsertRowsByAction(CAPEX_COSTS, targets, "save CAPEX costs", (s, g) => { summary = s; groups = g; }, { meter });
+      }, {
+        // Its requests are the meter's, less the contract write's (see `StepOptions.rest`).
+        rest: true,
+        detail: () => [summary, ...extras()].filter(Boolean).join(", "),
+        how: () => groupsText(groups, extras().map((e) => e.replace("unchanged skipped", "unchanged months skipped"))),
+      });
     };
 
     let contractId = line.id;
     if (isNew) {
-      contractId = await log.step("contract create", () => saveGate(() => createContract(args)), () => 1);
+      contractId = await log.step("contract create", () => gatedWrite(() => createContract(args), meter), { count: () => 1, gated: true });
       await costs(contractId);
     } else {
-      const contract = () => log.step("contract update", () => saveGate(() => updateContract(args)), () => 1);
+      const contract = () => log.step("contract update", () => gatedWrite(() => updateContract(args), meter), { count: () => 1, gated: true });
       const steps: (() => Promise<unknown>)[] = [() => costs(contractId)];
       if (reset) {
         await contract();
@@ -613,26 +739,35 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
       if (failed) throw failed.reason;
     }
 
-    let deletes = 0;
-    await log.step("cost deletes", async () => {
-      deletes = (await deleteMany(CAPEX_COSTS, plan.deletes, gatedCostDelete, {
-        limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost",
-      })).requests;
-    }, () => deletes);
+    const deleter = counting(gatedCostDelete);
+    await log.step("cost deletes", () => deleteMany(CAPEX_COSTS, plan.deletes, deleter.run, {
+      limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost",
+    }), { count: () => deleter.sent(), how: () => deletesHow(deleter.sent()) });
 
     return contractId;
   });
 }
 
+/** A delete step's readable "How" cell. */
+function deletesHow(n: number): string {
+  return n === 0 ? "nothing to delete" : `${plural(n, "row")}, ${PANEL_DELETE_LIMIT} at a time`;
+}
+
 /** The relink's `RemoveIf('Capex Comments', … 'Comments to payment date')`, 4 deletes at a time. */
 async function resetPaymentDateComments(contractId: string, log: SaveLog): Promise<void> {
-  let ids: string[] = [];
+  let read = 0;
+  const deleter = counting(gatedCommentDelete);
   await log.step("payment-date comments", async () => {
-    ids = paymentDateCommentIds(await loadComments([contractId]));
-    await deleteMany(CAPEX_COMMENTS, ids, gatedCommentDelete, {
+    read = 1;
+    const ids = paymentDateCommentIds(await loadComments([contractId]));
+    await deleteMany(CAPEX_COMMENTS, ids, deleter.run, {
       limit: PANEL_DELETE_LIMIT, label: "delete CAPEX comment",
     });
-  }, () => 1 + ids.length, () => `1 read, ${ids.length} deleted`);
+  }, {
+    count: () => read + deleter.sent(),
+    detail: () => `1 read, ${deleter.sent()} deleted`,
+    how: () => `1 read, ${plural(deleter.sent(), "comment")} deleted`,
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════ delete line ══ */
@@ -676,25 +811,31 @@ export async function deleteCostLine(line: CostLine): Promise<void> {
 /** The per-row delete: one request at a time. The rollback for `PANEL_BULK_SAVE`. */
 export async function deleteCostLineLegacy(line: CostLine): Promise<void> {
   const log = new SaveLog("per-row", "CAPEX panel delete");
+  log.expect(...DELETE_STEPS);
   await logged(log, async () => {
-    const comments = await log.step("comments read", () => loadComments([line.id]), () => 1);
+    const comments = await log.step("comments read", () => loadComments([line.id]), { count: () => 1 });
     const plan = planDeleteContract(
       line.id,
       comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" })),
     );
 
+    const commentDelete = counting(deleteComment);
     await log.step("comment deletes", async () => {
-      for (const commentId of plan.commentIds) await deleteComment(commentId);
-    }, () => plan.commentIds.length);
+      for (const commentId of plan.commentIds) await commentDelete.run(commentId);
+    }, { count: () => commentDelete.sent() });
     const costIds = line.payments.flatMap((p) => (p.id ? [p.id] : []));
+    const costDelete = counting(deleteRecord);
     await log.step("cost deletes", async () => {
-      for (const id of costIds) await deleteRecord("delete CAPEX cost", "vsb_capexcosts", id);
-    }, () => costIds.length);
+      for (const id of costIds) await costDelete.run("delete CAPEX cost", "vsb_capexcosts", id);
+    }, { count: () => costDelete.sent() });
     await log.step("contract delete", () => deleteRecord(
       "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
-    ), () => 1);
+    ), { count: () => 1 });
   });
 }
+
+/** The three delete phases after the comments read, in order (for "not sent" on a failure). */
+const DELETE_STEPS = ["comments read", "comment deletes", "cost deletes", "contract delete"] as const;
 
 /**
  * The same three phases in the same order — comments, then cost rows, then the contract — with the
@@ -705,23 +846,27 @@ export async function deleteCostLineLegacy(line: CostLine): Promise<void> {
  * while a child of it is still there, exactly as the per-row loop's first throw stopped it.
  */
 export async function deleteCostLineBulk(line: CostLine): Promise<void> {
+  // No gate tail: a Delete sends nothing through the shared write gate (`SaveLog`).
   const log = new SaveLog("bulk", "CAPEX panel delete");
+  log.expect(...DELETE_STEPS);
   await logged(log, async () => {
-    const comments = await log.step("comments read", () => loadComments([line.id]), () => 1);
+    const comments = await log.step("comments read", () => loadComments([line.id]), { count: () => 1 });
     const plan = planDeleteContract(
       line.id,
       comments.map((c) => ({ id: c.id, contractId: c.contractId ?? "" })),
     );
+    const commentDelete = counting(gatedCommentDelete);
     await log.step("comment deletes", () => deleteMany(
-      CAPEX_COMMENTS, plan.commentIds, gatedCommentDelete,
+      CAPEX_COMMENTS, plan.commentIds, commentDelete.run,
       { limit: PANEL_DELETE_LIMIT, label: "delete CAPEX comment" },
-    ), () => plan.commentIds.length);
+    ), { count: () => commentDelete.sent(), how: () => deletesHow(commentDelete.sent()) });
     const costIds = line.payments.flatMap((p) => (p.id ? [p.id] : []));
+    const costDelete = counting(gatedCostDelete);
     await log.step("cost deletes", () => deleteMany(
-      CAPEX_COSTS, costIds, gatedCostDelete, { limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost" },
-    ), () => costIds.length);
+      CAPEX_COSTS, costIds, costDelete.run, { limit: PANEL_DELETE_LIMIT, label: "delete CAPEX cost" },
+    ), { count: () => costDelete.sent(), how: () => deletesHow(costDelete.sent()) });
     await log.step("contract delete", () => deleteRecord(
       "delete CAPEX contract", "vsb_capexprojectcontracts", plan.contractId,
-    ), () => 1);
+    ), { count: () => 1 });
   });
 }
