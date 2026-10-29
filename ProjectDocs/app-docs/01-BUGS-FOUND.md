@@ -1184,6 +1184,55 @@ screens looking idle while they were busy.
   **Not verified** in a browser: the first live check on DEV is owed.
 - **Record:** **D60**.
 
+### CA-21 · The project name in the Cost header was smaller and greyer than in the Edit Project header (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (typography parity). Reported by the user: on every Cost screen the header's
+project name did not match the one on the Edit Project (Project Management) screens.
+- **Canvas ground truth.** Both apps' `cmp_Header` render the name with the same control,
+  `con_cmp_Header_HeaderText`: `Text@0.0.51`, `Size: =20`, `Weight: Semibold`
+  (`projectcosts/Src/Components/cmp_Header.pa.yaml:324-332`, `projectmanagement/…:446-458`). So the
+  canvas shows 20 px Semibold in both, and the Edit Project header was right.
+- **What differed.**
+
+  | | Cost header (before) | Edit Project header |
+  |---|---|---|
+  | Element | Fluent `<Text>` plus a Griffel style | plain `<span>` |
+  | Font size | 16 px (`fontSizeBase400`) | 20 px |
+  | Line height | Fluent default | 28 px |
+  | Colour | Fluent text grey | black |
+  | Width | capped at 28 characters | no cap, ellipsis on overflow |
+
+- **Root cause.** `components/AppHeader.tsx` rendered the Cost name as a Fluent `Text` carrying a
+  Griffel `pageTitle` style (16 px, `maxWidth: 28ch`) next to the `.canvas-project-title` class. A rule
+  for 20 px / 28 px existed in `styles/canvas.css`, but it is a plain single-class rule, and the Griffel
+  rules (injected at runtime, after the stylesheet) won the cascade. The PM name, a plain `<span>`
+  with no Griffel class, received the 20 px rule. The same trap had already been worked around for
+  the "Cloud" title (see the doubled-class comment in `canvas.css`).
+- **The fix.**
+  - **Cost name.** It is now the same kind of element as the PM name: a plain `<span
+    class="canvas-project-title">`. The Griffel `pageTitle` style was removed.
+  - **One shared rule.** The typography (20 px, 28 px line, 600, `#000`, single line with ellipsis,
+    `min-width: 0`, no 28-character cap) now lives only in `.canvas-project-title`. The PM-only
+    `.canvas-pm-project-title` keeps just `padding: 0`, so the two headers cannot drift apart again.
+  - **Unchanged.** The horizontal spacing and vertical centring of the Cost name, and the PM header
+    (it resolves to the same values as before).
+- **Visible effect.** On every Cost screen the project name grows from 16 px to 20 px and turns black.
+  A long name is no longer cut at 28 characters; it ellipsises at the header's free width, as on the
+  PM screens.
+- **Tests.**
+  - UT-HEADER-010 pins the Cost name as a plain span with only the shared class and no Fluent `Text`
+    or Griffel class. UT-HEADER-011 pins the PM name's classes, and UT-HEADER-012 the long-name case.
+  - UT-HEADER-013 loads the real stylesheet and checks both headers resolve to the same font (20 px,
+    600).
+  - UT-HEADERCSS-001..003 pin the shared rule, forbid the PM rule from restating typography, and
+    forbid any other rule from restyling the title's font.
+  - Mutation checks: restoring a Fluent `Text` fails UT-HEADER-010; 16 px in the shared rule fails
+    UT-HEADERCSS-001; a typography override in the PM rule fails UT-HEADERCSS-002.
+  - **Limit.** jsdom does not model a browser's cascade between Fluent's runtime rules and a
+    stylesheet, so UT-HEADER-013 alone would not have caught the original bug. The structural tests
+    are what guard against it.
+- **Not verified** in a browser; the first look on DEV is owed.
+
 ---
 
 ## Verification notes

@@ -25,7 +25,14 @@
 /* `rec_cmp_Header_Project_State` — 4 x 70, filled from `gblTableApprovalStateColors` by the
    project's approval state, with that state as its tooltip. White when it matches none. */
 .canvas-project-state { flex-shrink: 0; width: 4px; height: 70px; }
-.canvas-project-title { padding: 0 8px; max-width: none; font-size: 20px; line-height: 28px; }
+/* `con_cmp_Header_HeaderText` — `Text@0.0.51`, `Size: =20`, `Weight: Semibold`, in the `cmp_Header` of
+   BOTH apps (projectcosts `cmp_Header.pa.yaml:324-332`, projectmanagement `:446-458`). This one rule
+   is the project name's typography for the Cost header AND the Project Management header, so the two
+   cannot drift apart again (CA-21): the Cost name had been a Fluent `Text` whose own Griffel size
+   (16 px) and colour beat this rule, while the PM name, a plain span, got it. `min-width: 0` lets a
+   long name shrink and ellipsise inside the header's flex row. Only what differs per app is overridden
+   below (`.canvas-pm-project-title`: padding). */
+.canvas-project-title { padding: 0 8px; max-width: none; min-width: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* `overflow: visible` is load-bearing: Fluent's Button root clips to its own rounded box,
    and the avatar is positioned to stand proud of the pill's right edge and above its top. */
 /* Size and padding are in `styles.userPill` (AppHeader.tsx), where they beat Fluent's Button
@@ -92,7 +99,9 @@
 .canvas-project-heading { display: flex; flex-direction: column; min-width: 0; padding-left: 16px; }
 /* `Y: =(Parent.Height-Self.Height)/2-4`: a lone title sits 5 px above the bar's middle here. */
 .canvas-project-heading:not(:has(.canvas-project-status)) { margin-bottom: 10px; }
-.canvas-pm-project-title { padding: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Typography comes from the shared `.canvas-project-title`; the PM name sits 16 px from the state bar
+   through `.canvas-project-heading`'s padding, so it needs none of its own. */
+.canvas-pm-project-title { padding: 0; }
 .canvas-project-status { display: inline-flex; align-items: center; gap: 4px; margin-top: -2px; }
 .canvas-project-status-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
 .canvas-project-status-text { color: rgb(50, 49, 48); font-size: 13.33px; font-weight: 300; line-height: 18px; }
