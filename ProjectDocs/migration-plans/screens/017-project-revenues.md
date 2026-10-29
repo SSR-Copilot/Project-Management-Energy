@@ -138,6 +138,8 @@ Add rule tests for every REV-FX-* row. Add component tests for load/empty/error/
 
 **Status (20 Oct 2026):** redeveloped and connected — rules, UI, live Dataverse reads and writes (contract save / delete with the individual hedge volumes, balancing-price save / delete), docs. See `ProjectDocs/app-docs/02-OPEN-DECISIONS.md` **D33** and `gap-analysis/pm-revenues.md`. The standard-assumption engine stays inert until Fabric SQL is connected (D2).
 
+**Update (29 Oct 2026, D57):** `Assumptions Revenues SQL` (Fabric SQL) is connected through `listRevenueAssumptionRows` (the Milestones loader), so the standard-assumption engine now fills the contract panel; the notice is removed. A live-canvas visual parity pass followed, covering the cards, the fixed header, both panels, the balancing grid, the dropdowns, the field errors and the pop-ups, and panels no longer close on an outside click.
+
 Preserve the documented Canvas price-fallback defect only if product confirms. Treat existing React code as a helpful starting point only after comparing it to the Canvas YAML. Where the focused cost app and unified skeleton disagree, prefer Canvas behavior plus the global architecture plan.
 
 ## 21 Implementation Sequence

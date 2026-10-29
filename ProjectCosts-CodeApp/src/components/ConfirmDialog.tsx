@@ -118,6 +118,14 @@ const useStyles = makeStyles({
     ":disabled": { cursor: "default", opacity: 0.6 },
   },
   closeIcon: { fontSize: "20px" },
+  /** `classicPopUp` — `cmp_PopUp_Confirmation`: `con_PopUpConfirmation_Body.Width: =Min(490, …)`. */
+  surfaceClassic: { width: "490px" },
+  /** `con_PopUpConfirmation_BodyHeader.Height: =40`. */
+  headerClassic: { height: "40px", minHeight: "40px" },
+  /** `lbl_PopUpConfirmation_BodyHeader`: `Size: =12` (16 px), Semibold. */
+  titleClassic: { fontSize: pt(12), lineHeight: "22px" },
+  /** The canvas ✕ draws no focus ring when the pop-up opens focused on it. */
+  closeClassic: { ":focus": { outlineStyle: "none" }, ":focus-visible": { outlineStyle: "none" } },
   /**
    * The padded band the description sits in. `LayoutOverflowY: =LayoutOverflow.Scroll` on both
    * components (`cmp_PopUp_Confirmation:154`, `_New:171`) → `overflow-y: auto`.
@@ -163,6 +171,8 @@ const useStyles = makeStyles({
   },
   /** `cmp_PopUp_Confirmation` — no block, `Size: =11`. */
   descriptionPlain: { display: "block", fontSize: pt(11) },
+  /** `cmp_PopUp_Information` — `lbl_PopUpInformation_BodyDescription.Size: =12`. */
+  descriptionInformation: { fontSize: pt(12) },
   /**
    * `con_PopUpConfirmation_BodyDescription_Inside_2` (`_New:182-193`) — the ⓘ block, `Size: =9`.
    *
@@ -283,8 +293,13 @@ export interface ConfirmDialogProps {
   /** Destructive actions get the danger appearance; the canvas relied on the label alone. */
   destructive?: boolean;
   busy?: boolean;
-  /** `"info"` is `cmp_PopUp_Confirmation_New`'s pale ⓘ block; `"plain"` the older component. */
-  variant?: "plain" | "info";
+  /**
+   * `"info"` is `cmp_PopUp_Confirmation_New`'s pale ⓘ block; `"plain"` the older component;
+   * `"information"` the PM app's `cmp_PopUp_Information` (`Components/cmp_PopUp_Information.pa.yaml`):
+   * 450 x 260, a 40-high header with a `Size: =12` title, the description in `Size: =12`
+   * RGBA(50,49,48) inset 20, and ONE themePrimary "OK" button, 90 wide, 20 from the right edge.
+   */
+  variant?: "plain" | "info" | "information";
   /** `IconConfirmButton` — `"CheckMark"` is the `cmp_PopUp_Confirmation` default. */
   confirmIcon?: ConfirmDialogIcon;
   /** `IconCancelButton` — `"Cancel"` (an ✕) is the `cmp_PopUp_Confirmation` default. */
@@ -326,6 +341,12 @@ export interface ConfirmDialogProps {
   darkScrim?: boolean;
   /** Optional (Team / Planning): the PM canvas pop-up's size — 459 x 242, 36 px header, 30 px buttons. */
   compact?: boolean;
+  /**
+   * Optional (PM Revenues): the PM app's own `cmp_PopUp_Confirmation` (`Components/
+   * cmp_PopUp_Confirmation.pa.yaml`) — `Width: =Min(490, …)`, a 40-high header, a `Size: =12`
+   * Semibold title, and no focus ring on the ✕ (the canvas icon has none). Off by default.
+   */
+  classicPopUp?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -339,11 +360,14 @@ export function ConfirmDialog({
   confirmWidth = 96,
   boxHeight, textHeight,
   error, lockWhileBusy = false, canvasFooter = false, footerDivider = true, darkScrim = false, compact = false,
-  onConfirm, onCancel,
+  classicPopUp = false, onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const styles = useStyles();
   const locked = lockWhileBusy && busy;
   const isInfo = variant === "info";
+  const isInformation = variant === "information";
+  /** Both PM pop-ups share the 40-high header, the 12-pt title and the ring-less ✕. */
+  const pmHeader = classicPopUp || isInformation;
 
   /**
    * `BoxHeight` / `TextHeight` are per-instance NUMBERS, so they cannot live in `makeStyles`.
@@ -361,6 +385,7 @@ export function ConfirmDialog({
       className={mergeClasses(
         styles.description,
         isInfo ? styles.infoText : styles.descriptionPlain,
+        isInformation && styles.descriptionInformation,
         canvasFooter && styles.descriptionCanvas,
       )}
     >
@@ -377,16 +402,16 @@ export function ConfirmDialog({
       <DialogSurface
         className={mergeClasses(
           styles.surface, isInfo && styles.surfaceInfo, canvasFooter && styles.surfaceCanvas,
-          compact && styles.surfaceCompact,
+          compact && styles.surfaceCompact, classicPopUp && styles.surfaceClassic,
         )}
         style={surfaceStyle}
         aria-label={title}
         backdrop={{ className: mergeClasses(styles.backdrop, darkScrim && styles.backdropDark) }}
       >
-        <div className={mergeClasses(styles.header, compact && styles.headerCompact)}>
-          <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas)}>{title}</h2>
+        <div className={mergeClasses(styles.header, compact && styles.headerCompact, pmHeader && styles.headerClassic)}>
+          <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas, pmHeader && styles.titleClassic)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
-          <button type="button" className={styles.close} aria-label="Close"
+          <button type="button" className={mergeClasses(styles.close, pmHeader && styles.closeClassic)} aria-label="Close"
             data-testid="ico_PopUpConfirmation_BodyHeader_3" onClick={onCancel} disabled={locked}>
             <DismissRegular className={styles.closeIcon} />
           </button>
@@ -436,21 +461,23 @@ export function ConfirmDialog({
             {canvasFooter && confirmIcon === "delete" ? <DeleteFilled /> : ICONS[confirmIcon]}
             {confirmText}
           </button>
-          <button
-            type="button"
-            className={mergeClasses(
-              styles.button, styles.cancel, canvasFooter && styles.buttonCanvas,
-              compact && styles.buttonCompact, compact && styles.cancelCompact,
-            )}
-            onClick={onCancel}
-            disabled={busy}
-            aria-label={cancelText}
-          
-            data-testid="confirm-dialog-cancel"
-          >
-            {ICONS[cancelIcon]}
-            {cancelText}
-          </button>
+          {/* `cmp_PopUp_Information` has only its OK button (`pcf_PopUpInformation_BodyButtons_Ok`). */}
+          {isInformation ? null : (
+            <button
+              type="button"
+              className={mergeClasses(
+                styles.button, styles.cancel, canvasFooter && styles.buttonCanvas,
+                compact && styles.buttonCompact, compact && styles.cancelCompact,
+              )}
+              onClick={onCancel}
+              disabled={busy}
+              aria-label={cancelText}
+              data-testid="confirm-dialog-cancel"
+            >
+              {ICONS[cancelIcon]}
+              {cancelText}
+            </button>
+          )}
         </div>
       </DialogSurface>
     </Dialog>

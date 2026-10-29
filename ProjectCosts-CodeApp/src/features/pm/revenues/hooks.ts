@@ -12,9 +12,10 @@
  *    project country's `Country Inflation Profiles`;
  *  - at Save time, the contracts overlapping the new term (the hedge 100 % check).
  *
- * NOT CONNECTED: `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`,
- * D2/D26/D28), not a Dataverse table. `useRevenueAssumptions` returns no rows; the standard-
- * assumption engine therefore derives nothing and the panel says so.
+ * FABRIC SQL (connected 29 Oct 2026): `Assumptions Revenues SQL` (`[dbo].[AssumptionsRevenue]`,
+ * D54) is read only, by `useRevenueAssumptions`, for the project country's slice; the standard-
+ * assumption engine derives the type, description, dates, durations, price, inflation and hedged
+ * volume from it.
  *
  * WRITES — `WritePlan`s from `rules.ts`, run in order by `usePlanWrite`:
  *  - contract Save: the contract upsert, then the deletion of its stored individual volumes, then
@@ -37,11 +38,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { ES, ES_FINANCE, ES_PRODUCTION } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
-import { notConnected, type ScreenData } from "@/data/notConnected";
+import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import {
   findCurrency, hasNegativePriceProduction, listBalancingPrices, listIndividualVolumeIds,
-  listIndividualVolumes, listOverlappingContracts, listRevenueContracts, listRevenueCountryInflation,
+  listIndividualVolumes, listOverlappingContracts, listRevenueAssumptionRows, listRevenueContracts,
+  listRevenueCountryInflation,
   loadFirstRevenueSubaccount, loadRevenueProject, type StoredVolume,
 } from "@/data/revenues";
 import {
@@ -82,9 +84,15 @@ export function useRevenueProject(projectId: string | undefined): ScreenData<Rev
 export const useItalyRegion = (project: RevenueProject | null): string | null =>
   (project?.countryName === "Italy" ? provinceToPriceRegion(project.areaName) : null);
 
-/** Rule 3 — `Assumptions Revenues SQL`: Fabric SQL, NOT connected (D2). No rows, ever. */
-export function useRevenueAssumptions(): ScreenData<AssumptionRow[]> {
-  return notConnected<AssumptionRow[]>([]);
+/** Rule 3 — `Assumptions Revenues SQL` (Fabric SQL, read only) for the project's country. */
+export function useRevenueAssumptions(countryName: string | null): ScreenData<AssumptionRow[]> {
+  const q = useQuery({
+    queryKey: qk.revenuesReference("assumptions", countryName ?? "-"),
+    queryFn: () => listRevenueAssumptionRows(countryName!),
+    enabled: Boolean(countryName),
+    staleTime: REFERENCE_STALE,
+  });
+  return out<AssumptionRow[]>(q, []);
 }
 
 /** `colProjectRevenueContracts`. */

@@ -31,7 +31,7 @@ import {
   Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowSyncRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular, EditRegular,
+  AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular, EditRegular,
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
@@ -53,7 +53,7 @@ import {
   validateVolumeMwh, validateHedgedVolumePercent, validateInflationProfile,
   validateInflationStartYear, validateDescription, validateBalancingPrice, validateShiftOfCod,
   canSaveRevenueContract, needsIndividualVolumesConfirmation, isRevenuePageBlocked,
-  contractCommandBar, balancingCommandBar, contractCardFields, contractCardTitle, toggleContractFold,
+  contractCommandBar, balancingCommandBar, contractCardFields, contractCardBodyHeight, CARD_TILE_HEIGHT, contractCardTitle, toggleContractFold,
   unfoldContract, CONTRACT_CARD_CONTROL, type CardTone, balancingClusterReached, revenueLabelText,
   hedgeTypeFromValue, fmtCardDate, sortContracts, sortPeriods,
   deleteContractDescription, deleteBalancingDescription, contractPanelTitle, balancingPanelTitle,
@@ -81,10 +81,15 @@ import {
 // 13.33 px, Medium 11 = 14.67 px, Large 12 = 16 px. The shell's content area scrolls, so the page
 // grows with its content and never clips itself to the viewport.
 const useStyles = makeStyles({
-  // The right content: white, vertical, gap 3, PaddingTop 15 / Left 15 / Right 20.
+  // The right content: white, vertical, gap 3, PaddingTop 15 / Left 15 / Right 20. It is exactly
+  // the content area's height (`flex: 1 1 0`), so the contracts gallery can own the scroll and the
+  // lock message, heading, tabs and Add Contract stay put above it, as on the canvas. A taller tab
+  // (Balancing) scrolls the page itself.
   page: {
-    display: "flex", flexDirection: "column", gap: "3px", minWidth: 0, flex: "1 0 auto",
-    paddingTop: "15px", paddingLeft: "15px", paddingRight: "20px", paddingBottom: "15px",
+    display: "flex", flexDirection: "column", gap: "3px", minWidth: 0, flex: "1 1 0", minHeight: 0, overflowY: "auto",
+    // PaddingRight 6: with the card's 10-px right margin the cards end 16 px from the edge, as
+    // measured on the live canvas (29 Oct 2026; tiles exactly `(Parent.Width - 60) / 4` = 400).
+    paddingTop: "15px", paddingLeft: "15px", paddingRight: "6px", paddingBottom: "15px",
     backgroundColor: palette.white, boxSizing: "border-box",
   },
   // `lbl_…_CardHeader_LabelWithDescription_3`: Large (12 pt) Semibold, PaddingTop 10. PO screenshot
@@ -107,24 +112,48 @@ const useStyles = makeStyles({
     display: "flex", alignItems: "center", height: "38px", width: "50%", minWidth: "fit-content", paddingLeft: "3px",
     // `BasePaletteColor: themePrimary` — the selected tab's underline (and hover bar) in the VSB blue.
     "& .fui-Tab[aria-selected='true']::after": { backgroundColor: palette.themePrimary },
-    "& .fui-Tab[aria-selected='true'] .fui-Tab__content": { fontWeight: 600 },
+    // Selected caption Semibold in #242424, sampled off the live canvas (29 Oct 2026); the app
+    // theme's foreground is pure black.
+    "& .fui-Tab[aria-selected='true'] .fui-Tab__content": { fontWeight: 600, color: "#242424" },
+    // No focus box on a clicked tab (Fluent draws one on `[data-fui-focus-visible]`); `::after` is
+    // the selection bar and is left alone.
+    "& .fui-Tab:focus-visible, & .fui-Tab[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
   },
   // `con_…_Grid` (horizontal, wrapping) / `con_…_Grid_1` (vertical): PaddingLeft 15, PaddingTop 5.
   // PaddingTop 21: with the tabs 22 px shorter, Add Contract lands 37 px under the tab bar, as on the canvas.
-  contractsGrid: { display: "flex", flexWrap: "wrap", alignContent: "flex-start", paddingLeft: "15px", paddingTop: "21px", minWidth: 0 },
+  // Add Contract, then the gallery filling the rest of the page.
+  contractsGrid: {
+    display: "flex", flexDirection: "column", flex: "1 1 0", minHeight: 0,
+    paddingLeft: "15px", paddingTop: "21px", minWidth: 0,
+  },
   balancingGrid: { display: "flex", flexDirection: "column", gap: "20px", paddingLeft: "15px", paddingTop: "21px", minWidth: 0 },
   // `LayoutGap: If('Cluster State'.Order >= 4, 20, 25)`.
   balancingGridLocked: { gap: "25px" },
   // `btn_Revenue_AddContract` (140 wide) / `btn_Revenue_AddBlancing_Price` (190 wide): Transparent,
-  // themePrimary text and a solid themePrimary outline — 1 px, radius 2, as the PO's live-canvas
-  // screenshot shows (the 1.21.709 YAML says `BorderThickness: =2`).
+  // themePrimary text and a solid themePrimary outline, `BorderThickness: =2`, radius 2 — measured
+  // 2 px on the live canvas (29 Oct 2026; the 1 px read off the 20 Oct screenshot was wrong).
   addButton: {
+    // 32 high including the 2-px border (Fluent's min-height made it 34).
+    height: "32px", minHeight: "32px", boxSizing: "border-box",
     color: palette.themePrimary, borderRadius: "2px",
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopWidth: "2px", borderRightWidth: "2px", borderBottomWidth: "2px", borderLeftWidth: "2px",
     borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
     borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
     borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
     "& .fui-Button__icon": { color: palette.themePrimary },
+    // The canvas outline never changes: Fluent's hover / pressed border colours and its keyboard
+    // focus ring (which stays on the button while the panel it opened is up) are overridden.
+    ":enabled:hover, :enabled:active, :enabled:hover:active, :enabled:focus, :enabled:focus-visible, &[data-fui-focus-visible]": {
+      color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      outlineStyle: "none", boxShadow: "none",
+    },
+    "&[data-fui-focus-visible]::after": { display: "none" },
     // Disabled, the canvas shows only the grey caption and icon — no outline (29 Oct 2026).
     ":disabled": {
       color: tokens.colorNeutralForegroundDisabled, backgroundColor: "transparent",
@@ -135,65 +164,98 @@ const useStyles = makeStyles({
   },
   addContract: { width: "140px" },
   addBalancing: { width: "190px", alignSelf: "flex-start" },
-  // `con_ProjectBalancing_Price_Grid`: 1100 wide, scrolls horizontally.
-  gridWrap: { overflowX: "auto", minWidth: 0 },
-  // Header row 30 high, Size 10 in RGBA(89,89,89,1); rows 45 high (`TemplateSize`), Size 11 in
-  // RGBA(44,44,44,1), divided by a RGBA(231,231,231,1) line.
+  // `con_ProjectBalancing_Price_Grid`: the full width of the page (the live canvas columns sit at
+  // `FillPortions` of ~1660 px, 29 Oct 2026), never under 1100 — narrower, it scrolls horizontally.
+  gridWrap: { overflowX: "auto", minWidth: 0, marginRight: "10px" },
+  // Header row 30 high, Size 10 in RGBA(89,89,89,1), one line; rows 45 high (`TemplateSize`), Size 11
+  // in RGBA(44,44,44,1), divided by a RGBA(231,231,231,1) line.
   table: {
-    width: "1100px", tableLayout: "fixed",
-    "& th": { height: "30px", fontSize: "13.33px", color: "rgb(89, 89, 89)", fontWeight: 400 },
+    width: "100%", minWidth: "1100px", tableLayout: "fixed",
+    "& th": { height: "30px", fontSize: "13.33px", color: "rgb(89, 89, 89)", fontWeight: 400, whiteSpace: "nowrap" },
     "& td": { height: "45px", fontSize: "14.67px", color: "rgb(44, 44, 44)" },
-    "& tbody tr": { borderBottomColor: "rgb(231, 231, 231)" },
+    // Live canvas (29 Oct 2026): a rule under the header only — no line under a row, and a row does
+    // not tint under the cursor (Fluent's `TableRow` hover / pressed fill is cleared).
+    "& tbody tr": { borderBottomColor: "transparent" },
+    "& tbody tr:hover, & tbody tr:active": { backgroundColor: "transparent" },
+  },
+  // The row's Edit / Delete (`con_Main_Project_Overview_Header_SuitBar_CommandBar_1`): icon-only,
+  // themePrimary while enabled (grey when the row is not the newest), ~24 px between the glyphs.
+  rowActions: { display: "flex", alignItems: "center", gap: "16px" },
+  rowAction: {
+    ":enabled": { color: palette.themePrimary },
+    ":enabled .fui-Button__icon, :enabled:hover .fui-Button__icon": { color: palette.themePrimary },
   },
   // Header `FillPortions` 1.5 / 1 / 0.7 / 1 / 0.7 / 1 / 0.4 (of 6.3).
   colName: { width: "23.8%" },
   colWide: { width: "15.9%" },
   colDate: { width: "11.1%" },
   colActions: { width: "6.3%", minWidth: "80px" },
-  // The card gallery (`gal_…_GridContracts_1`, TemplatePadding 0): full width below the add button.
-  gallery: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0 },
-  // `con_…_GridContracts_Card_1`: white, PaddingLeft 20, `Parent.Width - 10` wide.
-  card: { backgroundColor: palette.white, paddingLeft: "20px", marginRight: "10px", minWidth: 0 },
+  // The card gallery (`gal_…_GridContracts_1`, TemplatePadding 0): full width below the add button,
+  // `Height: =Parent.Height-Self.Y` — it scrolls on its own and clips its cards at its top edge.
+  gallery: {
+    display: "flex", flexDirection: "column", width: "100%", minWidth: 0,
+    flex: "1 1 0", minHeight: 0, overflowY: "auto", overflowX: "hidden",
+  },
+  // `con_…_GridContracts_Card_1`: white, `Parent.Width - 10` wide. Its PaddingLeft 20 moves nothing:
+  // it is a ManualLayout container and the header and body sit at `X: =Parent.PaddingRight` (0), so
+  // the card title lines up with Add Contract (canvas screenshot, 29 Oct 2026).
+  // `flexShrink: 0`: inside the bounded gallery a card keeps its own height and the gallery scrolls.
+  card: { backgroundColor: palette.white, marginRight: "10px", minWidth: 0, flexShrink: 0 },
   // `con_…_GridContracts_CardHeader_1`: 50 high, Fill #fdffff, a 1 px themePrimary bottom line
-  // (`shp_…_CardHeader_BottomLine_1`, `gblAppColors.Icon.HoverColor`).
-  // PO screenshot (20 Oct 2026): a thin DARK rule under the header (the 1.21.709 YAML colours
-  // `shp_…_CardHeader_BottomLine_1` with `gblAppColors.Icon.HoverColor`, the theme blue).
+  // (`shp_…_CardHeader_BottomLine_1`, `gblAppColors.Icon.HoverColor`). Sampled off the live canvas
+  // (29 Oct 2026): #006EB9, the theme blue — not the dark rule read off the 20 Oct screenshot.
   cardHeader: {
     display: "flex", alignItems: "center", height: "50px", backgroundColor: "#fdffff",
-    borderBottom: "1px solid rgb(50, 49, 48)",
+    borderBottom: `1px solid ${palette.themePrimary}`,
+    // `btn_…_CardHeader_TransparentButton_1` covers the header: `HoverFill: =ColorValue("#E3E3E322")`.
+    ":hover": { backgroundImage: "linear-gradient(rgba(227, 227, 227, 0.133), rgba(227, 227, 227, 0.133))" },
   },
-  // `lbl_…_CardHeader_LabelWithDescription_1`: Semibold.
-  cardTitle: { fontSize: "16px", fontWeight: 600, flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  // `ico_…_CardHeader_Up_1/_2`: 45 x 30, themePrimary, at the far right of the header.
-  chevron: { width: "45px", minWidth: "45px", height: "30px", color: palette.themePrimary },
-  // `con_…_CardBody_Fields_Main_6`: vertical, PaddingTop 10; the command bar is 40 high.
-  cardBody: { display: "flex", flexDirection: "column", paddingTop: "6px", paddingBottom: "18px" },
+  // `lbl_…_CardHeader_LabelWithDescription_1`: `Size: =gblAppSizes.Font.Medium` (11 pt), Semibold.
+  cardTitle: { fontSize: "14.67px", fontWeight: 600, flexGrow: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  // `ico_…_CardHeader_Up_1/_2`: Classic Icon 45 x 30, themePrimary, at the far right of the header,
+  // Padding 5 / 10 / 5 / 5 — the glyph fills a 30 x 20 box: 20 x 10 px on the canvas (Fluent's
+  // 20-px chevron glyph is 12 x 7, so the icon is drawn at 30 px).
+  chevron: {
+    width: "45px", minWidth: "45px", height: "30px", color: palette.themePrimary,
+    paddingTop: "5px", paddingRight: "10px", paddingBottom: "5px", paddingLeft: "5px",
+    "& .fui-Button__icon": { fontSize: "30px", width: "30px", height: "20px", color: palette.themePrimary },
+  },
+  // `con_…_CardBody_Fields_Main_6`: vertical, PaddingTop 10; the command bar is 40 high. Its height
+  // (`contractCardBodyHeight`) is set inline: a minimum, so a narrow screen's extra rows still show.
+  cardBody: { display: "flex", flexDirection: "column", paddingTop: "10px", boxSizing: "border-box" },
   // The card's own Edit · Delete row: themePrimary text AND icons, no box (PO screenshot).
+  // Measured on the live canvas (29 Oct 2026): the PowerCAT bar draws its items 7 px in, in its
+  // default #0078D4.
   cardBar: {
-    "& .fui-Button:not(:disabled)": { color: palette.themePrimary },
+    paddingLeft: "7px",
+    "& .fui-Button:not(:disabled)": { color: "#0078d4" },
+    "& .fui-Button:not(:disabled) .fui-Button__icon": { color: "#0078d4" },
     // The Edit icon starts on the field grid's left edge (under "Currency"), as on the live
     // screen (PO, 21 Oct 2026): the shared `CommandBar` has no inset, so no padding here.
   },
-  // `con_…_CardBody_Fields_6`: four tiles a row (`(Parent.Width-60)/4`), spanning the card, with even
-  // gutters (PO screenshot ~22 px); two columns on a tablet, one on a phone.
+  // `con_…_CardBody_Fields_6`: four tiles a row (`(Parent.Width-60)/4`), spanning the card,
+  // `LayoutGap: =20` both ways, PaddingTop 10; two columns on a tablet, one on a phone.
   cardFields: {
-    display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", columnGap: "22px", rowGap: "14px",
+    display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", columnGap: "20px", rowGap: "20px",
     paddingTop: "10px",
     [media.belowMd]: { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" },
     [media.belowSm]: { gridTemplateColumns: "minmax(0, 1fr)" },
   },
-  // A tile: the caption (Regular, ~16 px) over the value box.
-  cardField: { display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 },
+  // A tile (`Height: =70`): the caption (`Height: =32`, Regular, `Size: =gblAppSizes.Font.Medium`,
+  // 11 pt = 14.67 px Open Sans) over the 32-high value box.
+  cardField: { display: "flex", flexDirection: "column", height: `${CARD_TILE_HEIGHT}px`, minWidth: 0 },
   cardCaption: {
-    fontSize: "16px", lineHeight: "22px", fontWeight: 400,
+    fontSize: "14.67px", lineHeight: "32px", height: "32px", fontWeight: 400,
     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
   },
-  cardValues: { display: "flex", gap: "12px", minWidth: 0 },
-  // A View-mode `TextInput`: the filled grey modern box, ~40 high, value left-aligned.
+  // The two Contract Duration boxes sit 20 apart (canvas screenshot, 29 Oct 2026).
+  cardValues: { display: "flex", gap: "20px", minWidth: 0 },
+  // A View-mode `TextInput` (modern, default height 32): the filled grey box, value left-aligned.
   cardValue: {
-    flexGrow: 1, flexBasis: 0, minWidth: 0, height: "40px", boxSizing: "border-box",
+    flexGrow: 1, flexBasis: 0, minWidth: 0, height: "32px", boxSizing: "border-box",
     borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderRadius: "4px",
-    backgroundColor: tokens.colorNeutralBackground3, paddingLeft: "12px", paddingRight: "12px",
+    // #F5F5F5 sampled off the live canvas (the theme's background 3 renders #F1F1F1).
+    backgroundColor: "#f5f5f5", paddingLeft: "12px", paddingRight: "12px",
     fontSize: "14px", textAlign: "left", color: tokens.colorNeutralForeground1, fontFamily: "inherit",
     outlineStyle: "none",
   },
@@ -219,30 +281,176 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column", gap: space.m, height: "100%", minHeight: 0, boxSizing: "border-box",
     [media.belowMd]: { height: "auto" },
   },
+  // `con_…_LeftSection_…`: `Width: =300`, its fields at X 20, `Parent.Width - 40` wide (260); the right
+  // section's fields start 40 further on (canvas screenshots, 29 Oct 2026).
+  // Each section carries a 10-px left gutter (`panelColumn`) for the hanging `*`, so the grid is
+  // 270 + 30 and the body pads 20 on the left: the fields still start at 30, 260 + 40 + 400 wide.
   panel: {
-    display: "grid", columnGap: "32px", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+    display: "grid", columnGap: "30px", gridTemplateColumns: "270px minmax(0, 1fr)",
     flexGrow: 1, minHeight: 0,
     "& .fui-Field__label": { fontWeight: 300, fontSize: "14.67px" },
     [media.belowMd]: { gridTemplateColumns: "1fr", rowGap: space.m },
   },
+  // The left section's field containers are 76 high (32 caption + 32 box + 12); no right padding, so
+  // the 100 + 20 + 140 duration pickers fit the 260 (canvas screenshots, 29 Oct 2026). The 10-px left
+  // padding keeps the hanging `*` inside the scroll box — `overflowX: hidden` clipped it otherwise.
   panelColumn: {
-    display: "flex", flexDirection: "column", gap: space.m, minWidth: 0, minHeight: 0,
-    overflowY: "auto", overflowX: "hidden", paddingRight: "8px", paddingBottom: "8px",
+    display: "flex", flexDirection: "column", gap: "12px", minWidth: 0, minHeight: 0, boxSizing: "border-box",
+    overflowY: "auto", overflowX: "hidden", paddingLeft: "10px", paddingBottom: "8px",
     [media.belowMd]: { overflowY: "visible" },
   },
+  // The right section: the two toggles 38 apart, the radios 34, the hedge box under them.
+  panelColumnRight: { gap: "6px" },
   column: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
-  notice: { flexShrink: 0 },
-  // A toggle caption with the red `*` before it (`lbl_…_InflationProfileToggleAsterisk_1`).
-  req: { color: "#d20532", marginRight: "4px" },
+  // A toggle's red `*` (`lbl_…_InflationProfileToggleAsterisk_1`): `palette.Error` #B22727, Bold,
+  // Medium, in a 10-wide box hanging LEFT of the section edge, so the toggles line up.
+  req: {
+    color: "#b22727", fontWeight: 700, fontSize: "14.67px", lineHeight: 1,
+    width: "10px", marginLeft: "-10px", flexShrink: 0, position: "relative", top: "-5px",
+  },
+  // The canvas sync icons are PowerCAT `Refresh` (`IconName: ="Refresh"`), themePrimary, a 17-px
+  // glyph in a 30 x 30 box (COD reset: the PCF default #0078D4).
+  syncIcon: {
+    minWidth: "30px", width: "30px", height: "30px", padding: 0, color: palette.themePrimary,
+    "& .fui-Button__icon": { fontSize: "22px", width: "22px", height: "22px", color: palette.themePrimary },
+  },
+  syncIconCod: { color: "#0078d4", "& .fui-Button__icon": { color: "#0078d4" } },
+  /*
+   * The contract panel's canvas skin, scoped by `panelClassName` (as Planning does) so it outranks
+   * `canvas.css` (`.canvas-panel :is(.fui-Input, .fui-Dropdown)`) and touches no other panel.
+   * Measured off the live canvas (29 Oct 2026).
+   */
+  contractPanelSkin: {
+    // Header 42 high; the ✕ shows no focus box when the drawer focuses it on open.
+    "&.canvas-panel .canvas-panel-header": { height: "42px", paddingTop: "7px", paddingBottom: "7px" },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    // A disabled Save is #595959 text and ✓ (live canvas), not Fluent's light disabled grey.
+    "&.canvas-panel .canvas-panel-footer button:disabled, &.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": {
+      color: "#595959",
+    },
+    // Fields 30 from either edge: 20 + (10 gutter + 260) + 30 + (10 gutter + 400) + 30 = 760.
+    "&.canvas-panel .canvas-panel-body": { paddingLeft: "20px", paddingRight: "30px" },
+    // Footer: no rule above Save / Cancel.
+    "&.canvas-panel .canvas-panel-footer": { borderTopColor: "transparent" },
+    // Every box #F5F5F5 and 32 high (the dropdowns were 30).
+    "&.canvas-panel :is(.fui-Input, .fui-Dropdown)": { backgroundColor: "#f5f5f5", minHeight: "32px", boxSizing: "border-box" },
+    // Disabled boxes are white with a 1-px grey outline (Currency #E9E9E9, End Date #E0E0E0).
+    "&.canvas-panel .fui-Dropdown:has(button:disabled)": {
+      backgroundColor: "#ffffff", border: "1px solid #e9e9e9",
+    },
+    "&.canvas-panel .fui-Input:has(input:disabled)": {
+      backgroundColor: "#ffffff", border: "1px solid #e0e0e0",
+    },
+    // Caption row 32 high, text at its foot 6 above the box; the `*` (`palette.Error`, Bold,
+    // Medium) hangs 10 px left of the caption, raised to the caption's cap height.
+    "&.canvas-panel .fui-Field": { rowGap: 0 },
+    "&.canvas-panel .fui-Field__label": {
+      minHeight: "32px", boxSizing: "border-box", alignItems: "flex-end",
+      paddingBottom: "2px", lineHeight: "20px", marginBottom: 0,
+    },
+    "&.canvas-panel .fui-Field__label .fui-Label__required": {
+      order: -1, alignSelf: "flex-start", width: "10px", marginLeft: "-10px", paddingLeft: 0, paddingRight: 0,
+      paddingTop: "5px", fontSize: "14.67px", fontWeight: 700, lineHeight: 1, color: "#b22727",
+    },
+    // `lbl_…_ErrorMessage_1`: `palette.Error`, Semibold, `ExtraExtraSmall` (8 pt), PaddingTop 3.
+    "&.canvas-panel .fui-Field__validationMessage": {
+      color: "#b22727", fontWeight: 600, fontSize: "10.67px", lineHeight: "14px", paddingTop: "3px",
+    },
+    // "Provide Hedge Volume in": Regular black, its `*` as the field captions'.
+    "&.canvas-panel .canvas-radio-group legend > span": { fontWeight: 400, color: "#000000", fontSize: "14.67px" },
+    "&.canvas-panel .canvas-radio-group legend > span[data-required=\"true\"]::before": {
+      content: "\"*\"", display: "inline-block", width: "10px", marginLeft: "-10px",
+      position: "relative", top: "-5px", color: "#b22727", fontWeight: 700,
+    },
+    // An unselected option's caption is grey (#616161), the selected one #242424.
+    "&.canvas-panel .canvas-radio-group label:not(:has(input:checked))": { color: "#616161" },
+    // The toggles start 3 px into the section, as the canvas `Toggle@1.1.5`.
+    "&.canvas-panel .fui-Switch": { marginLeft: "-5px" },
+  },
   // One Individual Volume row: the period box (`txt_…_IndividualVolume_Year`, 180 wide) beside the
   // `* Individual Volume [MWh]` caption and input of the same gallery template.
   volumeRow: { display: "grid", gridTemplateColumns: "180px minmax(0, 1fr)", columnGap: "16px", alignItems: "start" },
   // The period box sits level with the value input under its caption.
   volumePeriod: { paddingTop: "24px" },
-  pair: {
-    display: "grid", gap: space.m, gridTemplateColumns: "1fr 1fr",
-    [media.belowSm]: { gridTemplateColumns: "1fr" },
+  // The open list of a canvas `DropDown@0.0.45` (live canvas, 29 Oct 2026): square, a 1-px grey
+  // outline, no shadow, 27-px rows in 14 px, no check mark, the selected row solid themePrimary with
+  // white text. Fluent portals the list out of the panel, so it is set on the `listbox` slot.
+  // 20 rows show (0 Year … 19 Years), then it scrolls: 20 x 27 + the 2-px outline.
+  // `!important`: Fluent's positioning writes its own inline `max-height` (the space left below).
+  // `rowGap: 0`: Fluent's listbox puts 2 px between options, which made the rows 29 apart.
+  canvasListbox: {
+    borderRadius: 0, boxShadow: "none", padding: 0, border: "1px solid rgb(138, 136, 134)", rowGap: 0,
+    maxHeight: `${20 * 27 + 2}px !important`, boxSizing: "border-box", overflowY: "auto",
   },
+  canvasOption: {
+    height: "27px", minHeight: "27px", boxSizing: "border-box", lineHeight: "27px",
+    paddingTop: 0, paddingBottom: 0, paddingLeft: "12px", paddingRight: "12px",
+    borderRadius: 0, fontSize: "14px", alignItems: "center", columnGap: 0,
+    "& .fui-Option__checkIcon": { display: "none" },
+    ":hover": { backgroundColor: "#f3f2f1" },
+    "&[aria-selected='true']": { backgroundColor: palette.themePrimary, color: "#ffffff" },
+    "&[aria-selected='true']:hover": { backgroundColor: palette.themePrimary, color: "#ffffff" },
+    "::after": { display: "none" },
+  },
+  // The balancing panel's field containers are 76 high (32 caption + 32 box + 12).
+  balancingColumn: { display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 },
+  // `drp_…_ContractDuration_Years_2` / `_Months_2`: `(Parent.Width/2)-30` each (150 of 360), 20 apart.
+  balancingDurationPair: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "20px" },
+  /*
+   * The balancing panel's canvas skin, scoped by `panelClassName` like the contract panel's. From the
+   * YAML (`…_ContractStartDate_2`, `…_ContractDuration_Years_2`, `…Asterisk_2`) and the live canvas:
+   * header 46; captions RGBA(89,89,89) Medium with the `*` AFTER them (Error, Bold, raised); the
+   * pickers and the price white (`FilledLighter`) with a 1-px RGBA(170,170,170) outline; the
+   * computed dates Disabled in RGBA(237,235,233), Semibold.
+   */
+  balancingPanelSkin: {
+    "&.canvas-panel .canvas-panel-header": { height: "46px", paddingTop: "9px", paddingBottom: "9px" },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    "&.canvas-panel .canvas-panel-footer button:disabled, &.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": {
+      color: "#595959",
+    },
+    // The first caption sits 9 below the header (live canvas: caption centre 25 px under it).
+    "&.canvas-panel .canvas-panel-body": { paddingTop: "9px" },
+    "&.canvas-panel .canvas-panel-footer": { borderTopColor: "transparent" },
+    "&.canvas-panel .fui-Field": { rowGap: 0 },
+    "&.canvas-panel .fui-Field__label": {
+      minHeight: "32px", boxSizing: "border-box", alignItems: "flex-end", paddingBottom: "2px",
+      lineHeight: "20px", marginBottom: 0, fontSize: "14.67px", fontWeight: 400, color: "rgb(89, 89, 89)",
+    },
+    "&.canvas-panel .fui-Field__label .fui-Label__required": {
+      order: 1, alignSelf: "flex-start", paddingLeft: "2px", paddingRight: 0, paddingTop: "5px",
+      fontSize: "14.67px", fontWeight: 700, lineHeight: 1, color: "#b22727",
+    },
+    "&.canvas-panel :is(.fui-Input, .fui-Dropdown)": {
+      backgroundColor: "#ffffff", border: "1px solid rgb(170, 170, 170)", minHeight: "32px", boxSizing: "border-box",
+    },
+    // The balancing error labels are the contract panel's: Error, Semibold, 8 pt, PaddingTop 3.
+    "&.canvas-panel .fui-Field__validationMessage": {
+      color: "#b22727", fontWeight: 600, fontSize: "10.67px", lineHeight: "14px", paddingTop: "3px",
+    },
+    "&.canvas-panel .fui-Input:has(input:disabled)": { backgroundColor: "rgb(237, 235, 233)" },
+    "&.canvas-panel .fui-Input:has(input:disabled) input": {
+      fontWeight: 600, color: "#323130", WebkitTextFillColor: "#323130",
+    },
+  },
+  // `drp_…_ContractDuration_Years_1` `Width: =100`; `…_Months_1` `Width: =140`, 20 after it (L7901, L8071).
+  durationPair: {
+    display: "grid", columnGap: "20px", gridTemplateColumns: "100px 140px",
+    [media.belowSm]: { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" },
+  },
+  // A toggle with its red `*` BEFORE the switch (`lbl_…_InflationProfileToggleAsterisk_1`), the
+  // caption after it (`LabelPosition: After`).
+  toggleRow: { display: "flex", alignItems: "center" },
   dateRow: { display: "flex", alignItems: "flex-end", gap: space.s },
   grow: { flexGrow: 1, minWidth: 0 },
   dropdown: { minWidth: "0px", width: "100%" },
@@ -316,10 +524,11 @@ function SelectField({
         selectedOptions={value ? [value] : []}
         disabled={disabled}
         onOptionSelect={(_, d) => { if (d.optionValue !== undefined) onChange(d.optionValue); }}
+        listbox={{ className: s.canvasListbox }}
         aria-label={name}
         data-testid={name}
       >
-        {options.map((o) => <Option key={o.value} value={o.value}>{o.text}</Option>)}
+        {options.map((o) => <Option key={o.value} value={o.value} className={s.canvasOption}>{o.text}</Option>)}
       </Dropdown>
     </Field>
   );
@@ -342,10 +551,11 @@ function DurationPicker({ name, value, options, onChange }: {
       value={text}
       selectedOptions={value ? [value] : []}
       onOptionSelect={(_, d) => { if (d.optionValue !== undefined) onChange(d.optionValue); }}
+      listbox={{ className: s.canvasListbox }}
       aria-label={name}
       data-testid={name}
     >
-      {options.map((o) => <Option key={o.value} value={o.value}>{o.text}</Option>)}
+      {options.map((o) => <Option key={o.value} value={o.value} className={s.canvasOption}>{o.text}</Option>)}
     </Dropdown>
   );
 }
@@ -379,7 +589,7 @@ export default function ProjectRevenuesScreen() {
   const projectQ = useRevenueProject(projectId);
   const project = projectQ.data;
   const region = useItalyRegion(project);
-  const assumptions = useRevenueAssumptions();
+  const assumptions = useRevenueAssumptions(project?.countryName ?? null);
   const contractsQ = useRevenueContracts(projectId);
   const periodsQ = useBalancingPrices(projectId);
   const productionQ = useNegativePriceProduction(projectId);
@@ -706,7 +916,7 @@ export default function ProjectRevenuesScreen() {
                     )}
                   </div>
                   {isFolded ? null : (
-                    <div className={s.cardBody}>
+                    <div className={s.cardBody} style={{ minHeight: `${contractCardBodyHeight(c, cardCtx)}px` }}>
                       <div className={s.cardBar}>
                         <CommandBar commands={cardCommands(c)} onCommand={(key) => onCardCommand(c, key)}
                           ariaLabel={CONTRACT_CARD_CONTROL.commandBar}
@@ -789,22 +999,26 @@ export default function ProjectRevenuesScreen() {
                         <TableCell>{fmtCardDate(p.endDate)}</TableCell>
                         <TableCell>{p.price === null ? "" : String(p.price)}</TableCell>
                         <TableCell>
-                          <Tooltip content={SCREEN_LABEL.balancingRowTooltip} relationship="description">
+                          <div className={s.rowActions}>
+                            <Tooltip content={SCREEN_LABEL.balancingRowTooltip} relationship="description">
+                              <Button
+                                appearance="transparent" size="small" icon={<EditRegular />}
+                                className={s.rowAction}
+                                aria-label={SCREEN_LABEL.edit}
+                                data-testid={`con_Main_Project_Overview_Header_SuitBar_CommandBar_1-${p.id}-editProject`}
+                                disabled={busy || !rowBar.edit.enabled}
+                                onClick={() => openEditPeriod(p)}
+                              />
+                            </Tooltip>
                             <Button
-                              appearance="transparent" size="small" icon={<EditRegular />}
-                              aria-label={SCREEN_LABEL.edit}
-                              data-testid={`con_Main_Project_Overview_Header_SuitBar_CommandBar_1-${p.id}-editProject`}
-                              disabled={busy || !rowBar.edit.enabled}
-                              onClick={() => openEditPeriod(p)}
+                              appearance="transparent" size="small" icon={<DeleteRegular />}
+                              className={s.rowAction}
+                              aria-label={SCREEN_LABEL.delete}
+                              data-testid={`con_Main_Project_Overview_Header_SuitBar_CommandBar_1-${p.id}-deleteProject`}
+                              disabled={busy || !rowBar.delete.enabled}
+                              onClick={() => { setSelectedPeriodId(p.id); setConfirm("deletePeriod"); }}
                             />
-                          </Tooltip>
-                          <Button
-                            appearance="transparent" size="small" icon={<DeleteRegular />}
-                            aria-label={SCREEN_LABEL.delete}
-                            data-testid={`con_Main_Project_Overview_Header_SuitBar_CommandBar_1-${p.id}-deleteProject`}
-                            disabled={busy || !rowBar.delete.enabled}
-                            onClick={() => { setSelectedPeriodId(p.id); setConfirm("deletePeriod"); }}
-                          />
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -821,12 +1035,16 @@ export default function ProjectRevenuesScreen() {
       <FormPanel
         open={panel === "contract" && form !== null}
         title={contractPanelTitle(form?.mode !== "Edit")}
-        // PO screenshot (20 Oct 2026): a wide panel (~860) with two independently scrolling columns. The
-        // 1.21.709 YAML has `con_…_RightPanel_NewEditCost_Body_1.Width: Min(760, Parent.Width)`.
+        // `con_…_RightPanel_NewEditCost_Body_1.Width: Min(760, Parent.Width)`, two independently
+        // scrolling columns (live-canvas screenshots, 29 Oct 2026).
         width="twoColumn"
+        panelClassName={s.contractPanelSkin}
+        // The canvas panel closes only through ✕ / Cancel, never on a click outside it.
+        keepOpenOnOutsideClick
         onDismiss={closeContract}
         footer={
           <PanelButtons
+            subtleWhenDisabled
             onSave={onSaveContract}
             onCancel={closeContract}
             saveTestId="pcf_ProjectRevenues_RightPanel_NewEditCost_BodyButtons_Save_1"
@@ -839,9 +1057,6 @@ export default function ProjectRevenuesScreen() {
       >
         {form ? (
           <div className={s.panelBody}>
-            <MessageBar intent="info" className={s.notice} data-testid="revenues-assumptions-not-connected">
-              <MessageBarBody>{REVENUE_SCREEN_TEXT.assumptionsNotConnected}</MessageBarBody>
-            </MessageBar>
             <div className={s.panel}>
               {/* `con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent` — scrolls on its own. */}
               <div className={s.panelColumn} data-testid="con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent">
@@ -862,13 +1077,15 @@ export default function ProjectRevenuesScreen() {
                   error={validateDescription(form.description, form.isStandardContract).message}
                   onChange={(v) => change(editField(form, { description: v }))}
                 />
-                <TextInputField
+                {/* `DropDown@0.0.45`, always Disabled, showing the `'Currency Name'` (L7346-7375). */}
+                <SelectField
                   label={REVENUE_FORM_LABEL.currency}
                   name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Currency_1"
                   required
                   disabled
                   value={currencyQ.data?.name ?? ""}
-                  placeholder={form.currencyCode ?? ""}
+                  options={currencyQ.data ? [{ value: currencyQ.data.name, text: currencyQ.data.name }] : []}
+                  onChange={() => undefined}
                 />
                 <div className={s.dateRow}>
                   <div className={s.grow}>
@@ -878,6 +1095,8 @@ export default function ProjectRevenuesScreen() {
                       name="dte_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractStartDate_1"
                       format="dd.mm.yyyy"
                       required
+                      // `DatePicker@0.0.46`'s default placeholder, in #707070.
+                      placeholder="Select a date..."
                       standard={panelStd?.contractStartDate}
                       value={toIso(form.startDate)}
                       onChange={(v) => change(withTerm(form, { startDate: fromIso(v ?? "") }, { contractStartDate: false }))}
@@ -886,7 +1105,8 @@ export default function ProjectRevenuesScreen() {
                   <Tooltip content={SCREEN_LABEL.resetToCod} relationship="label">
                     <Button
                       appearance="transparent"
-                      icon={<ArrowSyncRegular />}
+                      className={mergeClasses(s.syncIcon, s.syncIconCod)}
+                      icon={<ArrowClockwiseRegular />}
                       aria-label={SCREEN_LABEL.resetToCod}
                       data-testid="ico_SetCODDate_RightPanelRevenue_1"
                       onClick={() => { if (project) change(resetStartToCod(form, project, assumptions.data)); }}
@@ -895,7 +1115,7 @@ export default function ProjectRevenuesScreen() {
                 </div>
                 {/* `con_…_ContractDuration_1`: ONE caption (`lbl_…_ContractDuration_1`) over the two pickers. */}
                 <Field className={skinField} label={REVENUE_FORM_LABEL.contractDuration} required>
-                  <div className={s.pair}>
+                  <div className={s.durationPair}>
                     <DurationPicker
                       name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Years_1"
                       value={form.durationYears === null ? "" : String(form.durationYears)}
@@ -1006,25 +1226,31 @@ export default function ProjectRevenuesScreen() {
               </div>
 
               {/* `con_ProjectRevenues_RightPanel_RightSection_NewEditCost_BodyContent` — scrolls on its own. */}
-              <div className={s.panelColumn} data-testid="con_ProjectRevenues_RightPanel_RightSection_NewEditCost_BodyContent">
-                <Switch
-                  label={{ children: <><span className={s.req} aria-hidden>*</span>{REVENUE_FORM_LABEL.inflationProfile}</> }}
-                  aria-label="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
-                  data-testid="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
-                  // `DisplayMode`: Disabled for Germany & FiT (L10423-10431, S14 — added D33).
-                  disabled={form.country === "Germany" && form.revenueTypeLabel === "FiT"}
-                  checked={form.useInflation}
-                  onChange={(_, d) => change(editField(form, { useInflation: d.checked }, { useInflation: false }))}
-                />
+              <div className={mergeClasses(s.panelColumn, s.panelColumnRight)} data-testid="con_ProjectRevenues_RightPanel_RightSection_NewEditCost_BodyContent">
+                <div className={s.toggleRow}>
+                  <span className={s.req} aria-hidden>*</span>
+                  <Switch
+                    label={REVENUE_FORM_LABEL.inflationProfile}
+                    aria-label="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
+                    data-testid="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
+                    // `DisplayMode`: Disabled for Germany & FiT (L10423-10431, S14 — added D33).
+                    disabled={form.country === "Germany" && form.revenueTypeLabel === "FiT"}
+                    checked={form.useInflation}
+                    onChange={(_, d) => change(editField(form, { useInflation: d.checked }, { useInflation: false }))}
+                  />
+                </div>
                 {/* Seen only with inflation on: its container is 36 high and it sits at Y 40 (audit 20 Oct 2026). */}
                 {showsCountryInflationToggle(form) ? (
-                  <Switch
-                    label={{ children: <><span className={s.req} aria-hidden>*</span>{REVENUE_FORM_LABEL.countryInflationProfile}</> }}
-                    aria-label="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
-                    data-testid="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
-                    checked={form.useCountryInflationProfile}
-                    onChange={(_, d) => change(toggleCountryInflation(form, d.checked, inflationQ.data, project?.countryCode ?? null))}
-                  />
+                  <div className={s.toggleRow}>
+                    <span className={s.req} aria-hidden>*</span>
+                    <Switch
+                      label={REVENUE_FORM_LABEL.countryInflationProfile}
+                      aria-label="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
+                      data-testid="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
+                      checked={form.useCountryInflationProfile}
+                      onChange={(_, d) => change(toggleCountryInflation(form, d.checked, inflationQ.data, project?.countryCode ?? null))}
+                    />
+                  </div>
                 ) : null}
                 {form.useInflation ? (
                   <>
@@ -1076,7 +1302,8 @@ export default function ProjectRevenuesScreen() {
                     >
                       <Button
                         appearance="transparent"
-                        icon={<ArrowSyncRegular />}
+                        className={s.syncIcon}
+                        icon={<ArrowClockwiseRegular />}
                         aria-label="ico_SyncNegativePrice_RightPanelRevenue"
                         data-testid="ico_SyncNegativePrice_RightPanelRevenue"
                         onClick={() => change(resyncNegativePrice(form, formNeg))}
@@ -1170,10 +1397,14 @@ export default function ProjectRevenuesScreen() {
       <FormPanel
         open={panel === "balancing" && balancing !== null}
         title={balancingPanelTitle(balancing?.id === null)}
-        width="narrow"
+        // `con_…_RightPanel_NewEditCost_Body_2`: 360 wide on the live canvas (29 Oct 2026).
+        width={360}
+        panelClassName={s.balancingPanelSkin}
+        keepOpenOnOutsideClick
         onDismiss={closeBalancing}
         footer={
           <PanelButtons
+            subtleWhenDisabled
             onSave={() => void onSaveBalancing()}
             onCancel={closeBalancing}
             saveTestId="pcf_ProjectRevenues_RightPanel_NewEditCost_BodyButtons_Save_2"
@@ -1189,7 +1420,7 @@ export default function ProjectRevenuesScreen() {
         }
       >
         {balancing ? (
-          <div className={s.column}>
+          <div className={s.balancingColumn}>
             {shiftVisible ? (
               <TextInputField
                 label={SCREEN_LABEL.shiftFromCod}
@@ -1208,31 +1439,30 @@ export default function ProjectRevenuesScreen() {
               disabled
               value={balancingStart}
             />
-            <div className={s.pair}>
-              <SelectField
-                label={REVENUE_FORM_LABEL.contractDuration}
-                name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Years_2"
-                required
-                value={String(balancing.years)}
-                options={balancingYearOptions().map((y) => ({ value: String(y), text: balancingYearsOption(y) }))}
-                onChange={(v) => {
-                  const y = Number(v);
-                  const months = balancingMonthOptions(y);
-                  setBalancing({
-                    ...balancing, years: y,
-                    months: months.includes(balancing.months) ? balancing.months : (months[0] ?? 0),
-                  });
-                }}
-              />
-              <SelectField
-                label={REVENUE_FORM_LABEL.contractDuration}
-                name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Months_2"
-                required
-                value={String(balancing.months)}
-                options={balancingMonthOptions(balancing.years).map((m) => ({ value: String(m), text: balancingMonthsOption(m) }))}
-                onChange={(v) => setBalancing({ ...balancing, months: Number(v) })}
-              />
-            </div>
+            {/* ONE caption (`lbl_…_ContractDuration_2`) over the two `(Parent.Width/2)-30` pickers, 20 apart. */}
+            <Field className={skinField} label={REVENUE_FORM_LABEL.contractDuration} required>
+              <div className={s.balancingDurationPair}>
+                <DurationPicker
+                  name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Years_2"
+                  value={String(balancing.years)}
+                  options={balancingYearOptions().map((y) => ({ value: String(y), text: balancingYearsOption(y) }))}
+                  onChange={(v) => {
+                    const y = Number(v);
+                    const months = balancingMonthOptions(y);
+                    setBalancing({
+                      ...balancing, years: y,
+                      months: months.includes(balancing.months) ? balancing.months : (months[0] ?? 0),
+                    });
+                  }}
+                />
+                <DurationPicker
+                  name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Months_2"
+                  value={String(balancing.months)}
+                  options={balancingMonthOptions(balancing.years).map((m) => ({ value: String(m), text: balancingMonthsOption(m) }))}
+                  onChange={(v) => setBalancing({ ...balancing, months: Number(v) })}
+                />
+              </div>
+            </Field>
             <DateField
               label={SCREEN_LABEL.endDate}
               name="dte_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractEndDate_2"
@@ -1261,8 +1491,10 @@ export default function ProjectRevenuesScreen() {
           : ""}
         confirmText={DIALOG.deleteConfirm}
         cancelText={DIALOG.cancel}
-        confirmIcon="delete"
-        destructive
+        // The live canvas Delete is the themePrimary confirm button with the check mark (29 Oct 2026);
+        // the popup's `IconRightButton: ="Trash"` is not what it renders. 490 wide on a dark scrim.
+        darkScrim
+        classicPopUp
         busy={busy}
         onCancel={() => setConfirm("none")}
         onConfirm={async () => {
@@ -1279,8 +1511,9 @@ export default function ProjectRevenuesScreen() {
         description={selectedPeriod ? deleteBalancingDescription(selectedPeriod.name) : ""}
         confirmText={DIALOG.deleteConfirm}
         cancelText={DIALOG.cancel}
-        confirmIcon="delete"
-        destructive
+        // The same `cmp_PopUp_Confirmation` as the contract delete: themePrimary, check mark.
+        darkScrim
+        classicPopUp
         busy={busy}
         onCancel={() => { setConfirm("none"); setSelectedPeriodId(null); }}
         onConfirm={async () => {
@@ -1297,6 +1530,8 @@ export default function ProjectRevenuesScreen() {
         description={MSG.individualVolumesConfirm}
         confirmText={DIALOG.confirm}
         cancelText={DIALOG.cancel}
+        darkScrim
+        classicPopUp
         onCancel={() => setConfirm("none")}
         onConfirm={() => { setConfirm("none"); if (form) void saveContract(form); }}
       />
@@ -1305,7 +1540,11 @@ export default function ProjectRevenuesScreen() {
         open={hedgeError !== null}
         title={DIALOG.hedgeOver100Title}
         description={hedgeError ?? ""}
-        variant="info"
+        // `cmp_ProjectRevenues_PopUp_Information` is a `cmp_PopUp_Information`: 450 wide, one OK.
+        variant="information"
+        confirmText="OK"
+        confirmWidth={90}
+        darkScrim
         onCancel={() => setHedgeError(null)}
         onConfirm={() => setHedgeError(null)}
       />
