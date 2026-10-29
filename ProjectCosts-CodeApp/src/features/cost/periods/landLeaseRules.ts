@@ -1012,7 +1012,7 @@ export function toggleLeaseSelectionCanvasParity(
  * LL:5895, `clearsSelectionAfterSave`). Its pop-up scrim made selecting DURING a write
  * impossible, so the selection it cleared was always the one the write started with.
  *
- * DIVERGENCE (D57, CA-17): since D57 selection stays enabled while a write runs. The selection
+ * DIVERGENCE (D58, CA-17): since D58 selection stays enabled while a write runs. The selection
  * the write started with is still cleared, as on the canvas; a row the user picked mid-write is
  * KEPT, unless the write deleted that row's period or its contract (`deleted`).
  */
@@ -2703,10 +2703,10 @@ export function leaseCommands(args: LeaseCommandArgs): LeaseCommand[] {
 }
 
 /**
- * `leaseCommands` with the D57 write guard applied: `disabled` (the shared
+ * `leaseCommands` with the D58 write guard applied: `disabled` (the shared
  * `writeCommandsDisabled`, `@/domain/writeGuard`) turns every command off.
  *
- * DIVERGENCE (D57, PROPOSED): replaces `cmp_LandLease_PopUpLoading`. The canvas pop-up
+ * DIVERGENCE (D58, PROPOSED): replaces `cmp_LandLease_PopUpLoading`. The canvas pop-up
  * (`Visible: =locIsVisiblePopUpSpinner`) covered the whole screen while a write ran, which is
  * what stopped a second Save, Delete or standard import from starting. Every Land Lease command
  * starts a write or opens the panel for one, so all five are guarded; expanding a card and

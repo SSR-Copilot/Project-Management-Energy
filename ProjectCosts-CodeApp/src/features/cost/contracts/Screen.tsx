@@ -245,7 +245,7 @@ export default function ContractsScreen() {
   const writeInFlight = useCostWriteInFlight(projectId);
   /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
   const reportFailure = useWriteFailureReport("Contracts");
-  /** `writeCommandsDisabled` (D57): the interaction guard that replaced the spinner overlay. */
+  /** `writeCommandsDisabled` (D58): the interaction guard that replaced the spinner overlay. */
   const writesDisabled = writeCommandsDisabled({ loading, writePending: busy, writeInFlight });
 
   /**
@@ -512,7 +512,7 @@ export default function ContractsScreen() {
      * panel afterwards, in the same `UpdateContext` that clears the spinner (`:7490`). CAPEX,
      * OPEX and Land Lease all close it up front, and the client asked for that order everywhere,
      * so the panel is dismissed here instead — the spinner is never drawn over the panel.
-     * Since D57 the "spinner" is the `WriteStatus` line (no overlay); the order is unchanged.
+     * Since D58 the "spinner" is the `WriteStatus` line (no overlay); the order is unchanged.
      */
     setSavingLabel(form.contractType === CONTRACT_TYPE.ProjectRights
       ? MSG.spinnerSavingRightsContract : MSG.spinnerSavingContract);
@@ -605,7 +605,7 @@ export default function ContractsScreen() {
   }
 
   /*
-   * DIVERGENCE (D57): while the first read is in flight the canvas screen showed its own
+   * DIVERGENCE (D58): while the first read is in flight the canvas screen showed its own
    * `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen`), and this app an inline
    * "Loading contracts…" spinner. Both are gone: the screen chrome (the command bar, every
    * write command greyed out by `writeCommandsDisabled`) renders with an EMPTY body — no
@@ -651,7 +651,7 @@ export default function ContractsScreen() {
         * `cmp_Contracts_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
         * =locIsContractVisiblePopUpSpinner`, `InformationText: =locContractSpinnerInformationText`):
         * the blocking spinner with the verbatim `MSG.spinner*` text shows for as long as the write
-        * runs (D59); `writeCommandsDisabled` also stops a second write.
+        * runs (D60); `writeCommandsDisabled` also stops a second write.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
       <WriteStatus testId="contracts-write-status" label={costWriteStatusLabel({
@@ -665,7 +665,7 @@ export default function ContractsScreen() {
       </div>
 
       {loading ? (
-        // D59: an inline spinner while loading, and never "No contracts yet" before the data lands.
+        // D60: an inline spinner while loading, and never "No contracts yet" before the data lands.
         <LoadingOverlay mode="inline" label="Loading contracts…" testId="contracts-loading" />
       ) : contracts.length === 0 ? (
         <EmptyState
@@ -1407,7 +1407,7 @@ function ContractCardBody({
   currency: string;
   targets: readonly PaymentTarget[];
   selectedTargetId: string | undefined;
-  /** `writeCommandsDisabled` (D57): Add Period, Edit and Delete grey out while a write runs. */
+  /** `writeCommandsDisabled` (D58): Add Period, Edit and Delete grey out while a write runs. */
   writesDisabled: boolean;
   onSelectTarget: (id: string) => void;
   onAddTarget: () => void;

@@ -798,7 +798,7 @@ describe("OpexScreen", () => {
     }
   });
 
-  /* ── D57: no spinner; a status line and a write guard instead ────────── */
+  /* ── D58: no spinner; a status line and a write guard instead ────────── */
 
   /** The card's toolbar commands — every one starts a write or opens the panel for one. */
   const WRITE_COMMAND_IDS = [
@@ -808,7 +808,7 @@ describe("OpexScreen", () => {
   const writeCommands = (title: string) =>
     WRITE_COMMAND_IDS.flatMap((id) => within(card(title)).queryAllByTestId(id));
 
-  /** D59: the blocking write spinner is the only `role="dialog"` once the panel has closed. */
+  /** D60: the blocking write spinner is the only `role="dialog"` once the panel has closed. */
   const expectBlocking = (text: string) => {
     const overlay = screen.getByTestId("opex-write-status");
     expect(overlay).toHaveAttribute("role", "dialog");

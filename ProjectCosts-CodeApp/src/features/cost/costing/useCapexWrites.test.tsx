@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * `useCapexWrites` refreshes the tab a write was MADE on (D57).
+ * `useCapexWrites` refreshes the tab a write was MADE on (D58).
  *
  * Without the blocking spinner the user can switch CAPEX tabs while a write runs. TanStack pushes
  * every render's options into a pending mutation, so an `invalidate` built from the render-time
@@ -46,7 +46,7 @@ function setup() {
 
 const LINE = { id: "l1" } as CostLine;
 
-describe("useCapexWrites — the written tab is the one refreshed (D57)", () => {
+describe("useCapexWrites — the written tab is the one refreshed (D58)", () => {
   it("UT-CAPEX-NOSPIN-022 a Paid write started on tab 1 that settles after a switch to tab 2 refreshes tab 1", async () => {
     const { hook, bookCategories } = setup();
     act(() => { hook.result.current.setPaid.mutate({ lineId: "l1", year: 2026, month: 1, paid: true }); });

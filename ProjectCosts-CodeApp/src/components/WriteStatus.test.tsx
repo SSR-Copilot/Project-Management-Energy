@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The Cost screens' "a write is running" indicator: a blocking spinner for as long as the write
- * lasts (D57 made it a text line; D59 restored the spinner after it left the screen looking idle).
+ * lasts (D58 made it a text line; D60 restored the spinner after it left the screen looking idle).
  */
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";

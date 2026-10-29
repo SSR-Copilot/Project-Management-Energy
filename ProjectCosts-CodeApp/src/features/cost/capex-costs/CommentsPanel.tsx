@@ -223,7 +223,7 @@ export interface CommentsPanelProps {
   onDismiss: () => void;
   /**
    * Told when the whole commit starts and ends, so the screen can refuse to reopen the panel (and
-   * its other write commands) mid-save — D57 decision 2b. Called directly from `commit`, not from
+   * its other write commands) mid-save — D58 decision 2b. Called directly from `commit`, not from
    * an effect, so it still reaches the screen if this panel unmounts while the save runs.
    */
   onSavingChange?: (saving: boolean) => void;
@@ -294,7 +294,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
    * still for the save — which is the loader the client reports as wrong.
    */
   const [saving, setSaving] = useState(false);
-  /** D57 decision 2b — Save, Add Comment and every card action, while loading or saving. */
+  /** D58 decision 2b — Save, Add Comment and every card action, while loading or saving. */
   const writesDisabled = writeCommandsDisabled({
     loading: query.isLoading, writePending: saving, writeInFlight,
   });
@@ -498,7 +498,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
      * Dismissing after the writes drew the saving spinner on top of the panel it was saving,
      * which on a thread with several changed comments is the whole visible duration of the save.
      *
-     * Since D57 the "spinner" is the non-blocking `WriteStatus` line; the order is unchanged
+     * Since D58 the "spinner" is the non-blocking `WriteStatus` line; the order is unchanged
      * (decision 7a).
      */
     setSaving(true);
@@ -608,7 +608,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
         </div>
 
         {/*
-          * DIVERGENCE (D57): this was an inline "Loading comments..." spinner (app text; the
+          * DIVERGENCE (D58): this was an inline "Loading comments..." spinner (app text; the
           * canvas loads `colCapexComments` behind its `cmp_Costs_PopUpLoading`). While the
           * comments load the list is now simply EMPTY — no spinner, no text, and not the previous
           * contract's threads, which `working` still holds until the new rows seed it — and
@@ -687,7 +687,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
         </div>
       </FormPanel>
       {/*
-        * DIVERGENCE (D57): `cmp_Costs_PopUpLoading` with `locSpinnerInformationText: "Saving
+        * DIVERGENCE (D58): `cmp_Costs_PopUpLoading` with `locSpinnerInformationText: "Saving
         * comments..."` (`btn_Capex_Comment_Save.OnSelect`, `CapexScreenCode.txt:10141`) was a
         * blocking spinner pop-up. It is now this non-blocking status line, same text, rendered
         * OUTSIDE the drawer — the drawer has already closed (7a) — so it sits in the screen's
@@ -724,7 +724,7 @@ function ReadCard(props: {
   cost: { year: number; month: number } | undefined;
   onEdit: () => void; onDelete: () => void; onResolve: () => void; onReopen: () => void;
   onReply: () => void;
-  /** `writeCommandsDisabled` — every action on the card is a write or opens an editor (D57). */
+  /** `writeCommandsDisabled` — every action on the card is a write or opens an editor (D58). */
   disabled: boolean;
 }) {
   const {

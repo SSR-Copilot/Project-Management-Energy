@@ -237,7 +237,7 @@ export default function AddCostsFromTableScreen() {
       canvasParityDeletion: CANVAS_PARITY_DELETION,
       now: () => performance.now(),
     });
-    // One line (plus a collapsed group, D58), so a slow Save can be pinned on the client side or
+    // One line (plus a collapsed group, D59), so a slow Save can be pinned on the client side or
     // the network side at a glance.
     const readBack = readBackMs.current;
     const validation = validationMs.current;
@@ -285,7 +285,7 @@ export default function AddCostsFromTableScreen() {
       // CA-15: the sheet's banner while it is mounted; the error toast if the user has left.
       reportFailure(userText, setSaveError);
       // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
-      // then the raw error object in its own collapsed group (D58); the screen shows one line.
+      // then the raw error object in its own collapsed group (D59); the screen shows one line.
       emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
     }
   };
@@ -318,7 +318,7 @@ export default function AddCostsFromTableScreen() {
   if (sheetQuery.isLoading || sessionLoading || initialGrid === null) {
     /*
      * No canvas control (the canvas screen sets no `LoadingSpinner`): the code app's own inline
-     * "Loading the cost table…" spinner (restored by D59 after D57 had left this body empty, so
+     * "Loading the cost table…" spinner (restored by D60 after D58 had left this body empty, so
      * opening the sheet showed a blank screen through the chunk download, the sheet fetch and the
      * grid build). The grid needs `initialGrid`, so nothing else can render yet.
      */
@@ -327,7 +327,7 @@ export default function AddCostsFromTableScreen() {
 
   const categoryName = CATEGORY_LABELS[category] ?? "";
   const title = sheetTitle(project?.projectName ?? "", categoryName);
-  // D57: no scrim while saving, so the sheet and its edit/leave controls lock instead.
+  // D58: no scrim while saving, so the sheet and its edit/leave controls lock instead.
   const locked = sheetLocked({ isPending: save.isPending });
 
   return (
@@ -417,7 +417,7 @@ export default function AddCostsFromTableScreen() {
           }}
         >
           {/*
-            * DIVERGENCE (D57): replaces `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable`
+            * DIVERGENCE (D58): replaces `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable`
             * (`cmp_PopUp_Loading_1`, `Visible: =locIsVisiblePopUpSpinner`,
             * `InformationText: =locSpinnerInformationText`) with one non-blocking status line in
             * the footer, same verbatim text. Save stays guarded by `saveButtonDisabled`.

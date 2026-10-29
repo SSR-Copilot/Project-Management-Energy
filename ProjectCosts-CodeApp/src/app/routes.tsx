@@ -75,8 +75,8 @@ export function CostProjectGate() {
   const navigate = useNavigate();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
   /*
-   * No canvas control; code-app route spinner. D57 had turned the Cost gate's "Loading project…"
-   * spinner into an empty placeholder, which left a blank screen (D59 restores it). The gate still
+   * No canvas control; code-app route spinner. D58 had turned the Cost gate's "Loading project…"
+   * spinner into an empty placeholder, which left a blank screen (D60 restores it). The gate still
    * holds back every Cost screen (and its queries) until the session and the project are loaded.
    */
   if (loading) return <LoadingOverlay mode="inline" label="Loading project…" testId="cost-project-loading" />;
@@ -91,7 +91,7 @@ export function CostProjectGate() {
   /*
    * No canvas control; code-app route spinner. The Cost subtree keeps its own Suspense boundary,
    * so the lazy Cost chunk (Add Cost from Table, Contracts, ...) shows a spinner while it downloads
-   * instead of the blank screen D57's empty fallback left (D59). Same text as the shared one
+   * instead of the blank screen D58's empty fallback left (D60). Same text as the shared one
    * (`AppRoutes`).
    */
   return (

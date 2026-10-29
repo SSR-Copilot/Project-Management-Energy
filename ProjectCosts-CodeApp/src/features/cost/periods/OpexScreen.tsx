@@ -24,7 +24,7 @@
  *   `con_OpexCosts_RightPanel_NewEditCost`               → `<FormPanel>` (left/right columns)
  *   `cmp_OpexCosts_PopUpConfirmation_DeleteCost`         → `<ConfirmDialog>`
  *   `cmp_OpexCosts_PopUpLoading`                         → `<WriteStatus>` + the write guard
- *                                                          (D57 DIVERGENCE: no spinner, no scrim)
+ *                                                          (D58 DIVERGENCE: no spinner, no scrim)
  *
  * Reference screenshots:
  *   `Cost App - O & M Selected Tab - Almost same for Landlease and other Opex also.png`
@@ -683,7 +683,7 @@ export interface OpexScreenProps {
 export default function OpexScreen({ mode }: OpexScreenProps) {
   const styles = useStyles();
   const { project, projectId } = useSession();
-  // D57: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
+  // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
   // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
   const { data: book, isLoading, error, save } = useCostBook();
   const extras = useProjectExtras(projectId);
@@ -711,7 +711,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const [deleting, setDeleting] = useState<OpexCost | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   /**
-   * `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` showed. Since D57 it is
+   * `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` showed. Since D58 it is
    * the `<WriteStatus>` line, and non-null means a write is pending (the write guard).
    */
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
@@ -866,7 +866,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   };
 
   /**
-   * D57 — the guard that replaced `cmp_OpexCosts_PopUpLoading`'s screen cover: while the first
+   * D58 — the guard that replaced `cmp_OpexCosts_PopUpLoading`'s screen cover: while the first
    * load or any write runs, no command that starts a write may fire (the buttons are disabled
    * too; this is the second line).
    */
@@ -1067,7 +1067,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // one of the two can be named; the cascade is the phase worth naming when there is one.
     const cascades = selected !== null && childrenOf(allCosts, selected.id).length > 0;
     /*
-     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS. (Since D57 the "spinner" is the
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS. (Since D58 the "spinner" is the
      * `<WriteStatus>` line plus the write guard; the order is unchanged.)
      *
      * The canvas Save raises the spinner and dismisses the panel in ONE `UpdateContext` —
@@ -1116,7 +1116,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
-   * D59: the first load shows an inline spinner in the body ("Loading Operation & Maintenance…"), with the write
+   * D60: the first load shows an inline spinner in the body ("Loading Operation & Maintenance…"), with the write
    * commands disabled (`writeCommandsDisabled`) and `aria-busy` on the page, so the screen never
    * looks idle while it loads. The load check still comes BEFORE the error check, so a load in
    * progress never reads "Cost data is unavailable".
@@ -1146,7 +1146,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       {/*
         * `cmp_OpexCosts_PopUpLoading` (`InformationText: =locSpinnerInformationText`, `Visible:
         * =locIsVisiblePopUpSpinner`): the blocking spinner with the verbatim `OPEX_MSG` text
-        * shows for as long as the write runs (D59). The write guard also disables the write
+        * shows for as long as the write runs (D60). The write guard also disables the write
         * commands.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
@@ -1285,7 +1285,7 @@ function OpexCardView({
   onToggle: () => void;
   onSelectRow: (row: OpexCost) => void;
   onCommand: (key: OpexCommandKey) => void;
-  /** D57 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
+  /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
   writeDisabled: boolean;
 }) {
   const styles = useStyles();

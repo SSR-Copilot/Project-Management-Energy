@@ -69,7 +69,7 @@ export class GridRenderer {
     // CA-16 (this app's port, not vendor): `WriteActionsDisabled` from the last render(). While
     // true, every menu item that starts a write (Add New Cost, Add Standard Contract, Set as
     // paid/unpaid, Comments, and the row menu's Edit / Comments / Delete) renders greyed and
-    // disabled, because the screen ignores those actions while a write runs (D57).
+    // disabled, because the screen ignores those actions while a write runs (D58).
     _writeActionsDisabled = false;
     /**
      * @param container        Root div handed over by index.ts (the PCF container).
@@ -157,7 +157,7 @@ export class GridRenderer {
         this._writeActionsDisabled = context.parameters.WriteActionsDisabled?.raw === true;
         this._actionDropdown.setWriteActionsDisabled?.(this._writeActionsDisabled);
         const dataset = context.parameters.DevexCapexCostSummary;
-        // DIVERGENCE (D57): the vendor control bailed out here with `renderLoading()`
+        // DIVERGENCE (D58): the vendor control bailed out here with `renderLoading()`
         // ("Loading project budget...") while `dataset.loading` was true. In this app the
         // dataset is built synchronously by `PcfGrid.tsx`, whose `loading` is always false, so
         // that branch and the method were dead code and were removed with the Cost spinners.
@@ -1435,7 +1435,7 @@ export class GridRenderer {
      * Shown when there are NO rows after the filters (Show Empty Accounts off, the Cost Paid
      * By filter, or a category with no accounts) — this is an empty grid, not a load.
      *
-     * DIVERGENCE (D57): the vendor control drew a spinning `.pcf-spinner` with "Loading data…"
+     * DIVERGENCE (D58): the vendor control drew a spinning `.pcf-spinner` with "Loading data…"
      * here, which on an empty grid spun forever and told the user something was still coming.
      * It is now a static message. The text is NEW — the canvas has no empty-gallery text to
      * transcribe (rule 7). The `.pcf-loading-state` class is kept for its centred layout

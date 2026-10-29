@@ -109,7 +109,7 @@ const CONTRACT_BIND = "vsb_Contract@odata.bind";
 export interface SavePlanDeps {
   /**
    * One upsert of `rows` into `table` (split into `CreateMultiple`/`UpdateMultiple` by the adapter); throws on failure.
-   * `step` (optional, LOG ONLY, D58): the step's name in the save log when it differs from `label`
+   * `step` (optional, LOG ONLY, D59): the step's name in the save log when it differs from `label`
    * — the two phase-2 stages, `upsert costs (existing contracts)` / `upsert costs (new contracts)`.
    * `label` stays the phase label, which every error message carries.
    */
@@ -123,7 +123,7 @@ export interface SavePlanDeps {
    * were confirmed already gone (404). Used only for `committedBefore`, so a batch of nothing but
    * confirmed 404s does not count as "something was saved". Omitted: every id counts as removed.
    * A failure says the same through the error's `removedCount` (`BulkDeleteError`).
-   * `step` (optional, LOG ONLY, D58): the batch's name in the save log, as for `upsert`.
+   * `step` (optional, LOG ONLY, D59): the batch's name in the save log, as for `upsert`.
    */
   deleteMany: (table: BulkTableInfo, ids: readonly string[], label: string, step?: string) =>
     Promise<{ requests: number; removed?: number }>;
@@ -352,7 +352,7 @@ const PHASE_LABEL: Record<SavePhase, string> = {
 };
 
 /**
- * The two phase-2 stages' names, and the retry-only phase-3 batch's, in the save LOG only (D58):
+ * The two phase-2 stages' names, and the retry-only phase-3 batch's, in the save LOG only (D59):
  * `PHASE_LABEL[2]` / `PHASE_LABEL[3]` stay their labels, so every error message and the screen's
  * technical line keep "upsert costs" / "delete costs".
  */

@@ -370,7 +370,7 @@ const TYPICAL_CALLS = [
 
 /**
  * Every `<label> (...)` entry of the save's log line for one label, joined. A cost stage's log name
- * (`upsert costs (existing contracts)` / `(new contracts)`, D58) counts as its label; the ms carry
+ * (`upsert costs (existing contracts)` / `(new contracts)`, D59) counts as its label; the ms carry
  * a thousands separator.
  */
 const logEntries = (line: string, label: string) =>
@@ -444,7 +444,7 @@ beforeEach(() => {
   vi.mocked(executeSavePlan).mockClear();
   vi.mocked(upsertMultiple).mockClear();
   resetBulkWriteAvailability();
-  // The save logs' collapsed groups (D58): kept out of the test output. A test that reads them
+  // The save logs' collapsed groups (D59): kept out of the test output. A test that reads them
   // spies on these itself.
   vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
   vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
@@ -1221,7 +1221,7 @@ describe("saveAddCostSheetBulk — the evaluator's findings F-A, F-B, F-C (D51 �
     await expect(saveAddCostSheetBulk({ ...staleRetry(), refreshBeforePlan: true })).rejects.toThrow("read failed");
     expect(upsertCalls).toEqual([]);
     expect(deleteCalls).toEqual([]);
-    // Changed (D58): the request count, "nothing was written" and the error follow.
+    // Changed (D59): the request count, "nothing was written" and the error follow.
     expect(logLine(info)).toMatch(
       /^Add Cost from Table save failed after [\d,]+ ms, refresh read failed \(refresh failed [\d,]+ ms\); .*; nothing was written; error: .*read failed/,
     );
@@ -1463,7 +1463,7 @@ describe("saveAddCostSheetBulk — parallel chunks and deferred contract deletes
     expect(outcome.costDeleteError).toBeUndefined();
     expect((outcome.error as InstanceType<typeof BulkDeleteError>).failedIds).toEqual([DOOMED]);
     // The refused delete was still SENT: the log counts it.
-    // Changed (D58): the root error follows, ids replaced.
+    // Changed (D59): the root error follows, ids replaced.
     expect(backgroundLines(info)[0]).toMatch(/: costs 1 req, contracts 1 req, [\d,]+ ms, failed; error: .*403 refused$/);
     expect(saveLine(info)).toMatch(/^Add Cost from Table save: /);
     // The toast text: the deleter's failed ids when it names them, else every deferred contract.
@@ -1645,7 +1645,7 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     const n = { costs: 16, contracts: 2 };
     expect(backgroundDeleteLogLine({ requests: 18 }, n, 1234.4))
       .toBe("Add Cost from Table background deletes: costs 16 req, contracts 2 req, 1,234 ms");
-    // Changed (D58): a failure names its root error, ids replaced.
+    // Changed (D59): a failure names its root error, ids replaced.
     expect(backgroundDeleteLogLine({ requests: 0, error: contractErr, contractDeleteError: contractErr }, n, 5))
       .toMatch(/^Add Cost from Table background deletes: costs 16 req, contracts 2 req, 5 ms, failed; error: BulkDeleteError: /);
     expect(backgroundDeleteLogLine({ requests: 0, error: costErr, costDeleteError: costErr, reconciled: true }, n, 5))
@@ -1746,7 +1746,7 @@ describe("saveAddCostSheetBulk — deferred deletes start after the writes; per-
       changedRows: Array.from({ length: 10 }, (_, i) => row("C1", C1, new Array<number>(12).fill(5), 2026 + i)),
       existingContracts: [contract(C1, "C1")], existingCosts: [], contractDeleteIds: [],
     });
-    // Changed (D58): the stage's log name; C1 already exists, so its costs are stage A.
+    // Changed (D59): the stage's log name; C1 already exists, so its costs are stage A.
     expect(saveLine(info)).toMatch(/upsert costs \(existing contracts\) \(create 4 req bulk \[\d+ ms, \d+ ms, \d+ ms, \d+ ms\]\)/);
     expect(saveLines(info)).toHaveLength(1);
   });
@@ -1843,7 +1843,7 @@ describe("saveAddCostSheetBulk — exact committedBefore (L2 / F5)", () => {
 });
 
 describe("saveAddCostSheetBulk — the background deletes' log lines (item 1)", () => {
-  // Changed (D58): "1 row" in the singular, ms with a thousands separator.
+  // Changed (D59): "1 row" in the singular, ms with a thousands separator.
   const STARTED = /^Add Cost from Table background deletes started: (costs|contracts) 1 row at [\d,]+ ms, delete gate (\d)\/4 busy$/;
 
   it("UT-ACSHEET-BULK-066 the hook's call path: the background line is written although nothing ever attaches to background", async () => {
@@ -2062,7 +2062,7 @@ describe("saveAddCostSheetBulk — reads during an earlier Save's background del
   });
 });
 
-describe("saveAddCostSheetBulk — the readable save log (D58)", () => {
+describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
   /** Every console line in order: info as is, a group title as `## title`, a table row as `| a | b`. */
   const captureLog = () => {
     const out: string[] = [];
@@ -2281,7 +2281,7 @@ describe("saveAddCostSheetBulk — the readable save log (D58)", () => {
     expect(r.sections[1]?.raw).toBe(error);
   });
 });
-describe("saveAddCostSheetBulk — the readable save log, review fixes (D58)", () => {
+describe("saveAddCostSheetBulk — the readable save log, review fixes (D59)", () => {
   const captureLog = () => {
     const out: string[] = [];
     const raw: unknown[] = [];

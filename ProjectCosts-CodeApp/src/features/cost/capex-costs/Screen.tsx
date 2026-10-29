@@ -222,7 +222,7 @@ export default function CapexCostsScreen() {
   const [commentsSaving, setCommentsSaving] = useState(false);
   /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
   const writeInFlight = useCostWriteInFlight(projectId);
-  /** D57 decision 2b — every write-starting command is greyed or ignored while this holds. */
+  /** D58 decision 2b — every write-starting command is greyed or ignored while this holds. */
   const writesDisabled = writeCommandsDisabled({
     loading: isLoading, writePending: busy || commentsSaving, writeInFlight,
   });
@@ -343,7 +343,7 @@ export default function CapexCostsScreen() {
 
   const toolbar = (
     <div className="canvas-cost-toolbar">
-      {/* Opens the bulk cost editor, so it is a write-starting command (D57 decision 2b). */}
+      {/* Opens the bulk cost editor, so it is a write-starting command (D58 decision 2b). */}
       <Button appearance="transparent" icon={<AddRegular />} aria-label="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable"
         data-testid="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable"
         disabled={writesDisabled} onClick={() => {
@@ -381,7 +381,7 @@ export default function CapexCostsScreen() {
   );
 
   /*
-   * DIVERGENCE (D57): the canvas showed `spn_LoadingSpinnerCost` (`Visible:
+   * DIVERGENCE (D58): the canvas showed `spn_LoadingSpinnerCost` (`Visible:
    * =locIsVisibleLoadingCostSpinner`) with "Please wait, loading cost ..." while the cost book
    * loaded. This app renders the screen chrome — tabs and toolbar, the write commands greyed by
    * `writeCommandsDisabled` — over an EMPTY body until the data arrives, and no spinner.
@@ -390,7 +390,7 @@ export default function CapexCostsScreen() {
    * "Cost data is unavailable"; a real failure still does (rule 19).
    */
   /*
-   * DIVERGENCE (D57): `cmp_Costs_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
+   * DIVERGENCE (D58): `cmp_Costs_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
    * =locIsVisiblePopUpSpinner`, `:18045-18056`) was a blocking spinner pop-up over the whole
    * screen. It is replaced by this non-blocking status line, beside the screen's error
    * banners, carrying the SAME `InformationText` — `capexWriteStatusLabel` keeps the
@@ -416,7 +416,7 @@ export default function CapexCostsScreen() {
     return <div className="canvas-cost-screen">
       {tabStrip}
       {isSummaryTab(category) ? null : toolbar}
-      {/* D59: an inline spinner in the body, so a tab change never shows an empty screen. */}
+      {/* D60: an inline spinner in the body, so a tab change never shows an empty screen. */}
       <LoadingOverlay mode="inline" label={LOADING_COST} testId="capex-loading" />
       {writeFeedback}
     </div>;
@@ -538,7 +538,7 @@ export default function CapexCostsScreen() {
 
   const onAction: GridCallback = (action, id, standardContractId, paid) => {
     /*
-     * D57 decision 2b: the vendored grid has no disabled state, and the overlay scrim that used
+     * D58 decision 2b: the vendored grid has no disabled state, and the overlay scrim that used
      * to block it is gone, so a write-starting action that arrives while a write is pending is
      * ignored here instead. Expand/collapse never reaches this callback.
      */
@@ -724,7 +724,7 @@ export default function CapexCostsScreen() {
      * the spinner was drawn on top of the panel it was saving. The client's reference is
      * explicit about the order, filename and all: "Panel Closes and Spinner is shown".
      *
-     * Since D57 there is no spinner: the panel still closes first, and the same text then
+     * Since D58 there is no spinner: the panel still closes first, and the same text then
      * shows as the `WriteStatus` line (decision 7a keeps the order).
      */
     setSavingLabel(savingCostLabel(edit.distribution));
@@ -812,7 +812,7 @@ export default function CapexCostsScreen() {
     {isSummaryTab(category) ? (
       /*
        * `cmp_Costs_PopUpLoading` showed "Please wait, loading data..." over the Summary until
-       * `colFinatCostDataOptimized` filled (its `InformationText`, `:18052`). D59 shows the same
+       * `colFinatCostDataOptimized` filled (its `InformationText`, `:18052`). D60 shows the same
        * text as an inline spinner in the table area until the totals land.
        */
       totals.isLoading ? <LoadingOverlay mode="inline" label={LOADING_DATA} testId="capex-summary-loading" /> : (
@@ -1137,7 +1137,7 @@ export default function CapexCostsScreen() {
         setPaidRequest(null);
       }} />
 
-    {/* D57: the status line and write banners, shared with the loading branch (`writeFeedback`). */}
+    {/* D58: the status line and write banners, shared with the loading branch (`writeFeedback`). */}
     {writeFeedback}
     {save.error ? (
       <p className="canvas-error" role="alert">{(save.error as Error).message}</p>

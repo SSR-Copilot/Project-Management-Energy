@@ -20,7 +20,7 @@ export function saveButtonDisabled(s: { canSave: boolean; isPending: boolean; is
  * Whether the sheet and every control that edits it or leaves it (Add Row, Delete Row, Copy
  * Table, Cancel, the header X) are locked: while a save is pending.
  *
- * DIVERGENCE (D57): the canvas covered the modal with
+ * DIVERGENCE (D58): the canvas covered the modal with
  * `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable` while it saved, so nothing could be
  * edited. Without that scrim, an edit typed mid-save would be silently lost when the successful
  * save navigates away, and Cancel mid-save would hide a failure. The grid is made `inert` (no

@@ -1,11 +1,11 @@
 /**
  * The "a write is running" indicator of the Cost screens: a blocking spinner for as long as the
- * write lasts (D57, restored by D59).
+ * write lasts (D58, restored by D60).
  *
- * D57 first replaced the canvas `cmp_*_PopUpLoading` pop-up (`cmp_PopUp_Loading`: a 10 % scrim, a
+ * D58 first replaced the canvas `cmp_*_PopUpLoading` pop-up (`cmp_PopUp_Loading`: a 10 % scrim, a
  * white card, a spinner and `InformationText`) with a quiet line of text. In use that left the
  * screen looking idle while a save was still running, so a user could click again or click
- * anywhere. D59 restores the canvas behaviour: while `label` is set the shared blocking
+ * anywhere. D60 restores the canvas behaviour: while `label` is set the shared blocking
  * `LoadingOverlay` (spinner + the SAME verbatim `InformationText`) covers the screen, and it goes
  * away when the write has finished and the screen's refresh is done. The per-screen write guard
  * (`writeCommandsDisabled`, `domain/writeGuard.ts`) stays as the second line of defence.

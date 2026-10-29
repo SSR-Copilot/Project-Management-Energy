@@ -973,7 +973,7 @@ message for an unset payment-date year.
 
 ### CA-15 · Cost module: leaving a screen mid-write loses the write's error, and the write guard reads open on return (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
-**A code-app defect, introduced by D57** (the spinners removed).
+**A code-app defect, introduced by D58** (the spinners removed).
 - **What happens.**
   - The `LoadingOverlay` scrim used to cover the rail and the header as well. Without it, the user
     can navigate away while a CAPEX, OPEX, Land Lease, Contracts or Comments write is still
@@ -986,7 +986,7 @@ message for an unset payment-date year.
 - **Severity.** Medium. The non-transactional multi-writes (Land Lease header → allocations →
   period, the OPEX child cascade) can interleave.
 - **Fix (planned).** A per-project "write in flight" flag that outlives the screen, plus a
-  global error toast for writes whose screen is gone. Record: **D57 §3 item 2**.
+  global error toast for writes whose screen is gone. Record: **D58 §3 item 2**.
 - **Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).**
   - *The flag.* Every Cost write hook carries the TanStack `mutationKey`
     `costWriteKey(projectId, family)` (`domain/writeGuard.ts`): CAPEX, comments, O&M / Other OPEX
@@ -1027,11 +1027,11 @@ message for an unset payment-date year.
 
 ### CA-16 · CAPEX PCF grid: write actions look enabled during a write (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
-**A code-app defect, D57.** While a write runs, the grid's Add, Edit, Delete, Add Standard, Paid
+**A code-app defect, D58.** While a write runs, the grid's Add, Edit, Delete, Add Standard, Paid
 and Comment actions are ignored by the React callback (`gridActionAllowed`). The vendored DOM menus
 (`pcf/ui/GridRenderer.js`) still look enabled, so a click silently does nothing. Severity: low (no
 wrong data). Fix: pass the pending flag into the renderer and grey the items. Check their
-identities by hand, because the label gate does not cover that file. Record: **D57 §3 item 3**.
+identities by hand, because the label gate does not cover that file. Record: **D58 §3 item 3**.
 
 **Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).** The CAPEX screen passes its
 `writesDisabled` to `PcfGrid` as `writeActionsDisabled`, which reaches the renderer as the new
@@ -1049,12 +1049,12 @@ Tests: UT-CAPEXPCF-WRITE-001…005 (`capex-costs/pcfWriteActions.test.ts`), UT-C
 
 ### CA-17 · Land Lease and Contracts: a selection made during a write is cleared when the write ends (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
 
-**A code-app defect, made reachable by D57.** The success paths clear the selection, as they always
-did. Before D57 the scrim made selecting during a write impossible; now selection stays enabled
+**A code-app defect, made reachable by D58.** The success paths clear the selection, as they always
+did. Before D58 the scrim made selecting during a write impossible; now selection stays enabled
 (decision 2b), so a row picked mid-write is dropped when the write finishes. Severity: low. Fix: keep
-the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
+the selection unless it pointed at the deleted row. Record: **D58 §3 item 4**.
 
-**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`), marked `DIVERGENCE (D57, CA-17)`.**
+**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`), marked `DIVERGENCE (D58, CA-17)`.**
 - *Land Lease* (`leaseSelectionAfterWrite`, `landLeaseRules.ts`). The save, the standard import
   and the delete capture the selection they started with. On success that same selection is
   still cleared, as on the canvas (LL:5895). A row picked mid-write is kept, unless the delete
@@ -1154,9 +1154,9 @@ the selection unless it pointed at the deleted row. Record: **D57 §3 item 4**.
   - Three concurrent `npx vitest run src/features/admin src/features/cost/capex-costs/Screen.test.tsx
     src/features/pm/project-main/Screen.test.tsx` runs, twice: 6 of 6 green, 826/826 each.
 
-### CA-20 · Cost module: no visible busy state after D57 removed the spinners (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+### CA-20 · Cost module: no visible busy state after D58 removed the spinners (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
 
-**A code-app defect, introduced by D57.** D57 removed the Cost module's loading spinners as canvas
+**A code-app defect, introduced by D58.** D58 removed the Cost module's loading spinners as canvas
 overhead, replacing them with a quiet status line and empty placeholders. In use that left the
 screens looking idle while they were busy.
 - **What happened.**
@@ -1173,16 +1173,16 @@ screens looking idle while they were busy.
     Table.
   - The Cost route's `Suspense` fallback and `CostProjectGate` were empty.
   - OPEX and Land Lease rendered empty card lists, and the Comments panel an empty thread list.
-- **The fix (D59).**
+- **The fix (D60).**
   - **Writes.** `WriteStatus` shows the blocking `LoadingOverlay` (spinner and scrim, with the verbatim
     canvas text) until the write has finished and the screen has refreshed, on success and on
     failure.
   - **Loads.** Inline spinners with the original texts replace every empty placeholder.
-  - **Unchanged.** The write guard from D57 stays.
-- **Tests.** The D57 `UT-*-NOSPIN-*` tests were flipped to pin the spinners (ids kept), and
+  - **Unchanged.** The write guard from D58 stays.
+- **Tests.** The D58 `UT-*-NOSPIN-*` tests were flipped to pin the spinners (ids kept), and
   `UT-WSTATUS-001…004`, `UT-SHELL-NOSPIN-001/007` were rewritten. New tests are `UT-*-BUSY-NNN`.
   **Not verified** in a browser: the first live check on DEV is owed.
-- **Record:** **D59**.
+- **Record:** **D60**.
 
 ---
 

@@ -209,8 +209,8 @@ export function previousYearFloor(args: {
 /*
  * The canvas raised `cmp_Costs_PopUpLoading` (component `cmp_PopUp_Loading`, `Visible:
  * =locIsVisiblePopUpSpinner`) for every write, and the inline `spn_LoadingSpinnerCost` (`Visible:
- * =locIsVisibleLoadingCostSpinner`) while the cost book loaded. D57 first replaced both with a
- * quiet text line and an empty body; D59 restores them, because the screen then looked idle (and
+ * =locIsVisibleLoadingCostSpinner`) while the cost book loaded. D58 first replaced both with a
+ * quiet text line and an empty body; D60 restores them, because the screen then looked idle (and
  * clickable) while it was busy. A write shows the blocking spinner with its SAME verbatim
  * `InformationText` (`WriteStatus`), and a load shows an inline spinner with the canvas text:
  */
@@ -222,7 +222,7 @@ export const LOADING_COST = "Please wait, loading cost ...";
 export const LOADING_DATA = "Please wait, loading data...";
 
 /*
- * Whether the commands that START a write are greyed (D57, decision 2b) is the shared
+ * Whether the commands that START a write are greyed (D58, decision 2b) is the shared
  * `writeCommandsDisabled` (`@/domain/writeGuard`). The blocking spinner's scrim was the only thing
  * that stopped a second Save, Delete, Paid toggle or Add Standard Contract while one was still
  * running. Read-only actions — the tabs, filters, year navigation and expand/collapse — are never
@@ -235,7 +235,7 @@ const WRITE_STARTING_GRID_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether the vendored PCF grid's callback may act (D57). The grid is a DOM-API renderer with no
+ * Whether the vendored PCF grid's callback may act (D58). The grid is a DOM-API renderer with no
  * disabled state of its own, so its write-starting actions are ignored in React while
  * `writeCommandsDisabled` holds. `Comment` counts: it opens the comments editor, whose own save
  * is one of the guarded writes. Anything else (an unknown action) is let through untouched.

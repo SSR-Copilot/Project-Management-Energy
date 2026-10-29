@@ -417,7 +417,7 @@ export function useCapexWrites(
   };
 
   /*
-   * `writtenOn` is the category the write was MADE on, captured in `onMutate` (D57). TanStack
+   * `writtenOn` is the category the write was MADE on, captured in `onMutate` (D58). TanStack
    * pushes every render's options into a pending mutation, so reading the render-time `category`
    * here refreshed the tab the user had since switched TO, and left the one written on stale.
    */
@@ -487,8 +487,8 @@ export function useCapexWrites(
 
   const deleteLine = useMutation({
     mutationKey,
-    // The click time, for the delete busy line (D58), and the category the delete is made on
-    // (D57, see `invalidate`); the refetch is awaited exactly as before.
+    // The click time, for the delete busy line (D59), and the category the delete is made on
+    // (D58, see `invalidate`); the refetch is awaited exactly as before.
     onMutate: () => ({ startedAt: performance.now(), ...writtenOn() }),
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
     onSuccess: async (_data, _line, context) => {
@@ -610,7 +610,7 @@ export function useSaveAddCostSheet(category: number) {
           client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
         } catch (error) {
           // The Save itself succeeded: a patch that throws must not turn it into a failure. The
-          // refetch below still brings the saved state. Readable line, then the raw error (D58).
+          // refetch below still brings the saved state. Readable line, then the raw error (D59).
           emitSaveLog(() => bookPatchFailureReport(error));
         }
       }

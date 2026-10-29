@@ -392,7 +392,7 @@ export function backgroundDeleteFailureTexts(outcome: BackgroundOutcome, counts:
   return texts;
 }
 
-/* ═══════════════════════════════════════════════════════════ the save log (D58) ══ */
+/* ═══════════════════════════════════════════════════════════ the save log (D59) ══ */
 
 /** Whether the background deletes failed (any group, or the generic error). */
 function backgroundFailed(outcome: BackgroundOutcome): boolean {
@@ -435,7 +435,7 @@ function reconcileStateOf(outcome: BackgroundOutcome): "reconciled" | "not recon
 }
 
 /**
- * The plan-refusal wording (D58 decision 3): a `SheetConflictError`'s message and detail carry
+ * The plan-refusal wording (D59 decision 3): a `SheetConflictError`'s message and detail carry
  * contract and account names (`ADDCOST_SAVE_MSG.conflict*`), so every READABLE line names the
  * refusal with this fixed text instead; the detail stays in the raw error group only.
  */
@@ -487,7 +487,7 @@ function backgroundDeleteStartLine(
     + `delete gate ${busy}/${limit} busy`;
 }
 
-/** One delete batch of a save, for the logs (D58: the background group's table). */
+/** One delete batch of a save, for the logs (D59: the background group's table). */
 interface DeleteBatch {
   label: string;
   /** From the start of the save. */
@@ -677,7 +677,7 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * and `UpdateMultiple` still has to fall back to per-row PATCHes (a 501 mid-save), the fallback
  * re-checks those ids first (`upsertEachRow`'s guard), because a PATCH is an upsert.
  *
- * LOG (D58, `./saveLog.ts`). One summary line per save through `console.info`: total ms, requests,
+ * LOG (D59, `./saveLog.ts`). One summary line per save through `console.info`: total ms, requests,
  * per-step timings IN START ORDER (each bulk request's own server duration in brackets, e.g.
  * `upsert contracts (create 1 req bulk [980 ms], update 1 req bulk [10,740 ms])`; the two cost
  * stages named `upsert costs (existing contracts)` / `(new contracts)` in the log only), then
@@ -740,7 +740,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   // BACKGROUND work can still be running when this one starts: its deferred deletes (their own
   // module gates, `contractDeleteGate` / `costDeleteGate`, shared by every save) and, after a
   // failed background cost delete, its reconcile upsert, which passes `saveGate` like any write.
-  // So this save counts its OWN write requests on its own meter (D58, measurement only): `meters.save`
+  // So this save counts its OWN write requests on its own meter (D59, measurement only): `meters.save`
   // until the save line is printed, then `meters.background` for this save's background reconcile,
   // so that never lands in the save line either. Another caller's writes are not counted; they
   // show only as the shared gate peak.
@@ -838,7 +838,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
    * each request's own server duration in brackets (`gated`: inside the gate, so queueing is
    * excluded), which shows contention that the group's wall time alone hides. The orchestrator's
    * labels already carry the verb ("upsert contracts", "reconcile totals"); `step` names the two
-   * cost stages in the log only (D58), `label` stays the phase label every error carries.
+   * cost stages in the log only (D59), `label` stays the phase label every error carries.
    */
   const upsert = async (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, step?: string) => {
     const t0 = performance.now();
@@ -870,7 +870,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
     .map(({ e }) => e.text).join(", ");
   const countedRequests = () => refreshRequests + meters.save.count + deletes.costs.sent + deletes.contracts.sent;
   /**
-   * The requests a FAILED save sent, failing ones included (D58): the error's own `requests.total`
+   * The requests a FAILED save sent, failing ones included (D59): the error's own `requests.total`
    * counts only the operations that succeeded, so the log takes this save's counted requests
    * (refresh reads, every gated write, every delete and 404 read-back) plus the error's verify
    * reads, and never less than the error's total.

@@ -1144,7 +1144,7 @@ export function contractCommands(args: {
  * (`@/domain/writeGuard`) holds. The same flag greys the payment-target bar's Add Period, Edit
  * and Delete.
  *
- * DIVERGENCE (D57): the canvas blocked a second write by covering the whole screen with
+ * DIVERGENCE (D58): the canvas blocked a second write by covering the whole screen with
  * `cmp_Contracts_PopUpLoading` (`Visible: =locIsContractVisiblePopUpSpinner`) and blocked the
  * first paint with the screen's `LoadingSpinner: =LoadingSpinner.Data`. Both spinners are gone,
  * so the guard replaces them. Read-only actions (selecting a contract or a payment target,
@@ -1167,10 +1167,10 @@ interface ContractSelection {
  * The selection once a successful delete ends (CA-17).
  *
  * A contract delete has always cleared the contract and its target, and a payment-target delete
- * the target. Before D57 the pop-up scrim made selecting during the delete impossible, so the
+ * the target. Before D58 the pop-up scrim made selecting during the delete impossible, so the
  * selection cleared was always the deleted row.
  *
- * DIVERGENCE (D57, CA-17): selection stays enabled while a write runs, so only what still points
+ * DIVERGENCE (D58, CA-17): selection stays enabled while a write runs, so only what still points
  * at a deleted row is cleared — the contract (and with it any target, which belongs to it) when
  * the contract is gone, the target when that target is gone. A row picked mid-delete is kept.
  */

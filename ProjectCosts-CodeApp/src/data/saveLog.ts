@@ -1,5 +1,5 @@
 /**
- * The readable console log of the two Dataverse bulk saves (D58): Add Cost from Table's Save
+ * The readable console log of the two Dataverse bulk saves (D59): Add Cost from Table's Save
  * (`./addCostSheet.ts`) and the DEVEX/CAPEX Add/Edit Cost panel's Save and Delete
  * (`./capexWrites.ts`).
  *
@@ -13,7 +13,7 @@
  * no React. `emitSaveLog` never throws; logging must not turn a successful save into a failure,
  * or a background outcome into a rejection.
  *
- * WHAT IS NEVER PRINTED READABLY: record ids and record names (D58 decision 3). Counts only. Error
+ * WHAT IS NEVER PRINTED READABLY: record ids and record names (D59 decision 3). Counts only. Error
  * messages pass `messageOf`, which replaces every GUID with `<id>`. The one exception is the raw
  * error object, kept for support in its own collapsed "Raw error (for support)" group, exactly as
  * the screen's `console.error` printed it before.
@@ -167,7 +167,7 @@ export function stepsSection(steps: readonly SaveLogStep[], title = "Steps (star
 }
 
 /**
- * One upsert's groups for a steps table's "How" column, readable (D58, shared by both saves):
+ * One upsert's groups for a steps table's "How" column, readable (D59, shared by both saves):
  * `create 12 rows: 1 request, bulk [1.4 s]; update 3 rows: FAILED, per-row after 501`, then each
  * non-empty `extras` entry (e.g. `2 unchanged skipped`), all joined with `; `. `nothing to send`
  * when there is neither.
@@ -188,7 +188,7 @@ function averageMs(meter: RequestMeter): number {
 
 /**
  * The summary line's gate tail: `gate peak 4/16, req avg 1,240 ms max 1,900 ms`. The peak and the
- * averages are THIS save's write requests only (D58 decision 4); when the shared gate held more at
+ * averages are THIS save's write requests only (D59 decision 4); when the shared gate held more at
  * once (other work writing), `, shared gate peak 6/16` follows.
  */
 export function gateTail(meter: RequestMeter): string {

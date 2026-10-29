@@ -243,9 +243,9 @@ describe("Add Cost from Table Save wiring", () => {
   });
 });
 
-/* ── no spinners (D57) ────────────────────────────────────────────────────── */
+/* ── no spinners (D58) ────────────────────────────────────────────────────── */
 
-describe("Add Cost from Table without spinners (D57)", () => {
+describe("Add Cost from Table without spinners (D58)", () => {
   it("UT-ADDCOST-NOSPIN-001 while the sheet loads: the inline spinner with the verbatim text, no grid", () => {
     sheet = { data: undefined, isFetching: true, isLoading: true };
     renderScreen();

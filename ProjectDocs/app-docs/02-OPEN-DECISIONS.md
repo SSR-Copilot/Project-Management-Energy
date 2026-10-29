@@ -4105,7 +4105,7 @@ past-cost notice).
 
 #### 11.6 Logging and screen
 
-> **Log format superseded by D58 (29 Oct 2026, proposed).** Every line quoted in §11 keeps its
+> **Log format superseded by D59 (29 Oct 2026, proposed).** Every line quoted in §11 keeps its
 > prefix and field order, but now shows exact ms with thousands separators (brackets too), "1
 > request" in the singular, steps in start order, and the two cost stages named "upsert costs
 > (existing contracts)" / "(new contracts)". Collapsed groups follow each line. The gate peak
@@ -4256,7 +4256,7 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   `gate peak 9/16, req avg 380 ms max 1200 ms, verify skipped, 2 already gone`: the gate's peak
   in-flight count, the average and maximum time a request held a gate slot (queueing excluded),
   whether the upsert verify ran, and how many deletes found their row already gone
-  (UT-ACSHEET-BULK-040). Since D58 the numbers carry separators (`req avg 380 ms max 1,200 ms`)
+  (UT-ACSHEET-BULK-040). Since D59 the numbers carry separators (`req avg 380 ms max 1,200 ms`)
   and count this save's writes only; `, shared gate peak N/16` follows when other work wrote at
   the same time.
 - **`createGate` `peak()` / `reset()`** (`data/concurrency.ts`). Measurement only; scheduling is
@@ -4294,7 +4294,7 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   new grid still re-hydrates (UT-ADDCOST-070, 071).
 - **The prepare log line.** One `console.info` per Save click:
   `Add Cost from Table prepare: <ms> ms (round-trip check …, align …, diff …, deletions …, orphans …; last edit's grid read-back …, validation …; <n> rows)`.
-  Since D58 each timing carries its unit (`4.2 ms`), and a collapsed "Prepare (client side)" group follows.
+  Since D59 each timing carries its unit (`4.2 ms`), and a collapsed "Prepare (client side)" group follows.
 - **Two edge-case behaviour notes** (from the code and UT-ADDCOST-072; output unchanged for every
   sheet the app produces):
   - **Undefined cells.** `gridToJson` no longer copies the cells after the first three, but reads
@@ -4538,7 +4538,7 @@ upsert queued about 4 s behind them, and the combined load slowed each request t
    - A contract-delete failure keeps the §11.14 text.
 4. **Log.** The save line shows `delete costs deferred`. The background line is `Add Cost from Table
    background deletes: costs N req, contracts M req, T ms[, failed][, totals reconciled|totals NOT
-   reconciled]`. Since D58, `; error: <message>` follows a failure, and a collapsed group lists each
+   reconciled]`. Since D59, `; error: <message>` follows a failure, and a collapsed group lists each
    batch (timing, requests, 404 read-backs) and the background reconcile's read and write.
 
 **DIVERGENCE (rule 8).** For a few seconds after Save, a cleared cell can still exist on the CAPEX
@@ -4620,7 +4620,7 @@ about 5–6×. Neither paste included the `background deletes …` line; see §1
     `Add Cost from Table background deletes started: <costs|contracts> N row(s) at T ms, delete gate
     B/4 busy`. The next live log shows whether they started, and whether they queued behind a
     request that never answered. The text is for logs only and has no canvas equivalent. Since
-    D58 it reads `… costs 3 rows at 1,903 ms, …` (`1 row` in the singular).
+    D59 it reads `… costs 3 rows at 1,903 ms, …` (`1 row` in the singular).
 - **L2 / F5: `committedBefore` is now exact.**
   - **Delete side.** The deleter reports `removed` (rows it deleted itself, excluding confirmed
     404s), and `BulkDeleteError.removedCount` was added. `committedBefore` uses the new
@@ -5119,11 +5119,11 @@ CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; cos
 CAPEX panel save busy: 2,034 ms (writes 1,234 ms, refetch 800 ms)
 ```
 
-Since D58 (proposed), the save line lists its steps in start order, shows exact ms with
+Since D59 (proposed), the save line lists its steps in start order, shows exact ms with
 separators throughout, and ends with this save's `gate peak … req avg … max …`. A failed step's
 requests are counted, and `; error: …` follows a failure. Collapsed groups follow the line, and a
 Delete also prints `CAPEX panel delete busy: …`. The example above shows the earlier format,
-which also counted a plain 12-month edit as 3 requests where the code sends 2 (see D58).
+which also counted a plain 12-month edit as 3 requests where the code sends 2 (see D59).
 
 A Delete prints `CAPEX panel delete (…)`. Run each case twice, per row (override set) and bulk
 (override removed): a new contract with 12 months; an edit of 12 months; a shrink that removes 6;
@@ -5142,7 +5142,7 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 - **Gates.** The panel writes pass the shared 16-request `saveGate`. Its deletes have their own
   4-slot gate, so they never queue behind Add Cost from Table's background deletes. Peak in flight
   is 28 of 52. Panel writes also counted in the request stats of the Add Cost save line (log
-  only); since D58 each save counts only its own writes.
+  only); since D59 each save counts only its own writes.
 - **Not fixed here:** `deleteComment` still uses the raw generated `delete()` (CA-10, "Not fixed").
   Both paths call it, so a refused comment delete is invisible and does not stop the next phase.
 
@@ -5179,15 +5179,15 @@ a relink reset with paid months and payment-date comments. Results: _not yet mea
 3. Accept the refusal of a row someone else deleted (§4).
 4. After the §6 numbers: keep the awaited refetch (§5), or build a book patch and stop waiting.
 
-## D57 · Cost module: no loading or saving spinners (29 Oct 2026)
+## D58 · Cost module: no loading or saving spinners (29 Oct 2026)
 
-> **SUPERSEDED IN PART by D59 (29 Oct 2026).** In use, removing the spinners left the screens idle
+> **SUPERSEDED IN PART by D60 (29 Oct 2026).** In use, removing the spinners left the screens idle
 > or blank while they were busy, so every spinner in the table below is back (the write guard,
-> the status wording and the other D57 changes stay). Read D59 first.
+> the status wording and the other D58 changes stay). Read D60 first.
 
 **Status: PROPOSED, uncommitted, on the local branch `feature/RemoveCostSpinners` only.** Not
 deployed. Not product-approved. Brief: `feature-briefs/FEATURE-RemoveCostSpinners.md`.
-(D58 is reserved by the parallel `feature/ReadableBulkSaveLogs` branch.)
+(D59 is reserved by the parallel `feature/ReadableBulkSaveLogs` branch.)
 
 ### 1. What changed — `DIVERGENCE`
 
@@ -5265,11 +5265,11 @@ Every other spinner text stays, because the status line shows it.
 
 Approve removing the spinners (§2), the status line in place of the pop-up, and the gaps in §3.
 
-## D58 · Readable console logs for both bulk saves (29 Oct 2026)
+## D59 · Readable console logs for both bulk saves (29 Oct 2026)
 
 **Status: PROPOSED, uncommitted, on the local branch `feature/ReadableBulkSaveLogs` only.** Not
 deployed. Logging only: no change to what a save writes, its order, its gates, its errors or the
-UI. (D57 is taken by `feature/RemoveCostSpinners`.)
+UI. (D58 is taken by `feature/RemoveCostSpinners`.)
 
 ### 1. Why
 
@@ -5488,21 +5488,21 @@ each, and this tab keeps sending UpdateMultiple rows one by one while its sessio
 
 Nothing functional. Confirm the console format, and that names stay out of readable logs.
 
-## D59 · Cost module: busy indicators restored, after D57 removed them (29 Oct 2026)
+## D60 · Cost module: busy indicators restored, after D58 removed them (29 Oct 2026)
 
 **Status: PROPOSED, uncommitted, on the local branch `feature/RestoreBusyIndicators`.** Not
-deployed. This partly reverses D57 at the user's request.
+deployed. This partly reverses D58 at the user's request.
 
 ### 1. What the user reported
 
-After D57 the Cost screens looked idle while they were busy:
+After D58 the Cost screens looked idle while they were busy:
 - **Saves.** After a Save the screen showed only a quiet line of text, with no spinner. The grid and
   every command stayed clickable, so a user could click again or click anywhere.
 - **CAPEX tabs.** A category change showed the tab strip over an empty body: nothing loaded, nothing
   moving, and controls that could be used.
 - **Add Cost from Table.** The click opened a blank screen, with no sign that it was loading.
 
-### 2. Root causes (all D57)
+### 2. Root causes (all D58)
 
 | # | Cause | Where |
 |---|---|---|
@@ -5534,9 +5534,9 @@ After D57 the Cost screens looked idle while they were busy:
   | Cost project gate | `cost-project-loading` | "Loading project…" |
   | Cost chunk fallback | `cost-screen-loading` | "Loading screen…" |
 
-  The texts are the originals from before D57 (the canvas ones, or the code app's earlier text).
+  The texts are the originals from before D58 (the canvas ones, or the code app's earlier text).
   `LOADING_COST` and `LOADING_DATA` are restored in `capex-costs/panelRules.ts`.
-- **Kept from D57.** The shared write guard (`writeCommandsDisabled`) and the "write in flight"
+- **Kept from D58.** The shared write guard (`writeCommandsDisabled`) and the "write in flight"
   state that outlives a screen (CA-15); the load check before the "Cost data is unavailable" error
   state (rule 19); the shell skipping its blocking overlay on `/costs/*` (the gate's spinner now
   fills that gap, so the rail and header stay visible); the sheet lock on Add Costs from Table; and
@@ -5546,7 +5546,7 @@ After D57 the Cost screens looked idle while they were busy:
 
 ### 4. DIVERGENCE
 
-D57's divergence from the canvas is withdrawn for every spinner above: the Cost module again shows
+D58's divergence from the canvas is withdrawn for every spinner above: the Cost module again shows
 the canvas pop-up spinner during writes and the canvas loading text during loads. What still differs
 from the canvas is that the screens additionally disable their write commands, and the CAPEX tab
 change shows an inline spinner (the canvas used `spn_LoadingSpinnerCost`).
@@ -5554,4 +5554,4 @@ change shows an inline spinner (the canvas used `spn_LoadingSpinnerCost`).
 ### 5. What the product owner is being asked
 
 Confirm that the blocking spinner during writes, and the inline spinner during loads, are what is
-wanted on every Cost screen. D57 is no longer the intended behaviour for these.
+wanted on every Cost screen. D58 is no longer the intended behaviour for these.

@@ -77,7 +77,7 @@ const deleteLine = { mutate: vi.fn(), isPending: false, error: null };
  * `useCapexWrites` is read on every render, so a test that flips this from inside its
  * `mutateAsync` sees the save status line on the re-render the save itself triggers — which is
  * the only way to observe "the panel closed and THEN the status appeared" as one ordering rather
- * than two unrelated assertions. (It was the blocking spinner until D57.)
+ * than two unrelated assertions. (It was the blocking spinner until D58.)
  */
 let savePending = false;
 /** `setPaid.isPending` / `deleteLine.isPending`, likewise — the two no-panel writes. */
@@ -89,7 +89,7 @@ let paidError: Error | null = null;
 let commentsPanelProps: {
   onSavingChange?: (saving: boolean) => void; writeStatus?: boolean; onSaveError?: (text: string) => void;
 } = {};
-/** The cost book's first load, and its failure (D57 decision 4a, rule 19). */
+/** The cost book's first load, and its failure (D58 decision 4a, rule 19). */
 let bookLoading = false;
 let bookError: Error | null = null;
 /** The Summary tab's totals query. */
@@ -631,7 +631,7 @@ const individualContract = (patch: Partial<CostLine> = {}): CostLine => ({
 });
 
 /**
- * D59: the BLOCKING write spinner is up — a `role="dialog" aria-modal` scrim carrying a Fluent
+ * D60: the BLOCKING write spinner is up — a `role="dialog" aria-modal` scrim carrying a Fluent
  * spinner and the verbatim canvas text, under the screen's `capex-write-status` test id.
  */
 const expectBlocking = (text: string) => {
@@ -663,7 +663,7 @@ const expectLoading = (testId: string, text: string) => {
 };
 
 /**
- * The save STATUS LINE — the blocking spinner until D57.
+ * The save STATUS LINE — the blocking spinner until D58.
  *
  * The status line carries the same verbatim `InformationText` the canvas spinner did, but it
  * blocks nothing; the write commands are greyed instead (decision 2b).
@@ -732,8 +732,8 @@ describe("the save status line", () => {
   });
 });
 
-/** D57 decision 2b — while a write is pending, only the commands that START a write go grey. */
-describe("the write guard (D57)", () => {
+/** D58 decision 2b — while a write is pending, only the commands that START a write go grey. */
+describe("the write guard (D58)", () => {
   /** Fires one grid action through the recorded `onAction`, from a throwaway control. */
   const fireGrid = (...args: Parameters<GridCallback>) => {
     const button = document.createElement("button");
@@ -840,8 +840,8 @@ describe("the write guard (D57)", () => {
   });
 });
 
-/** D57 decision 4a — a first load renders the chrome over an empty body, never a spinner. */
-describe("the first load (D57)", () => {
+/** D58 decision 4a — a first load renders the chrome over an empty body, never a spinner. */
+describe("the first load (D58)", () => {
   it("UT-CAPEX-NOSPIN-012 renders the tabs and toolbar, write commands greyed, and the inline loading spinner", () => {
     bookLoading = true;
     mount();
@@ -892,8 +892,8 @@ describe("the first load (D57)", () => {
   });
 });
 
-/** The comments commit on the screen's own status line (D57). */
-describe("the comments status line (D57)", () => {
+/** The comments commit on the screen's own status line (D58). */
+describe("the comments status line (D58)", () => {
   it("UT-CAPEX-NOSPIN-020 shows 'Saving comments...' from the panel's commit; the panel's own line is off", () => {
     mount();
     expect(commentsPanelProps.writeStatus).toBe(false);
@@ -918,8 +918,8 @@ describe("the comments status line (D57)", () => {
   });
 });
 
-/** D59 — the blocking write spinner and the inline load spinners stay until the work is done. */
-describe("the busy indicators (D59)", () => {
+/** D60 — the blocking write spinner and the inline load spinners stay until the work is done. */
+describe("the busy indicators (D60)", () => {
   /** Opens Edit on `l1` and starts a Save whose promise the test controls. */
   const startPendingSave = () => {
     lines = [individualContract()];

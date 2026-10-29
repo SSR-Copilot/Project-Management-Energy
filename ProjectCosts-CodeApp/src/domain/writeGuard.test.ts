@@ -4,7 +4,7 @@ import {
   writeCommandsDisabled, writeFailureSurface,
 } from "./writeGuard";
 
-describe("writeCommandsDisabled (D57)", () => {
+describe("writeCommandsDisabled (D58)", () => {
   it("UT-WGUARD-NOSPIN-001 idle: write commands are enabled", () => {
     expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
   });

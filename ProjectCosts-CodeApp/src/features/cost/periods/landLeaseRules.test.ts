@@ -57,7 +57,7 @@ import {
   type LeaseProjectContext, type LandLeaseForm, type GeneratorOption, type LeaseCommandArgs,
   type LeaseWrite,
 } from "./landLeaseRules";
-// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /** `LeaseWrite` is a discriminated union; a delete carries no payload. Narrow, don't cast. */
@@ -1937,9 +1937,9 @@ describe("Land Lease — the panel form", () => {
   });
 });
 
-/* ── D57: the write guard that replaced `cmp_LandLease_PopUpLoading` ─────────────────── */
+/* ── D58: the write guard that replaced `cmp_LandLease_PopUpLoading` ─────────────────── */
 
-describe("writeCommandsDisabled / guardLeaseCommands (D57)", () => {
+describe("writeCommandsDisabled / guardLeaseCommands (D58)", () => {
   const commands = leaseCommands({
     subaccountId: "sub-1", isSelectedCard: false, selectedPeriod: null, selectedCost: null,
     contract: null, costsInSubaccount: [], hasMatchingAssumption: true, permissions: perms,

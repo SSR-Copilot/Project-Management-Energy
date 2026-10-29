@@ -17,7 +17,7 @@ import {
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
 } from "./rules";
-// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /* ------------------------------------------------------------------ fixtures */
@@ -653,7 +653,7 @@ describe("contractCommands", () => {
   });
 });
 
-describe("writeCommandsDisabled / gatedContractCommands (D57)", () => {
+describe("writeCommandsDisabled / gatedContractCommands (D58)", () => {
   it("UT-CONTRACTS-NOSPIN-001 write commands are enabled only when nothing is loading or pending", () => {
     expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
     expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);

@@ -36,8 +36,8 @@ export default function App() {
   const onCostScreen = pathname.startsWith("/costs/");
   /*
    * No canvas control; code-app shell spinner. On the Cost routes the shell renders while the
-   * session loads (D57) and `CostProjectGate` (`app/routes.tsx`) shows its own inline "Loading
-   * project…" spinner (`cost-project-loading`, D59), so the rail and header stay visible, no Cost
+   * session loads (D58) and `CostProjectGate` (`app/routes.tsx`) shows its own inline "Loading
+   * project…" spinner (`cost-project-loading`, D60), so the rail and header stay visible, no Cost
    * screen mounts or starts a query before the project exists, and the body is never blank. Every
    * other route (the project list, PM, Admin, `/`) keeps the blocking overlay unchanged.
    */

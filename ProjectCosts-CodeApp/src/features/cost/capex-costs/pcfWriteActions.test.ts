@@ -3,7 +3,7 @@
  * CA-16 — the vendored PCF grid greys its write menu items while a write runs.
  *
  * The screen ignores Add, Add Standard Contract, Edit, Comments, Delete and Set as paid/unpaid
- * while `writeCommandsDisabled` holds (`gridActionAllowed`, D57). Before CA-16 the DOM menus still
+ * while `writeCommandsDisabled` holds (`gridActionAllowed`, D58). Before CA-16 the DOM menus still
  * looked enabled, so a click silently did nothing. `PcfGrid` now passes the flag in as the
  * `WriteActionsDisabled` parameter, and the renderer shows those items greyed and disabled.
  *

@@ -139,7 +139,7 @@ import {
   type PanelContext,
   matchesStandardAssumption,
 } from "./opexRules";
-// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /* ─────────────────────────────────────────────────────────────────── fixtures */
@@ -1697,9 +1697,9 @@ describe("OPEX — rendered rows", () => {
   });
 });
 
-/* ── D57: the write guard that replaced `cmp_OpexCosts_PopUpLoading` ─────────────────── */
+/* ── D58: the write guard that replaced `cmp_OpexCosts_PopUpLoading` ─────────────────── */
 
-describe("writeCommandsDisabled / guardOpexCommands (D57)", () => {
+describe("writeCommandsDisabled / guardOpexCommands (D58)", () => {
   const allOn = {
     newOpexProjectCostType: true, newOpexProjectCost: true, addStandardContract: true,
     editOpexProjectCost: true, deleteOpexProjectCost: true,

@@ -6,7 +6,7 @@
  * `ProjectDocs/Existing Solution/UI Screenshots/Cost App - Comment Panel contract Row - *.png` and the two
  * things the client reported wrong: the Year/Month gate that stops a payment-date comment being
  * saved with no cost row (the invisible-comment defect behind the missing red dot), and the
- * "Saving comments..." indicator — a blocking overlay until D57, now a non-blocking
+ * "Saving comments..." indicator — a blocking overlay until D58, now a non-blocking
  * `WriteStatus` line with the write controls greyed instead.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -193,7 +193,7 @@ describe("CommentsPanel", () => {
     // even though `mutation.isPending` is mocked false throughout.
     const label = await screen.findByText("Saving comments...");
     const overlay = screen.getByTestId("capex-comments-write-status");
-    // D59: the blocking spinner (modal scrim, spinner, the verbatim text) is up for the commit.
+    // D60: the blocking spinner (modal scrim, spinner, the verbatim text) is up for the commit.
     expect(overlay).toHaveAttribute("role", "dialog");
     expect(overlay).toHaveAttribute("aria-modal", "true");
     expect(overlay.contains(label)).toBe(true);
@@ -272,7 +272,7 @@ describe("CommentsPanel", () => {
     expect(screen.queryByText("Thread of contract A")).toBeNull();
     expect(screen.queryByTestId("btn_Read_Comment_Edit-a-1")).toBeNull();
     expect(screen.getByTestId("capex-comments-list")).toHaveAttribute("aria-busy", "true");
-    // D59: the only child is the inline loading spinner.
+    // D60: the only child is the inline loading spinner.
     expect(screen.getByTestId("capex-comments-list").childElementCount).toBe(1);
     expect(screen.getByTestId("capex-comments-loading")).toHaveTextContent("Loading comments...");
     expect(document.querySelector(".fui-Spinner")).not.toBeNull();

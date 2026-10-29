@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * UT-CONTRACTS-NOSPIN — the Contracts screen without spinners (D57).
+ * UT-CONTRACTS-NOSPIN — the Contracts screen without spinners (D58).
  *
  * While the first read runs, the chrome renders with an empty body and every write command greyed
  * out (no spinner, no "No contracts yet"). While a save or delete runs, the verbatim canvas
@@ -113,7 +113,7 @@ beforeEach(() => {
   state = { contractsLoading: false, contractsError: null, pending: "none", contracts: [CONTRACT], writeInFlight: false, gate: null };
 });
 
-describe("Contracts screen without spinners (D57)", () => {
+describe("Contracts screen without spinners (D58)", () => {
   it("UT-CONTRACTS-NOSPIN-010 while loading: the command bar with every write command disabled, the inline spinner body", () => {
     state.contractsLoading = true;
     mount();
@@ -187,7 +187,7 @@ describe("Contracts screen without spinners (D57)", () => {
   });
 });
 
-describe("Contracts screen: the busy indicators (D59)", () => {
+describe("Contracts screen: the busy indicators (D60)", () => {
   /** Selects c-1, confirms Delete Contract with the write held open on `state.gate`. */
   async function startPendingDelete(gate: Promise<void>) {
     state.gate = gate;

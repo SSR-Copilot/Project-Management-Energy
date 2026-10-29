@@ -198,14 +198,14 @@ interface RecordedStep {
 }
 
 /**
- * One panel save's or delete's steps for its console log (D58): the one-line summary
+ * One panel save's or delete's steps for its console log (D59): the one-line summary
  * `CAPEX panel save (bulk): 1,312 ms, 2 requests; contract update 1 req 1,301 ms; …; gate peak …`,
  * then collapsed Steps / Requests (and on failure Failure / Raw error) groups, through
  * `emitSaveLog`. Steps are listed in START order; every request a step sent is counted, also when
  * it failed.
  *
  * GATE TAIL. Only the bulk SAVE sends its writes through the shared `saveGate` (each counted on
- * this save's own `meter`, D58 decision 4), so only its line ends in `gate peak …`. The per-row
+ * this save's own `meter`, D59 decision 4), so only its line ends in `gate peak …`. The per-row
  * path and the deletes pass no shared write gate; a tail there would read "0/16" and mislead.
  */
 class SaveLog {
@@ -318,7 +318,7 @@ export function panelSaveLogLine(s: {
  * The second console line of a panel save or delete, from the hook: how long the action kept the
  * spinner up, split into the writes (the line above) and the refetch the hook awaits afterwards.
  * `CAPEX panel save busy: 2,118 ms (writes 1,312 ms, refetch 806 ms)`;
- * `CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)` (D58).
+ * `CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)` (D59).
  */
 export function panelBusyLogLine(writesMs: number, refetchMs: number, kind: "save" | "delete" = "save"): string {
   return `CAPEX panel ${kind} busy: ${formatMs(writesMs + refetchMs)} `
@@ -572,7 +572,7 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
 
     let created = 0;
     let updated = 0;
-    // Attempts, counted before each request, so a refused one still counts (D58).
+    // Attempts, counted before each request, so a refused one still counts (D59).
     let attempts = 0;
     await log.step("costs", async () => {
       for (const upsert of plan.upserts) {
@@ -687,7 +687,7 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
     newId: () => crypto.randomUUID(),
   });
   // The bulk SAVE is the only panel log with a gate tail: its writes pass the shared `saveGate`,
-  // each counted on this save's own meter (D58).
+  // each counted on this save's own meter (D59).
   const log = new SaveLog("bulk", "CAPEX panel save", true);
   log.expect(isNew ? "contract create" : "contract update", "costs", ...(reset ? ["payment-date comments"] : []), "cost deletes");
   const meter = log.meter;

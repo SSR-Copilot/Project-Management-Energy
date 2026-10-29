@@ -231,7 +231,7 @@ beforeEach(() => {
   resetBulkWriteAvailability();
   vi.spyOn(console, "info").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
-  // The readable groups (D58): kept out of the test output, and inspected by UT-CAPEXLOG-*.
+  // The readable groups (D59): kept out of the test output, and inspected by UT-CAPEXLOG-*.
   vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
   vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
   vi.spyOn(console, "table").mockImplementation(() => undefined);
@@ -659,7 +659,7 @@ describe("the console lines", () => {
       gate: "gate peak 2/16, req avg 1,253 ms max 1,301 ms",
     })).toBe("CAPEX panel save (bulk): 1,312 ms, 2 requests; contract update 1 req 1,301 ms; "
       + "costs 1 req 1,204 ms (update 1 req bulk [1,204 ms]); gate peak 2/16, req avg 1,253 ms max 1,301 ms");
-    // D58: "1 request" in the singular; the failure line ends with the readable error.
+    // D59: "1 request" in the singular; the failure line ends with the readable error.
     expect(panelSaveLogLine({
       what: "CAPEX panel delete", path: "per-row", failed: true, ms: 50, requests: 1, steps: [], error: "x refused",
     })).toBe("CAPEX panel delete (per-row) FAILED after 50 ms, 1 request; error: x refused");
@@ -670,9 +670,9 @@ describe("the console lines", () => {
   });
 });
 
-/* ═════════════════════════════════════════════════ readable log (D58) ══ */
+/* ═════════════════════════════════════════════════ readable log (D59) ══ */
 
-describe("the readable panel log (D58)", () => {
+describe("the readable panel log (D59)", () => {
   const groupTitles = () => vi.mocked(console.groupCollapsed).mock.calls.map((c) => String(c[0]));
   const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]));
   const twelve = () => months(12, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
@@ -721,7 +721,7 @@ describe("the readable panel log (D58)", () => {
     const summary = lastSummary();
     expect(summary).toMatch(/^CAPEX panel delete \(bulk\) FAILED after [\d,]+ ms, 2 requests; .*; error: .*<id>/);
     expect(summary).not.toContain(guid);
-    // The raw error is kept, for support, in its own group (D58 decision 3).
+    // The raw error is kept, for support, in its own group (D59 decision 3).
     expect(groupTitles()).toEqual(["Failure", "Steps (start order)", "Requests", "Raw error (for support)"]);
     expect(vi.mocked(console.error)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(console.error).mock.calls[0]?.[0]).toBeInstanceOf(Error);

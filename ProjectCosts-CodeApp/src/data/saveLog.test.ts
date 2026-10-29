@@ -11,7 +11,7 @@ const GUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("saveLog — pure builders (D58)", () => {
+describe("saveLog — pure builders (D59)", () => {
   it("UT-SAVELOG-001 formatMs: exact ms with a thousands separator, decimals on request", () => {
     expect(formatMs(980)).toBe("980 ms");
     expect(formatMs(1916.4)).toBe("1,916 ms");
@@ -222,7 +222,7 @@ describe("saveLog — emitSaveLog", () => {
   });
 });
 
-describe("saveLog — shared step text (D58 review)", () => {
+describe("saveLog — shared step text (D59 review)", () => {
   it("UT-SAVELOG-030 groupsText: each group readable, extras appended, empty when nothing", () => {
     expect(groupsText([
       { action: "create", rows: 12, requests: 1, failed: false, path: "bulk", durations: [1400] },

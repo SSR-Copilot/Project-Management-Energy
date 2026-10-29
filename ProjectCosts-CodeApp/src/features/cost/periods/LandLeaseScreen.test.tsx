@@ -417,7 +417,7 @@ describe("LandLeaseScreen", () => {
     expect(screen.queryByText("Locations")).not.toBeInTheDocument();
   });
 
-  /* ── D57: no spinner; a status line and a write guard instead ────────── */
+  /* ── D58: no spinner; a status line and a write guard instead ────────── */
 
   const WRITE_COMMAND_IDS = [
     "lease-newLandLeaseContractKey", "lease-newLandLeasePeriodKey",
@@ -427,7 +427,7 @@ describe("LandLeaseScreen", () => {
   const writeCommands = (name: string) =>
     WRITE_COMMAND_IDS.map((id) => within(card(name)).getByTestId(id));
 
-  /** D59: the blocking write spinner is the only `role="dialog"` once the panel has closed. */
+  /** D60: the blocking write spinner is the only `role="dialog"` once the panel has closed. */
   const expectBlocking = (text: string) => {
     const overlay = screen.getByTestId("land-lease-write-status");
     expect(overlay).toHaveAttribute("role", "dialog");

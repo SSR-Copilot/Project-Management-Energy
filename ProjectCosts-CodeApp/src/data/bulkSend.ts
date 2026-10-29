@@ -17,7 +17,7 @@
  *    and `costDeleteGate` (`CONTRACT_DELETE_LIMIT`, `COST_DELETE_LIMIT`). They exist ONCE, here, so
  *    both saves and their background work share the same caps under Dataverse's 52-per-user
  *    service-protection limit.
- *  - `RequestMeter`: one save's gated write requests (count, durations, peaks), for its log (D58).
+ *  - `RequestMeter`: one save's gated write requests (count, durations, peaks), for its log (D59).
  *  - `formatMs` / `formatRequestDuration`: the save logs' two duration formats.
  *  - `existingIds`: which ids of the two tables still exist (the per-row guard, phase 0, the 404
  *    read-back).
@@ -101,7 +101,7 @@ function bulkTransport(
 /**
  * One request's duration for the log: `980 ms` under a second, else seconds with one decimal
  * (`10.7 s`), so a slow, contended request stands out. The readable form, used in the save logs'
- * collapsed groups (D58).
+ * collapsed groups (D59).
  */
 export function formatRequestDuration(ms: number): string {
   const rounded = Math.round(ms);
@@ -110,7 +110,7 @@ export function formatRequestDuration(ms: number): string {
 
 /**
  * Exact whole milliseconds with an en-US thousands separator (`1,916 ms`): the one unit of the
- * save logs' one-line summaries (D58), so a pasted line compares directly with the D51/D56
+ * save logs' one-line summaries (D59), so a pasted line compares directly with the D51/D56
  * measurement tables. `digits` (default 0) keeps decimals, e.g. the sub-millisecond prepare steps
  * (`4.2 ms`). The one definition (CONVENTIONS rule 17); never format a log duration inline.
  */
@@ -205,7 +205,7 @@ const ROW_WRITE_CONCURRENCY = DELETE_CONCURRENCY;
  * and its background share in the same way. The CAPEX panel save passes the same gates.
  */
 export const SAVE_REQUEST_LIMIT = 16;
-// Not exported (D58): every caller writes through `upsertRowsByAction` or `gatedWrite`, which
+// Not exported (D59): every caller writes through `upsertRowsByAction` or `gatedWrite`, which
 // also count the request on that save's `RequestMeter`.
 const saveGate = createGate(SAVE_REQUEST_LIMIT);
 
@@ -237,7 +237,7 @@ export const COST_DELETE_LIMIT = 4;
 export const costDeleteGate = createGate(COST_DELETE_LIMIT);
 
 /**
- * ONE save's gated write requests, for its log (D58, measurement only: nothing here changes
+ * ONE save's gated write requests, for its log (D59, measurement only: nothing here changes
  * scheduling). Each save makes its own (`createRequestMeter`) and passes it down
  * (`upsertRowsByAction`'s `opts.meter`, `gatedWrite`), so its statistics never include another
  * save's writes or an earlier save's background reconcile (D56 §7), which a module-wide counter
@@ -372,7 +372,7 @@ interface GroupTrack { path?: GroupPath; durations?: number[] }
 
 /**
  * `bulk [980 ms, 10,740 ms]` on the bulk path (one entry per request, exact ms: the one-line
- * summary's unit, D58); the path alone otherwise.
+ * summary's unit, D59); the path alone otherwise.
  */
 function groupPathText(track: GroupTrack): string {
   const path = track.path ?? "bulk";
@@ -381,7 +381,7 @@ function groupPathText(track: GroupTrack): string {
 }
 
 /**
- * One action's group as it went, for the save logs' collapsed groups (D58): the structured twin
+ * One action's group as it went, for the save logs' collapsed groups (D59): the structured twin
  * of the summary text `upsertRowsByAction` reports.
  */
 export interface UpsertGroupReport {
@@ -431,7 +431,7 @@ async function sendGroup(
 }
 
 /**
- * The 501 warning (D58: the original text, then what happens next, in plain words). Shared by both
+ * The 501 warning (D59: the original text, then what happens next, in plain words). Shared by both
  * saves. Pure, so the text is pinned by a test.
  */
 export function bulk501WarningLine(actionName: string, groupLabel: string, rows: number): string {

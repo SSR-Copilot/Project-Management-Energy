@@ -22,7 +22,7 @@
  *     …_BodyButtons_1 (Save / Cancel / Hint)          -> `<PanelButtons>` + the hint
  *   cmp_…_PopUpConfirmation_DeletePeriod / …_DeleteLandLeaseCost -> one `<ConfirmDialog>`
  *   cmp_LandLease_PopUpLoading                        -> `<WriteStatus>` + the write guard
- *                                                        (D57 DIVERGENCE: no spinner, no scrim)
+ *                                                        (D58 DIVERGENCE: no spinner, no scrim)
  *
  * COMPOSITION ONLY. Every decision — column set, cell text, command gating, panel title,
  * field validation, the Save gate, the write plans — lives in `./landLeaseRules.ts`, which is
@@ -730,7 +730,7 @@ export default function LandLeaseScreen() {
 
   const isLoading = book.isLoading || extras.isLoading;
   /*
-   * D57: the screen renders while the first load runs instead of returning a spinner, so nothing
+   * D58: the screen renders while the first load runs instead of returning a spinner, so nothing
    * from the book may show until both reads have finished — the body stays empty.
    */
   const bookData = isLoading ? undefined : book.data;
@@ -810,7 +810,7 @@ export default function LandLeaseScreen() {
   );
 
   /**
-   * D57 — the guard that replaced `cmp_LandLease_PopUpLoading`'s screen cover: while the first
+   * D58 — the guard that replaced `cmp_LandLease_PopUpLoading`'s screen cover: while the first
    * load or any write runs, no command that starts a write may fire (the buttons are disabled
    * too; the check in `onCommand` is the second line).
    */
@@ -977,7 +977,7 @@ export default function LandLeaseScreen() {
      * dismisses the panel in ONE `UpdateContext`: `{locSpinnerInformationText: "Saving Land
      * Lease Contract...", locIsVisiblePopUpSpinner: true, locIsVisibleRightPanelNewEditPeriod:
      * false}`, before any write. Closing after the await drew the spinner over the panel.
-     * (Since D57 the "spinner" is the `<WriteStatus>` line plus the write guard; same order.)
+     * (Since D58 the "spinner" is the `<WriteStatus>` line plus the write guard; same order.)
      *
      * Only the panel moves. Clearing the SELECTION stays below, where the canvas keeps it —
      * that is a separate, later `UpdateContext` (LL:5895).
@@ -1036,7 +1036,7 @@ export default function LandLeaseScreen() {
   /* ── render ───────────────────────────────────────────────────────────── */
 
   /*
-   * D59: the first load shows an inline spinner in the body ("Loading Land Lease…"), with every
+   * D60: the first load shows an inline spinner in the body ("Loading Land Lease…"), with every
    * write command disabled (`writeCommandsDisabled`) and `aria-busy` on the page. The load check
    * still comes BEFORE the error check, so a load in progress never reads "Cost data is
    * unavailable".
@@ -1073,7 +1073,7 @@ export default function LandLeaseScreen() {
       {/*
         * `cmp_LandLease_PopUpLoading` (`InformationText: =locSpinnerInformationText`, `Visible:
         * =locIsVisiblePopUpSpinner`): the blocking spinner with the verbatim `LEASE_MSG` text
-        * shows for as long as the write runs (D59). The write guard also disables the write
+        * shows for as long as the write runs (D60). The write guard also disables the write
         * commands.
         */}
       {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
@@ -1230,7 +1230,7 @@ function SubaccountCard({
   onToggle: () => void;
   onSelectRow: (row: { periodId: string; costId: string | null; subaccountId: string }) => void;
   onCommand: (key: string) => void;
-  /** D57 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
+  /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
   writeDisabled: boolean;
 }) {
   const styles = useStyles();

@@ -12,7 +12,7 @@ import {
   savingCostLabel, standardContractLoadingLabel,
 } from "./panelRules";
 import { COMMENTS_SAVING } from "./comments";
-// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /** A minimal individual/absolute contract; each test overrides only what it is about. */
@@ -217,7 +217,7 @@ describe("previousYearFloor", () => {
 describe("spinner text", () => {
   /*
    * `LOADING_COST` ("Please wait, loading cost ...") and `LOADING_DATA` ("Please wait, loading
-   * data...") were pinned here too. D57 removed the two load spinners that showed them, so both
+   * data...") were pinned here too. D58 removed the two load spinners that showed them, so both
    * constants — and their two assertions — went with them.
    */
   it("matches the canvas strings", () => {
@@ -238,8 +238,8 @@ describe("spinner text", () => {
   });
 });
 
-/** D57 — no spinners; the write guard and the status line that replaced the overlay. */
-describe("write guard and status line (D57)", () => {
+/** D58 — no spinners; the write guard and the status line that replaced the overlay. */
+describe("write guard and status line (D58)", () => {
   it("UT-CAPEX-NOSPIN-001 greys the write commands while a write is pending", () => {
     expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
   });

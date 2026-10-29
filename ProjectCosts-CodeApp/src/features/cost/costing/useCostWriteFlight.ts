@@ -1,7 +1,7 @@
 /**
  * CA-15 — the Cost write state that outlives the screen which started the write.
  *
- * D57 removed the pop-up scrim that also covered the rail and the header, so a user can now leave
+ * D58 removed the pop-up scrim that also covered the rail and the header, so a user can now leave
  * a Cost screen while its write still runs. Two things then went wrong, and these hooks close
  * them:
  *  - a screen re-opened mid-write got a fresh mutation observer, so its guard read "nothing

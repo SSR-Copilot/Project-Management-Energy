@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * UT-SHELL-NOSPIN — the app frame while the session loads (D57).
+ * UT-SHELL-NOSPIN — the app frame while the session loads (D58).
  *
  * On a Cost route (`/costs/*`) the blocking "Please wait..." overlay is skipped: the shell renders,
  * `CostProjectGate` holds an empty `cost-project-loading` placeholder, and no Cost screen mounts.
@@ -62,12 +62,12 @@ beforeEach(() => {
   mounted.mockClear();
 });
 
-describe("App shell while the session loads (D57)", () => {
+describe("App shell while the session loads (D58)", () => {
   it("UT-SHELL-NOSPIN-001 a Cost route shows the inline 'Loading project…' spinner (not the blocking overlay) and mounts no Cost screen", async () => {
     mount(`/costs/capex?projectId=${PROJECT_ID}`);
     const placeholder = await screen.findByTestId("cost-project-loading");
     expect(placeholder.getAttribute("aria-busy")).toBe("true");
-    // D59: never a blank body while the session loads.
+    // D60: never a blank body while the session loads.
     expect(placeholder).toHaveTextContent("Loading project…");
     expect(placeholder.querySelector(".fui-Spinner")).not.toBeNull();
     // The shell's blocking overlay is still skipped on Cost routes (the rail stays visible).

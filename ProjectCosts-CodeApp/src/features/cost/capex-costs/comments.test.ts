@@ -8,7 +8,7 @@ import {
   planDeleteRoot, renumberThreads, reopenThread, resolveThread, sortComments,
   threadLatestActivity, truncateComment, type CapexComment,
 } from "./comments";
-// The shared D57 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 const comment = (over: Partial<CapexComment> = {}): CapexComment => ({
@@ -622,8 +622,8 @@ describe("commentName for a reply", () => {
   });
 });
 
-/** D57 — the comments panel's write guard, which replaced the "Saving comments..." scrim. */
-describe("writeCommandsDisabled for the comments panel (D57)", () => {
+/** D58 — the comments panel's write guard, which replaced the "Saving comments..." scrim. */
+describe("writeCommandsDisabled for the comments panel (D58)", () => {
   it("UT-CMT-NOSPIN-001 greys the write controls for the whole commit", () => {
     expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
   });
