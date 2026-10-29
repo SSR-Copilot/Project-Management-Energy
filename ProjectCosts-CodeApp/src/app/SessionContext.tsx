@@ -10,9 +10,10 @@
  * `projectId` comes from the deep link. There is deliberately NO fallback to a hard-coded
  * project — see `ProjectDocs/app-docs/01-BUGS-FOUND.md` A-2.
  */
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
+import { startAppInsights } from "@/appInsights";
 import { readSession, readProjectLink, type Session } from "@/platform/powerClient";
 import { loadEnvironmentVariables, loadProject, type EnvVars } from "@/data/project";
 import { qk } from "@/data/keys";
@@ -55,6 +56,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryFn: loadEnvironmentVariables,
     staleTime: 15 * 60 * 1000,
   });
+
+  // App Insights starts from `vsb_ApplicationInsightsConnectionString`; a failed load turns it off.
+  useEffect(() => {
+    if (envQuery.isSuccess) startAppInsights(envQuery.data.vsb_ApplicationInsightsConnectionString);
+    else if (envQuery.isError) startAppInsights(undefined);
+  }, [envQuery.isSuccess, envQuery.isError, envQuery.data]);
 
   /*
    * Project Management routes always carry `?projectId=` in the ROUTE (`/project/<screen>?…`),

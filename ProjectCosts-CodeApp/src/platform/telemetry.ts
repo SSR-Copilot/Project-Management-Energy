@@ -20,11 +20,23 @@ export interface TraceEntry {
 const MAX_ENTRIES = 200;
 const entries: TraceEntry[] = [];
 const listeners = new Set<() => void>();
+const sinks = new Set<(entry: TraceEntry) => void>();
 
 export function trace(severity: Severity, message: string, detail?: unknown): void {
-  entries.push({ severity, message, at: new Date().toISOString(), detail });
+  const entry: TraceEntry = { severity, message, at: new Date().toISOString(), detail };
+  entries.push(entry);
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const l of listeners) l();
+  for (const s of sinks) {
+    // A failing sink (e.g. Application Insights) must never break the caller.
+    try { s(entry); } catch { /* ignored */ }
+  }
+}
+
+/** Also hands every new entry to `sink` (Application Insights, `appInsights/`). Returns the removal. */
+export function addSink(sink: (entry: TraceEntry) => void): () => void {
+  sinks.add(sink);
+  return () => sinks.delete(sink);
 }
 
 export function traces(): readonly TraceEntry[] {
