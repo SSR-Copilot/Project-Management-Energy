@@ -190,14 +190,6 @@ describe("UT-ROUTES — Project Management", () => {
     }, 30_000);
   });
 
-  it("UT-ROUTES-018 a project screen without a project asks for one", async () => {
-    session = {};
-    // Planning has no New Project mode, so it still asks for a project.
-    renderAt("/project/planning");
-    expect(await screen.findByText("Select a project")).toBeTruthy();
-    expect(screen.queryByTestId("not-connected-notice")).toBeNull();
-  });
-
   it.each([
     ["milestones", "con_Milestones_Page_LockMessage"],
     ["generators", "con_Milestones_Page_LockMessage_1"],
@@ -205,6 +197,9 @@ describe("UT-ROUTES — Project Management", () => {
     ["checklist", "con_Milestones_Page_LockMessage_3"],
     ["team", "con_Milestones_Page_LockMessage_4"],
     ["grid-operator", "con_Milestones_Page_LockMessage_6"],
+    ["planning", "con_Milestones_Page_LockMessage_5"],
+    ["revenues", "con_Milestones_Page_LockMessage_7"],
+    ["finance", "con_Milestones_Page_LockMessage_8"],
   ])("New Project: /project/%s without a project shows the page lock, not 'Select a project'", async (slug, lockId) => {
     session = {};
     renderAt(`/project/${slug}`);

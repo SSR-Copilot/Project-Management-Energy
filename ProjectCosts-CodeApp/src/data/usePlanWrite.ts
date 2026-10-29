@@ -5,7 +5,7 @@
  * Shared by the admin screens (Default Checklists, CAPEX Accounts, …) so each screen only decides
  * WHAT to write (`rules.ts`) and which canvas texts to show.
  */
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
@@ -78,5 +78,7 @@ export function usePlanWrite(opts: {
     }
   };
 
-  return { run, progress, error, success, clear: () => { setError(null); setSuccess(null); } };
+  // Stable across renders, so a screen can clear the messages from a timer effect.
+  const clear = useCallback(() => { setError(null); setSuccess(null); }, []);
+  return { run, progress, error, success, clear };
 }

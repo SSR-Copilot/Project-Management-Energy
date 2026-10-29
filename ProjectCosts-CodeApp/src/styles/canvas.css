@@ -6,13 +6,19 @@
    horizontal scrollbar with it). The canvas leaves a visible margin after it. */
 /* `con_cmp_Header` is `height: 74px`, white, `border-radius: 4px` and the same shadow the
    rail carries — `padding: 0`, `gap: 0`. */
-.canvas-shell > header { height: 74px; min-height: 74px; padding: 0 20px 0 5px; gap: 0; border: 0; border-radius: 4px; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; flex-shrink: 0; }
+/* 70 px: the canvas header measured 65 against this app's 75 at 80 px (screenshot pair, 28 Oct 2026). */
+.canvas-shell > header { height: 70px; min-height: 70px; padding: 0 20px 0 5px; gap: 0; border: 0; border-radius: 4px; box-shadow: rgba(0, 0, 0, 0.12) 0 0 2px; flex-shrink: 0; }
+/* No dark line under the header: only the soft all-round edge, no downward shadow (canvas, 28 Oct 2026). */
 /* `con_cmp_Header_Logo` is 210 wide over a 60 x 66 image box. 204 here, not 210, so the
    approval separator that follows it lands on the rail's right edge: the rail is 200 wide
    inside the shell's 5 px padding with a 4 px gap after it, so the content below starts at
    209 — and 5 + 204 is 209. */
-.canvas-brand { width: 204px; height: 74px; gap: 14px; }
-.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 1.2; }
+.canvas-brand { width: 204px; height: 70px; gap: 14px; }
+/* Doubled so the canvas's 14 px logo-to-title gap outranks the header's own `space.s` gap. */
+.canvas-brand.canvas-brand { gap: 14px; }
+/* `lbl_cmp_Header_AppName`: themePrimary, Semibold, 18 pt. Doubled class so it outranks Fluent
+   Text's own size and colour, which had left "Cloud" black at 20 px (canvas, 28 Oct 2026). */
+.canvas-brand-title.canvas-brand-title { color: #006eb9; font-size: 24px; font-weight: 600; line-height: 1.2; }
 /* 8pt at `font-weight: lighter`, in pure black — not #111 at 10px semibold-ish. */
 .canvas-brand-version { color: #000; font-size: 10.67px; font-weight: 300; line-height: 1.2; }
 .canvas-project-suite { display: flex; align-items: center; gap: 6px; min-width: 250px; flex: 1; }
@@ -30,14 +36,19 @@
 /* `shp_cmp_In_Image_UserBorder` — a Circle with `BorderColor: =palette.black` and
    `BorderThickness: =2`, not a 1px themePrimary ring. Sampled either side of the avatar on
    `EveryScreen - Current LoggedIn User Badge.png` at (11, 11, 11), two pixels wide. */
-.canvas-user-avatar { position: absolute; right: -28px; top: -8px; height: 47px; width: 47px; border: 2px solid #0b0b0b; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
-.canvas-user-avatar svg { width: 40px; height: 40px; color: #a6a6a6; }
+/* No photo: the canvas shows a grey disc with a white person silhouette in a blue ring (28 Oct 2026). */
+.canvas-user-avatar { position: absolute; right: -28px; top: -8px; height: 47px; width: 47px; border: 2px solid #006eb9; border-radius: 50%; background: #a6a6a6; display: grid; place-items: center; overflow: hidden; }
+/* The whole silhouette inside the disc, shoulders included (PO, 28 Oct 2026). */
+.canvas-user-avatar svg { width: 36px; height: 36px; color: #fff; margin: 0; }
 /* `shp_cmp_In_Image_UserBorder`'s ellipse is filled WHITE and the photo is drawn over it, so
    the grey only belongs to the silhouette fallback. `object-fit: contain` is the canvas'
    own choice — it letterboxes a non-square photo rather than cropping it. */
 .canvas-user-avatar img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
-.canvas-shell > div { gap: 4px; }
-.canvas-shell main { padding: 0; gap: 0; background: #fff; border: 1px solid #dedede; border-radius: 4px; overflow: hidden; }
+/* 5 px between the left navigation card and the content card (measured off the canvas, 28 Oct 2026). */
+.canvas-shell > div { gap: 5px; }
+/* The content card as the canvas draws its cards (and as the header and rail already are): no
+   border, 4 px corners and the soft two-part shadow (PO, 28 Oct 2026). */
+.canvas-shell main { padding: 0; gap: 0; background: #fff; border: 0; border-radius: 4px; overflow: hidden; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
 /* PM and Admin screens are long forms: the content area scrolls vertically, or everything below
    the fold is cut off (PO report, 20 Oct 2026). Cost screens keep `overflow: hidden` above
    because they own their inner scroll regions. */
@@ -91,20 +102,24 @@
 /* A collapsed rail's group header: an empty Nav row, as tall as a link (`LeftNav.tsx`). */
 .canvas-rail-blank { display: block; flex-shrink: 0; min-height: 44px; }
 .canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
-.canvas-rail-collapse-delimiter { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #f3f2f1; }
+.canvas-rail-collapse-delimiter { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #f3f2f1; }
 .canvas-rail-pm .canvas-rail-collapse > button { width: 100%; height: 45px; justify-content: flex-start; padding: 0 0 0 7px; border-radius: 0; gap: 0; min-width: 0; color: #2c2c2c; font-size: 14.67px; font-weight: 400; }
-.canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon { width: 28px; height: 28px; display: grid; place-items: center; }
-.canvas-rail-collapse-label { padding-left: 12px; white-space: nowrap; overflow: hidden; }
+.canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon { width: 28px; height: 28px; display: grid; place-items: center; margin: 0; }
+/* The panel glyph 24 x 12 from x 9, as on the canvas; Fluent otherwise caps the icon at 20 px. */
+.canvas-rail-pm .canvas-rail-collapse > button .fui-Button__icon svg { width: 24px; height: 12px; max-width: none; }
+.canvas-rail-collapse-label { padding-left: 10px; white-space: nowrap; overflow: hidden; }
 /* Project Overview. Layout, column widths, row striping and the selected row are owned by the
    screen's own styles (`features/pm/project-main/Screen.tsx`); only the control skin and the
    grid's type sizes live here. The rules that used to sit here as well (a second, opposite
    row stripe, `nth-child` column widths, a 90 % table width and a border on whichever child
    came first) fought those styles and are gone. */
 .canvas-project-overview .fui-Input, .canvas-project-overview .fui-Dropdown { background: #f4f4f4; border: 0; border-radius: 3px; min-height: 32px; }
-.canvas-project-overview .fui-TableHeaderCell { font-size: 13px; font-weight: 600; height: 40px; border-bottom: 1px solid #eee; }
+.canvas-project-overview .fui-TableHeaderCell { font-size: 14px; font-weight: 600; height: 44px; border-bottom: 1px solid #eee; }
 /* `pcf_..._Filter_ProjectManager` is a PeoplePicker PCF: white with a dark 1 px outline, not
    the filled grey of the other filter inputs (UI Screenshots/Main Overview Screen.png). */
 .canvas-project-overview .canvas-person .fui-Input { background: #fff; border: 1px solid #323130; border-radius: 0; }
+/* Focused, the PeoplePicker frame turns the theme blue (canvas screenshot, 28 Oct 2026). */
+.canvas-project-overview .canvas-person .fui-Input:focus-within { border-color: #006eb9; }
 .canvas-project-overview .fui-TableCell { font-size: 12px; height: 38px; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Fluent's overlay drawer carries a 1-px transparent left border; the white surface showed
    through it as a white strip down the left of the blue header (PO, 21 Oct 2026). */
@@ -492,4 +507,6 @@
 
 /* Every field's validation message as the canvas error labels draw it: semibold, in the
    canvas error red (`akzent5`), PO 27 Oct 2026. The app uses no warning / success messages. */
-.fui-Field .fui-Field__validationMessage { color: #d20532; font-weight: 600; }
+.fui-Field .fui-Field__validationMessage { color: #d20532; font-weight: 600; font-size: 12px; padding-left: 0; }
+/* The canvas error labels carry no glyph. */
+.fui-Field .fui-Field__validationMessageIcon { display: none; }

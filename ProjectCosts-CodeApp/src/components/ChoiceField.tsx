@@ -54,11 +54,13 @@ export interface ChoiceFieldProps {
   onSelectMany?: (values: string[]) => void;
   /** Extra class on the `Field`. */
   className?: string;
+  /** Opt-in: a class on the open list (a screen's canvas list look). */
+  listboxClassName?: string;
 }
 
 export function ChoiceField({
   label, ariaLabel, testId, required, error, disabled = false, readOnly, value, valueLabel, options,
-  onSelect, placeholder, standard, multiselect, values, onSelectMany, className,
+  onSelect, placeholder, standard, multiselect, values, onSelectMany, className, listboxClassName,
 }: ChoiceFieldProps) {
   const s = useStyles();
   const skin = useFieldSkin();
@@ -87,6 +89,7 @@ export function ChoiceField({
         disabled={disabled}
         placeholder={placeholder}
         multiselect={multiselect}
+        {...(listboxClassName ? { listbox: { className: listboxClassName } } : {})}
         {...(view ? { open: false, expandIcon: null } : {})}
         value={text}
         selectedOptions={selected}

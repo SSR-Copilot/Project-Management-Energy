@@ -18,7 +18,7 @@ import {
   percentCell, countCell, aquisitionPanelTitle, deletePermitDescription,
   PERCENT_NOT_APPLICABLE, PAGE_LOCK_TITLE, LEAVE_CONFIRMATION, PLANNING_TABS, parseTab,
   pageLock, isPageLocked, pageLockCanvasHeightParity, isDraft,
-  showCooperationPartner, showCooperationDetails, cooperationDetailsEditable,
+  showCooperationPartner, showCooperationDetails, showCooperationDetailsCanvasParity, heightLimitValidity, cooperationDetailsEditable,
   showSecuredAccess, showRepoweringDetails, showHeightLimit,
   applyCooperationChange, applyRepoweringChange, applyHeightToggle,
   validateHeightLimit, validateHeightLimitCanvasParity, validatePlanning,
@@ -329,7 +329,9 @@ describe("UT-PLAN the height limitation", () => {
   it("the validation table reports only the height row", () => {
     const v = validatePlanning(form({ isHeightLimitation: true, heightLimitation: "1.234" }));
     expect(invalidPlanningFields(v)).toEqual(["heightLimitation"]);
-    expect(planningMessages(v)).toEqual([MSG.heightDecimals]);
+    // As the canvas: three decimals but in range fails only ONE check, so Save is blocked with
+    // no message shown (PO, 28 Oct 2026).
+    expect(planningMessages(v)).toEqual([]);
     expect(validatePlanning(form({ isHeightLimitation: false, heightLimitation: "1.234" })).heightLimitation.valid)
       .toBe(true);
   });
@@ -754,5 +756,27 @@ describe("D35 — the shared leave guard", () => {
     expect(planShouldConfirmLeave(baseline, baseline)).toBe(false);
     expect(planShouldConfirmLeave({ ...baseline, securedAccess: "typed" }, baseline)).toBe(true);
     expect(PLAN_LEAVE_DIALOG).toEqual({ title: "Unsaved data", description: "You have unsaved data. Do you really want to leave current form without saving?", confirm: "Yes", cancel: "Cancel" });
+  });
+});
+
+describe("UT-PLAN-COOP — Cooperation Details as the canvas shows it", () => {
+  it("is visible for Unknown only: with Yes the canvas form clips it", () => {
+    expect(showCooperationDetailsCanvasParity(YNU.unknown)).toBe(true);
+    expect(showCooperationDetailsCanvasParity(YNU.yes)).toBe(false);
+    expect(showCooperationDetailsCanvasParity(YNU.no)).toBe(false);
+    expect(showCooperationDetailsCanvasParity(null)).toBe(false);
+  });
+});
+
+describe("UT-PLAN-HEIGHT — the height field as the canvas shows it", () => {
+  it("an out-of-range whole number blocks Save with no message", () => {
+    expect(heightLimitValidity("324423535535")).toEqual({ valid: false });
+  });
+  it("a bad shape that is also out of range shows the two-decimals message", () => {
+    expect(heightLimitValidity("abc").valid).toBe(false);
+    expect(heightLimitValidity("abc").message).toBe(MSG.heightDecimals);
+  });
+  it("a valid height passes", () => {
+    expect(heightLimitValidity("120.5")).toEqual({ valid: true });
   });
 });

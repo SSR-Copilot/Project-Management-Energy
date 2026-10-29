@@ -89,25 +89,30 @@ const useStyles = makeStyles({
   },
   // `lbl_…_CardHeader_LabelWithDescription_3`: Large (12 pt) Semibold, PaddingTop 10. PO screenshot
   // (20 Oct 2026): the title sits ~35 px in from the content edge (page 15 + 20).
-  heading: { fontSize: "16px", lineHeight: "22px", fontWeight: 600, paddingLeft: "20px", paddingTop: "10px" },
+  // Canvas pair (29 Oct 2026): 6 px further left and 3 px higher than before.
+  heading: { fontSize: "16px", lineHeight: "22px", fontWeight: 600, paddingLeft: "14px", paddingTop: "7px" },
   // `con_Milestones_Page_LockMessage_7`: Fill RGBA(89, 89, 89, 1), horizontal, gap 10, PaddingLeft 20,
   // items centred; white 20 px lock icon and white text in `con_Milestones_pagelock_section_7` (padding 8).
+  // Canvas pair (29 Oct 2026): rounded corners, the bullets 7 px nearer the 24 px icon, 4 px more
+  // band below them.
   lock: {
     display: "flex", gap: "10px", alignItems: "center", paddingLeft: "20px",
-    backgroundColor: "rgb(89, 89, 89)", color: "#ffffff",
+    backgroundColor: "rgb(89, 89, 89)", color: "#ffffff", borderRadius: "4px",
   },
-  lockLines: { display: "flex", flexDirection: "column", paddingTop: "8px", paddingBottom: "8px", paddingLeft: "8px", paddingRight: "8px" },
+  lockLines: { display: "flex", flexDirection: "column", paddingTop: "8px", paddingBottom: "12px", paddingLeft: "1px", paddingRight: "8px" },
   lockText: { color: "#ffffff" },
   // `tab_ProjectRevenue_DisplayProjectBodyRightContent`: 60 high, `Parent.Width/2` wide.
   tabs: {
-    display: "flex", alignItems: "center", height: "60px", width: "50%", minWidth: "fit-content", paddingLeft: "5px",
+    // 38 high: the tab captions sit 11 px higher than at 60 (canvas pair, 29 Oct 2026).
+    display: "flex", alignItems: "center", height: "38px", width: "50%", minWidth: "fit-content", paddingLeft: "3px",
     // `BasePaletteColor: themePrimary` — the selected tab's underline (and hover bar) in the VSB blue.
     "& .fui-Tab[aria-selected='true']::after": { backgroundColor: palette.themePrimary },
     "& .fui-Tab[aria-selected='true'] .fui-Tab__content": { fontWeight: 600 },
   },
   // `con_…_Grid` (horizontal, wrapping) / `con_…_Grid_1` (vertical): PaddingLeft 15, PaddingTop 5.
-  contractsGrid: { display: "flex", flexWrap: "wrap", alignContent: "flex-start", paddingLeft: "15px", paddingTop: "5px", minWidth: 0 },
-  balancingGrid: { display: "flex", flexDirection: "column", gap: "20px", paddingLeft: "15px", paddingTop: "5px", minWidth: 0 },
+  // PaddingTop 21: with the tabs 22 px shorter, Add Contract lands 37 px under the tab bar, as on the canvas.
+  contractsGrid: { display: "flex", flexWrap: "wrap", alignContent: "flex-start", paddingLeft: "15px", paddingTop: "21px", minWidth: 0 },
+  balancingGrid: { display: "flex", flexDirection: "column", gap: "20px", paddingLeft: "15px", paddingTop: "21px", minWidth: 0 },
   // `LayoutGap: If('Cluster State'.Order >= 4, 20, 25)`.
   balancingGridLocked: { gap: "25px" },
   // `btn_Revenue_AddContract` (140 wide) / `btn_Revenue_AddBlancing_Price` (190 wide): Transparent,
@@ -120,10 +125,11 @@ const useStyles = makeStyles({
     borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
     borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
     "& .fui-Button__icon": { color: palette.themePrimary },
+    // Disabled, the canvas shows only the grey caption and icon — no outline (29 Oct 2026).
     ":disabled": {
-      color: tokens.colorNeutralForegroundDisabled,
-      borderTopColor: tokens.colorNeutralStrokeDisabled, borderRightColor: tokens.colorNeutralStrokeDisabled,
-      borderBottomColor: tokens.colorNeutralStrokeDisabled, borderLeftColor: tokens.colorNeutralStrokeDisabled,
+      color: tokens.colorNeutralForegroundDisabled, backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
       "& .fui-Button__icon": { color: tokens.colorNeutralForegroundDisabled },
     },
   },
@@ -623,7 +629,7 @@ export default function ProjectRevenuesScreen() {
 
       {!loading && lockBullets.length > 0 && blocked ? (
         <div className={s.lock} data-testid="con_Milestones_Page_LockMessage_7" role="status">
-          <span data-testid="icon_milestones_lock_7"><LockClosedRegular aria-hidden fontSize={20} /></span>
+          <span data-testid="icon_milestones_lock_7"><LockClosedRegular aria-hidden fontSize={24} /></span>
           <div className={s.lockLines}>
             <Text className={s.lockText} data-testid="lbl_ProjectRevenues_DisplayProjectBodyRightContent_Balancing_Price_VisibilityMessage_33">
               {PAGE_LOCK_TITLE}
