@@ -35,13 +35,24 @@ import { HOLDING_CUT, truncateHolding, yesNo } from "./rules";
 
 const useStyles = makeStyles({
   scroller: { overflowX: "auto", maxWidth: "100%" },
-  /** `gal_TasksInClusterDefaultChecklist_AdminScreen.Width: =1210`. */
-  table: { minWidth: "1210px", tableLayout: "fixed" },
+  /**
+   * `gal_TasksInClusterDefaultChecklist_AdminScreen.Width: =1210` and `con_Header_…` is 1210 wide: the table is exactly that wide, not the width of
+   * its container (a 100 % table stretched the fixed columns about 1.3 times, found by the Canvas parity run, 29 Oct 2026). The canvas labels sit at
+   * `PaddingLeft` 0 in their column, with the first one 20 px in (`X: gblAppSizes.Position.X`), so the cells carry no padding except the first.
+   * Text is the modern-Text colour #242424 measured in the Canvas (the shell's default is black).
+   */
+  table: {
+    width: "1210px", minWidth: "1210px", tableLayout: "fixed",
+    // Fluent's cells set their own colour, so it is set on the cells and their text, not on the table.
+    "& td, & th": { paddingLeft: "0", color: "#242424" },
+    "& td span, & th span": { color: "#242424" },
+    "& td:first-child, & th:first-child": { paddingLeft: "20px" },
+  },
   /** `con_Header_TasksInCluster*` — Grayscale40 (#FAFAFA), radius 2, Semibold labels. */
   head: { backgroundColor: palette.Grayscale40 },
   /** Header labels are `Text@0.0.51` Semibold with no `Size`: the modern Text default, 14 px. */
   headCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "14px", lineHeight: "20px", height: "32px" },
-  colDescription: { width: "300px" },
+  colDescription: { width: "320px" },
   colHolding: { width: "350px" },
   colFlag: { width: "180px" },
   /**

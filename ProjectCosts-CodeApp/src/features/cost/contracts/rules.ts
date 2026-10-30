@@ -798,14 +798,14 @@ export function validateCostField(
   if (raw.trim() === "") return { field, message: RESX.inputBlank };
   if (!isInteger(raw, locale)) return { field, message: RESX.numeric };
   if (!inRange(raw, 0, CONTRACT_COSTS_MAX, locale)) {
-    return { field, message: betweenMessage(0, CONTRACT_COSTS_MAX) };
+    return { field, message: betweenMessage(0, CONTRACT_COSTS_MAX, locale) };
   }
   return undefined;
 }
 
 /** `$"Please select a value between 0 and {Text(max, "#,##0")}"`. */
-export function betweenMessage(min: number, max: number): string {
-  return `Please select a value between ${formatThousands(min)} and ${formatThousands(max)}`;
+export function betweenMessage(min: number, max: number, locale?: string): string {
+  return `Please select a value between ${formatThousands(min, locale)} and ${formatThousands(max, locale)}`;
 }
 
 /** Power Fx `Text(n, "#,##0")` with the app's grouping. */
@@ -827,7 +827,7 @@ export function validateMarginPercentage(raw: string, locale?: string): FieldErr
     return { field: "marginPercentage", message: RESX.numericOneDecimals };
   }
   if (!inRange(raw, 0, 100, locale)) {
-    return { field: "marginPercentage", message: betweenMessage(0, 100) };
+    return { field: "marginPercentage", message: betweenMessage(0, 100, locale) };
   }
   return undefined;
 }
@@ -1015,7 +1015,7 @@ export function validateTargetPercent(
   if (!inRange(raw, 0, remaining, locale)) {
     return {
       field: "totalCostsContract",
-      message: `Please select a value between 0 and ${formatOneDecimal(remaining)}`,
+      message: `Please select a value between 0 and ${formatOneDecimal(remaining, locale)}`,
     };
   }
   return undefined;

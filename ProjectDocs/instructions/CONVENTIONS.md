@@ -196,6 +196,20 @@ development sessions and is recorded here because the README doesn't carry it ye
     "Filter projects details list view." on a Save button, which is a `SOURCE DEFECT` (rule 8) and says "Save". Check the canvas YAML for
     `Tooltip` on every new button and icon (item 2 below).
 
+23. **Every call and action is traced in the console** (product owner, 29 Oct 2026, D66). Every Dataverse read,
+    write, delete and bulk or flow call, and every page load and save, must show up as a `[VSB]` line in the browser
+    console, in every build (no environment switch, no download button). The logger is `platform/requestLog.ts`
+    (`logHttp`, `logData`, `loggedCall`, `actionLog`/`beginAction`, `logAction`); `app/queryLog.ts` already opens an
+    ACTION line for every TanStack query and mutation. Rules for new or changed code:
+    - Reads and writes go through the shared helpers in `data/client.ts` / `data/executePlan.ts` / `data/runPlan.ts`, which log
+      rows and time. A call that must use a generated service or the SDK client directly wraps it in `loggedCall(kind, target, fn, rowsOf)`.
+    - A multi-step flow outside a query or mutation (a background job, a retry loop) wraps itself in `actionLog(name, fn)`.
+      A bespoke summary line (as Add Cost from Table has) is printed with `logAction(text)`, never a bare `console.info`.
+    - Log counts, names and timings only, never row values or personal data.
+    - Failures go through `trace("error", …)` (`userErrorText` does) so they print a `[VSB] ERROR` line with the root cause; never swallow an error without a trace.
+    - Action ids (`[a7]`), `SLOW` flags and the ERROR format are part of the contract (D68); keep them when changing the logger.
+    - A new write path or data module is not done until its console lines were seen in a real run and a test pins its line (`UT-REQLOG-*` style).
+
 ## Before every build (standing instruction, 19 Oct 2026)
 
 Check all four, in order, before writing or building any feature or change. Items 1 and 3
@@ -229,6 +243,8 @@ restate rules 16 and 17; they are listed here so the whole check is in one place
    `ProjectDocs/app-docs/13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md` lists every improvement over
    the canvas in the change (fixed, reproduced or proposed, with the bug id or decision). Add
    what is missing, and mention the entry when asking for approval.
+
+7. **Console trace.** New or changed data calls, saves and loads print their `[VSB]` lines (rule 23); check them in the console.
 
 6. **E2E parity question.** Before any commit or merge, ask the user whether to run the Playwright
    parity suite (Canvas vs Code app, with the Power Fx vs `rules.ts` rule map) for the screens in

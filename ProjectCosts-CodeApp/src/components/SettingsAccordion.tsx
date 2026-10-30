@@ -39,6 +39,9 @@ const useStyles = makeStyles({
     "& button": { minHeight: "50px", paddingLeft: "10px" },
   },
   greyTitle: { fontWeight: tokens.fontWeightSemibold, fontSize: "16px", color: "#323130" },
+  // Fluent's AccordionPanel carries a 12 px side margin; the canvas panels have none, so a screen's padding is its whole inset
+  // (found by the Canvas parity run: the Check List task table sat 12 px right of the canvas).
+  lightPanel: { marginLeft: "0", marginRight: "0" },
   greyPanel: { marginLeft: "0", marginRight: "0", paddingBottom: "10px", minWidth: "0" },
 });
 
@@ -99,7 +102,7 @@ export function SettingsAccordion({
                 ? <Text className={styles.greyTitle}>{item.title}</Text>
                 : item.title}
             </AccordionHeader>
-            <AccordionPanel className={light ? undefined : styles.greyPanel} style={panelStyle}>
+            <AccordionPanel className={light ? styles.lightPanel : styles.greyPanel} style={panelStyle}>
               {item.content}
             </AccordionPanel>
           </AccordionItem>

@@ -1,0 +1,412 @@
+[
+ {
+  "text": "+",
+  "x": 220,
+  "y": 134,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "France",
+  "x": 290,
+  "y": 140,
+  "w": 41,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Apply to All",
+  "x": 491,
+  "y": 148,
+  "w": 75,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(189, 189, 189)"
+ },
+ {
+  "text": "Apply standard contracts to all relevant projects, this will override existing standard assumption contracts",
+  "x": 628,
+  "y": 149,
+  "w": 616,
+  "h": 17,
+  "fontSize": "13.3333px",
+  "fontWeight": "400",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 184,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Poland",
+  "x": 290,
+  "y": 190,
+  "w": 42,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "15.12.2025 Apply was made by Rounak Mathur",
+  "x": 473,
+  "y": 206,
+  "w": 275,
+  "h": 17,
+  "fontSize": "13.3333px",
+  "fontWeight": "400",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 234,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Italy",
+  "x": 290,
+  "y": 240,
+  "w": 26,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Development Contract - Test Description 101",
+  "x": 435,
+  "y": 258,
+  "w": 345,
+  "h": 22,
+  "fontSize": "16px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 284,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Finland",
+  "x": 290,
+  "y": 290,
+  "w": 45,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Edit",
+  "x": 503,
+  "y": 319,
+  "w": 24,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(0, 110, 185)"
+ },
+ {
+  "text": "Delete",
+  "x": 620,
+  "y": 319,
+  "w": 41,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(0, 110, 185)"
+ },
+ {
+  "text": "Apply",
+  "x": 757,
+  "y": 319,
+  "w": 37,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(189, 189, 189)"
+ },
+ {
+  "text": "Apply standard cost to relevant projects, this will override existing standard assumption contracts",
+  "x": 858,
+  "y": 320,
+  "w": 570,
+  "h": 17,
+  "fontSize": "13.3333px",
+  "fontWeight": "400",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 334,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Croatia",
+  "x": 290,
+  "y": 340,
+  "w": 44,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Description",
+  "x": 435,
+  "y": 363,
+  "w": 80,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Closing Date Reference",
+  "x": 921,
+  "y": 363,
+  "w": 164,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Test Description 101",
+  "x": 435,
+  "y": 393,
+  "w": 130,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Cluster 4 + 4 months",
+  "x": 921,
+  "y": 393,
+  "w": 140,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Margin",
+  "x": 435,
+  "y": 423,
+  "w": 50,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Margin Type",
+  "x": 921,
+  "y": 423,
+  "w": 88,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Margin [%]",
+  "x": 1408,
+  "y": 423,
+  "w": 78,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Yes",
+  "x": 435,
+  "y": 453,
+  "w": 21,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Percentage",
+  "x": 921,
+  "y": 453,
+  "w": 74,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "10",
+  "x": 1408,
+  "y": 453,
+  "w": 14,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "DevCo Costs From",
+  "x": 435,
+  "y": 483,
+  "w": 130,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Wind Turbine / Panels :",
+  "x": 437,
+  "y": 512,
+  "w": 146,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Test Subaccount",
+  "x": 605,
+  "y": 513,
+  "w": 96,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Substation / Grid Connection :",
+  "x": 437,
+  "y": 549,
+  "w": 192,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Substation",
+  "x": 651,
+  "y": 550,
+  "w": 63,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Grid Connection Costs",
+  "x": 746,
+  "y": 550,
+  "w": 131,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Other CAPEX :",
+  "x": 437,
+  "y": 586,
+  "w": 90,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "Compensation Meassures",
+  "x": 549,
+  "y": 587,
+  "w": 151,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Repowering Costs",
+  "x": 732,
+  "y": 587,
+  "w": 106,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Other Construction Costs",
+  "x": 870,
+  "y": 587,
+  "w": 148,
+  "h": 17,
+  "fontSize": "13px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Comments",
+  "x": 435,
+  "y": 626,
+  "w": 76,
+  "h": 21,
+  "fontSize": "16px",
+  "fontWeight": "400",
+  "color": "rgb(89, 89, 89)"
+ },
+ {
+  "text": "-",
+  "x": 435,
+  "y": 650,
+  "w": 6,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "Development Contract - Test Description 102",
+  "x": 435,
+  "y": 695,
+  "w": 345,
+  "h": 22,
+  "fontSize": "16px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ }
+]

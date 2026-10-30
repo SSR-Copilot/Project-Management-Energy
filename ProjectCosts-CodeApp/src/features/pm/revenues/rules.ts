@@ -60,6 +60,7 @@ import {
   isBlank, langRoot, decimalSeparator, pfxRound, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears } from "@/domain/dates";
+import { forLanguage } from "@/features/pm/generators/rules";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
 import { createdRowRef, refusePlan, type WritePlan } from "@/data/writePlan";
@@ -2331,8 +2332,8 @@ export const balancingClusterReached = (order: number | null | undefined): boole
 export const durationCellIsStandard = (flags: StandardFlags): boolean =>
   flags.contractDurationYears && flags.contractDurationMonths;
 
-export const fmtPrice = (v: number | null | undefined): string =>
-  v === null || v === undefined || Number.isNaN(v) ? "" : pfxRound(v, 2).toFixed(2);
+export const fmtPrice = (v: number | null | undefined, lang: Lang = "en-US"): string =>
+  v === null || v === undefined || Number.isNaN(v) ? "" : forLanguage(pfxRound(v, 2).toFixed(2), lang);
 
 export const fmtMwh = (v: number | null | undefined): string =>
   v === null || v === undefined || Number.isNaN(v) ? "" : new Intl.NumberFormat("en-GB").format(v);
@@ -2344,21 +2345,21 @@ export const fmtCardDate = (d: Date | null): string => (d ? dd(d) : "");
  * `Text(ThisItem.'Tariff / Price', "#,##0.00", Language())` (L2463), in en-US notation as the other
  * connected PM screens (the canvas follows `Language()`).
  */
-export const fmtTariffCell = (v: number | null): string =>
+export const fmtTariffCell = (v: number | null, lang: Lang = "en-US"): string =>
   v === null || Number.isNaN(v) ? ""
-    : new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+    : forLanguage(new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v), lang);
 
 /** `If(Int(x) = x, Text(x, "#"), Text(x, "#0.0#"))` — the Site Quality cells (L2165-2170). */
-export function fmtSiteQualityCell(v: number | null): string {
+export function fmtSiteQualityCell(v: number | null, lang: Lang = "en-US"): string {
   if (v === null || Number.isNaN(v)) return "";
   if (Number.isInteger(v)) return v === 0 ? "" : String(v);
-  return fmtSiteQualityDecimals(v);
+  return fmtSiteQualityDecimals(v, lang);
 }
 
 /** `Text(x, "#0.0#")` — at least one, at most two decimals. */
-export function fmtSiteQualityDecimals(v: number): string {
+export function fmtSiteQualityDecimals(v: number, lang: Lang = "en-US"): string {
   const r = pfxRound(v, 2);
-  return Number.isInteger(r * 10) ? r.toFixed(1) : r.toFixed(2);
+  return forLanguage(Number.isInteger(r * 10) ? r.toFixed(1) : r.toFixed(2), lang);
 }
 
 /**
@@ -2366,17 +2367,17 @@ export function fmtSiteQualityDecimals(v: number): string {
  * `"#0.0#"` otherwise), `Text(fixed, "#,##0") & " MWh"` for the fixed type, blank for Individual
  * Volumes (the `Switch` has no arm).
  */
-export function fmtHedgeCell(c: Pick<StoredRevenueContract, "hedgeType" | "hedgedVolume" | "fixedContractedMwhPa">): string {
+export function fmtHedgeCell(c: Pick<StoredRevenueContract, "hedgeType" | "hedgedVolume" | "fixedContractedMwhPa">, lang: Lang = "en-US"): string {
   const type = hedgeTypeFromValue(c.hedgeType);
   if (type === "percentage") {
     const v = c.hedgedVolume ?? 0;
     if (Number.isInteger(v)) return `${v} %`;
     const r = pfxRound(v, 2);
-    return `${Number.isInteger(r * 10) ? r.toFixed(1) : r.toFixed(2)} %`;
+    return `${forLanguage(Number.isInteger(r * 10) ? r.toFixed(1) : r.toFixed(2), lang)} %`;
   }
   if (type === "fixed") {
     const v = c.fixedContractedMwhPa;
-    return `${v === null ? "" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v)} MWh`;
+    return `${v === null ? "" : forLanguage(new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v), lang)} MWh`;
   }
   return "";
 }
@@ -2464,6 +2465,8 @@ export interface ContractCardContext {
   currencyName: string | null;
   /** `locAreaWithRegion` — the Italian inflation region. */
   region: string | null;
+  /** The user's language (default en-US): card numbers follow its separators (`Text(n, fmt, Language())`). */
+  language?: Lang;
 }
 
 /** `ThisItem.Label & " - " & ThisItem.Description` (`lbl_…_CardHeader_LabelWithDescription_1.Text`, Y:2840). */
@@ -2532,7 +2535,7 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
     [value("ContractEndDate_1", fmtCardDate(c.contractEndDate), cardTone(f.contractEndDate, true))]));
   if (fitNotPv) {
     out.push(field("biddingPrice", "BiddingPrice_1", SCREEN_LABEL.biddingPrice,
-      [value("BiddingPrice_1", fmtPrice(c.biddingPrice), cardTone(f.biddingPrice, true))]));
+      [value("BiddingPrice_1", fmtPrice(c.biddingPrice, ctx.language), cardTone(f.biddingPrice, true))]));
   }
   // `Text(Blank(), "#0.00 ")` is "": a contract with no custom profile value shows nothing.
   const inflationText = c.useCountryInflationProfile || c.inflationProfile !== null
@@ -2545,11 +2548,11 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
   }
   if (fitNotPv) {
     out.push(field("siteQuality", "SiteQuality_1", siteQualityCaption(fitWind),
-      [value("SiteQuality_1", fmtSiteQualityCell(c.siteQuality), "plain")]));
+      [value("SiteQuality_1", fmtSiteQualityCell(c.siteQuality, ctx.language), "plain")]));
   }
   if (fitWind) {
     out.push(field("siteQualityP90", "SiteQuality_p90", SCREEN_LABEL.siteQualityP90,
-      [value("SiteQuality_p90", fmtSiteQualityCell(c.siteQualityP90), "plain")]));
+      [value("SiteQuality_p90", fmtSiteQualityCell(c.siteQualityP90, ctx.language), "plain")]));
   }
   if (fitNotPv) {
     out.push(field("correctionFactor", "CorrectionFactor_1", correctionFactorCaption(fitWind),
@@ -2562,10 +2565,10 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
         cardTone(f.correctionFactorP90, true))]));
   }
   out.push(field("tariffPrice", "TarifPrice_1", cardTariffPriceCaption(ctx.country, fitWind),
-    [value("TarifPrice_1", fmtTariffCell(c.tariffPrice), cardTone(f.tariffPrice, true))]));
+    [value("TarifPrice_1", fmtTariffCell(c.tariffPrice, ctx.language), cardTone(f.tariffPrice, true))]));
   if (fitWind) {
     out.push(field("tariffPriceP90", "TarifPrice_p90", tariffPriceP90Caption(ctx.country),
-      [value("TarifPrice_p90", fmtTariffCell(c.tariffPriceP90), cardTone(f.tariffPriceP90, true))]));
+      [value("TarifPrice_p90", fmtTariffCell(c.tariffPriceP90, ctx.language), cardTone(f.tariffPriceP90, true))]));
   }
   if (showsAreaCell(ctx.country, c)) {
     out.push(field("area", "Area", SCREEN_LABEL.area,
@@ -2576,7 +2579,7 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
     "HedgedVolume_2"));
   if (hedge === "percentage" || hedge === "fixed") {
     out.push(field("hedgedVolume", "HedgedVolume_1", SCREEN_LABEL.hedgedVolume,
-      [value("HedgedVolume_1", fmtHedgeCell(c), cardTone(f.hedgedVolume && hedge === "percentage", true))]));
+      [value("HedgedVolume_1", fmtHedgeCell(c, ctx.language), cardTone(f.hedgedVolume && hedge === "percentage", true))]));
   }
   return out;
 }
@@ -3228,6 +3231,28 @@ export function applyRevenueEngine(input: {
 }
 
 /** The edit command (L959-1497): the form rehydrated from the stored contract and its volumes. */
+/**
+ * A contract form with its numbers written the way the user's language writes them (comma-decimal languages: "1.50" becomes
+ * "1,50"), because `validateTariff` and the other validators read the box back with the same language. Only a plain
+ * en-US number is touched, so a value already in the language, or any non-number, is left alone.
+ */
+export function localizeContractForm(form: RevenueFormState, lang: Lang = "en-US"): RevenueFormState {
+  const num = (t: string): string => (/^-?\d+\.\d+$/.test(t) ? forLanguage(t, lang) : t);
+  return {
+    ...form,
+    tariff: num(form.tariff), tariffP90: num(form.tariffP90), biddingPrice: num(form.biddingPrice),
+    siteQuality: num(form.siteQuality), siteQualityP90: num(form.siteQualityP90),
+    correctionFactor: num(form.correctionFactor), correctionFactorP90: num(form.correctionFactorP90),
+    inflationProfile: num(form.inflationProfile),
+    ...(form.storedInflationProfile === undefined ? {} : { storedInflationProfile: num(form.storedInflationProfile) }),
+    hedge: {
+      ...form.hedge,
+      percentage: { ...form.hedge.percentage, value: num(form.hedge.percentage.value) },
+      fixed: { ...form.hedge.fixed, value: num(form.hedge.fixed.value) },
+    },
+  };
+}
+
 export function editContractForm(input: {
   contract: StoredRevenueContract;
   project: RevenueProject;

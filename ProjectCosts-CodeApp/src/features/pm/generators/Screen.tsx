@@ -70,7 +70,7 @@ import {
   TYPE_PANEL_LABELS, TYPE_PANEL_TOOLTIPS, WRITE_ERROR, WRITE_MSG, WTG_CARD_LABELS,
   buildTurbineNames, canAddGenerator, canSavePvType, canSaveSimple, canSaveTurbine,
   canSaveType, cancelRequestVisible, capacityGuardReason, cascadeOptions, changeStatusDialog,
-  commandBarOrder, commandBarState, commandParentKey, costPerWtg, currencyCaption, defaultSelection, fmtCapacity, fmtHeight,
+  commandBarOrder, commandBarState, commandParentKey, costPerWtg, currencyCaption, defaultSelection, fmtCapacity, fmtHeight, forLanguage,
   generatorCommandIcon, generatorsTotalRowsText, heightBlocksSave, heightLimitExceeded,
   heightPopupTypeName, inverterCardValues, isBodyVisible, isDummySupplier, isOtherSupplierModule,
   isPageLocked, newTurbineHeights, nextTurbineIndex, numberOfGeneratorsMessage, numericOr,
@@ -490,8 +490,8 @@ const emptyPvForm = (): PvTypeFormState => ({
 });
 
 /** `If(Int(x) = x, Text(x, "#"), Text(x, "0.0#"))` — the PV panel's prefill (Y:7450, Y:7777). */
-const pvPrefill = (v: number | null): string =>
-  v === null ? "" : Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+const pvPrefill = (v: number | null, lang?: string): string =>
+  v === null ? "" : forLanguage(Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100), lang);
 
 /** The card fold icons (`ico_…_Up` while expanded, `ico_…_Down` while collapsed), per family. */
 const FOLD_ICON: Record<PlantFamily, { up: string; down: string }> = {
@@ -573,7 +573,8 @@ const isActive = (status: number) => status === CHOICE_PLANT.status.active;
 
 export default function GeneratorsScreen() {
   const s = useStyles();
-  const { projectId } = useSession();
+  // The user's language (`Language()` in the canvas): decimal separators in boxes, cards and messages follow it.
+  const { projectId, locale: lang } = useSession();
 
   /* ── data ── */
   const projectQ = useGeneratorsProject(projectId);
@@ -685,21 +686,21 @@ export default function GeneratorsScreen() {
   const resolvedModel = resolveModel(projected, {
     supplier: typeForm.supplier, turbineType: typeForm.turbineType, hubHeight: effectiveHubHeight,
   }) ?? null;
-  const count = numericOr(typeForm.numberOfGenerators, 0);
+  const count = numericOr(typeForm.numberOfGenerators, 0, lang);
   const derivedCost = resolvedModel && count > 0
     ? costPerWtg({ model: resolvedModel, count, accumulatedIndex: indexQ.data })
     : 0;
   const prospectiveHeight = resolvedModel
     ? newTurbineHeights({
         selectedHeight: effectiveHubHeight ?? 0,
-        typedHubHeight: numericOr(typeForm.revisedHubHeight, 0),
+        typedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
         catalogHubHeight: resolvedModel.hubHeight,
         rotorDiameter: resolvedModel.rotorDiameter,
       }).totalHeight
     : 0;
   const typeErrors = validateTypeForm({ ...typeForm, hubHeight: effectiveHubHeight }, {
     isoCurrencyCode: project?.isoCurrencyCode, derivedCostPerWtg: derivedCost,
-  });
+  }, lang);
   const typeHeightBlocked = resolvedModel !== null && heightBlocksSave({
     planning, totalHeight: prospectiveHeight, project, entraObjectId,
   });
@@ -747,7 +748,7 @@ export default function GeneratorsScreen() {
   const pvOptions = pvSupplierOptions(pvCatalogQ.data);
   const pvModule = pvCatalogQ.data.find((m) => m.id === pvForm.supplier) ?? null;
   const otherSupplierChosen = isOtherSupplierModule(pvModule);
-  const pvErrors = validatePvTypeForm(pvForm, { otherSupplierChosen });
+  const pvErrors = validatePvTypeForm(pvForm, { otherSupplierChosen }, lang);
   const pvSaveable = canSavePvType(pvErrors, pvForm, { otherSupplierChosen });
   const touchPv = <K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
     setPvForm((prev) => {
@@ -764,8 +765,8 @@ export default function GeneratorsScreen() {
     f === "storage" ? storageQ.data : f === "hydrogen" ? hydrogenQ.data : substationQ.data;
   const simpleSelectedOf = (f: SimpleCapacityFamily) =>
     f === "storage" ? selectedStorage : f === "hydrogen" ? selectedHydrogen : selectedSubstation;
-  const simpleErrors = simpleFamily ? validateSimpleForm(simpleFamily, simpleForm) : null;
-  const simpleSaveable = simpleFamily ? canSaveSimple(simpleFamily, simpleForm) : false;
+  const simpleErrors = simpleFamily ? validateSimpleForm(simpleFamily, simpleForm, lang) : null;
+  const simpleSaveable = simpleFamily ? canSaveSimple(simpleFamily, simpleForm, lang) : false;
   const touchSimple = <K extends keyof SimpleFormState>(field: K, value: SimpleFormState[K]) =>
     setSimpleForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) }));
 
@@ -776,9 +777,9 @@ export default function GeneratorsScreen() {
   const inverterSupplier = inverterCatalogQ.data.find((o) => o.id === inverterForm.supplierId) ?? null;
   const inverterOther = isPlantOtherSupplier("inverter", inverterSupplier);
   const inverterOtherValue = effectiveOtherSupplier(inverterForm.otherSupplier, inverterOther);
-  const inverterErrors = validateInverterForm(inverterForm, { otherSupplierChosen: inverterOther });
+  const inverterErrors = validateInverterForm(inverterForm, { otherSupplierChosen: inverterOther }, lang);
   const inverterRequests = plantRequestsPermission(inverterOtherValue);
-  const inverterSaveable = !inverterRequests && canSaveInverter(inverterForm, { otherSupplierChosen: inverterOther });
+  const inverterSaveable = !inverterRequests && canSaveInverter(inverterForm, { otherSupplierChosen: inverterOther }, lang);
   // `DisplayMode: If(IsBlank(<row>.Inverter), Edit, View)` and the title test the stored catalogue row.
   const inverterEditing = Boolean(selectedInverter?.catalogueId);
   const touchInverter = <K extends keyof InverterFormState>(field: K, value: InverterFormState[K]) =>
@@ -838,7 +839,7 @@ export default function GeneratorsScreen() {
     : 0;
   const replaceHeight = replaceModel
     ? newTurbineHeights({
-        selectedHeight: replaceHub ?? 0, typedHubHeight: numericOr(replaceWtg.revisedHubHeight, 0),
+        selectedHeight: replaceHub ?? 0, typedHubHeight: numericOr(replaceWtg.revisedHubHeight, 0, lang),
         catalogHubHeight: replaceModel.hubHeight, rotorDiameter: replaceModel.rotorDiameter,
       }).totalHeight
     : 0;
@@ -851,7 +852,7 @@ export default function GeneratorsScreen() {
   const [replacePvForm, setReplacePvForm] = useState<PvTypeFormState>(emptyPvForm);
   const replacePvModule = pvCatalogQ.data.find((m) => m.id === replacePvForm.supplier) ?? null;
   const replacePvOther = isOtherSupplierModule(replacePvModule);
-  const replacePvErrors = validatePvTypeForm(replacePvForm, { otherSupplierChosen: replacePvOther });
+  const replacePvErrors = validatePvTypeForm(replacePvForm, { otherSupplierChosen: replacePvOther }, lang);
   const replacePvOk = writes.progress === null
     && canSavePvType(replacePvErrors, replacePvForm, { otherSupplierChosen: replacePvOther });
   const touchReplacePv = <K extends keyof PvTypeFormState>(field: K, value: PvTypeFormState[K]) =>
@@ -919,7 +920,7 @@ export default function GeneratorsScreen() {
       () => setDialog({ kind: "deleteSimple", family, row }));
 
   const openSimple = (family: SimpleCapacityFamily) => {
-    setSimpleForm(simpleFormDefaults(family, simpleSelectedOf(family)));
+    setSimpleForm(simpleFormDefaults(family, simpleSelectedOf(family), lang));
     setPanel({ kind: family });
   };
 
@@ -933,17 +934,17 @@ export default function GeneratorsScreen() {
         setSelection(selectionAfterAddPv(selection));
         setPvForm(selectedPv ? {
           moduleLabel: selectedPv.moduleLabel ?? "",
-          capacity: pvPrefill(selectedPv.capacity),
+          capacity: pvPrefill(selectedPv.capacity, lang),
           supplier: selectedPv.catalogueId ?? null,
           otherSupplier: selectedPv.otherSupplier ?? "",
-          degradation1stYear: pvPrefill(selectedPv.degradation1stYear),
-          degradationRemainingYears: selectedPv.degradationRemainingYears === null ? "" : String(selectedPv.degradationRemainingYears),
+          degradation1stYear: pvPrefill(selectedPv.degradation1stYear, lang),
+          degradationRemainingYears: selectedPv.degradationRemainingYears === null ? "" : forLanguage(String(selectedPv.degradationRemainingYears), lang),
           dirty: new Set<string>(),
         } : emptyPvForm());
         setPanel({ kind: "pv" });
         break;
       case "addInverterType":
-        setInverterForm(inverterFormDefaults(selectedInverter));
+        setInverterForm(inverterFormDefaults(selectedInverter, lang));
         setPanel({ kind: "inverter" });
         break;
       case "addSubstructureType":
@@ -1010,7 +1011,7 @@ export default function GeneratorsScreen() {
     writes.clear();
     setSelection({ family: "wtg", id: type.id });
     setApplyAll({ capacity: false, plinth: false, hubHeight: false });
-    setTurbineForm(turbineFormDefaults({ turbine, model: modelOf(type), nextIndex: nextTurbineIndex(turbinesQ.data) }));
+    setTurbineForm(turbineFormDefaults({ turbine, model: modelOf(type), nextIndex: nextTurbineIndex(turbinesQ.data), lang }));
     setPanel({ kind: "turbine", typeId: type.id, turbineId: turbine?.id ?? null });
   };
 
@@ -1022,7 +1023,7 @@ export default function GeneratorsScreen() {
 
   const saveType = async () => {
     if (!planProject || !resolvedModel) return;
-    const n = numericOr(typeForm.numberOfGenerators, 0);
+    const n = numericOr(typeForm.numberOfGenerators, 0, lang);
     const progress = typeSaveProgressText(resolvedModel.displayName);
     const names = buildTurbineNames({ shortName: planProject.shortName, existing: turbinesQ.data, count: n });
     close();
@@ -1031,7 +1032,7 @@ export default function GeneratorsScreen() {
       errorText: WRITE_ERROR.typeSave,
       plan: planCreateGeneratorType({
         project: planProject, inCountry, model: resolvedModel, numberOfGenerators: n, costPerWtg: derivedCost,
-        selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0),
+        selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
         existingTypes: types, projectTurbines: turbinesQ.data,
       }),
     });
@@ -1073,7 +1074,7 @@ export default function GeneratorsScreen() {
     if (!planProject) return;
     const editing = selectedPv;
     const label = pvForm.moduleLabel;
-    const capacity = numericOr(pvForm.capacity, 0);
+    const capacity = numericOr(pvForm.capacity, 0, lang);
     const costPerPower = deviceQ.data.modules ?? 0;
     const others = pvQ.data.filter((r) => r.id !== editing?.id);
     close();
@@ -1163,7 +1164,7 @@ export default function GeneratorsScreen() {
         box.inputs = await loadReplaceInputs(planProject.id, oldType.id);
         return planReplaceGeneratorType({
           project: planProject, oldType, inCountry: form.inCountry, model, costPerWtg: replaceCost,
-          selectedHeight: replaceHub ?? 0, revisedHubHeight: numericOr(form.revisedHubHeight, 0),
+          selectedHeight: replaceHub ?? 0, revisedHubHeight: numericOr(form.revisedHubHeight, 0, lang),
           otherTypes: types.filter((t) => t.id !== oldType.id), otherTurbines, inputs: box.inputs,
         });
       },
@@ -1194,7 +1195,7 @@ export default function GeneratorsScreen() {
     if (!planProject || !selectedPv) return;
     const oldPv = selectedPv;
     const form = { ...replacePvForm, dirty: new Set(replacePvForm.dirty) };
-    const capacity = numericOr(form.capacity, 0);
+    const capacity = numericOr(form.capacity, 0, lang);
     const progress = replacePvProgressText(form.moduleLabel);
     const box: { inputs?: ReplaceInputs } = {};
     close();
@@ -1399,7 +1400,7 @@ export default function GeneratorsScreen() {
     const pageRows = rows.slice((page - 1) * GENERATORS_PAGE_SIZE, page * GENERATORS_PAGE_SIZE);
     const addEnabled = canAddGenerator(rows.length, type.status);
     const setPage = (p: number) => setPages((prev) => ({ ...prev, [type.id]: p }));
-    const v = wtgCardValues({ model, type, firstTurbine: rows[0] ?? null, planning });
+    const v = wtgCardValues({ model, type, firstTurbine: rows[0] ?? null, planning, lang });
     return {
       id: type.id,
       selected: selection?.family === "wtg" && selection.id === type.id,
@@ -1499,8 +1500,8 @@ export default function GeneratorsScreen() {
                       ? <InfoRegular aria-hidden="true" color={palette.Warning} />
                       : null}
                   </TableCell>
-                  <TableCell>{fmtHeight(t.totalHeight)}</TableCell>
-                  <TableCell>{fmtCapacity(t.effectiveCapacity)}</TableCell>
+                  <TableCell>{fmtHeight(t.totalHeight, lang)}</TableCell>
+                  <TableCell>{fmtCapacity(t.effectiveCapacity, lang)}</TableCell>
                   <TableCell>
                     <Button
                       appearance="subtle" size="small" icon={<EditRegular />}
@@ -1547,15 +1548,15 @@ export default function GeneratorsScreen() {
   }));
 
   const pvRows = familyRows("pv", pvQ.data, (r) => r.moduleLabel ?? "", (r) => {
-    const v = pvCardValues(r);
+    const v = pvCardValues(r, lang);
     return [v.supplier, v.capacity, v.degradation1stYear, v.degradationRemainingYears];
   }, 4);
   const inverterRows = familyRows("inverter", inverterQ.data, (r) => r.name ?? "", (r) => {
-    const v = inverterCardValues(r);
+    const v = inverterCardValues(r, lang);
     return [v.inverterType, v.supplier, v.costPerInverter, v.numberOfInverters, v.typeCost, v.nominalPower, v.warranty];
   }, 7);
   const substructureRows = familyRows("substructure", substructureQ.data, (r) => r.name ?? "", (r) => {
-    const v = substructureCardValues(r);
+    const v = substructureCardValues(r, lang);
     return [v.supplier, v.types, (
       <span key="cost" className={s.title}>
         {v.cost}
@@ -1574,9 +1575,9 @@ export default function GeneratorsScreen() {
       </span>
     )];
   }, 3);
-  const storageRows = familyRows("storage", storageQ.data, (r) => r.name ?? "", (r) => simpleCardValues("storage", r), 3);
-  const hydrogenRows = familyRows("hydrogen", hydrogenQ.data, (r) => r.name ?? "", (r) => simpleCardValues("hydrogen", r), 2);
-  const substationRows = familyRows("substation", substationQ.data, (r) => r.name ?? "", (r) => simpleCardValues("substation", r), 2);
+  const storageRows = familyRows("storage", storageQ.data, (r) => r.name ?? "", (r) => simpleCardValues("storage", r, lang), 3);
+  const hydrogenRows = familyRows("hydrogen", hydrogenQ.data, (r) => r.name ?? "", (r) => simpleCardValues("hydrogen", r, lang), 2);
+  const substationRows = familyRows("substation", substationQ.data, (r) => r.name ?? "", (r) => simpleCardValues("substation", r, lang), 2);
 
   /* ── the confirmation popups ── */
   const confirmText = (() => {
@@ -1771,7 +1772,7 @@ export default function GeneratorsScreen() {
               label={TYPE_PANEL_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1"
               ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required
               maxLength={256} value={typeForm.revisedHubHeight}
-              error={typeForm.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(typeForm.revisedHubHeight) : null}
+              error={typeForm.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(typeForm.revisedHubHeight, lang) : null}
               onChange={(v) => touchType("revisedHubHeight", v)}
             />
           )}
@@ -1817,7 +1818,7 @@ export default function GeneratorsScreen() {
               required value={turbineForm.nameIndex}
               error={validateTurbineName(turbineForm.nameIndex, {
                 existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
-              })}
+              }, lang)}
               onChange={(v) => touchTurbine("nameIndex", v)}
             />
           </div>
@@ -1825,7 +1826,7 @@ export default function GeneratorsScreen() {
             label={TURBINE_PANEL_LABELS.effectiveCapacity} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_Capacity"
             required maxLength={256} value={turbineForm.effectiveCapacity}
             error={turbineForm.effectiveCapacity.trim() === "" ? null : validateEffectiveCapacity(
-              turbineForm.effectiveCapacity, panelModel?.specificCapacity ?? null)}
+              turbineForm.effectiveCapacity, panelModel?.specificCapacity ?? null, lang)}
             onChange={(v) => touchTurbine("effectiveCapacity", v)}
           />
           <Checkbox
@@ -1838,7 +1839,7 @@ export default function GeneratorsScreen() {
           <InputField
             label={TURBINE_PANEL_LABELS.foundationPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Foundation_Plinth"
             maxLength={256} value={turbineForm.foundationPlinth}
-            error={validateFoundationPlinth(turbineForm.foundationPlinth.trim())}
+            error={validateFoundationPlinth(turbineForm.foundationPlinth.trim(), lang)}
             onChange={(v) => touchTurbine("foundationPlinth", v)}
           />
           <Checkbox
@@ -1851,7 +1852,7 @@ export default function GeneratorsScreen() {
           <InputField
             label={TURBINE_PANEL_LABELS.hubHeightExclPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_HubHeight"
             required maxLength={256} value={turbineForm.effectiveHubHeight}
-            error={turbineForm.effectiveHubHeight.trim() === "" ? null : validateEffectiveHubHeight(turbineForm.effectiveHubHeight)}
+            error={turbineForm.effectiveHubHeight.trim() === "" ? null : validateEffectiveHubHeight(turbineForm.effectiveHubHeight, lang)}
             onChange={(v) => touchTurbine("effectiveHubHeight", v)}
           />
           <Checkbox
@@ -1863,7 +1864,7 @@ export default function GeneratorsScreen() {
           {applyAll.hubHeight ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
           <InputField
             label={TURBINE_PANEL_LABELS.totalHeight} name="txt_GeneratorData_RightPanel_Form_Fields_Total_Height"
-            readOnly value={turbineHeight === null ? "" : String(turbineHeight)}
+            readOnly value={turbineHeight === null ? "" : forLanguage(String(turbineHeight), lang)}
           />
           {turbineHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
         </div>
@@ -2099,7 +2100,7 @@ export default function GeneratorsScreen() {
           />
           <InputField
             label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2"
-            readOnly value={fmtHubHeight(selectedTypeModel?.hubHeight)}
+            readOnly value={fmtHubHeight(selectedTypeModel?.hubHeight, lang)}
           />
           <InputField
             label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
@@ -2137,7 +2138,7 @@ export default function GeneratorsScreen() {
               label={REPLACE_LABELS.hubHeight} name="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_2"
               ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_HubHeight_1" required maxLength={256}
               value={replaceWtg.revisedHubHeight}
-              error={replaceWtg.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(replaceWtg.revisedHubHeight) : null}
+              error={replaceWtg.revisedHubHeight.trim() !== "" ? validateEffectiveHubHeight(replaceWtg.revisedHubHeight, lang) : null}
               onChange={(v) => setReplaceWtg({ ...replaceWtg, revisedHubHeight: v })}
             />
           )}
@@ -2172,7 +2173,7 @@ export default function GeneratorsScreen() {
           <InputField
             label={PV_FIELD_LABELS.capacity} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW_1"
             ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_PVCapacityMW" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.capacity) : ""}
+            value={selectedPv ? pvPrefill(selectedPv.capacity, lang) : ""}
           />
           <InputField
             label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_1"
@@ -2182,12 +2183,12 @@ export default function GeneratorsScreen() {
           <InputField
             label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1"
             ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.degradation1stYear) : ""}
+            value={selectedPv ? pvPrefill(selectedPv.degradation1stYear, lang) : ""}
           />
           <InputField
             label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1"
             ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears" readOnly
-            value={selectedPv ? pvPrefill(selectedPv.degradationRemainingYears) : ""}
+            value={selectedPv ? pvPrefill(selectedPv.degradationRemainingYears, lang) : ""}
           />
           <Text weight="semibold">{REPLACE_LABELS.replaceTo}</Text>
           <InputField

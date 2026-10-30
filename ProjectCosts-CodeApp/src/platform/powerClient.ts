@@ -12,6 +12,7 @@
  */
 import { setConfig, getContext, type IContext } from "@microsoft/power-apps/app";
 import type { Metric } from "@microsoft/power-apps/telemetry";
+import { logHttp } from "./requestLog";
 import { trace } from "./telemetry";
 
 let contextPromise: Promise<IContext> | undefined;
@@ -42,9 +43,11 @@ export function ensureInitialized(): Promise<IContext> {
             return;
           }
           const d = metric.data;
+          // Every request the SDK sends, from any screen, goes to the console (`platform/requestLog.ts`).
+          logHttp(d);
           // Only the failures are worth a buffer slot; a healthy app makes hundreds of these.
           if (d.statusCode >= 400) {
-            trace("error", `${d.method} ${d.url} → ${d.statusCode} (${d.duration} ms)`, d);
+            trace("error", `${d.method} ${d.url} → ${d.statusCode} (${d.duration} ms)`, d, true);
           }
         },
       },

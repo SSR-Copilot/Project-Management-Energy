@@ -83,6 +83,9 @@ not `localhost:3000`.
    current, and before asking for commit approval. Do not run it silently, and do not skip the
    question. This applies to everyone who commits from this folder.
 
+7. **Every new or changed call, load and save is traced in the console** (`[VSB] HTTP / DATA / ACTION`
+   lines, `CONVENTIONS.md` rule 23, D66). Use `platform/requestLog.ts`; never a bare `console.info`.
+
 Details: `CONVENTIONS.md`, "Before every build".
 
 ## Working agreement

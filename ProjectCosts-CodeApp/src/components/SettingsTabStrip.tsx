@@ -62,7 +62,7 @@ export function SettingsTabStrip({
     if (el && el.offsetWidth > 0) setMeasurable(true);
   }, []);
   const tab = (t: SettingsTab) => (
-    <Tab value={t.id} aria-label={t.label} data-testid={`${tabTestIdPrefix}-${t.id}`}>{t.label}</Tab>
+    <Tab key={t.id} value={t.id} aria-label={t.label} data-testid={`${tabTestIdPrefix}-${t.id}`}>{t.label}</Tab>
   );
   const listProps = {
     size, selectedValue: selected, "aria-label": ariaLabel,
@@ -87,7 +87,7 @@ export function SettingsTabStrip({
           </TabList>
         </Overflow>
       ) : (
-        <TabList {...listProps}>{tabs.map(tab)}</TabList>
+        <TabList {...listProps}>{tabs.map((t) => tab(t))}</TabList>
       )}
     </div>
   );

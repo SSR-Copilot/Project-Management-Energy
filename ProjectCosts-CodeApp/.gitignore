@@ -42,3 +42,9 @@ bin/
 *.pcf.cache
 .vite/
 coverage/
+
+# Playwright E2E parity suite: sign-in sessions and run output stay local
+e2e/.auth/
+e2e/report/
+e2e/results/
+e2e/parity-out/

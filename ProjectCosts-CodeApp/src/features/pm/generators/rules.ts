@@ -51,7 +51,7 @@
  */
 import {
   isNumeric, isInteger, isDecimalWithPlaces, inRange, parseNumber, pfxRound, roundUp,
-  isBlank, type Lang,
+  isBlank, decimalSeparator, type Lang,
 } from "@/domain/powerFxNumeric";
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
@@ -1630,7 +1630,7 @@ export function validateCostPerWtg(
   if (!isDecimalWithPlaces(v, 2, lang)) return MSG.numericTwoDecimals;
   const max = maxCostPerWtg(isoCurrencyCode);
   if (!inRange(v, 0, max, lang)) {
-    return `Please select a value between 0 and ${max.toLocaleString("en-US")}.`;
+    return `Please select a value between 0 and ${textFormat(max, "#,##0", lang)}.`;
   }
   return null;
 }
@@ -1661,7 +1661,7 @@ export function validateEffectiveCapacity(
   const max = specificCapacity ?? 0;
   if (!inRange(v, 0.01, max, lang)) {
     // `Text(locSelectedGeneratorEntity.Generator.'Specific Capacity', "#.0#")` (Y:10773).
-    return `Please select a value between 0.01 and ${textFormat(max, "#.0#")} MW max.`;
+    return `Please select a value between 0.01 and ${textFormat(max, "#.0#", lang)} MW max.`;
   }
   return null;
 }
@@ -1676,7 +1676,7 @@ export function validateEffectiveCapacityCanvasParity(
   const v = value.trim();
   if (v !== "" && !isDecimalWithPlaces(v, 2, lang)) return MSG.capacityNumeric;
   if (!inRange(grossYieldFromProductionScreen, 0.01, specificCapacity ?? 0, lang)) {
-    return `Please select a value between 0.01 and ${textFormat(specificCapacity ?? 0, "#.0#")} MW max.`;
+    return `Please select a value between 0.01 and ${textFormat(specificCapacity ?? 0, "#.0#", lang)} MW max.`;
   }
   return null;
 }
@@ -2342,12 +2342,22 @@ export const pvOtherSupplierValueCanvasParity = (fieldValue: string): string | n
 /* ═══════════════════════════════════════════════════════════════════ formatting ══ */
 
 /**
+ * A number's en-US text as the user's language writes it: for a comma-decimal language "." and ","
+ * swap (`1,234.50` becomes `1.234,50`), as the canvas `Text(n, fmt, Language())` renders it. Same rule as
+ * `pfxText` on the Production screen. A function declaration, so it is hoisted for module-level callers.
+ */
+export function forLanguage(en: string, lang: Lang = "en-US"): string {
+  return decimalSeparator(lang) === "." ? en : en.replace(/[.,]/g, (c) => (c === "." ? "," : "."));
+}
+
+/**
  * Power Fx `Text(value, "<pattern>")` for the custom numeric patterns this screen uses (`#`,
  * `#0.0#`, `#0.00`, `#.0`, `#0.0`, `0.0#`, `0`, `#,##0.00`, `#,##0.0`, `#,###.00`, `#.0#`), in
  * en-US notation: `0` is a required digit, `#` an optional one, `,` turns on thousands grouping.
- * A blank value is `""`, as `Text(Blank(), …)` is.
+ * A blank value is `""`, as `Text(Blank(), …)` is. `lang` (default en-US) swaps the separators for a
+ * comma-decimal language (see `forLanguage`).
  */
-export function textFormat(value: number | null | undefined, pattern: string): string {
+export function textFormat(value: number | null | undefined, pattern: string, lang: Lang = "en-US"): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
   const [intPart = "", fracPart = ""] = pattern.split(".");
   const minFrac = (fracPart.match(/0/g) ?? []).length;
@@ -2363,18 +2373,19 @@ export function textFormat(value: number | null | undefined, pattern: string): s
   while (whole.length < minInt) whole = `0${whole}`;
   if (grouped) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const body = frac ? `${whole}.${frac}` : whole;
-  return negative && body !== "" && /[1-9]/.test(body) ? `-${body}` : body;
+  const text = negative && body !== "" && /[1-9]/.test(body) ? `-${body}` : body;
+  return forLanguage(text, lang);
 }
 
 /** `If(Int(x) = x, Text(x, "#"), Text(x, <alt>))` — the card formula every height / power uses. */
-export const textIntOr = (value: number | null | undefined, alt: string): string =>
-  value === null || value === undefined ? "" : Number.isInteger(value) ? textFormat(value, "#") : textFormat(value, alt);
+export const textIntOr = (value: number | null | undefined, alt: string, lang: Lang = "en-US"): string =>
+  value === null || value === undefined ? "" : Number.isInteger(value) ? textFormat(value, "#", lang) : textFormat(value, alt, lang);
 
 /** Grid formats from `…_GeneratorsList.Items` (Y:2124-2138): `#0.0#`. */
-export const fmtCapacity = (v: number | null | undefined): string => textFormat(v, "#0.0#");
+export const fmtCapacity = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.0#", lang);
 
 /** `Text(…, "#0.00")`. */
-export const fmtHubHeight = (v: number | null | undefined): string => textFormat(v, "#0.00");
+export const fmtHubHeight = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.00", lang);
 
 /** `TotalHeight` grid column — `Text(ThisRecord.'Total Height', "#0.0#")` (Y:2138). */
 export const fmtHeight = fmtCapacity;
@@ -2930,9 +2941,10 @@ export const canAddGenerator = (turbineCount: number, status: number): boolean =
 export function wtgCardHubHeight(
   model: Pick<CatalogModel, "supplier" | "hubHeight"> | null | undefined,
   firstTurbine: Pick<TurbineRow, "hubHeightExclPlinth"> | null | undefined,
+  lang: Lang = "en-US",
 ): string {
   const value = isDummySupplier(model?.supplier) ? firstTurbine?.hubHeightExclPlinth : model?.hubHeight;
-  return textIntOr(value, "#0.0#");
+  return textIntOr(value, "#0.0#", lang);
 }
 
 /** The WTG card's other visible values (Y:1600-1838). */
@@ -2941,21 +2953,23 @@ export function wtgCardValues(args: {
   type: Pick<GeneratorTypeRow, "numberOfGenerators" | "generatorsCapacity">;
   firstTurbine: Pick<TurbineRow, "hubHeightExclPlinth"> | null | undefined;
   planning: ProjectPlanning | null;
+  /** The user's language (default en-US): the numbers on the card follow it. */
+  lang?: Lang;
 }): {
   supplier: string; hubHeight: string; rotorDiameter: string; totalHeight: string;
   heightLimitation: string; numberOfGenerators: string; generatorsCapacity: string;
 } {
   return {
     supplier: args.model?.supplier ?? "",
-    hubHeight: wtgCardHubHeight(args.model, args.firstTurbine),
-    rotorDiameter: textIntOr(args.model?.rotorDiameter, "#0.0#"),
-    totalHeight: textIntOr(catalogTotalHeight(args.model), "#0.0#"),
+    hubHeight: wtgCardHubHeight(args.model, args.firstTurbine, args.lang),
+    rotorDiameter: textIntOr(args.model?.rotorDiameter, "#0.0#", args.lang),
+    totalHeight: textIntOr(catalogTotalHeight(args.model), "#0.0#", args.lang),
     // `gblRecordProjectPlanning.'Height limitation [m]'` straight into a number field.
     heightLimitation: args.planning?.heightLimitation === null || args.planning?.heightLimitation === undefined
-      ? "" : String(args.planning.heightLimitation),
+      ? "" : forLanguage(String(args.planning.heightLimitation), args.lang),
     numberOfGenerators: args.type.numberOfGenerators === null ? "" : String(args.type.numberOfGenerators),
     // `Text(ThisItem.'Generators Capacity', "#.0")`.
-    generatorsCapacity: textFormat(args.type.generatorsCapacity, "#.0"),
+    generatorsCapacity: textFormat(args.type.generatorsCapacity, "#.0", args.lang),
   };
 }
 
@@ -2968,14 +2982,14 @@ export const cardSupplier = (row: Pick<SimpleTypeRow, "otherSupplier" | "catalog
   !isBlank(row.otherSupplier) ? String(row.otherSupplier) : row.catalogueSupplier ?? row.supplier ?? "";
 
 /** The PV card (Y:3097-3591): supplier, `Text(cap, "#0.0")`, both degradations `Int ? "#" : "0.0#"`. */
-export function pvCardValues(row: SimpleTypeRow): {
+export function pvCardValues(row: SimpleTypeRow, lang: Lang = "en-US"): {
   supplier: string; capacity: string; degradation1stYear: string; degradationRemainingYears: string;
 } {
   return {
     supplier: cardSupplier(row),
-    capacity: textFormat(row.capacity, "#0.0"),
-    degradation1stYear: textIntOr(row.degradation1stYear, "0.0#"),
-    degradationRemainingYears: textIntOr(row.degradationRemainingYears, "0.0#"),
+    capacity: textFormat(row.capacity, "#0.0", lang),
+    degradation1stYear: textIntOr(row.degradation1stYear, "0.0#", lang),
+    degradationRemainingYears: textIntOr(row.degradationRemainingYears, "0.0#", lang),
   };
 }
 
@@ -2984,17 +2998,17 @@ export function pvCardValues(row: SimpleTypeRow): {
  * supplier, cost per inverter and type cost `"#,###.00"`, count, nominal power `Int ? "#" : "0.0#"`,
  * warranty.
  */
-export function inverterCardValues(row: SimpleTypeRow): {
+export function inverterCardValues(row: SimpleTypeRow, lang: Lang = "en-US"): {
   inverterType: string; supplier: string; costPerInverter: string; numberOfInverters: string;
   typeCost: string; nominalPower: string; warranty: string;
 } {
   return {
     inverterType: (row.typeLabels ?? []).join(" ").trim().replace(/ /g, ","),
     supplier: cardSupplier(row),
-    costPerInverter: textFormat(row.costPerInverter, "#,###.00"),
+    costPerInverter: textFormat(row.costPerInverter, "#,###.00", lang),
     numberOfInverters: row.numberOfInverters === null || row.numberOfInverters === undefined ? "" : String(row.numberOfInverters),
-    typeCost: textFormat(row.cost, "#,###.00"),
-    nominalPower: textIntOr(row.nominalPower, "0.0#"),
+    typeCost: textFormat(row.cost, "#,###.00", lang),
+    nominalPower: textIntOr(row.nominalPower, "0.0#", lang),
     warranty: row.warranty === null || row.warranty === undefined ? "" : String(row.warranty),
   };
 }
@@ -3009,20 +3023,20 @@ export const substructureCostNoteVisible = (plantPvCapacity: number | null | und
   plantPvCapacity === null || plantPvCapacity === undefined || plantPvCapacity === 0;
 
 /** The substructure card (Y:4809-4949). */
-export function substructureCardValues(row: SimpleTypeRow): { supplier: string; types: string; cost: string } {
+export function substructureCardValues(row: SimpleTypeRow, lang: Lang = "en-US"): { supplier: string; types: string; cost: string } {
   return {
     supplier: cardSupplier(row),
     types: (row.typeLabels ?? []).join(" ").trim().replace(/ /g, ","),
-    cost: textFormat(row.cost, "#,##0.00"),
+    cost: textFormat(row.cost, "#,##0.00", lang),
   };
 }
 
 /** BESS `"#,##0.00"` ×2 (Y:5493/5550); Hydrogen and Substation `"#,##0.0"` (Y:6127/6703). */
-export function simpleCardValues(family: "storage" | "hydrogen" | "substation", row: SimpleTypeRow): string[] {
+export function simpleCardValues(family: "storage" | "hydrogen" | "substation", row: SimpleTypeRow, lang: Lang = "en-US"): string[] {
   if (family === "storage") {
-    return [textFormat(row.capacity, "#,##0.00"), textFormat(row.energyCapacity, "#,##0.00"), row.supplier ?? ""];
+    return [textFormat(row.capacity, "#,##0.00", lang), textFormat(row.energyCapacity, "#,##0.00", lang), row.supplier ?? ""];
   }
-  return [textFormat(row.capacity, "#,##0.0"), row.supplier ?? ""];
+  return [textFormat(row.capacity, "#,##0.0", lang), row.supplier ?? ""];
 }
 
 /**
@@ -3081,15 +3095,18 @@ export function turbineFormDefaults(args: {
   turbine: TurbineRow | null;
   model: Pick<CatalogModel, "specificCapacity" | "hubHeight"> | null;
   nextIndex: number;
+  /** The user's language (default en-US): the boxes open in its decimal separator, which the validators then expect. */
+  lang?: Lang;
 }): TurbineFormState {
   const t = args.turbine;
+  const lang = args.lang ?? "en-US";
   return {
     nameIndex: t ? (Number.isFinite(t.index) ? String(t.index) : "") : String(args.nextIndex),
     effectiveCapacity: t?.effectiveCapacity !== null && t?.effectiveCapacity !== undefined
-      ? textFormat(t.effectiveCapacity, "#0.0#") : textFormat(args.model?.specificCapacity, "#0.0#"),
+      ? textFormat(t.effectiveCapacity, "#0.0#", lang) : textFormat(args.model?.specificCapacity, "#0.0#", lang),
     effectiveHubHeight: t?.hubHeightExclPlinth !== null && t?.hubHeightExclPlinth !== undefined
-      ? textFormat(t.hubHeightExclPlinth, "#0.00") : textFormat(args.model?.hubHeight, "#0.00"),
-    foundationPlinth: String(t?.foundationPlinth ?? 0),
+      ? textFormat(t.hubHeightExclPlinth, "#0.00", lang) : textFormat(args.model?.hubHeight, "#0.00", lang),
+    foundationPlinth: forLanguage(String(t?.foundationPlinth ?? 0), lang),
     dirty: t ? new Set<string>() : new Set<string>(["nameIndex"]),
   };
 }
@@ -3193,11 +3210,11 @@ export function canSaveSimple(family: SimpleCapacityFamily, form: SimpleFormStat
  * `"#0.00"` (BESS) — D27 DIVERGENCE: Hydrogen / Substation prefill `"#0.0"`, not the canvas
  * `"#,##0.0"`, whose thousands separator its own one-decimal check rejects.
  */
-export function simpleFormDefaults(family: SimpleCapacityFamily, row: SimpleTypeRow | null): SimpleFormState {
+export function simpleFormDefaults(family: SimpleCapacityFamily, row: SimpleTypeRow | null, lang: Lang = "en-US"): SimpleFormState {
   return {
     label: row?.name ?? "",
-    capacity: textFormat(row?.capacity, family === "storage" ? "#0.00" : "#0.0"),
-    energyCapacity: family === "storage" ? textFormat(row?.energyCapacity, "#0.00") : "",
+    capacity: textFormat(row?.capacity, family === "storage" ? "#0.00" : "#0.0", lang),
+    energyCapacity: family === "storage" ? textFormat(row?.energyCapacity, "#0.00", lang) : "",
     supplier: row?.supplier ?? "",
     dirty: new Set<string>(),
   };
@@ -3940,6 +3957,10 @@ export const INVERTER_MSG = {
   saved: "Inverter type was successfully saved for current project!",
 } as const;
 
+/** `INVERTER_MSG.largeRange` in the user's language (`Text(1000000, "#,###.0#")` follows `Language()`). */
+export const inverterLargeRange = (lang: Lang = "en-US"): string =>
+  `Please select a value between 0 and ${textFormat(1_000_000, "#,###.0#", lang)}.`;
+
 /** `$"Inverter '{txt_…_Inverter_Fields_Label.Value}' will be saved, please wait..."` (Y:10181) — verbatim. */
 export const inverterSaveProgressText = (label: string): string => `Inverter '${label}' will be saved, please wait...`;
 
@@ -3948,7 +3969,7 @@ export const inverterSaveProgressText = (label: string): string => `Inverter '${
  * `Value` / `DefaultSelectedItems`: the label, the catalogue inverter, its Other Supplier, the stored
  * types, `'Warranty [Years]'`, `'Number of Inverters'`, `Text('Nominal Power [kW]', "#.0#")`.
  */
-export function inverterFormDefaults(row: SimpleTypeRow | null): InverterFormState {
+export function inverterFormDefaults(row: SimpleTypeRow | null, lang: Lang = "en-US"): InverterFormState {
   return {
     label: row?.label ?? "",
     supplierId: row?.catalogueId ?? null,
@@ -3956,7 +3977,7 @@ export function inverterFormDefaults(row: SimpleTypeRow | null): InverterFormSta
     inverterTypes: [...(row?.typeValues ?? [])],
     warranty: row?.warranty === null || row?.warranty === undefined ? "" : String(row.warranty),
     numberOfInverters: row?.numberOfInverters === null || row?.numberOfInverters === undefined ? "" : String(row.numberOfInverters),
-    nominalPower: textFormat(row?.nominalPower, "#.0#"),
+    nominalPower: textFormat(row?.nominalPower, "#.0#", lang),
     dirty: new Set<string>(),
   };
 }
@@ -3997,12 +4018,12 @@ export function validateInverterForm(
     otherSupplier: opts.otherSupplierChosen && d("otherSupplier") && isBlank(other) ? INVERTER_MSG.blank : null,
     inverterTypes: d("inverterTypes") && form.inverterTypes.length === 0 ? INVERTER_MSG.blank : null,
     warranty: integerRangeError(form.warranty, 40, INVERTER_MSG.warrantyRange, lang),
-    numberOfInverters: integerRangeError(form.numberOfInverters, 1_000_000, INVERTER_MSG.largeRange, lang),
+    numberOfInverters: integerRangeError(form.numberOfInverters, 1_000_000, inverterLargeRange(lang), lang),
     nominalPower: isBlank(form.nominalPower.trim())
       ? null
       : !isDecimalWithPlaces(form.nominalPower.trim(), 2, lang)
         ? INVERTER_MSG.twoDecimals
-        : inRange(form.nominalPower.trim(), 0, 1_000_000, lang) ? null : INVERTER_MSG.largeRange,
+        : inRange(form.nominalPower.trim(), 0, 1_000_000, lang) ? null : inverterLargeRange(lang),
   };
 }
 

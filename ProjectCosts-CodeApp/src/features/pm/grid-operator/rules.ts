@@ -230,24 +230,26 @@ export const GRID_OPERATOR_SCREEN_TEXT = {
 export function formatDecimal(
   value: number | null | undefined,
   maxFractionDigits: 2 | 3,
+  language: Lang = "en-US",
 ): string {
   if (value === 0) return "0";
-  return formatDecimalCanvasParity(value, maxFractionDigits);
+  return formatDecimalCanvasParity(value, maxFractionDigits, language);
 }
 
 export function formatDecimalCanvasParity(
   value: number | null | undefined,
   maxFractionDigits: 2 | 3,
+  language: Lang = "en-US",
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  if (Number.isInteger(value)) return textFormat(value, "#");
-  return textFormat(value, maxFractionDigits === 2 ? "#0.0#" : "#0.0##");
+  if (Number.isInteger(value)) return textFormat(value, "#", language);
+  return textFormat(value, maxFractionDigits === 2 ? "#0.0#" : "#0.0##", language);
 }
 
 /** `'Voltage level [kV]'` and the two diameters — one to two fraction digits. */
-export const formatTwoPlaces = (v: number | null | undefined) => formatDecimal(v, 2);
+export const formatTwoPlaces = (v: number | null | undefined, language: Lang = "en-US") => formatDecimal(v, 2, language);
 /** The two lengths — one to three fraction digits. */
-export const formatThreePlaces = (v: number | null | undefined) => formatDecimal(v, 3);
+export const formatThreePlaces = (v: number | null | undefined, language: Lang = "en-US") => formatDecimal(v, 3, language);
 
 /* ════════════════════════════════════════════════════════════════ validation ════ */
 
@@ -471,7 +473,7 @@ export const canSwitchTabs = (state: GatingState): boolean =>
 /* ════════════════════════════════════════════════════════════════════ dirty ════ */
 
 /** The bound values (`Value: gblRecordGridOperator.<column>`), i.e. what Cancel restores. */
-export function toForm(record: GridOperatorRecord | null): GridOperatorForm {
+export function toForm(record: GridOperatorRecord | null, language: Lang = "en-US"): GridOperatorForm {
   if (!record) return emptyForm();
   return {
     operator: record.operator ?? "",
@@ -480,10 +482,10 @@ export function toForm(record: GridOperatorRecord | null): GridOperatorForm {
     expansionDetails: record.expansionDetails ?? "",
     substationConstructionRequired: record.substationConstructionRequired,
     substationOperator: record.substationOperator ?? "",
-    lengthInternal: formatThreePlaces(record.lengthInternal),
-    diameterInternal: formatTwoPlaces(record.diameterInternal),
-    lengthExternal: formatThreePlaces(record.lengthExternal),
-    diameterExternal: formatTwoPlaces(record.diameterExternal),
+    lengthInternal: formatThreePlaces(record.lengthInternal, language),
+    diameterInternal: formatTwoPlaces(record.diameterInternal, language),
+    lengthExternal: formatThreePlaces(record.lengthExternal, language),
+    diameterExternal: formatTwoPlaces(record.diameterExternal, language),
   };
 }
 
@@ -635,7 +637,8 @@ export function buildPayload(
   return {
     [`${GRID_OPERATOR_LOOKUP.project}@odata.bind`]: bind(ES.projects, project.id),
     [GRID_OPERATOR_COL.operator]: textColumn(form.operator),
-    [GRID_OPERATOR_COL.voltageLevel]: numericColumn(form.voltageLevel, language),
+    // Voltage is dot-only in every language (validateVoltage bans the comma, as the canvas does).
+    [GRID_OPERATOR_COL.voltageLevel]: numericColumn(form.voltageLevel, "en-US"),
     [GRID_OPERATOR_COL.expansionRequired]: form.expansionRequired,
     [GRID_OPERATOR_COL.expansionDetails]: textColumn(form.expansionDetails),
     [GRID_OPERATOR_COL.substationConstructionRequired]: form.substationConstructionRequired,

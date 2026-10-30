@@ -17,6 +17,38 @@ first?"*
 - Scope the run to the screens the change touches. A full run is only for a release or when asked.
 - A failing parity row is reported to the user, not fixed silently, and not a reason to commit.
 
+## The apps being compared (background from the product owner, 29 Oct 2026)
+
+Two Canvas apps make up the product; the code app replaces both in one app.
+
+| Canvas app | What it holds | Opened how |
+|---|---|---|
+| **Project Management app** (primary) | The Project Management screens AND the Application Settings (admin) screens in the same app. The Project Overview is the landing screen | directly |
+| **Cost app** | The five cost screens (CAPEX/DEVEX, Add Cost from Table, OPEX, Land Lease, Contracts) | from the PM app: with a project selected, **Edit Costs** launches the Cost app with the project's GUID in the URL (`projectId=<guid>`), and the Cost app opens that project's data |
+
+In the PM app, selecting a project enables **Edit Project** (opens the PM screens, General tab first, with the other PM navigation) and **Edit Costs**.
+In the code app one app serves all of it: `Edit Costs` and `Edit Project` open a new tab of the same app with launch parameters
+(`costScreen` / `pmScreen` plus `projectId`, CONVENTIONS rule 12).
+
+**Canvas play links in VSBCloud_Dev** (from the product owner, 29 Oct 2026; also the defaults in `playwright.config.ts`):
+
+- Project Management app (with Application Settings): `https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/a/67054ad6-e70b-4738-a3e6-125384fe2b4b?tenantId=e3bab30b-3902-4ce6-b575-f005f94c78c1`
+- Cost app: `https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/a/ab3554c5-a4fc-4436-8825-8a84484ec5ea?tenantId=e3bab30b-3902-4ce6-b575-f005f94c78c1`; add `&projectId=<guid>` to open a project, which is what **Edit Costs** does.
+
+**Do not mix up the ids.** `807a2fba-665c-40f3-b158-ffe822aa7da4` is the CODE app (`power.config.json`), in VSBCloud_Dev
+(`be41add6-6f60-ebb0-9c73-2480d6bc615d`). A link with that id, or with a `#/costs/...` route, is the deployed code app, not a Canvas app.
+The Canvas apps have their own ids in each environment (the ids in the solution export do not exist in VSBCloud_Dev). For a comparison
+run, get the two Canvas play links from the owner: one for the Project Management app, one for a Cost app opened for a named project.
+Note: the deployed code app uses the same player frame name as a Canvas app, so the suite tells them apart by `data-control-name`
+(Canvas) and `data-testid` (code app), never by the frame.
+
+## Run order (standing instruction, 29 Oct 2026)
+
+**Always run the Canvas app first, then the code app.** The canvas run is the reference: its results (texts, states, sizes, messages,
+values) are recorded first, and the code app run is then compared with them. Do not run the code app first and compare it with the YAML
+alone. A rule-map row is only "Matched" once the canvas browser run has confirmed it. Order of work for a screen: rule map from the
+YAML, Canvas run, code app run, comparison, report.
+
 ## Inputs the user supplies each time (ask for what is missing)
 
 1. Role(s) / test account(s) to use (full access, read-only, other).

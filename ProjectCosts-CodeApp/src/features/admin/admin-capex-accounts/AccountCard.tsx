@@ -58,7 +58,8 @@ const useStyles = makeStyles({
   title: {
     flexGrow: 1, minWidth: 0, textAlign: "left",
     overflowX: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-    fontSize: tokens.fontSizeBase300,
+    // Canvas account caption: 13.3333 px (measured in the Canvas parity run), not the 14 px Fluent default.
+    fontSize: "13.3333px",
   },
   titleSelected: { fontWeight: tokens.fontWeightSemibold },
   /** `pcf_Account_AccountCardBody_SubAccounts.Width: =Min(…, 900)`; rows 32 px (`TotalRecords*32`). */

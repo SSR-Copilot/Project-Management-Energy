@@ -65,7 +65,8 @@ import { ContractPeriodDrawer } from "./ContractPeriodDrawer";
 const useStyles = makeStyles({
   page: {
     display: "flex", flexDirection: "column", rowGap: tokens.spacingVerticalM,
-    paddingTop: "15px", paddingLeft: "10px", paddingRight: "10px", paddingBottom: tokens.spacingVerticalXL,
+    // 29 Oct 2026 (Canvas parity run): the canvas rail starts at the content edge, as on every other settings screen, so no extra page inset.
+    paddingBottom: tokens.spacingVerticalXL,
     backgroundColor: palette.white, minHeight: "100%", boxSizing: "border-box", minWidth: "0",
   },
   // `alignItems: stretch` + `flexGrow: 1` so the row FILLS the column page instead of hugging

@@ -56,6 +56,7 @@ import {
   type BackgroundOutcome, type SavePlanDeps,
 } from "./addCostSheetBulk";
 import { planDeleteContract } from "@/features/cost/capex-costs/rules";
+import { logAction } from "@/platform/requestLog";
 import {
   contractUpserts, costWrites, recomputeContractTotal,
   type ExistingContract, type ExistingCost, type SaveFailure, type SheetRow,
@@ -522,7 +523,7 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * and `UpdateMultiple` still has to fall back to per-row PATCHes (a 501 mid-save), the fallback
  * re-checks those ids first (`upsertEachRow`'s guard), because a PATCH is an upsert.
  *
- * LOG. One `console.info` per save: total ms, requests, per-step timings (each bulk request's own
+ * LOG. One `[VSB] ACTION` console line per save (`platform/requestLog.ts`): total ms, requests, per-step timings (each bulk request's own
  * server duration in brackets, e.g. `upsert contracts (create 1 req bulk [980 ms], update 1 req
  * bulk [10.7 s])`), then the gate's peak
  * in-flight count, the average and maximum gated request duration, whether verify ran, and how
@@ -670,7 +671,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       timings.push(`${label} (${groups}) ${elapsed(t0)} ms`);
     }
   };
-  const logFailure = () => console.info(
+  const logFailure = () => logAction(
     `Add Cost from Table save failed after ${elapsed(started)} ms (${timings.join(", ")}); ${measures()}`,
   );
   if (refreshBeforePlan) {
@@ -701,7 +702,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       const isContracts = table.entitySetName === CAPEX_CONTRACTS.entitySetName;
       if (isContracts ? deferContractDeletes : deferCostDeletes) {
         // Only a deferred kind: `executeSavePlan` sends it after the writes settled.
-        console.info(backgroundDeleteStartLine(
+        logAction(backgroundDeleteStartLine(
           isContracts ? "contracts" : "costs", ids.length, elapsed(started),
           busySlots(isContracts ? contractDeleteGate : costDeleteGate),
           isContracts ? CONTRACT_DELETE_LIMIT : COST_DELETE_LIMIT,
@@ -758,7 +759,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   const shown = timings.filter((entry) => !hidden.has(entry));
   if (deferredCosts > 0) shown.push("delete costs deferred");
   if (deferredContracts > 0) shown.push("delete contracts deferred");
-  console.info(
+  logAction(
     `Add Cost from Table save: ${elapsed(started)} ms, `
       + `${result.requests.total} requests (${shown.join(", ")}); ${measures()}`,
   );
@@ -771,7 +772,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   );
   const background = settled.then((outcome) => {
     try {
-      console.info(backgroundDeleteLogLine(
+      logAction(backgroundDeleteLogLine(
         outcome, { costs: deletes.costs.sent, contracts: deletes.contracts.sent }, elapsed(started),
       ));
     } catch {

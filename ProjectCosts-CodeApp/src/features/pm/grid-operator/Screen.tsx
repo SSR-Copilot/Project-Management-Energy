@@ -162,7 +162,8 @@ export default function GridOperatorScreen() {
   const s = useStyles();
   const skin = useFieldSkin();
   const controlClass = useFieldControlClass();
-  const { projectId } = useSession();
+  // The user's language (`Language()` in the canvas): lengths and diameters follow its decimal separator (voltage stays dot-only).
+  const { projectId, locale: lang } = useSession();
   const [params, setParams] = useSearchParams();
   const tab = parseTab(params.get("tab"));
 
@@ -172,7 +173,7 @@ export default function GridOperatorScreen() {
   const project = projectQ.data;
   const record = recordQ.data;
 
-  const baseline = useMemo(() => toForm(record), [record]);
+  const baseline = useMemo(() => toForm(record, lang), [record, lang]);
   const [edited, setEdited] = useState<GridOperatorForm | null>(null);
   const [touched, setTouched] = useState<ReadonlySet<GridOperatorField>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
@@ -181,7 +182,7 @@ export default function GridOperatorScreen() {
   const loading = projectQ.isLoading || recordQ.isLoading;
   const busy = writes.progress !== null;
   const gating = { project, canEdit: GRID_OPERATOR_CAN_EDIT };
-  const validity = validateForm(form, touched);
+  const validity = validateForm(form, touched, lang);
   const lock = loading ? [] : pageLock(project);
   const saveEnabled = !loading && canSave({ project, canEdit: GRID_OPERATOR_CAN_EDIT, form, baseline, touched, busy });
   const cancelEnabled = !busy && canCancel(form, baseline);
@@ -203,7 +204,7 @@ export default function GridOperatorScreen() {
   const choice = (f: GridOperatorField) => form[f] as number | null;
   const onSave = async () => {
     writes.clear();
-    const ids = await writes.run(saveGridOperatorJob(form, project, record));
+    const ids = await writes.run(saveGridOperatorJob(form, project, record, lang));
     if (ids !== null) {
       setEdited(null); setTouched(new Set());
       // The canvas `Notify`: a bar across the top of the app, gone after a second (PO, 27 Oct 2026).

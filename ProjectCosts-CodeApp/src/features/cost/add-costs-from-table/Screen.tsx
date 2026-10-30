@@ -13,7 +13,7 @@
  * DELETION BEHAVIOUR is a single switch — `CANVAS_PARITY_DELETION` below.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button } from "@fluentui/react-components";
+import { Button, Switch } from "@fluentui/react-components";
 import { Add20Regular, Delete20Regular, Copy20Regular } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState, FormPanel, LoadingOverlay, PanelButtons } from "@/components";
@@ -30,7 +30,9 @@ import {
 } from "./rules";
 import { outputRowsToSheetRows, prepareSheetSave, sheetRowsToGrid } from "./spreadsheet/adapter";
 import { SpreadSheetComp, gridToJson, type SheetGrid } from "./spreadsheet/SpreadSheet";
+import { currentYearIndex } from "./spreadsheet/viewColumns";
 import { saveButtonDisabled, saveRequestRows } from "./saveRetry";
+import { logAction } from "@/platform/requestLog";
 
 /**
  * Canvas-exact deletion, ON — the client's explicit choice.
@@ -90,6 +92,11 @@ export default function AddCostsFromTableScreen() {
   const [addRowToken, setAddRowToken] = useState(0);
   const [deleteRowToken, setDeleteRowToken] = useState(0);
   const [copyTableToken, setCopyTableToken] = useState(0);
+  /*
+   * NEW (no canvas equivalent, D67): the table opens on the current year only; the switch shows every year. It only changes
+   * which columns are drawn — the grid, the read-back, validation, Copy Table and Save always use every year.
+   */
+  const [showAllYears, setShowAllYears] = useState(false);
   /*
    * Identity key → id of every NEW row a save attempt of THIS loaded sheet sent. Kept across a
    * failed save on purpose: the retry sends the same ids, so it updates what the failed attempt
@@ -232,7 +239,7 @@ export default function AddCostsFromTableScreen() {
     const t = prepared.timings;
     const ms = (n: number) => n.toFixed(1);
     // One line, so a slow Save can be pinned on the client side or the network side at a glance.
-    console.info(
+    logAction(
       `Add Cost from Table prepare: ${ms(t.total)} ms (round-trip check ${ms(t.roundTripCheck)}, `
       + `align ${ms(t.align)}, diff ${ms(t.diff)}, deletions ${ms(t.deletions)}, `
       + `orphans ${ms(t.orphans)}; last edit's grid read-back ${ms(readBackMs.current)}, `
@@ -321,6 +328,10 @@ export default function AddCostsFromTableScreen() {
           <Button aria-label="Copy Table" data-testid="btn_CopyData_SpreadSheet_Costs_ProjectCosts_TableCommandBar_AddDataTable_3" appearance="transparent" icon={<Copy20Regular />} onClick={() => setCopyTableToken((t) => t + 1)}>
             Copy Table
           </Button>
+          <Switch
+            label="Show all years" aria-label="Show all years" data-testid="add-costs-show-all-years"
+            checked={showAllYears} onChange={(_, d) => setShowAllYears(d.checked)}
+          />
         </div>
 
         {saveError ? <div className="canvas-error" role="alert">{saveError}</div> : null}
@@ -347,6 +358,7 @@ export default function AddCostsFromTableScreen() {
             addRowToken={addRowToken}
             deleteRowToken={deleteRowToken}
             copyTableToken={copyTableToken}
+            visibleYearIndex={showAllYears ? null : currentYearIndex(currentYear, years.start, years.years.length)}
           />
         </div>
       </div>

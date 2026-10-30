@@ -61,7 +61,7 @@ import {
   tariffPriceCaption, tariffPriceP90Caption, siteQualityCaption, correctionFactorCaption,
   biddingPriceCaption, balancingPriceCaption, inflationProfileFieldCaption, contractYearsOption,
   contractMonthsOption, balancingYearsOption, balancingMonthsOption, balancingDurationText,
-  shiftOfCodCell, bareRegion, newContractForm, applyRevenueEngine, editContractForm, editField,
+  shiftOfCodCell, bareRegion, newContractForm, applyRevenueEngine, editContractForm, localizeContractForm, editField,
   withTerm, toggleCountryInflation, changeInflationStartYear, resyncNegativePrice,
   planSaveContract, planSaveBalancing, saveContractJob, deleteContractJob, saveBalancingJob,
   deleteBalancingJob, SPINNER,
@@ -428,7 +428,7 @@ export default function ProjectRevenuesScreen() {
     writes.clear();
     setHedgeError(null);
     setEditingVolumesFor(null);
-    setForm(newContractForm(project, subaccountQ.data?.id ?? null));
+    setForm(localizeContractForm(newContractForm(project, subaccountQ.data?.id ?? null), lang));
     setPanel("contract");
   };
 
@@ -437,7 +437,7 @@ export default function ProjectRevenuesScreen() {
     writes.clear();
     setHedgeError(null);
     setEditingVolumesFor(hedgeTypeFromValue(c.hedgeType) === "individual" ? c.id : null);
-    setForm(editContractForm({ contract: c, project, volumes: [] }));
+    setForm(localizeContractForm(editContractForm({ contract: c, project, volumes: [] }), lang));
     setPanel("contract");
   };
 
@@ -452,10 +452,10 @@ export default function ProjectRevenuesScreen() {
   const onType = (label: string) => {
     if (!project || !form) return;
     setForm({
-      ...applyRevenueEngine({
+      ...localizeContractForm(applyRevenueEngine({
         project, rows: assumptions.data, region, label, productionExists: productionQ.data,
         subaccountId: form.subaccountId, profiles: inflationQ.data, language: lang,
-      }),
+      }), lang),
       ...(form.mode === "Edit" ? { mode: "Edit" as const, contractId: form.contractId } : {}),
     });
   };
@@ -550,7 +550,7 @@ export default function ProjectRevenuesScreen() {
   /* ─────────────────────────────────────────────────────────── commands ──── */
 
   const bar = contractCommandBar(selectedContract, blocked);
-  const cardCtx = { country, technology, currencyName: currencyQ.data?.name ?? null, region };
+  const cardCtx = { country, technology, currencyName: currencyQ.data?.name ?? null, region, language: lang };
   const balancingBar = balancingCommandBar(periods, null, project?.clusterStateOrder ?? null);
   const clusterReached = balancingClusterReached(project?.clusterStateOrder);
 

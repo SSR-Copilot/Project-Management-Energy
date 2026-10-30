@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { AppToaster, ErrorBoundary } from "@/components";
 import { vsbTheme } from "@/theme/fluent";
 import { isRetryable } from "@/platform/errors";
+import { attachQueryLog } from "./queryLog";
 import { SessionProvider } from "./SessionContext";
 
 /**
@@ -26,6 +27,9 @@ export const queryClient = new QueryClient({
     mutations: { retry: false },
   },
 });
+
+// Every load and save prints one `[VSB] ACTION` summary line in the console (`app/queryLog.ts`).
+attachQueryLog(queryClient);
 
 /**
  * The app's router: a HASH data router.

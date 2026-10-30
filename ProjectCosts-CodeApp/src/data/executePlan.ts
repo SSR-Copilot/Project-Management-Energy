@@ -39,6 +39,7 @@
 import { getClient } from "@microsoft/power-apps/data";
 import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo";
 import { isRecordGone, unwrap } from "@/platform/errors";
+import { logData } from "@/platform/requestLog";
 import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
 import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
 
@@ -165,6 +166,9 @@ export async function executePlan(
       }
       const data = resolveData(write.data, createdIds);
       const label = write.label ?? `${operation}: ${write.reason}`;
+      const t0 = performance.now();
+      /** One DATA line per write (a guarded update logs itself inside `updateRecordIfExists`). */
+      const logged = () => logData({ kind: write.op, target: write.entitySet, rows: 1, ms: performance.now() - t0, ok: true });
       if (write.op === "create") {
         const key = primaryKeyOf(write.entitySet);
         const row = unwrap(
@@ -178,6 +182,7 @@ export async function executePlan(
         const newId = row?.[key];
         if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
         createdIds.push(newId);
+        logged();
       } else if (write.op === "update" && write.guarded === true) {
         const primaryKey = primaryKeyOf(write.entitySet);
         if (typeof client.retrieveMultipleRecordsAsync !== "function") {
@@ -200,10 +205,12 @@ export async function executePlan(
           ),
           label,
         );
+        logged();
         invalidatePageTokens(write.entitySet);
       } else {
         primaryKeyOf(write.entitySet);
         unwrap(await client.deleteRecordAsync(write.entitySet, id!), label);
+        logged();
         invalidatePageTokens(write.entitySet);
       }
       done += 1;

@@ -19,6 +19,7 @@ import "./MySpreadsheet.css";
 import DropdownEditor from "./CostPaidBy";
 import YesNoEditor from "./YesNoDropDown";
 import { findNearestAccountHeaderRow } from "./util_dataset";
+import { fromView, toView, viewColumns } from "./viewColumns";
 
 export interface SheetCell extends CellBase<string> {
   value: string;
@@ -41,6 +42,12 @@ export interface ISpreadSheetProps {
   addRowToken?: number;
   deleteRowToken?: number;
   copyTableToken?: number;
+  /**
+   * Which year block the table shows (zero-based), or `null` / omitted for every year. NEW — no canvas
+   * equivalent (D67): only the visible columns are rendered, which is what keeps a click or Tab fast; the
+   * grid itself, `onDataChange`, Copy Table and the save always work on every column.
+   */
+  visibleYearIndex?: number | null;
 }
 
 const generateRowID = (rowIndex: number) => `Row_${rowIndex + 1}`;
@@ -238,7 +245,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   onDataChange,
   subaccountDataIn,
   onAddRow, onDeleteRow, onCopyTable,
-  addRowToken, deleteRowToken, copyTableToken,
+  addRowToken, deleteRowToken, copyTableToken, visibleYearIndex = null,
 }) => {
   const [data, setData] = React.useState<SheetGrid>(() => decorateGrid(initialData));
   const selectedRowIndexRef = React.useRef<number | null>(null);
@@ -262,9 +269,17 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData]);
 
+  const width = data[0]?.length ?? 0;
+  const columns = React.useMemo(() => viewColumns(width, visibleYearIndex), [width, visibleYearIndex]);
+  // The visible slice. Its cells ARE the full grid's cells, so a view costs one array per row, not a copy.
+  const viewData = React.useMemo(() => (columns ? toView(data, columns) : data), [data, columns]);
+
   const handleChange = React.useCallback(
     (newDataArg: Matrix<SheetCell>) => {
-      const newDataIn = newDataArg as SheetGrid;
+      // An edit made in a one-year view is written back into the full-width grid first; every rule below then sees the whole sheet.
+      const newDataIn = (columns
+        ? fromView<SheetCell>(newDataArg as (SheetCell[] | undefined)[], data, columns, width, () => ({ value: "" }))
+        : newDataArg) as SheetGrid;
       if (!Array.isArray(newDataIn) || newDataIn.length === 0) return;
 
       const headerRow = data[0] ?? [];
@@ -343,7 +358,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
       setData(sanitizedData);
     },
-    [data],
+    [data, columns, width],
   );
 
   const handleSelect = React.useCallback(
@@ -353,8 +368,8 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
       range?: unknown;
     }) => {
       type PointRange = { start: { row: number; column: number }; end: { row: number; column: number } };
-      const range = (selection?.normalizeTo?.(data)?.toRange?.(data)
-        ?? selection?.toRange?.(data)
+      const range = (selection?.normalizeTo?.(viewData)?.toRange?.(viewData)
+        ?? selection?.toRange?.(viewData)
         ?? selection?.range
         ?? null) as PointRange | null;
 
@@ -368,8 +383,9 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
       const er = range.end.row;
       const ec = range.end.column;
 
-      const lastRow = data.length - 1;
-      const lastCol = (data[0]?.length ?? 1) - 1;
+      // Selection coordinates are the VIEW's: "the whole worksheet" means every visible column.
+      const lastRow = viewData.length - 1;
+      const lastCol = (viewData[0]?.length ?? 1) - 1;
 
       const isFullWidth = sc === 0 && ec === lastCol;
       const isEntireWorksheet = isFullWidth && (sr === 0 || sr === 1) && er === lastRow;
@@ -383,7 +399,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
       selectedRowIndexRef.current = er;
     },
-    [data],
+    [viewData],
   );
 
   // onDataChange fires whenever the sheet's data settles (mirrors the PCF's OnSave-timer trigger,
@@ -468,7 +484,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
 
   return (
     <div style={{ height: "100%", width: "100%", overflow: "auto" }}>
-      <Spreadsheet data={data} onChange={handleChange} onSelect={handleSelect} />
+      <Spreadsheet key={columns ? "one-year" : "all-years"} data={viewData} onChange={handleChange} onSelect={handleSelect} />
     </div>
   );
 };

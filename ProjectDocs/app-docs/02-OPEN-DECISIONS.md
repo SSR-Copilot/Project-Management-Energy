@@ -5175,6 +5175,12 @@ The Apply / Apply All controls in the screenshot are NOT taken over (D61).
 | 3 | Header labels: modern Text, default size (14 px), Semibold, in a 32 px #FAFAFA strip | Inherited from the table | **14 px** set explicitly |
 | 4 | `lbl_BlankSubLabels_…` width 110 (Technology 100, Cluster 1-4 80, FID 60, Cluster 5 80, Operational Lifetime 160, Sales Start 80, Sales End 100) | 130, so every column after it sat 20 px too far right | **110**; table minimum width 1010 |
 
+| 11 | Columns keep their fixed widths; the grey strip runs to the right edge (the strip is stretched, the labels are not) | The table filled the window, so every fixed column was stretched about 1.6 times (found by E2E-MILESTONES-003) | A trailing empty column takes the remaining width; the 11 real columns keep 100, 110, 80 ... |
+| 12 | Header strip 32 px, no rule under it | 39 px (taller header button and a row border) | Header button pinned to 32 px, no row border |
+| 13 | Data rows 55 px, no rule between rows, labels padded 4 px (measured in the Canvas run, 29 Oct) | Rows 61 px: "Duration [months]" wrapped to three lines in the 110 px column | 4 px cell padding, no row border |
+| 14 | Country name 14.6667 px (Label, Medium 11 pt) | 14 px | 14.6667 px |
+| 15 | Header labels stay on one line; `lbl_SalesStartDate_…` has `Wrap: false` (AMS:431-439) and the label boxes carry no padding | "Sales Start" wrapped onto two lines (seen by the user): Fluent's header cell pads both sides, leaving too little room in the 80 px column | No horizontal padding on the header cells of the value columns, and no wrapping; the comparison test now fails on any header label that is not one line |
+
 Finding: in the screenshot every column is 12.5 % wider than the YAML (Cluster 90, FID 66, Operational Lifetime 180, Sales End 112) and the text
 is larger by the same factor. That is the canvas player scaling the page to the window, not a design size, so the code app keeps the YAML sizes.
 
@@ -5192,3 +5198,56 @@ Source: `con_Admin_MilestoneAssumtion_Form` (AMS:999-2670), measured against the
 | 10 | Input text is clipped in narrow cells ("3…", "0…") because the canvas input has 8 px padding in a 60 px box | n/a | Not reproduced: the values show in full (SOURCE DEFECT, visible-only) |
 
 Not changed: the title bar, Save and Cancel are the shared `FormPanel` footer used by every panel, and already match the canvas look.
+
+## D63 · The admin left menu opens with both groups expanded (29 Oct 2026) — PROPOSED
+
+Found by the first Canvas-first parity run (`E2E-PARITY-REPORT-2026-10-29.md`). **Not product-approved**; uncommitted.
+
+- **Canvas:** opening Application Settings shows `Project Gate` and `Standard Assumptions` both expanded, so Check List Settings, Project Gates, CAPEX Accounts, Milestones, Costs and Contracts are all visible.
+- **Code app before:** only the group that holds the current screen opened (Project Gate on Check List Settings), so Milestones, Costs and Contracts needed an extra click.
+- **Now:** `LeftNav` opens both groups on every admin screen (`components/LeftNav.tsx`). A group can still be folded by the user.
+- **Not changed:** the Cost and Project rails keep their own rule (the OPEX group opens when the current screen is inside it).
+
+## D64 · Numbers follow the user's language on every PM screen and the Cost messages (29 Oct 2026) — PROPOSED
+
+Requested by the user after the Canvas-first run showed that the Canvas reads and shows numbers with `Language()` (a German user types and sees "1,5", an English user "1.5").
+**Not product-approved**; uncommitted. Audit: a read of ~135 `Language()` sites in the Canvas YAML against the code (`E2E-PARITY-REPORT-2026-10-29.md`, "Numbers and language").
+Verified in the code before changing: Generators, Planning and Grid Operator never read the session language, so their validators always used en-US, while
+Finance, Production, Revenues and General Data did. Several boxes also OPENED in US text ("1.50") while the validator for a comma language expected "1,50".
+
+| # | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | `Text(n, fmt, Language())` and the implicit-locale `Text(n, fmt)` | `textFormat` (Generators) was en-US only | `textFormat(value, pattern, lang)` and `forLanguage`: en-US text with "." and "," swapped for a comma-decimal language; the default stays en-US |
+| 2 | Generators validators and card text follow the language | The screen never passed a language (about 30 call sites) | Screen reads `locale` and passes it: validators, panel opening values, card and grid text, range messages (`generators/rules.ts`, `Screen.tsx`) |
+| 3 | Planning height limit and acquisition boxes | en-US only | `toPlanningForm`, `aquisitionDraftFrom`, validators and save jobs take the language |
+| 4 | Grid Operator lengths and diameters; **voltage bans the comma** ("dot should be used instead") | en-US only | Lengths and diameters follow the language; **voltage stays dot-only in every language**, as the canvas does |
+| 5 | Finance DSCR `Text(x, "#.00")`, margins, step-ups, decommissioning and DSRA boxes, cards | The DSCR box opened "1.80x", which `validateDscr` rejects for a comma language | `formatDscr`, `fmtField`, `fmtCard`, `stepUpFromStorage`, `formatUpfrontFee`, `repaymentRowsOf` take the language |
+| 6 | Revenues card cells `Text(x, "#,##0.00", Language())` and the contract panel's boxes | en-US / en-GB hard-coded | Cells take the language; `localizeContractForm` writes the opening values in it (plain numbers only, idempotent) |
+| 7 | Contracts range messages `Text(max, "#,##0")` | Always German grouping ("1.000.000"), for every user | The message follows the language; with none given the old default is kept |
+| 8 | Capex total-cost message (`If(lang = "en", "2,250,000,000", "2.250.000.000")`) | The screen passed no language, so always the English form | The screen passes the session language |
+
+Not changed, on purpose or for lack of evidence (open points, none approved):
+
+- **Three number engines** (`powerFxNumeric`: language rule; `numeric`: Intl rule; `numberInput`: language / intl / both). They agree for en, de, fr, pl, es and it and differ for locales such as de-CH, es-MX, en-ZA, ja. Merging them is a design decision.
+- **Milestones accepts "." and ","** (D21, marked): the Canvas Language rule rejects the comma in en-US. Kept as decided; the E2E comparison keeps it as a known difference.
+- **Capex month boxes** parse with `Number()` and validate under the locale rule, and `initialCostValue` writes an invariant ".": reported by the audit from reading the code, not run, and not changed.
+- Hard-coded display formats still left: Production `fmtPercentTotal` (en-US), OPEX / Land Lease en-GB / en-US helpers, Admin Cost `GRID_LOCALE`, project overview capacity (en-GB), `locale.ts` fallback "de-DE" when the browser reports no language.
+- Month names in the Canvas are fixed English (`[$-en-US]mmmm`); the code app does the same.
+- **Not checked in a German browser.** The proof is the unit tests (UT-LOCALE-001 to 043: every box's opening text passes its own validator in en-US, en-GB, de-DE, pl-PL and fr-FR) and the unchanged default. A real run with the browser set to German is still to do.
+
+## D65 · Application Settings parity pass, Check List / Gates / CAPEX / Costs (29 Oct 2026) — PROPOSED
+
+Found by the Playwright parity run (see `E2E-PARITY-REPORT-APPSETTINGS-2026-10-29.md`). Changed to match the Canvas: Project Gates text sizes and colours, Status column width and Add Task inset; CAPEX account caption size; Costs page inset and breadcrumb size (also Contracts); Check List command bar height. **Needs a decision:** the default collapsed state of the country rail (Canvas collapsed, code app expanded) and the grey vs blue section chevrons on Costs/Contracts.
+
+## D66 · Request log in the browser console, every build (29 Oct 2026) — PROPOSED
+
+Product owner: trace every call and action; on in every build (no environment switch); Console only (no download button); the Add Cost from Table lines move to the same format.
+Canvas has no equivalent (its Monitor tool is a separate session). Lines are `[VSB] HTTP …` (every SDK request: method, path, status, ms, size), `[VSB] DATA …` (data-layer calls of one kind and table, summed into ONE line: rows, calls, total, average and slowest ms), `[VSB] ACTION …` (one page load or save: ms, requests, rows, operations). Counts and names only, never row values. Overlapping actions each count the requests made meanwhile. Code: `platform/requestLog.ts`, `app/queryLog.ts`, hooks in `platform/powerClient.ts`, `data/client.ts`, `data/executePlan.ts`; tests UT-REQLOG-001…022. Open: raw generated-service calls outside those helpers show only as HTTP lines (no row count).
+
+## D67 · Add Cost from Table: "Show all years" switch (29 Oct 2026) — PROPOSED
+
+Product owner request, to cut the click / Tab lag of the sheet (`react-spreadsheet` draws and re-evaluates every cell: about 28,000 for 225 rows x 10 years). NEW, no canvas equivalent: a switch "Show all years" in the toolbar beside Copy Table. Off (default) shows the 6 fixed columns plus the current year's 12 months (the nearest year when the current one is outside the sheet); on shows every year as before. **DIVERGENCE:** the canvas always shows every year; the default is now one year. Display only: the grid keeps every column, edits in the one-year view are written back into the full grid (`spreadsheet/viewColumns.ts`), hidden years are never touched, and `onDataChange`, validation, Copy Table and Save always use all years. A paste wider than the visible year is clipped to the visible columns. Tests UT-ADDCOST-VIEW-001…022. Open: whether the default should stay "current year" or be "all years"; a virtualized grid is still the fix for the all-years view.
+
+## D68 · Troubleshooting aids in the console log (29 Oct 2026) — PROPOSED
+
+Extends D66; console only, every build, no row values. (1) **Action ids:** each ACTION has an id (`a7`); HTTP, DATA and ACTION lines made while it was open end with `[a7]` (overlapping actions list every open id). (2) **ERROR lines:** every `trace("error" | "critical", …)` (so `userErrorText`, the error boundary, truncation guards) prints `[VSB] ERROR <what> — <root cause: HTTP status, server text, request id> @ <route>`; a critical one adds `· last actions: …` (the last five). A failed request's own trace stays in the buffer but prints no second line (its HTTP line is the record). (3) **SLOW:** a request over 3 s, an action over 5 s, or a DATA batch whose slowest call is over 3 s prints as a warning ending `· SLOW`. (4) **Unhandled errors:** `window` `error` and `unhandledrejection` are traced as critical (`platform/globalErrors.ts`, installed in `main.tsx`). Tests UT-REQLOG-030…043. Not built (not requested): a "Report a problem" copy button and a `?debug=1` facts line. The thresholds are constants in `platform/requestLog.ts`.

@@ -371,9 +371,11 @@ const logEntries = (line: string, label: string) =>
 const verifyReads = () => reads.filter((r) => r.label.startsWith("check existing "));
 
 type InfoSpy = { mock: { calls: unknown[][] } };
+/** Every `console.info` line, without the `[VSB] ACTION ` prefix the request log adds (`platform/requestLog.ts`). */
+const infoLines = (info: InfoSpy) => info.mock.calls.map((c) => String(c[0]).replace(/^\[VSB\] ACTION /, ""));
 /** The save's own `console.info` lines (success or failure), without the background-delete line. */
 const saveLines = (info: InfoSpy) =>
-  info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("Add Cost from Table save"));
+  infoLines(info).filter((l) => l.startsWith("Add Cost from Table save"));
 /** The first save line. */
 const saveLine = (info: InfoSpy) => saveLines(info)[0] ?? "";
 /**
@@ -381,11 +383,11 @@ const saveLine = (info: InfoSpy) => saveLines(info)[0] ?? "";
  * `background deletes started: …` lines logged when they are sent (`startLines`).
  */
 const backgroundLines = (info: InfoSpy) =>
-  info.mock.calls.map((c) => String(c[0]))
+  infoLines(info)
     .filter((l) => l.startsWith("Add Cost from Table background deletes:"));
 /** The `background deletes started: …` lines, one per deferred delete batch sent. */
 const startLines = (info: InfoSpy) =>
-  info.mock.calls.map((c) => String(c[0]))
+  infoLines(info)
     .filter((l) => l.startsWith("Add Cost from Table background deletes started:"));
 
 /**
@@ -1836,7 +1838,7 @@ describe("saveAddCostSheetBulk — the background deletes' log lines (item 1)", 
     const result = await saveAddCostSheet(typical());
     expect(result.background).toBeInstanceOf(Promise);
     // Both deferred kinds were SENT (after the writes), logged before the save line.
-    const lines = info.mock.calls.map((c) => String(c[0]));
+    const lines = infoLines(info);
     expect(startLines(info)).toHaveLength(2);
     for (const l of startLines(info)) expect(l).toMatch(STARTED);
     const firstStart = lines.findIndex((l) => STARTED.test(l));

@@ -196,7 +196,8 @@ export default function CapexCostsScreen() {
   const { data: book, isLoading, error, save, projectId } = useCostBook(scoped);
   const totals = useCapexTotals(isSummaryTab(category));
   const writes = useCapexWrites(scoped);
-  const { project } = useSession();
+  // The user's language: the range messages group their numbers the way the canvas does for it.
+  const { project, locale } = useSession();
   const isoCurrencyCode = project?.isoCurrencyCode;
   /** `Coalesce(gblRecordSelectedProjectCountry.'ISO Currency Code', "EUR")`, once. */
   const currency = currencyCode(project ?? {});
@@ -479,7 +480,7 @@ export default function CapexCostsScreen() {
   const countryName = project?.countryName;
   const showsTotalCost = Boolean(edit)
     && (edit?.distribution === "equal" || edit?.distributionScheme === "percent");
-  const totalCostCheck = validateTotalCost(costValue, countryName);
+  const totalCostCheck = validateTotalCost(costValue, countryName, locale);
   const totalCostError = showsTotalCost && costValue.trim() !== "" && !totalCostCheck.valid
     ? totalCostCheck.message
     : null;
@@ -496,7 +497,7 @@ export default function CapexCostsScreen() {
    * typed months; an Equal one computes them, so there is nothing to reject.
    */
   const monthErrors = edit && edit.distribution === "individual"
-    ? monthAmountErrors(edit.payments, edit.distributionScheme, countryName)
+    ? monthAmountErrors(edit.payments, edit.distributionScheme, countryName, locale)
     : new Map<string, string>();
 
   /*

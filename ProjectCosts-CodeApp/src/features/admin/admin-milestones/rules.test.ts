@@ -137,7 +137,7 @@ describe("Canvas text and typography", () => {
   });
 
   it("UT-ADMILE-019 typography: country Medium/Normal/black; values and sub-labels Large; technology ExtraLarge", () => {
-    expect(TYPOGRAPHY.countryName).toEqual({ fontSize: tokens.fontSizeBase300, fontWeight: tokens.fontWeightRegular, color: palette.black });
+    expect(TYPOGRAPHY.countryName).toEqual({ fontSize: "14.6667px", fontWeight: tokens.fontWeightRegular, color: palette.black });
     expect(TYPOGRAPHY.value).toEqual({ fontSize: "12px", fontWeight: tokens.fontWeightRegular });
     expect(TYPOGRAPHY.subLabel).toEqual({ fontSize: "12px", fontWeight: tokens.fontWeightRegular, color: tokens.colorNeutralForeground1 });
     expect(TYPOGRAPHY.technology).toEqual({ fontSize: "14px", fontWeight: tokens.fontWeightRegular });

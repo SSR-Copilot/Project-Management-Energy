@@ -142,9 +142,11 @@ export function LeftNav({ adminVisible = true }: { adminVisible?: boolean } = {}
 
   // The OPEX group starts open when the current screen is one of its children, which is
   // what the canvas rail showed on a deep link into Land Lease.
+  // The admin rail opens BOTH groups on every screen, as the canvas does (seen in the Canvas run, 29 Oct 2026: Project Gate and
+  // Standard Assumptions are both open when Application Settings opens), not only the group of the current screen.
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(parentOf(active, items) ? [parentOf(active, items) as string]
-      : section === "admin" ? ["GatesKey", "StandardAssumptionsKey"] : ["OpexCostsKey"]),
+    () => new Set(section === "admin" ? ["GatesKey", "StandardAssumptionsKey"]
+      : parentOf(active, items) ? [parentOf(active, items) as string] : ["OpexCostsKey"]),
   );
 
   const visible = useMemo(

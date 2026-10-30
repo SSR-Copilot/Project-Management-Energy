@@ -101,8 +101,16 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
   that fails if a screen draws its own small grey one (CONVENTIONS rule 21). Applies to every accordion and card header.
 - **Milestones matrix text and column width match the canvas** (28 Oct 2026, D62, proposed, not approved): technology name 14 px, values and
   sub-labels 12 px (the earlier port read the modern Text sizes as pt, so they were 20 px and 16 px), and the blank column 110 px instead of 130.
+  The columns now keep their fixed canvas widths instead of stretching with the window, and the strip is 32 px (D62 rows 11-12, found by the browser suite).
   The Edit panel follows the same sizes and the 80 px column layout (D62 rows 5-10), and its inputs show long values in full instead of the
   canvas's clipped "3…" and "0…".
+- **Canvas-first parity run found three more differences, now fixed** (29 Oct 2026, D62 rows 13-14, D63, proposed, not approved): the admin left menu opens with both
+  groups expanded as the Canvas does; Milestones rows are 55 px with 4 px cell padding (the sub-label no longer wraps to three lines); the country name is 14.6667 px.
+  The suite compares the code app with a measured Canvas reference on every run and fails on any unexplained difference.
+- **Numbers follow the user's language** (29 Oct 2026, D64, proposed, not approved): on Generators, Planning, Grid Operator, Finance and Revenues the boxes now OPEN in the
+  decimal separator their validators read (a German user no longer sees "1.80x" in a box that only accepts "1,80x"), cards and range messages use the language, and the Contracts
+  and Capex range messages group in it. The Grid Operator voltage stays dot-only, as in the canvas. A unit test per rule proves that each box's opening text passes its own
+  validator in five languages (UT-LOCALE). Found by comparing the code app with the Canvas run.
 - **Disabled Apply / Apply to All bars removed** from Admin Contract and Admin Cost (28 Oct 2026, D61, proposed, not approved). The canvas ships
   them permanently disabled with the sync call commented out, so they never did anything; the code app no longer draws them. Tests assert
   they are absent (UT-ADCONTR-936, UT-ADCOST-910).
@@ -229,3 +237,23 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 - **Waiting on the product owner:** D36 contradictions with D19, D22 and D24; the disabled Apply
   bars (D20); labels still containing record data; the Overview `clampPage` and inactive-project
   questions (G2).
+
+## Parity run, Application Settings (29 Oct 2026, D65) — fixed
+
+- **Project Gates:** header, people and gate/task text sizes and colours now equal the Canvas; Status column and Add Task inset aligned.
+- **CAPEX Accounts:** account caption size aligned (13.3333 px).
+- **Costs / Contracts:** page inset and breadcrumb size aligned.
+- **Check List Settings:** command bar height and caption inset aligned.
+- **New gate:** `e2e/appsettings.parity.spec.ts` compares each screen with the Canvas, text by text.
+
+## Request log (29 Oct 2026, D66) — fixed / new
+
+- **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
+
+## Add Cost from Table, year view (29 Oct 2026, D67) — fixed (default is a divergence, not approved)
+
+- A "Show all years" switch limits the table to the current year's columns, so clicking and Tab are fast on big sheets. Display only: save, validation and Copy Table still use every year. The canvas always shows every year.
+
+## Troubleshooting aids (29 Oct 2026, D68) — new
+
+- **Cross-cutting:** console lines carry an action id, errors print their Dataverse root cause with the route, slow requests and actions are flagged `SLOW`, and unhandled errors are logged with the last actions. The canvas silently swallowed these (`App.OnError`, B-1).

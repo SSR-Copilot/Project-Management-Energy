@@ -43,7 +43,8 @@ export function technologyName(value: number | undefined): string {
  */
 export const TYPOGRAPHY = {
   /** `lbl_ClusterName_…`: Medium, `FontWeight.Normal`, `gblAppColors.Label.Color` = black (AMS:814, 822-824, 833). */
-  countryName: { fontSize: tokens.fontSizeBase300, fontWeight: tokens.fontWeightRegular, color: palette.black },
+  // Measured in the Canvas run: 14.6667px (Medium 11pt), Open Sans, rgb(11, 11, 11). The font family stays the app-wide Open Sans decision.
+  countryName: { fontSize: "14.6667px", fontWeight: tokens.fontWeightRegular, color: palette.black },
   /** `lbl_TechnologyValue_…`: modern Text, ExtraLarge = 14px, Regular (AMS:766, 769). */
   technology: { fontSize: "14px", fontWeight: tokens.fontWeightRegular },
   /** `lbl_SubLabelsValue_…`: modern Text, Large = 12px, Regular, default font colour (AMS:751, 756; no FontColor set). */

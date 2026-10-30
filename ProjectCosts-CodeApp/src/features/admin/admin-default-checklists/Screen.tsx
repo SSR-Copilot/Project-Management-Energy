@@ -83,9 +83,10 @@ const useStyles = makeStyles({
     minHeight: "100%", boxSizing: "border-box",
   },
   /** `Size: gblAppSizes.Font.Medium` (11 pt); Semibold when it is the last selected cluster. */
-  caption: { fontSize: "14.7px", fontWeight: tokens.fontWeightRegular, color: palette.black },
+  caption: { fontSize: "14.6667px", fontWeight: tokens.fontWeightRegular, color: palette.black },
   captionSelected: { fontWeight: tokens.fontWeightSemibold },
-  commands: { paddingLeft: "0" },
+  // Canvas pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen: Height 32 (the shared bar is 40) and its first caption 8 px right of the shared bar's.
+  commands: { paddingLeft: "0", marginLeft: "8px", minHeight: "32px" },
 });
 
 /** `cmp_Admin_Project_Checklist_Header.Project` → `Name: "Checklist settings"` — verbatim (L90). */

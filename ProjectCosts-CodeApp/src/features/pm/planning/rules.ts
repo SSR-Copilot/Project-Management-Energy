@@ -39,7 +39,7 @@ import { CHOICE_PROCESS, ES, TEXT_MAX_LENGTH } from "@/data/dataverseNames";
 import { bind } from "@/data/odata";
 import { refusePlan, type WritePlan } from "@/data/writePlan";
 import type { PlanJob } from "@/data/usePlanWrite";
-import { textFormat } from "@/features/pm/generators/rules";
+import { forLanguage, textFormat } from "@/features/pm/generators/rules";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 
@@ -565,7 +565,7 @@ export const planningMessages = (v: PlanningValidity): string[] =>
 /* ═════════════════════════════════════════════════════════════ dirty tracking ════ */
 
 /** Each control's `Default` / `Value` from the stored row (Y:835-1986). */
-export function toPlanningForm(record: PlanningRecord | null): PlanningForm {
+export function toPlanningForm(record: PlanningRecord | null, language: Lang = "en-US"): PlanningForm {
   if (!record) return emptyPlanningForm();
   return {
     cooperation: record.cooperation,
@@ -579,7 +579,7 @@ export function toPlanningForm(record: PlanningRecord | null): PlanningForm {
     securedAccess: record.securedAccess ?? "",
     repoweringDetails: record.repoweringDetails ?? "",
     isHeightLimitation: record.isHeightLimitation,
-    heightLimitation: formatOneToTwoPlaces(record.heightLimitation),
+    heightLimitation: formatOneToTwoPlaces(record.heightLimitation, language),
   };
 }
 
@@ -600,14 +600,14 @@ export function emptyPlanningForm(): PlanningForm {
  * a blank field blocks Save until it is typed again. Here 0 shows "0" (as Admin Cost's `rateText`).
  * `formatOneToTwoPlacesCanvasParity` is the literal formula.
  */
-export function formatOneToTwoPlaces(value: number | null | undefined): string {
+export function formatOneToTwoPlaces(value: number | null | undefined, language: Lang = "en-US"): string {
   if (value === 0) return "0";
-  return formatOneToTwoPlacesCanvasParity(value);
+  return formatOneToTwoPlacesCanvasParity(value, language);
 }
 
-export function formatOneToTwoPlacesCanvasParity(value: number | null | undefined): string {
+export function formatOneToTwoPlacesCanvasParity(value: number | null | undefined, language: Lang = "en-US"): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return textFormat(value, Number.isInteger(value) ? "#" : "#0.0#");
+  return textFormat(value, Number.isInteger(value) ? "#" : "#0.0#", language);
 }
 
 export const dirtyFields = (form: PlanningForm, baseline: PlanningForm): PlanningField[] =>
@@ -1241,9 +1241,9 @@ export function planAquisitionSeedCanvasParity(
   return existing.some((r) => r.typeKind === kind) ? [] : types.filter((t) => t.type === kind);
 }
 
-export const aquisitionDraftFrom = (row: AquisitionStatusRow): AquisitionDraft => ({
-  secured: row.secured === null ? "" : String(row.secured),
-  required: row.required === null ? "" : String(row.required),
+export const aquisitionDraftFrom = (row: AquisitionStatusRow, language: Lang = "en-US"): AquisitionDraft => ({
+  secured: row.secured === null ? "" : forLanguage(String(row.secured), language),
+  required: row.required === null ? "" : forLanguage(String(row.required), language),
 });
 
 /* ═══════════════════════════════════════════════════════════════ custom choices ════ */

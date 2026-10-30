@@ -44,7 +44,7 @@ const COLUMNS = [
   { key: "contributors", label: "Contributors", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Contributors" },
   { key: "approvers", label: "Approvers", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Approvers" },
   { key: "notifications", label: "Notifications", width: 180, control: "lbl_Admin_ProjectGatest_Approvals_Header_Notifications" },
-  { key: "status", label: "Status", width: 90, control: "lbl_Admin_ProjectGatest_Approvals_Header_Status" },
+  { key: "status", label: "Status", width: 68, control: "lbl_Admin_ProjectGatest_Approvals_Header_Status" },
   { key: "action", label: "Action", width: 96, control: "lbl_Admin_ProjectGatest_Approvals_Header_Actions" },
 ] as const;
 
@@ -61,7 +61,8 @@ const addTaskDisabledReason = (tasksAvailable: boolean) => (tasksAvailable
 const useStyles = makeStyles({
   scroller: { overflowX: "auto", maxWidth: "100%" },
   table: { width: `${TABLE_WIDTH}px`, tableLayout: "fixed" },
-  headerCell: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase200 },
+  // Canvas header labels: Size gblAppSizes.Font.ExtraExtraSmall (8 pt = 10.67 px), colour measured in the Canvas run (rgb(11, 11, 11)).
+  headerCell: { fontWeight: tokens.fontWeightSemibold, fontSize: "10.6667px", color: "#0B0B0B" },
   gateRow: {
     // PGAS:1655 — Fill RGBA(0,0,0,0.1), DropShadow.Semilight.
     backgroundColor: "rgba(0,0,0,0.1)",
@@ -69,16 +70,16 @@ const useStyles = makeStyles({
   },
   cell: { verticalAlign: "top", paddingTop: space.s, paddingBottom: space.s },
   descriptionCell: { display: "flex", alignItems: "center", columnGap: space.s },
-  gateName: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase300 },
+  gateName: { fontWeight: tokens.fontWeightSemibold, fontSize: "12px", color: "#242424" },
   taskCell: { position: "relative", paddingLeft: "44px" },
   treeLine: {
     position: "absolute", left: "20px", top: 0, bottom: "50%", width: "18px",
     borderLeft: "1px solid #B0B0B0", borderBottom: "1px solid #B3B5B5",
   },
-  taskName: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase300, wordBreak: "break-word" },
+  taskName: { fontWeight: tokens.fontWeightSemibold, fontSize: "12px", color: "#242424", wordBreak: "break-word" },
   person: { display: "flex", flexDirection: "column", marginBottom: space.s },
-  personName: { fontSize: tokens.fontSizeBase200 },
-  personMail: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3, wordBreak: "break-all" },
+  personName: { fontSize: "10.6667px", color: "#0B0B0B" },
+  personMail: { fontSize: "10.6667px", color: "#0B0B0B", wordBreak: "break-all" },
   chip: {
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     minWidth: "110px", height: "25px", paddingLeft: space.s, paddingRight: space.s,
@@ -89,9 +90,9 @@ const useStyles = makeStyles({
   // PGAS:1088-1089 task chip: Fill RGBA(0,0,0,0.1), DropShadow.Semilight.
   taskChip: { backgroundColor: "rgba(0,0,0,0.1)", boxShadow: tokens.shadow4 },
   tooltip: { whiteSpace: "pre-line" },
-  dash: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
+  dash: { fontSize: "10.6667px", color: "#0B0B0B" },
   addTaskRow: { backgroundColor: palette.white },
-  addTask: { color: palette.themePrimary, marginLeft: "24px" },
+  addTask: { color: palette.themePrimary, marginLeft: "2px", fontSize: "12px" },
   warning: { color: palette.Warning, flexShrink: 0 },
   muted: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase200 },
 });
