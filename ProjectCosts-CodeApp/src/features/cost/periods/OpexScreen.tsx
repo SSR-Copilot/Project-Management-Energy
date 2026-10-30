@@ -23,7 +23,8 @@
  *   `inf_OpexCost_AlignWithDuration`                     → the amber info button in the row
  *   `con_OpexCosts_RightPanel_NewEditCost`               → `<FormPanel>` (left/right columns)
  *   `cmp_OpexCosts_PopUpConfirmation_DeleteCost`         → `<ConfirmDialog>`
- *   `cmp_OpexCosts_PopUpLoading`                         → `<LoadingOverlay>`
+ *   `cmp_OpexCosts_PopUpLoading`                         → `<WriteStatus>` + the write guard
+ *                                                          (D58 DIVERGENCE: no spinner, no scrim)
  *
  * Reference screenshots:
  *   `Cost App - O & M Selected Tab - Almost same for Landlease and other Opex also.png`
@@ -39,8 +40,10 @@ import {
   AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular,
   DeleteRegular, EditRegular, InfoRegular,
 } from "@fluentui/react-icons";
-import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, useCommandRowStyles, useStandardValueClass } from "@/components";
+import { ConfirmDialog, CostField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, WriteStatus, useCommandRowStyles, useStandardValueClass } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import {
   useAddStandardContract, useCostBook, useCountryInflation, useCountryInflationAreas,
@@ -58,7 +61,7 @@ import {
   defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
   inheritStartDateStandard, italyZone, matchesStandardAssumption, nextPeriodDescriptionPanel,
-  omDurationBadge, opexColumns, opexCommands,
+  guardOpexCommands, omDurationBadge, opexColumns, opexCommands,
   opexFormErrors, panelFieldModes, panelRateLabel, panelRequiredMarkers, panelTitle, planDeleteCost,
   resetStartDateFlag, resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
   showEurPerWtgField, showThresholdColumn, standardAssumptionFilter, startDateDefault,
@@ -680,9 +683,15 @@ export interface OpexScreenProps {
 export default function OpexScreen({ mode }: OpexScreenProps) {
   const styles = useStyles();
   const { project, projectId } = useSession();
+  // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
+  // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
   const { data: book, isLoading, error, save } = useCostBook();
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport(mode === "om" ? "O&M" : "Other OPEX");
   const areas = useCountryInflationAreas(extras.data?.countryId);
   /** `colOpexAccounts` / `colOpexSubaccounts` — real rows, not the constants this file carried. */
   const catalog = useOpexCatalog();
@@ -701,7 +710,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const [form, setForm] = useState<OpexForm | null>(null);
   const [deleting, setDeleting] = useState<OpexCost | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
-  /** `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` is showing. */
+  /**
+   * `locSpinnerInformationText` — the text `cmp_OpexCosts_PopUpLoading` showed. Since D58 it is
+   * the `<WriteStatus>` line, and non-null means a write is pending (the write guard).
+   */
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
 
   /* ── scope, once per render (`OnVisible`, `:9-64`) ─────────────────────── */
@@ -853,7 +865,19 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     setBanner(null);
   };
 
+  /**
+   * D58 — the guard that replaced `cmp_OpexCosts_PopUpLoading`'s screen cover: while the first
+   * load or any write runs, no command that starts a write may fire (the buttons are disabled
+   * too; this is the second line).
+   */
+  const writeDisabled = writeCommandsDisabled({
+    loading: isLoading,
+    writePending: busyLabel !== null || save.isPending || addStandard.isPending,
+    writeInFlight,
+  });
+
   const onCommand = (card: OpexCard, key: OpexCommandKey) => {
+    if (writeDisabled) return;
     const cardCosts = costsInScope(allCosts, mode, card.id);
 
     if (key === "newOpexProjectCostType") {
@@ -911,7 +935,9 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     if (key === "addStandardContract") {
       setBanner(null);
       setBusyLabel(OPEX_MSG.loadingStandardContract);
-      addStandard.mutate({
+      // `mutateAsync`, not `mutate(…, { onError })`: TanStack drops per-call callbacks once the
+      // screen unmounts, and a failure after the user left must still reach the toast (CA-15).
+      void addStandard.mutateAsync({
         mode,
         group: card.group,
         deviceId: card.deviceId,
@@ -931,10 +957,9 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
             area: null,
           },
         ) ?? undefined,
-      }, {
-        onError: (e: unknown) => setBanner(e instanceof Error ? e.message : String(e)),
-        onSettled: () => setBusyLabel(null),
-      });
+      })
+        .catch((e: unknown) => reportFailure(e instanceof Error ? e.message : String(e), setBanner))
+        .finally(() => setBusyLabel(null));
     }
   };
 
@@ -1042,7 +1067,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // one of the two can be named; the cascade is the phase worth naming when there is one.
     const cascades = selected !== null && childrenOf(allCosts, selected.id).length > 0;
     /*
-     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS.
+     * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS. (Since D58 the "spinner" is the
+     * `<WriteStatus>` line plus the write guard; the order is unchanged.)
      *
      * The canvas Save raises the spinner and dismisses the panel in ONE `UpdateContext` —
      * `{locSpinnerInformationText: "Saving OPEX cost...", locIsVisiblePopUpSpinner: true,
@@ -1063,7 +1089,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setBanner(OPEX_MSG.saveFailed("Save", message));
+      reportFailure(OPEX_MSG.saveFailed("Save", message), setBanner);
     } finally {
       setBusyLabel(null);
     }
@@ -1079,23 +1105,23 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     // the book diff issue a second, now-404 delete for every child. `plan.ids` is still what the
     // selection is cleared against.
     setBusyLabel(OPEX_MSG.deletingCost);
-    save.mutate(
-      { ...book, periods: book.periods.filter((p) => p.id !== deleting.id) },
-      {
-        onError: (e: unknown) => setBanner(e instanceof Error ? e.message : String(e)),
-        onSettled: () => setBusyLabel(null),
-      },
-    );
+    // `mutateAsync` so a failure after the screen was left still reaches the toast (CA-15).
+    void save.mutateAsync({ ...book, periods: book.periods.filter((p) => p.id !== deleting.id) })
+      .catch((e: unknown) => reportFailure(e instanceof Error ? e.message : String(e), setBanner))
+      .finally(() => setBusyLabel(null));
     if (plan.ids.includes(selection.selectedId ?? "")) setSelection(NO_SELECTION);
     setDeleting(null);
   };
 
   /* ── render ───────────────────────────────────────────────────────────── */
 
-  if (isLoading) {
-    return <LoadingOverlay mode="inline" label={`Loading ${OPEX_MODE_NAMES[mode]}…`} />;
-  }
-  if (!book || error) {
+  /*
+   * D60: the first load shows an inline spinner in the body ("Loading Operation & Maintenance…"), with the write
+   * commands disabled (`writeCommandsDisabled`) and `aria-busy` on the page, so the screen never
+   * looks idle while it loads. The load check still comes BEFORE the error check, so a load in
+   * progress never reads "Cost data is unavailable".
+   */
+  if (!isLoading && (!book || error)) {
     return (
       <EmptyState
         title="Cost data is unavailable"
@@ -1105,8 +1131,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   }
 
   // `lbl_OpexCosts_Content_GeneratorsInProject_Instruction.Visible` (`:309`) — O&M with an empty
-  // device gallery renders this and nothing else.
-  if (mode === "om" && cards.length === 0) {
+  // device gallery renders this and nothing else. Never while loading: no "no rows" text then.
+  if (!isLoading && mode === "om" && cards.length === 0) {
     return (
       <div className={styles.page}>
         <Text className={styles.instruction}>{OPEX_MSG.noGenerators}</Text>
@@ -1115,8 +1141,21 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} aria-busy={isLoading || undefined}>
       {banner ? <div className={styles.banner} role="alert">{banner}</div> : null}
+      {/*
+        * `cmp_OpexCosts_PopUpLoading` (`InformationText: =locSpinnerInformationText`, `Visible:
+        * =locIsVisiblePopUpSpinner`): the blocking spinner with the verbatim `OPEX_MSG` text
+        * shows for as long as the write runs (D60). The write guard also disables the write
+        * commands.
+        */}
+      {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+      <WriteStatus testId="opex-write-status" label={costWriteStatusLabel({
+        ownLabel: busyLabel, ownPending: save.isPending || addStandard.isPending, writeInFlight,
+      })} />
+      {isLoading ? (
+        <LoadingOverlay mode="inline" label={`Loading ${OPEX_MODE_NAMES[mode]}…`} testId="opex-loading" />
+      ) : null}
 
       <div className={styles.cardList}>
         {cards.map((card) => (
@@ -1163,6 +1202,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
             onSelectRow={(row) =>
               setSelection((current) => toggleRowSelection({ current, row, cardScopeId: card.id }))}
             onCommand={(key) => onCommand(card, key)}
+            writeDisabled={writeDisabled}
           />
         ))}
       </div>
@@ -1202,8 +1242,6 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
         onCancel={() => setDeleting(null)}
         onConfirm={confirmDelete}
       />
-
-      {busyLabel ? <LoadingOverlay label={busyLabel} /> : null}
     </div>
   );
 }
@@ -1232,7 +1270,7 @@ const SELECT_COLUMN_WIDTH = 40;
 
 function OpexCardView({
   card, mode, open, columns, allCosts, project, selection, selectedCost,
-  hasStandardAssumption, onToggle, onSelectRow, onCommand,
+  hasStandardAssumption, onToggle, onSelectRow, onCommand, writeDisabled,
 }: {
   card: OpexCard;
   mode: OpexMode;
@@ -1247,6 +1285,8 @@ function OpexCardView({
   onToggle: () => void;
   onSelectRow: (row: OpexCost) => void;
   onCommand: (key: OpexCommandKey) => void;
+  /** D58 — `writeCommandsDisabled`: a load or a write is running, so no new write may start. */
+  writeDisabled: boolean;
 }) {
   const styles = useStyles();
   const commandRow = useCommandRowStyles();
@@ -1259,7 +1299,7 @@ function OpexCardView({
     ? omDurationBadge(cardCosts, project)
     : durationBadge(cardCosts, project);
 
-  const gates = opexCommands({
+  const gates = guardOpexCommands(opexCommands({
     mode,
     cardScopeId: card.id,
     selectedScopeId: selection.scopeId,
@@ -1271,7 +1311,7 @@ function OpexCardView({
     // `DataSourceInfo`/`RecordInfo` have no Code-App equivalent; the server refuses what the user
     // may not do. The canvas O&M bar carries no `RecordInfo` check at all (defect O-1).
     permissions: { canCreate: true, canEditRecord: true, canDeleteRecord: true },
-  });
+  }), writeDisabled);
 
   const icons = { Add: <AddRegular />, Edit: <EditRegular />, Delete: <DeleteRegular /> };
 

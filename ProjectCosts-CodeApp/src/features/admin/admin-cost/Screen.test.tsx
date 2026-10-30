@@ -225,7 +225,7 @@ describe("CostsSettingsScreen", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /Edit Period/, hidden: true })).not.toBeInTheDocument());
   });
 
-  it("UT-ADCOST-910 draws no Apply to All bar and no per-section Apply strip (D61)", () => {
+  it("UT-ADCOST-910 draws no Apply to All bar and no per-section Apply strip (D67)", () => {
     render(<Harness><CostsSettingsScreen /></Harness>);
     const sections = [
       { title: "DEVEX/CAPEX", key: "devex" }, { title: "Operation & Maintenance", key: "oAndM" },

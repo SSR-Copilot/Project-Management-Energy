@@ -1465,6 +1465,10 @@ Texts: the canvas loading texts ("Loading, Please wait...", "Project Planning wi
 - Already registered and reused: `vsb_project`, `vsb_projectstate`, `vsb_projectrevenue` (D26), `vsb_energyyield` (D28), `vsb_countryinflationprofile`, `transactioncurrencies` (the canvas `Currencies`, D24).
 - Column names come from the generated models (`Vsb_projectrevenuesModel`, `Vsb_balancingpricesModel`, `Vsb_revenueindividualhedgevolumesModel`); `dataverse-attributes.json` has none of the three revenue tables. All 14 `Is … Standard Assumption?` columns exist. Binds: `vsb_Project`, `vsb_Subaccount` (`/vsb_revenuesubaccounts`), `vsb_Currency` (`/transactioncurrencies`), `vsb_RevenueContract`, `owningbusinessunit`.
 
+**Update 29 Oct 2026 (D57):** `Assumptions Revenues SQL` is now connected for this screen and the
+notice below is removed. The visual parity pass in D57 also corrects several layout values recorded
+here (panel 760, not 860; the dark header rule is themePrimary; the add-button border is 2 px).
+
 **Not connected (product decision D2):** `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`, as D26/D28 found), not a Dataverse table. The standard-assumption engine (`applyRevenueEngine`, the old in-Screen `applyAssumptions` moved to `rules.ts`) therefore runs over no rows: nothing is standard, no price, duration, inflation or hedged volume is derived, and the description is the bare "<type> <country>". A NEW notice (`REVENUE_SCREEN_TEXT.assumptionsNotConnected`) shows in the contract panel. Every engine rule stays tested. `Tarrif Price Standard Assumptions` is only in commented-out formulas and is not read. The other sources (Energy Yields, Country Inflation Profiles, Revenue Subaccounts, Currencies) are Dataverse tables and are connected.
 
 **Live reads** (`data/revenues.ts`): the project (with `'Cluster State'.Order` from `vsb_projectstates`; `countryCode` is the country GUID — `Country.Country` is the primary key in Power Fx, the old "code" note was wrong); the project's contracts and balancing prices (`createdon asc`); the edited contract's individual volumes; the negative-price yield check (`$top=1`, active, Consider Negative Prices); `First(Sort('Revenue Subaccounts', Order))`; the EUR / PLN currency; the project country's inflation profiles; at Save time, the contracts overlapping the new term (`le` / `ge` date-only filters, the edited row excluded).
@@ -4105,6 +4109,12 @@ past-cost notice).
 
 #### 11.6 Logging and screen
 
+> **Log format superseded by D59 (29 Oct 2026, proposed).** Every line quoted in §11 keeps its
+> prefix and field order, but now shows exact ms with thousands separators (brackets too), "1
+> request" in the singular, steps in start order, and the two cost stages named "upsert costs
+> (existing contracts)" / "(new contracts)". Collapsed groups follow each line. The gate peak
+> and request stats now cover this save only.
+
 - **One `console.info` per save:** total ms, request count, and per-step timings with request
   counts and the path of each upsert group (`bulk`, `per-row after 501`, `per-row since an earlier
   501`). A failed save logs its elapsed time and steps too.
@@ -4250,7 +4260,9 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   `gate peak 9/16, req avg 380 ms max 1200 ms, verify skipped, 2 already gone`: the gate's peak
   in-flight count, the average and maximum time a request held a gate slot (queueing excluded),
   whether the upsert verify ran, and how many deletes found their row already gone
-  (UT-ACSHEET-BULK-040).
+  (UT-ACSHEET-BULK-040). Since D59 the numbers carry separators (`req avg 380 ms max 1,200 ms`)
+  and count this save's writes only; `, shared gate peak N/16` follows when other work wrote at
+  the same time.
 - **`createGate` `peak()` / `reset()`** (`data/concurrency.ts`). Measurement only; scheduling is
   unchanged. `saveGate.reset()` runs at the start of every save (UT-CONC-013, 014).
 
@@ -4286,6 +4298,7 @@ This pass **supersedes** the stage order of §11.4 and the expected timings of �
   new grid still re-hydrates (UT-ADDCOST-070, 071).
 - **The prepare log line.** One `console.info` per Save click:
   `Add Cost from Table prepare: <ms> ms (round-trip check …, align …, diff …, deletions …, orphans …; last edit's grid read-back …, validation …; <n> rows)`.
+  Since D59 each timing carries its unit (`4.2 ms`), and a collapsed "Prepare (client side)" group follows.
 - **Two edge-case behaviour notes** (from the code and UT-ADDCOST-072; output unchanged for every
   sheet the app produces):
   - **Undefined cells.** `gridToJson` no longer copies the cells after the first three, but reads
@@ -4529,7 +4542,8 @@ upsert queued about 4 s behind them, and the combined load slowed each request t
    - A contract-delete failure keeps the §11.14 text.
 4. **Log.** The save line shows `delete costs deferred`. The background line is `Add Cost from Table
    background deletes: costs N req, contracts M req, T ms[, failed][, totals reconciled|totals NOT
-   reconciled]`.
+   reconciled]`. Since D59, `; error: <message>` follows a failure, and a collapsed group lists each
+   batch (timing, requests, 404 read-backs) and the background reconcile's read and write.
 
 **DIVERGENCE (rule 8).** For a few seconds after Save, a cleared cell can still exist on the CAPEX
 screen while its contract's stored total already excludes it. If a background delete fails, the
@@ -4609,7 +4623,8 @@ about 5–6×. Neither paste included the `background deletes …` line; see §1
   - **Defensive addition.** When the deferred deletes begin, a new line is written:
     `Add Cost from Table background deletes started: <costs|contracts> N row(s) at T ms, delete gate
     B/4 busy`. The next live log shows whether they started, and whether they queued behind a
-    request that never answered. The text is for logs only and has no canvas equivalent.
+    request that never answered. The text is for logs only and has no canvas equivalent. Since
+    D59 it reads `… costs 3 rows at 1,903 ms, …` (`1 row` in the singular).
 - **L2 / F5: `committedBefore` is now exact.**
   - **Delete side.** The deleter reports `removed` (rows it deleted itself, excluding confirmed
     404s), and `BulkDeleteError.removedCount` was added. `committedBefore` uses the new
@@ -4953,7 +4968,9 @@ connection reference was created, changed or duplicated.
    (`pa app push --solution-id 44aa38f9-…`, which changes the solution), the bindings do not
    reach another environment. In each target environment, the variables' current values and the
    reference's connection must be set as well (deployment settings).
-3. **No screen consumes the tables yet.**
+3. **No screen consumes the tables yet.** *(Update 29 Oct 2026: Milestones and Production read
+   `assumptionsrevenue` (`listRevenueAssumptions`), and so does Revenues (D57). Finance still does
+   not.)*
    - Finance (Debt, Banks, KfW), Revenues, Production and Milestones (Revenue) still return
      `notConnected()`.
    - Contracts still reads the Dataverse BoP copy, under provisional decision D2.
@@ -5006,11 +5023,701 @@ connection reference was created, changed or duplicated.
 VSBCloud. In a target environment, the variables' current values and the connection for
 `vsb_VSBCloudFabricSQL` must still be set when the solution is imported.
 
+## D56 · CAPEX Add/Edit Cost panel: bulk Save and parallel Delete (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/OptimizeEditCostSave` only.** Not
+deployed. Not product-approved. The live timings are owed (§6).
+
+### 1. What changed
+
+The DEVEX/CAPEX panel's Save (`saveCostLine`, `data/capexWrites.ts`) and Delete
+(`deleteCostLine`) used one awaited request per row. They now use the Add Cost from Table approach
+(D51): Dataverse `CreateMultiple` / `UpdateMultiple` for the month rows, and concurrent requests
+where the rows do not depend on each other.
+- **Planner** (pure): `features/cost/capex-costs/savePlan.ts` `planPanelCostWrites`. It wraps
+  `capexWriteSet`, which stays the one home of the canvas zero rule.
+- **Sender:** the shared `data/bulkSend.ts`, moved out of `data/addCostSheet.ts` unchanged. Both
+  saves therefore share the per-action 501 fallback, its `sessionStorage` flags, the 16-request
+  write gate and the 4-slot cost-delete gate.
+- **Switches** (`data/capexWrites.ts`): `PANEL_BULK_SAVE` (`false` restores the per-row path,
+  `saveCostLineLegacy` / `deleteCostLineLegacy`, unchanged) and `SKIP_UNCHANGED_COSTS` (§3).
+  Treat both like `BULK_SAVE`: live product decisions.
+- **DEV-only override for measuring:** `sessionStorage.setItem("vsb.capexPanel.legacySave", "1")`
+  in the console of a `pac code run` session sends the next saves per row. It is not read in a
+  deployed build.
+- **No UI change.** The Screen passes one more argument, `storedPayments`.
+- **No change to what is stored:** the same columns, binds, owning business unit on every create
+  (rule 4), the Linked Cluster `null` clear on update, and the average payment as text. The contract
+  payload is now one function (`contractPayload`) that both paths call.
+
+### 2. The request order — `DIVERGENCE`
+
+| Case | Per-row path (canvas order) | Bulk path |
+|---|---|---|
+| New contract, n months | create contract, then n creates | create contract, then 1 `CreateMultiple` |
+| Edit, n months | update contract, then n updates | contract update ∥ 1 `UpdateMultiple` (∥ 1 `CreateMultiple` for new months) |
+| Shrink by k months | … then k deletes, one at a time | after all writes have settled: k deletes, 4 at a time |
+| Relink reset, N paid, C payment-date comments | update contract, N paid updates, 1 read, C deletes, then the months | update contract **first**; then the month `UpdateMultiple`, which carries the paid resets, ∥ 1 read, then C deletes, 4 at a time |
+| Delete contract | comments, then cost rows, then contract, one at a time | the same three phases, each phase's deletes 4 at a time |
+
+The canvas order (contract `Patch` `CapexScreenCode.txt:953`, month `Patch` `:1120`, `Remove`
+`:1166`; relink `OnConfirm` `:19906-19925`) is kept where a row depends on another:
+- a new contract's months wait for the contract, because each binds `vsb_Contract`;
+- the deletes run last and only after every write succeeded, so a failed save leaves extra rows
+  rather than missing money. They are awaited, not deferred as in D51 §11.15, so the schedule never
+  shows a delete Dataverse did not apply;
+- the payment-date comments go before any month delete;
+- in a Delete, each phase must fully succeed before the next starts.
+
+**Failure.** Every concurrent step is awaited to the end, then the error of the first failed step
+in canvas order (contract, months, comments) is thrown. It reaches the existing error banner
+unchanged. After a failure the hook now refetches the book too (it did so only on success), so the
+grid and the next panel's stored months show what Dataverse holds.
+
+**One new partial state.**
+- **Plain edit.** A refused contract update can leave the months written under the contract's old
+  `vsb_totalcost` and `vsb_averagepayment` (UT-CAPEXBULK-015). The per-row path stops before any
+  month.
+- **Relink save.** The contract goes first, so a refused contract update resets no paid flag and
+  deletes no comment (UT-CAPEXBULK-013). That is the review's finding 1.
+- **The reverse case** (contract written, months refused) was already possible on the per-row
+  path.
+
+### 3. Unchanged months are not written — `DIVERGENCE`
+
+With `SKIP_UNCHANGED_COSTS`, an existing month whose stored amount (the book row the panel opened
+with) already equals the new amount gets no write. A month that the relink reset must clear is
+always written.
+- **Canvas:** the individual branch patches every non-blank month. The equal branch rewrites no
+  month at all unless the schedule changed (D38 §6 L-6).
+- **Same rows stored, while the cached book matches Dataverse.** UT-CAPEXBULK-009 checks 300
+  seeded saves, but its fake always agrees with the cache, so it cannot see the risk below.
+- **A 0 is never skipped.** The book reads a stored null `vsb_cost` as 0 (`costBook.ts`), and the
+  canvas zero rule must still update such a row to 0 (UT-CAPEXSAVE-014, UT-CAPEXBULK-019).
+- **Risk.** If another user changed a month after the panel opened, a skipped month keeps their
+  value, where the per-row path overwrote it with ours. On an equal-distribution contract the
+  contract total is still written from our numbers, so the total can then disagree with the
+  months. That is narrower than R-12's last-writer-wins, but not the same. `SKIP_UNCHANGED_COSTS =
+  false` removes it.
+
+### 4. A month deleted by someone else — `DIVERGENCE`
+
+`UpdateMultiple` refuses its whole request when a target row no longer exists: that request
+writes nothing, and the save fails with "Does Not Exist" in the banner. The per-row PATCH, which
+has no `If-Match`, silently re-created the row (R-12 resurrection). The refusal is the safer
+behaviour, but it is new. After the 501 fallback the per-row PATCH, and with it the resurrection,
+comes back for that action. UT-CAPEXBULK-011 pins both halves.
+
+### 5. The refetch after Save — unchanged
+
+`useCapexWrites().saveLine` still awaits the five invalidations before the spinner goes. The
+canvas also lowers its spinner only after
+`Select(btn_Capex_Cost_Reload_PCF_After_Mutation_Code)`. Making it fire-and-forget would need a
+book patch like D51 §11.19, or the pre-save grid would flash. The second console line measures
+the wait, so the decision can rest on a number.
+
+### 6. Measuring (owed by the user, on DEV through `pac code run`)
+
+Each save prints two lines:
+
+```
+CAPEX panel save (bulk): 1,234 ms, 3 requests; contract update 1 req 410 ms; costs 1 req 980 ms (update 1 req bulk [980 ms]); cost deletes 0 req 0 ms
+CAPEX panel save busy: 2,034 ms (writes 1,234 ms, refetch 800 ms)
+```
+
+Since D59 (proposed), the save line lists its steps in start order, shows exact ms with
+separators throughout, and ends with this save's `gate peak … req avg … max …`. A failed step's
+requests are counted, and `; error: …` follows a failure. Collapsed groups follow the line, and a
+Delete also prints `CAPEX panel delete busy: …`. The example above shows the earlier format,
+which also counted a plain 12-month edit as 3 requests where the code sends 2 (see D59).
+
+A Delete prints `CAPEX panel delete (…)`. Run each case twice, per row (override set) and bulk
+(override removed): a new contract with 12 months; an edit of 12 months; a shrink that removes 6;
+a relink reset with paid months and payment-date comments. Results: _not yet measured_.
+
+### 7. Open risks
+
+- **Lock contention** between the contract update and its month writes, which now run together.
+  D51 §11.16 measured parallel contract and cost bulk writes at 0.6–1.9 s each without contention;
+  the cascades were the problem there, and here deletes still start only after the writes.
+- **Small saves.** One bulk request measured 0.6–1.9 s through the host (D51 §11.16). A save of one
+  or two months may not get faster. The measurements in §6 decide whether a per-row threshold is
+  worth adding.
+- **Shared 501 flags.** A 501 seen by either screen moves both to per-row for that action, for the
+  rest of the session. That is intended: the 501 belongs to the host route, not to the screen.
+- **Gates.** The panel writes pass the shared 16-request `saveGate`. Its deletes have their own
+  4-slot gate, so they never queue behind Add Cost from Table's background deletes. Peak in flight
+  is 28 of 52. Panel writes also counted in the request stats of the Add Cost save line (log
+  only); since D59 each save counts only its own writes.
+- **Not fixed here:** `deleteComment` still uses the raw generated `delete()` (CA-10, "Not fixed").
+  Both paths call it, so a refused comment delete is invisible and does not stop the next phase.
+
+### 8. Tests and review
+
+- `features/cost/capex-costs/savePlan.test.ts`: UT-CAPEXSAVE-001…014, 020, 021. UT-CAPEXSAVE-012 is a
+  400-seed equivalence with `capexWriteSet`.
+- `data/capexWrites.bulk.test.ts`: UT-CAPEXBULK-001…019, 020, 030, 031, 040…043, 050, 051.
+  - The fake Dataverse has upsert PATCH, an `UpdateMultiple` / `CreateMultiple` that can refuse,
+    deletes that can be refused, and holds to prove concurrency and settling.
+- The existing `costBook.test.ts` round-trip tests (UT-BOOK-025…059) run unchanged, through the
+  bulk path. `addCostSheet.bulk.test.ts` only takes the moved names from `./bulkSend`.
+- **Independent review (29 Oct).** Five findings: four fixed (relink contract first, refetch after
+  a failure, never skip a 0, own delete gate), and the overclaiming comment-delete comments
+  corrected. The bulkSend move was confirmed line for line.
+- **Mutation check, all killed:**
+
+  | Mutation | Killed by (UT-CAPEXBULK- unless shown) |
+  |---|---|
+  | M1 relink contract no longer first | 013, 014 |
+  | M2 `allSettled` → `all` | 016 |
+  | M3 no throw on failure | 004, 005 and others |
+  | M4 reset on a new contract | 017 |
+  | M5 skip a 0 | 019, UT-CAPEXSAVE-014 |
+  | M6 skip a paid reset | 006, 009, UT-CAPEXSAVE-010 |
+  | M7 reset a deleted row | 006, UT-CAPEXSAVE-011 |
+  | M8 no owning BU on a new month | 002 |
+  | M9 contract deleted after a refused cost delete | 042 |
+
+### 9. What the product owner is being asked
+
+1. Approve the bulk path (§2), or keep `PANEL_BULK_SAVE = false`.
+2. Approve skipping unchanged months (§3).
+3. Accept the refusal of a row someone else deleted (§4).
+4. After the §6 numbers: keep the awaited refetch (§5), or build a book patch and stop waiting.
+
+## D57 · PM Revenues: Fabric standard assumptions connected, and a live-canvas visual parity pass (29 Oct 2026)
+
+**Status:** committed on branch `pm-revenue` as `0e33fe9` and `b3a3728` ("Functional Changes on
+Revenue Screen"), and merged into `master` as `f8d5f47` (29 Oct 2026; no conflicts with the
+Application Insights merge `2e5d706`). On the merged `master`, typecheck, lint and the 272 affected
+tests passed. The user confirmed in DEV that the Fabric assumptions now fill the contract panel. Supersedes the "not connected" parts of D33 and closes
+D54 open item 3 for Revenues.
+
+### 1. Fabric SQL connected (`Assumptions Revenues SQL`)
+- **Hook.** `useRevenueAssumptions(countryName)` (`features/pm/revenues/hooks.ts`) now reads
+  `[dbo].[AssumptionsRevenue]`. It is read only and cached for 30 minutes under
+  `qk.revenuesReference("assumptions", country)`. It returned `notConnected([])` before.
+- **Loader.** `data/revenues.ts` `listRevenueAssumptionRows` calls the Milestones loader
+  (`data/milestones.ts` `listRevenueAssumptions`); nothing is copied (rule 17).
+  - Italy reads every `Italy*` row (`startswith(country,'Italy')`, 1.21.753). Every other country
+    reads `country eq '<name>'`. The loader re-checks the slice in case the connector ignores the
+    filter.
+  - A blank `category` becomes `""`, as the canvas `category = …` comparisons see it.
+- **Engine.** `applyRevenueEngine` and the other rules in `rules.ts` are unchanged; they now run over
+  real rows. Picking a Type fills the description, currency, start date, durations, end date, price,
+  p90, inflation and hedged %, and marks them standard.
+- **Removed.** The panel notice and `REVENUE_SCREEN_TEXT.assumptionsNotConnected`.
+- **Open.** A failed Fabric read is silent: the panel stays empty and no message shows. The user
+  still has to decide whether to add an error line.
+
+### 2. Visual parity pass
+**Method.** The real `Screen.tsx` was rendered in headless Edge with fixture hooks: a scratchpad
+Vite harness, not part of the repo. Each scenario was compared pixel by pixel with the live-canvas
+screenshots the user supplied. Where no screenshot existed, it was checked against the YAML
+(`Project Revenues Screen.pa.yaml`, `Components/cmp_PopUp_*.pa.yaml`). The live canvas wins over
+the 1.21.709 YAML where they differ.
+
+| Area | Change (canvas value) |
+|---|---|
+| Contract cards | Tiles `(Parent.Width-60)/4` (400 at 1717): caption 32 + box 32 in a 70 tile, gaps 20 / 20, boxes #F5F5F5. The body reserves 3 / 4 / 5 tile rows (`contractCardBodyHeight`, `CardBody_Fields_Main_6.Height`). No card left padding (ManualLayout). The cards end 16 px from the page edge (page PaddingRight 6 + card margin 10). Header rule themePrimary #006EB9 (YAML `Icon.HoverColor`; the dark rule read off the 20 Oct screenshot was wrong). Chevron glyph 20 x 10 (Classic Icon 45 x 30, padding 5/10/5/5). Title Medium 14.67 Semibold. Header hover `#E3E3E322`. Edit / Delete inset 7 px in #0078D4 (PowerCAT CommandBar). |
+| Page | The heading, tabs and Add Contract stay fixed and the gallery scrolls on its own (`Height: =Parent.Height-Self.Y`). Add Contract / Add Balancing Price: a 2-px border (`BorderThickness: =2`; the 1 px was wrong), 32 high, unchanged on hover, press and focus. Selected tab #242424, no focus box. |
+| Contract panel (`twoColumn`) | 760 wide (`Min(760, …)`; the 860 was wrong). Header 42. Fields 30 from each edge, 260 + 40 + 400; each section has a 10-px gutter for the hanging `*`. Field pitch 76. Boxes #F5F5F5, 32 high. Disabled Currency (now a disabled Dropdown) and End Date are white with a 1-px grey outline. Start date placeholder "Select a date...". Duration pickers 100 / 140, 20 apart. `*` is `palette.Error` #B22727, Bold, Medium, raised and hanging 10 px left, before the toggles too. "Provide Hedge Volume in" is Regular. Unselected radio #616161. Sync icons are PowerCAT `Refresh` (`ArrowClockwise`) in themePrimary / #0078D4. Footer: no divider; a disabled Save is a plain ✓ Save in #595959. |
+| Balancing panel | 360 wide (was 450). Header 46. Captions RGBA(89,89,89), `*` after the caption. Pickers and price white with a 1-px RGBA(170,170,170) outline. Computed dates RGBA(237,235,233), Semibold. ONE Contract Duration caption over two pickers 20 apart (there were two captions). |
+| Balancing grid | Full page width (min 1100, scrolls narrower); the header stays on one line. No line under the rows and no hover tint. Row Edit / Delete in themePrimary, ~24 px apart. |
+| Dropdown lists (both panels) | Square, a 1-px grey outline, no shadow, 27-px rows, no check mark, the selected row solid themePrimary. 20 rows show (0 … 19 Years), then the list scrolls (`!important` over Fluent's inline max-height; `rowGap: 0`). |
+| Field errors | `lbl_…_ErrorMessage_1`: #B22727, Semibold, `ExtraExtraSmall` 8 pt, PaddingTop 3 (was Fluent #D20532, 12 px). |
+| Pop-ups | Delete contract / delete balancing / Individual Volumes: `cmp_PopUp_Confirmation`, 490 wide, header 40, title 12 pt, dark scrim, no ring on ✕. Delete is the themePrimary confirm with ✓: the live canvas ignores `IconRightButton: ="Trash"`. "Hedged Volume more than 100%": `cmp_PopUp_Information`, 450 wide, 12-pt text, ONE themePrimary OK, 90 wide. |
+| Panels close | Only through ✕, Cancel or Escape. A click outside a Revenues panel no longer closes it. |
+
+### 3. Shared components (additive, opt-in; every other screen is unchanged)
+- **`ConfirmDialog`.**
+  - `classicPopUp`: the PM `cmp_PopUp_Confirmation` look (490 wide, 40-high header, 12-pt title,
+    ring-less ✕).
+  - `variant="information"`: `cmp_PopUp_Information`, one OK button and no Cancel.
+- **`FormPanel`.** `keepOpenOnOutsideClick` ignores Fluent's `backdropClick` close; Escape and ✕
+  still close the panel.
+- **`formPanelContext`.** `twoColumn` 860 → 760. Only the Revenues contract panel uses it.
+
+### 4. DIVERGENCEs and decisions for the user
+1. **Font.** The canvas draws Open Sans; the code app falls back to Segoe UI, so text is 4–8 %
+   narrower. An app-wide Open Sans (`@fontsource/open-sans`) was tried and **reverted on request**.
+   A Revenues-only version was not built. The package is still in `package.json`, unused.
+2. **Card captions.** 14.67 px (the canvas Medium) was set during the font attempt. With Segoe UI,
+   16 px matches the canvas width better. Decision owed.
+3. **Keyboard focus.** The add buttons, tabs and panel / dialog ✕ show no focus ring (the canvas
+   has none), so a keyboard user loses the focus cue. Option: a ring for keyboard focus only.
+4. **Fabric read failure.** Silent (§1).
+5. The D33 open questions stand: 1.21.753 vs 1.21.709 (it now affects real Italian data), the
+   balancing owner, the custom-inflation flag, the price fallback, and the regeneration of
+   individual volumes.
+
+### 5. Not yet compared with the canvas
+- The saving / deleting overlay (`cmp_PopUp_Loading`).
+- The "Hedged Volume more than 100%" and Individual Volumes pop-ups as rendered (built from the
+  component YAML). Whether the information pop-up's OK carries an icon: the YAML sets an
+  `IconColor` but no icon name.
+- The values the engine derives against the canvas, for an Italian, a German wind FiT and a Polish
+  project.
+
+### 6. Tests and checks
+- **New.**
+  - UT-REV-156: the reserved card body height.
+  - UT-REV-DATA-001 / 002 (`data/revenues.assumptions.test.ts`): the Fabric `$select` / `$filter`,
+    the Italy slice and the blank category.
+  - UT-SETPANEL-023: `keepOpenOnOutsideClick`.
+- **Updated.**
+  - UT-REV-903: the notice is gone.
+  - The Screen test for the Currency dropdown.
+  - UT-FORMPANEL-001: `twoColumn` = 760.
+- **Last run.** Typecheck, lint and the canvas-identity gate (0 findings) passed. The affected files
+  passed: 258 tests (Revenues, FormPanel, ConfirmDialog, the two assumption loaders, routes). The
+  full `npm run verify` (with the build) has **not** been run since these changes.
+
+### 7. Incident (repaired)
+A PowerShell rewrite of `features/pm/revenues/Screen.tsx` read the file as ANSI and wrote it back as
+UTF-8, which garbled 67 non-ASCII characters (`…`, `—`, `✓`, …). The conversion was reversed
+exactly: the same 535 non-ASCII characters as `0e33fe9`, no U+FFFD, and no other change.
+
+## D58 · Cost module: no loading or saving spinners (29 Oct 2026)
+
+> **SUPERSEDED IN PART by D60 (29 Oct 2026).** In use, removing the spinners left the screens idle
+> or blank while they were busy, so every spinner in the table below is back (the write guard,
+> the status wording and the other D58 changes stay). Read D60 first.
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/RemoveCostSpinners` only.** Not
+deployed. Not product-approved. Brief: `feature-briefs/FEATURE-RemoveCostSpinners.md`.
+(D59 is reserved by the parallel `feature/ReadableBulkSaveLogs` branch.)
+
+### 1. What changed — `DIVERGENCE`
+
+Every canvas Cost screen raises a `cmp_PopUp_Loading` pop-up (10 % scrim, white card, spinner
+`AccessibleLabel "Waiting"`, `InformationText`) while it writes, and CAPEX also shows the inline
+`spn_LoadingSpinnerCost` while it loads. The code app showed these through `LoadingOverlay`. The
+Cost module now shows **no spinner and no scrim**:
+- **Writes** (panel saves and the no-panel actions) show the same verbatim `InformationText` as a
+  plain, non-animated `role="status"` line, the new shared `components/WriteStatus.tsx`. The panel
+  or dialog still closes first (the client's "Panel closes and spinner is shown" order).
+- **A second write cannot start.** The scrim used to block the grid and command bar. Each screen
+  now disables only its write-starting commands while a write is pending, through a pure rule with
+  tests. Read-only actions (filters, year, tabs, selection, folding) stay enabled.
+- **First loads** render the screen chrome (where it exists without data) over an empty
+  `aria-busy="true"` body, with the write commands disabled. The loading check comes before the
+  `Cost data is unavailable` EmptyState, so a load never looks like an error, and a real error
+  still shows it (rule 19).
+- `LoadingOverlay` is unchanged; the PM and Admin screens still use it.
+
+### 2. Sites removed, and the canvas control each one stood for
+
+| # | Code site | Canvas control | Now |
+|---|---|---|---|
+| A1 | `App.tsx` blocking "Please wait..." | none (code-app shell) | skipped on `/costs/*` only; `/`, `/projects`, `/project/*`, `/admin/*` unchanged |
+| A3 | `routes.tsx` `CostProjectGate` "Loading project…" | none | empty `cost-project-loading` placeholder; no Cost screen mounts before the session and project exist |
+| A5 | `routes.tsx` Suspense "Loading screen…" | none | the Cost subtree has its own empty `cost-screen-loading` fallback; the shared one is unchanged |
+| B1 | CAPEX book load, `LOADING_COST` | `spn_LoadingSpinnerCost` (`Visible: =locIsVisibleLoadingCostSpinner`) | tab strip and toolbar over empty `capex-loading` |
+| B2 | CAPEX Summary totals, `LOADING_DATA` | `cmp_Costs_PopUpLoading` ("Please wait, loading data...") | empty `capex-summary-loading` |
+| B3 | CAPEX save / Paid / Delete / Add Standard Contract | `cmp_Costs_PopUpLoading` (`Visible: =locIsVisiblePopUpSpinner`) | `capex-write-status`; guard `writeCommandsDisabled`, `gridActionAllowed` (`panelRules.ts`) |
+| B4 | Comments load "Loading comments..." | none (code-app text) | empty `capex-comments-list`, Add Comment disabled |
+| B5 | Comments save "Saving comments..." | `cmp_Costs_PopUpLoading` (`Capex Costs Screen.pa.yaml:10141`) | `capex-comments-write-status`; guard `commentWritesDisabled` (`comments.ts`) |
+| B6 | PCF `renderLoading` | vendor PCF (dead: `dataset.loading` is always false) | deleted |
+| B7 | PCF `renderEmptyState` spinner + "Loading data…" | vendor PCF | static "No costs to display." (**NEW text**, the canvas has none), `capex-grid-empty-state` |
+| B8 | OPEX load "Loading O&M/Other OPEX…" | `LoadingSpinner: =LoadingSpinner.Data` | device / sub-account cards with no rows, commands disabled |
+| B9 | OPEX save / delete / Add Standard | `cmp_OpexCosts_PopUpLoading` (`Opex Costs Screen.pa.yaml:5380`) | `opex-write-status`; guard `opexWriteCommandsDisabled` (`opexRules.ts`) |
+| B10 | Land Lease load "Loading Land Lease…" | `LoadingSpinner: =LoadingSpinner.Data` | empty `aria-busy` page (its cards come from the book) |
+| B11 | Land Lease save / delete / standard import | `cmp_LandLease_PopUpLoading` (`Land Lease Costs Screen.pa.yaml:6285`) | `land-lease-write-status`; guard `leaseWriteCommandsDisabled` (`landLeaseRules.ts`) |
+| B12 | Contracts load "Loading contracts…" | `LoadingSpinner: =LoadingSpinner.Data` (`Contracts Screen.pa.yaml:14`) | command bar (disabled) over empty `contracts-loading` |
+| B13 | Contracts save / delete | `cmp_Contracts_PopUpLoading` (`Visible: =locIsContractVisiblePopUpSpinner`, `:7733-7739`) | `contracts-write-status`; guard `writeCommandsDisabled` (`contracts/rules.ts`) |
+| B14 | Add Costs from Table load "Loading the cost table…" | none | empty `add-costs-loading` |
+| B15 | Add Costs from Table save "Please wait, saving costs..." | `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable` (`Add Costs from Table.pa.yaml:388-394`) | `add-costs-write-status` in the footer; Save already guarded by `saveButtonDisabled` |
+
+Constants `LOADING_COST` and `LOADING_DATA` (`panelRules.ts`) had no other user and are deleted.
+Every other spinner text stays, because the status line shows it.
+
+### 3. Known gaps, for the product owner
+
+1. **Add Costs from Table locks the sheet during a save** (`sheetLocked`, `saveRetry.ts`): Add Row,
+   Delete Row, Copy Table, Cancel and ✕ are disabled and the grid wrapper is `inert`, because the
+   overlay used to cover them and an edit typed mid-save was silently lost when the screen closed.
+   `SpreadSheetComp` has no cheap read-only mode.
+2. **Navigation stays live during a write.** The scrim also covered the rail and header. Leaving a
+   screen mid-write lets the write finish, but its error has no screen left to show it on, and a
+   screen re-opened while that write still runs has a fresh mutation observer, so its guard reads
+   open. Closing this needs a per-project "write in flight" flag and a global error toast (not built).
+   *Fixed 29 Oct 2026 (uncommitted), see CA-15:* `useCostWriteInFlight` + `costWriteKey`, the NEW
+   "another screen" status line, and the NEW error toast via `useWriteFailureReport`.
+3. **The PCF grid's write actions are ignored, not greyed**, while a write runs (the menus still
+   look enabled; the guard sits in the React callback). *Fixed 29 Oct 2026 (uncommitted), see
+   CA-16.*
+4. **A selection made during a write is cleared when the write ends** (Land Lease, Contracts
+   delete), as the success paths always did. *Fixed 29 Oct 2026 (uncommitted), see CA-17:* only
+   the selection the write started with, or one pointing at a deleted row, is cleared.
+5. **CAPEX refreshes the tab the write was made on** (`useCapexWrites` records the category in
+   `onMutate`), so switching tab mid-save no longer leaves the first tab stale. The status line and
+   error banners also render during a tab's first load, and "Saving comments..." survives the
+   Comments panel unmounting (the panel's own line is turned off on CAPEX via `writeStatus={false}`).
+6. **`.pcf-spinner` CSS is left in place, unused.** `pcfCascade.test.ts` requires the vendored
+   stylesheet to stay byte-identical to the vendor control's.
+7. **CAPEX counts Comment and Add Cost from Table as write-starting** (they open editors), so both
+   are disabled while a CAPEX write or a comments save runs.
+8. **A failure still shows as the existing banner.** There is no success message, as before.
+
+### 4. What the product owner is being asked
+
+Approve removing the spinners (§2), the status line in place of the pop-up, and the gaps in §3.
+
+## D59 · Readable console logs for both bulk saves (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/ReadableBulkSaveLogs` only.** Not
+deployed. Logging only: no change to what a save writes, its order, its gates, its errors or the
+UI. (D58 is taken by `feature/RemoveCostSpinners`.)
+
+### 1. Why
+
+The two Dataverse bulk saves (Add Cost from Table, D51; the DEVEX/CAPEX Add/Edit Cost panel, D56)
+each printed one dense line per event. The lines mixed units, said "1 requests", listed steps in
+completion order and named both cost stages "upsert costs". Some detail never reached the console
+at all:
+- the background reconcile's read and write timings;
+- the deferred deletes' per-batch timings and 404 read-backs;
+- the error messages on the failure lines.
+
+A refused plan (`SheetConflictError`) logged nothing. The request statistics were module-wide, so
+they could include another save's writes (D56 §7).
+
+### 2. Decisions (accepted by the user on 29 Oct 2026)
+
+| # | Question | Accepted |
+|---|---|---|
+| D1 | Format | One summary line per event (`console.info`), then collapsed groups (`console.groupCollapsed`) with `console.table`; indented plain lines when the console has neither. |
+| D2 | The one-line text | Keep every prefix and the field order; fix the quirks: "1 request", thousands separators on every ms, steps in start order, the stages `upsert costs (existing contracts)` / `upsert costs (new contracts)` (log only: `PHASE_LABEL` and every error text are unchanged), a request count on the failure line, the panel's failed step counted, the panel line ending in the same gate tail. |
+| D3 | Ids and names | Counts only. No ids and no contract, account or project names in readable text; GUIDs are replaced with `<id>` (`messageOf`). The raw error object is kept, but only inside a collapsed "Raw error (for support)" group. |
+| D4 | Gate statistics | Per save: a `RequestMeter` passed through `upsertRowsByAction` and `gatedWrite` to `gated` (measurement only). `, shared gate peak N/16` is added when the shared gate held more. |
+| D5 | Units | The one-liners use exact ms with separators (`formatMs`), brackets included. The groups use `formatRequestDuration` (`980 ms` / `1.4 s`). The prepare timings keep one decimal. One `formatMs`, next to `formatRequestDuration` in `data/bulkSend.ts`, replaces the inline copies (rule 17). |
+| D6 | New events | Only the gaps:<br>- a plan-refusal line;<br>- background reconcile timings;<br>- per-batch delete timings and 404 read-backs;<br>- error text on the A3, A5 and panel failure lines;<br>- a readable book-patch failure;<br>- `CAPEX panel delete busy:`. |
+| D7 | Level | `console.info` for every summary. |
+
+### 3. Where it lives
+
+- `data/saveLog.ts` holds the pure builders and `emitSaveLog`. The emitter never throws and also
+  accepts a builder function, which it runs inside its guard. Tests: UT-SAVELOG-001…023.
+- `data/bulkSend.ts` holds:
+  - `formatMs`;
+  - `RequestMeter` / `createRequestMeter`;
+  - `gatedWrite`;
+  - `UpsertGroupReport` (structured group reports through `upsertRowsByAction`'s `report`);
+  - `bulk501WarningLine`.
+
+  The module-wide `requestStats` is removed, and `saveGate` is no longer exported.
+- `data/concurrency.ts`: the gate's `inFlight()`, measurement only.
+- Add Cost from Table: `data/addCostSheet.ts` builds its reports. In `data/addCostSheetBulk.ts`,
+  `deps.upsert` takes an optional log-only `step` name. Tests: UT-ACSHEET-LOG-001… in
+  `addCostSheet.bulk.test.ts`.
+- Panel: `data/capexWrites.ts` (`SaveLog`, `panelSaveLogLine`, `panelBusyLogLine`). Tests:
+  UT-CAPEXLOG-001…012 in `capexWrites.bulk.test.ts`.
+- **Gate tail on the panel's bulk Save only.** The per-row path and every Delete send nothing
+  through the shared write gate, so a tail there would read a misleading `0/16`. Their Requests
+  group says "none pass the shared write gate" instead.
+
+### 4. Panel request counts (checked against the code, pinned by UT-CAPEXLOG-010, 011, 006)
+
+| Case | Requests in the line |
+|---|---|
+| New contract, 12 months | 2 (contract create + 1 `CreateMultiple`) |
+| Edit of 12 months | 2 (contract update ∥ 1 `UpdateMultiple`) |
+| Shrink 12 → 6 | 8 (2 + 6 deletes) |
+| Relink reset, 2 paid months, 1 payment-date comment | 4 (contract, 1 `UpdateMultiple` carrying the resets, 1 read, 1 comment delete) |
+| Delete, C comments and M cost rows | 2 + C + M |
+| `UpdateMultiple` 501 on 3 months | 5 (contract, the refused request, 3 PATCHes) |
+
+The D56 §6 example ("3 requests" for a plain edit) predates this check. A refused `UpdateMultiple`
+used to print `1 requests`; it now counts the refused request too.
+
+### 5. Before and after
+
+Real output from the test suites, which run against a fake host, so the times are near 0 ms. `##`
+marks a collapsed group and `|` a `console.table` row.
+
+**Add Cost from Table, before (8dc4553):**
+```
+Add Cost from Table save: 10 ms, 4 requests (plan 3 ms, upsert contracts (create 1 req bulk [0 ms], update 1 req bulk [0 ms]) 1 ms, upsert costs (create 1 req bulk [0 ms]) 0 ms, upsert costs (update 1 req bulk [0 ms]) 1 ms, delete costs deferred, delete contracts deferred); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+Add Cost from Table background deletes started: costs 1 row(s) at 9 ms, delete gate 0/4 busy
+Add Cost from Table save failed after 4 ms (plan 0 ms, delete contracts 1 req 1 ms, …); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+```
+
+**Add Cost from Table, after: a successful save with deferred deletes:**
+```
+Add Cost from Table background deletes started: contracts 1 row at 8 ms, delete gate 0/4 busy
+Add Cost from Table background deletes started: costs 1 row at 9 ms, delete gate 0/4 busy
+Add Cost from Table save: 9 ms, 4 requests (plan 3 ms, upsert contracts (create 1 req bulk [0 ms], update 1 req bulk [0 ms]) 1 ms, upsert costs (existing contracts) (update 1 req bulk [0 ms]) 1 ms, upsert costs (new contracts) (create 1 req bulk [0 ms]) 0 ms, delete costs deferred, delete contracts deferred); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone
+## Plan
+Contracts: 1 created, 1 updated, 1 deleted
+Cost rows: 1 created, 1 updated, 1 deleted
+Changed cells equal to the stored value (nothing written): 0
+Cost deletes planned: 1; only if they still exist (left by a failed attempt): 0
+Contract deletes planned: 1 (their cost rows and comments go by the Dataverse cascade)
+Contract totals planned: 2
+## Steps (start order)
+| plan | 0 ms | 3 ms | – | – | ok
+| upsert contracts | 7 ms | 1 ms | 2 | create 1 row: 1 request, bulk [0 ms]; update 1 row: 1 request, bulk [0 ms] | ok
+| upsert costs (existing contracts) | 7 ms | 1 ms | 1 | update 1 row: 1 request, bulk [0 ms] | ok
+| upsert costs (new contracts) | 8 ms | 0 ms | 1 | create 1 row: 1 request, bulk [0 ms] | ok
+| delete costs | – | – | – | 1 row, deleted after Save returned | in the background
+| delete contracts | – | – | – | 1 contract, deleted after Save returned | in the background
+## Deferred deletes …
+## Requests
+Write requests of this save: 4; at most 3 of 16 in flight at once
+Time per write request (inside the gate, queueing excluded): average 0 ms, slowest 0 ms
+Requests in all, reads and deletes included: 4
+Existence check before writing: skipped (first attempt)
+Deletes whose row was already gone (confirmed by a read-back): 0
+Not counted as requests: the reconcile's cost reads and the per-row fallback's existence check
+Add Cost from Table background deletes: costs 1 req, contracts 1 req, 10 ms
+## Background deletes
+Settled 10 ms after the Save started, 1 ms after it returned
+| delete contracts | 8 ms | 1 ms | 1 | 0 | 0 | ok
+| delete costs | 9 ms | 1 ms | 1 | 0 | 0 | ok
+```
+The batches table's columns are Batch, Started, Took, Requests, 404 read-backs, Already gone and
+Result.
+
+**After: a failed save (`UpdateMultiple` refused).** It now counts every request sent, refused
+ones included, and names the root error:
+```
+Add Cost from Table save failed after 2 ms, 6 requests (plan 0 ms, delete contracts 1 req 1 ms, delete costs 1 req 1 ms, upsert contracts (create 1 req bulk [0 ms], update failed bulk [0 ms]) 0 ms, upsert costs (existing contracts) (update failed bulk [0 ms]) 0 ms, reconcile read 0 ms, reconcile totals (update failed bulk [0 ms]) 0 ms); gate peak 3/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone; error: Dataverse error (HTTP 400): update bulk write refused
+## Failure
+Steps completed: plan; delete contracts; delete costs; reconcile read
+Steps failed: upsert contracts; upsert costs (existing contracts); reconcile totals
+Phase: 1
+Something reached Dataverse before the failure: yes (or may have)
+Contract totals: could NOT be reconciled
+Error: SavePlanError: Save failed in phase 1 (upsert contracts); contract totals could NOT be reconciled.
+  caused by … caused by Dataverse error (HTTP 400): update bulk write refused
+## Plan … ## Steps (start order) … ## Requests …
+```
+
+**After: a refused plan (two sheet rows in conflict).** The names stay out of the readable text:
+```
+Add Cost from Table save failed after 0 ms, 0 requests (plan failed 0 ms); gate peak 0/16, req avg 0 ms max 0 ms, verify skipped, 0 already gone; nothing was written; error: SheetConflictError: refused while planning (conflict between sheet rows); the rows' detail is in the raw error group
+## Failure … ## Steps … ## Requests … ## Raw error (for support)
+```
+
+**After: a background cost delete refused, then reconciled:**
+```
+Add Cost from Table background deletes: costs 1 req, contracts 1 req, 3 ms, failed, totals reconciled; error: BulkDeleteError: delete costs: 1 delete(s) on vsb_capexcosts failed, 0 succeeded. First failure: delete costs: 403 refused
+## Background deletes
+| delete contracts | 2 ms | 1 ms | 1 | 0 | 0 | ok
+| delete costs | 2 ms | 0 ms | 1 | 0 | 0 | FAILED
+## Background reconcile
+Contract totals: reconciled (they match what landed)
+Write requests of the background reconcile: 1; at most 1 of 16 in flight at once
+| reconcile read | 3 ms | 0 ms | – | – | ok
+| reconcile totals | 3 ms | 0 ms | 1 | update 2 rows: 1 request, bulk [0 ms] | ok
+## Errors
+Cost delete: BulkDeleteError: delete costs: 1 delete(s) on vsb_capexcosts failed, 0 succeeded. …
+```
+
+**CAPEX panel, before (8dc4553):**
+```
+CAPEX panel save (bulk): 15 ms, 3 requests; contract update 1 req 2 ms; costs 1 req 14 ms (update 1 req bulk [0 ms]); cost deletes 1 req 1 ms
+CAPEX panel save (bulk) FAILED after 1 ms, 1 requests; contract update 1 req 0 ms; costs FAILED 1 ms (update failed bulk [0 ms])
+```
+
+**CAPEX panel, after:**
+```
+CAPEX panel save (bulk): 3 ms, 3 requests; contract update 1 req 1 ms; costs 1 req 0 ms (update 1 req bulk [0 ms]); cost deletes 1 req 0 ms; gate peak 2/16, req avg 0 ms max 1 ms
+## Steps (start order) … ## Requests
+CAPEX panel save (bulk) FAILED after 1 ms, 2 requests; contract update 1 req 0 ms; costs FAILED 0 ms (update failed bulk [0 ms]); gate peak 2/16, req avg 0 ms max 0 ms; error: Dataverse error (HTTP 404): UpdateMultiple refused: vsb_capexcost With Id = <id> Does Not Exist
+## Failure … ## Steps (start order) … ## Requests … ## Raw error (for support)
+CAPEX panel delete (bulk): 1 ms, 6 requests; comments read 1 req 0 ms; comment deletes 1 req 0 ms; cost deletes 3 req 0 ms; contract delete 1 req 0 ms
+CAPEX panel save busy: 2,118 ms (writes 1,312 ms, refetch 806 ms)
+CAPEX panel delete busy: 1,540 ms (deletes 1,120 ms, refetch 420 ms)
+```
+The two busy lines come from the line builders' tests (UT-CAPEXBULK-051, UT-CAPEXLOG-007).
+
+**501 fallback (both saves):** `UpdateMultiple answered 501 Not Implemented; upsert costs (update)
+continues row by row. Nothing of it was written by the refused request; 3 rows go out as one PATCH
+each, and this tab keeps sending UpdateMultiple rows one by one while its session flag is set
+(until the tab closes).`
+
+**Review (29 Oct, independent).** No change to save behaviour. Seven findings, all fixed:
+1. Contract and account names reached readable text through `SheetConflictError` and the
+   screen's conflict message. Both are now fixed wording; the detail stays in the raw group
+   (UT-ACSHEET-LOG-013).
+2. Overlapping cost-delete batches inflated each other's counts. They are now counted per call,
+   and the retry batch is logged as `delete costs (left by a failed attempt)`
+   (UT-ACSHEET-LOG-014, 015).
+3. A failed refresh showed 0 requests. It now says `refresh read failed`, and the requests that are
+   not counted are named (UT-ACSHEET-BULK-043, UT-ACSHEET-LOG-016).
+4. New unused exports were removed (knip).
+5. One shared `groupsText`, `reconcileStateOf` and `verifyLines` (rule 17; UT-SAVELOG-030).
+6. Report builders run inside `emitSaveLog`'s guard (UT-SAVELOG-023).
+7. Wording: "Write requests of the background reconcile" (UT-SAVELOG-031); the 501 line's session
+   wording.
+
+**Mutation checks.** All killed:
+- 8 in the first Add Cost round and 8 in the panel round;
+- 9 after the review fixes (N1–N7, M3b, M8b);
+- the shared `groupsText` durations (UT-SAVELOG-030, UT-CAPEXLOG-009).
+
+**Tests.**
+- UT-SAVELOG-001…014, 020…023, 030, 031.
+- UT-ACSHEET-LOG-001…016.
+- UT-CAPEXLOG-001…012.
+- Updated, with the same ids: UT-ACSHEET-BULK-043, 050, 055, 056, 057, 062, 066, 067;
+  UT-CAPEXBULK-012, 050; UT-ACSHEET-QUERY-016.
+
+**Checks (29 Oct).**
+- `npm run verify`: `check:power` 89 registered, 0 problems; typecheck, lint, the label gate and
+  the canvas gate clean; 168 files, 4,478 tests, 4,477 passed.
+- The one failure, UT-ADGATE-910, is the known flake; its file passed 33/33 alone.
+- `npm run build` ran separately and is OK.
+- knip: 20 unused files (baseline), and no new unused exports in the changed files.
+
+### 6. What to look for on the next live Save
+
+- `Add Cost from Table prepare: … ms (…; N rows)`.
+- `Add Cost from Table save: 1,916 ms, 5 requests (… upsert costs (existing contracts) (…) …,
+  upsert costs (new contracts) (…) …); gate peak …, req avg … max …, verify …, N already gone`,
+  then the collapsed groups Plan, Steps (start order), Deferred deletes and Requests.
+- `Add Cost from Table background deletes: costs N req, contracts M req, T ms`, with its batches
+  table.
+- `CAPEX panel save (bulk): …; gate peak …`, then `CAPEX panel save busy: …`. After a Delete:
+  `CAPEX panel delete busy: …`.
+
+### 7. What the product owner is being asked
+
+Nothing functional. Confirm the console format, and that names stay out of readable logs.
+
+## D60 · Cost module: busy indicators restored, after D58 removed them (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `feature/RestoreBusyIndicators`.** Not
+deployed. This partly reverses D58 at the user's request.
+
+### 1. What the user reported
+
+After D58 the Cost screens looked idle while they were busy:
+- **Saves.** After a Save the screen showed only a quiet line of text, with no spinner. The grid and
+  every command stayed clickable, so a user could click again or click anywhere.
+- **CAPEX tabs.** A category change showed the tab strip over an empty body: nothing loaded, nothing
+  moving, and controls that could be used.
+- **Add Cost from Table.** The click opened a blank screen, with no sign that it was loading.
+
+### 2. Root causes (all D58)
+
+| # | Cause | Where |
+|---|---|---|
+| 1 | `WriteStatus` drew a text span: no spinner, no scrim, and it was easy to miss. The write guard disables only the commands that start a write, not the grid or navigation. | `components/WriteStatus.tsx` |
+| 2 | The first-load placeholders were empty `<div>`s: `capex-loading`, `capex-summary-loading`, `contracts-loading`, `add-costs-loading`. | the Cost screens |
+| 3 | The Cost route's `Suspense` fallback and `CostProjectGate` were empty `<div>`s, so the lazy chunk download and the project load showed nothing. Opening Add Cost from Table crosses all three: chunk, then sheet fetch, then grid build. | `app/routes.tsx` |
+| 4 | OPEX and Land Lease rendered empty card lists while loading; the Comments panel an empty thread list. | `OpexScreen`, `LandLeaseScreen`, `CommentsPanel` |
+
+### 3. What changed
+
+- **Writes.** `WriteStatus` shows the shared blocking `LoadingOverlay` (spinner, scrim and the same
+  verbatim canvas `InformationText`) for as long as its label is set. The label stays set until the
+  mutation has settled and the screen's refresh is done, so the spinner persists to the end of the
+  operation, on success and on failure. When idle it is an empty `role="status"` span. Every
+  Cost screen uses `WriteStatus`, so Save, Delete, Paid, Add Standard Contract, Import and the
+  Comments Save are all covered.
+- **Loads.** An inline `LoadingOverlay` shows in the body, with the screen chrome around it (tab
+  strip and toolbar, command bar):
+
+  | Screen | Test id | Text |
+  |---|---|---|
+  | CAPEX, first load or a tab change | `capex-loading` | "Please wait, loading cost ..." (`locSpinnerInformationText`, `:2434`) |
+  | CAPEX Summary | `capex-summary-loading` | "Please wait, loading data..." (`:18052`) |
+  | OPEX | `opex-loading` | "Loading Operation & Maintenance…" / "Loading Other OPEX Costs…" |
+  | Land Lease | `land-lease-loading` | "Loading Land Lease…" |
+  | Contracts | `contracts-loading` | "Loading contracts…" |
+  | Add Costs from Table | `add-costs-loading` | "Loading the cost table…" |
+  | Comments panel | `capex-comments-loading` | "Loading comments..." |
+  | Cost project gate | `cost-project-loading` | "Loading project…" |
+  | Cost chunk fallback | `cost-screen-loading` | "Loading screen…" |
+
+  The texts are the originals from before D58 (the canvas ones, or the code app's earlier text).
+  `LOADING_COST` and `LOADING_DATA` are restored in `capex-costs/panelRules.ts`.
+- **Kept from D58.** The shared write guard (`writeCommandsDisabled`) and the "write in flight"
+  state that outlives a screen (CA-15); the load check before the "Cost data is unavailable" error
+  state (rule 19); the shell skipping its blocking overlay on `/costs/*` (the gate's spinner now
+  fills that gap, so the rail and header stay visible); the sheet lock on Add Costs from Table; and
+  the PCF grid's disabled write items and "No costs to display." message.
+- **`LoadingOverlay`.** It gained an optional `testId`, and the inline mode carries
+  `aria-busy="true"`. Existing callers (PM, Admin) render as before.
+
+### 4. DIVERGENCE
+
+D58's divergence from the canvas is withdrawn for every spinner above: the Cost module again shows
+the canvas pop-up spinner during writes and the canvas loading text during loads. What still differs
+from the canvas is that the screens additionally disable their write commands, and the CAPEX tab
+change shows an inline spinner (the canvas used `spn_LoadingSpinnerCost`).
+
+### 5. What the product owner is being asked
+
+Confirm that the blocking spinner during writes, and the inline spinner during loads, are what is
+wanted on every Cost screen. D58 is no longer the intended behaviour for these.
+
+## D61 · Contract panel: errors only for fields the user has touched (29 Oct 2026)
+
+**Status: PROPOSED, uncommitted, on the local branch `fix/contract-devco-checkbox-validation`.** Not
+deployed. Not product-approved. Records bugs CA-22 (checkbox sizes) and CA-23 (error display).
+
+### 1. What the user asked for
+
+In the Cost module's Contracts screen, the Add/Edit Contract pop-up:
+- the DevCo Costs checkboxes should be one size in the main and the nested gallery;
+- validation messages should show only for fields the user has touched, tracking a dirty state, so
+  nothing shows for a field nobody has used, including a required field that is still empty.
+
+### 2. The canvas, and the divergence
+
+The canvas computes each `*_ErrorMessage` from its own control's value, with no per-field memory,
+and for a blank required field it shows nothing at all (`Visible: =Not(IsBlank(…))`). D-4 already
+diverged from that: a blank required field reports "Input must not be blank". The code app then
+gated every error behind one flag for the whole panel, so the first edit anywhere showed every
+error at once.
+
+**DIVERGENCE (rule 8).** Each field now has its own touched state. This is a deliberate UX change
+beyond the canvas, at the user's request. It is marked in `rules.ts` (`visibleFieldError`), and the
+previous behaviour is kept as `visibleFieldErrorPanelWide`, so the decision is reversible and both
+halves are tested.
+
+### 3. What changed
+
+- **Touched fields.** A field is touched when the user edits it, or visits it and leaves it
+  (`onBlur`, a new optional prop of the shared `CostField`). Not touched by the app's own actions: a
+  recalculation, a radio choice (Plan/Actual, Calculated/Overwrite, Margin Yes/No and its type), the
+  Reset-to-standard icon, or the margin seed from the standard assumption.
+- **DevCo accounts.** Ticking or unticking an account touches the account field, so unticking the
+  last one shows "Input must not be blank" under DevCo Costs; a fresh panel shows nothing.
+- **Reset.** Opening any panel (new contract, edit, add period, edit period) starts with nothing touched.
+- **Scope.** The Development/Construction panel, the Project Rights panel, and the Add/Edit Period
+  panel, which shared the flag.
+- **Unchanged.** `contractErrors`, `paymentTargetErrors` and the Save gates. Save is disabled
+  exactly when it was. The Rights panel's Save now reads "is the field invalid", not "is its error
+  shown", so what is displayed never decides whether Save is allowed.
+- **Checkboxes (CA-22).** One variable, `--devco-check` (18 px), sizes both levels; the column
+  centres stay 56 px from the row's right edge. The glyphs are unchanged.
+
+### 4. Open for the product owner
+
+A consequence of showing less: Save can be disabled while the field that blocks it shows no message,
+for example a new contract with a description and accounts but an untouched closing date. Options:
+1. Leave it (the request as stated). A user finds the field by its required marker.
+2. A tooltip on the disabled Save naming what is missing (new text, no canvas equivalent).
+3. Clicking a disabled Save reveals every error at once and focuses the first invalid field.
+
+The first is implemented. Say if 2 or 3 is wanted.
+
+### 5. Tests
+
+UT-CONTOUCH-001…007 (rules, with the old behaviour as a twin), UT-CONPANEL-001…010 (the screen),
+UT-CONCHECK-001…005 (the stylesheet sizes). Every mutation of the behaviour above fails a test; see
+CA-22 and CA-23.
+
 ---
 
-## D56 · Add Cost from Table opens as a right panel, not a modal (27 Oct 2026) — PROPOSED
+## D62 · Add Cost from Table opens as a right panel, not a modal (27 Oct 2026) — PROPOSED
 
-Requested by the user. **Nothing in D56 is product-approved.** The change is uncommitted. **Being in
+Requested by the user. **Nothing in D62 is product-approved.** The change is uncommitted. **Being in
 the tree is not approval.**
 
 ### 1. The canvas
@@ -5048,7 +5755,7 @@ reported that it looks good. A full add / edit / delete / reload walk was not re
 2. Should Cancel ask "Discard changes?" when the table has unsaved edits, as other panels do? (Today it
    does not, as in the canvas.)
 
-## D57 · The footer version strip is removed from every screen (27 Oct 2026) — PROPOSED
+## D63 · The footer version strip is removed from every screen (27 Oct 2026) — PROPOSED
 
 Requested by the user (from a screenshot of the General Data screen). **Not product-approved.** The change is
 uncommitted.
@@ -5067,7 +5774,7 @@ uncommitted.
 - **Asked of the product owner:** approve dropping the strip, since the canvas shows the version twice (header
   and footer) and the footer takes 32 px of height on every screen.
 
-## D58 · Check List Settings UI parity pass, and the admin page title moved to the header (27 Oct 2026) — PROPOSED
+## D64 · Check List Settings UI parity pass, and the admin page title moved to the header (27 Oct 2026) — PROPOSED
 
 Requested by the user from a screenshot of the live canvas Check List Settings
 (`Admin Project Default Checklists Screen.pa.yaml`). **Not product-approved**; uncommitted.
@@ -5100,7 +5807,7 @@ header title position, left rail and spacing need the user's check in the browse
 
 Approve the header title on all six admin screens, the "…" tab menu, and the smaller row text.
 
-## D59 · Hover hints on the panel ✕, the dialog ✕ and the Save buttons (27 Oct 2026) — PROPOSED
+## D65 · Hover hints on the panel ✕, the dialog ✕ and the Save buttons (27 Oct 2026) — PROPOSED
 
 Requested by the user after a scan of every canvas `Tooltip` property (163 real hints on 299 button / icon controls).
 **Not product-approved**; uncommitted.
@@ -5120,7 +5827,7 @@ other missing texts from the scan (year arrows, "Mark as Resolved.", "Left navig
 
 **Asked of the product owner:** approve "Save" in place of the pasted text, and the "Cancel" hover on every panel ✕.
 
-## D60 · Cluster Check List: parity pass against a canvas screenshot (27 Oct 2026) — PROPOSED
+## D66 · Cluster Check List: parity pass against a canvas screenshot (27 Oct 2026) — PROPOSED
 
 Requested by the user from two screenshots (canvas and code app) of the PM Cluster Check List. **Not product-approved**; uncommitted.
 Sources: `Project General CheckList Screen.pa.yaml` and `Components/cmp_Project_States.pa.yaml`.
@@ -5147,7 +5854,7 @@ metrics app-wide, so it needs a decision before anyone does it.
 The Cancel Approval Request, Gate approval and row ✕ buttons stay visible but disabled (approval flows, D29). The history, comment and approval
 panels are unchanged.
 
-## D61 · The Apply and Apply to All bars are removed from the Admin screens (28 Oct 2026) — PROPOSED
+## D67 · The Apply and Apply to All bars are removed from the Admin screens (28 Oct 2026) — PROPOSED
 
 Requested by the user. **Not product-approved**; uncommitted. Supersedes the "drawn disabled" part of D20 and D36 §5.
 
@@ -5162,11 +5869,11 @@ Canvas parity note: the canvas shows these disabled bars. They did nothing, so r
 longer look the same as the canvas there. Tests UT-ADCONTR-936 and UT-ADCOST-910 now assert the bars are absent. To bring them back,
 restore the two files from git history.
 
-## D62 · Admin Milestones: matrix text sizes and column width follow the canvas (28 Oct 2026) — PROPOSED
+## D68 · Admin Milestones: matrix text sizes and column width follow the canvas (28 Oct 2026) — PROPOSED
 
 Requested by the user from a screenshot of the live canvas Milestones screen. **Not product-approved**; uncommitted.
 Sources: `Admin Milestones Screen.pa.yaml` (AMS) and `App.pa.yaml` 1148-1156 (`gblAppSizes.Font`: Small 10, Medium 11, Large 12, ExtraLarge 14).
-The Apply / Apply All controls in the screenshot are NOT taken over (D61).
+The Apply / Apply All controls in the screenshot are NOT taken over (D67).
 
 | # | Canvas | Code app before | Now |
 |---|---|---|---|
@@ -5199,7 +5906,7 @@ Source: `con_Admin_MilestoneAssumtion_Form` (AMS:999-2670), measured against the
 
 Not changed: the title bar, Save and Cancel are the shared `FormPanel` footer used by every panel, and already match the canvas look.
 
-## D63 · The admin left menu opens with both groups expanded (29 Oct 2026) — PROPOSED
+## D69 · The admin left menu opens with both groups expanded (29 Oct 2026) — PROPOSED
 
 Found by the first Canvas-first parity run (`E2E-PARITY-REPORT-2026-10-29.md`). **Not product-approved**; uncommitted.
 
@@ -5208,7 +5915,7 @@ Found by the first Canvas-first parity run (`E2E-PARITY-REPORT-2026-10-29.md`). 
 - **Now:** `LeftNav` opens both groups on every admin screen (`components/LeftNav.tsx`). A group can still be folded by the user.
 - **Not changed:** the Cost and Project rails keep their own rule (the OPEX group opens when the current screen is inside it).
 
-## D64 · Numbers follow the user's language on every PM screen and the Cost messages (29 Oct 2026) — PROPOSED
+## D70 · Numbers follow the user's language on every PM screen and the Cost messages (29 Oct 2026) — PROPOSED
 
 Requested by the user after the Canvas-first run showed that the Canvas reads and shows numbers with `Language()` (a German user types and sees "1,5", an English user "1.5").
 **Not product-approved**; uncommitted. Audit: a read of ~135 `Language()` sites in the Canvas YAML against the code (`E2E-PARITY-REPORT-2026-10-29.md`, "Numbers and language").
@@ -5235,19 +5942,19 @@ Not changed, on purpose or for lack of evidence (open points, none approved):
 - Month names in the Canvas are fixed English (`[$-en-US]mmmm`); the code app does the same.
 - **Not checked in a German browser.** The proof is the unit tests (UT-LOCALE-001 to 043: every box's opening text passes its own validator in en-US, en-GB, de-DE, pl-PL and fr-FR) and the unchanged default. A real run with the browser set to German is still to do.
 
-## D65 · Application Settings parity pass, Check List / Gates / CAPEX / Costs (29 Oct 2026) — PROPOSED
+## D71 · Application Settings parity pass, Check List / Gates / CAPEX / Costs (29 Oct 2026) — PROPOSED
 
 Found by the Playwright parity run (see `E2E-PARITY-REPORT-APPSETTINGS-2026-10-29.md`). Changed to match the Canvas: Project Gates text sizes and colours, Status column width and Add Task inset; CAPEX account caption size; Costs page inset and breadcrumb size (also Contracts); Check List command bar height. **Needs a decision:** the default collapsed state of the country rail (Canvas collapsed, code app expanded) and the grey vs blue section chevrons on Costs/Contracts.
 
-## D66 · Request log in the browser console, every build (29 Oct 2026) — PROPOSED
+## D72 · Request log in the browser console, every build (29 Oct 2026) — PROPOSED
 
 Product owner: trace every call and action; on in every build (no environment switch); Console only (no download button); the Add Cost from Table lines move to the same format.
 Canvas has no equivalent (its Monitor tool is a separate session). Lines are `[VSB] HTTP …` (every SDK request: method, path, status, ms, size), `[VSB] DATA …` (data-layer calls of one kind and table, summed into ONE line: rows, calls, total, average and slowest ms), `[VSB] ACTION …` (one page load or save: ms, requests, rows, operations). Counts and names only, never row values. Overlapping actions each count the requests made meanwhile. Code: `platform/requestLog.ts`, `app/queryLog.ts`, hooks in `platform/powerClient.ts`, `data/client.ts`, `data/executePlan.ts`; tests UT-REQLOG-001…022. Open: raw generated-service calls outside those helpers show only as HTTP lines (no row count).
 
-## D67 · Add Cost from Table: "Show all years" switch (29 Oct 2026) — PROPOSED
+## D73 · Add Cost from Table: "Show all years" switch (29 Oct 2026) — PROPOSED
 
 Product owner request, to cut the click / Tab lag of the sheet (`react-spreadsheet` draws and re-evaluates every cell: about 28,000 for 225 rows x 10 years). NEW, no canvas equivalent: a switch "Show all years" in the toolbar beside Copy Table. Off (default) shows the 6 fixed columns plus the current year's 12 months (the nearest year when the current one is outside the sheet); on shows every year as before. **DIVERGENCE:** the canvas always shows every year; the default is now one year. Display only: the grid keeps every column, edits in the one-year view are written back into the full grid (`spreadsheet/viewColumns.ts`), hidden years are never touched, and `onDataChange`, validation, Copy Table and Save always use all years. A paste wider than the visible year is clipped to the visible columns. Tests UT-ADDCOST-VIEW-001…022. Open: whether the default should stay "current year" or be "all years"; a virtualized grid is still the fix for the all-years view.
 
-## D68 · Troubleshooting aids in the console log (29 Oct 2026) — PROPOSED
+## D74 · Troubleshooting aids in the console log (29 Oct 2026) — PROPOSED
 
-Extends D66; console only, every build, no row values. (1) **Action ids:** each ACTION has an id (`a7`); HTTP, DATA and ACTION lines made while it was open end with `[a7]` (overlapping actions list every open id). (2) **ERROR lines:** every `trace("error" | "critical", …)` (so `userErrorText`, the error boundary, truncation guards) prints `[VSB] ERROR <what> — <root cause: HTTP status, server text, request id> @ <route>`; a critical one adds `· last actions: …` (the last five). A failed request's own trace stays in the buffer but prints no second line (its HTTP line is the record). (3) **SLOW:** a request over 3 s, an action over 5 s, or a DATA batch whose slowest call is over 3 s prints as a warning ending `· SLOW`. (4) **Unhandled errors:** `window` `error` and `unhandledrejection` are traced as critical (`platform/globalErrors.ts`, installed in `main.tsx`). Tests UT-REQLOG-030…043. Not built (not requested): a "Report a problem" copy button and a `?debug=1` facts line. The thresholds are constants in `platform/requestLog.ts`.
+Extends D72; console only, every build, no row values. (1) **Action ids:** each ACTION has an id (`a7`); HTTP, DATA and ACTION lines made while it was open end with `[a7]` (overlapping actions list every open id). (2) **ERROR lines:** every `trace("error" | "critical", …)` (so `userErrorText`, the error boundary, truncation guards) prints `[VSB] ERROR <what> — <root cause: HTTP status, server text, request id> @ <route>`; a critical one adds `· last actions: …` (the last five). A failed request's own trace stays in the buffer but prints no second line (its HTTP line is the record). (3) **SLOW:** a request over 3 s, an action over 5 s, or a DATA batch whose slowest call is over 3 s prints as a warning ending `· SLOW`. (4) **Unhandled errors:** `window` `error` and `unhandledrejection` are traced as critical (`platform/globalErrors.ts`, installed in `main.tsx`). Tests UT-REQLOG-030…043. Not built (not requested): a "Report a problem" copy button and a `?debug=1` facts line. The thresholds are constants in `platform/requestLog.ts`.

@@ -28,7 +28,7 @@ import {
   deserialiseStandardValuesJson, seasonalityFields,
   buildNegativePriceRows, negativeRowsForEdit, applyReductionEdit, resetNegativePriceRow,
   planNegativePriceWrites, planNegativePriceWritesCanvasParity, negativePriceFields,
-  syncRevenueNegativePrices, revenueSyncYieldsCanvasParity, parseFabricNumber, normaliseAmount,
+  syncRevenueNegativePrices, revenueSyncYieldsCanvasParity, parseFabricNumber, normaliseAmount, parseStandardAssumptions,
   validateWindSpeed, validateGrossYield, validateIrradiation, validateTotalLosses, validateUncertainty,
   validateUncertaintyCanvasParity, validateNetYieldP50, validateNetYieldP75, validateNetYieldP90,
   validateCellPercent, canSaveYield, yieldErrors,
@@ -45,7 +45,7 @@ import { LEAVE_DIALOG as PROD_LEAVE_DIALOG, shouldConfirmLeave as prodShouldConf
 /* ═══════════════════════════════════════════════════════════════════ fixtures ═══ */
 
 const project = (over: Partial<ProductionProject> = {}): ProductionProject => ({
-  id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", technology: 952850000,
+  id: "p1", projectIdText: "DE-0001", projectName: "Windpark Nord", countryId: "c1", countryName: "Germany", technology: 952850000,
   totalCapacity: 22.4, endDate: "2055-12-31", cod: "2028-09-01", plantPvCapacity: 5,
   grossYield: 12_000, windSpeed: 7.25, irradiation: null, netYieldP50: 12_000, netYieldP75: 11_000, netYieldP90: 10_000,
   standardCostCreated: false, owningBusinessUnitId: "bu-1",
@@ -316,7 +316,7 @@ describe("seasonality", () => {
     expect(buildSeasonalityRows(std, "PV")[0]!.value).toBe(6.5);
     expect(buildSeasonalityRows(std, "WTG")[0]!.value).toBe(8);
   });
-  it("UT-PROD-085 a month missing from the standard (Fabric not connected) is blank", () => {
+  it("UT-PROD-085 a month missing from the standard (or a failed Fabric read) is blank", () => {
     const rows = buildSeasonalityRows([], "WTG");
     expect(rows.every((r) => r.value === null && r.text === "")).toBe(true);
     expect(isSeasonalityValid(rows)).toBe(false);
@@ -806,5 +806,30 @@ describe("D35 — the shared leave guard", () => {
     expect(shouldConfirmLeaveWhilePanelOpen(true)).toBe(true);
     expect(shouldConfirmLeaveWhilePanelOpen(false)).toBe(false);
     expect(PROD_LEAVE_DIALOG).toEqual({ title: "Unsaved data", description: "You have unsaved data. Do you really want to leave current form without saving?", confirm: "Yes", cancel: "Cancel" });
+  });
+});
+
+describe("parseStandardAssumptions (Fabric SQL, connected 28 Oct 2026)", () => {
+  it("UT-PROD-120 seasonality: Month = Value(category), PV / WTG = Value × 100 (unrounded), sorted by category", () => {
+    const { seasonality } = parseStandardAssumptions([
+      { valuetype: "seasonality", category: "2", pv: "0.07", wind: "0.075" },
+      { valuetype: "seasonality", category: "1", pv: "0.065", wind: "0.08" },
+      { valuetype: "price", category: "2030", pv: "70", wind: "80" },
+    ]);
+    expect(seasonality.map((r) => r.month)).toEqual([1, 2]);
+    expect(seasonality[0]!.pv).toBeCloseTo(6.5, 10);
+    expect(seasonality[1]!.wtg).toBeCloseTo(7.5, 10);
+  });
+
+  it("UT-PROD-121 negative prices: Year = Value(category), Round(Value × 100, 1); blanks read 0, a non-numeric category is dropped", () => {
+    const { negativePrices } = parseStandardAssumptions([
+      { valuetype: "negativeprices", category: "2029", pv: "0.0123", wind: "" },
+      { valuetype: "negativeprices", category: "2028", pv: "0.05", wind: "0.0456" },
+      { valuetype: "negativeprices", category: "n/a", pv: "0.1", wind: "0.1" },
+    ]);
+    expect(negativePrices).toEqual([
+      { year: 2028, pv: 5, wind: 4.6 },
+      { year: 2029, pv: 1.2, wind: 0 },
+    ]);
   });
 });

@@ -38,7 +38,7 @@ export function technologyName(value: number | undefined): string {
 /**
  * Canvas typography of the screen. `gblAppSizes.Font` (App:1148-1156): Small 10, Medium 11, Large 12,
  * ExtraLarge 14. The matrix labels are modern `Text@0.0.51` controls, whose `Size` is in px (28 Oct 2026,
- * D62); only `lbl_ClusterName_…` is a classic Label (Medium, pt ≈ 14.7px, nearest ramp step 300).
+ * D68); only `lbl_ClusterName_…` is a classic Label (Medium, pt ≈ 14.7px, nearest ramp step 300).
  * All weights Regular, default colours.
  */
 export const TYPOGRAPHY = {

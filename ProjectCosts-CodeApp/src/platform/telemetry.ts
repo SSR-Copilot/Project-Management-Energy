@@ -23,6 +23,7 @@ export interface TraceEntry {
 const MAX_ENTRIES = 200;
 const entries: TraceEntry[] = [];
 const listeners = new Set<() => void>();
+const sinks = new Set<(entry: TraceEntry) => void>();
 
 /** The server-side reason of `detail`, as text: the Dataverse root cause, else the error's own message. */
 function causeText(detail: unknown): string | undefined {
@@ -37,7 +38,7 @@ function causeText(detail: unknown): string | undefined {
  * `[VSB] HTTP … → 4xx` line is already there (`platform/powerClient.ts`).
  */
 export function trace(severity: Severity, message: string, detail?: unknown, quiet = false): void {
-  // Errors reach the console in one format, with their root cause (D68). A warning is not an error.
+  // Errors reach the console in one format, with their root cause (D74). A warning is not an error.
   if (!quiet && (severity === "error" || severity === "critical")) {
     try {
       logError(message, causeText(detail), severity === "critical");
@@ -45,9 +46,20 @@ export function trace(severity: Severity, message: string, detail?: unknown, qui
       // Logging must never break the caller.
     }
   }
-  entries.push({ severity, message, at: new Date().toISOString(), detail });
+  const entry: TraceEntry = { severity, message, at: new Date().toISOString(), detail };
+  entries.push(entry);
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const l of listeners) l();
+  for (const s of sinks) {
+    // A failing sink (e.g. Application Insights) must never break the caller.
+    try { s(entry); } catch { /* ignored */ }
+  }
+}
+
+/** Also hands every new entry to `sink` (Application Insights, `appInsights/`). Returns the removal. */
+export function addSink(sink: (entry: TraceEntry) => void): () => void {
+  sinks.add(sink);
+  return () => sinks.delete(sink);
 }
 
 export function traces(): readonly TraceEntry[] {

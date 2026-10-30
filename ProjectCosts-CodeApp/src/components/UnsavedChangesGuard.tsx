@@ -28,7 +28,7 @@ export function UnsavedChangesGuard({ when, dialog, canvasLook = false }: {
   /** The screen's dirty condition — the canvas `If(<dirty>, <dialog>, <navigate>)` test. */
   when: boolean;
   dialog: LeaveDialogText;
-  /** Opt-in: the canvas pop-up's look (dark scrim, flat card, 120 px Yes, no footer rule). */
+  /** Opt-in: the canvas pop-up's look (dark scrim, flat 459 x 242 card, 120 px Yes, no footer rule). */
   canvasLook?: boolean;
 }) {
   const shouldBlock = useCallback<BlockerFunction>(
@@ -63,6 +63,7 @@ export function UnsavedChangesGuard({ when, dialog, canvasLook = false }: {
       canvasFooter={canvasLook}
       footerDivider={!canvasLook}
       darkScrim={canvasLook}
+      compact={canvasLook}
       {...(canvasLook ? { confirmWidth: 120 } : {})}
       onConfirm={() => blocker.proceed?.()}
       onCancel={() => blocker.reset?.()}

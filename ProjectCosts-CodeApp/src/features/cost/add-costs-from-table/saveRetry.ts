@@ -17,6 +17,22 @@ export function saveButtonDisabled(s: { canSave: boolean; isPending: boolean; is
 }
 
 /**
+ * Whether the sheet and every control that edits it or leaves it (Add Row, Delete Row, Copy
+ * Table, Cancel, the header X) are locked: while a save is pending.
+ *
+ * DIVERGENCE (D58): the canvas covered the modal with
+ * `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable` while it saved, so nothing could be
+ * edited. Without that scrim, an edit typed mid-save would be silently lost when the successful
+ * save navigates away, and Cancel mid-save would hide a failure. The grid is made `inert` (no
+ * focus, no input) rather than rebuilt with read-only cells, which would hand `react-spreadsheet`
+ * a new `data` matrix twice per save on a sheet of up to ~190,000 cells; ignoring `onDataChange`
+ * instead would let the grid show edits the save state never sees.
+ */
+export function sheetLocked(s: { isPending: boolean }): boolean {
+  return s.isPending;
+}
+
+/**
  * What a Save sends as `changedRows`, whether the data layer must re-read before planning, and
  * which row identities this attempt sends (the screen keeps them if the attempt fails).
  *

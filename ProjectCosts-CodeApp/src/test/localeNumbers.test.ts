@@ -1,5 +1,5 @@
 /**
- * UT-LOCALE: numbers follow the user's language (D64).
+ * UT-LOCALE: numbers follow the user's language (D70).
  *
  * The canvas formats and reads numbers with `Language()`: a German user types and sees "1,5", an English user "1.5". The code app
  * validated in the user's language but several screens still OPENED their boxes in US text, so a German user's untouched

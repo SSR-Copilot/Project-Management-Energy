@@ -59,7 +59,7 @@ const twoYears = (): SheetGrid => {
   ];
 };
 
-describe("SpreadSheetComp year view (D67)", () => {
+describe("SpreadSheetComp year view (D73)", () => {
   it("UT-ADDCOST-VIEW-020 a one-year view draws only that year's columns but reports the whole grid", () => {
     const onDataChange = vi.fn();
     const { container } = render(<SpreadSheetComp data={twoYears()} onDataChange={onDataChange} {...props} visibleYearIndex={1} />);

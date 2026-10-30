@@ -22,14 +22,14 @@ import {
 } from "@fluentui/react-components";
 import {
   BugRegular, GlobeRegular, HomeAddRegular, HomeRegular, InfoRegular, LocalLanguageRegular,
-  LockClosedRegular, MailRegular, PersonRegular, ProhibitedRegular, SettingsRegular, WarningFilled,
+  LockClosedRegular, MailRegular, PersonFilled, ProhibitedRegular, SettingsRegular, WarningFilled,
   ChevronDownRegular,
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
 import { layout, media, palette, space } from "@/theme/tokens";
 import { VsbLogo } from "./VsbLogo";
 import {
-  environmentInfoColor, projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
+  projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
 } from "./headerRules";
 
 const useStyles = makeStyles({
@@ -49,7 +49,9 @@ const useStyles = makeStyles({
     minWidth: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
     height: "auto",
   },
-  title: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase500 },
+  // `lbl_cmp_Header_AppName`: themePrimary, Semibold, 18 pt (24 px). Fluent `Text` drops plain
+  // class names, so the canvas.css rule never reached it; the look lives here.
+  title: { fontWeight: tokens.fontWeightSemibold, fontSize: "24px", lineHeight: "1.2", color: palette.themePrimary },
   version: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase100 },
   /** The (i) icon then the version, 4 px apart. The icon is 14 x 14 in the canvas. */
   versionLine: { display: "inline-flex", alignItems: "center", gap: space.xs },
@@ -60,12 +62,8 @@ const useStyles = makeStyles({
    * Toolbar padding + first button padding used to give (23 px: the bar pulls its first
    * command 3 px left onto the icon glyph), so the first icon stays where it was.
    */
-  commandSlot: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingLeft: "23px" },
-  pageTitle: {
-    fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400,
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-    maxWidth: "28ch",
-  },
+  // The first command's icon at x 198, right after the 204 px brand block (canvas, 28 Oct 2026).
+  commandSlot: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingLeft: 0 },
   right: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
   help: { fontWeight: tokens.fontWeightRegular, "& .fui-Button__icon": { color: tokens.colorNeutralForeground3 } },
   /*
@@ -217,7 +215,6 @@ export function AppHeader({
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
-  const infoColor = environmentInfoColor(environmentName);
 
   return (
     <header className={`${styles.header}${onBack ? " canvas-pm-header" : ""}`}>
@@ -243,15 +240,12 @@ export function AppHeader({
         )}
         <div className={styles.brandText}>
           <Text className={`${styles.title} canvas-brand-title`}>Cloud</Text>
+          {/*
+            `ico_cmp_Header_Info.Visible` is a literal `false` in the canvas (its Dev check is
+            commented out, cmp_Header:269-275), so no (i) icon renders beside the version
+            (canvas screenshot, 28 Oct 2026). `environmentInfoColor` keeps its colour switch.
+          */}
           <span className={styles.versionLine}>
-            {infoColor ? (
-              <InfoRegular
-                className={styles.versionIcon}
-                style={{ color: infoColor }}
-                aria-hidden="true"
-                data-testid="ico_cmp_Header_Info"
-              />
-            ) : null}
             <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
           </span>
         </div>
@@ -310,7 +304,13 @@ export function AppHeader({
               ) : null}
             </span>
           ) : (
-            <Text className={`${styles.pageTitle} canvas-project-title`} title={pageTitle}>{pageTitle}</Text>
+            /*
+             * Cost: the same `con_cmp_Header_HeaderText` as the PM header above (20 px, Semibold),
+             * as the same kind of element: a plain span carrying only `.canvas-project-title`. It was a
+             * Fluent `Text` with a Griffel `pageTitle` (16 px, 28ch cap) that beat the stylesheet's
+             * 20 px, so the Cost name rendered smaller and in Fluent's grey (CA-21).
+             */
+            <span className="canvas-project-title" title={pageTitle}>{pageTitle}</span>
           )}
         </div>
       ) : null}
@@ -379,7 +379,9 @@ export function AppHeader({
                 * because `Wrap: false` needs `overflow: hidden`, and the pill itself must stay
                 * `overflow: visible` for the avatar to escape it.
                 */}
-              <span className="canvas-user-name">{userName ? `Hi ${userName}` : "User"}</span>
+              {/* Dataverse prefixes synced accounts' full name with "# "; the canvas reads
+                  User().FullName, which has none, so it is dropped here (28 Oct 2026). */}
+              <span className="canvas-user-name">{userName ? `Hi ${userName.replace(/^#\s*/, "")}` : "User"}</span>
               {/*
                 * `con_cmp_In_Header_UserImage` is a 50 x 50 box at x 200 / y 12, but what is
                 * VISIBLE is `shp_cmp_In_Image_UserBorder` inside it: a 47 x 47 circle at (1, 1),
@@ -389,7 +391,7 @@ export function AppHeader({
                 * a user whose photo Graph would not give us; the canvas simply showed nothing.
                 */}
               <span className="canvas-user-avatar">
-                {userPhoto ? <img src={userPhoto} alt="" /> : <PersonRegular />}
+                {userPhoto ? <img src={userPhoto} alt="" /> : <PersonFilled />}
               </span>
             </Button>
           </MenuTrigger>

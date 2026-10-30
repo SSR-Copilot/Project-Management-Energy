@@ -11,12 +11,15 @@ import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useNotify, type Notify } from "@/components/useNotify";
 import {
-  backgroundDeleteFailureTexts, type DeferredCounts, type SaveAddCostSheetResult,
+  backgroundDeleteFailureTexts, bookPatchFailureReport, type DeferredCounts, type SaveAddCostSheetResult,
 } from "@/data/addCostSheet";
+import { emitSaveLog } from "@/data/saveLog";
 import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
 import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
-import type { CostBook, CostLine, CostPeriod } from "./model";
+import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
+import { panelBusyLogLine } from "@/data/capexWrites";
 import { applySavedSheetToBook } from "./savedSheetPatch";
+import { costWriteKey } from "@/domain/writeGuard";
 
 /**
  * Every field a save should compare — `id` decides create/update/delete, not equality.
@@ -95,6 +98,8 @@ export function useCostBook(category?: number) {
    * already carry a header — and is no longer a place to park an unsaved group name.
    */
   const save = useMutation({
+    // CA-15: counted by `useCostWriteInFlight` even after the screen that started it is gone.
+    mutationKey: costWriteKey(projectId, "periods"),
     mutationFn: async (nextBook: CostBook): Promise<{ book: CostBook; touchedPeriods: boolean }> => {
       if (!projectId) throw new Error("No project is selected.");
       const previous = query.data;
@@ -182,6 +187,7 @@ export function useAddStandardContract() {
   const { projectId, project } = useSession();
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: costWriteKey(projectId, "periods"), // CA-15
     mutationFn: (args: StandardContractArgs) => {
       if (!projectId) throw new Error("No project is selected.");
       return costRepository().addStandardContract(periodWriteContext(projectId, project), args);
@@ -303,6 +309,7 @@ export function useLeaseAssumptions(
 export function useLeaseWrites(projectId: string | undefined) {
   const client = useQueryClient();
   return useMutation({
+    mutationKey: costWriteKey(projectId, "land-lease"), // CA-15
     mutationFn: (writes: readonly LeaseWrite[]) => costRepository().applyLeaseWrites(writes),
     onSuccess: async () => {
       await Promise.all([
@@ -394,13 +401,29 @@ export function useCapexTotals(enabled = true) {
  * mean diffing the entire project. All three invalidate the same keys, because a cost change
  * moves the grid, the Summary tab's totals and the Contracts recalculation alike.
  */
-export function useCapexWrites(category?: number) {
+export function useCapexWrites(
+  category?: number,
+  /**
+   * CA-15 — called for every failed CAPEX write, from the HOOK-level `onError`: TanStack keeps
+   * running those after the screen unmounts (per-call `mutate(…, { onError })` callbacks it drops),
+   * so a failure after the user left still reaches the caller's toast.
+   */
+  options: { onWriteError?: (error: unknown) => void } = {},
+) {
   const { projectId, project } = useSession();
   const client = useQueryClient();
+  const reportError = (error: unknown) => {
+    try { options.onWriteError?.(error); } catch { /* reporting must never break the write */ }
+  };
 
-  const invalidate = async () => {
+  /*
+   * `writtenOn` is the category the write was MADE on, captured in `onMutate` (D58). TanStack
+   * pushes every render's options into a pending mutation, so reading the render-time `category`
+   * here refreshed the tab the user had since switched TO, and left the one written on stale.
+   */
+  const invalidate = async (writtenOn: number | undefined) => {
     await Promise.all([
-      client.invalidateQueries({ queryKey: ["cost-book", projectId, category ?? "none"] }),
+      client.invalidateQueries({ queryKey: ["cost-book", projectId, writtenOn ?? "none"] }),
       client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
       client.invalidateQueries({ queryKey: qk.devCoCapexContracts(projectId ?? "none") }),
       client.invalidateQueries({ queryKey: qk.devCoCapexCosts(projectId ?? "none") }),
@@ -410,29 +433,72 @@ export function useCapexWrites(category?: number) {
     ]);
   };
 
+  /** Runs at mutate time, from that render's options: the category the write is made on. */
+  const writtenOn = () => ({ category });
+
+  /** CA-15: every CAPEX write carries the project's Cost write key (`useCostWriteInFlight`). */
+  const mutationKey = costWriteKey(projectId, "capex");
+
   const setPaid = useMutation({
+    mutationKey,
+    onMutate: writtenOn,
     mutationFn: (args: { lineId: string; year: number; month: number; paid: boolean; costId?: string }) =>
       costRepository().setCostPaid(projectId as string, args),
-    onSuccess: invalidate,
+    onSuccess: (_data, _args, context) => invalidate(context.category),
+    onError: (error) => reportError(error),
   });
 
   const saveLine = useMutation({
+    mutationKey,
+    // The click time, for the busy line below (the panel's spinner waits for the refetch too),
+    // and the category the save is made on (see `invalidate`).
+    onMutate: () => ({ startedAt: performance.now(), ...writtenOn() }),
     mutationFn: (args: {
       line: CostLine; accountId: string; isNew: boolean;
       payments: { id?: string; year: number; month: number; amount: number | null }[];
       /** See `SaveCostLineArgs` — the relink confirmation was accepted. */
       resetPaidAndPaymentDateComments?: boolean;
+      /** See `SaveCostLineArgs` — the months the panel opened with. */
+      storedPayments?: readonly Payment[];
     }) => costRepository().saveCostLine({
       ...args,
       projectId: projectId as string,
       owningBusinessUnitId: project?.owningBusinessUnitId,
     }),
-    onSuccess: invalidate,
+    /*
+     * Still AWAITED (D56 §5): the canvas lowers its spinner only after
+     * `Select(btn_Capex_Cost_Reload_PCF_After_Mutation_Code)` has reloaded the grid
+     * (`CapexScreenCode.txt:17413`), and without a book patch a fire-and-forget refetch would show
+     * the pre-save grid for a moment. The line below measures what that wait costs.
+     */
+    onSuccess: async (_id, _args, context) => {
+      const writesDone = performance.now();
+      await invalidate(context ? context.category : category);
+      console.info(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
+    },
+    // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
+    // the next panel compares against (`storedPayments`, D56 §3), show what Dataverse holds.
+    // Not awaited: the error banner must not wait for the reload.
+    onError: (error, _args, context) => {
+      void invalidate(context ? context.category : category).catch(() => undefined);
+      reportError(error);
+    },
   });
 
   const deleteLine = useMutation({
+    mutationKey,
+    // The click time, for the delete busy line (D59), and the category the delete is made on
+    // (D58, see `invalidate`); the refetch is awaited exactly as before.
+    onMutate: () => ({ startedAt: performance.now(), ...writtenOn() }),
     mutationFn: (line: CostLine) => costRepository().deleteCostLine(projectId as string, line),
-    onSuccess: invalidate,
+    onSuccess: async (_data, _line, context) => {
+      const deletesDone = performance.now();
+      await invalidate(context ? context.category : category);
+      console.info(panelBusyLogLine(
+        deletesDone - (context?.startedAt ?? deletesDone), performance.now() - deletesDone, "delete",
+      ));
+    },
+    onError: (error) => reportError(error),
   });
 
   return { setPaid, saveLine, deleteLine };
@@ -522,6 +588,7 @@ export function useSaveAddCostSheet(category: number) {
   };
 
   return useMutation({
+    mutationKey: costWriteKey(projectId, "add-cost-sheet"), // CA-15
     mutationFn: (args: Omit<Parameters<
       ReturnType<typeof costRepository>["saveAddCostSheet"]
     >[0], "projectId" | "owningBusinessUnitId">) =>
@@ -543,8 +610,8 @@ export function useSaveAddCostSheet(category: number) {
           client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
         } catch (error) {
           // The Save itself succeeded: a patch that throws must not turn it into a failure. The
-          // refetch below still brings the saved state.
-          console.error("Add Cost from Table: patching the DEVEX/CAPEX book failed", error);
+          // refetch below still brings the saved state. Readable line, then the raw error (D59).
+          emitSaveLog(() => bookPatchFailureReport(error));
         }
       }
       void invalidate();
@@ -723,10 +790,12 @@ export function useCommentWrites() {
     // A comment's resolved state can change the grid's red-dot flags.
     void client.invalidateQueries({ queryKey: ["cost-book", projectId] });
   };
+  const mutationKey = costWriteKey(projectId, "capex-comments"); // CA-15
   const save = useMutation({
+    mutationKey,
     mutationFn: (args: Omit<Parameters<typeof saveComment>[0], "owningBusinessUnitId">) =>
       saveComment({ ...args, owningBusinessUnitId: project?.owningBusinessUnitId }),
   });
-  const remove = useMutation({ mutationFn: (id: string) => deleteComment(id) });
+  const remove = useMutation({ mutationKey, mutationFn: (id: string) => deleteComment(id) });
   return { save, remove, invalidate };
 }

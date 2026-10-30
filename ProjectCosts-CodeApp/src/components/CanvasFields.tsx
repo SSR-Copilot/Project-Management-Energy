@@ -101,7 +101,7 @@ const useStyles = makeStyles({
  * `Y: =8`, i.e. beside the caption, not under the box. Same for the contract panel's
  * `Comment  0/255`.
  */
-export function CostField({ label, name, required, value, onChange, type = "text", disabled = false, error, maxLength, placeholder, counter, standard, children }: {
+export function CostField({ label, name, required, value, onChange, onBlur, type = "text", disabled = false, error, maxLength, placeholder, counter, standard, children }: {
   label: string;
   /**
    * The original canvas control's own name (`txt_Screen_Panel_Field_1`), when known — Tosca's
@@ -123,6 +123,11 @@ export function CostField({ label, name, required, value, onChange, type = "text
    */
   name?: string;
   required?: boolean; value?: string | number; onChange?: (value: string) => void;
+  /**
+   * The input lost focus (the "touched" signal). Optional, so every existing caller is unchanged;
+   * the Contracts panel uses it to show a required field's error once the user has visited it.
+   */
+  onBlur?: () => void;
   type?: string; disabled?: boolean; error?: string; maxLength?: number; placeholder?: string;
   counter?: string;
   /**
@@ -136,7 +141,7 @@ export function CostField({ label, name, required, value, onChange, type = "text
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required} data-counter={counter ? true : undefined}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
-    {children ?? <input className={standardClass(standard)} type={type} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
+    {children ?? <input className={standardClass(standard)} type={type} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </label>;
 }

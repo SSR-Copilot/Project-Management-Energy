@@ -749,7 +749,7 @@ describe("Canvas parity pass: list view", () => {
     expect(toolbar.children[2]).toBe(screen.getByRole("button", { name: "Add Construction Contract" }));
   });
 
-  it("UT-ADCONTR-936 no Apply to All bar and no per-contract Apply bar are drawn (D61)", async () => {
+  it("UT-ADCONTR-936 no Apply to All bar and no per-contract Apply bar are drawn (D67)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await user.click(await screen.findByRole("button", { name: "Expand Construction Contract - Grid" }));

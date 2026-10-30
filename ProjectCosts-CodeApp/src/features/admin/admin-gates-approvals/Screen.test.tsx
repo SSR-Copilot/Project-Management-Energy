@@ -203,12 +203,13 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(taskDelete());
-    const dialog = await screen.findByRole("alertdialog");
+    // `hidden: true`: tabster marks the open dialog aria-hidden after 250 ms in jsdom (CA-19, see UT-ADGATE-910).
+    const dialog = await screen.findByRole("alertdialog", { hidden: true });
     expect(within(dialog).getByText("Delete Check List Approval Item?")).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Germany - Wind");
     expect(dialog).toHaveTextContent("Cluster 1 to Cluster 2");
     expect(dialog).toHaveTextContent("Check List Item: 'Grid connection request'");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete", hidden: true }));
     await waitFor(() => expect(exec).toHaveBeenCalledTimes(1));
     expect(sentWrites()).toEqual([expect.objectContaining({ op: "delete", entitySet: TASK_APPROVALS, id: "60000000-0000-0000-0000-000000000001" })]);
   });
@@ -256,15 +257,28 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
   });
 
   it("UT-ADGATE-910 Reset Gate asks for confirmation first, then issues one reset", async () => {
+    /*
+     * CA-19: every role query here is `hidden: true`. In jsdom (no layout) tabster finds no
+     * visible focusable in a freshly opened Fluent dialog, so Fluent focuses the surface itself;
+     * tabster registers the surface's modalizer only after that focus and does not activate a
+     * modalizer whose own element is focused. With NO active modalizer, tabster's deferred
+     * `_hiddenUpdate` (a 250 ms timer) then marks every modalizer — the open drawer AND this
+     * alert dialog — `aria-hidden="true"`, and it stays so (traced, 29 Oct 2026). A default role
+     * query therefore only works if it runs within those 250 ms: under a loaded full run it
+     * did not, and the `findByRole` waited out its 5 s on an element that would never come
+     * back. Not an app defect: in a browser the dialog's first button is focusable, so the
+     * modalizer activates. What this test pins is behaviour (confirmation first, then one
+     * reset), so it waits for the controls to EXIST, not for tabster's a11y state.
+     */
+    const all = { hidden: true } as const;
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(gateEdit(1));
-    fireEvent.click(await screen.findByRole("button", { name: "Reset Gate" }));
-    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(await screen.findByRole("button", { name: "Reset Gate", ...all }));
+    const dialog = await screen.findByRole("alertdialog", all);
     expect(dialog).toHaveTextContent("Remove all cluster gate participants");
     expect(exec).not.toHaveBeenCalled();
-    // `findByRole`, not `getByRole`: under load tabster marks the alert dialog `aria-hidden` for a moment while it takes over from the open panel.
-    fireEvent.click(await within(dialog).findByRole("button", { name: "Reset Gate" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reset Gate", ...all }));
     await waitFor(() => expect(sentWrites()).toEqual([
       expect.objectContaining({ op: "update", entitySet: GATE_TEMPLATES, id: "40000000-0000-0000-0000-000000000001", data: expect.objectContaining({ vsb_gateactive: false }) }),
     ]));
@@ -314,8 +328,9 @@ describe("ProjectGatesSettingsScreen", { timeout: TEST_TIMEOUT }, () => {
     renderScreen();
     await screen.findByText("Draft to Cluster 1");
     fireEvent.click(taskDelete());
-    const dialog = await screen.findByRole("alertdialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    // `hidden: true`: see UT-ADGATE-906 / 910 (CA-19).
+    const dialog = await screen.findByRole("alertdialog", { hidden: true });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete", hidden: true }));
     const label = await screen.findByText(/being deleted, please wait/);
     expect(label.textContent).toBe(
       "Approval item for Project Gates | Germany | Wind\nCheck List: 'Grid connection request' being deleted, please wait...",

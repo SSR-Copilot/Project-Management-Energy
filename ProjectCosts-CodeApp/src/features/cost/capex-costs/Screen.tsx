@@ -35,6 +35,7 @@ import {
   LoadingOverlay,
   PanelButtons,
   PanelExtraButton,
+  WriteStatus,
   useStandardValueClass,
   ExpandChevron,
 } from "@/components";
@@ -73,16 +74,26 @@ import {
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
 } from "./rules";
 import {
-  LOADING_COST, LOADING_DATA, MSG,
+  MSG,
   PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
   PAID_CONFIRM_TITLE,
-  RECALCULATE_ALLOCATED_COST, SAVING_COSTS,
-  allocatedCostLabel, clusterCheckboxState, confirmButtonWidth, defaultSelectedYear,
-  deleteContractDescription,
-  distributionLocked, enabledClusters, isoToMonthYear, monthYearLabel, monthYearToIso,
+  RECALCULATE_ALLOCATED_COST,
+  allocatedCostLabel, capexWriteStatusLabel, clusterCheckboxState, confirmButtonWidth,
+  defaultSelectedYear, deleteContractDescription,
+  LOADING_COST, LOADING_DATA,
+  distributionLocked, enabledClusters, gridActionAllowed, isoToMonthYear, monthYearLabel,
+  monthYearToIso,
   onStartSelectedYear, previousYearFloor, recalculateEnabled, recalculateVisible, recalculatedPayments,
-  savingCostLabel, standardContractLoadingLabel,
+  savingCostLabel,
 } from "./panelRules";
+import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
+import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
+
+/**
+ * CA-15 — while the screen is mounted a failed CAPEX write is already shown, by the banner built
+ * from `writes.*.error`; the reporter is only needed for the toast once the screen is gone.
+ */
+const SHOWN_BY_WRITE_BANNER = () => undefined;
 
 const MONTH_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -195,7 +206,11 @@ export default function CapexCostsScreen() {
   const scoped = category;
   const { data: book, isLoading, error, save, projectId } = useCostBook(scoped);
   const totals = useCapexTotals(isSummaryTab(category));
-  const writes = useCapexWrites(scoped);
+  /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
+  const reportFailure = useWriteFailureReport("DEVEX/CAPEX");
+  const writes = useCapexWrites(scoped, {
+    onWriteError: (e) => reportFailure(e instanceof Error ? e.message : String(e), SHOWN_BY_WRITE_BANNER),
+  });
   // The user's language: the range messages group their numbers the way the canvas does for it.
   const { project, locale } = useSession();
   const isoCurrencyCode = project?.isoCurrencyCode;
@@ -205,6 +220,14 @@ export default function CapexCostsScreen() {
   const startClusterNo = project?.startClusterNo ?? 0;
 
   const busy = writes.setPaid.isPending || writes.saveLine.isPending || writes.deleteLine.isPending;
+  /** The Comments panel's whole-commit flag, reported up so the grid cannot reopen it mid-save. */
+  const [commentsSaving, setCommentsSaving] = useState(false);
+  /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
+  const writeInFlight = useCostWriteInFlight(projectId);
+  /** D58 decision 2b — every write-starting command is greyed or ignored while this holds. */
+  const writesDisabled = writeCommandsDisabled({
+    loading: isLoading, writePending: busy || commentsSaving, writeInFlight,
+  });
   const writeError = writes.setPaid.error ?? writes.saveLine.error ?? writes.deleteLine.error;
 
   /*
@@ -300,7 +323,106 @@ export default function CapexCostsScreen() {
     [book, comments.data, year],
   );
 
-  if (isLoading) return <LoadingOverlay mode="inline" label={LOADING_COST} />;
+  const chooseCategory = (i: number) => {
+    const next = new URLSearchParams(search);
+    if (isSummaryTab(i)) next.delete("category"); else next.set("category", String(i));
+    setSearch(next, { replace: true });
+  };
+
+  /*
+   * The tab strip and the toolbar need nothing from `book`, so they are built here, ahead of the
+   * loading guard, and shared by the loading render and the loaded one.
+   */
+  const tabStrip = (
+    <div role="tablist" aria-label="CAPEX categories" className="canvas-capex-tabs">
+      {tabs.map((label, i) => (
+        <button key={label} role="tab" aria-selected={category === i - 1} aria-label={label}
+          data-testid={`tab_Costs_ContentAssignableAccountCategories-${i - 1}`}
+          onClick={() => chooseCategory(i - 1)}>{label}</button>
+      ))}
+    </div>
+  );
+
+  const toolbar = (
+    <div className="canvas-cost-toolbar">
+      {/* Opens the bulk cost editor, so it is a write-starting command (D58 decision 2b). */}
+      <Button appearance="transparent" icon={<AddRegular />} aria-label="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable"
+        data-testid="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable"
+        disabled={writesDisabled} onClick={() => {
+        const to = costLocation("/costs/add-from-table", projectId!);
+        navigate({ ...to, search: `${to.search}&category=${category}` });
+      }}>Add Cost from Table</Button>
+      <Switch label="Show Empty Accounts" aria-label="tgl_Costs_ProjectCostbtn_ShowEmptyAccounts"
+        data-testid="tgl_Costs_ProjectCostbtn_ShowEmptyAccounts" checked={showEmpty}
+        onChange={(_, d) => setShowEmpty(d.checked)} />
+      <Switch label="Show Total Planned/Paid" aria-label="tgl_Costs_ProjectCostbtn_ShowPlannedPaid"
+        data-testid="tgl_Costs_ProjectCostbtn_ShowPlannedPaid" checked={showPlanned}
+        onChange={(_, d) => setShowPlanned(d.checked)} />
+      <Dropdown className={styles.payerFilter} aria-label="drp_Costs_ProjectCostbtn_ShowCostPaidBy"
+        data-testid="drp_Costs_ProjectCostbtn_ShowCostPaidBy"
+        value={payer} selectedOptions={[payer]}
+        onOptionSelect={(_, d) => { if (d.optionValue) setPayer(d.optionValue); }}>
+        {PAYER_FILTERS.map(v => <Option key={v} value={v}>{v}</Option>)}
+      </Dropdown>
+      <Button appearance="transparent" icon={<ArrowLeftRegular />} aria-label="btn_Costs_ProjectCostbtn_ShowPreviousYear"
+        data-testid="btn_Costs_ProjectCostbtn_ShowPreviousYear"
+        disabled={!canGoPreviousYear(year, yearFloor)}
+        onClick={() => setYear(Math.max(year - 1, yearFloor))} />
+      <Dropdown className={styles.yearFilter} aria-label="drp_Costs_ProjectCostbtn_ShowSelectedYear"
+        data-testid="drp_Costs_ProjectCostbtn_ShowSelectedYear"
+        value={String(year)} selectedOptions={[String(year)]}
+        onOptionSelect={(_, d) => { if (d.optionValue) setYear(Number(d.optionValue)); }}>
+        {projectPeriods(window.min, window.max).map(y => (
+          <Option key={y} value={String(y)}>{String(y)}</Option>
+        ))}
+      </Dropdown>
+      <Button appearance="transparent" icon={<ArrowRightRegular />} aria-label="btn_Costs_ProjectCostbtn_ShowNextYear"
+        data-testid="btn_Costs_ProjectCostbtn_ShowNextYear"
+        disabled={!canGoNextYear(year, window.max)} onClick={() => setYear(year + 1)} />
+    </div>
+  );
+
+  /*
+   * DIVERGENCE (D58): the canvas showed `spn_LoadingSpinnerCost` (`Visible:
+   * =locIsVisibleLoadingCostSpinner`) with "Please wait, loading cost ..." while the cost book
+   * loaded. This app renders the screen chrome — tabs and toolbar, the write commands greyed by
+   * `writeCommandsDisabled` — over an EMPTY body until the data arrives, and no spinner.
+   *
+   * The loading check stays AHEAD of the error check, so a load in progress never reads as
+   * "Cost data is unavailable"; a real failure still does (rule 19).
+   */
+  /*
+   * DIVERGENCE (D58): `cmp_Costs_PopUpLoading` (`cmp_PopUp_Loading`, `Visible:
+   * =locIsVisiblePopUpSpinner`, `:18045-18056`) was a blocking spinner pop-up over the whole
+   * screen. It is replaced by this non-blocking status line, beside the screen's error
+   * banners, carrying the SAME `InformationText` — `capexWriteStatusLabel` keeps the
+   * overlay's precedence (standard contract → panel save → "costs" → "Saving comments..."). What
+   * the scrim used to block is now blocked by `writeCommandsDisabled` / `gridActionAllowed`.
+   *
+   * Built ahead of the loading guard and rendered by BOTH branches: a write started on one tab
+   * can still be running (or have failed) after a switch puts the next tab on its first load.
+   */
+  const writeFeedback = <>
+    {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
+    <WriteStatus testId="capex-write-status" label={costWriteStatusLabel({
+      ownLabel: capexWriteStatusLabel({ pending: busy, standardName, savingLabel, commentsSaving }),
+      ownPending: busy || commentsSaving, writeInFlight,
+    })} />
+    {actionError ? <div className="canvas-error" role="alert">{actionError}</div> : null}
+    {writeError ? (
+      <div className="canvas-error" role="alert">{(writeError as Error).message}</div>
+    ) : null}
+  </>;
+
+  if (isLoading) {
+    return <div className="canvas-cost-screen">
+      {tabStrip}
+      {isSummaryTab(category) ? null : toolbar}
+      {/* D60: an inline spinner in the body, so a tab change never shows an empty screen. */}
+      <LoadingOverlay mode="inline" label={LOADING_COST} testId="capex-loading" />
+      {writeFeedback}
+    </div>;
+  }
   if (!book || error) {
     return <EmptyState title="Cost data is unavailable"
       description="This project's Cost data could not be loaded." />;
@@ -318,12 +440,6 @@ export default function CapexCostsScreen() {
   const clearStandardFlag = (description: string, wasStandard: boolean) => {
     const next = applyDescriptionChange(description, wasStandard);
     return { description: next.description, standard: next.isStandardContract };
-  };
-
-  const chooseCategory = (i: number) => {
-    const next = new URLSearchParams(search);
-    if (isSummaryTab(i)) next.delete("category"); else next.set("category", String(i));
-    setSearch(next, { replace: true });
   };
 
   const open = (accountId: string, line?: CostLine) => {
@@ -414,7 +530,7 @@ export default function CapexCostsScreen() {
       clusters: eligible.map(c => c.order), payments: [], comments: [],
       totalCost: amt, standardAssumptionId: assumption.id,
     };
-    // Two round trips (the contract row, then its months) — the spinner names which one.
+    // Two round trips (the contract row, then its months) — the status line names which one.
     setStandardName(assumption.description);
     writes.saveLine.mutate({
       line: newLine, accountId: subaccountId, isNew: true,
@@ -423,6 +539,12 @@ export default function CapexCostsScreen() {
   };
 
   const onAction: GridCallback = (action, id, standardContractId, paid) => {
+    /*
+     * D58 decision 2b: the vendored grid has no disabled state, and the overlay scrim that used
+     * to block it is gone, so a write-starting action that arrives while a write is pending is
+     * ignored here instead. Expand/collapse never reaches this callback.
+     */
+    if (!gridActionAllowed(action, writesDisabled)) return;
     if (action === "Add") open(id);
     if (action === "AddStandardContract" && standardContractId) {
       addStandardContract(id, standardContractId);
@@ -603,6 +725,9 @@ export default function CapexCostsScreen() {
      * This used to `await` the write with the panel still mounted and close it afterwards, so
      * the spinner was drawn on top of the panel it was saving. The client's reference is
      * explicit about the order, filename and all: "Panel Closes and Spinner is shown".
+     *
+     * Since D58 there is no spinner: the panel still closes first, and the same text then
+     * shows as the `WriteStatus` line (decision 7a keeps the order).
      */
     setSavingLabel(savingCostLabel(edit.distribution));
     closePanel();
@@ -649,6 +774,8 @@ export default function CapexCostsScreen() {
         payments: reconcilePayments(stored, proposed),
         // The dialog's third bullet is a promise; `saveCostLine` keeps it.
         resetPaidAndPaymentDateComments: relinkResetNeeded,
+        // Lets the bulk path skip a month whose amount did not change (D56 §3).
+        storedPayments: stored,
       });
     } catch {
       // Swallowed on purpose: `writes.saveLine.error` is already rendered as the screen's error
@@ -682,16 +809,15 @@ export default function CapexCostsScreen() {
   );
 
   return <div className="canvas-cost-screen">
-    <div role="tablist" aria-label="CAPEX categories" className="canvas-capex-tabs">
-      {tabs.map((label, i) => (
-        <button key={label} role="tab" aria-selected={category === i - 1} aria-label={label}
-          data-testid={`tab_Costs_ContentAssignableAccountCategories-${i - 1}`}
-          onClick={() => chooseCategory(i - 1)}>{label}</button>
-      ))}
-    </div>
+    {tabStrip}
 
     {isSummaryTab(category) ? (
-      totals.isLoading ? <LoadingOverlay mode="inline" label={LOADING_DATA} /> : (
+      /*
+       * `cmp_Costs_PopUpLoading` showed "Please wait, loading data..." over the Summary until
+       * `colFinatCostDataOptimized` filled (its `InformationText`, `:18052`). D60 shows the same
+       * text as an inline spinner in the table area until the totals land.
+       */
+      totals.isLoading ? <LoadingOverlay mode="inline" label={LOADING_DATA} testId="capex-summary-loading" /> : (
         <table className="canvas-capex-summary" aria-label="DEVEX/CAPEX Summary"><tbody>
           {categoryNames.map((name, i) => (
             <tr key={name}>
@@ -709,50 +835,19 @@ export default function CapexCostsScreen() {
         </tbody></table>
       )
     ) : <>
-      <div className="canvas-cost-toolbar">
-        <Button appearance="transparent" icon={<AddRegular />} aria-label="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable"
-          data-testid="btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable" onClick={() => {
-          const to = costLocation("/costs/add-from-table", projectId!);
-          navigate({ ...to, search: `${to.search}&category=${category}` });
-        }}>Add Cost from Table</Button>
-        <Switch label="Show Empty Accounts" aria-label="tgl_Costs_ProjectCostbtn_ShowEmptyAccounts"
-          data-testid="tgl_Costs_ProjectCostbtn_ShowEmptyAccounts" checked={showEmpty}
-          onChange={(_, d) => setShowEmpty(d.checked)} />
-        <Switch label="Show Total Planned/Paid" aria-label="tgl_Costs_ProjectCostbtn_ShowPlannedPaid"
-          data-testid="tgl_Costs_ProjectCostbtn_ShowPlannedPaid" checked={showPlanned}
-          onChange={(_, d) => setShowPlanned(d.checked)} />
-        <Dropdown className={styles.payerFilter} aria-label="drp_Costs_ProjectCostbtn_ShowCostPaidBy"
-          data-testid="drp_Costs_ProjectCostbtn_ShowCostPaidBy"
-          value={payer} selectedOptions={[payer]}
-          onOptionSelect={(_, d) => { if (d.optionValue) setPayer(d.optionValue); }}>
-          {PAYER_FILTERS.map(v => <Option key={v} value={v}>{v}</Option>)}
-        </Dropdown>
-        <Button appearance="transparent" icon={<ArrowLeftRegular />} aria-label="btn_Costs_ProjectCostbtn_ShowPreviousYear"
-          data-testid="btn_Costs_ProjectCostbtn_ShowPreviousYear"
-          disabled={!canGoPreviousYear(year, yearFloor)}
-          onClick={() => setYear(Math.max(year - 1, yearFloor))} />
-        <Dropdown className={styles.yearFilter} aria-label="drp_Costs_ProjectCostbtn_ShowSelectedYear"
-          data-testid="drp_Costs_ProjectCostbtn_ShowSelectedYear"
-          value={String(year)} selectedOptions={[String(year)]}
-          onOptionSelect={(_, d) => { if (d.optionValue) setYear(Number(d.optionValue)); }}>
-          {projectPeriods(window.min, window.max).map(y => (
-            <Option key={y} value={String(y)}>{String(y)}</Option>
-          ))}
-        </Dropdown>
-        <Button appearance="transparent" icon={<ArrowRightRegular />} aria-label="btn_Costs_ProjectCostbtn_ShowNextYear"
-          data-testid="btn_Costs_ProjectCostbtn_ShowNextYear"
-          disabled={!canGoNextYear(year, window.max)} onClick={() => setYear(year + 1)} />
-      </div>
+      {toolbar}
       <PcfGrid key={category} accounts={categoryAccounts}
         lines={book.lines} year={year} showEmpty={showEmpty} showPlanned={showPlanned}
         payer={payer} clusterDates={boundaries} standardOptions={pcfStandardOptions}
-        commentFlags={commentFlags} onAction={onAction} />
+        commentFlags={commentFlags} onAction={onAction}
+        // CA-16: the grid greys its write menu items while `gridActionAllowed` would ignore them.
+        writeActionsDisabled={writesDisabled} />
     </>}
 
     <FormPanel open={!!edit} width="cost" onDismiss={closePanel}
       title={panelTitle(isEdit, book.accounts.find(a => a.id === edit?.accountId)?.name ?? "")}
       footer={<PanelButtons onSave={() => { void commit(); }} onCancel={closePanel}
-        disabled={!valid || busy}
+        disabled={!valid || writesDisabled}
         saveTestId="btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save"
         cancelTestId="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_2"
         /*
@@ -953,6 +1048,10 @@ export default function CapexCostsScreen() {
     </FormPanel>
 
     <CommentsPanel
+      // CA-15 / CA-18: a refused comment write shows on this screen's error banner, and the next
+      // commit clears it, so a successful retry does not leave the old error up.
+      onSaveError={setActionError}
+      onSaveStart={() => setActionError(null)}
       open={!!commentFor}
       contractId={commentFor}
       contractDescription={book.lines.find(c => c.id === commentFor)?.description ?? ""}
@@ -960,6 +1059,9 @@ export default function CapexCostsScreen() {
       payments={book.lines.find(c => c.id === commentFor)?.payments ?? []}
       distribution={book.lines.find(c => c.id === commentFor)?.distribution ?? "equal"}
       onDismiss={() => setCommentFor(null)}
+      onSavingChange={setCommentsSaving}
+      // The screen's own `capex-write-status` carries "Saving comments..." (it survives a tab switch).
+      writeStatus={false}
     />
 
     {/*
@@ -1037,22 +1139,8 @@ export default function CapexCostsScreen() {
         setPaidRequest(null);
       }} />
 
-    {/*
-      * `cmp_Costs_PopUpLoading` — `Visible: =locIsVisiblePopUpSpinner` (`:18045-18056`), with
-      * `InformationText` coming from whichever branch raised it. `savingLabel` is the panel
-      * save's ("the cost" for an individual distribution, "costs" for an equal one); the
-      * standard-contract path names the assumption it is creating; anything else falls back to
-      * the plural form.
-      */}
-    {busy ? (
-      <LoadingOverlay label={standardName
-        ? standardContractLoadingLabel(standardName)
-        : savingLabel ?? SAVING_COSTS} />
-    ) : null}
-    {actionError ? <div className="canvas-error" role="alert">{actionError}</div> : null}
-    {writeError ? (
-      <div className="canvas-error" role="alert">{(writeError as Error).message}</div>
-    ) : null}
+    {/* D58: the status line and write banners, shared with the loading branch (`writeFeedback`). */}
+    {writeFeedback}
     {save.error ? (
       <p className="canvas-error" role="alert">{(save.error as Error).message}</p>
     ) : null}

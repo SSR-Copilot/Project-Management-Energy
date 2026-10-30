@@ -275,7 +275,8 @@ export function LeftNav({ adminVisible = true }: { adminVisible?: boolean } = {}
               aria-label="Collapse Menu"
               onClick={() => setExpanded((v) => !v)}
               icon={
-                <svg width="17" height="9" viewBox="0 0 19 9" fill="none" aria-hidden="true">
+                // 24 px wide, as the canvas glyph renders (screenshot, 28 Oct 2026).
+                <svg width="24" height="12" viewBox="0 0 19 9" fill="none" aria-hidden="true">
                   <path d={expanded ? PANEL_COLLAPSE_PATH : PANEL_EXPAND_PATH} fill="#595959" />
                 </svg>
               }

@@ -15,7 +15,7 @@
  *
  * Only counts, names and timings are logged — never a row's values, so nothing personal reaches the console.
  *
- * Troubleshooting aids (D68):
+ * Troubleshooting aids (D74):
  *   - Every ACTION has a short id (`a7`); the HTTP and DATA lines made while it was open end with `[a7]`, so one save can be followed
  *     through all its requests. (Overlapping actions list every open id: `[a7,a8]`.)
  *   - A request over `SLOW_REQUEST_MS`, an action over `SLOW_ACTION_MS` and a batch whose slowest call is over the request limit print as a

@@ -530,6 +530,31 @@ export const commentEditable = (thread: Pick<CommentThread, "resolved">): boolea
   !thread.resolved;
 
 /**
+ * `locSpinnerInformationText: "Saving comments..."` — the comments Save button's `OnSelect`,
+ * `Capex Costs Screen.pa.yaml:10141`, verbatim. Shown by the `WriteStatus` line (D58).
+ */
+export const COMMENTS_SAVING = "Saving comments...";
+
+/**
+ * NEW TEXT (CA-15 / CA-18) — no canvas source: the canvas comments Save ignores a failed `Patch`
+ * or `Remove` (no `Notify`). The CAPEX banner (and, once the screen is gone, the toast detail)
+ * for a comments commit that a refused save or delete stopped part-way.
+ */
+export const commentsSaveFailed = (detail: string): string =>
+  `Error: the comments could not be saved completely. ${detail}`.trim();
+
+/*
+ * Whether the panel's write-starting controls are greyed (D58, decision 2b) is the shared
+ * `writeCommandsDisabled` (`@/domain/writeGuard`), fed the comments' load and the commit.
+ *
+ * DIVERGENCE (D58): the canvas raised `cmp_Costs_PopUpLoading` with "Saving comments..."
+ * (`locIsVisiblePopUpSpinner: true`, `Capex Costs Screen.pa.yaml:10141`), and its scrim was
+ * what stopped a second save. Without it, Save, Add Comment and every card action (Edit, Delete,
+ * Reply, Mark as Resolved, Reset) are disabled while the commit runs, and while the comments are
+ * still loading — a draft started then would be overwritten when the loaded rows seed the panel.
+ */
+
+/**
  * `Comment - {n} - {full name}` — the saved `Name`, `CapexScreenCode.txt:10012`:
  *
  *   Name: $"Comment - {_currentComment.SequenceNumber} - {User().FullName}"

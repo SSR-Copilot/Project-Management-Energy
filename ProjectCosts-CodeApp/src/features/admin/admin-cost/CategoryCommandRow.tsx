@@ -6,7 +6,7 @@
  * The parent menu item only opens the menu. Each child is disabled when that
  * sub-account already has a contract in the scope (the canvas `ItemEnabled: CountIf(…) = 0`)
  * or when creating is not permitted.
- * The canvas "Apply" strip is not built (D61).
+ * The canvas "Apply" strip is not built (D67).
  *
  * The row is repeated per accordion section (canvas `Gallery1`), so each canvas name carries the
  * section key as a suffix (CONVENTIONS rule 16).

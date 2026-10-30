@@ -21,15 +21,15 @@ Written 28 Oct 2026 from a read of the YAML and `rules.ts`. Canvas formulas are 
 | A7 | `lbl_Cluster5Value…` | `$"{Duration}\n1"` (the stored success value is ignored) | `matrixCells` (`cluster5`) | rules.test | E2E-MILESTONES-003 | Matched |
 | A8 | `lbl_OperationalLifetimeValue…`, `lbl_SalesStartDateValue…`, `lbl_SalesCompletionDateValue…` | `Coalesce(Text(record.Duration), "-")` and `Coalesce(Text(record.SuccessRate), "-")`; Sales cells show "-" on the second line | `matrixCells` | rules.test | E2E-MILESTONES-003 | Matched |
 | A9 | Header labels (Technology, Cluster 1 to 5, FID, Operational Lifetime, Sales Start, Sales End) in a 32 px `#FAFAFA` strip | literal texts | `MATRIX_COLUMNS`, `MATRIX_TEXT` | rules.test | E2E-MILESTONES-003 | Matched |
-| A10 | Matrix text sizes: technology ExtraLarge, sub-labels and values Large (modern Text, px) | 14 px, 12 px, 12 px | `TYPOGRAPHY` | rules.test | E2E-MILESTONES-003 | Matched after D62 (28 Oct) |
+| A10 | Matrix text sizes: technology ExtraLarge, sub-labels and values Large (modern Text, px) | 14 px, 12 px, 12 px | `TYPOGRAPHY` | rules.test | E2E-MILESTONES-003 | Matched after D68 (28 Oct) |
 
 ## B. Commands and gates
 
 | # | Canvas control.property | Live Power Fx | Code location | UT | Playwright | Status |
 |---|---|---|---|---|---|---|
 | B1 | `cmd_…CommandBar.Items`, Edit | `ItemEnabled: true` | `Screen.tsx`: `enabled: canEdit && groups.length > 0 && !preparing` | Screen.test | E2E-MILESTONES-004 | Divergent, marked: needs the admin rule and at least one stored row |
-| B2 | `cmd_…CommandBar.Items`, Apply | `ItemEnabled: false` | not rendered | Screen.test | E2E-MILESTONES-001 | Divergent, marked: removed (D61) |
-| B3 | `CommandBar1`, Apply All | `DisplayMode.Disabled` | not rendered | Screen.test | E2E-MILESTONES-001 | Divergent, marked: removed (D61) |
+| B2 | `cmd_…CommandBar.Items`, Apply | `ItemEnabled: false` | not rendered | Screen.test | E2E-MILESTONES-001 | Divergent, marked: removed (D67) |
+| B3 | `CommandBar1`, Apply All | `DisplayMode.Disabled` | not rendered | Screen.test | E2E-MILESTONES-001 | Divergent, marked: removed (D67) |
 | B4 | `cmd_….OnSelect`, Edit | `UpdateContext({locSelectedMilestoneAssumptions: Filter('Milestones Standard Assumptions', Country.Country = ThisItem.Country)}); locIsVisibleMilestoneAssumptionsRightPanel: true` | `openEdit` | Screen.test | E2E-MILESTONES-004 | Divergent, marked: refetches first; a failure shows a message and does not open |
 | B5 | Screen entry (no check on the screen) | the nav item is hidden unless `Or(IsApplicationAdministrator, IsControllerOwnData)` | `useAdminAccess` | Screen.test | E2E-MILESTONES-007 | SOURCE DEFECT documented; a client-side gate is added |
 

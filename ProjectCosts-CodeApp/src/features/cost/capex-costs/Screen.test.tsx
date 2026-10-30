@@ -12,7 +12,7 @@
  * file asserts is that the panel actually puts them on screen.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -20,6 +20,7 @@ import type { CostAccount, CostLine } from "../costing/model";
 import type { GridCallback } from "./pcf/ui/GridRenderer";
 import { CATEGORY_LABELS, SUMMARY_TAB_NAME } from "./rules";
 import { MSG, PAID_CONFIRM_TITLE } from "./panelRules";
+import { COST_WRITE_MSG } from "@/domain/writeGuard";
 
 const ACCOUNTS: CostAccount[] = [
   { id: "acc-1", number: "80000", name: "Turbine / PV Supply Agreement", category: 0 },
@@ -61,7 +62,7 @@ const projectStates = [
 ];
 
 /** `mutateAsync` takes the save args, so `mock.calls` can be asserted against them. */
-const saveLine = {
+const saveLine: { mutate: ReturnType<typeof vi.fn>; mutateAsync: ReturnType<typeof vi.fn>; isPending: boolean; error: Error | null } = {
   mutate: vi.fn(),
   mutateAsync: vi.fn(async (_args: { line: CostLine }) => undefined),
   isPending: false,
@@ -74,22 +75,42 @@ const deleteLine = { mutate: vi.fn(), isPending: false, error: null };
  * `saveLine.isPending`, made reactive.
  *
  * `useCapexWrites` is read on every render, so a test that flips this from inside its
- * `mutateAsync` sees the save spinner on the re-render the save itself triggers — which is the
- * only way to observe "the panel closed and THEN the spinner appeared" as one ordering rather
- * than two unrelated assertions.
+ * `mutateAsync` sees the save status line on the re-render the save itself triggers — which is
+ * the only way to observe "the panel closed and THEN the status appeared" as one ordering rather
+ * than two unrelated assertions. (It was the blocking spinner until D58.)
  */
 let savePending = false;
+/** `setPaid.isPending` / `deleteLine.isPending`, likewise — the two no-panel writes. */
+let paidPending = false;
+let deletePending = false;
+/** `setPaid.error` — a failed Paid write, for the error banner. */
+let paidError: Error | null = null;
+/** The props the (mocked) comments panel was last rendered with. */
+let commentsPanelProps: {
+  onSavingChange?: (saving: boolean) => void; writeStatus?: boolean; onSaveError?: (text: string) => void;
+} = {};
+/** The cost book's first load, and its failure (D58 decision 4a, rule 19). */
+let bookLoading = false;
+let bookError: Error | null = null;
+/** The Summary tab's totals query. */
+let totalsLoading = false;
 
 vi.mock("@/features/cost/costing/useCostBook", () => ({
   useCostBook: () => ({
-    data: { accounts: ACCOUNTS, lines, periods: [], extraGroups: { om: [], land: [], other: [] } },
-    isLoading: false, error: null, save: { error: null }, projectId: "p1",
+    data: bookLoading ? undefined
+      : { accounts: ACCOUNTS, lines, periods: [], extraGroups: { om: [], land: [], other: [] } },
+    isLoading: bookLoading, error: bookError, save: { error: null }, projectId: "p1",
   }),
-  useCapexTotals: () => ({ data: [], isLoading: false }),
+  useCapexTotals: () => ({ data: totalsLoading ? undefined : [], isLoading: totalsLoading }),
   useCapexCategories: () => ({ data: capexCategories }),
-  useCapexWrites: () => ({
-    setPaid, deleteLine, saveLine: { ...saveLine, isPending: savePending },
-  }),
+  useCapexWrites: (_category?: number, options?: { onWriteError?: (error: unknown) => void }) => {
+    capexWriteOptions = options;
+    return {
+      setPaid: { ...setPaid, isPending: paidPending, error: paidError },
+      deleteLine: { ...deleteLine, isPending: deletePending },
+      saveLine: { ...saveLine, isPending: savePending },
+    };
+  },
   useStandardAssumptions: () => ({
     assumptions: [], activeWtgCount: 0, totalCapacity: 0,
     countryId: undefined, technology: undefined, isLoading: false,
@@ -123,20 +144,34 @@ vi.mock("@/app/SessionContext", () => ({
 
 /** The real grid is a hand-rolled PCF renderer; the screen only needs its callback. */
 let onAction: GridCallback = () => {};
+/** CA-16 — the `writeActionsDisabled` the grid was last rendered with. */
+let gridWriteActionsDisabled: boolean | undefined;
 vi.mock("./PcfGrid", () => ({
-  PcfGrid: (props: { onAction: GridCallback }) => {
+  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean }) => {
     onAction = props.onAction;
+    gridWriteActionsDisabled = props.writeActionsDisabled;
     return <div data-testid="pcf-grid" />;
   },
 }));
-vi.mock("./CommentsPanel", () => ({ CommentsPanel: () => null }));
+/** CA-15 — the project-wide "Cost write in flight" flag and the failure reporter. */
+let writeInFlight = false;
+const reportFailure = vi.fn((text: string, show?: (t: string) => void) => { show?.(text); });
+vi.mock("@/features/cost/costing/useCostWriteFlight", () => ({
+  useCostWriteInFlight: () => writeInFlight,
+  useWriteFailureReport: () => reportFailure,
+}));
+/** The options `useCapexWrites` was last called with — the screen's `onWriteError`. */
+let capexWriteOptions: { onWriteError?: (error: unknown) => void } | undefined;
+vi.mock("./CommentsPanel", () => ({
+  CommentsPanel: (props: typeof commentsPanelProps) => { commentsPanelProps = props; return null; },
+}));
 
 import CapexCostsScreen from "./Screen";
 
-function mount() {
+function mount(entry = "/costs/capex?category=0") {
   return render(
     <FluentProvider theme={vsbTheme}>
-      <MemoryRouter initialEntries={["/costs/capex?category=0"]}>
+      <MemoryRouter initialEntries={[entry]}>
         <CapexCostsScreen />
       </MemoryRouter>
     </FluentProvider>,
@@ -188,6 +223,16 @@ beforeEach(() => {
   clusterStateOrder = undefined;
   capexCategories = [...CATEGORY_LABELS];
   savePending = false;
+  paidPending = false;
+  deletePending = false;
+  paidError = null;
+  commentsPanelProps = {};
+  bookLoading = false;
+  bookError = null;
+  totalsLoading = false;
+  writeInFlight = false;
+  gridWriteActionsDisabled = undefined;
+  capexWriteOptions = undefined;
   vi.clearAllMocks();
   document.querySelectorAll('[data-testid="open-add"]').forEach((n) => n.remove());
 });
@@ -585,16 +630,54 @@ const individualContract = (patch: Partial<CostLine> = {}): CostLine => ({
   ...patch,
 });
 
-describe("the save spinner", () => {
+/**
+ * D60: the BLOCKING write spinner is up — a `role="dialog" aria-modal` scrim carrying a Fluent
+ * spinner and the verbatim canvas text, under the screen's `capex-write-status` test id.
+ */
+const expectBlocking = (text: string) => {
+  const overlay = screen.getByTestId("capex-write-status");
+  expect(overlay).toHaveAttribute("role", "dialog");
+  expect(overlay).toHaveAttribute("aria-modal", "true");
+  expect(overlay).toHaveTextContent(text);
+  expect(overlay.querySelector(".fui-Spinner")).not.toBeNull();
+};
+
+/** No write spinner: the status region is the empty idle `role="status"` span. */
+const expectNotBlocking = () => {
+  const overlay = screen.getByTestId("capex-write-status");
+  expect(overlay).toHaveAttribute("role", "status");
+  expect(overlay).toBeEmptyDOMElement();
+  expect(document.querySelector('[aria-modal="true"][aria-busy="true"]')).toBeNull();
+};
+
+/** The `WriteStatus` element, by its test id. */
+const writeStatus = () => screen.queryByTestId("capex-write-status");
+
+/** An inline load spinner (`LoadingOverlay mode="inline"`) with its verbatim canvas text. */
+const expectLoading = (testId: string, text: string) => {
+  const el = screen.getByTestId(testId);
+  expect(el).toHaveAttribute("role", "status");
+  expect(el).toHaveAttribute("aria-busy", "true");
+  expect(el.querySelector(".fui-Spinner")).not.toBeNull();
+  expect(el).toHaveTextContent(text);
+};
+
+/**
+ * The save STATUS LINE — the blocking spinner until D58.
+ *
+ * The status line carries the same verbatim `InformationText` the canvas spinner did, but it
+ * blocks nothing; the write commands are greyed instead (decision 2b).
+ */
+describe("the save status line", () => {
   /**
    * Reference: `Cost App - Loading Spinner Design - Panel Closes and Spinner is shown..png`.
    *
    * Both save branches of the canvas Save button dismiss the panel and raise the spinner in the
    * SAME `UpdateContext` (`CapexScreenCode.txt:17413` — `locIsVisibleRightPanelAddContract:
    * false` alongside `locIsVisiblePopUpSpinner: true`), so the spinner is never drawn over an
-   * open panel. This used to await the write first and close afterwards.
+   * open panel. Decision 7a keeps that order for the status line that replaced it.
    */
-  it("closes the panel before the write, then shows the spinner over the grid", () => {
+  it("closes the panel before the write, then shows the blocking spinner with the status text", () => {
     lines = [individualContract()];
     mountAndOpenEdit("l1");
     expect(screen.getByText("Edit Costs - Turbine / PV Supply Agreement")).toBeInTheDocument();
@@ -608,6 +691,7 @@ describe("the save spinner", () => {
     expect(screen.queryByText("Edit Costs - Turbine / PV Supply Agreement"))
       .not.toBeInTheDocument();
     expect(screen.getByText("Please wait, saving the cost...")).toBeInTheDocument();
+    expectBlocking("Please wait, saving the cost...");
   });
 
   /** The equal-distribution branch says "costs" (plural) — `:17413`, extracted line 1489. */
@@ -644,6 +728,268 @@ describe("the save spinner", () => {
     expect(screen.queryByText("Edit Costs - Turbine / PV Supply Agreement"))
       .not.toBeInTheDocument();
     expect(screen.getByText("Please wait, saving the cost...")).toBeInTheDocument();
+    expectBlocking("Please wait, saving the cost...");
+  });
+});
+
+/** D58 decision 2b — while a write is pending, only the commands that START a write go grey. */
+describe("the write guard (D58)", () => {
+  /** Fires one grid action through the recorded `onAction`, from a throwaway control. */
+  const fireGrid = (...args: Parameters<GridCallback>) => {
+    const button = document.createElement("button");
+    button.setAttribute("data-testid", "open-add");
+    button.addEventListener("click", () => onAction(...args));
+    document.body.appendChild(button);
+    fireEvent.click(button);
+    button.remove();
+  };
+
+  it("UT-CAPEX-NOSPIN-008 ignores Add, Edit and Delete from the grid while a save is pending", () => {
+    lines = [individualContract()];
+    savePending = true;
+    mount();
+    fireGrid("Add", "sub-1");
+    fireGrid("Edit", "l1");
+    fireGrid("Delete", "l1");
+    expect(screen.queryByText(/^Add Costs - /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Edit Costs - /)).not.toBeInTheDocument();
+    expect(screen.queryByText(MSG.deleteTitle)).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-NOSPIN-009 ignores the Paid toggle while a delete is pending, and shows its status", () => {
+    lines = [individualContract({
+      payments: [{ id: "c1", year: 2016, month: 6, amount: 500, paid: false }],
+    })];
+    deletePending = true;
+    mount();
+    fireGrid("SetCostPaidUnpaid", "l1", undefined, { year: 2016, month: 6, paid: true });
+    expect(setPaid.mutate).not.toHaveBeenCalled();
+    // A delete latches no label of its own, so it falls back to the plural form.
+    expectBlocking("Please wait, saving costs...");
+  });
+
+  it("UT-CAPEX-NOSPIN-010 greys Add Cost from Table while a Paid write is pending, not the filters", () => {
+    paidPending = true;
+    mount();
+    expect(screen.getByRole("button", {
+      name: "btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable",
+    })).toBeDisabled();
+    // Read-only commands stay live.
+    expect(screen.getByRole("switch", { name: "tgl_Costs_ProjectCostbtn_ShowEmptyAccounts" }))
+      .toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowCostPaidBy" }))
+      .toBeEnabled();
+    expect(screen.getByRole("button", { name: "btn_Costs_ProjectCostbtn_ShowNextYear" }))
+      .toBeEnabled();
+    expect(screen.getAllByRole("tab")[0]).toBeEnabled();
+  });
+
+  it("UT-CAPEX-NOSPIN-011 acts on the same grid commands once nothing is pending", () => {
+    lines = [individualContract()];
+    mount();
+    expect(writeStatus()).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", {
+      name: "btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable",
+    })).toBeEnabled();
+    fireGrid("Delete", "l1");
+    expect(screen.getByText(MSG.deleteTitle)).toBeInTheDocument();
+  });
+
+  /* ── CA-15 / CA-16 ─────────────────────────────────────────────────────── */
+
+  it("UT-CAPEX-FLIGHT-001 a Cost write still in flight elsewhere greys the write commands and says so", () => {
+    lines = [individualContract()];
+    writeInFlight = true;
+    mount();
+    expect(screen.getByRole("button", {
+      name: "btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable",
+    })).toBeDisabled();
+    expect(writeStatus()).toHaveTextContent(COST_WRITE_MSG.writeRunningElsewhere);
+    // The grid's write actions are ignored, as for the screen's own write.
+    fireGrid("Delete", "l1");
+    expect(screen.queryByText(MSG.deleteTitle)).not.toBeInTheDocument();
+    // Read-only commands stay live.
+    expect(screen.getByRole("switch", { name: "tgl_Costs_ProjectCostbtn_ShowEmptyAccounts" }))
+      .toBeEnabled();
+  });
+
+  it("UT-CAPEX-FLIGHT-002 a failed CAPEX write reaches the reporter with its message, banner kept on screen", () => {
+    mount();
+    expect(capexWriteOptions?.onWriteError).toBeTypeOf("function");
+    capexWriteOptions?.onWriteError?.(new Error("HTTP 412"));
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(reportFailure.mock.calls[0]?.[0]).toBe("HTTP 412");
+    // The mounted screen shows it through `writes.*.error`; the reporter's screen arm is a no-op.
+    expect(reportFailure.mock.calls[0]?.[1]).toBeTypeOf("function");
+  });
+
+  it("UT-CAPEX-FLIGHT-004 a refused comment write from the panel shows on the screen's error banner (CA-18)", () => {
+    mount();
+    expect(commentsPanelProps.onSaveError).toBeTypeOf("function");
+    act(() => { commentsPanelProps.onSaveError?.("Error: the comments could not be saved completely. HTTP 403"); });
+    expect(screen.getByRole("alert")).toHaveTextContent("Error: the comments could not be saved completely. HTTP 403");
+  });
+  it("UT-CAPEX-FLIGHT-003 the PCF grid is told to grey its write items exactly while the guard holds (CA-16)", () => {
+    lines = [individualContract()];
+    const view = mount();
+    expect(gridWriteActionsDisabled).toBe(false);
+    view.unmount();
+    deletePending = true;
+    mount();
+    expect(gridWriteActionsDisabled).toBe(true);
+  });
+});
+
+/** D58 decision 4a — a first load renders the chrome over an empty body, never a spinner. */
+describe("the first load (D58)", () => {
+  it("UT-CAPEX-NOSPIN-012 renders the tabs and toolbar, write commands greyed, and the inline loading spinner", () => {
+    bookLoading = true;
+    mount();
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(1);
+    expect(screen.getByRole("button", {
+      name: "btn_Costs_ProjectCosts_TableCommandBar_AddCostFromTable",
+    })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "drp_Costs_ProjectCostbtn_ShowSelectedYear" }))
+      .toBeEnabled();
+    expectLoading("capex-loading", "Please wait, loading cost ...");
+    expect(screen.queryByTestId("pcf-grid")).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-NOSPIN-013 never reads 'Cost data is unavailable' while loading", () => {
+    bookLoading = true;
+    bookError = new Error("not yet");
+    mount();
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-NOSPIN-014 still shows the load-error state once a load has failed (rule 19)", () => {
+    bookError = new Error("403");
+    mount();
+    expect(screen.getByText("Cost data is unavailable")).toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-NOSPIN-015 shows the Summary inline spinner while its totals load, no table", () => {
+    totalsLoading = true;
+    mount("/costs/capex");
+    expectLoading("capex-summary-loading", "Please wait, loading data...");
+    expect(screen.queryByRole("table", { name: "DEVEX/CAPEX Summary" })).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-NOSPIN-018 while loading, a pending write still shows the blocking spinner", () => {
+    bookLoading = true;
+    deletePending = true;
+    mount();
+    expect(screen.getByTestId("capex-loading")).toBeInTheDocument();
+    expectBlocking("Please wait, saving costs...");
+  });
+
+  it("UT-CAPEX-NOSPIN-019 while loading, a failed write still shows its error banner", () => {
+    bookLoading = true;
+    paidError = new Error("Paid write refused");
+    mount();
+    expect(screen.getByTestId("capex-loading")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Paid write refused");
+  });
+});
+
+/** The comments commit on the screen's own status line (D58). */
+describe("the comments status line (D58)", () => {
+  it("UT-CAPEX-NOSPIN-020 shows 'Saving comments...' from the panel's commit; the panel's own line is off", () => {
+    mount();
+    expect(commentsPanelProps.writeStatus).toBe(false);
+    act(() => commentsPanelProps.onSavingChange?.(true));
+    expect(writeStatus()).toHaveTextContent("Saving comments...");
+    act(() => commentsPanelProps.onSavingChange?.(false));
+    expect(writeStatus()).toBeEmptyDOMElement();
+  });
+
+  it("UT-CAPEX-NOSPIN-021 the line survives the panel unmounting: a tab switch into a first load mid-commit", () => {
+    const view = mount();
+    act(() => commentsPanelProps.onSavingChange?.(true));
+    // The loading branch renders no comments panel at all.
+    bookLoading = true;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={["/costs/capex?category=0"]}><CapexCostsScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(screen.getByTestId("capex-loading")).toBeInTheDocument();
+    expect(writeStatus()).toHaveTextContent("Saving comments...");
+  });
+});
+
+/** D60 — the blocking write spinner and the inline load spinners stay until the work is done. */
+describe("the busy indicators (D60)", () => {
+  /** Opens Edit on `l1` and starts a Save whose promise the test controls. */
+  const startPendingSave = () => {
+    lines = [individualContract()];
+    let settle: { resolve: () => void; reject: (e: Error) => void } = { resolve: () => {}, reject: () => {} };
+    saveLine.mutateAsync.mockImplementationOnce(() => {
+      savePending = true;
+      return new Promise<undefined>((resolve, reject) => {
+        settle = { resolve: () => { savePending = false; resolve(undefined); }, reject: (e: Error) => { savePending = false; reject(e); } };
+      });
+    });
+    mountAndOpenEdit("l1");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    return { settle: () => settle };
+  };
+
+  it("UT-CAPEX-BUSY-001 the spinner survives other renders and clicks, and goes when the write resolves", async () => {
+    const pending = startPendingSave();
+    expectBlocking("Please wait, saving the cost...");
+    // Other interactions and re-renders do not dismiss it.
+    fireEvent.click(screen.getAllByRole("tab")[0]!);
+    act(() => commentsPanelProps.onSavingChange?.(false));
+    expectBlocking("Please wait, saving the cost...");
+    await act(async () => { pending.settle().resolve(); });
+    expectNotBlocking();
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+  });
+
+  it("UT-CAPEX-BUSY-002 the spinner also goes when the write REJECTS, and the error banner shows", async () => {
+    const pending = startPendingSave();
+    expectBlocking("Please wait, saving the cost...");
+    saveLine.error = new Error("Save refused");
+    await act(async () => { pending.settle().reject(new Error("Save refused")); });
+    expectNotBlocking();
+    expect(document.querySelector(".fui-Spinner")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("Save refused");
+    saveLine.error = null;
+  });
+
+  it("UT-CAPEX-BUSY-003 a category change that starts a load shows the inline spinner under the tab strip, then the grid", () => {
+    const view = mount("/costs/capex?category=0");
+    expect(screen.getByTestId("pcf-grid")).toBeInTheDocument();
+    const tabs = screen.getAllByRole("tab");
+    bookLoading = true;
+    fireEvent.click(tabs[1]!);
+    expectLoading("capex-loading", "Please wait, loading cost ...");
+    expect(screen.getAllByRole("tab").length).toBe(tabs.length);
+    expect(screen.queryByTestId("pcf-grid")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cost data is unavailable")).not.toBeInTheDocument();
+    bookLoading = false;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={["/costs/capex?category=0"]}><CapexCostsScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(screen.queryByTestId("capex-loading")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pcf-grid")).toBeInTheDocument();
+  });
+
+  it("UT-CAPEX-BUSY-004 the Summary tab shows capex-summary-loading with a spinner while totals load", () => {
+    totalsLoading = true;
+    const view = mount("/costs/capex");
+    expectLoading("capex-summary-loading", "Please wait, loading data...");
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(1);
+    totalsLoading = false;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={["/costs/capex"]}><CapexCostsScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(screen.queryByTestId("capex-summary-loading")).not.toBeInTheDocument();
   });
 });
 

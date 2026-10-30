@@ -22,6 +22,24 @@
  * =============================================================================
  */
 /**
+ * CA-16 (this app's port, not vendor): greys and disables one write-starting menu item, or
+ * restores it. Shared by `ActionDropdown` and `GridRenderer` (rule 17: one definition).
+ * `pcf-dropdown-item-disabled` is the vendored stylesheet's own disabled look for
+ * `.pcf-dropdown-item`; the Add menu's `.pcf-add-dropdown-item` greys on `:disabled` already.
+ */
+export function setWriteItemDisabled(item, disabled) {
+    item.disabled = disabled;
+    if (disabled) {
+        item.setAttribute("aria-disabled", "true");
+    }
+    else {
+        item.removeAttribute("aria-disabled");
+    }
+    if (item.classList.contains("pcf-dropdown-item")) {
+        item.classList.toggle("pcf-dropdown-item-disabled", disabled);
+    }
+}
+/**
  * Handles the rendering and events for the context action dropdown menu.
  */
 export class ActionDropdown {
@@ -74,6 +92,10 @@ export class ActionDropdown {
             Edit
         `;
         btnEdit.onclick = () => {
+            // CA-16: a greyed item is inert (a disabled button gets no click in a browser).
+            if (btnEdit.disabled) {
+                return;
+            }
             this._onActionTriggered("Edit", this._currentRecordId);
             this.closeDropdown();
         };
@@ -93,6 +115,10 @@ export class ActionDropdown {
             <span class="pcf-dot-inline" id="dropdown-comment-dot" style="display: none;"></span>
         `;
         btnComment.onclick = () => {
+            // CA-16: a greyed item is inert (a disabled button gets no click in a browser).
+            if (btnComment.disabled) {
+                return;
+            }
             this._onActionTriggered("Comment", this._currentRecordId);
             this.closeDropdown();
         };
@@ -109,12 +135,18 @@ export class ActionDropdown {
             Delete
         `;
         btnDelete.onclick = () => {
+            // CA-16: a greyed item is inert (a disabled button gets no click in a browser).
+            if (btnDelete.disabled) {
+                return;
+            }
             this._onActionTriggered("Delete", this._currentRecordId);
             this.closeDropdown();
         };
         this._dropdownElement.appendChild(btnEdit);
         this._dropdownElement.appendChild(btnComment);
         this._dropdownElement.appendChild(btnDelete);
+        // CA-16 (this app's port, not vendor): all three start a write or open its editor.
+        this._writeItems = [btnEdit, btnComment, btnDelete];
         // Appending to body is best practice for custom absolute popups so they aren't clipped by 'overflow:hidden'
         // Concretely: the grid scrolls inside an overflow container, so a
         // menu parented inside it would be cut off at the container edge for
@@ -122,6 +154,18 @@ export class ActionDropdown {
         // Canvas controls due to stacking contexts. Body-level positioning
         // sidesteps both. The trade-off is manual cleanup in destroy().
         document.body.appendChild(this._dropdownElement);
+    }
+    /**
+     * CA-16 (this app's port; the vendor control has no such state). While a write runs the
+     * screen ignores Edit / Comments / Delete (`gridActionAllowed`), so they are shown greyed
+     * (the vendored `.pcf-dropdown-item-disabled` style) and disabled — `disabled` stops the
+     * click, `aria-disabled` tells a screen reader and Tosca. Their text and position are
+     * unchanged, and they carry no id or aria-label to keep stable.
+     */
+    setWriteActionsDisabled(disabled) {
+        for (const item of this._writeItems ?? []) {
+            setWriteItemDisabled(item, disabled);
+        }
     }
     /**
      * Opens (or repositions) the shared menu for one contract row.

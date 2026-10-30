@@ -24,6 +24,7 @@ const useStyles = makeStyles({
     height: "100vh",
     minHeight: 0,
     // The ground behind the header, rail and content cards.
+    // `#f3f2f1`, sampled off the canvas (28 Oct 2026).
     backgroundColor: "#f3f2f1",
   },
   // `minWidth: 0` is load-bearing: without it this row's flex items keep `min-width: auto`

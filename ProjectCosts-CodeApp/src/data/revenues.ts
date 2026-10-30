@@ -9,7 +9,9 @@
  * currencies, inflation profiles and cluster states are read through the existing loaders
  * (`data/landLease.ts`, `data/generalData.ts`), not copied.
  *
- * `Assumptions Revenues SQL` is a Fabric SQL source (D2/D26/D28) and is NOT read here.
+ * `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`, D54), read only
+ * through the Milestones loader (`listRevenueAssumptions`, the same country slice), not copied
+ * (connected 29 Oct 2026).
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_projectrevenuesService } from "@/generated/services/Vsb_projectrevenuesService";
@@ -19,7 +21,7 @@ import { Vsb_revenuesubaccountsService } from "@/generated/services/Vsb_revenues
 import { Vsb_energyyieldsService } from "@/generated/services/Vsb_energyyieldsService";
 import {
   BALANCING_COL, FLAG_COL, HEDGE_VOLUME_COL, PROJECT_COL, REVENUE_COL, ALL_STANDARD_FLAG_KEYS,
-  type BalancingPeriod, type CountryInflationProfileRow, type IndividualVolumeRow,
+  type AssumptionRow, type BalancingPeriod, type CountryInflationProfileRow, type IndividualVolumeRow,
   type OverlappingContract, type RevenueProject, type StandardFlags, type StoredRevenueContract,
   type Technology,
 } from "@/features/pm/revenues/rules";
@@ -28,6 +30,7 @@ import { fetchAll, fetchPage } from "./client";
 import { ACTIVE, and, dateOnly, eq, geDate, guid, leDate, lookupEq, numberOf } from "./odata";
 import { listProjectStates } from "./generalData";
 import { loadCountryInflation, loadCurrencies } from "./landLease";
+import { listRevenueAssumptions } from "./milestones";
 
 type Raw = Record<string, unknown>;
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
@@ -247,6 +250,17 @@ export async function loadFirstRevenueSubaccount(): Promise<{ id: string; name: 
   );
   const r = rows[0];
   return r ? { id: r.vsb_revenuesubaccountid, name: r.vsb_name ?? "" } : null;
+}
+
+/**
+ * `locCountryRelatedAssumptions` (Add L729-742, Edit L978-991) — the project country's slice of
+ * `Assumptions Revenues SQL` (an Italian project reads every `Italy*` row, 1.21.753), through the
+ * Milestones loader. A blank `category` is "" here, as the canvas `category = …` comparisons see it.
+ */
+export async function listRevenueAssumptionRows(countryName: string): Promise<AssumptionRow[]> {
+  return (await listRevenueAssumptions(countryName)).map((r) => ({
+    country: r.country, valuetype: r.valuetype, category: r.category ?? "", wind: r.wind, pv: r.pv,
+  }));
 }
 
 /** `LookUp(Currencies, 'Currency Code' = <code>)` — through the shared `loadCurrencies` (Land Lease). */

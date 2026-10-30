@@ -1,5 +1,5 @@
 /**
- * The "current year / all years" view of the sheet (product owner, 29 Oct 2026, D67).
+ * The "current year / all years" view of the sheet (product owner, 29 Oct 2026, D73).
  *
  * The grid always HOLDS every column: 6 fixed ones (Number, Name, Description, Cost Paid By,
  * Depreciation, Apply VAT) then 12 month columns per year. The toggle only chooses which columns

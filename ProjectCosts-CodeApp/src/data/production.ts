@@ -7,8 +7,9 @@
  *
  * Reused, not repeated: the project's generator types, PV types, turbines / PV units and device
  * types come from `data/generators.ts`; the country inflation rows from `data/landLease.ts`.
- * `Assumptions Revenues SQL` is a Fabric SQL source (`References/DataSources.json`), not Dataverse,
- * and stays unconnected (D2): nothing here reads it.
+ * `Assumptions Revenues SQL` is a Fabric SQL source (`[dbo].[AssumptionsRevenue]`, registered as
+ * `AssumptionsRevenueService`, D54). It is read only, for the standard seasonality and negative
+ * prices (`listStandardRevenueAssumptions`, connected 28 Oct 2026).
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_energyyieldsService } from "@/generated/services/Vsb_energyyieldsService";
@@ -19,10 +20,12 @@ import { Vsb_opexsubaccountsService } from "@/generated/services/Vsb_opexsubacco
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { Vsb_landleaseprojectcostsService } from "@/generated/services/Vsb_landleaseprojectcostsService";
 import { Vsb_opexprojectcostsService } from "@/generated/services/Vsb_opexprojectcostsService";
+import { AssumptionsRevenueService } from "@/generated/services/AssumptionsRevenueService";
 import {
   NEGATIVE_PRICE_COL, PROJECT_YIELD_COL, REVENUE_COL, SEASONALITY_COL, YIELD_COL, inflationStartYear,
+  parseStandardAssumptions,
   type EnergyYieldRow, type GenerationInputs, type ProductionProject, type RevenueRow, type StandardAssumption,
-  type StoredNegativePrice, type StoredSeasonality,
+  type StandardNegativePriceRow, type StandardSeasonalityRow, type StoredNegativePrice, type StoredSeasonality,
 } from "@/features/pm/production/rules";
 import { CHOICE_PRODUCTION, OANDM_SUBACCOUNT_NAME } from "./dataverseNames";
 import { fetchAll, fetchPage } from "./client";
@@ -61,6 +64,7 @@ export async function loadProductionProject(projectId: string): Promise<Producti
     projectIdText: str(r[PROJECT_YIELD_COL.projectIdText]),
     projectName: str(r[PROJECT_YIELD_COL.projectName]),
     countryId: str(r[PROJECT_YIELD_COL.country]),
+    countryName: str(r[`${PROJECT_YIELD_COL.country}@OData.Community.Display.V1.FormattedValue`]),
     technology: num(r[PROJECT_YIELD_COL.technology]),
     totalCapacity: num(r[PROJECT_YIELD_COL.totalCapacity]),
     endDate: ymd(r[PROJECT_YIELD_COL.endDate]),
@@ -75,6 +79,26 @@ export async function loadProductionProject(projectId: string): Promise<Producti
     standardCostCreated: bool(r[PROJECT_YIELD_COL.standardCostCreated]) === true,
     owningBusinessUnitId: str(r[PROJECT_YIELD_COL.owningBusinessUnit]),
   };
+}
+
+/**
+ * `Filter('Assumptions Revenues SQL', country = gblRecordSelectedProject.Country.Name, valuetype =
+ * "seasonality" | "negativeprices")` — both canvas reads in one, parsed by `parseStandardAssumptions`.
+ */
+export async function listStandardRevenueAssumptions(countryName: string): Promise<{
+  seasonality: StandardSeasonalityRow[];
+  negativePrices: StandardNegativePriceRow[];
+}> {
+  const rows = await fetchAll(
+    "read the standard seasonality and negative prices (Fabric SQL)",
+    (o) => AssumptionsRevenueService.getAll(o),
+    {
+      select: ["country", "valuetype", "category", "pv", "wind"],
+      filter: and(eq("country", countryName), inList("valuetype", ["seasonality", "negativeprices"])),
+    },
+  );
+  // Re-checked in case the connector does not apply the filter.
+  return parseStandardAssumptions(rows.filter((r) => r.country === countryName));
 }
 
 /* ═════════════════════════════════════════════════════════════ energy yields ══ */

@@ -81,12 +81,17 @@ export interface FormPanelProps {
   ariaLabel?: string;
   /** Extra class on the drawer surface, for screen-scoped chrome overrides (Contracts). Default none. */
   panelClassName?: string;
+  /**
+   * Opt-in (PM Revenues): a click outside the panel does NOT close it — the canvas panel closes
+   * only through its ✕ or Cancel. Escape still closes. Off by default (the backdrop dismisses).
+   */
+  keepOpenOnOutsideClick?: boolean;
 }
 
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -114,7 +119,11 @@ export function FormPanel({
     <FormPanelContext.Provider value={api}>
       <Drawer type="overlay" position="end" open={open}
         className={`canvas-panel canvas-panel-${typeof width === "number" ? "custom" : width}${panelClassName ? ` ${panelClassName}` : ""}`}
-        onOpenChange={(_, data) => { if (!data.open) requestClose("dismiss"); }}
+        onOpenChange={(_, data) => {
+          if (data.open) return;
+          if (keepOpenOnOutsideClick && data.type === "backdropClick") return;
+          requestClose("dismiss");
+        }}
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}
         style={style}>
         <DrawerHeader className="canvas-panel-header">

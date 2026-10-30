@@ -25,13 +25,18 @@ folder in the workspace.
 
 ## Quick orientation
 
-- **Start here in a new chat:** `ProjectDocs/app-docs/14-SESSION-HANDOFF-2026-10-27.md` (the
-  latest state, what is deployed, and what waits on the product owner). Then read
-  `02-OPEN-DECISIONS.md` **D51** (Add Cost from Table bulk Save, especially §10 and §11–§11.16)
-  and **D52** (the DEV push of `2c7e6aa`), then D41–D46 (Project Overview pagination) and
-  `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` (the admin-screen
+- **Start here in a new chat:** `ProjectDocs/app-docs/15-SESSION-HANDOFF-2026-10-29.md`. It has
+  the latest state, what is deployed, and what waits on the product owner. Then read these, in
+  `02-OPEN-DECISIONS.md`:
+  - **D51** §10 and §11–§11.19 (the Add Cost from Table bulk Save and the CAPEX refresh after it);
+  - **D53**, **D55** (the DEV pushes);
+  - **D54** (the Fabric SQL data sources);
+  - D41–D46 (Project Overview pagination).
+
+  Then `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md` (the admin-screen
   replacement, D36).
 - **Older context:**
+  - `14-SESSION-HANDOFF-2026-10-27.md`
   - `12-SESSION-HANDOFF-2026-10-26.md`
   - `10-SESSION-HANDOFF-2026-10-22.md`
   - `11-CAPEX-PARITY-CHANGE-RECORD-2026-10-23.md`
@@ -84,7 +89,7 @@ not `localhost:3000`.
    question. This applies to everyone who commits from this folder.
 
 7. **Every new or changed call, load and save is traced in the console** (`[VSB] HTTP / DATA / ACTION`
-   lines, `CONVENTIONS.md` rule 23, D66). Use `platform/requestLog.ts`; never a bare `console.info`.
+   lines, `CONVENTIONS.md` rule 23, D72). Use `platform/requestLog.ts`; never a bare `console.info`.
 
 Details: `CONVENTIONS.md`, "Before every build".
 

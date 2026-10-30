@@ -404,10 +404,16 @@ describe("useSaveAddCostSheet — saved state at once (D51 §11.19)", () => {
     reset();
     cache.set(BOOK_KEY, { broken: true }); // not a book: the patch throws on it
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const options = useSaveAddCostSheet(3) as unknown as PatchOptions;
     const bg = deferred();
     expect(() => options.onSuccess(deferredResult(bg.promise))).not.toThrow();
+    // D59: the readable line first, then the raw error object (still through console.error).
     expect(error).toHaveBeenCalled();
+    expect(info.mock.calls.map((c) => String(c[0]))).toContainEqual(expect.stringMatching(
+      /^Add Cost from Table: patching the DEVEX\/CAPEX book failed; the save itself succeeded and the refetch brings the saved state: /,
+    ));
+    info.mockRestore();
     expect(invalidations).toContainEqual({ queryKey: ["cost-book", "p-1", 3], refetchType: "all" });
     bg.resolve({ requests: 2 });
     await flush();

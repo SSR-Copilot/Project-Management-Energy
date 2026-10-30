@@ -44,7 +44,7 @@ export interface ISpreadSheetProps {
   copyTableToken?: number;
   /**
    * Which year block the table shows (zero-based), or `null` / omitted for every year. NEW — no canvas
-   * equivalent (D67): only the visible columns are rendered, which is what keeps a click or Tab fast; the
+   * equivalent (D73): only the visible columns are rendered, which is what keeps a click or Tab fast; the
    * grid itself, `onDataChange`, Copy Table and the save always work on every column.
    */
   visibleYearIndex?: number | null;

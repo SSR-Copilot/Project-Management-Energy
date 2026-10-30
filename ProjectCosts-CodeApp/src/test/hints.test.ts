@@ -3,7 +3,7 @@
  *
  * Twelve canvas Save buttons carry the hover text "Filter projects details list view.", pasted from the
  * Project Overview's filter icon. It is wrong on a Save button, so the code app says "Save" there
- * (`HINTS.save`, D58). The text is only right on the Overview's filter icons.
+ * (`HINTS.save`, D64). The text is only right on the Overview's filter icons.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";

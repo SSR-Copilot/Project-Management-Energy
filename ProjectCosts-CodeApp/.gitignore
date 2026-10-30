@@ -29,7 +29,6 @@ dist/
 
 # Merged from the former workspace-root .gitignore (19 Oct 2026 restructure).
 # `.power/` is pac output: regenerate it with `pac code add-data-source`, never commit it.
-.power/
 build/
 out/
 *.tsbuildinfo

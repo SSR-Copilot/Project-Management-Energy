@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  guardOpexCommands,
   CASCADED_FIELDS,
   DELETE_DIALOG,
   DURATION_BADGE_TEXT,
@@ -138,6 +139,8 @@ import {
   type PanelContext,
   matchesStandardAssumption,
 } from "./opexRules";
+// The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
+import { writeCommandsDisabled } from "@/domain/writeGuard";
 
 /* ─────────────────────────────────────────────────────────────────── fixtures */
 
@@ -1691,5 +1694,40 @@ describe("OPEX — rendered rows", () => {
     expect(row.cells.durationMonths).toBe("");
     expect(row.cells.aggregation).toBe("");
     expect(row.cells.endDate).toBe("31.12.26");
+  });
+});
+
+/* ── D58: the write guard that replaced `cmp_OpexCosts_PopUpLoading` ─────────────────── */
+
+describe("writeCommandsDisabled / guardOpexCommands (D58)", () => {
+  const allOn = {
+    newOpexProjectCostType: true, newOpexProjectCost: true, addStandardContract: true,
+    editOpexProjectCost: true, deleteOpexProjectCost: true,
+  };
+  const allOff = {
+    newOpexProjectCostType: false, newOpexProjectCost: false, addStandardContract: false,
+    editOpexProjectCost: false, deleteOpexProjectCost: false,
+  };
+
+  it("UT-OPEX-NOSPIN-001 a pending write disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: true })).toBe(true);
+  });
+
+  it("UT-OPEX-NOSPIN-002 the first load disables the write commands", () => {
+    expect(writeCommandsDisabled({ loading: true, writePending: false })).toBe(true);
+    expect(writeCommandsDisabled({ loading: true, writePending: true })).toBe(true);
+  });
+
+  it("UT-OPEX-NOSPIN-003 nothing pending and loaded leaves the commands to their own gates", () => {
+    expect(writeCommandsDisabled({ loading: false, writePending: false })).toBe(false);
+    expect(guardOpexCommands(allOn, false)).toEqual(allOn);
+    const mixed = { ...allOff, newOpexProjectCost: true };
+    expect(guardOpexCommands(mixed, false)).toEqual(mixed);
+  });
+
+  it("UT-OPEX-NOSPIN-004 the guard turns every one of the five commands off", () => {
+    expect(guardOpexCommands(allOn, true)).toEqual(allOff);
+    // It only ever removes: a command its own gate disabled stays disabled.
+    expect(guardOpexCommands(allOff, true)).toEqual(allOff);
   });
 });

@@ -32,14 +32,18 @@ let queriedBy: Record<string, unknown[]> = {};
 let refused = new Set<string>();
 
 /** `deleteRecord`'s entity set → the prefix `deleted` records it under. */
-const PREFIX: Record<string, string> = { vsb_capexcosts: "cost", vsb_capexprojectcontracts: "contract" };
+const PREFIX: Record<string, string> = {
+  vsb_capexcosts: "cost", vsb_capexprojectcontracts: "contract",
+  // Comments too since CA-18 (`deleteComment` goes through `deleteRecord`).
+  vsb_capexcommentses: "comment",
+};
 
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
   },
-  // Cost and contract deletes go through `deleteRecord` (CONVENTIONS rule 14), not the generated
+  // Cost, contract and comment deletes go through `deleteRecord` (CONVENTIONS rule 14), not the generated
   // services' raw `delete()`, so this is where they are recorded.
   deleteRecord: async (operation: string, tableName: string, id: string) => {
     if (refused.has(id)) throw new Error(`${operation}: 403 refused`);
@@ -80,10 +84,7 @@ vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
     getAll: async () => ({ success: true, data: [] }),
     create: async () => ({ success: true, data: { vsb_capexcommentsid: "comment-new" } }),
     update: async () => ({ success: true, data: {} }),
-    delete: async (id: string) => {
-      deleted.push(`comment:${id}`);
-      return { success: true, data: {} };
-    },
+    delete: rawDelete("Vsb_capexcommentsesService"),
   },
 }));
 

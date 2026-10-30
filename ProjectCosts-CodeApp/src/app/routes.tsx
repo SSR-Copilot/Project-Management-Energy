@@ -74,7 +74,12 @@ export function CostProjectGate() {
   const { project, projectId, projectIdInvalid, projectNotFound, loading, error } = useSession();
   const navigate = useNavigate();
   const action = { label: "Back to Projects", onClick: () => navigate("/projects") };
-  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" />;
+  /*
+   * No canvas control; code-app route spinner. D58 had turned the Cost gate's "Loading project…"
+   * spinner into an empty placeholder, which left a blank screen (D60 restores it). The gate still
+   * holds back every Cost screen (and its queries) until the session and the project are loaded.
+   */
+  if (loading) return <LoadingOverlay mode="inline" label="Loading project…" testId="cost-project-loading" />;
   if (projectIdInvalid) return <EmptyState title="This project link is invalid"
     description="Return to the project list and open Costs for a selected project." action={action} />;
   if (!projectId) return <EmptyState title="Select a project to open Costs"
@@ -83,16 +88,31 @@ export function CostProjectGate() {
     description="Return to the project list and try again." action={action} />;
   if (projectNotFound || !project) return <EmptyState title="Project unavailable"
     description="The project could not be found or you do not have access to it." action={action} />;
-  return <Outlet />;
+  /*
+   * No canvas control; code-app route spinner. The Cost subtree keeps its own Suspense boundary,
+   * so the lazy Cost chunk (Add Cost from Table, Contracts, ...) shows a spinner while it downloads
+   * instead of the blank screen D58's empty fallback left (D60). Same text as the shared one
+   * (`AppRoutes`).
+   */
+  return (
+    <Suspense fallback={<LoadingOverlay mode="inline" label="Loading screen…" testId="cost-screen-loading" />}>
+      <Outlet />
+    </Suspense>
+  );
 }
 
 /**
  * The New Project screens: General Data with NO project is the New Project form (`addProject`
- * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Team / Grid Operator open on
- * their page-lock banner ("• General" not saved yet) instead of asking for a project.
+ * blanks `gblRecordSelectedProject` and navigates there), and Milestones / Generator / Production /
+ * Cluster Check List / Team / Planning / Grid Operator / Revenues / Finance open on their page-lock banner ("• General" not saved
+ * yet) instead of asking for a project. Production and Cluster Check List added 28 Oct 2026: both
+ * screens already had the locked New Project mode, but the gate never let them through.
  */
 const NEW_PROJECT_PATHS = new Set([
-  "/project/general", "/project/milestones", "/project/generators", "/project/team", "/project/grid-operator",
+  "/project/general", "/project/milestones", "/project/generators", "/project/production",
+  "/project/checklist", "/project/team", "/project/grid-operator",
+  // Planning, Revenues and Finance open locked too in the canvas's New Project mode (PO, 28 Oct 2026).
+  "/project/planning", "/project/revenues", "/project/finance",
 ]);
 
 /**

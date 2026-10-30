@@ -953,7 +953,7 @@ Record: **D51** §11.12–§11.13.
 UT-ACSHEET-BULK-069…075; UT-ACSHEET-QUERY-009…017; UT-ACSHEET-CACHE-001; UT-BOOK-075, 076. **Not verified** against live
 data. Record: **D51** §11.19.
 
-### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, uncommitted)
+### CA-14 · CAPEX Comments panel: the Year dropdown and its "Required" message were out of line with Type and Month (found 28 Oct 2026, fixed 28 Oct 2026, committed `30061f1`, on DEV)
 
 **A code-app defect** (layout). The canvas has no "Required" text here; it is this app's own
 message for an unset payment-date year.
@@ -970,6 +970,325 @@ message for an unset payment-date year.
   dropdowns share one line, and "Required" sits directly under Year without moving anything else.
 - **Tests.** None automated: jsdom does no layout, so a unit test cannot see the alignment. The
   fix needs a visual check in the running app.
+
+### CA-15 · Cost module: leaving a screen mid-write loses the write's error, and the write guard reads open on return (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
+
+**A code-app defect, introduced by D58** (the spinners removed).
+- **What happens.**
+  - The `LoadingOverlay` scrim used to cover the rail and the header as well. Without it, the user
+    can navigate away while a CAPEX, OPEX, Land Lease, Contracts or Comments write is still
+    running.
+  - The write still finishes, but its error banner belongs to the screen that was left, so a
+    failure is shown nowhere.
+  - A screen re-opened while that write is still running gets a fresh mutation observer. Its
+    `writeCommandsDisabled` guard therefore reads "no write pending", so a second write can start
+    on the same rows.
+- **Severity.** Medium. The non-transactional multi-writes (Land Lease header → allocations →
+  period, the OPEX child cascade) can interleave.
+- **Fix (planned).** A per-project "write in flight" flag that outlives the screen, plus a
+  global error toast for writes whose screen is gone. Record: **D58 §3 item 2**.
+- **Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).**
+  - *The flag.* Every Cost write hook carries the TanStack `mutationKey`
+    `costWriteKey(projectId, family)` (`domain/writeGuard.ts`): CAPEX, comments, O&M / Other OPEX
+    (book save, Add Standard Contract), Land Lease, Contracts (4 hooks) and Add Cost from Table.
+    `useCostWriteInFlight(projectId)` (`features/cost/costing/useCostWriteFlight.ts`) is
+    `useIsMutating` over the project prefix, so it counts a write whose screen has unmounted. It
+    feeds `writeCommandsDisabled` (new `writeInFlight` input) on CAPEX, the Comments panel, O&M /
+    Other OPEX, Land Lease and Contracts, and Add Cost from Table's `saveButtonDisabled`. Every
+    family blocks every other one, as the canvas scrim did.
+  - *The status line.* A screen with no write of its own, while a write started elsewhere runs,
+    shows `COST_WRITE_MSG.writeRunningElsewhere`, "Please wait, a change started on another screen
+    is still being saved..." (**NEW text**, no canvas source; `costWriteStatusLabel`).
+  - *The error.* `useWriteFailureReport(screen)` sends the screen's own error text to its banner
+    while the screen is mounted, and to the app-wide error toast once it is gone
+    (`writeFailureSurface`, `leftScreenFailureToast`). Toast title "A change on the <screen> screen
+    could not be saved." (**NEW**); detail: the text the banner would have shown. CAPEX reports
+    through a new hook-level `onWriteError` option on `useCapexWrites` (TanStack drops per-call
+    `mutate` callbacks after unmount). OPEX's delete and Add Standard Contract moved from
+    `mutate(…, { onError })` to `mutateAsync().catch()` for the same reason.
+  - *Comments* (also closes the CA-18 follow-up below). The comments Save closes its panel before
+    writing and had no error display at all (its rejection was unhandled). A refused save or delete
+    now shows `commentsSaveFailed` (**NEW**, "Error: the comments could not be saved completely.
+    <cause>") on the CAPEX error banner (`onSaveError`), or the toast once CAPEX is gone, and the
+    threads are refetched.
+  - *Tests.* UT-WGUARD-FLIGHT-001…010, UT-COSTFLIGHT-001…017, UT-CAPEX-FLIGHT-001…004, 010, 011,
+    UT-OPEX-FLIGHT-001…003, UT-LEASE-FLIGHT-001, 002, UT-CONTRACTS-FLIGHT-001, UT-CMT-FAIL-001…003.
+    UT-OPEX-NOSPIN-007 and 008 now drive `mutateAsync`.
+  - *Known limit.* Between two mutations of one comments commit the in-flight count is briefly 0.
+    The CAPEX screen still holds its own `commentsSaving` flag, but a CAPEX screen re-opened at that
+    instant could read open for a moment.
+  - *Known limit (independent review, 29 Oct).* Add Cost from Table's DEFERRED background deletes
+    (`followBackgroundDeletes`, D51 §11.14) are not covered: their mutation settles before they
+    finish, so `writeInFlight` is false while they run. This is the existing D51 §11.14 window, not
+    a regression.
+  - *Review fix.* The CAPEX comments error banner was never cleared, so it stayed up after a
+    successful retry. `CommentsPanel` now calls `onSaveStart` before its first write, and CAPEX
+    clears its banner there (UT-CMT-FAIL-004; removing the call fails it).
+
+### CA-16 · CAPEX PCF grid: write actions look enabled during a write (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
+
+**A code-app defect, D58.** While a write runs, the grid's Add, Edit, Delete, Add Standard, Paid
+and Comment actions are ignored by the React callback (`gridActionAllowed`). The vendored DOM menus
+(`pcf/ui/GridRenderer.js`) still look enabled, so a click silently does nothing. Severity: low (no
+wrong data). Fix: pass the pending flag into the renderer and grey the items. Check their
+identities by hand, because the label gate does not cover that file. Record: **D58 §3 item 3**.
+
+**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`).** The CAPEX screen passes its
+`writesDisabled` to `PcfGrid` as `writeActionsDisabled`, which reaches the renderer as the new
+`WriteActionsDisabled` parameter (this app's port only; the vendor control has none). While it
+holds, Add New Cost, Add Standard Contract and its submenu entries, Set as paid/unpaid, Comments,
+and the row menu's Edit / Comments / Delete are `disabled` with `aria-disabled="true"`. They are
+greyed by the vendored stylesheet's own rules (`.pcf-add-dropdown-item:disabled`,
+`.pcf-dropdown-item-disabled`); the stylesheet is unchanged, so `pcfCascade.test.ts` still holds.
+Each item's click handler also returns early when disabled; `gridActionAllowed` stays as the second
+line. The shared helper is `setWriteItemDisabled` (`pcf/ui/ActionDropdown.js`). Identities checked
+by hand: these items carry no `data-testid` or `aria-label` (they never did), their captions are
+unchanged and pinned by the new test, and the grid ids listed in
+`09-tosca-automation-conventions.md` (`capex-month-cell-…`, `capex-comment-…`) are untouched.
+Tests: UT-CAPEXPCF-WRITE-001…005 (`capex-costs/pcfWriteActions.test.ts`), UT-CAPEX-FLIGHT-003.
+
+### CA-17 · Land Lease and Contracts: a selection made during a write is cleared when the write ends (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
+
+**A code-app defect, made reachable by D58.** The success paths clear the selection, as they always
+did. Before D58 the scrim made selecting during a write impossible; now selection stays enabled
+(decision 2b), so a row picked mid-write is dropped when the write finishes. Severity: low. Fix: keep
+the selection unless it pointed at the deleted row. Record: **D58 §3 item 4**.
+
+**Fixed (29 Oct 2026, uncommitted, `feature/FixCostBugs`), marked `DIVERGENCE (D58, CA-17)`.**
+- *Land Lease* (`leaseSelectionAfterWrite`, `landLeaseRules.ts`). The save, the standard import
+  and the delete capture the selection they started with. On success that same selection is
+  still cleared, as on the canvas (LL:5895). A row picked mid-write is kept, unless the delete
+  removed its period or its contract.
+- *Contracts* (`contractSelectionAfterDelete`, `contracts/rules.ts`). Only what still points at a
+  deleted row is cleared: the contract and its target when the contract is gone, the target when
+  that target is gone. The screen reads the latest selection through a ref when the delete settles.
+- *Tests.* UT-LEASE-SEL-001…005, 010…012; UT-CONTRACTS-SEL-001, 002, 010…013.
+
+### CA-18 · `deleteComment` swallows a refused delete (rule 14) (found 29 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
+
+**A code-app defect, recorded in D56 §7 and never logged here.**
+- **What happens.** `deleteComment` (`data/comments.ts`) calls the raw generated `delete()`, which
+  discards the `IOperationResult`. The SDK never throws, so a Dataverse refusal (403, a cascade
+  restriction) resolves like success.
+- **Who calls it.**
+  - the CAPEX panel Delete, which removes comments first (both the bulk and the per-row path);
+  - the relink reset in the panel Save;
+  - the Comments panel.
+- **Effect.** The next phase runs anyway: the cost rows and the contract are deleted while a
+  comment silently remains. The panel logs show the step as done.
+- **Fix.** Route it through `deleteRecord` (`data/client.ts`), as every other delete path does
+  (CONVENTIONS rule 14, KNOWN-RISKS "Several delete paths discard the SDK's failure result
+  silently"). Then add a test with a refusing fake.
+- **Fixed (29 Oct 2026, uncommitted).** `deleteComment` now calls
+  `deleteRecord("delete CAPEX comment", "vsb_capexcommentses", id)`. No caller needed a code
+  change: each already awaits it inside its `SaveLog` step, so the throw stops the next phase.
+  - The bulk Delete's `deleteMany` attempts every comment, then throws; no cost row and no
+    contract delete is sent.
+  - The per-row Delete stops at the first refusal.
+  - The relink reset (bulk and per-row) fails the Save, and no month delete is sent.
+  - In each case the log marks the comment step FAILED and lists the later steps as "Not sent".
+  - The Add Cost from Table legacy delete (`addCostSheet.ts`) also benefits.
+  - The Comments panel now stops its later saves at a refused delete. It still shows no error
+    text, the same as for a refused `saveComment` (a gap that predates this fix, left alone).
+  - Comments panel now shows the error (fixed with CA-15): a refused delete or save shows
+    `commentsSaveFailed` on the CAPEX banner, or the toast once CAPEX is gone (UT-CMT-FAIL-001…003).
+  - No new user text.
+  - Tests: UT-CMTDEL-001…004 (`data/capexWrites.bulk.test.ts`, refusing fake) and
+    UT-CMTDEL-005, 006 (`data/comments.test.ts`, refusing SDK client).
+  - The fakes in `costBook.test.ts`, `addCostSheet.test.ts` and `capexWrites.bulk.test.ts` now
+    route `vsb_capexcommentses` deletes through `deleteRecord`. The raw generated comment
+    `delete()` either throws there or discards a refusal, as the real one does.
+  - Mutation check: going back to the raw `delete()` turns UT-CMTDEL-001…004 red. The file was
+    restored byte-identically (hash checked).
+  - **Behaviour change (independent review, 29 Oct).** `deleteRecord` rejects a **404**, where the raw
+    delete "succeeded" silently. So if another user already deleted a comment, these now fail part
+    way:
+    - the next CAPEX panel Delete (comments phase);
+    - the relink paid reset;
+    - a comments Save.
+
+    The contract update and the paid reset may already have landed; a retry after a reload works.
+    This is correct under rule 14. Add Cost from Table's bulk path instead treats a 404 as "already
+    gone" (D51 §11.12); aligning the panel with that is a product choice, not done here.
+
+### CA-19 · Test reliability: UT-ADGATE-910 fails intermittently under the full suite (seen repeatedly since 27 Oct 2026, **fixed 29 Oct 2026, uncommitted**)
+
+**A test defect, not an app defect.**
+- **What happens.** `features/admin/admin-gates-approvals/Screen.test.tsx` UT-ADGATE-910 ("Reset
+  Gate asks for confirmation first, then issues one reset") fails under a full `npm run verify`.
+  It takes about 7 s, and the file passes 33/33 when run alone.
+- **Seen in:**
+  - the D51 §11.11 run;
+  - the E5 run;
+  - the D55 run;
+  - the 29 Oct runs on `8dc4553`;
+  - the `feature/ReadableBulkSaveLogs` verify.
+- **Cost.** Each occurrence aborts `verify` before the build, so every gate run needs a manual
+  re-run. UT-ADGATE-915 had the same shape and was fixed on 27 Oct by waiting for
+  `aria-expanded="true"`, a race on a still-mounted listbox.
+- **Fix.** Find the equivalent race in 910 (probably the confirm dialog's async open) and wait on
+  the right condition. Do not raise the timeout. Record: TESTING-AND-HARNESS.md ("known timing
+  flake").
+- **Root cause (traced 29 Oct 2026).** This is not a short `aria-hidden` flicker. In jsdom, which
+  has no layout, tabster finds no visible focusable control in a freshly opened Fluent dialog.
+  1. Fluent therefore focuses the dialog surface itself.
+  2. Tabster registers the surface's modalizer only after that focus. It never activates a
+     modalizer whose own element has focus, so no modalizer is active, for the drawer or for the
+     alert dialog.
+  3. With none active, tabster's deferred `_hiddenUpdate` (a 250 ms timer) marks every modalizer
+     `aria-hidden="true"`, the open alert dialog included, and that never reverts.
+  4. A default role query therefore works only within those 250 ms. Under load, the
+     `within(dialog).findByRole("button", …)` ran later and waited out its 5 s, which is where the
+     7 s came from.
+
+  Reproduced: three concurrent heavy runs failed 2 of 2; an added 600 ms wait made it fail
+  even alone. Not an app defect: in a browser the dialog's first button is focusable, so the
+  modalizer activates.
+- **Fixed (29 Oct 2026, uncommitted, test only).** UT-ADGATE-910 queries the panel button, the
+  alert dialog and its confirm button with `{ hidden: true }`. The test pins behaviour, so it
+  waits for the controls to exist rather than for tabster's a11y state. Other tests in the file
+  already do the same (905, 915, 916). UT-ADGATE-906 and 914 open the same dialog and got the
+  same change. No timeout was raised and no app code changed.
+  - With the 600 ms wait added, the fixed test passes.
+  - The file alone: 5 of 5 runs, 33/33 each.
+  - Three concurrent `npx vitest run src/features/admin src/features/cost/capex-costs/Screen.test.tsx
+    src/features/pm/project-main/Screen.test.tsx` runs, twice: 6 of 6 green, 826/826 each.
+
+### CA-20 · Cost module: no visible busy state after D58 removed the spinners (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect, introduced by D58.** D58 removed the Cost module's loading spinners as canvas
+overhead, replacing them with a quiet status line and empty placeholders. In use that left the
+screens looking idle while they were busy.
+- **What happened.**
+  - **Saves.** After Save, Delete and the other writes, only a line of text showed. The grid and
+    every command stayed clickable.
+  - **CAPEX tab change.** The tab strip sat over an empty body: nothing loaded, nothing moving.
+  - **Add Cost from Table.** The click opened a blank screen, through the lazy chunk download, the
+    sheet fetch and the grid build.
+  - **Effect.** Users clicked twice or clicked anywhere, and could start work on a screen that had
+    not finished loading (a double submit on the non-transactional multi-writes).
+- **Root causes.**
+  - `WriteStatus` drew only a text span.
+  - The load placeholders were empty `<div>`s on CAPEX, the Summary tab, Contracts and Add Costs from
+    Table.
+  - The Cost route's `Suspense` fallback and `CostProjectGate` were empty.
+  - OPEX and Land Lease rendered empty card lists, and the Comments panel an empty thread list.
+- **The fix (D60).**
+  - **Writes.** `WriteStatus` shows the blocking `LoadingOverlay` (spinner and scrim, with the verbatim
+    canvas text) until the write has finished and the screen has refreshed, on success and on
+    failure.
+  - **Loads.** Inline spinners with the original texts replace every empty placeholder.
+  - **Unchanged.** The write guard from D58 stays.
+- **Tests.** The D58 `UT-*-NOSPIN-*` tests were flipped to pin the spinners (ids kept), and
+  `UT-WSTATUS-001…004`, `UT-SHELL-NOSPIN-001/007` were rewritten. New tests are `UT-*-BUSY-NNN`.
+  **Not verified** in a browser: the first live check on DEV is owed.
+- **Record:** **D60**.
+
+### CA-21 · The project name in the Cost header was smaller and greyer than in the Edit Project header (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (typography parity). Reported by the user: on every Cost screen the header's
+project name did not match the one on the Edit Project (Project Management) screens.
+- **Canvas ground truth.** Both apps' `cmp_Header` render the name with the same control,
+  `con_cmp_Header_HeaderText`: `Text@0.0.51`, `Size: =20`, `Weight: Semibold`
+  (`projectcosts/Src/Components/cmp_Header.pa.yaml:324-332`, `projectmanagement/…:446-458`). So the
+  canvas shows 20 px Semibold in both, and the Edit Project header was right.
+- **What differed.**
+
+  | | Cost header (before) | Edit Project header |
+  |---|---|---|
+  | Element | Fluent `<Text>` plus a Griffel style | plain `<span>` |
+  | Font size | 16 px (`fontSizeBase400`) | 20 px |
+  | Line height | Fluent default | 28 px |
+  | Colour | Fluent text grey | black |
+  | Width | capped at 28 characters | no cap, ellipsis on overflow |
+
+- **Root cause.** `components/AppHeader.tsx` rendered the Cost name as a Fluent `Text` carrying a
+  Griffel `pageTitle` style (16 px, `maxWidth: 28ch`) next to the `.canvas-project-title` class. A rule
+  for 20 px / 28 px existed in `styles/canvas.css`, but it is a plain single-class rule, and the Griffel
+  rules (injected at runtime, after the stylesheet) won the cascade. The PM name, a plain `<span>`
+  with no Griffel class, received the 20 px rule. The same trap had already been worked around for
+  the "Cloud" title (see the doubled-class comment in `canvas.css`).
+- **The fix.**
+  - **Cost name.** It is now the same kind of element as the PM name: a plain `<span
+    class="canvas-project-title">`. The Griffel `pageTitle` style was removed.
+  - **One shared rule.** The typography (20 px, 28 px line, 600, `#000`, single line with ellipsis,
+    `min-width: 0`, no 28-character cap) now lives only in `.canvas-project-title`. The PM-only
+    `.canvas-pm-project-title` keeps just `padding: 0`, so the two headers cannot drift apart again.
+  - **Unchanged.** The horizontal spacing and vertical centring of the Cost name, and the PM header
+    (it resolves to the same values as before).
+- **Visible effect.** On every Cost screen the project name grows from 16 px to 20 px and turns black.
+  A long name is no longer cut at 28 characters; it ellipsises at the header's free width, as on the
+  PM screens.
+- **Tests.**
+  - UT-HEADER-010 pins the Cost name as a plain span with only the shared class and no Fluent `Text`
+    or Griffel class. UT-HEADER-011 pins the PM name's classes, and UT-HEADER-012 the long-name case.
+  - UT-HEADER-013 loads the real stylesheet and checks both headers resolve to the same font (20 px,
+    600).
+  - UT-HEADERCSS-001..003 pin the shared rule, forbid the PM rule from restating typography, and
+    forbid any other rule from restyling the title's font.
+  - Mutation checks: restoring a Fluent `Text` fails UT-HEADER-010; 16 px in the shared rule fails
+    UT-HEADERCSS-001; a typography override in the PM rule fails UT-HEADERCSS-002.
+  - **Limit.** jsdom does not model a browser's cascade between Fluent's runtime rules and a
+    stylesheet, so UT-HEADER-013 alone would not have caught the original bug. The structural tests
+    are what guard against it.
+- **Not verified** in a browser; the first look on DEV is owed.
+
+### CA-22 · Contracts, DevCo Costs: the checkboxes were two different sizes (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (UI). Reported by the user: in the Add/Edit Contract panel's DevCo Costs picker
+some checkboxes looked big and some small.
+- **What differed.** The picker has two levels, and each drew its own box:
+
+  | Level | Control | Box before |
+  |---|---|---|
+  | Main gallery (the account row) | a drawn SVG in a 32 px button (the canvas `img_Contracts_DevCoCosts_ParentCheckbox`) | about 18.3 px (20 px element, box 22/24 of it) |
+  | Nested gallery (the leaf rows) | a native `<input type="checkbox">` (the canvas `chb_…_CostssRow`) | 16 px |
+
+- **Root cause.** The two sizes were set in two unrelated places (an SVG `width="20"` attribute and
+  a `width: 16px` rule), so nothing tied them together. The canvas itself had the same split: an
+  image with its own padding for the parent, the modern CheckBox control for the leaf.
+- **The fix.** One variable, `--devco-check: 18px`, on `.canvas-devco` (`styles/canvas.css`). The
+  leaf takes `width` and `height` from it; the parent's SVG is `24/22` of it, so the drawn box is
+  exactly that size. The leaf's right margin is `56px - box / 2`, so both columns still centre
+  56 px from the row's right edge, as they did.
+- **Not changed.** The look: the parent stays the drawn glyph (blue, tick, dash, locked grey) and the
+  leaf the native checkbox. Only the size is unified; making the leaf draw the same glyph would be a
+  separate, visual decision.
+- **Tests.** UT-CONCHECK-001…005 (`contracts/devcoCheckboxStyle.test.ts`) read the stylesheet: one
+  variable; the leaf and the SVG both derive from it and nothing else sets either size; the SVG's
+  drawn box equals the variable; the column centres match at 56 px. Reintroducing the 16 px leaf, the
+  20 px SVG or the fixed 48 px margin each fails them.
+- **Not verified** in a browser; the first look on DEV is owed.
+
+### CA-23 · Contracts panel: errors showed under fields the user had not touched (found 29 Oct 2026, fixed 29 Oct 2026, uncommitted)
+
+**A code-app defect** (UX). Reported by the user: the validation messages in the Add/Edit Contract
+panel should appear only for fields the user has touched, and a required field left empty should not
+show an error until then.
+- **What happened.** The panel held ONE flag, `panelTouched`, and every field's error was gated by
+  it. The first change to anything in the panel, even ticking a DevCo account, or the screen
+  recalculating, set it, and then every empty required field showed "Input must not be blank" at
+  once, including fields the user had never visited.
+- **Root cause.** The granularity of the flag. Divergence D-4 (blank required fields now report why;
+  the canvas showed nothing) made every blank field an error, and the single flag turned them all on
+  together. The Payment Target panel and the Rights panel shared the flag.
+- **The fix (D61).** A per-field set of touched fields replaces the flag (`TouchedFields`,
+  `touchFields`, `visibleFieldError` in `contracts/rules.ts`). A field counts as touched when the
+  user edits it or visits it and leaves it (a new optional `onBlur` on the shared `CostField`). A
+  recalculation, a radio choice, or the reset of the margin boxes touches nothing. The DevCo
+  account error shows once the user has ticked or unticked an account. Opening a panel starts clean.
+  The validation itself and the Save gate are unchanged (the Rights panel's Save now reads whether a
+  field is invalid, not whether its error is on screen).
+- **Consequence to know.** Save stays disabled while any required field is invalid, but a field the
+  user has not touched shows no message, so a greyed Save can have no visible reason. See D61 §4.
+- **Tests.** UT-CONTOUCH-001…007 (the rules, including the old behaviour kept as a twin) and
+  UT-CONPANEL-001…010 (the screen: a fresh panel shows nothing; ticking an account shows nothing;
+  clearing a field shows only that field; leaving it empty touches it; a radio touches nothing;
+  Margin Yes touches nothing; unticking the last account shows its error; reopening resets; the
+  Add Period panel follows the same rule). Five mutations (one flag again, no blur, the margin
+  radio touching its resets, the account toggle not touching, no blur on the period percentage)
+  each fail them.
+- **Not verified** in a browser; the first look on DEV is owed.
 
 ---
 

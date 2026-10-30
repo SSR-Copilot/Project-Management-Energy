@@ -2613,6 +2613,8 @@ export const PANEL_BUTTONS = {
 export const TYPE_PANEL_LABELS = {
   /** `lbl_GeneratorData_RightPanel_FormHeader_FormHeader.Text` — verbatim. */
   title: "Add Generator Type",
+  /** `ComboBox@0.0.51` with no `InputTextPlaceholder`: the control's own "Find items". */
+  findItems: "Find items",
   /** `lbl_btn_GeneratorData_RightPanel_Form_Filter_Country_Text.Text` — verbatim. */
   countryFilter:
     "Show generator types which are available in my country and latest possible order date is valid",

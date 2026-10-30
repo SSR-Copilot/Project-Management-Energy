@@ -32,8 +32,8 @@ Also run: 92 Vitest tests for Milestones and the shared gates pass.
 
 | # | Finding | Where found | Fix |
 |---|---|---|---|
-| F1 | The Milestones matrix columns were about 1.6 times wider than the canvas (the table stretched to the window, so the 110 px blank-column fix of D62 had no visible effect) | E2E-MILESTONES-003 | A fixed-width layout with an empty trailing column takes the remaining width, as the canvas strip does (D62 row 11) |
-| F2 | The header strip was 39 px, the canvas 32 px (a taller header button and a row border) | E2E-MILESTONES-003 | Header button pinned to 32 px, no row border (D62 row 12) |
+| F1 | The Milestones matrix columns were about 1.6 times wider than the canvas (the table stretched to the window, so the 110 px blank-column fix of D68 had no visible effect) | E2E-MILESTONES-003 | A fixed-width layout with an empty trailing column takes the remaining width, as the canvas strip does (D68 row 11) |
+| F2 | The header strip was 39 px, the canvas 32 px (a taller header button and a row border) | E2E-MILESTONES-003 | Header button pinned to 32 px, no row border (D68 row 12) |
 | F3 | React warning "Each child in a list should have a unique key" from `SettingsTabStrip` (my overflow change) | console, while moving through Check List Settings | Key added; Check List Settings tests pass |
 | F4 | After the merge the Vite dev server served an EMPTY `routes.tsx` (stale cache), so the app showed a blank page or "useSession must be used inside SessionProvider" | the blank page seen by the user | Dev server restarted, cache cleared. Not a code defect: typecheck, tests and build never see it |
 

@@ -1165,7 +1165,7 @@ export interface ProjectRevenueDraft {
   };
 }
 
-const REVENUE_COL = {
+export const REVENUE_COL = {
   name: "vsb_name",
   label: "vsb_label",
   description: "vsb_description",
@@ -1190,9 +1190,11 @@ const REVENUE_COL = {
   isContractDurationMonthsStd: "vsb_iscontractdurationmonthsstandardassumption",
   isContractStartDateStd: "vsb_iscontractstartdatestandardassumption",
   isContractEndDateStd: "vsb_iscontractenddatestandardassumption",
-  isTariffPriceStd: "vsb_istariffpricestandardassumption",
-  isTariffPriceP90Std: "vsb_istariffpricep90standardassumption",
-  isUseInflationProfileStd: "vsb_isuseinflationprofilestandardassumption",
+  // The table spells it "tarrif" (as the Revenues `FLAG_COL`); `'Is Use Inflation Profile …'`
+  // is `vsb_isinflationprofilestandardassumption`. Corrected 28 Oct 2026: the create was refused.
+  isTariffPriceStd: "vsb_istarrifpricestandardassumption",
+  isTariffPriceP90Std: "vsb_istarrifpricep90standardassumption",
+  isUseInflationProfileStd: "vsb_isinflationprofilestandardassumption",
   isUseCustomInflationStd: "vsb_isusecustominflationstandardassumption",
   isInflationProfileYearStd: "vsb_isinflationprofileyearstandardassumption",
   isHedgedVolumeStd: "vsb_ishedgedvolumestandardassumption",
@@ -1297,6 +1299,8 @@ export function buildDefaultRevenue(ctx: RevenueSeedContext): ProjectRevenueDraf
     "owningbusinessunit@odata.bind": ctx.owningBusinessUnitId
       ? `/businessunits(${ctx.owningBusinessUnitId})` : null,
   };
+  // As rule 18: omitted rather than sent as null, so Dataverse defaults the owner on create.
+  if (!ctx.owningBusinessUnitId) delete data["owningbusinessunit@odata.bind"];
 
   return {
     data,
@@ -1608,9 +1612,9 @@ export const MILESTONES_SCREEN_TEXT = {
   loadFailedDescription: "Reload the page or try again later.",
   loading: "Loading...",
   noProject: "The project could not be found.",
-  /** The default revenue contract the canvas seeds needs `Assumptions Revenues SQL` (Fabric, D2). */
-  revenueSeedNotConnected:
-    "Saving does not create the default revenue contract yet: its assumptions come from Fabric SQL, which is not connected.",
+  /** The save could not read `Assumptions Revenues SQL` (Fabric SQL), so no default revenue contract was created. */
+  revenueSeedFabricFailed:
+    "The milestones were saved, but the default revenue contract was not created: the revenue assumptions could not be read from Fabric SQL.",
 } as const;
 
 /**
@@ -1631,7 +1635,7 @@ export function formatShortDateTime24(timestamp: string | null, locale: string):
 
 /**
  * The seed gate of the default revenue contract (rule 20, Y:509-521): `'Cluster State'.Name in
- * ["Draft", "Cluster 1"]` and no `Project Revenues` row yet. Used only for the not-connected notice.
+ * ["Draft", "Cluster 1"]` and no `Project Revenues` row yet. `loadRevenueSeed` checks it at save time.
  */
 export const revenueSeedWouldRun = (p: MilestoneProject | null, revenueRowCount: number): boolean =>
   !!p && ["Draft", "Cluster 1"].includes(p.clusterStateName ?? "") && revenueRowCount === 0;

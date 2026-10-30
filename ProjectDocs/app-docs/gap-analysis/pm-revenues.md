@@ -1,5 +1,11 @@
 # Gap analysis — Project Revenues Screen (PM)
 
+> **Historical (written before D33).** This report describes the screen *before* it was connected,
+> and most MISSING / WRONG rows below were fixed on 20 Oct 2026. For the current state read
+> `02-OPEN-DECISIONS.md`: **D33** (connected; the card gallery), **D57** (29 Oct 2026: Fabric
+> `Assumptions Revenues SQL` connected; the live-canvas visual parity pass). The open questions are
+> in `PM-OPEN-QUESTIONS-2026-10-20.md` (V1–V9).
+
 - **Canvas:** `ProjectDocs/_extracted/msapp/projectmanagement/Src/Project Revenues Screen.pa.yaml`. It is 12 771 lines and 289 controls, and it was read in full with only styling properties filtered out. "L" = a line in this file.
   - Components used: `cmp_Header`, `cmp_Left_Navigation`, `cmp_Information_Button`, `cmp_PopUp_Confirmation` ×3, `cmp_PopUp_Information`, `cmp_PopUp_Loading`, `cmp_ReportErrorRightPanel`, `fn_Numeric` (IsInteger / IsOneDecimal / IsTwoDecimal / IsThreeDecimal) and `fn_Common` (IsValidCurrency).
   - Globals: `gblAppResx` (App.pa.yaml:1625-1634): `Numeric` = "Numeric value without decimals", `NumericOneDecimals` / `NumericTwoDecimals` / `NumericThreeDecimals` = "Numeric value with maximum of one / two / three decimals".

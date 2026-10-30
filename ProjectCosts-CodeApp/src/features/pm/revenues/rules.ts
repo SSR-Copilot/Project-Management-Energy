@@ -52,8 +52,8 @@
  *
  * CONNECTED 20 Oct 2026 (D33). The write plans (`planSaveContract`, `planDeleteContract`,
  * `planSaveBalancing`, `planDeleteBalancing`) and the column maps live at the end of this file.
- * `Assumptions Revenues SQL` is Fabric SQL (D2/D26/D28) and stays unconnected, so every engine
- * function below runs over an EMPTY row set until it is (`REVENUE_SCREEN_TEXT.assumptionsNotConnected`).
+ * `Assumptions Revenues SQL` is Fabric SQL (D54), read only for the project country's slice
+ * (connected 29 Oct 2026); every engine function below runs over those rows.
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, isDecimalWithPlaces, isValidCurrency,
@@ -2584,6 +2584,25 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
   return out;
 }
 
+/** `con_…_CardBody_Fields_Currency_1.Height` — every field tile is 70 high. */
+export const CARD_TILE_HEIGHT = 70;
+
+/**
+ * `con_…_CardBody_Fields_Main_6.Height` (Y:883-906): the unfolded card body keeps room for a fixed
+ * number of tile rows, whatever it shows — 5 (+60) for a German wind FiT, else 4 (+40) with an
+ * Inflation Start Year > 0, else 3 (+40). A card with fewer tiles leaves blank space under them, as
+ * on the canvas (the card is `CardHeader.Height + CardBody_Fields_6.Height`, Y:868-873).
+ */
+export function contractCardBodyHeight(
+  c: Pick<StoredRevenueContract, "label" | "inflationStartYear">,
+  ctx: Pick<ContractCardContext, "country" | "technology">,
+): number {
+  if (ctx.country === "Germany" && ctx.technology === "Wind" && revenueLabelText(c.label) === "FiT") {
+    return CARD_TILE_HEIGHT * 5 + 60;
+  }
+  return (c.inflationStartYear ?? 0) > 0 ? CARD_TILE_HEIGHT * 4 + 40 : CARD_TILE_HEIGHT * 3 + 40;
+}
+
 /**
  * The fold chevrons' `OnSelect` (Y:2864-2878, 2910-2924) flip the card's `IsFolded` (and make the
  * card the selected contract — the caller does that). Every card starts unfolded
@@ -2768,14 +2787,11 @@ export const shiftOfCodCell = (v: number | null): string => (v === null ? "-" : 
 /* ═══════════════════════════════════════════════════════════════ NEW texts ═════ */
 
 /**
- * NEW — no canvas equivalent. The load-error state (CONVENTIONS rule 19), the Fabric notice
- * (D2: `Assumptions Revenues SQL` is a Fabric SQL source, not connected) and the plan refusals.
+ * NEW — no canvas equivalent. The load-error state (CONVENTIONS rule 19) and the plan refusals.
  */
 export const REVENUE_SCREEN_TEXT = {
   loadFailedTitle: "Revenue data is unavailable",
   loadFailedDescription: "The revenue contracts or balancing prices of this project could not be loaded. Reload the page to try again.",
-  assumptionsNotConnected:
-    "The standard revenue assumptions come from Fabric SQL (Assumptions Revenues SQL), which is not connected yet. Enter the values by hand.",
   noProject: "The project is not loaded.",
   noSubaccount: "No Revenue Subaccount exists.",
   noCurrency: "The contract currency could not be found.",

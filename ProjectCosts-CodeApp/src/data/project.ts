@@ -40,6 +40,8 @@ export const ENV_VAR_NAMES = [
   "vsb_ProjectOverviewPowerBIReportID",
   "vsb_PortfolioOverviewPowerBIReportID",
   "vsb_PowerBITenantID",
+  /** Azure Application Insights (`appInsights/`); empty or missing = telemetry off. */
+  "vsb_ApplicationInsightsConnectionString",
 ] as const;
 
 export type EnvVarName = (typeof ENV_VAR_NAMES)[number];

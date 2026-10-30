@@ -10,7 +10,7 @@
  *
  * Canvas parity: 0 px left inset, blue chevron and `#0078D4` rule, 16 px headings over 15 px
  * semibold values in 30 px rows, the DevCo tags as a header plus a WRAPPING tag container
- * (ACS:1723-1726). The per-card Apply bar is not built (D61).
+ * (ACS:1723-1726). The per-card Apply bar is not built (D67).
  *
  * DIVERGENCE: the canvas card has a hand-computed height and clips long text; here the height is
  * intrinsic and long values wrap.

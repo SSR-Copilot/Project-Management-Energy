@@ -1050,10 +1050,12 @@ export const municipalityMode = (countryName: string | null | undefined): Munici
   countryName === "Germany" ? "germany" : countryName === "France" ? "france" : "text";
 
 /**
- * The French list is empty below three characters
+ * The municipality list is empty below three characters. France: the canvas rule
  * (`If(Len(Self.SearchText) < 3, Filter(colAssumptionsFranceSQL, false), …)`, Y:3673).
+ * Germany: CHANGED (PO, 28 Oct 2026) — the canvas searches from the first letter although its
+ * placeholder says "Type 3 or more letters"; both lists now wait for three.
  */
-export const franceSearchIsSuppressed = (searchText: string): boolean =>
+export const municipalitySearchIsSuppressed = (searchText: string): boolean =>
   searchText.length < 3;
 
 /** SPV legal structure is required only for Germany with an SPV name present (Y:1631-1639). */

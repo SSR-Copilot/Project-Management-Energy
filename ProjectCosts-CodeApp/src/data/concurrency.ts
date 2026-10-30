@@ -104,6 +104,8 @@ interface Gate {
   peak(): number;
   /** Restarts `peak()` from the current in-flight count. */
   reset(): void;
+  /** How many gated tasks hold a slot right now (measurement only; the save logs read it). */
+  inFlight(): number;
 }
 
 export function createGate(limit: number): Gate {
@@ -129,5 +131,6 @@ export function createGate(limit: number): Gate {
   return Object.assign(gate, {
     peak: () => peak,
     reset: () => { peak = active; },
+    inFlight: () => active,
   });
 }

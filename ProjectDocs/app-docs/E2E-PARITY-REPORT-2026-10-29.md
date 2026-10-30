@@ -49,7 +49,7 @@ Documented differences confirmed against the Canvas (the test fails if one of th
 
 | Item | Canvas | Code app | Why |
 |---|---|---|---|
-| Apply (per country) and Apply All | shown, disabled | not drawn | D61 |
+| Apply (per country) and Apply All | shown, disabled | not drawn | D67 |
 | Duration `101`, `1001` | accepted | rejected (column maximum 100 / 1000) | marked DIVERGENCE in `validateDuration` |
 | Duration ` 6` (leading space) | rejected | accepted (spaces ignored) | marked DIVERGENCE in `validateDuration` |
 | Success rate `0,5` | rejected (the canvas accepts only the language's separator, here `.`) | accepted (`.` and `,`) | marked DIVERGENCE in `validateSuccessRate` |
@@ -79,7 +79,7 @@ Documented differences confirmed against the Canvas (the test fails if one of th
 - Not compared: colours, the panel footer buttons, hover and focus states, other zoom levels, the Cost Canvas app, the other 20 screens.
 - A Save was never run, so the save payload (Power Fx `Patch` against the code app's `buildPatches`) is compared only through the rule map and unit tests.
 
-## Numbers and language (audit and fix, 29 Oct 2026, D64)
+## Numbers and language (audit and fix, 29 Oct 2026, D70)
 
 Prompted by the Success Rate `0,5` difference: the Canvas reads and shows numbers with `Language()`. A read-only audit of the Canvas YAML (about 135 `Language()` sites, 190 more
 implicit-locale `Text()` calls) against the code found:
@@ -87,9 +87,9 @@ implicit-locale `Text()` calls) against the code found:
 | Group | Canvas | Code app | Result |
 |---|---|---|---|
 | Decimal separator rule | `Lower(First(Split(Language(), "-")).Value) = "en"` means ".", any other language means "," (fn_Numeric, fn_Common, fn_Numeric_With_Separtors; per-screen copies) | three engines: `powerFxNumeric` (same rule), `numeric` (Intl), `numberInput` (language / intl / both) | Same for en, de, fr, pl, es, it; differs for de-CH, es-MX, en-ZA, ja. Not merged (decision) |
-| Boxes opening with stored numbers | `Text(n, fmt)` in the user's language | Generators, Planning, Grid Operator, Finance, Revenues opened in US text while validating in the user's language | **Fixed** (D64 rows 2 to 6) |
+| Boxes opening with stored numbers | `Text(n, fmt)` in the user's language | Generators, Planning, Grid Operator, Finance, Revenues opened in US text while validating in the user's language | **Fixed** (D70 rows 2 to 6) |
 | Screens that never read the session language | n/a | Generators, Planning, Grid Operator | **Fixed** |
-| Messages carrying a number | `Text(max, "#,##0")` (implicit), or a literal per language (Capex) | Contracts always German grouping; Capex always English | **Fixed** (D64 rows 7, 8) |
+| Messages carrying a number | `Text(max, "#,##0")` (implicit), or a literal per language (Capex) | Contracts always German grouping; Capex always English | **Fixed** (D70 rows 7, 8) |
 | Voltage on Grid Operator | comma banned on purpose ("dot should be used instead") | dot-only | Kept, and now protected by a test |
 | Country conditions | Poland vs other: ceilings, PLN/EUR labels, ranges, base-rate defaults, units | reproduced on Finance, General Data, Revenues, Generators, Admin Cost, Capex, Land Lease, OPEX | No change needed (the agent found no differences); Capex message grouping was the one gap |
 | Money conversion by exchange rate | none in any formula | none | Matches |

@@ -46,9 +46,9 @@ export function formPanelWidth(width: FormPanelWidth): string | number {
     // (`CapexScreenCode.txt:8041`); its Type/Year/Month row is a fixed 250+100+100 and does not
     // fit the 450 of `narrow`.
     case "comments": return 600;
-    // `twoColumn` (860) is the PM Revenues contract panel as the product owner's live-canvas
-    // screenshot shows it (two independently scrolling columns, 20 Oct 2026).
-    case "twoColumn": return 860;
+    // `twoColumn` (760) is the PM Revenues contract panel, `Min(760, Parent.Width)`: two independently
+    // scrolling columns. The live-canvas screenshots (29 Oct 2026) measure 760; 860 was a misreading.
+    case "twoColumn": return 760;
     // `fieldsAndSide` (680) is the canvas 640-wide Production panel with one side column (fields 280 +
     // 360) plus the 2 x 20 body padding.
     case "fieldsAndSide": return 680;

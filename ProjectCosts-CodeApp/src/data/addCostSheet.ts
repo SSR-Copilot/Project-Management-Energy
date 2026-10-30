@@ -31,26 +31,37 @@
  * graph rather than in strict order. Each upsert goes out as `CreateMultiple` (new rows) and
  * `UpdateMultiple` (existing rows) in parallel — see `upsertRowsByAction`. `UpsertMultiple` is
  * not used.
+ *
+ * The generic bulk SENDER (`upsertRowsByAction` with its per-action 501 fallback and session
+ * flags, the module gates `saveGate` / `contractDeleteGate` / `costDeleteGate`, the request stats
+ * and `existingIds`) lives in `./bulkSend.ts`, shared with the CAPEX Add/Edit Cost panel's save
+ * (`./capexWrites.ts`), so both saves pass the same gates. What stays here is the sheet save's
+ * own: `skipUpsertVerify`, the delete pools (`deleteLimit`), the 404 read-back
+ * (`deleteOr404`, `verifyNotFound`) and the orchestration and log of `saveAddCostSheetBulk`.
  */
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
-import { CreateMultipleService } from "@/generated/services/CreateMultipleService";
-import { UpdateMultipleService } from "@/generated/services/UpdateMultipleService";
-import { DataError, RecordGoneError, isRecordGone, unwrap } from "@/platform/errors";
+import { DataError, isRecordGone, unwrap } from "@/platform/errors";
 import { deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, bind, chunk, idIn, lookupEq, lookupIn, numberOf } from "./odata";
-import { DELETE_CONCURRENCY, createGate, forEachLimit, mapLimit } from "./concurrency";
+import { forEachLimit, mapLimit } from "./concurrency";
 import { loadCostAccounts, loadPayerDefaults } from "./costBook";
 import {
   excludePendingCosts, excludePendingFromSheet, pendingDeletes, pendingExcept,
 } from "./pendingDeletes";
 import { deleteComment, loadComments } from "./comments";
+import { BulkDeleteError, deleteMany } from "./bulkWrites";
+import type { BulkTableInfo, SaveBuildPlan, SavedSheetChanges, UpsertTarget } from "./bulkTypes";
 import {
-  BulkDeleteError, BulkWriteError, deleteMany, parallelChunkSize, toUpsertTargets, upsertMultiple,
-} from "./bulkWrites";
-import type {
-  BulkTableInfo, BulkUpsertTransport, ExistingIdsReader, SavedSheetChanges, UpsertTarget,
-} from "./bulkTypes";
+  CONTRACT_DELETE_LIMIT, COST_DELETE_LIMIT, contractDeleteGate, costDeleteGate, createRequestMeter,
+  existingIds, formatMs, formatRequestDuration, isBulkUnavailable, upsertRowsByAction,
+  type RequestMeter, type UpsertGroupReport,
+} from "./bulkSend";
+import {
+  emitSaveLog, errorChainLines, failureSection, gateTail, groupsText, inStartOrder, messageOf, plural,
+  rawErrorSection, requestsSection, rootMessageOf, stepsSection,
+  type SaveLogReport, type SaveLogRow, type SaveLogSection, type SaveLogStep,
+} from "./saveLog";
 import {
   CAPEX_CONTRACTS, CAPEX_COSTS, RowsGoneError, SavePlanError, executeSavePlan,
   type BackgroundOutcome, type SavePlanDeps,
@@ -216,37 +227,6 @@ async function loadCostsForContracts(contractIds: readonly string[]): Promise<Ex
   }));
 }
 
-/** Every row of one id batch of `table`, primary key only. The two tables the bulk save writes. */
-async function idRows(table: BulkTableInfo, batch: readonly string[]): Promise<readonly object[]> {
-  const options = { select: [table.primaryKey], filter: idIn(table.primaryKey, batch) };
-  const label = `check existing ${table.entitySetName}`;
-  if (table.entitySetName === CAPEX_CONTRACTS.entitySetName) {
-    return fetchAll(label, (o) => Vsb_capexprojectcontractsService.getAll(o), options);
-  }
-  if (table.entitySetName === CAPEX_COSTS.entitySetName) {
-    return fetchAll(label, (o) => Vsb_capexcostsService.getAll(o), options);
-  }
-  throw new Error(`existingIds: no reader for ${table.entitySetName}`);
-}
-
-/**
- * Which of `ids` still exist in `table` — the bulk save's phase-0 check (`SavePlanDeps.existingIds`).
- *
- * A server read with `$select` = the primary key only (rule 1), the ids filtered on the server in
- * `chunk` batches of `CHUNK` (rule 2), every page through `fetchAll`, which unwraps (rule 3). No
- * state filter: an inactive row still exists, and an upsert of it updates rather than re-creates.
- * Ids come back lower-cased so the caller can match case-insensitively.
- */
-const existingIds: ExistingIdsReader = async (table, ids) => {
-  const batches = await Promise.all(chunk(ids).map((batch) => idRows(table, batch)));
-  const found = new Set<string>();
-  for (const row of batches.flat()) {
-    const id = (row as Record<string, unknown>)[table.primaryKey];
-    if (typeof id === "string") found.add(id.toLowerCase());
-  }
-  return found;
-};
-
 /* ═════════════════════════════════════════════════════════════════ the write ══ */
 
 export interface SaveAddCostSheetArgs {
@@ -309,20 +289,6 @@ export interface SaveAddCostSheetResult {
   deferredCostIds?: readonly string[];
   applied?: SavedSheetChanges;
 }
-
-/**
- * Bulk requests per upsert group sent AT ONCE (`upsertMultiple`'s `parallel`).
- *
- * Microsoft's bulk guidance is to send bulk messages in parallel: the server processes the rows
- * of ONE request in sequence (D51 §11 measured a 1,000-row `CreateMultiple` of costs at
- * ~3.3 s), so a big group split into 4 requests sent together finishes in about a quarter of the
- * time. It cannot overload Dataverse: every bulk request still passes the shared `saveGate`, which
- * caps the write requests in flight at `SAVE_REQUEST_LIMIT`. A group under 50 rows stays one
- * request (`MIN_PARALLEL_CHUNK`). "4" holds up to 4 × 500 = 2,000 rows; a bigger group is one
- * request per 500 rows, all sent at once (`parallelChunkSize`). The 501 fallback still holds: when every parallel request answers
- * 501, `upsertMultiple` throws a `BulkWriteError` with 0 committed, as the sequential path does.
- */
-export const BULK_PARALLEL_CHUNKS = 4;
 
 /**
  * D51 option A (§11.14): Save returns as soon as every operation EXCEPT the contract deletes has
@@ -427,26 +393,85 @@ export function backgroundDeleteFailureTexts(outcome: BackgroundOutcome, counts:
   return texts;
 }
 
+/* ═══════════════════════════════════════════════════════════ the save log (D59) ══ */
+
+/** Whether the background deletes failed (any group, or the generic error). */
+function backgroundFailed(outcome: BackgroundOutcome): boolean {
+  return outcome.error !== undefined || outcome.costDeleteError !== undefined
+    || outcome.contractDeleteError !== undefined;
+}
+
+/** The first background error to name in the one-liner: cost, contract, reconcile, then the generic one. */
+function backgroundErrorOf(outcome: BackgroundOutcome): unknown {
+  return outcome.costDeleteError ?? outcome.contractDeleteError ?? outcome.reconcileError ?? outcome.error;
+}
+
 /**
- * `Add Cost from Table background deletes: costs N req, contracts M req, T ms[, failed][, totals
- * reconciled|totals NOT reconciled]`. `T` counts from the start of the save (when the deletes were
- * sent). The totals clause appears only when a background reconcile ran.
+ * `Add Cost from Table background deletes: costs N req, contracts M req, 7,412 ms[, failed][, totals
+ * reconciled|totals NOT reconciled][; error: <the root Dataverse message, ids replaced>]`. `T`
+ * counts from the start of the save (when the deletes were sent). The totals clause appears only
+ * when a background reconcile ran; the error clause when something failed.
  */
 export function backgroundDeleteLogLine(
   outcome: BackgroundOutcome, requests: { costs: number; contracts: number }, ms: number,
 ): string {
-  const failed = outcome.error !== undefined || outcome.costDeleteError !== undefined
-    || outcome.contractDeleteError !== undefined;
-  const reconcileRan = outcome.reconciled !== undefined || outcome.reconcileError !== undefined;
-  const reconciled = outcome.reconciled === true && outcome.reconcileError === undefined;
+  const failed = backgroundFailed(outcome);
+  const state = reconcileStateOf(outcome);
+  const error = backgroundErrorOf(outcome);
   return `Add Cost from Table background deletes: costs ${requests.costs} req, `
-    + `contracts ${requests.contracts} req, ${Math.round(ms)} ms`
+    + `contracts ${requests.contracts} req, ${formatMs(ms)}`
     + (failed ? ", failed" : "")
-    + (reconcileRan ? (reconciled ? ", totals reconciled" : ", totals NOT reconciled") : "");
+    + (state === "reconciled" ? ", totals reconciled" : state === "not reconciled" ? ", totals NOT reconciled" : "")
+    + (error !== undefined ? `; error: ${readableRoot(error)}` : "");
 }
 
 /**
- * `Add Cost from Table background deletes started: costs 16 row(s) at 2345 ms, delete gate 0/4
+ * The background reconcile's state, the one rule for both the A5 line and its group: it ran when
+ * the outcome carries `reconciled` or a `reconcileError`; it reconciled only when `reconciled` is
+ * true and nothing failed.
+ */
+function reconcileStateOf(outcome: BackgroundOutcome): "reconciled" | "not reconciled" | "not run" {
+  if (outcome.reconciled === undefined && outcome.reconcileError === undefined) return "not run";
+  return outcome.reconciled === true && outcome.reconcileError === undefined ? "reconciled" : "not reconciled";
+}
+
+/**
+ * The plan-refusal wording (D59 decision 3): a `SheetConflictError`'s message and detail carry
+ * contract and account names (`ADDCOST_SAVE_MSG.conflict*`), so every READABLE line names the
+ * refusal with this fixed text instead; the detail stays in the raw error group only.
+ */
+const CONFLICT_TEXT = "refused while planning (conflict between sheet rows)";
+
+/**
+ * The error to print readably: a name-free stand-in for a `SheetConflictError`, the error itself
+ * otherwise. Pass the REAL error to `rawErrorSection`.
+ */
+function readableError(error: unknown): unknown {
+  if (!(error instanceof SheetConflictError)) return error;
+  const standIn = new Error(`${CONFLICT_TEXT}; the rows' detail is in the raw error group`);
+  standIn.name = "SheetConflictError";
+  return standIn;
+}
+
+/** `rootMessageOf` of `readableError`. */
+function readableRoot(error: unknown): string {
+  return rootMessageOf(readableError(error));
+}
+
+/**
+ * The Requests group's verify and 404 lines, and what the counts leave out (shared by the success
+ * and the failure report).
+ */
+function verifyLines(verifyRan: boolean, alreadyGone: number): string[] {
+  return [
+    `Existence check before writing: ${verifyRan ? "ran" : "skipped (first attempt)"}`,
+    `Deletes whose row was already gone (confirmed by a read-back): ${alreadyGone}`,
+    "Not counted as requests: the reconcile's cost reads and the per-row fallback's existence check",
+  ];
+}
+
+/**
+ * `Add Cost from Table background deletes started: costs 16 rows at 2,345 ms, delete gate 0/4
  * busy` — logged when a DEFERRED kind of delete is sent (after the writes settled; on the early
  * path that is just before the save line). Diagnostic only: when a live log has the save line's
  * `delete … deferred` but no `background deletes: …` line, this says whether the deferred deletes
@@ -459,18 +484,148 @@ export function backgroundDeleteLogLine(
 function backgroundDeleteStartLine(
   kind: "costs" | "contracts", rows: number, ms: number, busy: number, limit: number,
 ): string {
-  return `Add Cost from Table background deletes started: ${kind} ${rows} row(s) at ${Math.round(ms)} ms, `
+  return `Add Cost from Table background deletes started: ${kind} ${plural(rows, "row")} at ${formatMs(ms)}, `
     + `delete gate ${busy}/${limit} busy`;
 }
 
+/** One delete batch of a save, for the logs (D59: the background group's table). */
+interface DeleteBatch {
+  label: string;
+  /** From the start of the save. */
+  startMs: number;
+  ms: number;
+  /** Requests sent, delete calls plus 404 read-backs. */
+  requests: number;
+  /** 404 read-back requests among them. */
+  readBack: number;
+  /** Deletes whose row was confirmed already gone. */
+  alreadyGone: number;
+  ok: boolean;
+}
+
+/** The background group's batch table (pure). */
+function deleteBatchRows(batches: readonly DeleteBatch[]): SaveLogRow[] {
+  return [...batches].sort((a, b) => a.startMs - b.startMs).map((b) => ({
+    Batch: b.label,
+    Started: formatRequestDuration(b.startMs),
+    Took: formatRequestDuration(b.ms),
+    Requests: b.requests,
+    "404 read-backs": b.readBack,
+    "Already gone": b.alreadyGone,
+    Result: b.ok ? "ok" : "FAILED",
+  }));
+}
+
+/** The "Plan" group: what `buildSavePlan` decided, counts only (no ids, no names). */
+function planSection(plan: Pick<SaveBuildPlan,"stats" | "contractDeletes" | "costDeletes" | "costDeletesIfExist" | "totals">): SaveLogSection {
+  const s = plan.stats;
+  return {
+    title: "Plan",
+    lines: [
+      `Contracts: ${s.contractsCreated} created, ${s.contractsUpdated} updated, ${s.contractsDeleted} deleted`,
+      `Cost rows: ${s.costsCreated} created, ${s.costsUpdated} updated, ${s.costsDeleted} deleted`,
+      `Changed cells equal to the stored value (nothing written): ${s.noOpCells}`,
+      `Cost deletes planned: ${plan.costDeletes.length}; only if they still exist (left by a failed attempt): ${plan.costDeletesIfExist.length}`,
+      `Contract deletes planned: ${plan.contractDeletes.length} (their cost rows and comments go by the Dataverse cascade)`,
+      `Contract totals planned: ${plan.totals.size}`,
+    ],
+  };
+}
+
+/** The facts a save error carries, in words (counts and flags only). */
+function failureFacts(error: unknown): string[] {
+  const facts: string[] = [];
+  if (error instanceof SavePlanError) {
+    facts.push(
+      `Phase: ${error.phase}`,
+      `Operations failed: ${error.failures.length} (phases ${error.failures.map((f) => f.phase).join(", ")})`,
+      `Something reached Dataverse before the failure: ${error.committedBefore ? "yes (or may have)" : "no"}`,
+      `Contract totals: ${error.reconcileError !== undefined ? "could NOT be reconciled" : error.reconciled ? "consistent with what landed" : "may not match"}`,
+    );
+    if (error.unverifiedContractIds.length > 0) facts.push(`New contracts with an unknown outcome (never reconciled): ${error.unverifiedContractIds.length}`);
+  } else if (error instanceof RowsGoneError) {
+    facts.push(
+      `Rows deleted by someone else since the sheet loaded: ${plural(error.gone.contracts, "contract")}, ${plural(error.gone.costs, "cost row")}; no upsert was sent`,
+      `Deletes sent alongside the check landed: ${error.committedBefore ? "yes (or may have)" : "no"}`,
+    );
+  } else if (error instanceof SheetConflictError) {
+    facts.push("Refused while planning: nothing was sent");
+  }
+  return facts;
+}
+
 /**
- * How many slots of `gate` are held right now. `reset()` restarts `peak()` from the in-flight
- * count, so reading `peak()` straight after it gives that count. Used only on the two delete
- * gates, whose peak nothing else reads (the save line's gate peak is `saveGate`'s).
+ * The screen's message, when it may be printed readably. A conflict's message names contracts and
+ * accounts (`ADDCOST_SAVE_MSG.conflict*`), so it is never printed; the general rule is that a
+ * message built from record names is left out. Every other kind's text is fixed wording with counts.
  */
-function busySlots(gate: ReturnType<typeof createGate>): number {
-  gate.reset();
-  return gate.peak();
+function screenTextOf(kind: SaveFailure["kind"], userText: string): string {
+  return kind === "conflict"
+    ? `the screen shows the conflict message (it names the rows, so it is left out; see the raw error)`
+    : `the screen shows: "${messageOf(userText)}"`;
+}
+
+/** The Failure group of `error`, readable and name-free (`readableError`). */
+function readableFailure(error: unknown, steps: readonly SaveLogStep[] = []): SaveLogSection {
+  return failureSection(readableError(error), steps, failureFacts(error));
+}
+
+
+/** The requests a save error knows it sent (`SavePlanError` / `RowsGoneError`), else undefined. */
+function requestsOf(error: unknown): number | undefined {
+  const total = (error as { requests?: { total?: unknown } } | null)?.requests?.total;
+  return typeof total === "number" ? total : undefined;
+}
+
+/** The prepare timings the screen logs (`prepareSheetSave`'s `timings`). */
+interface PrepareLogTimings {
+  total: number; roundTripCheck: number; align: number; diff: number; deletions: number; orphans: number;
+}
+
+/**
+ * A1, the screen's prepare line and group: `Add Cost from Table prepare: 4.2 ms (round-trip check
+ * 0.3 ms, …; 96 rows)`. Timings keep one decimal: these client steps are often under 1 ms.
+ */
+export function prepareLogReport(
+  t: PrepareLogTimings, readBackMs: number, validationMs: number, rows: number,
+): SaveLogReport {
+  const d = (n: number) => formatMs(n, 1);
+  return {
+    summary: `Add Cost from Table prepare: ${d(t.total)} (round-trip check ${d(t.roundTripCheck)}, `
+      + `align ${d(t.align)}, diff ${d(t.diff)}, deletions ${d(t.deletions)}, `
+      + `orphans ${d(t.orphans)}; last edit's grid read-back ${d(readBackMs)}, `
+      + `validation ${d(validationMs)}; ${plural(rows, "row")})`,
+    sections: [{
+      title: "Prepare (client side)",
+      lines: [
+        `Total ${d(t.total)}, before any request is sent`,
+        `Round-trip check ${d(t.roundTripCheck)}: every contract the sheet was built from is still matched`,
+        `Align ${d(t.align)}, diff ${d(t.diff)}, deletions ${d(t.deletions)}, orphan clean-up ${d(t.orphans)}`,
+        `The last edit's grid read-back took ${d(readBackMs)} and its validation ${d(validationMs)}`,
+        `Rows on the sheet: ${rows.toLocaleString("en-US")}`,
+      ],
+    }],
+  };
+}
+
+/**
+ * A7, the screen's catch: what the screen classified and showed, then the readable chain, then the
+ * raw error object (kept for support, collapsed). `kind` is `toSaveFailure`'s.
+ */
+export function screenSaveFailureReport(error: unknown, kind: SaveFailure["kind"], userText: string): SaveLogReport {
+  return {
+    summary: `Add Cost from Table save failed: ${kind}; ${screenTextOf(kind, userText)}`,
+    sections: [readableFailure(error), rawErrorSection(error)],
+  };
+}
+
+/** A8: the cached-book patch after a successful Save threw (the Save stands; the refetch repairs). */
+export function bookPatchFailureReport(error: unknown): SaveLogReport {
+  return {
+    summary: "Add Cost from Table: patching the DEVEX/CAPEX book failed; the save itself succeeded "
+      + `and the refetch brings the saved state: ${readableRoot(error)}`,
+    sections: [readableFailure(error), rawErrorSection(error)],
+  };
 }
 
 /**
@@ -498,7 +653,7 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * and the cost rows of the plan's new contracts follow as soon as the contract upsert landed (the
  * graph and why it is safe: the module note of `./addCostSheetBulk.ts`). Each upsert is one
  * `CreateMultiple` request per 500 new rows and one `UpdateMultiple` request per 500 existing
- * rows, the two sent in parallel (`upsertRowsByAction`), and a group of 50 rows or more split into
+ * rows, the two sent in parallel (`upsertRowsByAction`, `./bulkSend.ts`), and a group of 50 rows or more split into
  * requests sent at once: up to `BULK_PARALLEL_CHUNKS` of them up to 2,000 rows, one per 500 rows
  * above that (`parallelChunkSize`); `UpsertMultiple` is not used. Each
  * delete is one request per record. Every write request passes one shared gate of
@@ -523,11 +678,16 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * and `UpdateMultiple` still has to fall back to per-row PATCHes (a 501 mid-save), the fallback
  * re-checks those ids first (`upsertEachRow`'s guard), because a PATCH is an upsert.
  *
- * LOG. One `[VSB] ACTION` console line per save (`platform/requestLog.ts`): total ms, requests, per-step timings (each bulk request's own
- * server duration in brackets, e.g. `upsert contracts (create 1 req bulk [980 ms], update 1 req
- * bulk [10.7 s])`), then the gate's peak
- * in-flight count, the average and maximum gated request duration, whether verify ran, and how
- * many deletes found their row already gone.
+ * LOG (D59, `./saveLog.ts`). One summary line per save through `console.info`: total ms, requests,
+ * per-step timings IN START ORDER (each bulk request's own server duration in brackets, e.g.
+ * `upsert contracts (create 1 req bulk [980 ms], update 1 req bulk [10,740 ms])`; the two cost
+ * stages named `upsert costs (existing contracts)` / `(new contracts)` in the log only), then
+ * THIS save's gate peak and request statistics (its own `RequestMeter`; the shared gate's peak
+ * only when other work raised it), whether verify ran, and how many deletes found their row
+ * already gone. Every duration in exact ms with a thousands separator (`formatMs`). Below the
+ * line, collapsed groups: Plan, Steps, Deferred deletes, Requests. A failure (including a refused
+ * plan, `SheetConflictError`) logs `Add Cost from Table save failed after …` with its request
+ * count and root error, and a Failure group with the readable chain.
  *
  * DIVERGENCE: the canvas (and `saveAddCostSheetLegacy`) write one record per request: contract
  * creates/updates, cost creates/updates, cost deletes, a separate total update per contract,
@@ -581,40 +741,46 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   // BACKGROUND work can still be running when this one starts: its deferred deletes (their own
   // module gates, `contractDeleteGate` / `costDeleteGate`, shared by every save) and, after a
   // failed background cost delete, its reconcile upsert, which passes `saveGate` like any write.
-  // So what is reset here measures, from this point on: `peak()` the most WRITE requests in
-  // flight at once (starting from any write already in flight), and `requestStats` every gated
-  // write request that finished (bulk calls and per-row upserts; never a delete or a read). Either
-  // can include that rare background reconcile write of an earlier save.
-  saveGate.reset();
-  resetRequestStats();
+  // So this save counts its OWN write requests on its own meter (D59, measurement only): `meters.save`
+  // until the save line is printed, then `meters.background` for this save's background reconcile,
+  // so that never lands in the save line either. Another caller's writes are not counted; they
+  // show only as the shared gate peak.
+  const meters = { save: createRequestMeter(), background: createRequestMeter() };
+  let meter = meters.save;
   let alreadyGone = 0;
+  let refreshRequests = 0;
   const started = performance.now();
-  const timings: string[] = [];
-  const elapsed = (t0: number) => Math.round(performance.now() - t0);
-  /** `gate peak 9/16, req avg 380 ms max 1200 ms, verify skipped, 2 already gone`. */
-  const measures = () => {
-    const avg = requestStats.count === 0 ? 0 : Math.round(requestStats.totalMs / requestStats.count);
-    return `gate peak ${saveGate.peak()}/${SAVE_REQUEST_LIMIT}, `
-      + `req avg ${avg} ms max ${Math.round(requestStats.maxMs)} ms, `
-      + `verify ${verifyUpserts ? "ran" : "skipped"}, ${alreadyGone} already gone`;
-  };
-  /**
-   * `SavePlanDeps.deleteMany`: `deleteMany` with a deleter that resolves on 404, then the 404s
-   * checked (`verifyNotFound`). Confirmed ones are counted as already gone for the log.
-   */
+  const elapsed = (t0: number) => performance.now() - t0;
+  /** One timed step: its text in the one-liner and its row in the steps table. */
+  interface Entry { text: string; step: SaveLogStep }
+  // Steps of the save itself, and the ones that finish after the save line (background reconcile).
+  let printed = false;
+  const entries: Entry[] = [];
+  const backgroundEntries: Entry[] = [];
+  const record = (entry: Entry) => { (printed ? backgroundEntries : entries).push(entry); };
+  /** `gate peak 4/16, req avg 1,240 ms max 1,900 ms, verify skipped, 0 already gone`. */
+  const measures = () => `${gateTail(meters.save)}, verify ${verifyUpserts ? "ran" : "skipped"}, ${alreadyGone} already gone`;
   /**
    * Per kind of delete: the requests SENT (each delete call, plus 404 read-backs), counted as they
-   * go so a failed batch still reports them (the background line), and the timing entries of its
-   * batches, kept apart from `timings` because a DEFERRED kind is shown as `delete … deferred` in
-   * the save line instead, even when it happened to finish before the Save returned.
+   * go so a failed batch still reports them (the background line), the entries of its batches
+   * (kept apart because a DEFERRED kind is shown as `delete … deferred` in the save line instead,
+   * even when it happened to finish before the Save returned), and its batches for the logs.
    */
   const deletes = {
-    costs: { sent: 0, entries: [] as string[] },
-    contracts: { sent: 0, entries: [] as string[] },
+    costs: { sent: 0, entries: new Set<Entry>(), batches: [] as DeleteBatch[] },
+    contracts: { sent: 0, entries: new Set<Entry>(), batches: [] as DeleteBatch[] },
   };
   const deleteKind = (table: BulkTableInfo) =>
     (table.entitySetName === CAPEX_CONTRACTS.entitySetName ? deletes.contracts : deletes.costs);
-  const verifiedDeleteMany = async (table: BulkTableInfo, ids: readonly string[], label: string) => {
+  /**
+   * `SavePlanDeps.deleteMany`: `deleteMany` with a deleter that resolves on 404, then the 404s
+   * checked (`verifyNotFound`). Confirmed ones are counted as already gone for the log; `track`
+   * receives the read-backs and confirmations, also when the batch then throws.
+   */
+  const verifiedDeleteMany = async (
+    table: BulkTableInfo, ids: readonly string[], label: string,
+    track: { sent: number; readBack: number; confirmed: number },
+  ) => {
     const kind = deleteKind(table);
     const notFound = new Map<string, DataError>();
     let sent: { requests: number } | undefined;
@@ -623,6 +789,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       try {
         sent = await deleteMany(table, ids, async (tableName, id) => {
           kind.sent += 1;
+          track.sent += 1;
           const answer = await deleteOr404(label, tableName, id);
           if (answer) notFound.set(id, answer);
         }, { label, limit: deleteLimit(table) });
@@ -632,14 +799,22 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       const checked = await verifyNotFound(table, ids, label, notFound, sent, failure);
       alreadyGone += checked.confirmed;
       kind.sent += checked.readBack;
+      track.sent += checked.readBack;
+      track.readBack = checked.readBack;
+      track.confirmed = checked.confirmed;
       return { requests: checked.requests, readBack: checked.readBack, removed: checked.removed };
     } catch (error) {
       // A read-back sent before failing is still a request sent.
-      if (notFound.size > 0) kind.sent += chunk([...notFound.keys()]).length;
+      if (notFound.size > 0) {
+        const readBack = chunk([...notFound.keys()]).length;
+        kind.sent += readBack;
+        track.sent += readBack;
+        track.readBack = readBack;
+      }
       throw error;
     }
   };
-  /** One timing entry per call: `<name> <detail of the result, or "failed"> <ms> ms`. */
+  /** One entry per call: `<name> <detail of the result, or "failed"> <ms>`. */
   const timed = <A extends unknown[], R>(
     name: (...a: NoInfer<A>) => string, fn: (...a: A) => Promise<R>, detail?: (result: R) => string,
   ) =>
@@ -651,29 +826,91 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
         outcome = detail ? detail(result) : "";
         return result;
       } finally {
-        timings.push(`${[name(...a), outcome].filter(Boolean).join(" ")} ${elapsed(t0)} ms`);
+        const ms = elapsed(t0);
+        const label = name(...a);
+        record({
+          text: `${[label, outcome].filter(Boolean).join(" ")} ${formatMs(ms)}`,
+          step: { label, startMs: t0 - started, ms, status: outcome === "failed" ? "failed" : "ok" },
+        });
       }
     };
   /**
-   * `<label> (create N req bulk [980 ms], update M req per-row after 501) <ms> ms`. A bulk group
-   * names each request's own server duration in brackets (`gated`: inside the gate, so queueing
-   * is excluded), which shows contention that the group's wall time alone hides. The
-   * orchestrator's labels already carry the verb ("upsert contracts", "reconcile totals").
+   * `<step> (create N req bulk [980 ms], update M req per-row after 501) <ms>`. A bulk group names
+   * each request's own server duration in brackets (`gated`: inside the gate, so queueing is
+   * excluded), which shows contention that the group's wall time alone hides. The orchestrator's
+   * labels already carry the verb ("upsert contracts", "reconcile totals"); `step` names the two
+   * cost stages in the log only (D59), `label` stays the phase label every error carries.
    */
-  const upsert = async (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string) => {
+  const upsert = async (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, step?: string) => {
     const t0 = performance.now();
+    const name = step ?? label;
+    const counted = meter;
     let groups = "not sent";
+    let reports: readonly UpsertGroupReport[] = [];
+    let requests: number | undefined;
     try {
-      return await upsertRowsByAction(
-        table, rows, label, (summary) => { groups = summary; }, { guardPerRowUpdates: !verifyUpserts },
+      const result = await upsertRowsByAction(
+        table, rows, label, (summary, g) => { groups = summary; reports = g; },
+        { guardPerRowUpdates: !verifyUpserts, meter: counted },
       );
+      requests = result.requests;
+      return result;
     } finally {
-      timings.push(`${label} (${groups}) ${elapsed(t0)} ms`);
+      const ms = elapsed(t0);
+      record({
+        text: `${name} (${groups}) ${formatMs(ms)}`,
+        step: {
+          label: name, startMs: t0 - started, ms, detail: groupsText(reports),
+          status: requests === undefined ? "failed" : "ok",
+          ...(requests === undefined ? {} : { requests }),
+        },
+      });
     }
   };
-  const logFailure = () => logAction(
-    `Add Cost from Table save failed after ${elapsed(started)} ms (${timings.join(", ")}); ${measures()}`,
-  );
+  const entryText = (list: readonly Entry[]) => inStartOrder(list.map((e) => ({ startMs: e.step.startMs, e })))
+    .map(({ e }) => e.text).join(", ");
+  const countedRequests = () => refreshRequests + meters.save.count + deletes.costs.sent + deletes.contracts.sent;
+  /**
+   * The requests a FAILED save sent, failing ones included (D59): the error's own `requests.total`
+   * counts only the operations that succeeded, so the log takes this save's counted requests
+   * (refresh reads, every gated write, every delete and 404 read-back) plus the error's verify
+   * reads, and never less than the error's total.
+   */
+  const failedRequests = (error: unknown) => {
+    const reported = requestsOf(error);
+    const verify = (error as { requests?: { verify?: unknown } } | null)?.requests?.verify;
+    return Math.max(reported ?? 0, countedRequests() + (typeof verify === "number" ? verify : 0));
+  };
+  /**
+   * A3: the failure line and its groups. `opts.note` says what the line cannot (e.g. nothing
+   * written); `opts.count` replaces the request count when it is not known (a failed refresh read
+   * sent reads nobody counted); `opts.raw` adds the raw error group (a refused plan, whose readable
+   * text leaves the rows' names out). Readable text never carries a conflict's names
+   * (`readableError`).
+   */
+  const logFailure = (
+    error: unknown, opts: { planned?: SaveBuildPlan; note?: string; count?: string; raw?: boolean } = {},
+  ) => {
+    emitSaveLog(() => {
+      const steps = entries.map((e) => e.step);
+      const reported = requestsOf(error);
+      return {
+        summary: `Add Cost from Table save failed after ${formatMs(elapsed(started))}, `
+          + `${opts.count ?? plural(failedRequests(error), "request")} (${entryText(entries)}); ${measures()}`
+          + `${opts.note ? `; ${opts.note}` : ""}; error: ${readableRoot(error)}`,
+        sections: [
+          readableFailure(error, steps),
+          ...(opts.planned ? [planSection(opts.planned)] : []),
+          stepsSection(steps),
+          requestsSection(meters.save, [
+            ...(reported === undefined ? [] : [`Requests of the operations that succeeded (the error's own count): ${reported}`]),
+            ...verifyLines(verifyUpserts, alreadyGone),
+          ]),
+          ...(opts.raw ? [rawErrorSection(error)] : []),
+        ],
+      };
+    });
+  };
   if (refreshBeforePlan) {
     const t0 = performance.now();
     try {
@@ -685,39 +922,77 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       );
       input.existingContracts = fresh.contracts;
       input.existingCosts = fresh.costs;
-      timings.push(`refresh ${fresh.requests} req ${elapsed(t0)} ms`);
+      refreshRequests = fresh.requests;
+      const ms = elapsed(t0);
+      record({
+        text: `refresh ${fresh.requests} req ${formatMs(ms)}`,
+        step: { label: "refresh", startMs: t0 - started, ms, requests: fresh.requests, detail: "re-read before planning", status: "ok" },
+      });
     } catch (error) {
-      timings.push(`refresh failed ${elapsed(t0)} ms`);
-      logFailure();
+      const ms = elapsed(t0);
+      record({ text: `refresh failed ${formatMs(ms)}`, step: { label: "refresh", startMs: t0 - started, ms, status: "failed" } });
+      // The refresh reads run in parallel and a failed one does not say how many were sent.
+      logFailure(error, { note: "nothing was written", count: "refresh read failed" });
       throw error;
     }
   }
   const planStarted = performance.now();
-  const plan = buildSavePlan({ ...input, pendingIds: idCache }, { newId });
-  timings.push(`plan ${elapsed(planStarted)} ms`);
+  let plan: ReturnType<typeof buildSavePlan>;
+  try {
+    plan = buildSavePlan({ ...input, pendingIds: idCache }, { newId });
+  } catch (error) {
+    // A refused plan (`SheetConflictError`) sends nothing: say so, then rethrow it unchanged.
+    const ms = elapsed(planStarted);
+    record({ text: `plan failed ${formatMs(ms)}`, step: { label: "plan", startMs: planStarted - started, ms, status: "failed" } });
+    logFailure(error, { note: "nothing was written", raw: true });
+    throw error;
+  }
+  {
+    const ms = elapsed(planStarted);
+    record({ text: `plan ${formatMs(ms)}`, step: { label: "plan", startMs: planStarted - started, ms, status: "ok" } });
+  }
   const deps: SavePlanDeps = {
     upsert,
-    // `timed`'s entry, also filed under its kind (`deletes.*.entries`) for the save line.
-    deleteMany: async (table, ids, label) => {
+    // `timed`'s entry, also filed under its kind (`deletes.*`) for the save line and the logs.
+    deleteMany: async (table, ids, label, step) => {
       const isContracts = table.entitySetName === CAPEX_CONTRACTS.entitySetName;
       if (isContracts ? deferContractDeletes : deferCostDeletes) {
         // Only a deferred kind: `executeSavePlan` sends it after the writes settled.
         logAction(backgroundDeleteStartLine(
           isContracts ? "contracts" : "costs", ids.length, elapsed(started),
-          busySlots(isContracts ? contractDeleteGate : costDeleteGate),
+          (isContracts ? contractDeleteGate : costDeleteGate).inFlight(),
           isContracts ? CONTRACT_DELETE_LIMIT : COST_DELETE_LIMIT,
         ));
       }
+      const kind = deleteKind(table);
       const t0 = performance.now();
+      // This call's own requests: two batches of one kind (`costDeletes` and the retry-only
+      // `costDeletesIfExist`) can be in flight together, so `kind.sent` cannot be diffed.
+      const track = { sent: 0, readBack: 0, confirmed: 0 };
+      const name = step ?? label;
       let outcome = "failed";
+      let ok = false;
       try {
-        const r = await verifiedDeleteMany(table, ids, label);
+        const r = await verifiedDeleteMany(table, ids, label, track);
         outcome = `${r.requests} req${r.readBack > 0 ? ` (${r.readBack} 404 read-back)` : ""}`;
+        ok = true;
         return r;
       } finally {
-        const entry = `${label} ${outcome} ${elapsed(t0)} ms`;
-        deleteKind(table).entries.push(entry);
-        timings.push(entry);
+        const ms = elapsed(t0);
+        const requests = track.sent;
+        const entry: Entry = {
+          text: `${name} ${outcome} ${formatMs(ms)}`,
+          step: {
+            label: name, startMs: t0 - started, ms, requests, status: ok ? "ok" : "failed",
+            detail: `${plural(ids.length, "row")}${track.readBack > 0 ? `, ${track.readBack} 404 read-back, ${track.confirmed} already gone` : ""}`,
+          },
+        };
+        kind.entries.add(entry);
+        kind.batches.push({
+          label: name, startMs: t0 - started, ms, requests, readBack: track.readBack, alreadyGone: track.confirmed, ok,
+        });
+        // A delete never lands among the background reconcile's steps: its batch is in `batches`.
+        if (!printed) entries.push(entry);
       }
     },
     // The reconcile sums what the contracts will hold once every pending delete landed: rows an
@@ -742,7 +1017,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   try {
     result = await executeSavePlan(plan, deps);
   } catch (error) {
-    logFailure();
+    logFailure(error, { planned: plan });
     throw error;
   }
   // A kind is deferred exactly when the orchestrator holds it back (its flag on, something to
@@ -752,17 +1027,48 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   const deferredCosts = result.background && deferCostDeletes
     ? plan.costDeletes.length + plan.costDeletesIfExist.length : 0;
   const deferredContracts = result.background && deferContractDeletes ? plan.contractDeletes.length : 0;
-  const hidden = new Set([
+  const hidden = new Set<Entry>([
     ...(deferredCosts > 0 ? deletes.costs.entries : []),
     ...(deferredContracts > 0 ? deletes.contracts.entries : []),
   ]);
-  const shown = timings.filter((entry) => !hidden.has(entry));
-  if (deferredCosts > 0) shown.push("delete costs deferred");
-  if (deferredContracts > 0) shown.push("delete contracts deferred");
-  logAction(
-    `Add Cost from Table save: ${elapsed(started)} ms, `
-      + `${result.requests.total} requests (${shown.join(", ")}); ${measures()}`,
-  );
+  const shown = entries.filter((entry) => !hidden.has(entry));
+  const deferredSteps: SaveLogStep[] = [
+    ...(deferredCosts > 0 ? [{ label: "delete costs", detail: `${plural(deferredCosts, "row")}, deleted after Save returned`, status: "deferred" as const }] : []),
+    ...(deferredContracts > 0 ? [{ label: "delete contracts", detail: `${plural(deferredContracts, "contract")}, deleted after Save returned`, status: "deferred" as const }] : []),
+  ];
+  const line = [
+    entryText(shown),
+    ...(deferredCosts > 0 ? ["delete costs deferred"] : []),
+    ...(deferredContracts > 0 ? ["delete contracts deferred"] : []),
+  ].filter(Boolean).join(", ");
+  const saveMs = elapsed(started);
+  try {
+    emitSaveLog(() => ({
+      summary: `Add Cost from Table save: ${formatMs(saveMs)}, `
+        + `${plural(result.requests.total, "request")} (${line}); ${measures()}`,
+      sections: [
+        planSection(plan),
+        stepsSection([...shown.map((e) => e.step), ...deferredSteps]),
+        ...(deferredSteps.length > 0 ? [{
+          title: "Deferred deletes",
+          lines: [
+            `Cost rows deleted in the background: ${deferredCosts}`,
+            `Contracts deleted in the background: ${deferredContracts} (their cost rows and comments go by the Dataverse cascade)`,
+            "Their outcome follows on an \"Add Cost from Table background deletes:\" line once they settle.",
+          ],
+        }] : []),
+        requestsSection(meters.save, [
+          `Requests in all, reads and deletes included: ${result.requests.total.toLocaleString("en-US")}`,
+          ...verifyLines(verifyUpserts, alreadyGone),
+        ]),
+      ],
+    }));
+  } catch {
+    // Logging must never change the save's result.
+  }
+  // From here on, a write of this save (the background reconcile) is counted apart.
+  printed = true;
+  meter = meters.background;
   const applied = plan.applied;
   if (!result.background) return { applied };
   // The orchestrator's promise never rejects; the second handler keeps that true regardless.
@@ -772,8 +1078,8 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   );
   const background = settled.then((outcome) => {
     try {
-      logAction(backgroundDeleteLogLine(
-        outcome, { costs: deletes.costs.sent, contracts: deletes.contracts.sent }, elapsed(started),
+      emitSaveLog(() => backgroundLogReport(
+        outcome, deletes, backgroundEntries.map((e) => e.step), meters.background, elapsed(started), saveMs,
       ));
     } catch {
       // Logging must never turn the background outcome into a rejection.
@@ -787,6 +1093,57 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
     deferredContractIds: deferredContracts > 0 ? plan.contractDeletes : [],
     deferredCostIds: deferredCosts > 0 ? [...plan.costDeletes, ...plan.costDeletesIfExist] : [],
     applied,
+  };
+}
+
+/**
+ * A5: the background deletes once they settled — the one-liner (`backgroundDeleteLogLine`), then
+ * the batches (per-batch timing, requests, 404 read-backs), the background reconcile's read and
+ * write steps and its own meter, and each error's readable chain. Pure.
+ */
+function backgroundLogReport(
+  outcome: BackgroundOutcome,
+  deletes: { costs: { sent: number; batches: readonly DeleteBatch[] }; contracts: { sent: number; batches: readonly DeleteBatch[] } },
+  reconcileSteps: readonly SaveLogStep[],
+  reconcileMeter: RequestMeter,
+  ms: number,
+  saveMs: number,
+): SaveLogReport {
+  const batches = [...deletes.costs.batches, ...deletes.contracts.batches];
+  const state = reconcileStateOf(outcome);
+  const sections: SaveLogSection[] = [{
+    title: "Background deletes",
+    lines: [
+      `Settled ${formatRequestDuration(ms)} after the Save started, ${formatRequestDuration(Math.max(0, ms - saveMs))} after it returned`,
+      `Requests: ${deletes.costs.sent} for cost rows, ${deletes.contracts.sent} for contracts (delete calls and 404 read-backs)`,
+      `Result: ${backgroundFailed(outcome) ? "FAILED" : "every deferred delete succeeded"}`,
+    ],
+    table: deleteBatchRows(batches),
+  }];
+  if (state !== "not run" || reconcileSteps.length > 0) {
+    const steps = stepsSection(reconcileSteps, "Background reconcile");
+    sections.push({
+      ...steps,
+      lines: [
+        `Contract totals: ${state === "reconciled" ? "reconciled (they match what landed)" : state === "not reconciled" ? "NOT reconciled (they may not match)" : "no reconcile needed"}`,
+        ...requestsSection(reconcileMeter, [], "the background reconcile").lines,
+        ...steps.lines,
+      ],
+    });
+  }
+  const errors: [string, unknown][] = [
+    ["Cost delete", outcome.costDeleteError],
+    ["Contract delete", outcome.contractDeleteError],
+    ["Totals reconcile", outcome.reconcileError],
+    ...(outcome.costDeleteError === undefined && outcome.contractDeleteError === undefined
+      ? [["Background work", outcome.error] as [string, unknown]] : []),
+  ];
+  const errorLines = errors.filter(([, e]) => e !== undefined)
+    .flatMap(([what, e]) => errorChainLines(readableError(e)).map((line, i) => (i === 0 ? `${what}: ${line}` : `  ${line}`)));
+  if (errorLines.length > 0) sections.push({ title: "Errors", lines: errorLines });
+  return {
+    summary: backgroundDeleteLogLine(outcome, { costs: deletes.costs.sent, contracts: deletes.contracts.sent }, ms),
+    sections,
   };
 }
 
@@ -912,404 +1269,12 @@ async function verifyNotFound(
  * middle of a save whose verify was skipped is covered by `upsertEachRow`'s guard.
  */
 function skipUpsertVerify(firstAttempt: boolean): boolean {
-  return firstAttempt && !bulkUnavailable.create && !bulkUnavailable.update;
+  return firstAttempt && !isBulkUnavailable("create") && !isBulkUnavailable("update");
 }
-
-/** The two bulk actions an upsert phase is split into (`upsertRowsByAction`). */
-type BulkAction = "create" | "update";
-
-/**
- * The gated transport of one bulk action. `onDuration` receives each request's own server time,
- * measured inside the gate (from the moment it holds a slot, so queueing is excluded), for the
- * per-request durations in the save line.
- */
-function bulkTransport(action: BulkAction, onDuration?: (ms: number) => void): BulkUpsertTransport {
-  return action === "create"
-    ? (es, targets) => gated(() => CreateMultipleService.CreateMultiple(es, [...targets]), onDuration)
-    : (es, targets) => gated(() => UpdateMultipleService.UpdateMultiple(es, [...targets]), onDuration);
-}
-
-/**
- * One request's duration for the log: `980 ms` under a second, else seconds with one decimal
- * (`10.7 s`), so a slow, contended request stands out in the save line.
- */
-export function formatRequestDuration(ms: number): string {
-  const rounded = Math.round(ms);
-  return rounded < 1000 ? `${rounded} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
-
-const BULK_ACTION_NAME: Readonly<Record<BulkAction, string>> = {
-  create: "CreateMultiple",
-  update: "UpdateMultiple",
-};
-
-/**
- * Set PER ACTION for the rest of the session once that action is refused with HTTP 501 Not
- * Implemented (`UpsertMultiple` did that against VSBCloud_Dev, 27 Oct 2026, D51): later phases
- * and saves then send that action's rows per row straight away instead of paying for a refused
- * request first. A 501 on one action says nothing about the other, so each has its own flag.
- */
-const BULK_501_KEY: Readonly<Record<BulkAction, string>> = {
-  create: "vsb.addCostSheet.createMultiple501",
-  update: "vsb.addCostSheet.updateMultiple501",
-};
-
-/** The flag the retired `UpsertMultiple` path wrote; only ever removed now. */
-const RETIRED_UPSERT_501_KEY = "vsb.addCostSheet.upsertMultiple501";
-
-/** Also kept in `sessionStorage`, so a page reload does not pay for the refused request again. */
-const bulkUnavailable: Record<BulkAction, boolean> = {
-  create: readBulk501("create"),
-  update: readBulk501("update"),
-};
-
-function readBulk501(action: BulkAction): boolean {
-  try {
-    return globalThis.sessionStorage?.getItem(BULK_501_KEY[action]) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function rememberBulk501(action: BulkAction): void {
-  bulkUnavailable[action] = true;
-  try {
-    globalThis.sessionStorage?.setItem(BULK_501_KEY[action], "1");
-  } catch {
-    // Storage blocked (private window, policy): the in-memory flag still covers this page.
-  }
-}
-
-/** Test seam: forget every 501 seen earlier in the session, for both actions. */
-export function resetBulkWriteAvailability(): void {
-  for (const action of ["create", "update"] as const) {
-    bulkUnavailable[action] = false;
-    try {
-      globalThis.sessionStorage?.removeItem(BULK_501_KEY[action]);
-    } catch {
-      // See `rememberBulk501`.
-    }
-  }
-  try {
-    globalThis.sessionStorage?.removeItem(RETIRED_UPSERT_501_KEY);
-  } catch {
-    // See `rememberBulk501`.
-  }
-}
-
-/**
- * Per-row fallback writes in flight at once. Dataverse allows 52 concurrent requests per user
- * (service protection); 16 matches `DELETE_CONCURRENCY` and halves the round trips of the old 8.
- */
-const ROW_WRITE_CONCURRENCY = DELETE_CONCURRENCY;
-
-/**
- * One ceiling for EVERY write request of a save — bulk calls and per-row upserts (deletes have
- * their own gates, `contractDeleteGate` and `costDeleteGate`). The
- * orchestrator runs up to five operations at once, each with its own pool of 16, which could put
- * ~100 requests in flight, past Dataverse's 52-per-user service-protection limit; writes are not
- * retried on 429. One module gate serves every save: two Saves never overlap (the button is
- * disabled while one runs), and the one write an earlier save can still send in the background
- * (the reconcile after a failed deferred cost delete) passes this same gate, so the cap holds
- * across them. The deferred deletes themselves run on their own module gates, which every save
- * and its background share in the same way.
- */
-const SAVE_REQUEST_LIMIT = 16;
-const saveGate = createGate(SAVE_REQUEST_LIMIT);
-
-/**
- * Contract deletes have their OWN small gate, outside `saveGate`. Each one is a server-side
- * cascade (measured 5.2 s for one contract, D51 §11.14) and they may run on in the background
- * after Save returns (`DEFER_CONTRACT_DELETES`). Inside the shared gate, 16 slow cascades would
- * hold every slot and stall the upserts — cancelling the deferral — and would leak into the next
- * save's gate peak and request stats. Peak in flight is therefore 16 (writes) + 4 (cascades), well
- * under Dataverse's 52-per-user limit.
- */
-export const CONTRACT_DELETE_LIMIT = 4;
-const contractDeleteGate = createGate(CONTRACT_DELETE_LIMIT);
-
-/**
- * Cost deletes (cleared cells, phase 3 and 3') have their OWN gate too, outside `saveGate`.
- *
- * Measured on DEV, 27 Oct (D51 §11.15): 16 per-row cost deletes went through `saveGate` with a
- * pool of `DELETE_CONCURRENCY` (16). They took all 16 slots at t = 0 (`gate peak 16/16`), so
- * every upsert queued about 4 s behind them: the contract upsert finished at 4.7 s and the save at
- * 7.3 s, with the server load pushing each request to about 3 s (`req avg 2971 ms`). With 4
- * slots of their own the deletes can never delay a write.
- *
- * Peak in flight is therefore 16 (writes) + 4 (contract cascades) + 4 (cost deletes) = 24, well
- * under Dataverse's 52-per-user limit. Not counted in `requestStats` either: the log's gate peak
- * and request stats describe the writes only; the delete counts are their own log entries.
- */
-export const COST_DELETE_LIMIT = 4;
-const costDeleteGate = createGate(COST_DELETE_LIMIT);
 
 /** `deleteMany`'s pool for a table: the same size as that table's gate, so no task waits twice. */
 function deleteLimit(table: BulkTableInfo): number {
   return table.entitySetName === CAPEX_CONTRACTS.entitySetName ? CONTRACT_DELETE_LIMIT : COST_DELETE_LIMIT;
-}
-
-/** Duration of the gated requests of the current save (time inside the gate, not queueing), for the log. */
-const requestStats = { count: 0, totalMs: 0, maxMs: 0 };
-
-function resetRequestStats(): void {
-  requestStats.count = 0;
-  requestStats.totalMs = 0;
-  requestStats.maxMs = 0;
-}
-
-/**
- * `saveGate(task)`, timing the task once it holds a slot. Every write request of a save (never a
- * delete) goes through here. `onDuration` also receives that one request's duration (the bulk
- * requests' per-request entries in the save line).
- */
-function gated<T>(task: () => Promise<T>, onDuration?: (ms: number) => void): Promise<T> {
-  return saveGate(async () => {
-    const t0 = performance.now();
-    try {
-      return await task();
-    } finally {
-      const ms = performance.now() - t0;
-      requestStats.count += 1;
-      requestStats.totalMs += ms;
-      if (ms > requestStats.maxMs) requestStats.maxMs = ms;
-      onDuration?.(ms);
-    }
-  });
-}
-
-/**
- * A 501 on the FIRST chunk: the bulk action itself is not available on this route, and nothing
- * was written (each chunk is all-or-nothing), so falling back to per-row upserts is safe. Any
- * other failure, or a 501 after a chunk landed, is a real error and is rethrown.
- */
-function isBulkNotImplemented(error: unknown): boolean {
-  if (!(error instanceof BulkWriteError) || error.chunksCommitted !== 0) return false;
-  let current: unknown = error;
-  for (let depth = 0; depth < 8 && current; depth += 1) {
-    if (current instanceof DataError && current.status === 501) return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
-}
-
-const ROW_UPSERT: Readonly<Record<string, (id: string, fields: Readonly<Record<string, unknown>>) => Promise<unknown>>> = {
-  [CAPEX_CONTRACTS.entitySetName]: async (id, fields) =>
-    Vsb_capexprojectcontractsService.update(id, fields as never),
-  [CAPEX_COSTS.entitySetName]: async (id, fields) => Vsb_capexcostsService.update(id, fields as never),
-};
-
-/**
- * The same plan rows as one PATCH `<set>(<id>)` each. The SDK sends no `If-Match`, so Dataverse
- * treats each as an UPSERT: it creates the row with the planner's id when absent and updates it
- * otherwise, which keeps the stable retry ids (D51 §3a) and the phase-0 existence check valid.
- * Not atomic: a failure throws a plain `DataError` without commit counts, which the orchestrator
- * treats as "may have committed" and reconciles cautiously.
- *
- * GUARD (`guard: true`, only for UPDATE rows of a save whose phase-0 upsert verify was skipped,
- * `skipUpsertVerify`): nothing has proved those rows still exist, and a PATCH would re-create one
- * another user deleted since the sheet loaded. So their ids are read back first (`existingIds`,
- * one read per `CHUNK` ids, counted as requests). If ANY is missing, NONE of the group is sent: a
- * `BulkWriteError` with 0 committed is thrown, its cause a `RecordGoneError` naming the first
- * missing id — the same "deleted by someone else, nothing of it written" meaning as phase 0's
- * `RowsGoneError`, reported through the orchestrator's `SavePlanError` (other operations of the
- * save may have landed by then, so it cannot be the zero-write `RowsGoneError` itself).
- */
-async function upsertEachRow(
-  table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, guard = false,
-): Promise<{ requests: number }> {
-  const send = ROW_UPSERT[table.entitySetName];
-  if (!send) throw new Error(`${label}: no per-row upsert for ${table.entitySetName}`);
-  let checks = 0;
-  if (guard && rows.length > 0) {
-    const ids = rows.map((r) => r.id);
-    const found = await existingIds(table, ids);
-    checks = chunk(ids).length;
-    const missing = rows.filter((r) => !found.has(r.id.toLowerCase()));
-    const first = missing[0];
-    if (first) {
-      throw new BulkWriteError(label, table.entitySetName, 0, 0, 0, new RecordGoneError(
-        `${label}: ${missing.length} of ${rows.length} row(s) no longer exist; the per-row fallback did not re-create them`,
-        table.entitySetName, first.id,
-      ));
-    }
-  }
-  await forEachLimit(rows, async (row) => {
-    unwrap((await gated(() => send(row.id, row.fields))) as Parameters<typeof unwrap>[0], label);
-  }, ROW_WRITE_CONCURRENCY);
-  return { requests: checks + rows.length };
-}
-
-/** How one action's group of rows actually went out, for the save's timing log. */
-type GroupPath = "bulk" | "per-row after 501" | "per-row since an earlier 501";
-
-/**
- * One action's group, for the log: its path, and on the bulk path each bulk request's own server
- * duration in completion order (`gated`, queueing excluded).
- */
-interface GroupTrack { path?: GroupPath; durations?: number[] }
-
-/** `bulk [980 ms, 10.7 s]` on the bulk path (one entry per request); the path alone otherwise. */
-function groupPathText(track: GroupTrack): string {
-  const path = track.path ?? "bulk";
-  const durations = path === "bulk" ? track.durations ?? [] : [];
-  return durations.length === 0 ? path : `${path} [${durations.map(formatRequestDuration).join(", ")}]`;
-}
-
-/**
- * One action's group: the bulk message first, per-row upserts when that action answers 501 on
- * its first chunk (nothing was written then, so the fallback is safe). Any other refusal, or a
- * 501 after a chunk landed, propagates unchanged. The refused 501 request counts as a request.
- * `guardPerRowUpdates`: the update group's per-row path re-checks its ids first (`upsertEachRow`).
- */
-async function sendGroup(
-  action: BulkAction, table: BulkTableInfo, rows: readonly UpsertTarget[], label: string,
-  track: GroupTrack, guardPerRowUpdates = false,
-): Promise<number> {
-  if (rows.length === 0) return 0;
-  const groupLabel = `${label} (${action})`;
-  const guard = action === "update" && guardPerRowUpdates;
-  if (bulkUnavailable[action]) {
-    // Reached in a skipped-verify save only when another operation of THIS save set the flag.
-    track.path = "per-row since an earlier 501";
-    return (await upsertEachRow(table, rows, groupLabel, guard)).requests;
-  }
-  track.path = "bulk";
-  const durations: number[] = (track.durations = []);
-  try {
-    // Parallel chunks (`BULK_PARALLEL_CHUNKS`): each one still passes `saveGate` through
-    // `bulkTransport`, so the save's in-flight cap is unchanged.
-    return (await upsertMultiple(table, rows, bulkTransport(action, (ms) => { durations.push(ms); }), {
-      label: groupLabel, parallel: BULK_PARALLEL_CHUNKS,
-    })).requests;
-  } catch (error) {
-    if (!isBulkNotImplemented(error)) throw error;
-    rememberBulk501(action);
-    console.warn(`${BULK_ACTION_NAME[action]} answered 501 Not Implemented; ${groupLabel} continues row by row.`);
-  }
-  track.path = "per-row after 501";
-  return refusedBulkRequests(rows.length) + (await upsertEachRow(table, rows, groupLabel, guard)).requests;
-}
-
-/**
- * How many bulk requests a group of `rowCount` rows sent before its 501 fallback: every parallel
- * chunk when the group was split (all of them answered 501, or it would not have fallen back),
- * else the one sequential first chunk.
- */
-function refusedBulkRequests(rowCount: number): number {
-  const parallelRequests = Math.ceil(rowCount / parallelChunkSize(rowCount, BULK_PARALLEL_CHUNKS));
-  return parallelRequests > 1 ? parallelRequests : 1;
-}
-
-/** The innermost `DataError` status in an error's `cause` chain, if any. */
-function dataStatus(error: unknown): number | undefined {
-  let status: number | undefined;
-  let current: unknown = error;
-  for (let depth = 0; depth < 8 && current; depth += 1) {
-    if (current instanceof DataError && current.status !== undefined) status = current.status;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return status;
-}
-
-/**
- * The Save's upsert adapter (`SavePlanDeps.upsert`): Microsoft's bulk guidance is that Upsert is
- * slower than Create or Update and that a caller who knows whether a record exists should say so.
- * The planner knows, per row (`UpsertTarget.isNew`), and the orchestrator's phase-0 check turns
- * a "new" id that already exists into `isNew: false`, so `CreateMultiple` never gets an id that
- * exists. So the rows are split, in input order, into `creates` and `updates`, and the two
- * groups go out IN PARALLEL — one `CreateMultiple` / `UpdateMultiple` request per 500 rows each
- * (`upsertMultiple` chunks, validates and unwraps). `UpsertMultiple` is no longer used: it
- * answered 501 against VSBCloud_Dev (D51).
- *
- * VALIDATION first, over ALL the rows, before either group sends anything: a duplicate id across
- * the two groups, an empty id or a reserved key throws `BulkValidationError` (0 committed).
- *
- * 501 FALLBACK PER ACTION: see `sendGroup`. One action's 501 leaves the other on its bulk path.
- *
- * FAILURE. Both groups are awaited to the end (`allSettled`) before anything is thrown, so no
- * request is still in flight when the orchestrator starts reconciling. Then:
- * - only one group had rows: its own error is rethrown unchanged. That group IS `rows` in input
- *   order, so a `BulkWriteError`'s `rowsCommitted` still means "this prefix of `rows` landed";
- * - both groups had rows: neither group's rows are a prefix of `rows` (creates and updates
- *   interleave in the input), so no commit count can keep that meaning. The adapter throws a
- *   plain `DataError` with NO `rowsCommitted` / `chunksCommitted`, its `cause` the first failure
- *   (create before update) and its `status` that failure's innermost Dataverse status. The
- *   orchestrator reads "counts unknown" as "may have committed" and reconciles cautiously;
- * - EXCEPT both groups failed and each error reports 0 rows committed: then nothing of `rows`
- *   landed, and the adapter throws a `BulkWriteError` with 0 committed (its `cause` that same
- *   `DataError`), so the orchestrator neither says "some of your changes were already saved"
- *   nor treats this phase as possibly landed (L2 / F5).
- *
- * `requests` is the sum of both groups. `report` receives the per-action summary for the log,
- * also on failure. `opts.guardPerRowUpdates` is set when this save skipped the phase-0 upsert
- * verify: see `upsertEachRow`'s guard.
- */
-async function upsertRowsByAction(
-  table: BulkTableInfo, rows: readonly UpsertTarget[], label: string,
-  report?: (summary: string) => void, opts: { guardPerRowUpdates?: boolean } = {},
-): Promise<{ requests: number }> {
-  toUpsertTargets(table, rows, label);
-  const groups: Record<BulkAction, readonly UpsertTarget[]> = {
-    create: rows.filter((r) => r.isNew),
-    update: rows.filter((r) => !r.isNew),
-  };
-  const tracks: Record<BulkAction, GroupTrack> = { create: {}, update: {} };
-  const actions = ["create", "update"] as const;
-  const settled = await Promise.allSettled(
-    actions.map((action) => sendGroup(
-      action, table, groups[action], label, tracks[action], opts.guardPerRowUpdates === true,
-    )),
-  );
-
-  report?.(actions
-    .map((action, i) => {
-      if (groups[action].length === 0) return null;
-      const s = settled[i] as PromiseSettledResult<number>;
-      return s.status === "fulfilled"
-        ? `${action} ${s.value} req ${groupPathText(tracks[action])}`
-        : `${action} failed ${groupPathText(tracks[action])}`;
-    })
-    .filter((part): part is string => part !== null)
-    .join(", ") || "nothing to send");
-
-  const failed = actions.flatMap((action, i) => {
-    const s = settled[i] as PromiseSettledResult<number>;
-    return s.status === "rejected" ? [{ action, reason: s.reason as unknown }] : [];
-  });
-  const [first, second] = failed;
-  if (!first) {
-    return { requests: settled.reduce((n, s) => n + (s.status === "fulfilled" ? s.value : 0), 0) };
-  }
-  if (groups.create.length === 0 || groups.update.length === 0) throw first.reason;
-
-  const detail = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
-  const other: BulkAction = first.action === "create" ? "update" : "create";
-  const operation = second
-    ? `${label}: both the create and the update group failed (update: ${detail(second.reason)})`
-    : `${label}: the ${first.action} group failed while the ${other} group (${groups[other].length} row(s)) was saved`;
-  const wrapped = new DataError(operation, first.reason, dataStatus(first.reason));
-  // L2 / F5: both groups failed and BOTH report exactly 0 rows committed (a refused single
-  // request, a 501 on every chunk, the per-row guard), so nothing of `rows` landed and 0 is a
-  // true prefix count of them. Say so — a `BulkWriteError` with 0 committed around the same
-  // detail — instead of the count-less error, which the orchestrator must read as "may have
-  // committed". Any group that fulfilled, or reports rows, or reports no counts at all (a
-  // per-row failure, a partial parallel split) keeps the count-less error below.
-  if (second && reportsNothingCommitted(first.reason) && reportsNothingCommitted(second.reason)) {
-    throw new BulkWriteError(label, table.entitySetName, 0, 0, 0, wrapped);
-  }
-  throw wrapped;
-}
-
-/**
- * The error says, with counts, that its group committed nothing: `rowsCommitted` is 0 and
- * `chunksCommitted` (when present) is 0. `BulkWriteError` / `BulkValidationError` carry them; a
- * plain or `BulkPartialWriteError` does not, and so never qualifies.
- */
-function reportsNothingCommitted(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const { rowsCommitted, chunksCommitted } = error as { rowsCommitted?: unknown; chunksCommitted?: unknown };
-  return rowsCommitted === 0 && (chunksCommitted === undefined || chunksCommitted === 0);
 }
 
 /**

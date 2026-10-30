@@ -15,8 +15,8 @@ const SUFFIX = "_MilestonesStandardAssumptions_AdminScreen";
 
 /** Differences from the Canvas run that are decided or documented, with the reason. Anything else fails the test. */
 const KNOWN: Record<string, string> = {
-  "commands": "D61: Apply is removed from the code app (the canvas shows it disabled)",
-  "topCommands": "D61: Apply All is removed from the code app (the canvas shows it disabled)",
+  "commands": "D67: Apply is removed from the code app (the canvas shows it disabled)",
+  "topCommands": "D67: Apply All is removed from the code app (the canvas shows it disabled)",
   'validation.duration["101"].saveEnabled': "DIVERGENCE (validateDuration): the column maximum 100 for Cluster 1 is also enforced; the canvas checks only digits",
   'validation.duration["1001"].saveEnabled': "DIVERGENCE (validateDuration): the column maximum is also enforced; the canvas checks only digits",
   'validation.duration[" 6"].saveEnabled': "DIVERGENCE (validateDuration): surrounding spaces are ignored; the canvas rejects \" 6\"",

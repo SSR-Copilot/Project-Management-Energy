@@ -44,7 +44,7 @@ import {
 } from "@/data/generalData";
 import type { Persona } from "@/data/adminGatesApprovals";
 import {
-  franceSearchIsSuppressed, projectSaveErrorText,
+  municipalitySearchIsSuppressed, projectSaveErrorText,
   type CountryRef, type MunicipalityMode, type ProjectRow, type ProjectStateRef,
   type ShareholdingEntity, type TrackingRow,
 } from "./rules";
@@ -165,8 +165,8 @@ export function useMunicipalitySearch(
   search: string,
   areaName?: string | null,
 ): ScreenData<MunicipalityRow[]> {
-  const germany = mode === "germany" && Boolean(areaName) && search.trim().length > 0;
-  const france = mode === "france" && !franceSearchIsSuppressed(search);
+  const germany = mode === "germany" && Boolean(areaName) && !municipalitySearchIsSuppressed(search.trim());
+  const france = mode === "france" && !municipalitySearchIsSuppressed(search);
   const q = useQuery({
     queryKey: germany ? qk.germanMunicipalities(areaName!, search.trim()) : qk.frenchMunicipalities(search),
     queryFn: () => (germany ? searchGermanMunicipalities(areaName!, search) : searchFrenchMunicipalities(search)),

@@ -94,21 +94,26 @@ export interface LoadingOverlayProps {
    * default, so every existing caller renders exactly where it did.
    */
   portal?: boolean;
+  /**
+   * Optional `data-testid` for the outer element. Existing callers pass none, so they render
+   * exactly as before; the Cost screens pass their own `<screen>-loading` / `<screen>-write-status`.
+   */
+  testId?: string;
 }
 
-export function LoadingOverlay({ mode = "blocking", label, portal = false }: LoadingOverlayProps) {
+export function LoadingOverlay({ mode = "blocking", label, portal = false, testId }: LoadingOverlayProps) {
   if (mode === "blocking" && portal) {
-    return <Portal><LoadingOverlayBody mode="blocking" label={label} /></Portal>;
+    return <Portal><LoadingOverlayBody mode="blocking" label={label} testId={testId} /></Portal>;
   }
-  return <LoadingOverlayBody mode={mode} label={label} />;
+  return <LoadingOverlayBody mode={mode} label={label} testId={testId} />;
 }
 
-function LoadingOverlayBody({ mode = "blocking", label }: Omit<LoadingOverlayProps, "portal">) {
+function LoadingOverlayBody({ mode = "blocking", label, testId }: Omit<LoadingOverlayProps, "portal">) {
   const styles = useStyles();
 
   if (mode === "inline") {
     return (
-      <div className={styles.inline} role="status" aria-live="polite">
+      <div className={styles.inline} role="status" aria-live="polite" aria-busy="true" data-testid={testId}>
         <Spinner size="medium" label={label} />
       </div>
     );
@@ -117,7 +122,7 @@ function LoadingOverlayBody({ mode = "blocking", label }: Omit<LoadingOverlayPro
   return (
     // `aria-modal` plus a live region: the canvas version was a plain container with no
     // role at all, which is one of the 239 acc-AccessibleLabelNeeded findings.
-    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true">
+    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true" data-testid={testId}>
       <div className={styles.card}>
         {/* `InformationText = ""` (no label) ⇒ a 120 px spinner box; any text ⇒ 90 px. */}
         <div className={mergeClasses(styles.spinnerBox, label ? styles.spinnerBoxWithLabel : styles.spinnerBoxNoLabel)}>

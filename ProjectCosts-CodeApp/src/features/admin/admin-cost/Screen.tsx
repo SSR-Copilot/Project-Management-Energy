@@ -18,7 +18,7 @@
  * Composition only: rules in `./rules.ts`, queries in `./hooks.ts`, Dataverse I/O in
  * `@/data/adminCost.ts`.
  *
- * The canvas Apply / Apply to All bars are not built (D61).
+ * The canvas Apply / Apply to All bars are not built (D67).
  *
  * DIVERGENCE (outcomes): the canvas shows nothing on success and a raw `Notify` on failure; this
  * screen shows short toasts (`useNotify`) for every save / delete outcome — see `MSG` in

@@ -56,8 +56,8 @@ Live performance is unmeasured (R-11), and the two latest DEV pushes had no smok
 | Wording drift | Verbatim strings in `MSG` objects with the canvas control cited (rule 7) |
 | No gate before publishing | `npm run verify` plus a pre-push checklist; per-screen gap reports with COVERED / PARTIAL / MISSING / WRONG rows |
 | Standard-assumption blue/italic rebuilt per control | One shared style, `components/standardValue.ts` (rule 20, D35); 168 canvas controls audited on 10 screens, 56 fixed |
-| A version footer strip on every screen takes 32 px of height and repeats the version already in the header (`lbl_…_FooterVersion`) | **Divergence, proposed (not approved), 27 Oct 2026:** removed once in the shared `AppShell`, so every screen gains the height; the version stays in the header and user menu (D57) |
-| Fold chevrons drawn per screen: small and grey on some, blue and large on others | **One shared `ExpandChevron`** on every accordion and card header, enforced by UT-EXPAND (27 Oct 2026, D58, proposed) |
+| A version footer strip on every screen takes 32 px of height and repeats the version already in the header (`lbl_…_FooterVersion`) | **Divergence, proposed (not approved), 27 Oct 2026:** removed once in the shared `AppShell`, so every screen gains the height; the version stays in the header and user menu (D63) |
+| Fold chevrons drawn per screen: small and grey on some, blue and large on others | **One shared `ExpandChevron`** on every accordion and card header, enforced by UT-EXPAND (27 Oct 2026, D64, proposed) |
 | Same feature built in different ways per screen | Shared kit: `FormPanel`, `ConfirmDialog`, `CountryTechnologyPicker`, `StatusPill`, `RowActions`, `ReorderPanel`, `SettingsAccordion` and others, so one fix reaches every screen |
 | Unsaved-changes guard missing or inconsistent | Shared guards: leave guard between screens (PO X1, D35), panel discard guard and `beforeunload` |
 
@@ -70,7 +70,7 @@ on purpose. **Fixed** = changed under a recorded decision.
 
 ### A. Administration (Application Settings) — 6 screens
 
-All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and Cost were removed too, D61), canvas-named test ids and `AccessibleLabel`s
+All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and Cost were removed too, D67), canvas-named test ids and `AccessibleLabel`s
 (D36), shared `FormPanel` / `ConfirmDialog` / `ReorderPanel`, and a per-screen `messages.ts`,
 `fixtures.ts` and `writes.test.ts`. None of their tables fires a flow or plugin unless noted.
 
@@ -83,7 +83,7 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
 | **Contract** (005, D23) | Plugin `DevCoCostRootCapexPlugin` sets the root CAPEX account on DevCo cost creation | Client does not redo the plugin's work. `createdRowRef(n)` lets one write plan reference rows it has just created. DevCo cost table registered. Option-set values corrected |
 | **Cost** (006, D24) | Option sets had swapped or invented values (DevCo / SPV, an invented "Portfolio"); currency table name wrong | `costPaidType`, `thresholdType` and unit labels ("EUR/MW(p)", "SUM / MAX / MIN") corrected from `customizations.xml`; DEVEX and OPEX split into tree, drawers and contract table; 10 tables connected |
 
-**Check List Settings UI parity (27 Oct 2026, D58, proposed, not approved):** measured against the live canvas screenshot and
+**Check List Settings UI parity (27 Oct 2026, D64, proposed, not approved):** measured against the live canvas screenshot and
 `Admin Project Default Checklists Screen.pa.yaml`.
 - **Page title in the header band** (`cmp_Header.Project.Name`) on all six admin screens, as on the PM screens; a visually hidden
   heading stays for screen readers.
@@ -91,27 +91,27 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
   (16 px values, 12 px header).
 - **Canvas action icons restored** on the Completion Date and Active buttons (an earlier divergence removed).
 - **Hover hints on every panel and dialog ✕** ("Cancel", or "Close" where the canvas says so): the shared `FormPanel` and `ConfirmDialog` carry
-  them, so no screen can miss one (D59, proposed). The canvas has 33 such hints; the earlier port had none.
+  them, so no screen can miss one (D65, proposed). The canvas has 33 such hints; the earlier port had none.
 - **12 canvas Save buttons showed a wrong hint** ("Filter projects details list view.", pasted from the filter icon). Fixed: they say "Save"; a test
-  (UT-HINTS-001) keeps the pasted text out (D59).
+  (UT-HINTS-001) keeps the pasted text out (D65).
 - **Hover and press feedback on row action icons** (Edit, Delete, and the Completion Date / Active buttons): a mid grey fill (#D0D0D0) and the
   pointer cursor on hover, darker while pressed, none while busy or locked. The canvas gives no feedback (`HoverFillColor` transparent);
-  this is an addition, shared in `RowActions` so every screen has it (D58 row 7, proposed).
+  this is an addition, shared in `RowActions` so every screen has it (D64 row 7, proposed).
 - **One expand / collapse chevron everywhere** (blue, 1.4x, as the Cost cards), shared as `ExpandChevron`, with a test (UT-EXPAND)
   that fails if a screen draws its own small grey one (CONVENTIONS rule 21). Applies to every accordion and card header.
-- **Milestones matrix text and column width match the canvas** (28 Oct 2026, D62, proposed, not approved): technology name 14 px, values and
+- **Milestones matrix text and column width match the canvas** (28 Oct 2026, D68, proposed, not approved): technology name 14 px, values and
   sub-labels 12 px (the earlier port read the modern Text sizes as pt, so they were 20 px and 16 px), and the blank column 110 px instead of 130.
-  The columns now keep their fixed canvas widths instead of stretching with the window, and the strip is 32 px (D62 rows 11-12, found by the browser suite).
-  The Edit panel follows the same sizes and the 80 px column layout (D62 rows 5-10), and its inputs show long values in full instead of the
+  The columns now keep their fixed canvas widths instead of stretching with the window, and the strip is 32 px (D68 rows 11-12, found by the browser suite).
+  The Edit panel follows the same sizes and the 80 px column layout (D68 rows 5-10), and its inputs show long values in full instead of the
   canvas's clipped "3…" and "0…".
-- **Canvas-first parity run found three more differences, now fixed** (29 Oct 2026, D62 rows 13-14, D63, proposed, not approved): the admin left menu opens with both
+- **Canvas-first parity run found three more differences, now fixed** (29 Oct 2026, D68 rows 13-14, D69, proposed, not approved): the admin left menu opens with both
   groups expanded as the Canvas does; Milestones rows are 55 px with 4 px cell padding (the sub-label no longer wraps to three lines); the country name is 14.6667 px.
   The suite compares the code app with a measured Canvas reference on every run and fails on any unexplained difference.
-- **Numbers follow the user's language** (29 Oct 2026, D64, proposed, not approved): on Generators, Planning, Grid Operator, Finance and Revenues the boxes now OPEN in the
+- **Numbers follow the user's language** (29 Oct 2026, D70, proposed, not approved): on Generators, Planning, Grid Operator, Finance and Revenues the boxes now OPEN in the
   decimal separator their validators read (a German user no longer sees "1.80x" in a box that only accepts "1,80x"), cards and range messages use the language, and the Contracts
   and Capex range messages group in it. The Grid Operator voltage stays dot-only, as in the canvas. A unit test per rule proves that each box's opening text passes its own
   validator in five languages (UT-LOCALE). Found by comparing the code app with the Canvas run.
-- **Disabled Apply / Apply to All bars removed** from Admin Contract and Admin Cost (28 Oct 2026, D61, proposed, not approved). The canvas ships
+- **Disabled Apply / Apply to All bars removed** from Admin Contract and Admin Cost (28 Oct 2026, D67, proposed, not approved). The canvas ships
   them permanently disabled with the sync call commented out, so they never did anything; the code app no longer draws them. Tests assert
   they are absent (UT-ADCONTR-936, UT-ADCOST-910).
 - **"…" overflow menu for the country / technology tabs** instead of a scrollbar, in the shared tab strip (CAPEX Accounts too).
@@ -129,7 +129,7 @@ earlier decisions D19, D22 and D24 and are waiting on the product owner (D36 §6
 | **Generators** (D27) | Module-permission flows send mails and Teams cards; a type Save blocker and a PV supplier write error | Both fixed. 7 SOURCE DEFECTs fixed; 10 tables connected; permission-request controls shown but disabled with an `EXCLUDED.*` tooltip; `CommandBar` gained a tooltip for a disabled command |
 | **Production** (D28) | Seasonality and negative-price values come from Fabric SQL | Shows a clear "not connected" notice instead of silently blank values; save, delete, activate / deactivate, project roll-up and the one-shot standard Land Lease / Other OPEX / O&M contracts are connected |
 | **Checklist** (D29) | Approval buttons start flows (mails, Teams cards) | Everything not tied to a flow is connected: back-fill, tracking, materialisation, Complete / In Progress, comments, ungated moves, Reset, Abandon / Inactivate / Activate. Approval buttons visible but disabled |
-| **Checklist, UI parity** (27 Oct, D60, proposed) | Screenshot comparison with the canvas | Mail / People gate icon at 20 px; state text lined up across the stage cards; the clock under the gate; plain refresh icon; 16 px text and a plain ✕ on three action buttons; table capped at 1520 px (a table ignores `max-width`, so it had filled the window); 37 px rows with 80 x 26 toggles; Note comment icon and a 20 px approval icon in the canvas colours |
+| **Checklist, UI parity** (27 Oct, D66, proposed) | Screenshot comparison with the canvas | Mail / People gate icon at 20 px; state text lined up across the stage cards; the clock under the gate; plain refresh icon; 16 px text and a plain ✕ on three action buttons; table capped at 1520 px (a table ignores `max-width`, so it had filled the window); 37 px rows with 80 x 26 toggles; Note comment icon and a 20 px approval icon in the canvas colours |
 | **Team** (D30) | Office 365 Users search | Entra (`aadusers`) people search and pre-selection (D25-Q6); 5 SOURCE DEFECTs fixed; add / edit / delete a member |
 | **Planning** (D31) | Description lookup name guessed wrongly in earlier code; acquisition type caption mismatch | Correct names from generated models; get-or-create of planning and acquisition rows on visit; permit add / edit / delete; Save and Clear & Save; 33 canvas ids verified |
 | **Grid Operator** (D32) | Gap report: 53 requirements, 24 covered, 12 partial, 10 missing, 7 wrong | Save as one create or update with Project and Owning Business Unit; 16 canvas ids verified; no flow or plugin on its table |
@@ -172,7 +172,7 @@ earlier decisions D19, D22 and D24 and are waiting on the product owner (D36 §6
 | Year range off by one for projects longer than 15 years (C-1) | The CAPEX screen's correct `max − min + 1` form is the one used |
 | Duplicate-contract error can name the wrong account (C-2) | Not reproduced |
 | Whole save is a long timer in the canvas | Phased save as a write plan; still non-transactional |
-| The table opened as a centred 90 % × 90 % pop-up over a scrim, unlike every other form | **Divergence, proposed (not approved), 26 Oct 2026:** opens as the shared right-docked `FormPanel` at about 95 % width (new `grid` preset) over the DEVEX/CAPEX screen, so the grid keeps its room and the panel behaves like the other features. The URL `/costs/add-from-table` stays a deep link. Behaviour, ids and the save logic are unchanged; Cancel still closes without a prompt. Checked in the browser by the user, who found it good; recorded as D56 |
+| The table opened as a centred 90 % × 90 % pop-up over a scrim, unlike every other form | **Divergence, proposed (not approved), 26 Oct 2026:** opens as the shared right-docked `FormPanel` at about 95 % width (new `grid` preset) over the DEVEX/CAPEX screen, so the grid keeps its room and the panel behaves like the other features. The URL `/costs/add-from-table` stays a deep link. Behaviour, ids and the save logic are unchanged; Cancel still closes without a prompt. Checked in the browser by the user, who found it good; recorded as D62 |
 
 ### F. Cost — Contracts
 
@@ -238,7 +238,7 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
   bars (D20); labels still containing record data; the Overview `clampPage` and inactive-project
   questions (G2).
 
-## Parity run, Application Settings (29 Oct 2026, D65) — fixed
+## Parity run, Application Settings (29 Oct 2026, D71) — fixed
 
 - **Project Gates:** header, people and gate/task text sizes and colours now equal the Canvas; Status column and Add Task inset aligned.
 - **CAPEX Accounts:** account caption size aligned (13.3333 px).
@@ -246,14 +246,14 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 - **Check List Settings:** command bar height and caption inset aligned.
 - **New gate:** `e2e/appsettings.parity.spec.ts` compares each screen with the Canvas, text by text.
 
-## Request log (29 Oct 2026, D66) — fixed / new
+## Request log (29 Oct 2026, D72) — fixed / new
 
 - **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
 
-## Add Cost from Table, year view (29 Oct 2026, D67) — fixed (default is a divergence, not approved)
+## Add Cost from Table, year view (29 Oct 2026, D73) — fixed (default is a divergence, not approved)
 
 - A "Show all years" switch limits the table to the current year's columns, so clicking and Tab are fast on big sheets. Display only: save, validation and Copy Table still use every year. The canvas always shows every year.
 
-## Troubleshooting aids (29 Oct 2026, D68) — new
+## Troubleshooting aids (29 Oct 2026, D74) — new
 
 - **Cross-cutting:** console lines carry an action id, errors print their Dataverse root cause with the route, slow requests and actions are flagged `SLOW`, and unhandled errors are logged with the last actions. The canvas silently swallowed these (`App.OnError`, B-1).

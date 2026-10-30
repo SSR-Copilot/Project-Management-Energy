@@ -68,10 +68,12 @@ vi.mock("./client", () => ({
    *
    * Recorded into `deleted` with the same `cost:` / `contract:` prefixes the generated-service
    * mocks below use, so the ordering assertions in UT-BOOK-039..041 read unchanged. Comments
-   * still delete through `Vsb_capexcommentsesService`, which is why that mock stays live.
+   * delete through `deleteRecord` too since CA-18, recorded under `comment:`.
    */
   deleteRecord: async (_operation: string, tableName: string, recordId: string) => {
-    deleted.push(`${tableName === "vsb_capexcosts" ? "cost" : "contract"}:${recordId}`);
+    const prefix = tableName === "vsb_capexcosts" ? "cost"
+      : tableName === "vsb_capexcommentses" ? "comment" : "contract";
+    deleted.push(`${prefix}:${recordId}`);
   },
 }));
 
@@ -109,14 +111,32 @@ vi.mock("@/generated/services/Vsb_capexcostsService", () => ({
     },
   },
 }));
+/*
+ * The panel Save's bulk path (D56) sends the month rows as `CreateMultiple` / `UpdateMultiple`.
+ * A paid reset rides in the update targets, so it is recorded into `costPaidUpdates` exactly as
+ * the per-row `update` mock above records it: UT-BOOK-058/059 read the same either way.
+ */
+vi.mock("@/generated/services/CreateMultipleService", () => ({
+  CreateMultipleService: { CreateMultiple: async () => ({ success: true, data: {} }) },
+}));
+vi.mock("@/generated/services/UpdateMultipleService", () => ({
+  UpdateMultipleService: {
+    UpdateMultiple: async (_es: string, targets: Record<string, unknown>[]) => {
+      for (const t of targets) {
+        if ("vsb_costpaid" in t) costPaidUpdates.push({ id: String(t.vsb_capexcostid), paid: t.vsb_costpaid });
+      }
+      return { success: true, data: {} };
+    },
+  },
+}));
 vi.mock("@/generated/services/Vsb_capexcommentsesService", () => ({
   Vsb_capexcommentsesService: {
     getAll: async () => ({ success: true, data: [] }),
     create: async () => ({ success: true, data: { vsb_capexcommentsid: "comment-new" } }),
     update: async () => ({ success: true, data: {} }),
+    // The raw generated `delete()` discards a refusal; since CA-18 nothing may reach it.
     delete: async (id: string) => {
-      deleted.push(`comment:${id}`);
-      return { success: true, data: {} };
+      throw new Error(`raw Vsb_capexcommentsesService.delete(${id}) called; use deleteRecord`);
     },
   },
 }));
