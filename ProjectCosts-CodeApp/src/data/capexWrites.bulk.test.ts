@@ -169,7 +169,9 @@ const {
   deleteCostLineBulk, deleteCostLineLegacy, panelBusyLogLine, panelSaveLogLine, saveCostLine,
   saveCostLineBulk, saveCostLineLegacy, LEGACY_SAVE_OVERRIDE_KEY,
 } = await import("./capexWrites");
-const { resetBulkWriteAvailability } = await import("./bulkSend");
+const { resetBulkWriteAvailability, SAVE_REQUEST_LIMIT } = await import("./bulkSend");
+/** The write gate in the `gate peak N/<limit>` tail (WS-A tuning: 24; 16 before it). */
+const GATE = String(SAVE_REQUEST_LIMIT);
 
 /* ═══════════════════════════════════════════════════════════ fixtures ══ */
 
@@ -692,7 +694,7 @@ describe("the readable panel log (D59)", () => {
     await save;
     expect(at("end:bulk:update:12")).toBeLessThan(at("end:contract:update"));
     expect(lastSummary()).toMatch(
-      /^CAPEX panel save \(bulk\): [\d,]+ ms, 2 requests; contract update 1 req [\d,]+ ms; costs 1 req [\d,]+ ms \(update 1 req bulk \[[\d,]+ ms\]\); cost deletes 0 req [\d,]+ ms; gate peak \d+\/16, /,
+      new RegExp(`^CAPEX panel save \\(bulk\\): [\\d,]+ ms, 2 requests; contract update 1 req [\\d,]+ ms; costs 1 req [\\d,]+ ms \\(update 1 req bulk \\[[\\d,]+ ms\\]\\); cost deletes 0 req [\\d,]+ ms; gate peak \\d+/${GATE}, `),
     );
   });
 
@@ -740,7 +742,7 @@ describe("the readable panel log (D59)", () => {
     await other;
     const summary = lastSummary();
     expect(summary).toMatch(/, 2 requests; /);
-    expect(summary).toMatch(/; gate peak 2\/16, req avg [\d,]+ ms max [\d,]+ ms, shared gate peak 3\/16$/);
+    expect(summary).toMatch(new RegExp(`; gate peak 2/${GATE}, req avg [\\d,]+ ms max [\\d,]+ ms, shared gate peak 3/${GATE}$`));
   });
 
   it("UT-CAPEXLOG-006 a Delete line counts every request and carries no gate tail", async () => {

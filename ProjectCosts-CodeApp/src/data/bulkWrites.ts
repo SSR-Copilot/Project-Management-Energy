@@ -31,9 +31,11 @@ import { unwrap } from "../platform/errors";
 export const DEFAULT_BULK_CHUNK = 500;
 
 /**
- * The smallest chunk a parallel phase is split into. A phase below 2 × this stays ONE request
- * (no chunk of a parallel split is ever made smaller than this on purpose; only the remainder
- * chunk can be).
+ * The smallest chunk a parallel phase is split into, by DEFAULT (a caller passes `minChunk` to
+ * override it; the bulk sender does, from its `BULK_TUNING` in `./bulkSend.ts`). A phase below
+ * 2 × the minimum stays ONE request (no chunk of a parallel split is ever made smaller than the
+ * minimum on purpose; only the remainder chunk can be). 25 is the pre-tuning value, kept as the
+ * executor's default so a caller that passes nothing behaves exactly as before.
  */
 export const MIN_PARALLEL_CHUNK = 25;
 
@@ -267,7 +269,8 @@ export function toUpsertTargets(
  *
  * `parallel` (default 1 = the sequential behaviour above, exact prefix counts). When it is > 1
  * and the phase splits into more than one chunk (`parallelChunkSize`: at most `parallel` chunks
- * up to `parallel × chunkSize` rows, `ceil(n / chunkSize)` above that), every chunk is sent at
+ * up to `parallel × chunkSize` rows, `ceil(n / chunkSize)` above that; `minChunk`, default
+ * `MIN_PARALLEL_CHUNK`, is the smallest chunk a split makes), every chunk is sent at
  * once (`Promise.allSettled`; the caller's transport is already gated by the shared concurrency
  * limiter, so no limiter is added here) and each result is unwrapped. Then:
  * - all succeeded → `{ requests, rows }`;
@@ -279,10 +282,11 @@ export async function upsertMultiple(
   table: BulkTableInfo,
   rows: readonly UpsertTarget[],
   transport: BulkUpsertTransport,
-  opts: { chunkSize?: number; label?: string; parallel?: number } = {},
+  opts: { chunkSize?: number; label?: string; parallel?: number; minChunk?: number } = {},
 ): Promise<{ requests: number; rows: number }> {
   const size = opts.chunkSize ?? DEFAULT_BULK_CHUNK;
   const parallel = opts.parallel ?? 1;
+  const minChunk = opts.minChunk ?? MIN_PARALLEL_CHUNK;
   const label = opts.label ?? `upsert ${table.logicalName}`;
   if (!Number.isInteger(size) || size < 1) {
     throw new BulkValidationError(label, table.entitySetName, `chunkSize must be a positive integer, got ${size}.`);
@@ -290,11 +294,14 @@ export async function upsertMultiple(
   if (!Number.isInteger(parallel) || parallel < 1) {
     throw new BulkValidationError(label, table.entitySetName, `parallel must be a positive integer, got ${parallel}.`);
   }
+  if (!Number.isInteger(minChunk) || minChunk < 1) {
+    throw new BulkValidationError(label, table.entitySetName, `minChunk must be a positive integer, got ${minChunk}.`);
+  }
   if (rows.length === 0) return { requests: 0, rows: 0 };
 
   const targetsAll = toUpsertTargets(table, rows, label);
   if (parallel > 1) {
-    const parallelChunks = chunk(targetsAll, parallelChunkSize(rows.length, parallel, size));
+    const parallelChunks = chunk(targetsAll, parallelChunkSize(rows.length, parallel, size, minChunk));
     if (parallelChunks.length > 1) {
       return sendParallel(table, parallelChunks, transport, label, rows.length);
     }
@@ -318,18 +325,21 @@ export async function upsertMultiple(
 }
 
 /**
- * Chunk size for a parallel phase: `ceil(rowCount / parallel)`, never below `MIN_PARALLEL_CHUNK`,
- * never above `maxChunk`. A phase under 2 × `MIN_PARALLEL_CHUNK` rows stays one request, so a
- * small save is not split into a full chunk plus a tiny remainder.
+ * Chunk size for a parallel phase: `ceil(rowCount / parallel)`, never below `minChunk` (default
+ * `MIN_PARALLEL_CHUNK`), never above `maxChunk`. A phase under 2 × `minChunk` rows stays one
+ * request, so a small save is not split into a full chunk plus a tiny remainder.
  *
  * So a phase is split into AT MOST `parallel` chunks only up to `parallel × maxChunk` rows (2,000
- * with `parallel` 4 and the default 500). Above that the `maxChunk` cap wins and the phase is
- * `ceil(rowCount / maxChunk)` chunks of `maxChunk` — MORE than `parallel` — and `upsertMultiple`
- * sends every one of them at once (the caller's gate still bounds what is in flight).
+ * with `parallel` 4 and the default 500; 4,000 with `parallel` 8). Above that the `maxChunk` cap
+ * wins and the phase is `ceil(rowCount / maxChunk)` chunks of `maxChunk` — MORE than `parallel` —
+ * and `upsertMultiple` sends every one of them at once (the caller's gate still bounds what is in
+ * flight).
  */
-export function parallelChunkSize(rowCount: number, parallel: number, maxChunk = DEFAULT_BULK_CHUNK): number {
-  if (rowCount < 2 * MIN_PARALLEL_CHUNK) return Math.max(1, Math.min(maxChunk, rowCount));
-  return Math.min(maxChunk, Math.max(MIN_PARALLEL_CHUNK, Math.ceil(rowCount / parallel)));
+export function parallelChunkSize(
+  rowCount: number, parallel: number, maxChunk = DEFAULT_BULK_CHUNK, minChunk = MIN_PARALLEL_CHUNK,
+): number {
+  if (rowCount < 2 * minChunk) return Math.max(1, Math.min(maxChunk, rowCount));
+  return Math.min(maxChunk, Math.max(minChunk, Math.ceil(rowCount / parallel)));
 }
 
 async function sendParallel(
