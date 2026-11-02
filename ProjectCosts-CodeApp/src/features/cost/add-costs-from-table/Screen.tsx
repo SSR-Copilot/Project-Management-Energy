@@ -26,7 +26,8 @@ import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/us
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { costWriteStatusLabel } from "@/domain/writeGuard";
 import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data/addCostSheet";
-import { emitSaveLog } from "@/data/saveLog";
+import { deferSaveLog, emitSaveLog } from "@/data/saveLog";
+import { addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
 import { rootCauseDetail } from "@/platform/errors";
 import {
   ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
@@ -211,9 +212,19 @@ export default function AddCostsFromTableScreen() {
   };
 
   const doSave = async () => {
+    // P0.1: the Save's client timeline starts at the click (measurement only, `saveTimeline.ts`).
+    addCostSaveTimeline.begin();
+    /*
+     * WS-E checked: these two stay here. React bails out when they are already null (the usual
+     * first Save); only a showing banner (a retry) costs a render before the first request, and
+     * clearing it after the send could wipe the banner of a Save refused within the same tick.
+     */
     setSaveError(null);
     setSaveNotice(null);
-    if (!canSaveBulkEdit(permissions, errors) || !loaded) return;
+    if (!canSaveBulkEdit(permissions, errors) || !loaded) {
+      addCostSaveTimeline.cancel();
+      return;
+    }
 
     /*
      * Refuse to save at all if a contract the sheet was BUILT from no longer resolves once the
@@ -237,12 +248,18 @@ export default function AddCostsFromTableScreen() {
       canvasParityDeletion: CANVAS_PARITY_DELETION,
       now: () => performance.now(),
     });
+    addCostSaveTimeline.mark("prepared");
+    addCostSaveTimeline.measure("prepareMs", prepared.timings.total);
     // One line (plus a collapsed group, D59), so a slow Save can be pinned on the client side or
     // the network side at a glance.
     const readBack = readBackMs.current;
     const validation = validationMs.current;
-    emitSaveLog(() => prepareLogReport(prepared.timings, readBack, validation, currentRows.length));
+    const rowCount = currentRows.length;
+    const prepareLog = () => prepareLogReport(prepared.timings, readBack, validation, rowCount);
     if (prepared.kind === "lost") {
+      // Nothing is sent, so nothing waits behind the log: it prints now, and no timeline line.
+      emitSaveLog(prepareLog);
+      addCostSaveTimeline.cancel();
       setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
       return;
     }
@@ -256,14 +273,29 @@ export default function AddCostsFromTableScreen() {
     // Drop the previous attempt's technical line so it never sits under a newer outcome.
     save.reset();
     try {
-      await save.mutateAsync({
+      // Started inside an async wrapper, so even a synchronous throw arrives as a rejection and
+      // the deferred prepare log below is still scheduled.
+      const sending = (async () => save.mutateAsync({
         changedRows,
         existingContracts,
         existingCosts,
         contractDeleteIds,
         idCache: idCache.current,
         refreshBeforePlan,
+      }))();
+      /*
+       * WS-E: the prepare line prints one task later, not on the critical path. Everything from
+       * `mutateAsync` to the save's first request runs in microtasks (no timer in between), so the
+       * request has left when this prints; `console.table` / `groupCollapsed` are slow with DevTools
+       * open. Same content; any save line emitted earlier (a plan refused within the same tick)
+       * still prints after it (`deferSaveLog`).
+       */
+      deferSaveLog(prepareLog, (startedAt, ms) => {
+        addCostSaveTimeline.mark("prepareLog", startedAt);
+        addCostSaveTimeline.measure("prepareLogMs", ms);
       });
+      await sending;
+      addCostSaveTimeline.mark("returned");
       idCache.current.clear();
       sentInFailedAttempts.current.clear();
       if (deletion.blockedByPastCosts.length > 0) {
@@ -272,10 +304,14 @@ export default function AddCostsFromTableScreen() {
         setSaveNotice(ADDCOST_MSG.pastCostGuard(deletion.blockedByPastCosts.map((c) => c.name)));
         // The save no longer waits for a reload (it navigates away), so staying here reloads now.
         void sheetQuery.refetch();
+        addCostSaveTimeline.end("stayed");
         return;
       }
+      // Before `navigate`, so the DEVEX/CAPEX screen's first commit already finds it waiting.
+      addCostSaveTimeline.awaitPaint();
       back();
     } catch (error) {
+      addCostSaveTimeline.mark("returned");
       // The canvas wording, plus what the bulk save says about the failure. The id cache is
       // deliberately NOT cleared here: a retry must reuse the ids this attempt sent. Part of
       // this attempt may have landed, so the retry plans against a fresh read, not the snapshot.
@@ -287,6 +323,7 @@ export default function AddCostsFromTableScreen() {
       // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
       // then the raw error object in its own collapsed group (D59); the screen shows one line.
       emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
+      addCostSaveTimeline.end("failed");
     }
   };
 
