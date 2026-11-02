@@ -117,7 +117,10 @@ describe("Add Cost from Table Save — client path (WS-E, P0.1)", () => {
     editJanuary("200");
     let atSend: string[] | null = null;
     let resolve!: () => void;
-    mutateAsync.mockImplementationOnce(() => {
+    mutateAsync.mockImplementationOnce(async () => {
+      // TanStack's `execute` awaits (`onMutate`, the retryer) before `mutationFn` runs, and the data
+      // layer's plan comes before its first request: the request leaves some microtasks later.
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
       atSend = [...lines];
       addCostSaveTimeline.mark("firstWrite"); // the data layer's mark, played by the double
       return new Promise<undefined>((res) => { resolve = () => res(undefined); });
