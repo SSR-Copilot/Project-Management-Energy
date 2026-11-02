@@ -1032,12 +1032,17 @@ function needsReconcile(outcomes: readonly OpOutcome[]): boolean {
  *  - `force`: an EXISTING contract whose (1) row did not land, or may not have. Its stored total
  *    is unknown (the old one, or the plan's) while (2a)/(3) may have changed its costs, so the
  *    actual sum is always written. An update of an existing contract is always safe.
- *  - `unverified`: a NEW contract (1) may or may not have created (no `rowsCommitted`). Never
- *    written: an upsert on an id that does not exist would CREATE a bare contract.
+ *  - `unverified`: a NEW contract (1) may or may not have created (no `rowsCommitted`, no
+ *    `landedIds`). Never written: an upsert on an id that does not exist would CREATE a bare
+ *    contract.
  * A new contract past `rowsCommitted` (or after a failure that sent nothing) definitely did not
  * land and is left out. The executor sends chunks in row order, so the first `rowsCommitted`
- * rows are the ones that landed. Deleted contracts, and `exclude` (contracts phase 0 found gone),
- * are left out in every case.
+ * rows are the ones that landed. A group split into parallel chunks reports WHICH rows landed
+ * instead (`BulkPartialWriteError.landedIds`, every row of each fulfilled all-or-nothing chunk):
+ * those are compared, a new contract outside it is left out like one past `rowsCommitted` (review
+ * fix, D75: before it, a partial split left every new contract `unverified`, so the totals of the
+ * ones that did land were never repaired). Deleted contracts, and `exclude` (contracts phase 0
+ * found gone), are left out in every case.
  *
  * With (1') (`plan.deep`, WS-B), (1)'s prefix reads against `deep.flat`, and a deep-inserted
  * contract landed exactly when (1') succeeded or names it in `landedIds` (each create is atomic:
@@ -1059,14 +1064,19 @@ function reconcileScope(
   // every skipped contract after any partial failure.
   const targeted = new Set(rows.map((r) => r.id.toLowerCase()));
 
-  // How many of (1)'s rows are known to have landed; undefined = unknown.
+  // How many of (1)'s rows are known to have landed; undefined = unknown. Or, from a split group's
+  // `BulkPartialWriteError` (or the two-group error that carries the create group's), WHICH rows:
+  // `flatLanded`, a set, never a prefix. A new row not in it did not land.
   const flat = plan.deep?.flat ?? rows;
   let landedCount: number | undefined;
+  let flatLanded: readonly string[] | undefined;
   if (contracts.status === "ok") landedCount = flat.length;
   else if (contracts.status !== "failed") landedCount = 0;
   else if (sentNothing(contracts)) landedCount = 0;
-  else landedCount = commitProgress(contracts.cause).rowsCommitted;
+  else ({ rowsCommitted: landedCount, landedIds: flatLanded } = commitProgress(contracts.cause));
   const landed = new Set(flat.slice(0, landedCount ?? 0).map((r) => r.id.toLowerCase()));
+  for (const id of flatLanded ?? []) landed.add(id.toLowerCase());
+  const flatKnown = landedCount !== undefined || flatLanded !== undefined;
 
   // (1'): which deep-inserted contracts landed; undefined = unknown.
   const deepIds = new Set((plan.deep?.contractIds ?? []).map((id) => id.toLowerCase()));
@@ -1086,7 +1096,7 @@ function reconcileScope(
     const k = id.toLowerCase();
     if (landed.has(k) || !targeted.has(k)) ids.push(id);
     else if (!isNew.has(k)) { ids.push(id); force.add(id); }
-    else if (deepIds.has(k) ? deepLanded === undefined : landedCount === undefined) unverified.push(id);
+    else if (deepIds.has(k) ? deepLanded === undefined : !flatKnown) unverified.push(id);
   }
   return { ids, force, unverified };
 }

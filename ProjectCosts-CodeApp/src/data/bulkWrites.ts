@@ -95,6 +95,12 @@ export class BulkWriteError extends Error {
  *
  * `rowsLanded` (the rows in the chunks that succeeded) and `chunksFailed` are informational only.
  * `cause` is the first failure in chunk order; `causes` lists every failure in chunk order.
+ *
+ * `landedIds`: the ids of every row in a fulfilled chunk, in input order. Each chunk is one
+ * all-or-nothing request, so these rows landed and every other row of the phase did not (the same
+ * assumption `BulkWriteError.rowsCommitted` makes of its failed chunk). The orchestrator reads it as
+ * a SET, like `DeepInsertError.landedIds`, never as a prefix (review fix: a creates-only contract
+ * group split into parallel chunks left every new contract "unverified" and their totals unrepaired).
  */
 export class BulkPartialWriteError extends Error {
   readonly label: string;
@@ -103,6 +109,8 @@ export class BulkPartialWriteError extends Error {
   readonly chunksFailed: number;
   /** Rows in the fulfilled chunks. Informational: NOT a prefix of the input. */
   readonly rowsLanded: number;
+  /** Ids of the rows in the fulfilled chunks (a set, not a prefix; see the class note). */
+  readonly landedIds: readonly string[];
   readonly causes: readonly unknown[];
   /** `Error.cause` exists on the base type, hence the modifier. */
   override readonly cause: unknown;
@@ -113,6 +121,7 @@ export class BulkPartialWriteError extends Error {
     chunksFailed: number,
     rowsLanded: number,
     causes: readonly unknown[],
+    landedIds: readonly string[] = [],
   ) {
     const first = causes[0];
     const detail = first instanceof Error ? first.message : String(first);
@@ -125,6 +134,7 @@ export class BulkPartialWriteError extends Error {
     this.table = table;
     this.chunksFailed = chunksFailed;
     this.rowsLanded = rowsLanded;
+    this.landedIds = landedIds;
     this.causes = causes;
     this.cause = first;
   }
@@ -301,9 +311,12 @@ export async function upsertMultiple(
 
   const targetsAll = toUpsertTargets(table, rows, label);
   if (parallel > 1) {
-    const parallelChunks = chunk(targetsAll, parallelChunkSize(rows.length, parallel, size, minChunk));
+    const split = parallelChunkSize(rows.length, parallel, size, minChunk);
+    const parallelChunks = chunk(targetsAll, split);
     if (parallelChunks.length > 1) {
-      return sendParallel(table, parallelChunks, transport, label, rows.length);
+      // The ids per chunk, cut the same way (`identify` may not carry the primary key).
+      const idChunks = chunk(rows.map((r) => r.id), split);
+      return sendParallel(table, parallelChunks, idChunks, transport, label, rows.length);
     }
   }
 
@@ -345,6 +358,7 @@ export function parallelChunkSize(
 async function sendParallel(
   table: BulkTableInfo,
   chunks: Record<string, unknown>[][],
+  idChunks: readonly (readonly string[])[],
   transport: BulkUpsertTransport,
   label: string,
   rowCount: number,
@@ -358,16 +372,16 @@ async function sendParallel(
     }),
   );
   const causes: unknown[] = [];
-  let rowsLanded = 0;
+  const landedIds: string[] = [];
   settled.forEach((outcome, index) => {
-    if (outcome.status === "fulfilled") rowsLanded += (chunks[index] as unknown[]).length;
+    if (outcome.status === "fulfilled") landedIds.push(...(idChunks[index] ?? []));
     else causes.push(outcome.reason);
   });
   if (causes.length === 0) return { requests: chunks.length, rows: rowCount };
   if (causes.length === chunks.length) {
     throw new BulkWriteError(label, table.entitySetName, 0, 0, 0, causes[0]);
   }
-  throw new BulkPartialWriteError(label, table.entitySetName, causes.length, rowsLanded, causes);
+  throw new BulkPartialWriteError(label, table.entitySetName, causes.length, landedIds.length, causes, landedIds);
 }
 
 /**

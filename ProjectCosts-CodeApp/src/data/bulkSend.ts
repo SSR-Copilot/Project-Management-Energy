@@ -613,7 +613,9 @@ function dataStatus(error: unknown): number | undefined {
  *   interleave in the input), so no commit count can keep that meaning. The adapter throws a
  *   plain `DataError` with NO `rowsCommitted` / `chunksCommitted`, its `cause` the first failure
  *   (create before update) and its `status` that failure's innermost Dataverse status. The
- *   orchestrator reads "counts unknown" as "may have committed" and reconciles cautiously;
+ *   orchestrator reads "counts unknown" as "may have committed" and reconciles cautiously. When
+ *   the create group's outcome is exact, the error (`GroupsWriteError`) also carries its
+ *   `landedIds`, so the new rows that landed are reconciled and the others left out;
  * - EXCEPT both groups failed and each error reports 0 rows committed: then nothing of `rows`
  *   landed, and the adapter throws a `BulkWriteError` with 0 committed (its `cause` that same
  *   `DataError`), so the orchestrator neither says "some of your changes were already saved"
@@ -674,7 +676,11 @@ export async function upsertRowsByAction(
   const operation = second
     ? `${label}: both the create and the update group failed (update: ${detail(second.reason)})`
     : `${label}: the ${first.action} group failed while the ${other} group (${groups[other].length} row(s)) was saved`;
-  const wrapped = new DataError(operation, first.reason, dataStatus(first.reason));
+  const createIndex = actions.indexOf("create");
+  const wrapped = new GroupsWriteError(
+    operation, first.reason, dataStatus(first.reason),
+    groupLandedIds(groups.create, settled[createIndex] as PromiseSettledResult<number>),
+  );
   // L2 / F5: both groups failed and BOTH report exactly 0 rows committed (a refused single
   // request, a 501 on every chunk, the per-row guard), so nothing of `rows` landed and 0 is a
   // true prefix count of them. Say so — a `BulkWriteError` with 0 committed around the same
@@ -685,6 +691,39 @@ export async function upsertRowsByAction(
     throw new BulkWriteError(label, table.entitySetName, 0, 0, 0, wrapped);
   }
   throw wrapped;
+}
+
+/**
+ * `upsertRowsByAction`'s error when BOTH groups had rows and one or both failed: a plain `DataError`
+ * (no `rowsCommitted` / `chunksCommitted`: neither group is a prefix of the phase's rows), plus
+ * `landedIds` when the CREATE group's outcome is exact (`groupLandedIds`). The orchestrator reads it
+ * as "these new rows landed, every other new row did not"; existing rows outside it stay unknown
+ * and are reconciled by force, as before (review fix, D75). `name` stays `DataError`.
+ */
+class GroupsWriteError extends DataError {
+  readonly landedIds?: readonly string[];
+
+  constructor(operation: string, cause: unknown, status: number | undefined, landedIds?: readonly string[]) {
+    super(operation, cause, status);
+    if (landedIds) this.landedIds = landedIds;
+  }
+}
+
+/**
+ * Which rows of one action's group landed, when that is known exactly: all of them when it
+ * succeeded; a `BulkPartialWriteError`'s `landedIds` (each parallel chunk is all-or-nothing); the
+ * `rowsCommitted` prefix of a `BulkWriteError` (the group is in input order). Undefined otherwise
+ * (a per-row failure, no counts).
+ */
+function groupLandedIds(
+  rows: readonly UpsertTarget[], outcome: PromiseSettledResult<number>,
+): readonly string[] | undefined {
+  if (outcome.status === "fulfilled") return rows.map((r) => r.id);
+  const reason = outcome.reason as { landedIds?: unknown; rowsCommitted?: unknown } | null;
+  if (typeof reason !== "object" || reason === null) return undefined;
+  if (Array.isArray(reason.landedIds)) return reason.landedIds as string[];
+  if (typeof reason.rowsCommitted === "number") return rows.slice(0, reason.rowsCommitted).map((r) => r.id);
+  return undefined;
 }
 
 /**

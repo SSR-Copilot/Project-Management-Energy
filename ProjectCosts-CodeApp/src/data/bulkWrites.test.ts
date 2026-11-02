@@ -353,6 +353,19 @@ describe("upsertMultiple, parallel > 1", () => {
     expect(e.chunksFailed).toBe(1);
   });
 
+  it("UT-ACREV-001 a partial failure names the rows of the fulfilled chunks (landedIds, a set in input order, not a prefix)", async () => {
+    // 4 × 25: chunks 1 and 3 fail, so rows 0–24 and 50–74 landed.
+    const { transport } = fakeTransport((call) => (call === 1 || call === 3 ? fail() : ok()));
+    const e = (await upsertMultiple(TABLE, rows(100), transport, { parallel: 4 })
+      .catch((x: unknown) => x)) as BulkPartialWriteError;
+    expect(e).toBeInstanceOf(BulkPartialWriteError);
+    const all = rows(100).map((r) => r.id);
+    expect(e.landedIds).toEqual([...all.slice(0, 25), ...all.slice(50, 75)]);
+    expect(e.landedIds).toHaveLength(e.rowsLanded);
+    // Still no prefix counts: the orchestrator must not read it as "the first N landed".
+    expect("rowsCommitted" in e).toBe(false);
+  });
+
   it("UT-BULK-064 validation runs over every row before any parallel send", async () => {
     const { transport, calls } = fakeTransport();
     const error = await upsertMultiple(TABLE, [...rows(99), row(0)], transport, { parallel: 4 })

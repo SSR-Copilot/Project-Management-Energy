@@ -16,14 +16,18 @@ let inFlight = 0;
 let peakInFlight = 0;
 const bulkCalls: { action: string; rows: number }[] = [];
 const rowUpdates: string[] = [];
+/** When set, the bulk call it answers true for (per action, 0-based in send order) is refused. */
+let refuse: ((action: string, index: number) => boolean) | null = null;
 
 const bulk = (action: string) => async (_set: string, targets: readonly unknown[]) => {
+  const index = bulkCalls.filter((c) => c.action === action).length;
   bulkCalls.push({ action, rows: targets.length });
   inFlight += 1;
   peakInFlight = Math.max(peakInFlight, inFlight);
   try {
     if (hold) await hold;
     await Promise.resolve();
+    if (refuse?.(action, index)) throw new Error(`${action} ${index} refused`);
     if (notImplemented) {
       const { DataError } = await import("@/platform/errors");
       throw new DataError("bulk", "not implemented", 501);
@@ -64,6 +68,7 @@ type Tuning = typeof BULK_TUNING;
 
 afterEach(() => {
   hold = null;
+  refuse = null;
   notImplemented = false;
   inFlight = 0;
   peakInFlight = 0;
@@ -223,5 +228,49 @@ describe("through the bulk sender (`upsertRowsByAction`, the shared write gate)"
     const result = await upsertRowsByAction(CAPEX_COSTS, targets(19, true), "upsert costs");
     expect(bulkCalls.map((c) => c.rows)).toEqual([19]);
     expect(result).toEqual({ requests: 1 + 19 });
+  });
+});
+
+describe("which contracts of a split group landed (review fix, D75)", () => {
+  const ids = (rows: readonly UpsertTarget[]) => rows.map((r) => r.id);
+
+  it("UT-ACREV-005 25 new contracts split 10/10/5: chunk 2 refused → BulkPartialWriteError naming the 15 that landed", async () => {
+    const { BulkPartialWriteError } = await import("./bulkWrites");
+    refuse = (action, index) => action === "create" && index === 1;
+    const rows = targets(25, true, "c");
+    const e = await upsertRowsByAction(CAPEX_CONTRACTS, rows, "upsert contracts").catch((x: unknown) => x);
+    expect(bulkCalls.map((c) => c.rows)).toEqual([10, 10, 5]);
+    expect(e).toBeInstanceOf(BulkPartialWriteError);
+    expect((e as InstanceType<typeof BulkPartialWriteError>).landedIds)
+      .toEqual([...ids(rows).slice(0, 10), ...ids(rows).slice(20)]);
+  });
+
+  it("UT-ACREV-006 both groups had rows, the update group refused: the error names every created row, still no counts", async () => {
+    const { DataError } = await import("@/platform/errors");
+    const { BulkWriteError } = await import("./bulkWrites");
+    refuse = (action) => action === "update";
+    const creates = targets(5, true, "c");
+    const e = await upsertRowsByAction(CAPEX_CONTRACTS, [...creates, ...targets(3, false, "d")], "upsert contracts")
+      .catch((x: unknown) => x) as Record<string, unknown>;
+    expect(e).toBeInstanceOf(DataError);
+    expect(e).not.toBeInstanceOf(BulkWriteError);
+    expect(e.name).toBe("DataError");
+    expect(e).not.toHaveProperty("rowsCommitted");
+    expect(e.landedIds).toEqual(ids(creates));
+  });
+
+  it("UT-ACREV-007 both groups had rows: a partial create split names its landed rows; a refused single create request names none", async () => {
+    refuse = (action, index) => action === "create" && index === 0;
+    const creates = targets(25, true, "c");
+    const e = await upsertRowsByAction(CAPEX_CONTRACTS, [...creates, ...targets(3, false, "d")], "upsert contracts")
+      .catch((x: unknown) => x) as Record<string, unknown>;
+    expect(e.landedIds).toEqual(ids(creates).slice(10));
+
+    bulkCalls.length = 0;
+    const few = targets(5, true, "e");
+    const e2 = await upsertRowsByAction(CAPEX_CONTRACTS, [...few, ...targets(3, false, "f")], "upsert contracts")
+      .catch((x: unknown) => x) as Record<string, unknown>;
+    // One all-or-nothing request refused: none of the new rows landed, and the error says so.
+    expect(e2.landedIds).toEqual([]);
   });
 });
