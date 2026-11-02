@@ -21,6 +21,8 @@
  *  - `formatMs` / `formatRequestDuration`: the save logs' two duration formats.
  *  - `existingIds`: which ids of the two tables still exist (the per-row guard, phase 0, the 404
  *    read-back).
+ *  - `deepInsertContracts` (WS-B, Add Cost from Table only, behind `DEEP_INSERT_NEW_CONTRACTS`):
+ *    new contracts created with their cost rows nested, one POST each, and its per-tab flags.
  *
  * Nothing here plans rows or decides what a save writes; callers pass `UpsertTarget`s already
  * shaped by their own planner.
