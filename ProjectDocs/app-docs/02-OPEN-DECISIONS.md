@@ -5712,3 +5712,337 @@ The first is implemented. Say if 2 or 3 is wanted.
 UT-CONTOUCH-001…007 (rules, with the old behaviour as a twin), UT-CONPANEL-001…010 (the screen),
 UT-CONCHECK-001…005 (the stylesheet sizes). Every mutation of the behaviour above fails a test; see
 CA-22 and CA-23.
+
+## D75 · Add Cost from Table Save performance wave: client timeline, chunk tuning, changed columns only (2 Nov 2026) — PROPOSED
+
+**Status: PROPOSED, local-only branch `feature/AddCostSavePerf`** (worktree
+`Project-Management-Energy-perf\feature`, cut from `RounakDev1` at `615719d`). Not pushed, not
+deployed, not product-approved. **Nothing here has been measured live.** Every timing below is
+either the D51 §11.16 baseline or inferred from a model. The plan, the bottleneck table and the
+benchmark the user must run are in `17-ADDCOST-SAVE-PERF-PLAN.md`. D76 (deep insert) and D77
+(background Save) are the two flag-off parts of the same wave.
+
+Numbering: `master` tops at D61 and the unmerged `origin/Feature2810` uses D62–D74, so this wave
+starts at D75.
+
+### 1. The baseline and the target
+
+Live on DEV (D51 §11.16):
+| Save | Total | Critical path |
+|---|---|---|
+| S: 60 rows on existing contracts | 1,607 ms, 3 requests | cost `CreateMultiple` 1.6 s ‖ cost `UpdateMultiple` 1.3 s ‖ contract update 865 ms |
+| M: 96 rows with new contracts | 1,916 ms | contract `CreateMultiple` 1.4 s, THEN the new contracts' costs 556 ms |
+
+About 90% is server time per bulk request; the rows of one request are processed one after
+another; the smallest request ever measured took 556 ms. Target: 2.5× faster, **S ≤ 643 ms and
+M ≤ 766 ms** (median of 5).
+
+### 2. What changed (all on by default unless stated)
+
+#### 2.1 Client timeline (P0.1, measurement only)
+
+- New `features/cost/costing/saveTimeline.ts`: one timeline per Save (two never overlap, CA-15).
+  Points: click, prepared, first write request (the first `upsert` of `saveAddCostSheetBulk`, first
+  mark wins), resolved (`useSaveAddCostSheet.onSuccess`, with the patch and onSuccess durations),
+  returned, navigated, painted (DEVEX/CAPEX's first commit of a book, one frame plus one task
+  later), and when the deferred prepare line ran.
+- New console line, D59 style, after the paint:
+  `Add Cost from Table client: click→first request 9 ms (prepare 4.2 ms, then 5.0 ms), first request→resolved 1,607 ms, resolve→CAPEX painted 180 ms (onSuccess 8.1 ms, patch 6.0 ms, navigate→paint 178 ms); prepare log 12.0 ms, after the first request`,
+  followed by a collapsed group "Client timeline (from the click)".
+- It prints after the paint; after `PAINT_TIMEOUT_MS` = 10,000 ms without one ("not within …");
+  at once when the Save stays on the sheet or fails; never for a Save the round-trip check
+  refused; a timeline still waiting when a new click arrives prints as `superseded`. A missing
+  point drops its part rather than print a wrong number. Every entry point is wrapped, so a
+  throwing console, clock or timer never reaches the Save.
+
+#### 2.2 Prepare log after the first request (WS-E)
+
+`data/saveLog.ts` gains `deferSaveLog` (prints one task later); `emitSaveLog` first flushes any
+deferred report, so line order is kept. The screen calls `deferSaveLog(prepareLog)` after starting
+`mutateAsync`; the path from `mutateAsync` to the first SDK call is microtasks only (TanStack
+5.102.8), so the console work now runs after the request is dispatched. The round-trip-refused
+branch still prints at once. Line order: success = prepare, the data layer's lines, the client
+line after the paint; failure = prepare, `save failed`, the screen's `save failed: <kind>`, the
+client line. Expected gain: well under 1% (about 12 ms with DevTools open, under 1 ms closed).
+
+#### 2.3 Chunk tuning (WS-A, PROVISIONAL)
+
+All chunk and gate numbers come from one set in `data/bulkSend.ts` (`BulkTuning`), so the split,
+the 501-refused request count and the write gate cannot disagree.
+
+| | minChunk | parallel | maxChunk | write gate (`SAVE_REQUEST_LIMIT`) |
+|---|---|---|---|---|
+| `LEGACY_BULK_TUNING` (before) | 25 (a group under 50 rows is one request) | 4 | 500 | 16 |
+| `TUNED_BULK_TUNING` (in force) | 10 (a group under 20 rows is one request) | 8 | 500 | 24 |
+
+Model (inferred, not measured): one bulk request takes `a + b × rows`, `a` ≈ 0.5 s, `b` ≈ 22–32 ms
+per row (from the two §11.16 saves). Chunks sent together overlap. minChunk 10 keeps a chunk's row
+time at about `a/2`; parallel 8 covers the measured 25–50-row groups; the gate of 24 binds only on
+large saves. Peak gated in flight: 24 + 4 + 4 = 32 (36 with the CAPEX panel's delete gate), under
+Dataverse's 52 per user. **Reads are not gated** (review finding; CA-26): a large `existingIds`
+read beside full write slots can pass 52.
+
+The save log's gate tail now reads `/24`. `upsertMultiple`'s own defaults are unchanged, so a
+caller that passes nothing behaves as before.
+
+#### 2.4 Contract updates send only the columns that change (WS-D, B5)
+
+`CHANGED_COLUMNS_ONLY` in `features/cost/add-costs-from-table/savePlan.ts`. An existing contract's
+UPDATE carries only the columns whose planned value differs from the snapshot, plus
+`vsb_totalcost` only when the total changes or the stored total is unknown. Unchanged: no write
+when nothing differs; `{vsb_totalcost}` alone when only the total changed; creates carry the full
+bag, the Project and Account binds, the owning-BU bind (rule 4) and the total; an existing id not
+in the snapshot gets the full bag.
+
+- `BLANK_READS_AS`: `vsb_name` and `vsb_iseditedfrompcf` are lossy on read (`?? ""`, `=== true`),
+  so a planned `""` / `false` is sent whenever another column of the same row is sent and never on
+  its own. That keeps the final row identical to the full-bag path, stored nulls included.
+- `applied` (D51 §11.19) is unchanged: the book is still patched with every column.
+- **DIVERGENCE, concurrent edits only (review finding, marked in `savePlan.ts`).** The final row
+  equals the full-bag path only while the snapshot equals the stored row. If another tab or user
+  changed a column after the sheet loaded (or after the `refreshBeforePlan` re-read), the canvas
+  Patch and the full bag overwrote it with the sheet's value; now a column the sheet did not change
+  keeps the other writer's value (column-level instead of row-level last-writer-wins). Meanwhile the
+  book is patched with the sheet's value for that column until the post-save refetch replaces it.
+  Product owner to confirm (see §7).
+- Expected gain: small, tens of ms at most on the 865 ms contract update, unless audit costs per
+  changed column (WS-C finding 4: the contract table audits 20+ columns).
+
+#### 2.5 Review fixes (2 Nov 2026)
+
+An independent review of the merged branch raised one medium and three low findings:
+- **Medium, fixed (CA-24).** With minChunk 10, a creates-only contract group of 20–49 new contracts
+  became parallel chunks. A partial failure threw `BulkPartialWriteError` without counts, so the
+  reconcile marked every new contract `unverified` and never repaired the totals of the ones that
+  landed. `BulkPartialWriteError` now carries `landedIds` (every row of each fulfilled,
+  all-or-nothing chunk). `upsertRowsByAction`'s two-group error (`GroupsWriteError`, still a
+  `DataError` with no counts) carries the create group's `landedIds` when they are exact.
+  `reconcileScope` compares the landed new contracts and leaves the others out. This also closes the
+  same gap for groups of 50+ rows that existed before the tuning. Tests UT-ACREV-001…007.
+- **Low, documented.** `CHANGED_COLUMNS_ONLY` was described as row-neutral; it is not under
+  concurrent edits (§2.4).
+- **Low, documented, open (CA-26).** The write-gate rationale claimed 16 slots were left for reads;
+  reads are not gated. The comment now states the worst case.
+- **Low, fixed.** UT-BULKCHUNK-023 now asserts on the chunk sizes actually sent, not their average.
+
+### 3. Flags
+
+| Flag | Where | Default | `false` / off restores |
+|---|---|---|---|
+| `TUNED_CHUNKING` | `data/bulkSend.ts` | `true` | `LEGACY_BULK_TUNING` exactly: 25 / 4 / 500, gate 16, the legacy 501 refused-request count |
+| `CHANGED_COLUMNS_ONLY` | `add-costs-from-table/savePlan.ts` (per plan: `deps.changedColumnsOnly`) | `true` | the full contract column bag plus the total on every changed existing contract |
+| `PAINT_TIMEOUT_MS` | `costing/saveTimeline.ts` | 10,000 ms | measurement only, nothing to restore |
+| `DEEP_INSERT_NEW_CONTRACTS` | `data/addCostSheet.ts` | `false` | D76 |
+| `BACKGROUND_SAVE` | `costing/backgroundSave.ts` | `false` | D77 |
+
+The prepare-log deferral has no flag (it changes only when a console line prints): to restore the
+old timing, replace `deferSaveLog(prepareLog, …)` in `add-costs-from-table/Screen.tsx` with
+`emitSaveLog(prepareLog)` before `save.reset()`. None of these is a canvas DIVERGENCE except the
+concurrent-edit case in §2.4 and the two flag-off parts D76 and D77.
+
+### 4. Expected against the target (inferred, not measured)
+
+| Save | Baseline | WS-A tuning | + WS-D, WS-E | Target | Reached? |
+|---|---|---|---|---|---|
+| S (60 rows, existing contracts) | 1,607 ms | about 820–870 ms (≈ 1.9×; the 865 ms contract update becomes the floor) | a few ms to tens of ms less | ≤ 643 ms | **No, modelled.** minChunk ≈ 5 models 635–660 ms at 15–16 requests; a one-constant change once P0.3 confirms `a` and `b` |
+| M (96 rows, new contracts) | 1,916 ms | about 1.9 s (neither the contract create nor stage B splits) | about the same | ≤ 766 ms | **No.** D76 removes at most the 556 ms hop; the 1.4 s contract create stays the floor |
+| 1,000 rows | about 3.9 s | about 2.4 s | — | — | — |
+| 3,500 rows | about 12.3 s | about 6.4 s | — | — | — |
+
+The 2.5× target is **not** reachable by client changes alone on the measured shapes. What is left
+is the server's own work per row (WS-C, `17-ADDCOST-SAVE-PERF-PLAN.md` §6): the inherited sharing
+row on every create (finding 6, inferred 10–30% of create time) and auditing (finding 4, inferred
+5–15%). Only the perceived time can reach the target, through D77.
+
+### 5. Tests
+
+- UT-ACPERF-001…006, 010…015, 020…023 (`saveTimeline.test.ts`), 030…033
+  (`add-costs-from-table/Screen.perf.test.tsx`, jsdom), 040, 041 (`addCostSheet.timeline.test.ts`).
+- UT-BULKCHUNK-001…004, 010…023, 030…033 (`data/bulkTuning.test.ts`). Pins that depended on the old
+  numbers now derive from the exported constants (UT-ACSHEET-BULK-017, 040, 048, 051, 054, 062;
+  UT-ACSHEET-LOG-005, 007…009; UT-SAVELOG-009, 010, 031; two `capexWrites.bulk.test.ts` regexes).
+- UT-ACSAVE-PAYLOAD-001…012 (`savePlan.test.ts`); UT-ACSAVE-004 (new shape plus the flag-off bag)
+  and UT-ACSAVE-035 (renamed "a target") were edited, ids kept.
+- UT-ACREV-001…007 (review fix): `bulkWrites.test.ts` 001, `addCostSheetBulk.test.ts` 002…004,
+  `bulkTuning.test.ts` 005…007.
+- Every new constant and branch has a mutation check that a test kills (8 for P0.1/WS-E, 10 for
+  WS-A, 6 for WS-D, 7 for the review fix).
+- **Last `npm run verify`** (2 Nov 2026, on `43a6a73`, the branch's code after the review fixes):
+  exit 0; `check:power` 89 registered, 0 problems; labels 0 missing; canvas C1–C5 0; 193 files,
+  4,797 tests, all passed (no worker-start timeouts); build OK. knip: 20 unused files, the known
+  baseline.
+
+### 6. Risks
+
+- The tuned numbers are a model. 8+ parallel requests on one table may not keep `a` and `b`
+  (locks on a shared parent contract, the browser's connections per host, the org's degree of
+  parallelism), and 24 in flight may raise 429s. Writes are not retried on 429.
+- More, smaller requests mean more partial-failure shapes. CA-24's fix covers the contract groups;
+  a partial cost group is reconciled cautiously, as before.
+- The client timeline's "first request" is the first `upsert` call, not the SDK send itself; on a
+  retry it follows the refresh/verify read.
+
+### 7. What the product owner is being asked
+
+1. Keep `TUNED_CHUNKING` on after the P0.2 benchmark, and approve the P0.3 chunk-size probe, which
+   writes test rows to DEV (`17-ADDCOST-SAVE-PERF-PLAN.md` §4 and §5a).
+2. Accept the concurrent-edit DIVERGENCE of `CHANGED_COLUMNS_ONLY` (§2.4), or switch it off.
+3. Whether a Dataverse admin may act on WS-C findings 6 and 4 (`17-…` §6).
+
+## D76 · Add Cost from Table: new contracts created with their costs in one deep insert (2 Nov 2026) — PROPOSED, flag off
+
+**Status: PROPOSED, built behind `DEEP_INSERT_NEW_CONTRACTS = false`** (`data/addCostSheet.ts`) on
+the local-only branch `feature/AddCostSavePerf`. Off by default: the Save sends exactly today's
+requests. Not measured live. Needs a live DEV run and product sign-off before it is switched on.
+
+### 1. Why
+
+On the M save (D75 §1), the new contracts' costs (stage 2b) wait for the contract `CreateMultiple`
+(1.4 s), then take 556 ms. Removing that serial hop is the only client lever on M's critical path.
+
+### 2. Evidence (feasibility)
+
+- **Deep insert is documented for a single create only.** Microsoft Learn, "Create a table row using
+  the Web API", section "Create related table rows in one operation": creating related rows as
+  navigation-property values "is known as deep insert", one "atomic operation [that] succeeds or
+  fails entirely"; "The URIs for the related entities created aren't returned."
+- **`CreateMultiple` with nested Targets is not documented** (the CreateMultiple reference, the
+  bulk-operations and optimize-performance pages, and the plug-in and troubleshooting pages say
+  nothing about related rows). It was not used.
+- **The SDK forwards the body unchanged** (`@microsoft/power-apps` 1.3.1: `createRecordAsync` →
+  `createDataAsync` → `JSON.stringify` into a Blob, sent through the host's `sendHttp` with a
+  BatchInfo header and `Prefer: return=representation`). What the host does with nested arrays is
+  unknown until a live run.
+- **The navigation property** is `vsb_capexcost_Contract_vsb_capexprojectcontract` (one-to-many,
+  referencing attribute `vsb_Contract`, Cascade delete), from
+  `ProjectDocs/_extracted/VSBCloud/customizations.xml`.
+
+### 3. What was built
+
+- Pure `deepInsertPlan` (`data/addCostSheetBulk.ts`), run on the targets as sent (after phase 0's
+  retry flip). Each new contract with stage-B rows becomes a group; nested rows keep their id and
+  every field, including the owning-BU bind (rule 4), and lose `vsb_Contract@odata.bind` (the
+  parent links them). Today's path is kept when there are more than `DEEP_INSERT_MAX_CONTRACTS` (8)
+  groups, a group has more than `DEEP_INSERT_MAX_COSTS` (24) rows, or a stage-B row is not new.
+- A new operation (1') `contractsDeep` starts with (1) (now only the flat contract rows) and (2a);
+  (2b) becomes empty.
+- Sender `deepInsertContracts` (`data/bulkSend.ts`): one POST per new contract, all at once, each
+  through the save gate and meter. It validates first (`BulkValidationError`, nothing sent). On a
+  tab's first deep insert it reads the nested cost ids back; a missing row, or a failed read, throws
+  `DeepInsertError` with `childrenMissing`, so a host that drops the nested array cannot leave a
+  contract with a total and no costs.
+- Reconcile: each POST is atomic, so `DeepInsertError.landedIds` is exact; a landed contract is
+  compared, a failed one left out; no `landedIds` leaves them `unverified`.
+- Session flags: `vsb.addCostSheet.deepInsertUnavailable` (any failure; the rest of the tab takes
+  the `CreateMultiple` path with the same ids) and `vsb.addCostSheet.deepInsertConfirmed` (a fully
+  read-back success; later saves skip the read).
+- Log: step `upsert new contracts with their costs (deep insert)`, entry
+  `(create N req deep insert [ms, …])`. The count includes the read-back on success.
+
+**DIVERGENCE (flag on only; request shape and write order).** The canvas creates the contract, then
+each cost row. Here a new contract and its new cost rows are one POST. Rows, columns, ids and owning
+BU are the same.
+
+### 4. Expected (inferred, not measured)
+
+M's critical path becomes the slowest deep POST: about 1.4 s + `b_deep × k` (k nested rows of the
+largest new contract). Net gain about 0–0.5 s for small new contracts, about zero or negative near
+24 rows (hence the cap). `b_deep` is unknown: deep-insert children run as separate Create
+operations and may be slower per row than `CreateMultiple`. The first deep insert per tab adds one
+read (likely 0.2–0.5 s). **D76 alone does not reach the 766 ms target**; the 1.4 s contract create
+remains the floor.
+
+### 5. Tests
+
+UT-ACDEEP-001…016 (`addCostSheetBulk.deep.test.ts`) and 020…027 (`addCostSheet.deep.test.ts`),
+13 mutations killed. UT-ACDEEP-014 and 021 pin that the flag off sends exactly today's requests.
+
+### 6. To confirm on DEV before switching it on (flag on, a test project)
+
+- the host forwards the nested array; Dataverse accepts client-minted ids and
+  `owningbusinessunit@odata.bind` on nested rows; a nested row without its contract bind is linked;
+- the log shows the deep-insert step and no `upsert costs (new contracts)` step; a second save in the
+  same tab makes no `check existing vsb_capexcosts` read;
+- a forced failure makes the tab fall back to `CreateMultiple` with the same ids;
+- `b_deep`, then tune the two thresholds (both PROVISIONAL).
+
+### 7. Alternative if the host refuses nested payloads
+
+A Dataverse Custom API (a plug-in that creates the contracts and their costs in one transaction).
+It would also give the all-or-nothing save KNOWN-RISKS asks for. Cost: a C# plug-in assembly, a
+Custom API definition in the VSBCloud solution, a new data source (`pa` CLI), admin deployment and
+ALM; several days, outside this repo's client-only scope.
+
+### 8. What the product owner is being asked
+
+Approve the live DEV test of §6, then decide whether to switch the flag on. Treat the flag like
+`BULK_SAVE`: a live product decision.
+
+## D77 · Add Cost from Table: optional background Save (2 Nov 2026) — PROPOSED, flag off
+
+**Status: PROPOSED, built behind `BACKGROUND_SAVE = false`** (`features/cost/costing/backgroundSave.ts`)
+on the local-only branch `feature/AddCostSavePerf`. Off by default. Not run live. Product decision.
+
+### 1. The divergence
+
+The canvas keeps `cmp_Costs_PopUpLoading_CostDescriptionAddCostFromTable`
+(`locIsVisiblePopUpSpinner`, "Please wait, saving costs...") up until the Save has finished, then
+navigates. **DIVERGENCE (rule 8), flag on only:** the code app navigates back to DEVEX/CAPEX as soon
+as `prepareSheetSave` accepts the sheet and finishes the Save in the background. The flag restores
+the canvas order; tests pin both halves.
+
+### 2. What the user sees with the flag on
+
+- DEVEX/CAPEX at once, with the cached pre-save book and a NEW status toast "Saving the cost table
+  in the background..." (`data-testid` `add-costs-background-save-status`, aria-label = the text).
+  No optimistic patch: `applied` exists only once the Save resolves, so the book is patched then
+  (success) or refetched (failure).
+- Every Cost write on that project stays greyed (the CA-15 lock: the mutation stays pending under
+  `costWriteKey(projectId, 'add-cost-sheet')`). CAPEX's existing line "Please wait, a change started
+  on another screen is still being saved..." shows too.
+- Closing the tab asks first (the shared `beforeunload` hold, `holdBeforeUnload`).
+- A sheet opened meanwhile is locked (grid inert; Add, Delete, Copy, Cancel disabled) and re-read
+  when the Save settles.
+- Success: the unchanged `onSuccess` patch, then a NEW toast "The cost table has been saved.".
+- Failure: the book and totals are refetched (the cache rolls back to what landed), an open sheet is
+  re-read, and the existing CA-15 error toast shows with the mapped failure text. The sheet's edits
+  that did not land are lost: the user reopens Add Cost from Table (a fresh read; landed rows are
+  updated, not duplicated) and re-enters the rest.
+
+### 3. Flag off
+
+`mutateAsync` gets the same arguments (no `background` key); no hook branch runs; navigation, the
+banner and the same-sheet retry behave as before (UT-ACBG-020…022, 040…043).
+
+### 4. Components
+
+`Notify.progress(message, {testId}) => done()` (a spinner toast with no Dismiss) and
+`components/beforeUnload.ts` `holdBeforeUnload()`, which `useBeforeUnload` now delegates to. Neither
+is re-exported from `components/index.ts` (no new knip findings).
+
+### 5. Expected (inferred)
+
+Perceived time, click to DEVEX/CAPEX visible: prepare + navigate + paint, tens of ms with a cached
+book; it would meet the target **for perceived time only**. Server time, the request count and 429
+exposure are unchanged; the saved values appear at the same moment as today. The D75 client
+timeline ends at the paint, so with the flag on its line has no "first request→resolved" part.
+
+### 6. Tests
+
+UT-ACBG-001…007 (`backgroundSave.test.ts`), 010…015 and 020…022
+(`useSaveAddCostSheet.background.test.tsx`, jsdom, real QueryClient), 030…033 and 040…043
+(`add-costs-from-table/Screen.background.test.tsx`); 12 mutations killed.
+
+### 7. What the product owner is being asked
+
+1. Enable `BACKGROUND_SAVE`? The trade: DEVEX/CAPEX shows before Dataverse has the rows, and a
+   failure loses the edits that did not land.
+2. Wording of the two NEW texts (rule 7): "Saving the cost table in the background..." and "The cost
+   table has been saved.".
+3. The double status on DEVEX/CAPEX (the toast and CAPEX's own `writeRunningElsewhere` line): keep
+   both, or suppress one?
+4. Should the lock and status also cover the deferred background deletes (D51 §11.14–§11.16), which
+   finish after the mutation resolves (as they do with the flag off)?
+5. Other tabs do not see the lock (unchanged, but more likely to matter when the user leaves sooner).
+   Related, existing and not caused by D77: CA-25 (a sheet opened during another Cost write keeps a
+   snapshot read mid-write).
