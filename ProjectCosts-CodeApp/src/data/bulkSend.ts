@@ -43,9 +43,9 @@ import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./addCostSheetBulk";
  * How the bulk writes of a save are cut into requests and how many may be in flight. ONE set, so
  * the split (`sendGroup`), the refused-request count after a 501 (`refusedBulkRequests`) and the
  * write gate (`saveGate`) can never disagree.
- *  - `minChunk`: the smallest chunk a split makes; a group under 2 Ã— this stays one request.
+ *  - `minChunk`: the smallest chunk a split makes; a group under 2 × this stays one request.
  *  - `parallel`: chunks per group sent at once (`upsertMultiple`'s `parallel`).
- *  - `maxChunk`: the largest chunk; above `parallel Ã— maxChunk` rows a group is one request per
+ *  - `maxChunk`: the largest chunk; above `parallel × maxChunk` rows a group is one request per
  *    `maxChunk` rows (`parallelChunkSize`).
  *  - `writeGate`: write requests in flight at once across every save (`SAVE_REQUEST_LIMIT`).
  */
@@ -57,8 +57,8 @@ export interface BulkTuning {
 }
 
 /**
- * The numbers before the WS-A tuning (D51 Â§11.14â€“Â§11.16), exactly: a group under 50 rows is one
- * request, 50â€“2,000 rows are at most 4 chunks of at least 25, above that one request per 500 rows;
+ * The numbers before the WS-A tuning (D51 §11.14–§11.16), exactly: a group under 50 rows is one
+ * request, 50–2,000 rows are at most 4 chunks of at least 25, above that one request per 500 rows;
  * every write passes one gate of 16. `TUNED_CHUNKING = false` restores them.
  */
 export const LEGACY_BULK_TUNING: BulkTuning = Object.freeze({
@@ -67,35 +67,35 @@ export const LEGACY_BULK_TUNING: BulkTuning = Object.freeze({
 
 /**
  * PROVISIONAL until the live probe (request time against rows per request, D51 P0.2) has run on
- * DEV. Every number below is inferred from the two Â§11.16 saves, not measured per request.
+ * DEV. Every number below is inferred from the two §11.16 saves, not measured per request.
  *
- * MODEL. One bulk request takes `a + b Ã— rows`: `a` â‰ˆ 0.5 s is the fixed host and server cost (the
+ * MODEL. One bulk request takes `a + b × rows`: `a` ≈ 0.5 s is the fixed host and server cost (the
  * smallest request ever measured took 556 ms), and the server processes a request's rows one
- * after another. The Â§11.16 logs give each request's time but not its rows, so `b` comes from the
- * totals: the 60-row save's two cost requests took (1.6 âˆ’ 0.5) + (1.3 âˆ’ 0.5) = 1.9 s of row time
- * for 60 rows, b â‰ˆ 32 ms; the 96-row save's three cost requests (1.9 + 1.2 + 0.556 âˆ’ 3 Ã— 0.5 =
- * 2.16 s) give b â‰ˆ 22 ms. So b â‰ˆ 22â€“32 ms per row, about 27 ms. Chunks sent together overlap, so a
- * group of `n` rows split into chunks of `c` takes about `a + b Ã— c` while the gate has room.
- *  - `minChunk` 10: the row share of a chunk, `b Ã— c`, should stay at about half of `a` or less;
+ * after another. The §11.16 logs give each request's time but not its rows, so `b` comes from the
+ * totals: the 60-row save's two cost requests took (1.6 − 0.5) + (1.3 − 0.5) = 1.9 s of row time
+ * for 60 rows, b ≈ 32 ms; the 96-row save's three cost requests (1.9 + 1.2 + 0.556 − 3 × 0.5 =
+ * 2.16 s) give b ≈ 22 ms. So b ≈ 22–32 ms per row, about 27 ms. Chunks sent together overlap, so a
+ * group of `n` rows split into chunks of `c` takes about `a + b × c` while the gate has room.
+ *  - `minChunk` 10: the row share of a chunk, `b × c`, should stay at about half of `a` or less;
  *    below that each halving of `c` saves under 0.14 s and doubles the requests. a / (2b) =
- *    0.5 / 0.054 â‰ˆ 9.3, so 10 (8â€“11 over the range of b). A 10-row chunk is â‰ˆ 0.77 s, against
- *    â‰ˆ 1.8 s for one 49-row request today. A group under 20 rows stays one request, so a 1-month
+ *    0.5 / 0.054 ≈ 9.3, so 10 (8–11 over the range of b). A 10-row chunk is ≈ 0.77 s, against
+ *    ≈ 1.8 s for one 49-row request today. A group under 20 rows stays one request, so a 1-month
  *    edit is still one request.
  *  - `parallel` 8: with chunks of 10, 8 reaches 80 rows at the 10-row floor, which covers the
- *    measured saves (25â€“50 rows per group); a 500-row group is 8 Ã— 63 rows (â‰ˆ 2.2 s, against 4 Ã— 125
- *    â‰ˆ 3.9 s). A save runs up to 4 groups at once (contract create and update, the existing
+ *    measured saves (25–50 rows per group); a 500-row group is 8 × 63 rows (≈ 2.2 s, against 4 × 125
+ *    ≈ 3.9 s). A save runs up to 4 groups at once (contract create and update, the existing
  *    contracts' cost create and update), so 8 per group can already ask for 32 slots: more per
  *    group only queues behind the gate.
  *  - `maxChunk` 500, unchanged: with `parallel` 8 it binds only above 4,000 rows per group, past
- *    the 3,500-row sheet this was sized for. Inside Microsoft's 100â€“1,000 guidance.
+ *    the 3,500-row sheet this was sized for. Inside Microsoft's 100–1,000 guidance.
  *  - `writeGate` 24 (was 16): binds only on large saves. Modelled, with FIFO queueing: a 1,000-row
- *    save 3.4 s at 16 â†’ 2.4 s at 24, a 3,500-row save 8.1 s â†’ 6.4 s; 20 gives 2.7 s and 6.4 s, 32
+ *    save 3.4 s at 16 → 2.4 s at 24, a 3,500-row save 8.1 s → 6.4 s; 20 gives 2.7 s and 6.4 s, 32
  *    gives no more than 24. Peak in flight: 24 writes + 4 contract cascades + 4 cost deletes = 32,
  *    36 with the CAPEX panel's own delete gate of 4 (`capexWrites.ts`), under Dataverse's 52 per
  *    user and leaving 16 for reads (the phase-0 and 404 read-backs are not gated).
  *
  * EXPECTED (inferred, not measured): the 60-row save on existing contracts goes from 1,607 ms to
- * about 0.82â€“0.87 s: its cost groups become 10-row chunks (â‰ˆ 0.82 s) and the 865 ms contract update,
+ * about 0.82–0.87 s: its cost groups become 10-row chunks (≈ 0.82 s) and the 865 ms contract update,
  * one request while it has under 20 rows, becomes the critical path. The 96-row save with new
  * contracts stays at about 1.9 s: its critical path is the contract `CreateMultiple` (1.4 s for a
  * few rows) THEN the new contracts' costs (556 ms), and neither has enough rows to split.
@@ -127,10 +127,10 @@ export const BULK_TUNING: BulkTuning = selectBulkTuning(TUNED_CHUNKING);
  *
  * Microsoft's bulk guidance is to send bulk messages in parallel: the server processes the rows
  * of ONE request in sequence, so a group split into N requests sent together finishes in about
- * `a + b Ã— n / N` instead of `a + b Ã— n` (see `TUNED_BULK_TUNING`). It cannot overload Dataverse:
+ * `a + b × n / N` instead of `a + b × n` (see `TUNED_BULK_TUNING`). It cannot overload Dataverse:
  * every bulk request still passes the shared `saveGate`, which caps the write requests in flight
- * at `SAVE_REQUEST_LIMIT`. A group under 2 Ã— `BULK_TUNING.minChunk` rows stays one request; up to
- * `parallel Ã— maxChunk` rows it is at most `parallel` requests; a bigger group is one request per
+ * at `SAVE_REQUEST_LIMIT`. A group under 2 × `BULK_TUNING.minChunk` rows stays one request; up to
+ * `parallel × maxChunk` rows it is at most `parallel` requests; a bigger group is one request per
  * `maxChunk` rows, all sent at once (`parallelChunkSize`). The 501 fallback still holds: when every
  * parallel request answers 501, `upsertMultiple` throws a `BulkWriteError` with 0 committed, as the
  * sequential path does.
@@ -173,7 +173,7 @@ async function idRows(table: BulkTableInfo, batch: readonly string[]): Promise<r
 }
 
 /**
- * Which of `ids` still exist in `table` â€” the bulk save's phase-0 check (`SavePlanDeps.existingIds`).
+ * Which of `ids` still exist in `table` — the bulk save's phase-0 check (`SavePlanDeps.existingIds`).
  *
  * A server read with `$select` = the primary key only (rule 1), the ids filtered on the server in
  * `chunk` batches of `CHUNK` (rule 2), every page through `fetchAll`, which unwraps (rule 3). No
@@ -302,7 +302,7 @@ export function resetBulkWriteAvailability(): void {
 const ROW_WRITE_CONCURRENCY = DELETE_CONCURRENCY;
 
 /**
- * One ceiling for EVERY write request of a save â€” bulk calls and per-row upserts (deletes have
+ * One ceiling for EVERY write request of a save — bulk calls and per-row upserts (deletes have
  * their own gates, `contractDeleteGate` and `costDeleteGate`). The
  * orchestrator runs up to five operations at once, each with its own pool of 16, which could put
  * ~100 requests in flight, past Dataverse's 52-per-user service-protection limit; writes are not
@@ -322,9 +322,9 @@ const saveGate = createGate(SAVE_REQUEST_LIMIT);
 
 /**
  * Contract deletes have their OWN small gate, outside `saveGate`. Each one is a server-side
- * cascade (measured 5.2 s for one contract, D51 Â§11.14) and they may run on in the background
+ * cascade (measured 5.2 s for one contract, D51 §11.14) and they may run on in the background
  * after Save returns (`DEFER_CONTRACT_DELETES`). Inside the shared gate, 16 slow cascades would
- * hold every slot and stall the upserts â€” cancelling the deferral â€” and would leak into the next
+ * hold every slot and stall the upserts — cancelling the deferral — and would leak into the next
  * save's gate peak and request stats. Peak in flight is therefore `SAVE_REQUEST_LIMIT` (writes,
  * 24; 16 before the WS-A tuning) + 4 (cascades), well under Dataverse's 52-per-user limit.
  */
@@ -334,7 +334,7 @@ export const contractDeleteGate = createGate(CONTRACT_DELETE_LIMIT);
 /**
  * Cost deletes (cleared cells, phase 3 and 3') have their OWN gate too, outside `saveGate`.
  *
- * Measured on DEV, 27 Oct (D51 Â§11.15): 16 per-row cost deletes went through `saveGate` with a
+ * Measured on DEV, 27 Oct (D51 §11.15): 16 per-row cost deletes went through `saveGate` with a
  * pool of `DELETE_CONCURRENCY` (16). They took all 16 slots at t = 0 (`gate peak 16/16`), so
  * every upsert queued about 4 s behind them: the contract upsert finished at 4.7 s and the save at
  * 7.3 s, with the server load pushing each request to about 3 s (`req avg 2971 ms`). With 4
@@ -352,7 +352,7 @@ export const costDeleteGate = createGate(COST_DELETE_LIMIT);
  * ONE save's gated write requests, for its log (D59, measurement only: nothing here changes
  * scheduling). Each save makes its own (`createRequestMeter`) and passes it down
  * (`upsertRowsByAction`'s `opts.meter`, `gatedWrite`), so its statistics never include another
- * save's writes or an earlier save's background reconcile (D56 Â§7), which a module-wide counter
+ * save's writes or an earlier save's background reconcile (D56 §7), which a module-wide counter
  * did.
  *  - `count` / `totalMs` / `maxMs`: this save's finished write requests, timed inside the gate
  *    (queueing excluded).
@@ -435,7 +435,7 @@ const ROW_UPSERT: Readonly<Record<string, (id: string, fields: Readonly<Record<s
 /**
  * The same plan rows as one PATCH `<set>(<id>)` each. The SDK sends no `If-Match`, so Dataverse
  * treats each as an UPSERT: it creates the row with the planner's id when absent and updates it
- * otherwise, which keeps the stable retry ids (D51 Â§3a) and the phase-0 existence check valid.
+ * otherwise, which keeps the stable retry ids (D51 §3a) and the phase-0 existence check valid.
  * Not atomic: a failure throws a plain `DataError` without commit counts, which the orchestrator
  * treats as "may have committed" and reconciles cautiously.
  *
@@ -444,7 +444,7 @@ const ROW_UPSERT: Readonly<Record<string, (id: string, fields: Readonly<Record<s
  * another user deleted since the sheet loaded. So their ids are read back first (`existingIds`,
  * one read per `CHUNK` ids, counted as requests). If ANY is missing, NONE of the group is sent: a
  * `BulkWriteError` with 0 committed is thrown, its cause a `RecordGoneError` naming the first
- * missing id â€” the same "deleted by someone else, nothing of it written" meaning as phase 0's
+ * missing id — the same "deleted by someone else, nothing of it written" meaning as phase 0's
  * `RowsGoneError`, reported through the orchestrator's `SavePlanError` (other operations of the
  * save may have landed by then, so it cannot be the zero-write `RowsGoneError` itself).
  */
@@ -580,7 +580,7 @@ function dataStatus(error: unknown): number | undefined {
  * The planner knows, per row (`UpsertTarget.isNew`), and the orchestrator's phase-0 check turns
  * a "new" id that already exists into `isNew: false`, so `CreateMultiple` never gets an id that
  * exists. So the rows are split, in input order, into `creates` and `updates`, and the two
- * groups go out IN PARALLEL â€” one `CreateMultiple` / `UpdateMultiple` request per 500 rows each
+ * groups go out IN PARALLEL — one `CreateMultiple` / `UpdateMultiple` request per 500 rows each
  * (`upsertMultiple` chunks, validates and unwraps). `UpsertMultiple` is no longer used: it
  * answered 501 against VSBCloud_Dev (D51).
  *
@@ -661,8 +661,8 @@ export async function upsertRowsByAction(
   const wrapped = new DataError(operation, first.reason, dataStatus(first.reason));
   // L2 / F5: both groups failed and BOTH report exactly 0 rows committed (a refused single
   // request, a 501 on every chunk, the per-row guard), so nothing of `rows` landed and 0 is a
-  // true prefix count of them. Say so â€” a `BulkWriteError` with 0 committed around the same
-  // detail â€” instead of the count-less error, which the orchestrator must read as "may have
+  // true prefix count of them. Say so — a `BulkWriteError` with 0 committed around the same
+  // detail — instead of the count-less error, which the orchestrator must read as "may have
   // committed". Any group that fulfilled, or reports rows, or reports no counts at all (a
   // per-row failure, a partial parallel split) keeps the count-less error below.
   if (second && reportsNothingCommitted(first.reason) && reportsNothingCommitted(second.reason)) {
