@@ -161,14 +161,17 @@ describe("chunk sizes and request counts per group", () => {
     expect(bulkRequestCount(60, sequential)).toBe(1);
   });
 
-  it("UT-BULKCHUNK-023 no tuned chunk is above maxChunk, and no split chunk but the last is below minChunk (20…4,000 rows)", () => {
+  it("UT-BULKCHUNK-023 no tuned chunk is above maxChunk, and no split chunk but the last is below minChunk (20…4,000 rows)", async () => {
+    // Review fix: asserts on the chunk sizes `upsertMultiple` actually sends, not their average.
     const { minChunk, parallel, chunkSize } = bulkChunkOptions(TUNED_BULK_TUNING);
     for (let n = 2 * minChunk; n <= 4000; n += 37) {
-      const requests = bulkRequestCount(n, TUNED_BULK_TUNING);
-      const size = Math.ceil(n / requests);
-      expect(size).toBeLessThanOrEqual(chunkSize);
-      expect(size).toBeGreaterThanOrEqual(minChunk);
-      expect(requests).toBeLessThanOrEqual(parallel);
+      const sizes = await sentSizes(n, TUNED_BULK_TUNING);
+      expect(sizes).toHaveLength(bulkRequestCount(n, TUNED_BULK_TUNING));
+      expect(sizes.length).toBeGreaterThan(1);
+      expect(sizes.length).toBeLessThanOrEqual(parallel);
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(chunkSize);
+      for (const size of sizes.slice(0, -1)) expect(size).toBeGreaterThanOrEqual(minChunk);
+      expect(sizes.reduce((a, b) => a + b, 0)).toBe(n);
     }
   });
 });
