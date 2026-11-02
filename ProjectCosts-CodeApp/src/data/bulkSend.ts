@@ -21,6 +21,8 @@
  *  - `formatMs` / `formatRequestDuration`: the save logs' two duration formats.
  *  - `existingIds`: which ids of the two tables still exist (the per-row guard, phase 0, the 404
  *    read-back).
+ *  - `deepInsertContracts` (WS-B, Add Cost from Table only, behind `DEEP_INSERT_NEW_CONTRACTS`):
+ *    new contracts created with their cost rows nested, one POST each, and its per-tab flags.
  *
  * Nothing here plans rows or decides what a save writes; callers pass `UpsertTarget`s already
  * shaped by their own planner.
@@ -34,9 +36,11 @@ import { fetchAll } from "./client";
 import { chunk, idIn } from "./odata";
 import { DELETE_CONCURRENCY, createGate, forEachLimit } from "./concurrency";
 import {
-  BulkWriteError, DEFAULT_BULK_CHUNK, MIN_PARALLEL_CHUNK, parallelChunkSize, toUpsertTargets, upsertMultiple,
+  BulkValidationError, BulkWriteError, DEFAULT_BULK_CHUNK, MIN_PARALLEL_CHUNK, parallelChunkSize, toUpsertTargets, upsertMultiple,
 } from "./bulkWrites";
-import type { BulkTableInfo, BulkUpsertTransport, ExistingIdsReader, UpsertTarget } from "./bulkTypes";
+import type {
+  BulkTableInfo, BulkUpsertTransport, DeepInsertGroup, ExistingIdsReader, UpsertTarget,
+} from "./bulkTypes";
 import { CAPEX_CONTRACTS, CAPEX_COSTS } from "./addCostSheetBulk";
 
 /**
@@ -261,21 +265,30 @@ export function isBulkUnavailable(action: BulkAction): boolean {
   return bulkUnavailable[action];
 }
 
-function readBulk501(action: BulkAction): boolean {
+/** A per-tab flag in `sessionStorage`; false when storage is blocked. */
+function readSessionFlag(key: string): boolean {
   try {
-    return globalThis.sessionStorage?.getItem(BULK_501_KEY[action]) === "1";
+    return globalThis.sessionStorage?.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-function rememberBulk501(action: BulkAction): void {
-  bulkUnavailable[action] = true;
+function writeSessionFlag(key: string): void {
   try {
-    globalThis.sessionStorage?.setItem(BULK_501_KEY[action], "1");
+    globalThis.sessionStorage?.setItem(key, "1");
   } catch {
     // Storage blocked (private window, policy): the in-memory flag still covers this page.
   }
+}
+
+function readBulk501(action: BulkAction): boolean {
+  return readSessionFlag(BULK_501_KEY[action]);
+}
+
+function rememberBulk501(action: BulkAction): void {
+  bulkUnavailable[action] = true;
+  writeSessionFlag(BULK_501_KEY[action]);
 }
 
 /** Test seam: forget every 501 seen earlier in the session, for both actions. */
@@ -473,8 +486,11 @@ async function upsertEachRow(
   return { requests: checks + rows.length };
 }
 
-/** How one action's group of rows actually went out, for the save's timing log. */
-type GroupPath = "bulk" | "per-row after 501" | "per-row since an earlier 501";
+/**
+ * How one action's group of rows actually went out, for the save's timing log. `deep insert`: new
+ * contracts created with their cost rows nested, one POST each (`deepInsertContracts`).
+ */
+type GroupPath = "bulk" | "per-row after 501" | "per-row since an earlier 501" | "deep insert";
 
 /**
  * One action's group, for the log: its path, and on the bulk path each bulk request's own server
@@ -488,7 +504,7 @@ interface GroupTrack { path?: GroupPath; durations?: number[] }
  */
 function groupPathText(track: GroupTrack): string {
   const path = track.path ?? "bulk";
-  const durations = path === "bulk" ? track.durations ?? [] : [];
+  const durations = path === "bulk" || path === "deep insert" ? track.durations ?? [] : [];
   return durations.length === 0 ? path : `${path} [${durations.map((ms) => formatMs(ms)).join(", ")}]`;
 }
 
@@ -680,4 +696,205 @@ function reportsNothingCommitted(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const { rowsCommitted, chunksCommitted } = error as { rowsCommitted?: unknown; chunksCommitted?: unknown };
   return rowsCommitted === 0 && (chunksCommitted === undefined || chunksCommitted === 0);
+}
+
+/* ═══════════════════════════════════════════════════════ deep insert (WS-B) ══ */
+
+/**
+ * The contract → cost one-to-many navigation property, on the contract side: relationship
+ * `vsb_capexcost_Contract_vsb_capexprojectcontract` (Cascade delete), its referenced-role
+ * `NavigationPropertyName` in `ProjectDocs/_extracted/VSBCloud/customizations.xml`. The
+ * referencing role is `vsb_Contract`, the bind a new cost row carries (`vsb_Contract@odata.bind`).
+ */
+export const CONTRACT_COSTS_NAV = "vsb_capexcost_Contract_vsb_capexprojectcontract";
+
+/** The cost row's contract bind; inside a deep insert the parent links the row instead. */
+const COST_CONTRACT_BIND = "vsb_Contract@odata.bind";
+
+/**
+ * The body of one deep-insert POST to `vsb_capexprojectcontracts` (Microsoft Learn, "Create a
+ * table row using the Web API", section "Create related table rows in one operation"): the
+ * contract's own fields and client-minted id, and its new cost rows as an array under
+ * `CONTRACT_COSTS_NAV`, each with its own fields (owning-BU bind included, rule 4) and id. No
+ * `@odata.type`: a plain create addresses its entity set by URL. Pure.
+ */
+export function deepInsertBody(group: DeepInsertGroup): Record<string, unknown> {
+  return {
+    ...group.contract.fields,
+    [CAPEX_CONTRACTS.primaryKey]: group.contract.id,
+    [CONTRACT_COSTS_NAV]: group.costs.map((c) => ({ ...c.fields, [CAPEX_COSTS.primaryKey]: c.id })),
+  };
+}
+
+/**
+ * The deep-insert route's two per-tab flags (`sessionStorage`, like the 501 flags):
+ *  - `unavailable`: a deep insert failed in this tab (refused, or its nested rows did not land).
+ *    Later saves take the CreateMultiple path at once, so a route that refuses the nested payload
+ *    can never block a retry.
+ *  - `confirmed`: a deep insert in this tab landed AND its nested cost rows were read back. Until
+ *    then each deep insert reads its nested ids back (`deepInsertContracts`), because a host that
+ *    dropped the nested array would create the contract without its costs and answer success.
+ */
+const DEEP_INSERT_KEY = {
+  unavailable: "vsb.addCostSheet.deepInsertUnavailable",
+  confirmed: "vsb.addCostSheet.deepInsertConfirmed",
+} as const;
+
+const deepInsertState = {
+  unavailable: readSessionFlag(DEEP_INSERT_KEY.unavailable),
+  confirmed: readSessionFlag(DEEP_INSERT_KEY.confirmed),
+};
+
+/** Whether this tab may still try the deep-insert route (no deep insert failed in it). */
+export function isDeepInsertAvailable(): boolean {
+  return !deepInsertState.unavailable;
+}
+
+/** Test seam: forget both deep-insert flags. */
+export function resetDeepInsertState(): void {
+  for (const key of ["unavailable", "confirmed"] as const) {
+    deepInsertState[key] = false;
+    try {
+      globalThis.sessionStorage?.removeItem(DEEP_INSERT_KEY[key]);
+    } catch {
+      // See `writeSessionFlag`.
+    }
+  }
+}
+
+function rememberDeepInsert(key: keyof typeof DEEP_INSERT_KEY): void {
+  deepInsertState[key] = true;
+  writeSessionFlag(DEEP_INSERT_KEY[key]);
+}
+
+/**
+ * Some deep-insert POSTs failed, or their nested rows did not land. Each POST is ONE atomic
+ * operation (Microsoft: deep insert "succeeds or fails entirely"), so the contracts are exact:
+ * `landedIds` were created (with their cost rows, unless `childrenMissing`), `failedIds` were not.
+ *
+ * DELIBERATELY no `rowsCommitted` / `chunksCommitted`: the orchestrator reads those as "this prefix
+ * of the rows landed", and parallel POSTs are not a prefix. It reads `landedIds` instead.
+ * `cause` is the first failure in input order; `causes` every failure, the read-back's last.
+ */
+export class DeepInsertError extends Error {
+  readonly label: string;
+  readonly landedIds: readonly string[];
+  readonly failedIds: readonly string[];
+  /** The nested cost rows of a landed contract were not found (or could not be read) afterwards. */
+  readonly childrenMissing: boolean;
+  readonly causes: readonly unknown[];
+  /** `Error.cause` exists on the base type, hence the modifier. */
+  override readonly cause: unknown;
+
+  constructor(
+    label: string, landedIds: readonly string[], failedIds: readonly string[], childrenMissing: boolean,
+    causes: readonly unknown[],
+  ) {
+    const first = causes[0];
+    const detail = first instanceof Error ? first.message : String(first);
+    super(
+      `${label}: ${failedIds.length} deep insert(s) failed, ${landedIds.length} contract(s) were created`
+        + `${childrenMissing ? " but their cost rows were not all found" : ""}. First failure: ${detail}`,
+    );
+    this.name = "DeepInsertError";
+    this.label = label;
+    this.landedIds = landedIds;
+    this.failedIds = failedIds;
+    this.childrenMissing = childrenMissing;
+    this.causes = causes;
+    this.cause = first;
+  }
+}
+
+/**
+ * Checks a deep insert's groups before anything is sent (0 committed, `BulkValidationError`):
+ * the same id and reserved-key checks as a bulk upsert, for the contracts and for every nested
+ * row; only NEW rows; no nested array or contract bind already in the fields.
+ */
+function validateDeepInsert(groups: readonly DeepInsertGroup[], label: string): void {
+  toUpsertTargets(CAPEX_CONTRACTS, groups.map((g) => g.contract), label);
+  toUpsertTargets(CAPEX_COSTS, groups.flatMap((g) => g.costs), label);
+  const refuse = (table: BulkTableInfo, reason: string) => new BulkValidationError(label, table.entitySetName, reason);
+  for (const { contract, costs } of groups) {
+    if (!contract.isNew) throw refuse(CAPEX_CONTRACTS, `contract ${contract.id} is not new; only a create can carry nested rows.`);
+    if (Object.prototype.hasOwnProperty.call(contract.fields, CONTRACT_COSTS_NAV)) {
+      throw refuse(CAPEX_CONTRACTS, `contract ${contract.id} sets "${CONTRACT_COSTS_NAV}" in fields; the sender adds it itself.`);
+    }
+    for (const cost of costs) {
+      if (!cost.isNew) throw refuse(CAPEX_COSTS, `cost row ${cost.id} is not new; only a create can be nested.`);
+      if (Object.prototype.hasOwnProperty.call(cost.fields, COST_CONTRACT_BIND)) {
+        throw refuse(CAPEX_COSTS, `cost row ${cost.id} still sets "${COST_CONTRACT_BIND}"; a nested row is linked by its parent.`);
+      }
+    }
+  }
+}
+
+/**
+ * WS-B: creates each NEW contract together with its new cost rows, one deep-insert POST per
+ * contract (`Vsb_capexprojectcontractsService.create`; the SDK sends the body as it is, JSON, with
+ * `Prefer: return=representation`), all POSTs at once, each through the shared `saveGate` and
+ * counted on `opts.meter`. `CreateMultiple` is not used for them: its `Targets` are "records of the
+ * same type", and Microsoft documents deep insert for a single create only.
+ *
+ * READ-BACK. Until a deep insert has been confirmed in this tab, the nested cost ids of the
+ * contracts that landed are read back once (`existingIds`, one read per `CHUNK` ids, counted in
+ * `requests`). All found: the tab is confirmed and later saves skip the read. Any missing, or the
+ * read failed: a `DeepInsertError` with `childrenMissing`, so the orchestrator reconciles those
+ * contracts' totals instead of trusting them.
+ *
+ * FAILURE. Every POST is awaited (`allSettled`), then any failure throws `DeepInsertError` (exact
+ * `landedIds`), and the tab is flagged `unavailable`, so the retry takes the CreateMultiple path.
+ * `report` receives the log summary and group, also on failure. Returns the requests sent.
+ */
+export async function deepInsertContracts(
+  groups: readonly DeepInsertGroup[], label: string,
+  report?: (summary: string, groups: readonly UpsertGroupReport[]) => void,
+  opts: { meter?: RequestMeter } = {},
+): Promise<{ requests: number }> {
+  if (groups.length === 0) return { requests: 0 };
+  const groupLabel = `${label} (deep insert)`;
+  validateDeepInsert(groups, groupLabel);
+  const track: GroupTrack = { path: "deep insert", durations: [] };
+  const durations = track.durations as number[];
+  const settled = await Promise.allSettled(groups.map((group) => gated(
+    async () => unwrap(await Vsb_capexprojectcontractsService.create(deepInsertBody(group) as never), groupLabel),
+    (ms) => { durations.push(ms); }, opts.meter,
+  )));
+  const landed = groups.filter((_, i) => settled[i]?.status === "fulfilled");
+  const failedIds = groups.filter((_, i) => settled[i]?.status !== "fulfilled").map((g) => g.contract.id);
+  const causes: unknown[] = settled.flatMap((s) => (s.status === "rejected" ? [s.reason as unknown] : []));
+  let requests = groups.length;
+  let childrenMissing = false;
+
+  const nested = landed.flatMap((g) => g.costs.map((c) => c.id));
+  if (!deepInsertState.confirmed && nested.length > 0) {
+    requests += chunk(nested).length;
+    try {
+      const found = await existingIds(CAPEX_COSTS, nested);
+      const missing = nested.filter((id) => !found.has(id.toLowerCase())).length;
+      if (missing > 0) {
+        childrenMissing = true;
+        causes.push(new DataError(
+          `${groupLabel}: ${missing} of ${nested.length} nested cost row(s) were not found after their contract was created`,
+        ));
+      } else if (causes.length === 0) {
+        rememberDeepInsert("confirmed");
+      }
+    } catch (readError) {
+      childrenMissing = true;
+      causes.push(new DataError(`${groupLabel}: the nested cost rows could not be read back`, readError));
+    }
+  }
+
+  const failed = causes.length > 0;
+  report?.(
+    `create ${failed ? "failed" : `${requests} req`} ${groupPathText(track)}`,
+    [{
+      action: "create", rows: groups.length + groups.reduce((n, g) => n + g.costs.length, 0),
+      failed, path: "deep insert", durations: [...durations], ...(failed ? {} : { requests }),
+    }],
+  );
+  if (!failed) return { requests };
+  rememberDeepInsert("unavailable");
+  throw new DeepInsertError(groupLabel, landed.map((g) => g.contract.id), failedIds, childrenMissing, causes);
 }

@@ -51,11 +51,13 @@ import {
 } from "./pendingDeletes";
 import { deleteComment, loadComments } from "./comments";
 import { BulkDeleteError, deleteMany } from "./bulkWrites";
-import type { BulkTableInfo, SaveBuildPlan, SavedSheetChanges, UpsertTarget } from "./bulkTypes";
+import type {
+  BulkTableInfo, DeepInsertGroup, SaveBuildPlan, SavedSheetChanges, UpsertTarget,
+} from "./bulkTypes";
 import {
   CONTRACT_DELETE_LIMIT, COST_DELETE_LIMIT, contractDeleteGate, costDeleteGate, createRequestMeter,
-  existingIds, formatMs, formatRequestDuration, isBulkUnavailable, upsertRowsByAction,
-  type RequestMeter, type UpsertGroupReport,
+  deepInsertContracts, existingIds, formatMs, formatRequestDuration, isBulkUnavailable,
+  isDeepInsertAvailable, upsertRowsByAction, type RequestMeter, type UpsertGroupReport,
 } from "./bulkSend";
 import {
   emitSaveLog, errorChainLines, failureSection, gateTail, groupsText, inStartOrder, messageOf, plural,
@@ -266,6 +268,11 @@ export interface SaveAddCostSheetArgs {
    * cleared cells).
    */
   deferCostDeletes?: boolean;
+  /**
+   * Bulk path only: overrides `DEEP_INSERT_NEW_CONTRACTS` for this one call. The screen never sets
+   * it; it lets the suite pin both halves of the decision (`false` = today's (1) → (2b) hop).
+   */
+  deepInsertNewContracts?: boolean;
 }
 
 /**
@@ -323,6 +330,28 @@ export const DEFER_CONTRACT_DELETES = true;
  * (`COST_DELETE_FAILED_RECONCILED` / `COST_DELETE_FAILED_NOT_RECONCILED`).
  */
 export const DEFER_COST_DELETES = true;
+
+/**
+ * WS-B (D51 §11 performance follow-up): create each NEW contract of a save together with its new
+ * cost rows, one deep-insert POST per contract (`deepInsertContracts` in `./bulkSend.ts`), instead
+ * of the contract `CreateMultiple` THEN the new contracts' cost `CreateMultiple` (stage 2b), which
+ * measured 1.4 s then 556 ms on DEV (D51 §11.16). Only while the plan has at most
+ * `DEEP_INSERT_MAX_CONTRACTS` such contracts of at most `DEEP_INSERT_MAX_COSTS` rows each
+ * (`deepInsertPlan`); bigger plans keep today's path.
+ *
+ * DIVERGENCE (request shape only): the canvas creates the contract, then each cost row on its own.
+ * Here, with the flag on, they are created in one request per contract; the rows, columns, ids and
+ * owning BU written are the same.
+ *
+ * DEFAULT OFF. Deep insert is documented for a single create (Microsoft Learn, "Create a table row
+ * using the Web API"), not for `CreateMultiple`, and nothing here has run against VSBCloud_Dev:
+ * that the Power Apps host forwards the nested array, that Dataverse accepts the client-minted ids
+ * and the owning-BU bind on nested rows, and how long a create with k nested rows takes are all
+ * UNVERIFIED until a live run. Until a tab has confirmed it once, each deep insert reads its nested
+ * ids back; any failure turns the route off for the tab (`isDeepInsertAvailable`). `false` sends
+ * exactly today's requests. Treat it like `BULK_SAVE`: a live decision, not dead code.
+ */
+export const DEEP_INSERT_NEW_CONTRACTS = false;
 
 /**
  * The toast when deferred contract deletes failed. NEW text with no canvas equivalent: the canvas
@@ -692,6 +721,10 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * plan, `SheetConflictError`) logs `Add Cost from Table save failed after …` with its request
  * count and root error, and a Failure group with the readable chain.
  *
+ * DEEP INSERT (`DEEP_INSERT_NEW_CONTRACTS`, default off; `args.deepInsertNewContracts` overrides
+ * it): the orchestrator's (1'), logged as `upsert new contracts with their costs (deep insert)
+ * (create N req deep insert [ms, …]) <ms>`; see `executeSavePlan`'s module note.
+ *
  * DIVERGENCE: the canvas (and `saveAddCostSheetLegacy`) write one record per request: contract
  * creates/updates, cost creates/updates, cost deletes, a separate total update per contract,
  * then per deleted contract its comments, cost rows and the contract. Here the WRITE ORDER and
@@ -727,7 +760,8 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
 export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<SaveAddCostSheetResult> {
   const {
     idCache = new Map<string, string>(), refreshBeforePlan = false,
-    deferContractDeletes = DEFER_CONTRACT_DELETES, deferCostDeletes = DEFER_COST_DELETES, ...input
+    deferContractDeletes = DEFER_CONTRACT_DELETES, deferCostDeletes = DEFER_COST_DELETES,
+    deepInsertNewContracts = DEEP_INSERT_NEW_CONTRACTS, ...input
   } = args;
   // Ids issued by an EARLIER attempt (only those can already exist in Dataverse); taken before
   // planning, so ids minted for this save are not read back in phase 0.
@@ -865,6 +899,34 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
         text: `${name} (${groups}) ${formatMs(ms)}`,
         step: {
           label: name, startMs: t0 - started, ms, detail: groupsText(reports),
+          status: requests === undefined ? "failed" : "ok",
+          ...(requests === undefined ? {} : { requests }),
+        },
+      });
+    }
+  };
+  /**
+   * WS-B, `SavePlanDeps.deepInsert`: the new contracts with their nested cost rows, logged like an
+   * upsert, `<step> (create N req deep insert [1,203 ms, …]) <ms>`, under its own step name.
+   */
+  const deepInsert = async (groups: readonly DeepInsertGroup[], label: string, step: string) => {
+    if (!printed) addCostSaveTimeline.mark("firstWrite");
+    const t0 = performance.now();
+    let groupsSummary = "not sent";
+    let reports: readonly UpsertGroupReport[] = [];
+    let requests: number | undefined;
+    try {
+      const result = await deepInsertContracts(
+        groups, label, (summary, g) => { groupsSummary = summary; reports = g; }, { meter },
+      );
+      requests = result.requests;
+      return result;
+    } finally {
+      const ms = elapsed(t0);
+      record({
+        text: `${step} (${groupsSummary}) ${formatMs(ms)}`,
+        step: {
+          label: step, startMs: t0 - started, ms, detail: groupsText(reports),
           status: requests === undefined ? "failed" : "ok",
           ...(requests === undefined ? {} : { requests }),
         },
@@ -1016,6 +1078,8 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
     verifyUpserts,
     deferContractDeletes,
     deferCostDeletes,
+    // WS-B: only with the flag on, and while no deep insert has failed in this tab.
+    ...(deepInsertNewContracts && isDeepInsertAvailable() ? { deepInsert } : {}),
   };
   let result: Awaited<ReturnType<typeof executeSavePlan>>;
   try {
