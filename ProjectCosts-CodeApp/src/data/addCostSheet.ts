@@ -653,9 +653,12 @@ export async function saveAddCostSheet(args: SaveAddCostSheetArgs): Promise<Save
  * and the cost rows of the plan's new contracts follow as soon as the contract upsert landed (the
  * graph and why it is safe: the module note of `./addCostSheetBulk.ts`). Each upsert is one
  * `CreateMultiple` request per 500 new rows and one `UpdateMultiple` request per 500 existing
- * rows, the two sent in parallel (`upsertRowsByAction`, `./bulkSend.ts`), and a group of 50 rows or more split into
- * requests sent at once: up to `BULK_PARALLEL_CHUNKS` of them up to 2,000 rows, one per 500 rows
- * above that (`parallelChunkSize`); `UpsertMultiple` is not used. Each
+ * rows, the two sent in parallel (`upsertRowsByAction`, `./bulkSend.ts`), and a group of at least twice
+ * `BULK_TUNING.minChunk` rows split into requests sent at once: up to `BULK_PARALLEL_CHUNKS` of
+ * them while each stays within `BULK_TUNING.maxChunk` rows, one per `maxChunk` rows above that
+ * (`parallelChunkSize`; the numbers are the tuning in force, `TUNED_CHUNKING` in
+ * `./bulkSend.ts`: 20 rows / 8 requests / 500 rows tuned, 50 / 4 / 500 legacy); `UpsertMultiple`
+ * is not used. Each
  * delete is one request per record. Every write request passes one shared gate of
  * `SAVE_REQUEST_LIMIT`; contract deletes and cost deletes each pass their own gate of 4
  * (`CONTRACT_DELETE_LIMIT`, `COST_DELETE_LIMIT`), so a delete never holds a write slot.
@@ -758,7 +761,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
   const entries: Entry[] = [];
   const backgroundEntries: Entry[] = [];
   const record = (entry: Entry) => { (printed ? backgroundEntries : entries).push(entry); };
-  /** `gate peak 4/16, req avg 1,240 ms max 1,900 ms, verify skipped, 0 already gone`. */
+  /** `gate peak 4/24, req avg 1,240 ms max 1,900 ms, verify skipped, 0 already gone`. */
   const measures = () => `${gateTail(meters.save)}, verify ${verifyUpserts ? "ran" : "skipped"}, ${alreadyGone} already gone`;
   /**
    * Per kind of delete: the requests SENT (each delete call, plus 404 read-backs), counted as they

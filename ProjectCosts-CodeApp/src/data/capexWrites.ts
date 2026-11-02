@@ -206,7 +206,7 @@ interface RecordedStep {
  *
  * GATE TAIL. Only the bulk SAVE sends its writes through the shared `saveGate` (each counted on
  * this save's own `meter`, D59 decision 4), so only its line ends in `gate peak …`. The per-row
- * path and the deletes pass no shared write gate; a tail there would read "0/16" and mislead.
+ * path and the deletes pass no shared write gate; a tail there would read "0/24" and mislead.
  */
 class SaveLog {
   private readonly t0 = performance.now();
@@ -625,8 +625,9 @@ const CAPEX_COMMENTS: BulkTableInfo = {
  * The panel's own delete gate (month rows and comments), apart from `costDeleteGate`: Add Cost
  * from Table's deferred background deletes can still hold that one for many seconds after its
  * Save returned (D51 §11.15), and a panel shrink or Delete right after must not queue behind
- * them (D56 review, finding 5). Peak in flight stays 16 (writes) + 4 + 4 (the sheet's delete
- * gates) + 4 (this) = 28, under Dataverse's 52-per-user limit.
+ * them (D56 review, finding 5). Peak in flight stays `SAVE_REQUEST_LIMIT` (writes: 24 tuned,
+ * 16 legacy, `TUNED_CHUNKING` in `./bulkSend.ts`) + 4 + 4 (the sheet's delete gates) + 4 (this)
+ * = 36 (28 legacy), under Dataverse's 52-per-user limit (UT-BULKCHUNK-004).
  */
 const PANEL_DELETE_LIMIT = 4;
 const panelDeleteGate = createGate(PANEL_DELETE_LIMIT);

@@ -193,9 +193,10 @@ function averageMs(meter: RequestMeter): number {
 }
 
 /**
- * The summary line's gate tail: `gate peak 4/16, req avg 1,240 ms max 1,900 ms`. The peak and the
- * averages are THIS save's write requests only (D59 decision 4); when the shared gate held more at
- * once (other work writing), `, shared gate peak 6/16` follows.
+ * The summary line's gate tail: `gate peak 4/24, req avg 1,240 ms max 1,900 ms` (the denominator
+ * is `SAVE_REQUEST_LIMIT`: 24 tuned, 16 legacy). The peak and the averages are THIS save's write
+ * requests only (D59 decision 4); when the shared gate held more at once (other work writing),
+ * `, shared gate peak 6/24` follows.
  */
 export function gateTail(meter: RequestMeter): string {
   return `gate peak ${meter.peak}/${SAVE_REQUEST_LIMIT}, `
