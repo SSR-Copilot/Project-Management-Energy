@@ -428,17 +428,18 @@ function ChoiceField({ label, testId, value, options, disabled, onChange }: {
 }
 
 /** The drawer's percentage box as the canvas shows it; see `securedPercent` for the arithmetic. */
-function canvasAquisitionPercent(secured: string, required: string): number | string {
+function canvasAquisitionPercent(secured: string, required: string, language?: Parameters<typeof securedPercent>[2]): number | string {
   const isBlank = (v: string) => v.trim() === "";
   const notNumber = (v: string) => !isBlank(v) && Number.isNaN(Number(v.replace(",", ".")));
   if (notNumber(secured) || notNumber(required)) return "";
   if (isBlank(secured) || isBlank(required)) return 0;
-  return securedPercent(secured, required);
+  return securedPercent(secured, required, language);
 }
 
 export default function PlanningScreen() {
   const s = useStyles();
-  const { projectId } = useSession();
+  // The user's language (`Language()` in the canvas): the height-limit box and the acquisition numbers follow its decimal separator.
+  const { projectId, locale: lang } = useSession();
   const [params, setParams] = useSearchParams();
   const tab = parseTab(params.get("tab"));
 
@@ -454,7 +455,7 @@ export default function PlanningScreen() {
   const procedureQ = useCustomChoiceValues(CUSTOM_CHOICE_FIELD.permitProcedure, countryId, Boolean(project));
   const writes = usePlanningWrites(projectId);
 
-  const baseline = useMemo(() => toPlanningForm(planning), [planning]);
+  const baseline = useMemo(() => toPlanningForm(planning, lang), [planning, lang]);
   const [edited, setEdited] = useState<PlanningForm | null>(null);
   const form = edited ?? baseline;
 
@@ -467,12 +468,12 @@ export default function PlanningScreen() {
   const busy = writes.progress !== null;
   const gating = { project, canEdit: PLANNING_CAN_EDIT };
   const editable = canEditPlanning(gating) && !busy;
-  const validity = validatePlanning(form);
+  const validity = validatePlanning(form, lang);
   const legalOptions = customChoiceOptions(legalQ.data, countryId).map((o) => ({ value: o.id, label: o.label }));
   const procedureOptions = customChoiceOptions(procedureQ.data, countryId).map((o) => ({ value: o.id, label: o.label }));
   const selectedPermit = permitsQ.data.find((p) => p.id === selectedPermitId) ?? null;
   const permitGates = permitCommandState(gating, selectedPermit);
-  const saveEnabled = canSave({ project, canEdit: PLANNING_CAN_EDIT, form, baseline, busy });
+  const saveEnabled = canSave({ project, canEdit: PLANNING_CAN_EDIT, form, baseline, busy, language: lang });
   const cancelEnabled = !busy && canReset(form, baseline);
   const lock = loading ? [] : pageLock(project);
 
@@ -500,7 +501,7 @@ export default function PlanningScreen() {
 
   const onSave = async () => {
     writes.clear();
-    const ids = await writes.run(savePlanningJob(form, project, planning));
+    const ids = await writes.run(savePlanningJob(form, project, planning, lang));
     if (ids !== null) setEdited(null);
   };
   const onReset = () => { writes.clear(); setEdited(resetPlanningForm(form, baseline)); setSelectedPermitId(null); };
@@ -521,7 +522,7 @@ export default function PlanningScreen() {
 
   const onSaveAquisition = async () => {
     if (!aquisition) return;
-    const job = saveAquisitionJob(aquisition.draft, aquisition.row, project);
+    const job = saveAquisitionJob(aquisition.draft, aquisition.row, project, lang);
     setAquisition(null);
     await writes.run(job);
   };
@@ -577,7 +578,7 @@ export default function PlanningScreen() {
                       icon={<EditRegular />}
                       className={s.aqEdit}
                       disabled={busy}
-                      onClick={() => { writes.clear(); setAquisition({ row: r, lla, draft: aquisitionDraftFrom(r) }); }}
+                      onClick={() => { writes.clear(); setAquisition({ row: r, lla, draft: aquisitionDraftFrom(r, lang) }); }}
                       aria-label={`pcf_but_${C}_AquisitionStatus_${testBase}_Edit`}
                       data-testid={`pcf_but_${C}_AquisitionStatus_${testBase}_Edit`}
                     />
@@ -591,10 +592,10 @@ export default function PlanningScreen() {
     );
   };
 
-  const aqValidity = aquisition ? validateAquisition(aquisition.draft) : null;
+  const aqValidity = aquisition ? validateAquisition(aquisition.draft, lang) : null;
   // As the canvas shows it (PO, 28 Oct 2026): a blank Secured or Required reads 0, text that is not
   // a number leaves the box blank (no "N/A"); only `Required = 0` is "N/A".
-  const aqPercent = aquisition ? canvasAquisitionPercent(aquisition.draft.secured, aquisition.draft.required) : "";
+  const aqPercent = aquisition ? canvasAquisitionPercent(aquisition.draft.secured, aquisition.draft.required, lang) : "";
   const setPermitDraft = (patch: Partial<PermitDraft>) =>
     permitPanel && setPermitPanel({ ...permitPanel, draft: { ...permitPanel.draft, ...patch } });
 
@@ -932,9 +933,9 @@ export default function PlanningScreen() {
             </Tooltip>
             {aquisition?.lla === "rem" ? (
               <Button
-                appearance={busy || !canSaveAquisition(aquisition.draft) ? "subtle" : "primary"}
+                appearance={busy || !canSaveAquisition(aquisition.draft, lang) ? "subtle" : "primary"}
                 icon={<CheckmarkRegular />}
-                disabled={busy || !canSaveAquisition(aquisition.draft)}
+                disabled={busy || !canSaveAquisition(aquisition.draft, lang)}
                 onClick={() => void onSaveAquisition()}
                 aria-label="pcf_btn_ProjectPlanning_RightPanel_AquisitionStatus_InpForm_Buttons_Save_InRem"
                 data-testid="pcf_btn_ProjectPlanning_RightPanel_AquisitionStatus_InpForm_Buttons_Save_InRem"
@@ -943,9 +944,9 @@ export default function PlanningScreen() {
               </Button>
             ) : (
               <Button
-                appearance={busy || !aquisition || !canSaveAquisition(aquisition.draft) ? "subtle" : "primary"}
+                appearance={busy || !aquisition || !canSaveAquisition(aquisition.draft, lang) ? "subtle" : "primary"}
                 icon={<CheckmarkRegular />}
-                disabled={busy || !aquisition || !canSaveAquisition(aquisition.draft)}
+                disabled={busy || !aquisition || !canSaveAquisition(aquisition.draft, lang)}
                 onClick={() => void onSaveAquisition()}
                 aria-label="pcf_btn_ProjectPlanning_RightPanel_AquisitionStatus_InpForm_Buttons_Save_UnderLaw"
                 data-testid="pcf_btn_ProjectPlanning_RightPanel_AquisitionStatus_InpForm_Buttons_Save_UnderLaw"

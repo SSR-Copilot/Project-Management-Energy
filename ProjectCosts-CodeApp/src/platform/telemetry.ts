@@ -7,6 +7,9 @@
  * completely silent. This buffer keeps the capture (the report panel needs it) and the UI
  * layer is responsible for actually saying something.
  */
+import { rootCauseDetail } from "./errors";
+import { logError } from "./requestLog";
+
 export type Severity = "information" | "warning" | "error" | "critical";
 
 export interface TraceEntry {
@@ -22,7 +25,27 @@ const entries: TraceEntry[] = [];
 const listeners = new Set<() => void>();
 const sinks = new Set<(entry: TraceEntry) => void>();
 
-export function trace(severity: Severity, message: string, detail?: unknown): void {
+/** The server-side reason of `detail`, as text: the Dataverse root cause, else the error's own message. */
+function causeText(detail: unknown): string | undefined {
+  const root = rootCauseDetail(detail);
+  if (root) return root.length > 300 ? `${root.slice(0, 299)}…` : root;
+  if (detail instanceof Error && detail.message !== "") return detail.message.slice(0, 300);
+  return undefined;
+}
+
+/**
+ * `quiet` keeps the entry in the buffer without a console line: for a failed request, whose
+ * `[VSB] HTTP … → 4xx` line is already there (`platform/powerClient.ts`).
+ */
+export function trace(severity: Severity, message: string, detail?: unknown, quiet = false): void {
+  // Errors reach the console in one format, with their root cause (D74). A warning is not an error.
+  if (!quiet && (severity === "error" || severity === "critical")) {
+    try {
+      logError(message, causeText(detail), severity === "critical");
+    } catch {
+      // Logging must never break the caller.
+    }
+  }
   const entry: TraceEntry = { severity, message, at: new Date().toISOString(), detail };
   entries.push(entry);
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);

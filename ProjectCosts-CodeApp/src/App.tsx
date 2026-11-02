@@ -18,6 +18,7 @@ import { AppShell, LoadingOverlay, EmptyState, pmHeaderTitle } from "@/component
 import { useSession } from "@/app/SessionContext";
 import { AppRoutes } from "@/app/routes";
 import { adminEntriesVisible } from "@/app/adminAccess";
+import { adminPageTitle } from "@/app/adminTitles";
 import { lastError } from "@/platform/telemetry";
 import { ReportProblemPanel } from "@/features/shared/report-problem/ReportProblemPanel";
 
@@ -69,15 +70,13 @@ export default function App() {
    * Through the router, so the unsaved-changes guard (`useBlocker`) still gets its say.
    */
   const pageTitle = onProjectScreen ? pmHeaderTitle(projectId, project?.projectName)
-    : showsProject ? project?.projectName || undefined : undefined;
+    : showsProject ? project?.projectName || undefined : adminPageTitle(pathname);
   /* The two admin role flags, with the local-run bypass (`app/adminAccess.ts`). */
   const adminVisible = adminEntriesVisible(currentUser.data);
 
   return (
     <AppShell
       showRail={showRail}
-      // The PM screens (Add and Edit Project) show no "Version …" strip, like the canvas (PO, 27 Oct 2026).
-      showFooter={showRail && !onProjectScreen}
       contentScrolls={onProjectScreen || onAdminScreen}
       {...(pageTitle ? { pageTitle } : {})}
       {...(onProjectScreen && project?.clusterStateName ? { projectStatus: project.clusterStateName } : {})}

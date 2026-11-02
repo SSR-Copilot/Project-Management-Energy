@@ -211,13 +211,4 @@ export const MSG = {
   subaccountInactive: INACTIVE_SUBACCOUNT_MESSAGE,
   /** NEW — no canvas equivalent: the contract currency (EUR / PLN) must exist (DIVERGENCE, `currencyIssue`). */
   currencyMissing: (code: string) => `Currency ${code} is not configured, so the contract cannot be saved. Ask an administrator to add it.`,
-  // Drawn disabled, as in the canvas (`DisplayMode.Disabled`).
-  /** `btn_Admin_Cost_Landlease_ApplyToLandlease_1.Text` — verbatim. */
-  applyToAll: "Apply to All",
-  /** `btn_Admin_Cost_Landlease_ApplyToLandlease.Text` — verbatim. */
-  apply: "Apply",
-  /** `lbl_Admin_Cost_Landlease_ApplyToLandlease_Info.Text` / `_Info_1.Text` — verbatim. */
-  applyInfo: "Apply standard cost to relevant projects, this will override existing standard assumption cost.",
-  /** NEW — no canvas equivalent: the disabled buttons' tooltip (D20 / D36 §5). */
-  applyNotBuilt: "Apply / Apply to All are not available: they are disabled in the canvas app pending a business decision.",
 } as const;

@@ -69,6 +69,7 @@ import {
   type BackgroundOutcome, type SavePlanDeps,
 } from "./addCostSheetBulk";
 import { planDeleteContract } from "@/features/cost/capex-costs/rules";
+import { logAction } from "@/platform/requestLog";
 import {
   contractUpserts, costWrites, recomputeContractTotal,
   type ExistingContract, type ExistingCost, type SaveFailure, type SheetRow,
@@ -1024,7 +1025,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
       const isContracts = table.entitySetName === CAPEX_CONTRACTS.entitySetName;
       if (isContracts ? deferContractDeletes : deferCostDeletes) {
         // Only a deferred kind: `executeSavePlan` sends it after the writes settled.
-        console.info(backgroundDeleteStartLine(
+        logAction(backgroundDeleteStartLine(
           isContracts ? "contracts" : "costs", ids.length, elapsed(started),
           (isContracts ? contractDeleteGate : costDeleteGate).inFlight(),
           isContracts ? CONTRACT_DELETE_LIMIT : COST_DELETE_LIMIT,

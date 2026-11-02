@@ -22,6 +22,13 @@ describe("SettingsTabStrip", () => {
     expect(onSelect).toHaveBeenCalledWith("b");
   });
 
+  it("UT-SETLAYOUT-007 Without a measurable width (no layout) every tab stays in the list and there is no overflow menu", () => {
+    wrap(<SettingsTabStrip tabs={TABS} selected="a" onSelect={vi.fn()} ariaLabel="Country and technology" tabTestIdPrefix="tab_x" />);
+    expect(screen.getAllByRole("tab")).toHaveLength(TABS.length);
+    expect(screen.queryByRole("tab", { name: "More tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tab_x-overflow")).not.toBeInTheDocument();
+  });
+
   it("UT-SETLAYOUT-002 Size and band options change the rendering", () => {
     wrap(<>
       <SettingsTabStrip tabs={TABS} selected="a" onSelect={vi.fn()} ariaLabel="one" testId="ca" />

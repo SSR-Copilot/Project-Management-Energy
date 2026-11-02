@@ -5,7 +5,7 @@ import { useVisuallyHiddenStyles } from "@/theme/visuallyHidden";
 
 export interface VisuallyHiddenProps {
   children?: ReactNode;
-  as?: "span" | "div";
+  as?: "span" | "div" | "h1";
   id?: string;
   role?: AriaRole;
   "aria-live"?: "polite" | "assertive" | "off";

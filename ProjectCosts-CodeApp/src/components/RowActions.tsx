@@ -19,6 +19,7 @@
 import type { ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses } from "@fluentui/react-components";
 import { palette, space } from "@/theme/tokens";
+import { useRowActionStyles } from "@/theme/buttonStyles";
 import { DisabledReason } from "./DisabledReason";
 
 const useStyles = makeStyles({
@@ -75,6 +76,7 @@ export function RowActions({
   gap = 0, align, className,
 }: RowActionsProps) {
   const styles = useStyles();
+  const feedback = useRowActionStyles();
   const toneClass = tone ? styles[tone] : undefined;
   return (
     <div className={mergeClasses(
@@ -87,6 +89,8 @@ export function RowActions({
           <Button
             key={a.key}
             appearance={appearance} size={size}
+            // Hover / press feedback only while the action can run (not busy, not locked).
+            {...(!locked && a.disabled !== true ? { className: feedback.interactive } : {})}
             icon={iconClass ? { children: a.icon, className: iconClass } : a.icon}
             disabled={a.disabled === true}
             aria-label={a.label}

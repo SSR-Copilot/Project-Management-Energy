@@ -1,0 +1,72 @@
+[
+ {
+  "text": "Draft to Cluster 1",
+  "x": 226,
+  "y": 153,
+  "w": 117,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Cluster 1 to Cluster 2",
+  "x": 226,
+  "y": 195,
+  "w": 143,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Cluster 2 to Cluster 3",
+  "x": 226,
+  "y": 237,
+  "w": 143,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Cluster 3 to Cluster 4",
+  "x": 226,
+  "y": 279,
+  "w": 143,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Cluster 4 to Cluster 5",
+  "x": 226,
+  "y": 321,
+  "w": 143,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Cluster 5 to Cluster 6",
+  "x": 226,
+  "y": 363,
+  "w": 143,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ },
+ {
+  "text": "Criteria After Cluster 6 Entry",
+  "x": 226,
+  "y": 405,
+  "w": 191,
+  "h": 20,
+  "fontSize": "14.6667px",
+  "fontWeight": "400",
+  "color": "rgb(11, 11, 11)"
+ }
+]

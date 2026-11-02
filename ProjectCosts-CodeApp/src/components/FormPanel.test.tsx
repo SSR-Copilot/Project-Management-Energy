@@ -97,6 +97,8 @@ describe("FormPanelWidth", () => {
     expect(formPanelWidth("comments")).toBe(600);
     expect(formPanelWidth("wide")).toBe("min(960px, 50vw)");
     expect(formPanelWidth("full")).toBe("min(960px, 100vw)");
+    // UT-FORMPANEL-005 `grid` is Add Cost from Table's ~95 % wide panel.
+    expect(formPanelWidth("grid")).toBe("95vw");
     expect(formPanelWidth(540)).toBe("min(540px, 100vw)");
     expect(formPanelWidth(650)).toBe("min(650px, 100vw)");
   });

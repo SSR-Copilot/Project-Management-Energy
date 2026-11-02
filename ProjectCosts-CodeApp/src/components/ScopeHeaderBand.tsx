@@ -19,7 +19,8 @@ const useStyles = makeStyles({
   // The UA `h2` margins (0.83em) would grow the band past 50 px; a `span` has none, so zeroing
   // them changes nothing for Costs.
   title: {
-    fontWeight: tokens.fontWeightSemibold, color: "#323130", minWidth: "200px", marginRight: "auto",
+    // The canvas label (Label@2.5.1, default size) measures 17.33 px wide-text in the Canvas run, not the 14 px Fluent default.
+    fontSize: "17.3333px", fontWeight: tokens.fontWeightSemibold, color: "#323130", minWidth: "200px", marginRight: "auto",
     marginTop: "0", marginBottom: "0",
   },
   /** With `actionsAlign="start"` the band must not be squeezed by a column parent when it wraps. */

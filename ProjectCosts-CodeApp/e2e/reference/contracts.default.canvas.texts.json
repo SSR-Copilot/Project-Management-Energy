@@ -1,0 +1,152 @@
+[
+ {
+  "text": "+",
+  "x": 220,
+  "y": 134,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "France",
+  "x": 290,
+  "y": 140,
+  "w": 41,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Apply to All",
+  "x": 491,
+  "y": 148,
+  "w": 75,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "600",
+  "color": "rgb(189, 189, 189)"
+ },
+ {
+  "text": "Apply standard contracts to all relevant projects, this will override existing standard assumption contracts",
+  "x": 628,
+  "y": 149,
+  "w": 616,
+  "h": 17,
+  "fontSize": "13.3333px",
+  "fontWeight": "400",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 184,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Poland",
+  "x": 290,
+  "y": 190,
+  "w": 42,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "15.12.2025 Apply was made by Rounak Mathur",
+  "x": 473,
+  "y": 206,
+  "w": 275,
+  "h": 17,
+  "fontSize": "13.3333px",
+  "fontWeight": "400",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 234,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Italy",
+  "x": 290,
+  "y": 240,
+  "w": 26,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Development Contract - Test Description 101",
+  "x": 435,
+  "y": 258,
+  "w": 345,
+  "h": 22,
+  "fontSize": "16px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 284,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Finland",
+  "x": 290,
+  "y": 290,
+  "w": 45,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ },
+ {
+  "text": "Development Contract - Test Description 102",
+  "x": 435,
+  "y": 309,
+  "w": 345,
+  "h": 22,
+  "fontSize": "16px",
+  "fontWeight": "600",
+  "color": "rgb(50, 49, 48)"
+ },
+ {
+  "text": "+",
+  "x": 220,
+  "y": 334,
+  "w": 14,
+  "h": 27,
+  "fontSize": "20px",
+  "fontWeight": "600",
+  "color": "rgb(53, 61, 63)"
+ },
+ {
+  "text": "Croatia",
+  "x": 290,
+  "y": 340,
+  "w": 44,
+  "h": 19,
+  "fontSize": "14px",
+  "fontWeight": "400",
+  "color": "rgb(36, 36, 36)"
+ }
+]

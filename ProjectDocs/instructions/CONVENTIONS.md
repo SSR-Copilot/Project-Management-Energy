@@ -182,6 +182,34 @@ development sessions and is recorded here because the README doesn't carry it ye
     - Check every module's canvas YAML for these pairs when porting (item 2 below), including
       gallery rows, inputs, date pickers and labels.
 
+21. **One expand / collapse chevron** (product owner, 27 Oct 2026). Every accordion header and card header uses
+    `<ExpandChevron open={…} />` from `@/components`: themePrimary blue and 1.4x the default size, as the Cost app's
+    Land Lease and OPEX cards (the canvas classic `Icon.ChevronUp` / `ChevronDown`). Never import Fluent's
+    `ChevronUp` / `ChevronDown` for a fold control: it renders small and grey. Menu carets, navigation groups and
+    tree row toggles are not fold controls; they are listed with their reasons in `PLAIN_CHEVRON_ALLOWED`
+    (`src/test/expandChevrons.test.ts`, UT-EXPAND), which fails the suite on any other plain chevron.
+    Adding an exception needs a reason there.
+
+22. **Hover hints come from one place** (27 Oct 2026). A panel's ✕ and a dialog's ✕ say "Cancel" on hover through `FormPanel` and
+    `ConfirmDialog` themselves; a panel whose canvas ✕ says otherwise passes `closeTooltip`. The texts "Cancel", "Close" and "Save" come from
+    `HINTS` in `@/components`. A canvas `Tooltip` is transcribed verbatim like any visible string (rule 7), except a copy-paste error such as
+    "Filter projects details list view." on a Save button, which is a `SOURCE DEFECT` (rule 8) and says "Save". Check the canvas YAML for
+    `Tooltip` on every new button and icon (item 2 below).
+
+23. **Every call and action is traced in the console** (product owner, 29 Oct 2026, D72). Every Dataverse read,
+    write, delete and bulk or flow call, and every page load and save, must show up as a `[VSB]` line in the browser
+    console, in every build (no environment switch, no download button). The logger is `platform/requestLog.ts`
+    (`logHttp`, `logData`, `loggedCall`, `actionLog`/`beginAction`, `logAction`); `app/queryLog.ts` already opens an
+    ACTION line for every TanStack query and mutation. Rules for new or changed code:
+    - Reads and writes go through the shared helpers in `data/client.ts` / `data/executePlan.ts` / `data/runPlan.ts`, which log
+      rows and time. A call that must use a generated service or the SDK client directly wraps it in `loggedCall(kind, target, fn, rowsOf)`.
+    - A multi-step flow outside a query or mutation (a background job, a retry loop) wraps itself in `actionLog(name, fn)`.
+      A bespoke summary line (as Add Cost from Table has) is printed with `logAction(text)`, never a bare `console.info`.
+    - Log counts, names and timings only, never row values or personal data.
+    - Failures go through `trace("error", …)` (`userErrorText` does) so they print a `[VSB] ERROR` line with the root cause; never swallow an error without a trace.
+    - Action ids (`[a7]`), `SLOW` flags and the ERROR format are part of the contract (D74); keep them when changing the logger.
+    - A new write path or data module is not done until its console lines were seen in a real run and a test pins its line (`UT-REQLOG-*` style).
+
 ## Before every build (standing instruction, 19 Oct 2026)
 
 Check all four, in order, before writing or building any feature or change. Items 1 and 3
@@ -211,10 +239,23 @@ restate rules 16 and 17; they are listed here so the whole check is in one place
 4. **Approval before commit.** After `npm run verify` passes, show the user what changed and
    wait for their explicit approval before any commit, merge or push. A passing gate is not
    approval.
+5. **Improvements log before commit.** Before any commit or merge, make sure
+   `ProjectDocs/app-docs/13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md` lists every improvement over
+   the canvas in the change (fixed, reproduced or proposed, with the bug id or decision). Add
+   what is missing, and mention the entry when asking for approval.
+
+7. **Console trace.** New or changed data calls, saves and loads print their `[VSB]` lines (rule 23); check them in the console.
+
+6. **E2E parity question.** Before any commit or merge, ask the user whether to run the Playwright
+   parity suite (Canvas vs Code app, with the Power Fx vs `rules.ts` rule map) for the screens in
+   the change. Use `ProjectDocs/instructions/E2E-PARITY-PROMPT.md` and ask for the inputs it lists.
+   Never run it silently and never skip the question; if the user declines, say so in the commit
+   approval request.
 
 ## Before every commit or merge
 
-**Get the user's explicit approval first** (item 4 above). Then, from `ProjectCosts-CodeApp/`,
+**Check the improvements log first** (item 5 above), **ask about the E2E parity run** (item 6
+above), then **get the user's explicit approval** (item 4 above). Then, from `ProjectCosts-CodeApp/`,
 run **`npm run verify`**. It runs these steps in order, and
 every step must pass:
 1. the `.power/` data-source gate (`check:power`);

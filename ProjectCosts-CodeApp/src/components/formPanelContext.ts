@@ -29,7 +29,7 @@ export const PANEL_RADIO_ROW = "canvas-radio-row";
 
 export type FormPanelWidth =
   | "wide" | "narrow" | "cost" | "period" | "comments" | "twoColumn" | "fieldsAndSide" | "threeColumn"
-  | "full" | number;
+  | "full" | "grid" | number;
 
 /** The CSS width of a `FormPanel` preset or px number. */
 export function formPanelWidth(width: FormPanelWidth): string | number {
@@ -37,6 +37,9 @@ export function formPanelWidth(width: FormPanelWidth): string | number {
   switch (width) {
     case "wide": return "min(960px, 50vw)";
     case "full": return "min(960px, 100vw)";
+    // `grid` (95vw) is Add Cost from Table: a spreadsheet of fixed columns plus 12 months per year,
+    // which the canvas gave 90 % of the screen. The CAPEX screen stays visible as a strip behind it.
+    case "grid": return "95vw";
     case "cost": return 750;
     case "period": return 660;
     // `comments` is 600 because the canvas comments panel is `Width: =Min(600, Parent.Width)`

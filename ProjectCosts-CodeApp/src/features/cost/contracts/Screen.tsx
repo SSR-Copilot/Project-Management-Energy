@@ -35,6 +35,7 @@ import {
   FormPanel,
   PanelButtons,
   useCommandRowStyles,
+  ExpandChevron,
   LoadingOverlay,
   WriteStatus,
 } from "@/components";
@@ -764,7 +765,7 @@ export default function ContractsScreen() {
                         : [...prev, contract.id],
                     )}
                   >
-                    {open ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                    <ExpandChevron open={open} />
                   </button>
                 </div>
 

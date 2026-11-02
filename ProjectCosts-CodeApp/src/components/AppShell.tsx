@@ -1,5 +1,5 @@
 /**
- * The screen frame: header, optional left rail, content, footer.
+ * The screen frame: header, optional left rail, content.
  *
  * **The rail is per-screen, not global.** The Main Project Overview has no left rail — it is
  * a flat, full-width project list (the reference screenshots, and the r02 UI note: "Left rail:
@@ -7,11 +7,13 @@
  * app instanced `cmp_Left_Navigation`. Rendering it on the overview both wastes 200 px of the
  * widest grid in the app and shows cost sections before a project is chosen.
  *
- * The footer version string is `lbl_Contracts_FooterVersion.Text` = `"Version " & gblAppVersion`.
+ * DIVERGENCE: the canvas cost screens end in a footer strip with `lbl_Contracts_FooterVersion.Text` =
+ * `"Version " & gblAppVersion`. It is removed (product owner, 27 Oct 2026); the version stays in the
+ * header (`con_cmp_Header_Version`) and the user menu.
  */
-import { makeStyles, Text, tokens } from "@fluentui/react-components";
+import { makeStyles } from "@fluentui/react-components";
 import { useState, type ReactNode } from "react";
-import { layout, space } from "@/theme/tokens";
+import { space } from "@/theme/tokens";
 import { AppHeader, type AppHeaderProps } from "./AppHeader";
 import { CommandSlotProvider } from "./CommandSlot";
 import { LeftNav } from "./LeftNav";
@@ -38,18 +40,6 @@ const useStyles = makeStyles({
     paddingLeft: space.l,
     gap: space.m,
   },
-  footer: {
-    display: "flex", alignItems: "center",
-    minHeight: `${layout.footerHeight}px`,
-    paddingLeft: space.l, paddingRight: space.l,
-    borderTopWidth: "1px",
-    borderTopStyle: "solid",
-    borderTopColor: tokens.colorNeutralStroke2,
-  },
-  footerText: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase100,
-  },
 });
 
 export interface AppShellProps extends Omit<AppHeaderProps, "commandSlotRef"> {
@@ -64,12 +54,10 @@ export interface AppShellProps extends Omit<AppHeaderProps, "commandSlotRef"> {
    * form that must scroll, like the canvas screen's vertical container.
    */
   contentScrolls?: boolean;
-  /** Whether the "Version …" footer strip shows; with the rail by default. */
-  showFooter?: boolean;
 }
 
 export function AppShell({
-  children, showRail = true, adminVisible = true, contentScrolls = false, showFooter = showRail, ...header
+  children, showRail = true, adminVisible = true, contentScrolls = false, ...header
 }: AppShellProps) {
   const styles = useStyles();
   // A ref callback into state, not a `useRef`: the portal has to re-render once the element
@@ -86,9 +74,6 @@ export function AppShell({
             {children}
           </main>
         </div>
-        {showFooter ? <footer className={styles.footer}>
-          <Text className={styles.footerText}>{`Version ${header.appVersion ?? ""}`}</Text>
-        </footer> : null}
       </div>
     </CommandSlotProvider>
   );

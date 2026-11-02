@@ -76,7 +76,7 @@ import {
   assumptionNumber, pageLock as revenuePageLock, isPageLocked as revenueIsPageLocked,
   type RevenueProject,
 } from "@/features/pm/revenues/rules";
-import { textFormat } from "@/features/pm/generators/rules";
+import { forLanguage, textFormat } from "@/features/pm/generators/rules";
 
 /* ═════════════════════════════════════════════════════════════════════ types ════ */
 
@@ -999,9 +999,10 @@ export function parseDscr(text: string, lang: Lang = "en-US"): number {
  * `$"{Text(Coalesce(tranche.DSCR, standard.DSCR), "#.00")}{If(IsBlank(...), "", "x")}"`.
  * A blank value must render as `""` with no stray `x`.
  */
-export function formatDscr(value: number | null | undefined): string {
+export function formatDscr(value: number | null | undefined, lang: Lang = "en-US"): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "";
-  return `${pfxRound(value, 2).toFixed(2)}x`;
+  // `Text(x, "#.00")` follows `Language()` in the canvas, and `validateDscr` expects the same separator back.
+  return `${forLanguage(pfxRound(value, 2).toFixed(2), lang)}x`;
 }
 
 /**
@@ -1165,14 +1166,14 @@ export function stepUpToStorage(rows: readonly StepUpRow[], lang: Lang = "en-US"
  * mistake — the first period starts at year 1 inclusive, later ones start at the
  * previous period's end year.
  */
-export function stepUpFromStorage(rows: readonly StoredStepUpRow[]): StepUpRow[] {
+export function stepUpFromStorage(rows: readonly StoredStepUpRow[], lang: Lang = "en-US"): StepUpRow[] {
   return [...rows]
     .sort((a, b) => a.order - b.order)
     .map((r) => ({
       id: r.order,
       durationYY: r.order === 1 ? r.startYear + r.duration - 1 : r.startYear + r.duration,
       // `txt_SeniorDebtData_StepUp_Bank_Margin_Percentage.Value: Text(ThisItem.Margin, "##0.00")` (Y:13102).
-      margin: textFormat(r.margin, "##0.00"),
+      margin: textFormat(r.margin, "##0.00", lang),
       valid: true,
       recordId: r.id ?? null,
     }));
@@ -2105,10 +2106,10 @@ export function trancheDisplayName(
  * Rule 34 — the upfront fee is formatted by its OWN option:
  * `If('Upfront Fee' = 'Percentage of Debt', Text(v, "##0.0"), Text(v, "###,###,##0"))`.
  */
-export function formatUpfrontFee(option: number, value: number | null): string {
+export function formatUpfrontFee(option: number, value: number | null, lang?: Lang): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "";
-  if (option === CHOICE_FINANCE.upfrontFee.percentageOfDebt) return pfxRound(value, 1).toFixed(1);
-  return formatInteger(value, "en-GB");
+  if (option === CHOICE_FINANCE.upfrontFee.percentageOfDebt) return forLanguage(pfxRound(value, 1).toFixed(1), lang);
+  return formatInteger(value, lang ?? "en-GB");
 }
 
 /**
@@ -2345,8 +2346,8 @@ export function trancheDeletePlan(
 
 /* ═════════════════════════════════════════════════════════════════ formatting ══ */
 
-export const fmtAmount = (v: number | null | undefined): string =>
-  v === null || v === undefined || Number.isNaN(v) ? "" : formatInteger(v, "en-GB");
+export const fmtAmount = (v: number | null | undefined, lang?: Lang): string =>
+  v === null || v === undefined || Number.isNaN(v) ? "" : formatInteger(v, lang ?? "en-GB");
 
 export const fmtPercent = (v: number | null | undefined, places = 2): string =>
   v === null || v === undefined || Number.isNaN(v) ? "" : `${pfxRound(v, places).toFixed(places)} %`;
@@ -3559,7 +3560,7 @@ export function rawDay(v: unknown): Date | null {
 }
 
 /** `Text(<stored or standard>, "<pattern>")` for the panel's text inputs. */
-const fmtField = (v: number | null | undefined, pattern: string): string => textFormat(v ?? null, pattern);
+const fmtFieldIn = (v: number | null | undefined, pattern: string, lang: Lang): string => textFormat(v ?? null, pattern, lang);
 
 /**
  * Add Tranche / Edit Tranche (`pcf_FinancingInputs_Content_SeniroDebtTranche_CommandBar.OnSelect`,
@@ -3580,8 +3581,12 @@ export function openTrancheForm(input: {
   standard: SeniorDebtStandard | null;
   banks: readonly BankRow[];
   tranches: readonly FinancingInputRow[];
+  /** The user's language (default en-US): the boxes open in its decimal separator. */
+  language?: Lang;
 }): SeniorDebtFormState {
   const { existing, project, banks } = input;
+  const language = input.language ?? "en-US";
+  const fmtField = (v: number | null | undefined, pattern: string): string => fmtFieldIn(v, pattern, language);
   const r = existing?.raw ?? {};
   // On Edit the canvas blanks `locSelectedStandardAssumption`, so only the stored values count.
   const std = existing ? null : input.standard;
@@ -3661,7 +3666,7 @@ export function openTrancheForm(input: {
  */
 export function applyTrancheStatusChange(input: {
   form: SeniorDebtFormState; next: number; project: FinanceProject; standard: SeniorDebtStandard | null;
-  banks: readonly BankRow[]; tranches: readonly FinancingInputRow[];
+  banks: readonly BankRow[]; tranches: readonly FinancingInputRow[]; language?: Lang;
 }): SeniorDebtFormState {
   const { form, next, standard } = input;
   const wasStandard = form.trancheStatus === CHOICE_FINANCE.trancheStatus.standardAssumption
@@ -3669,7 +3674,7 @@ export function applyTrancheStatusChange(input: {
   const reset = resetOnTrancheStatusChange(next, standard ?? EMPTY_SENIOR_DEBT_STANDARD);
   const base = { ...form, trancheStatus: next, formDirty: true };
   if (reset.standardApplies || wasStandard) {
-    const fresh = openTrancheForm({ existing: null, project: input.project, standard: reset.standardApplies ? standard : null, banks: input.banks, tranches: input.tranches });
+    const fresh = openTrancheForm({ existing: null, project: input.project, standard: reset.standardApplies ? standard : null, banks: input.banks, tranches: input.tranches, ...(input.language ? { language: input.language } : {}) });
     // Both branches run `locSelectedSeniorDebtTranche: Blank()` (Y:9239). Corrected 21 Oct 2026 (audit):
     //  - the stored status no longer counts, so a later Term Sheet ↔ Credit Agreement change is the plain
     //    third branch and does not reset the form again (it did, because the stored SA was kept);
@@ -3735,7 +3740,7 @@ export const CARD_FORMAT = {
   dsraUpfrontFee: "#0.0#",
   pofds: "##0.0",
 } as const;
-export const fmtCard = (v: number | null | undefined, pattern: string): string => textFormat(v ?? null, pattern);
+export const fmtCard = (v: number | null | undefined, pattern: string, lang: Lang = "en-US"): string => textFormat(v ?? null, pattern, lang);
 
 /* ══════════════════════════════════════════════════════════════════ folding ══ */
 
@@ -3814,14 +3819,15 @@ export function openVatForm(row: FinancingInputRow | null, country: string | nul
  * `locCostsOfGuarantee` as `Text(…, "0.0")`, the three dates, the MMYY duration) and `locMyRecord`;
  * `locIsDirtyDecommissiongForm: false`.
  */
-export function openDecommissioningForm(row: FinancingInputRow | null): DecommissioningForm {
+export function openDecommissioningForm(row: FinancingInputRow | null, language: Lang = "en-US"): DecommissioningForm {
+  const fmtField = (v: number | null | undefined, pattern: string): string => fmtFieldIn(v, pattern, language);
   const r = row?.raw ?? {};
   const duration = rawStr(r[INPUT_COL.durationOfSaving]);
   const { months, years } = unpackMMYY(duration);
   const value = rawNum(r[INPUT_COL.costsOfDecommissioningValue]);
   return {
     costType: rawNum(r[INPUT_COL.costsOfDecommissioning]),
-    value: value === null ? "" : String(value),
+    value: value === null ? "" : forLanguage(String(value), language),
     guarantee: fmtField(rawNum(r[INPUT_COL.costOfGuarantee]), "0.0"),
     dateOfIssue: rawDay(r[INPUT_COL.dateOfIssue]),
     startDateOfSaving: rawDay(r[INPUT_COL.startDateOfSaving]),
@@ -3838,7 +3844,8 @@ export function openDecommissioningForm(row: FinancingInputRow | null): Decommis
  * edit is blanked) formatted as each control's `Value`, and `locSelectedDSRA_DSRF_IsStandard`.
  * The duration months are the STORED months (SOURCE DEFECT 6, `dsraDurationMonthsCanvasParity`).
  */
-export function openDsraForm(row: FinancingInputRow | null): DsraForm {
+export function openDsraForm(row: FinancingInputRow | null, language: Lang = "en-US"): DsraForm {
+  const fmtField = (v: number | null | undefined, pattern: string): string => fmtFieldIn(v, pattern, language);
   const r = row?.raw ?? {};
   const flags = parseStandardFlags(rawStr(r[INPUT_COL.dsraStandardAssumptionsJson]), DEFAULT_DSRA_FLAGS);
   const duration = rawStr(r[INPUT_COL.durationOfFutureDebtServiceMmyy]);
@@ -3870,8 +3877,9 @@ export function openDsraForm(row: FinancingInputRow | null): DsraForm {
  * would blank or zero them and flag them standard).
  */
 export function applyDsraTypeChange(
-  form: DsraForm, type: number, standard: DsraStandard | null, endOfSavings: Date | null,
+  form: DsraForm, type: number, standard: DsraStandard | null, endOfSavings: Date | null, language: Lang = "en-US",
 ): DsraForm {
+  const fmtField = (v: number | null | undefined, pattern: string): string => fmtFieldIn(v, pattern, language);
   if (!standard) return { ...form, type, endOfSavings: endOfSavings ?? form.endOfSavings };
   const dur = unpackMMYY(padMMYY(standard.durationOfFutureDebtService));
   return {
@@ -3891,13 +3899,13 @@ export function applyDsraTypeChange(
 }
 
 /** The repayment rows of a stored tranche (`colRepaymentProfileAmount` on Edit, Y:2700). */
-export const repaymentRowsOf = (trancheId: string | null, stored: readonly StoredRepaymentRow[]): RepaymentRow[] =>
+export const repaymentRowsOf = (trancheId: string | null, stored: readonly StoredRepaymentRow[], lang: Lang = "en-US"): RepaymentRow[] =>
   stored.filter((r) => r.financingInputId === trancheId).sort((a, b) => a.year - b.year)
-    .map((r) => ({ year: r.year, value: String(r.amount), valid: true, dirty: false, repaymentAmountRecordId: r.id }));
+    .map((r) => ({ year: r.year, value: forLanguage(String(r.amount), lang), valid: true, dirty: false, repaymentAmountRecordId: r.id }));
 
 /** The step-up rows of a stored tranche (`colStepUpBankMargins` on Edit, Y:2712). */
-export const stepUpRowsOf = (trancheId: string | null, stored: readonly StoredStepUpMarginRow[]): StepUpRow[] =>
-  stepUpFromStorage(stored.filter((r) => r.financingInputId === trancheId));
+export const stepUpRowsOf = (trancheId: string | null, stored: readonly StoredStepUpMarginRow[], lang: Lang = "en-US"): StepUpRow[] =>
+  stepUpFromStorage(stored.filter((r) => r.financingInputId === trancheId), lang);
 
 /**
  * `tgl_SeniorDebtData_Step_Up_Bank_Margin.OnCheck` (Y:12923) and `drp_SeniorDebtData_Fixed_Interest_Rate_YY.OnChange`

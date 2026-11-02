@@ -96,8 +96,8 @@ const useStyles = makeStyles({
     paddingLeft: 0, paddingRight: 0,
   },
   command: {
-    // `palette.neutralPrimary` is #000000 — the canvas label colour, sampled.
-    color: palette.neutralPrimary,
+    // The PowerCAT command bar's text, measured in the Canvas app (computed colour rgb(50, 49, 48), 29 Oct 2026): #323130, not black.
+    color: "#323130",
     fontWeight: "400",
     // Only the leading icon carries the brand colour.
     "& .fui-Button__icon": { color: palette.themePrimary },

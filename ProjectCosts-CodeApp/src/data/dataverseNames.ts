@@ -438,8 +438,6 @@ export const ES_ADMIN = {
   bopContractsStandardAssumptions: "vsb_bopcontractsstandardassumptionses",
   /** `BoP Contracts Standard Assumption DevCo Costs` — the owned CAPEX subaccounts. */
   bopDevCoCosts: "vsb_bopcontractsstandardassumptiondevcocostses",
-  /** `Apply and Apply All Trackings` — the audit row every Apply writes. */
-  applyAndApplyAllTrackings: "vsb_applyandapplyalltrackings",
   /** `Milestones Standard Assumptions` — Admin Milestones Screen. */
   milestonesStandardAssumptions: "vsb_milestonesstandardassumptionses",
   /** `CAPEX Account Lists` — the self-referencing chart of accounts. */
@@ -468,8 +466,6 @@ export const CHOICE_ADMIN = {
     landlease: "952850000", opexOandM: "952850001",
     opexOther: "952850002", devexCapex: "952850003",
   },
-  /** `'Action? (Apply and Apply All Trackings)'`. */
-  applyAction: { apply: 952850000, applyAll: 952850001 },
   /** `'Status (Project Default Checklists)'` and `'Status Reason (…)'` — statecode pairs. */
   status: { active: 0, inactive: 1 },
   statusReason: { active: 1, inactive: 2 },

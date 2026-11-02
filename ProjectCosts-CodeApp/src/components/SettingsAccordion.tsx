@@ -18,6 +18,7 @@ import {
   Accordion, AccordionHeader, AccordionItem, AccordionPanel, Text, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import { palette } from "@/theme/tokens";
+import { ExpandChevron } from "./ExpandChevron";
 
 const useStyles = makeStyles({
   item: { backgroundColor: palette.white },
@@ -38,6 +39,9 @@ const useStyles = makeStyles({
     "& button": { minHeight: "50px", paddingLeft: "10px" },
   },
   greyTitle: { fontWeight: tokens.fontWeightSemibold, fontSize: "16px", color: "#323130" },
+  // Fluent's AccordionPanel carries a 12 px side margin; the canvas panels have none, so a screen's padding is its whole inset
+  // (found by the Canvas parity run: the Check List task table sat 12 px right of the canvas).
+  lightPanel: { marginLeft: "0", marginRight: "0" },
   greyPanel: { marginLeft: "0", marginRight: "0", paddingBottom: "10px", minWidth: "0" },
 });
 
@@ -86,6 +90,9 @@ export function SettingsAccordion({
           >
             <AccordionHeader
               expandIconPosition="end"
+              // The shared fold chevron (blue, 1.4x), as every card header. Fluent rotates its own icon by the
+              // open state; ours swaps up / down instead, so that rotation is switched off.
+              expandIcon={{ children: <ExpandChevron open={open} />, style: { transform: "none" } }}
               {...(light ? { size: "large" as const } : {})}
               className={light
                 ? mergeClasses(styles.lightHeader, border === "always" && styles.headerRule)
@@ -95,7 +102,7 @@ export function SettingsAccordion({
                 ? <Text className={styles.greyTitle}>{item.title}</Text>
                 : item.title}
             </AccordionHeader>
-            <AccordionPanel className={light ? undefined : styles.greyPanel} style={panelStyle}>
+            <AccordionPanel className={light ? styles.lightPanel : styles.greyPanel} style={panelStyle}>
               {item.content}
             </AccordionPanel>
           </AccordionItem>

@@ -36,12 +36,13 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, ChevronDownRegular,
-  ChevronUpRegular, DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
+  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, 
+  DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   type Command, CommandBar, ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay,
   PanelButtons, ReadOnlyField, TextField, WriteFeedback, useFieldControlClass, useStandardValueClass,
+  ExpandChevron,
 } from "@/components";
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
@@ -57,8 +58,8 @@ import {
   categoryCommandLabel, categoryToggleDialog, categoryToggleJob, commitmentFeeFreePeriodLabel,
   currencySuffix, decommissioningDurationLabel, decommissioningSaveJob, defaultEndOfDebtServiceSavings,
   dsraCardToggle, dsraPeriodLabel, dsraSaveJob, dsraToggleDialog, dsraToggleJob, durationOptionName,
-  durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, fmtAmount, fmtCard, fmtDateDots,
-  fmtLongDate, formatDscr, formatUpfrontFee, financingOptionJob, freeEquityLabel, isOtherBank,
+  durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, fmtAmount as fmtAmountIn, fmtCard as fmtCardIn, fmtDateDots,
+  fmtLongDate, formatDscr as formatDscrIn, formatUpfrontFee as formatUpfrontFeeIn, financingOptionJob, freeEquityLabel, isOtherBank,
   isPageLocked, isTrancheFolded, mmyyLabel, openDecommissioningForm, openDsraForm, openEquityForm,
   openTrancheForm, openVatForm, pageLock, planCategoryToggle, planDecommissioningSave, planDsraSave,
   planDsraToggle, planEquitySave, planFinancingOption, planFinancingOptionOnVisit, planSeeds,
@@ -467,13 +468,13 @@ function CategoryCard({ order, cardId, name, status, folded, disabled, onToggleF
           <Button
             appearance="transparent" className={s.chevron} aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_Down_1"
             data-testid="ico_Generators_DisplayProject_Body_Form_GeneratorType_Down_1"
-            icon={<ChevronDownRegular />} disabled={disabled} onClick={onToggleFold}
+            icon={<ExpandChevron open={false} />} disabled={disabled} onClick={onToggleFold}
           />
         ) : (
           <Button
             appearance="transparent" className={s.chevron} aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_Up_1"
             data-testid="ico_Generators_DisplayProject_Body_Form_GeneratorType_Up_1"
-            icon={<ChevronUpRegular />} disabled={disabled} onClick={onToggleFold}
+            icon={<ExpandChevron open />} disabled={disabled} onClick={onToggleFold}
           />
         )}
       </div>
@@ -502,6 +503,11 @@ export default function ProjectFinanceScreen() {
   const s = useStyles();
   const { projectId, locale } = useSession();
   const lang = locale;
+  // Card and box numbers in the user's language (`Text(n, fmt, Language())`): one place, so no call site can forget it.
+  const fmtCard = (v: number | null | undefined, pattern: string) => fmtCardIn(v, pattern, lang);
+  const fmtAmount = (v: number | null | undefined) => fmtAmountIn(v, lang);
+  const formatDscr = (v: number | null | undefined) => formatDscrIn(v, lang);
+  const formatUpfrontFee = (option: number, value: number | null) => formatUpfrontFeeIn(option, value, lang);
 
   const projectQ = useFinanceProject(projectId);
   const project = projectQ.data;
@@ -636,9 +642,9 @@ export default function ProjectFinanceScreen() {
   const openTranche = (existing: FinancingInputRow | null) => {
     if (!project) return;
     writes.clear();
-    setRepaymentRows(existing ? repaymentRowsOf(existing.id, repaymentsQ.data) : []);
-    setStepUpRows(existing ? stepUpRowsOf(existing.id, stepUpsQ.data) : []);
-    setTranche(openTrancheForm({ existing, project, standard, banks, tranches: trancheInputs }));
+    setRepaymentRows(existing ? repaymentRowsOf(existing.id, repaymentsQ.data, lang) : []);
+    setStepUpRows(existing ? stepUpRowsOf(existing.id, stepUpsQ.data, lang) : []);
+    setTranche(openTrancheForm({ existing, project, standard, banks, tranches: trancheInputs, language: lang }));
     setPanel("tranche");
   };
 
@@ -698,7 +704,7 @@ export default function ProjectFinanceScreen() {
     if (key === "EditFinanceInput") {
       if (order === CATEGORY_ORDER.equity) { setEquity(openEquityForm(input)); setPanel("equity"); }
       else if (order === CATEGORY_ORDER.vatFinancing) { setVat(openVatForm(input, country)); setPanel("vat"); }
-      else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input)); setPanel("decommissioning"); }
+      else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input, lang)); setPanel("decommissioning"); }
     } else {
       setToggleTarget(input);
       setDialog("category");
@@ -790,13 +796,13 @@ export default function ProjectFinanceScreen() {
           <StatusChip status={i.status} canvasName="lbl_FinancingInputs_SeniorDebt_Status" />
           {isFolded ? (
             <Button
-              appearance="transparent" className={s.chevron} icon={<ChevronDownRegular />} disabled={locked} onClick={toggleFold}
+              appearance="transparent" className={s.chevron} icon={<ExpandChevron open={false} />} disabled={locked} onClick={toggleFold}
               aria-label="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down"
               data-testid="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Down"
             />
           ) : (
             <Button
-              appearance="transparent" className={s.chevron} icon={<ChevronUpRegular />} disabled={locked} onClick={toggleFold}
+              appearance="transparent" className={s.chevron} icon={<ExpandChevron open />} disabled={locked} onClick={toggleFold}
               aria-label="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Up"
               data-testid="ico_FinancingInputs_DisplayProject_Body_Form_SeniorDebt_Up"
             />
@@ -855,7 +861,7 @@ export default function ProjectFinanceScreen() {
             icon={<EditRegular />} aria-label="con_DSRA_DSRF_Data_Edit" data-testid="con_DSRA_DSRF_Data_Edit"
             // `DisplayMode: If(con_DSRA_DSRF_Data_Deactivate.Text = "Activate", Disabled, Edit)`
             disabled={busy || locked || dsraInput === null || toggle.label === DSRA_TOGGLE_LABEL.activate}
-            onClick={() => { writes.clear(); setDsra(openDsraForm(dsraInput)); setPanel("dsra"); }}
+            onClick={() => { writes.clear(); setDsra(openDsraForm(dsraInput, lang)); setPanel("dsra"); }}
           >
             {FIN_LABEL.edit}
           </Button>
@@ -1197,7 +1203,7 @@ export default function ProjectFinanceScreen() {
                 // `DisplayMode: If(selected.'Tranche Status' = 'Credit Agreement', Disabled, Edit)`
                 disabled={busy || trancheStatusRadioDisabled(form.storedTrancheStatus)}
                 onChange={(v) => {
-                  setTranche(applyTrancheStatusChange({ form, next: v, project, standard, banks, tranches: trancheInputs }));
+                  setTranche(applyTrancheStatusChange({ form, next: v, project, standard, banks, tranches: trancheInputs, language: lang }));
                   setRepaymentRows([]); setStepUpRows([]);
                 }}
               />
@@ -1691,7 +1697,7 @@ export default function ProjectFinanceScreen() {
               caption={FIN_LABEL.type} testId="rad_DSRA_DRSFData_DSRA_DRSF_Type" required
               value={dsra.type} choices={options(CHOICE_LABEL.dsraDsrfType)} disabled={busy}
               onChange={(v) => setDsra(applyDsraTypeChange(dsra, v, assumptionsConnected ? dsraStandard : null,
-                defaultEndOfDebtServiceSavings(project?.cod ?? null, tenorTranches)))}
+                defaultEndOfDebtServiceSavings(project?.cod ?? null, tenorTranches), lang))}
             />
             {dsra.type === CHOICE_FINANCE.dsraDsrfType.dsrf ? (
               <>

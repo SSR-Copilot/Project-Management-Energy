@@ -31,13 +31,14 @@ import {
   Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowClockwiseRegular, ChevronDownRegular, ChevronUpRegular, DeleteRegular, EditRegular,
+  AddRegular, ArrowClockwiseRegular, DeleteRegular, EditRegular,
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, LoadingOverlay,
   DateField, FIELD_APPEARANCE, PanelButtons, WriteFeedback, testIdPart, useFieldControlClass, useFieldSkin,
   useStandardValueClass, type StandardProp,
+  ExpandChevron,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { media, palette, space } from "@/theme/tokens";
@@ -60,7 +61,7 @@ import {
   tariffPriceCaption, tariffPriceP90Caption, siteQualityCaption, correctionFactorCaption,
   biddingPriceCaption, balancingPriceCaption, inflationProfileFieldCaption, contractYearsOption,
   contractMonthsOption, balancingYearsOption, balancingMonthsOption, balancingDurationText,
-  shiftOfCodCell, bareRegion, newContractForm, applyRevenueEngine, editContractForm, editField,
+  shiftOfCodCell, bareRegion, newContractForm, applyRevenueEngine, editContractForm, localizeContractForm, editField,
   withTerm, toggleCountryInflation, changeInflationStartYear, resyncNegativePrice,
   planSaveContract, planSaveBalancing, saveContractJob, deleteContractJob, saveBalancingJob,
   deleteBalancingJob, SPINNER,
@@ -643,7 +644,7 @@ export default function ProjectRevenuesScreen() {
     writes.clear();
     setHedgeError(null);
     setEditingVolumesFor(null);
-    setForm(newContractForm(project, subaccountQ.data?.id ?? null));
+    setForm(localizeContractForm(newContractForm(project, subaccountQ.data?.id ?? null), lang));
     setPanel("contract");
   };
 
@@ -652,7 +653,7 @@ export default function ProjectRevenuesScreen() {
     writes.clear();
     setHedgeError(null);
     setEditingVolumesFor(hedgeTypeFromValue(c.hedgeType) === "individual" ? c.id : null);
-    setForm(editContractForm({ contract: c, project, volumes: [] }));
+    setForm(localizeContractForm(editContractForm({ contract: c, project, volumes: [] }), lang));
     setPanel("contract");
   };
 
@@ -667,10 +668,10 @@ export default function ProjectRevenuesScreen() {
   const onType = (label: string) => {
     if (!project || !form) return;
     setForm({
-      ...applyRevenueEngine({
+      ...localizeContractForm(applyRevenueEngine({
         project, rows: assumptions.data, region, label, productionExists: productionQ.data,
         subaccountId: form.subaccountId, profiles: inflationQ.data, language: lang,
-      }),
+      }), lang),
       ...(form.mode === "Edit" ? { mode: "Edit" as const, contractId: form.contractId } : {}),
     });
   };
@@ -765,7 +766,7 @@ export default function ProjectRevenuesScreen() {
   /* ─────────────────────────────────────────────────────────── commands ──── */
 
   const bar = contractCommandBar(selectedContract, blocked);
-  const cardCtx = { country, technology, currencyName: currencyQ.data?.name ?? null, region };
+  const cardCtx = { country, technology, currencyName: currencyQ.data?.name ?? null, region, language: lang };
   const balancingBar = balancingCommandBar(periods, null, project?.clusterStateOrder ?? null);
   const clusterReached = balancingClusterReached(project?.clusterStateOrder);
 
@@ -895,7 +896,7 @@ export default function ProjectRevenuesScreen() {
                       <Button
                         className={s.chevron}
                         appearance="transparent"
-                        icon={<ChevronDownRegular />}
+                        icon={<ExpandChevron open={false} />}
                         disabled={blocked}
                         aria-label="ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_2"
                         aria-expanded={false}
@@ -906,7 +907,7 @@ export default function ProjectRevenuesScreen() {
                       <Button
                         className={s.chevron}
                         appearance="transparent"
-                        icon={<ChevronUpRegular />}
+                        icon={<ExpandChevron open />}
                         disabled={blocked}
                         aria-label="ico_ProjectRevenues_DisplayProjectBodyRightContent_GridContracts_CardHeader_Up_1"
                         aria-expanded

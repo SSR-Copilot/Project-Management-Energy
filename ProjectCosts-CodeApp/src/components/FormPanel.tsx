@@ -26,12 +26,13 @@
  *   - `ariaLabel`: the drawer's accessible name (defaults to `title`).
  *   - `panelClassName`: extra class on the drawer surface, for screen-scoped chrome overrides.
  */
-import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle, Tooltip } from "@fluentui/react-components";
+import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useBeforeUnload, useDiscardGuard } from "./discardGuard";
 import type { CloseReason, DiscardText } from "./discardText";
 import { FormPanelContext, formPanelWidth, type FormPanelApi, type FormPanelWidth } from "./formPanelContext";
+import { HINTS } from "./hints";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { PanelMessages, type PanelMessagesProps } from "./PanelMessages";
 import { PanelButtons, type PanelButtonsProps } from "./CanvasFields";
@@ -49,6 +50,8 @@ export interface FormPanelProps {
   closeTestId?: string;
   /** The canvas close icon's `AccessibleLabel`; default "Close panel". */
   closeLabel?: string;
+  /** The canvas close icon's hover `Tooltip`; default "Cancel" (`HINTS.cancel`: 33 canvas ✕ icons say it). */
+  closeTooltip?: string;
   /** Blocks every dismissal while true (a save is running). */
   busy?: boolean;
   /** Implies `busy`; shows the blocking spinner with this text inside the panel. */
@@ -78,8 +81,6 @@ export interface FormPanelProps {
   ariaLabel?: string;
   /** Extra class on the drawer surface, for screen-scoped chrome overrides (Contracts). Default none. */
   panelClassName?: string;
-  /** Opt-in: the ✕'s hover text — the canvas command bar's `ItemDisplayName` (e.g. "Home", "Cancel"). */
-  closeTooltip?: string;
   /**
    * Opt-in (PM Revenues): a click outside the panel does NOT close it — the canvas panel closes
    * only through its ✕ or Cancel. Escape still closes. Off by default (the backdrop dismisses).
@@ -88,9 +89,9 @@ export interface FormPanelProps {
 }
 
 export function FormPanel({
-  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel,
+  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName, closeTooltip, keepOpenOnOutsideClick = false,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -126,17 +127,11 @@ export function FormPanel({
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}
         style={style}>
         <DrawerHeader className="canvas-panel-header">
-          <DrawerHeaderTitle action={closeTooltip ? (
-            <Tooltip content={closeTooltip} relationship="description" positioning="below">
-              <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
-                data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
-                disabled={locked} onClick={() => requestClose("dismiss")} />
-            </Tooltip>
-          ) : (
-            <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
+          <DrawerHeaderTitle action={
+            <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"} title={closeTooltip ?? HINTS.cancel}
               data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
               disabled={locked} onClick={() => requestClose("dismiss")} />
-          )}>
+          }>
             {title}
           </DrawerHeaderTitle>
         </DrawerHeader>

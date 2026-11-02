@@ -44,10 +44,10 @@
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Spinner, Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { Spinner, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
   CommandBar, ConfirmDialog, LoadingOverlay, NoticeBar, QueryStates, ReorderPanel, SettingsAccordion,
-  SettingsTabStrip, VisuallyHidden, useNotify,
+  SettingsTabStrip, VisuallyHidden, useNotify, HINTS,
   useQueryHealth,
 } from "@/components";
 import { useAdminAccess } from "@/app/useCurrentUser";
@@ -83,14 +83,10 @@ const useStyles = makeStyles({
     minHeight: "100%", boxSizing: "border-box",
   },
   /** `Size: gblAppSizes.Font.Medium` (11 pt); Semibold when it is the last selected cluster. */
-  caption: { fontSize: "14.7px", fontWeight: tokens.fontWeightRegular, color: palette.black },
+  caption: { fontSize: "14.6667px", fontWeight: tokens.fontWeightRegular, color: palette.black },
   captionSelected: { fontWeight: tokens.fontWeightSemibold },
-  commands: { paddingLeft: "0" },
-  /**
-   * `cmp_Admin_Project_Checklist_Header` page title. The app shell has no per-page title, so
-   * the screen renders it (as the other admin screens do).
-   */
-  title: { margin: "0", fontSize: tokens.fontSizeBase500, fontWeight: tokens.fontWeightSemibold, color: palette.black },
+  // Canvas pcf_CommandBar_Cluster_DefaultChecklist_AdminScreen: Height 32 (the shared bar is 40) and its first caption 8 px right of the shared bar's.
+  commands: { paddingLeft: "0", marginLeft: "8px", minHeight: "32px" },
 });
 
 /** `cmp_Admin_Project_Checklist_Header.Project` → `Name: "Checklist settings"` — verbatim (L90). */
@@ -358,7 +354,8 @@ export default function CheckListSettingsScreen() {
   };
 
   /* ───────────────────────────────────────────────────────────── render ── */
-  const heading = <Text as="h1" className={styles.title}>{PAGE_TITLE}</Text>;
+  // The shell header shows the title (`app/adminTitles.ts`); a visually hidden h1 keeps the page heading.
+  const heading = <VisuallyHidden as="h1">{PAGE_TITLE}</VisuallyHidden>;
 
   if (tabsHealth.phase !== "ready" || !hasTabs) {
     const states = (
@@ -540,6 +537,8 @@ export default function CheckListSettingsScreen() {
         canSave={(changed) => changed && !reorderStale && canEdit}
         onSave={(ordered) => void saveReorder(ordered)}
         onCancel={reorder.close}
+        // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
+        saveTooltip={HINTS.save}
         saveTestId="pcf_but_Admin_Checklist_Reorder_Buttons_Save"
         cancelTestId="pcf_but_Admin_Admin_Checklist_Reorder_Buttons_Cancel"
         listProps={{

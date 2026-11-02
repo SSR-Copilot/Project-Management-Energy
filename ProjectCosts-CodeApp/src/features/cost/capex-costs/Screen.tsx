@@ -22,7 +22,7 @@ import {
   Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowLeftRegular, ArrowRightRegular, ChevronDownRegular, ChevronUpRegular,
+  AddRegular, ArrowLeftRegular, ArrowRightRegular, 
 } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -37,6 +37,7 @@ import {
   PanelExtraButton,
   WriteStatus,
   useStandardValueClass,
+  ExpandChevron,
 } from "@/components";
 import { costLocation } from "@/app/deepLinks";
 import { useSession } from "@/app/SessionContext";
@@ -211,7 +212,8 @@ export default function CapexCostsScreen() {
   const writes = useCapexWrites(scoped, {
     onWriteError: (e) => reportFailure(e instanceof Error ? e.message : String(e), SHOWN_BY_WRITE_BANNER),
   });
-  const { project } = useSession();
+  // The user's language: the range messages group their numbers the way the canvas does for it.
+  const { project, locale } = useSession();
   const isoCurrencyCode = project?.isoCurrencyCode;
   /** `Coalesce(gblRecordSelectedProjectCountry.'ISO Currency Code', "EUR")`, once. */
   const currency = currencyCode(project ?? {});
@@ -611,7 +613,7 @@ export default function CapexCostsScreen() {
   const countryName = project?.countryName;
   const showsTotalCost = Boolean(edit)
     && (edit?.distribution === "equal" || edit?.distributionScheme === "percent");
-  const totalCostCheck = validateTotalCost(costValue, countryName);
+  const totalCostCheck = validateTotalCost(costValue, countryName, locale);
   const totalCostError = showsTotalCost && costValue.trim() !== "" && !totalCostCheck.valid
     ? totalCostCheck.message
     : null;
@@ -628,7 +630,7 @@ export default function CapexCostsScreen() {
    * typed months; an Equal one computes them, so there is nothing to reject.
    */
   const monthErrors = edit && edit.distribution === "individual"
-    ? monthAmountErrors(edit.payments, edit.distributionScheme, countryName)
+    ? monthAmountErrors(edit.payments, edit.distributionScheme, countryName, locale)
     : new Map<string, string>();
 
   /*
@@ -1020,7 +1022,7 @@ export default function CapexCostsScreen() {
                 <span className={styles.yearNumber}>{y}</span>
                 <span className={styles.yearAllocated}>{allocatedLabel(y)}</span>
                 <span className={styles.yearChevron} aria-hidden="true">
-                  {expanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                  <ExpandChevron open={expanded} />
                 </span>
               </button>
               {expanded ? (
