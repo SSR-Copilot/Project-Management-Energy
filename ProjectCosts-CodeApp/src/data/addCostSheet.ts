@@ -74,6 +74,7 @@ import {
 import {
   SheetConflictError, buildSavePlan, contractFields,
 } from "@/features/cost/add-costs-from-table/savePlan";
+import { addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
 
 /* ══════════════════════════════════════════════════════════════════ the read ══ */
 
@@ -841,6 +842,7 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
    * cost stages in the log only (D59), `label` stays the phase label every error carries.
    */
   const upsert = async (table: BulkTableInfo, rows: readonly UpsertTarget[], label: string, step?: string) => {
+    if (!printed) addCostSaveTimeline.mark("firstWrite"); // P0.1: the client timeline's first request (first wins)
     const t0 = performance.now();
     const name = step ?? label;
     const counted = meter;

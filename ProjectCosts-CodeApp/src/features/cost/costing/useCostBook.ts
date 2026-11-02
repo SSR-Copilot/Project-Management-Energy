@@ -19,6 +19,7 @@ import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from 
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
 import { panelBusyLogLine } from "@/data/capexWrites";
 import { applySavedSheetToBook } from "./savedSheetPatch";
+import { addCostSaveTimeline } from "./saveTimeline";
 import { costWriteKey } from "@/domain/writeGuard";
 
 /**
@@ -600,11 +601,15 @@ export function useSaveAddCostSheet(category: number) {
     // Fire-and-forget: returning the promise would make `mutateAsync` (and so the Save button)
     // wait for every invalidated query to refetch before the screen may navigate.
     onSuccess: (result: SaveAddCostSheetResult | undefined) => {
+      // P0.1 (measurement only): when the data layer resolved, and what this synchronous part costs.
+      const startedAt = performance.now();
+      addCostSaveTimeline.mark("resolved", startedAt);
       const release = result?.background
         ? pendingDeletes.add({ contractIds: result.deferredContractIds, costIds: result.deferredCostIds })
         : undefined;
       const applied = result?.applied;
       if (applied) {
+        const patchStarted = performance.now();
         try {
           // An updater returning `undefined` (no book cached for this key) leaves the cache alone.
           client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
@@ -613,6 +618,7 @@ export function useSaveAddCostSheet(category: number) {
           // refetch below still brings the saved state. Readable line, then the raw error (D59).
           emitSaveLog(() => bookPatchFailureReport(error));
         }
+        addCostSaveTimeline.measure("patchMs", performance.now() - patchStarted);
       }
       void invalidate();
       if (result?.background) {
@@ -621,6 +627,7 @@ export function useSaveAddCostSheet(category: number) {
           deferredCosts: result.deferredCosts ?? 0,
         }, invalidate, notify, release);
       }
+      addCostSaveTimeline.measure("onSuccessMs", performance.now() - startedAt);
     },
   });
 }
