@@ -18,6 +18,7 @@ import type { BackgroundOutcome } from "@/data/addCostSheetBulk";
 import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from "@/data/pendingDeletes";
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
 import { panelBusyLogLine } from "@/data/capexWrites";
+import { logAction } from "@/platform/requestLog";
 import { applySavedSheetToBook } from "./savedSheetPatch";
 import { addCostSaveTimeline } from "./saveTimeline";
 import { beginBackgroundSave, type BackgroundSaveHandle } from "./backgroundSave";
@@ -476,7 +477,7 @@ export function useCapexWrites(
     onSuccess: async (_id, _args, context) => {
       const writesDone = performance.now();
       await invalidate(context ? context.category : category);
-      console.info(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
+      logAction(panelBusyLogLine(writesDone - (context?.startedAt ?? writesDone), performance.now() - writesDone));
     },
     // A failed save may have landed in part (D56 §2): reload so the grid, and the stored months
     // the next panel compares against (`storedPayments`, D56 §3), show what Dataverse holds.
@@ -496,7 +497,7 @@ export function useCapexWrites(
     onSuccess: async (_data, _line, context) => {
       const deletesDone = performance.now();
       await invalidate(context ? context.category : category);
-      console.info(panelBusyLogLine(
+      logAction(panelBusyLogLine(
         deletesDone - (context?.startedAt ?? deletesDone), performance.now() - deletesDone, "delete",
       ));
     },

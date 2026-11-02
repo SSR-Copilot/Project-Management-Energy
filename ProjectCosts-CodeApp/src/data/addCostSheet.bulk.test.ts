@@ -12,6 +12,8 @@
  * wrapped in spies (calling through) only so the deps and options the wiring passes can be read.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logText } from "@/test/logLines";
+import { flushDataLog, resetRequestLog } from "@/platform/requestLog";
 
 type Action = "create" | "update";
 interface UpsertCall { action: Action; entitySetName: string; targets: Record<string, unknown>[] }
@@ -383,7 +385,7 @@ const verifyReads = () => reads.filter((r) => r.label.startsWith("check existing
 
 type InfoSpy = { mock: { calls: unknown[][] } };
 /** Every `console.info` line, without the `[VSB] ACTION ` prefix the request log adds (`platform/requestLog.ts`). */
-const infoLines = (info: InfoSpy) => info.mock.calls.map((c) => String(c[0]).replace(/^\[VSB\] ACTION /, ""));
+const infoLines = (info: InfoSpy) => info.mock.calls.map((c) => logText(c[0]));
 /** The save's own `console.info` lines (success or failure), without the background-delete line. */
 const saveLines = (info: InfoSpy) =>
   infoLines(info).filter((l) => l.startsWith("Add Cost from Table save"));
@@ -2086,7 +2088,7 @@ describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
   /** Every console line in order: info as is, a group title as `## title`, a table row as `| a | b`. */
   const captureLog = () => {
     const out: string[] = [];
-    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(String(t)); });
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(logText(t)); });
     vi.spyOn(console, "groupCollapsed").mockImplementation((t: unknown) => { out.push(`## ${String(t)}`); });
     vi.spyOn(console, "table").mockImplementation((rows: unknown) => {
       for (const r of rows as Record<string, unknown>[]) out.push(`| ${Object.values(r).join(" | ")}`);
@@ -2305,7 +2307,7 @@ describe("saveAddCostSheetBulk — the readable save log, review fixes (D59)", (
   const captureLog = () => {
     const out: string[] = [];
     const raw: unknown[] = [];
-    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(String(t)); });
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { out.push(logText(t)); });
     vi.spyOn(console, "groupCollapsed").mockImplementation((t: unknown) => { out.push(`## ${String(t)}`); });
     vi.spyOn(console, "table").mockImplementation((rows: unknown) => {
       for (const r of rows as Record<string, unknown>[]) out.push(`| ${Object.values(r).join(" | ")}`);
@@ -2384,5 +2386,71 @@ describe("saveAddCostSheetBulk — the readable save log, review fixes (D59)", (
     await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
     const start = out.indexOf("## Requests");
     expect(out.slice(start)).toContain("Not counted as requests: the reconcile's cost reads and the per-row fallback's existence check");
+  });
+});
+
+describe("saveAddCostSheetBulk — the request-log format (D78)", () => {
+  /** Every raw console line of one level, prefix kept: these tests pin the prefix itself. */
+  const raw = (spy: InfoSpy) => spy.mock.calls.map((c) => String(c[0]));
+  const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  beforeEach(() => { resetRequestLog(); });
+
+  it("UT-REQLOG-ACS-010 the save line is an ACTION line, and each bulk request is one DATA line with its rows", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false });
+    flushDataLog();
+    expect(raw(info)).toContainEqual(expect.stringMatching(/^\[VSB\] ACTION Add Cost from Table save: [\d,]+ ms, /));
+    const data = raw(info).filter((l) => l.startsWith("[VSB] DATA "));
+    for (const kind of ["create", "update"]) {
+      for (const es of [ES_CONTRACTS, ES_COSTS]) {
+        expect(data).toContainEqual(expect.stringMatching(new RegExp(`^\\[VSB\\] DATA ${kind} ${es}: 1 row, \\d+ ms`)));
+      }
+    }
+    // Counts and table names only: no row id reaches a DATA line.
+    expect(data.join("\n")).not.toMatch(GUID_RE);
+  });
+
+  it("UT-REQLOG-ACS-011 a refused bulk request is a FAILED DATA warning, with no rows counted", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    refusedActions = new Set(["update"]);
+    await expect(saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false })).rejects.toThrow();
+    flushDataLog();
+    expect(raw(warn)).toContainEqual(expect.stringMatching(new RegExp(`^\\[VSB\\] DATA update ${ES_COSTS}: 0 rows, .*1 FAILED`)));
+  });
+
+  it("UT-REQLOG-ACS-012 the 501 fallback warning carries the ACTION prefix, at warning level", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    notImplemented = new Set(["create"]);
+    rowUpsertAllowed = true;
+    await saveAddCostSheetBulk(typical());
+    expect(raw(warn)).toContainEqual(expect.stringMatching(/^\[VSB\] ACTION .*CreateMultiple/));
+    expect(raw(warn).filter((l) => /501/.test(l) && !l.startsWith("[VSB] "))).toEqual([]);
+  });
+
+  it("UT-REQLOG-ACS-013 the deferred deletes are one ACTION of their own, closed when they settle", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const result = await saveAddCostSheetBulk(typical());
+    const action = () => raw(info).filter((l) => l.startsWith("[VSB] ACTION Add Cost from Table deferred deletes:"));
+    expect(result.background).toBeInstanceOf(Promise);
+    await result.background;
+    expect(action()).toHaveLength(1);
+    expect(action()[0]).toMatch(/: \d+ ms, \d+ requests?, \d+ rows?.* \[a\d+\]$/);
+    // The D59 outcome line is still there, under its own, distinct wording.
+    expect(infoLines(info)).toContainEqual(expect.stringMatching(/^Add Cost from Table background deletes: /));
+  });
+
+  it("UT-REQLOG-ACS-014 a refused deferred delete closes that ACTION as FAILED, at warning level", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    refused = new Set([DOOMED]);
+    const result = await saveAddCostSheetBulk(typical());
+    await result.background;
+    expect(raw(warn)).toContainEqual(expect.stringMatching(/^\[VSB\] ACTION Add Cost from Table deferred deletes: .*, FAILED/));
   });
 });

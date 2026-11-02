@@ -7,6 +7,8 @@
  * and — flag off, the default — that the requests are exactly today's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logText } from "@/test/logLines";
+import { flushDataLog, resetRequestLog } from "@/platform/requestLog";
 
 type Action = "create" | "update";
 interface UpsertCall { action: Action; entitySetName: string; targets: Record<string, unknown>[] }
@@ -166,7 +168,7 @@ function normalised(): string {
 }
 
 const saveLine = (info: { mock: { calls: unknown[][] } }) =>
-  info.mock.calls.map((c) => String(c[0])).find((l) => l.startsWith("Add Cost from Table save")) ?? "";
+  info.mock.calls.map((c) => logText(c[0])).find((l) => l.startsWith("Add Cost from Table save")) ?? "";
 
 function reset() {
   upsertCalls = [];
@@ -258,6 +260,21 @@ describe("DEEP_INSERT_NEW_CONTRACTS on — the new contract travels with its cos
     expect(creates).toHaveLength(1);
     expect(reads.filter((l) => l.startsWith("check existing "))).toHaveLength(0); // confirmed for the tab
     expect(saveLine(info)).toMatch(/\(create 1 req deep insert \[/);
+  });
+
+  it("UT-ACDEEP-030 each deep-insert POST is one [VSB] DATA create line with the contract plus its nested rows (D78)", async () => {
+    resetRequestLog();
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await saveAddCostSheetBulk({ ...sheet(), deepInsertNewContracts: true });
+    flushDataLog();
+    const data = info.mock.calls.map((c) => String(c[0]))
+      .filter((l) => l.startsWith("[VSB] DATA create vsb_capexprojectcontracts (deep insert):"));
+    // One summed line for this save's POSTs; rows = the contracts plus their nested cost rows.
+    const rows = creates.length + creates.reduce((n, body) => n + ((body[NAV] as unknown[] | undefined)?.length ?? 0), 0);
+    expect(creates.length).toBeGreaterThan(0);
+    expect(data).toHaveLength(1);
+    expect(data[0]).toMatch(new RegExp(`: ${rows} rows, ${creates.length === 1 ? "\\d+ ms$" : `${creates.length} calls, `}`));
+    expect(data[0]).not.toMatch(GUID);
   });
 
   it("UT-ACDEEP-024 nested rows that did not land: phase-1 SavePlanError, the new contract's total rewritten from what landed, the tab falls back", async () => {

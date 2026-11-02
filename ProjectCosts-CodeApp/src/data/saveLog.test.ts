@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  MAX_MESSAGE, MAX_TABLE_ROWS, emitSaveLog, errorChainLines, failureSection, gateTail, inStartOrder,
+  MAX_MESSAGE, MAX_TABLE_ROWS, SAVE_LOG_PREFIX, emitSaveLog, errorChainLines, failureSection, gateTail, inStartOrder,
   groupsText, messageOf, plural, rawErrorSection, requestsSection, rootMessageOf, stepsSection, type SaveLogStep,
 } from "./saveLog";
 import { SAVE_REQUEST_LIMIT, bulk501WarningLine, createRequestMeter, formatMs } from "./bulkSend";
@@ -172,7 +172,8 @@ describe("saveLog — emitSaveLog", () => {
     vi.spyOn(console, "error").mockImplementation((e: unknown) => { calls.push(`error:${(e as Error).message}`); });
     emitSaveLog(report);
     expect(calls).toEqual([
-      "info:Add Cost from Table save: 1,916 ms, 5 requests (…)",
+      // The summary carries the request log's ACTION prefix (D78); the group lines do not.
+      "info:[VSB] ACTION Add Cost from Table save: 1,916 ms, 5 requests (…)",
       "group:Steps (start order)", "info:note", "table", "end",
       "group:Raw error (for support)", "error:raw", "end",
     ]);
@@ -192,7 +193,7 @@ describe("saveLog — emitSaveLog", () => {
       console.table = original.table;
     }
     expect(lines).toEqual([
-      "Add Cost from Table save: 1,916 ms, 5 requests (…)",
+      "[VSB] ACTION Add Cost from Table save: 1,916 ms, 5 requests (…)",
       "  Steps (start order):", "    note", "    Step: plan | Took: 2 ms",
       "  Raw error (for support):",
     ]);
@@ -209,7 +210,7 @@ describe("saveLog — emitSaveLog", () => {
     vi.spyOn(console, "groupEnd").mockImplementation(() => { ended += 1; });
     vi.spyOn(console, "error").mockImplementation(() => { throw new Error("also broke"); });
     expect(() => emitSaveLog(report)).not.toThrow();
-    expect(lines[0]).toBe(report.summary);
+    expect(lines[0]).toBe(`${SAVE_LOG_PREFIX}${report.summary}`);
     expect(ended).toBe(2);
     vi.spyOn(console, "info").mockImplementation(() => { throw new Error("all broke"); });
     expect(() => emitSaveLog(report)).not.toThrow();
@@ -220,7 +221,7 @@ describe("saveLog — emitSaveLog", () => {
     vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(String(t)); });
     expect(() => emitSaveLog(() => { throw new Error("builder broke"); })).not.toThrow();
     emitSaveLog(() => ({ summary: "built", sections: [] }));
-    expect(lines).toEqual(["built"]);
+    expect(lines).toEqual(["[VSB] ACTION built"]);
   });
 });
 

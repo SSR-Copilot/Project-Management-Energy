@@ -227,9 +227,12 @@ export function logError(message: string, cause?: string, context = false): void
   emit("error", `${LOG_PREFIX} ERROR ${message}${cause ? ` — ${cause}` : ""}${where}${last}${idTag()}`);
 }
 
-/** A free-form ACTION line (the Add Cost from Table save keeps its own wording behind this prefix). */
-export function logAction(message: string): void {
-  emit("info", `${LOG_PREFIX} ACTION ${message}`);
+/**
+ * A free-form ACTION line (the Add Cost from Table save keeps its own wording behind this prefix).
+ * `warn` for an outcome worth a second look that is not an error (e.g. a bulk action's 501 fallback).
+ */
+export function logAction(message: string, level: "info" | "warn" = "info"): void {
+  emit(level, `${LOG_PREFIX} ACTION ${message}`);
 }
 
 const MAX_OPS_SHOWN = 6;

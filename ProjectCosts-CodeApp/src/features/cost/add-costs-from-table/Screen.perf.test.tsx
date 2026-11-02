@@ -15,6 +15,7 @@ import type { AddCostSheetData } from "@/data/addCostSheet";
 import { CHOICE, type ExistingContract } from "./rules";
 import type { SheetGrid } from "./spreadsheet/SpreadSheet";
 import { PAINT_TIMEOUT_MS, addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
+import { logText } from "@/test/logLines";
 
 let sheet: AddCostSheetData;
 const mutateAsync = vi.fn(async (_args: unknown) => undefined);
@@ -97,7 +98,7 @@ beforeEach(() => {
   reportGrid = null;
   lastGrid = null;
   lines = [];
-  vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(String(t)); });
+  vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(logText(t)); });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
   vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);

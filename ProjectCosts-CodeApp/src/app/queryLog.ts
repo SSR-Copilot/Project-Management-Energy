@@ -31,6 +31,23 @@ export const keyText = (key: readonly unknown[]): string => {
   return text.length > MAX_KEY ? `${text.slice(0, MAX_KEY - 1)}…` : text;
 };
 
+/**
+ * A readable name for the keys support asks about most (D78), else `undefined` and the key text is
+ * used. Never a row id: the project GUID in these keys is left out.
+ *  - the Add Cost from Table Save (`costWriteKey(projectId, "add-cost-sheet")`, CA-15);
+ *  - any other Cost write family (`["cost-write", projectId, family]`);
+ *  - the Add Cost from Table sheet load (`["add-cost-sheet", projectId, category]`).
+ */
+export function actionName(kind: "Load" | "Write", key: readonly unknown[] | undefined): string | undefined {
+  if (!key) return undefined;
+  if (kind === "Write" && key[0] === "cost-write") {
+    return key[2] === "add-cost-sheet" ? "Add Cost from Table save"
+      : typeof key[2] === "string" ? `Cost write (${key[2]})` : "Cost write";
+  }
+  if (kind === "Load" && key[0] === "add-cost-sheet") return `Add Cost from Table load (category ${String(key[2])})`;
+  return undefined;
+}
+
 export function attachQueryLog(client: QueryClient): () => void {
   const loads = new Map<string, (ok: boolean) => void>();
   const writes = new Map<number, (ok: boolean) => void>();
@@ -40,7 +57,8 @@ export function attachQueryLog(client: QueryClient): () => void {
     const hash = event.query.queryHash;
     const action = event.action.type;
     if (action === "fetch" && !loads.has(hash)) {
-      loads.set(hash, beginAction(`Load ${keyText(event.query.queryKey)}`));
+      const key = event.query.queryKey;
+      loads.set(hash, beginAction(actionName("Load", key) ?? `Load ${keyText(key)}`));
     } else if (action === "success" || action === "error") {
       loads.get(hash)?.(action === "success");
       loads.delete(hash);
@@ -53,7 +71,7 @@ export function attachQueryLog(client: QueryClient): () => void {
     const action = event.action.type;
     if (action === "pending" && !writes.has(id)) {
       const key = event.mutation.options.mutationKey;
-      writes.set(id, beginAction(key ? `Write ${keyText(key)}` : `Write @ ${routeOf()}`));
+      writes.set(id, beginAction(actionName("Write", key) ?? (key ? `Write ${keyText(key)}` : `Write @ ${routeOf()}`)));
     } else if (action === "success" || action === "error") {
       writes.get(id)?.(action === "success");
       writes.delete(id);

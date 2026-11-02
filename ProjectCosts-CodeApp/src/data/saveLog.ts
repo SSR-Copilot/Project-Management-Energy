@@ -5,7 +5,10 @@
  *
  * SHAPE. Every event prints ONE summary line through `console.info` first: greppable, short enough
  * to paste into a support ticket, and in the one unit `formatMs` (exact ms with a thousands
- * separator). Below it come collapsed groups (`console.groupCollapsed`) with the detail: tables
+ * separator). The summary carries the request log's `[VSB] ACTION ` prefix (D72, D78), so the
+ * console filter `[VSB]` shows these lines beside the HTTP / DATA / ACTION ones; the builders
+ * here stay prefix-free and `printReport` adds it. Below it come collapsed groups
+ * (`console.groupCollapsed`) with the detail: tables
  * through `console.table`, durations in the readable `formatRequestDuration` form. A console
  * without groups or tables gets the same content as indented plain lines.
  *
@@ -30,6 +33,10 @@
 import {
   SAVE_REQUEST_LIMIT, formatMs, formatRequestDuration, type RequestMeter, type UpsertGroupReport,
 } from "./bulkSend";
+import { LOG_PREFIX } from "@/platform/requestLog";
+
+/** What `printReport` puts before every summary line: the request log's ACTION prefix (D78). */
+export const SAVE_LOG_PREFIX = `${LOG_PREFIX} ACTION `;
 
 /** Rows shown per table; the rest are summarised in an `… and N more` line. */
 export const MAX_TABLE_ROWS = 50;
@@ -267,7 +274,7 @@ function printReport(input: SaveLogReport | (() => SaveLogReport)): void {
     const report = typeof input === "function" ? input() : input;
     const c: ConsoleLike = console;
     const info = (text: string): void => { if (typeof c.info === "function") c.info(text); };
-    info(report.summary);
+    info(`${SAVE_LOG_PREFIX}${report.summary}`);
     for (const section of report.sections) {
       let grouped = false;
       try {

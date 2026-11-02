@@ -69,7 +69,7 @@ import {
   type BackgroundOutcome, type SavePlanDeps,
 } from "./addCostSheetBulk";
 import { planDeleteContract } from "@/features/cost/capex-costs/rules";
-import { logAction } from "@/platform/requestLog";
+import { beginAction, logAction } from "@/platform/requestLog";
 import {
   contractUpserts, costWrites, recomputeContractTotal,
   type ExistingContract, type ExistingCost, type SaveFailure, type SheetRow,
@@ -1018,18 +1018,33 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
     const ms = elapsed(planStarted);
     record({ text: `plan ${formatMs(ms)}`, step: { label: "plan", startMs: planStarted - started, ms, status: "ok" } });
   }
+  /**
+   * D78: the deferred deletes are their own request-log ACTION, "Add Cost from Table deferred
+   * deletes" (not "background deletes": that wording is the D59 outcome line's, and a filter on it
+   * must find that line only). It opens when the first deferred batch is sent and closes when the
+   * last one settles (on every path: success, a failed batch, or a Save that waits for them).
+   * Their HTTP and DATA lines then carry an id of their own after the Save's action has closed,
+   * instead of only the ids of the reloads that happen to be open. Logging only.
+   */
+  const backgroundAction = { open: 0, failed: false, end: undefined as ((ok: boolean) => void) | undefined };
   const deps: SavePlanDeps = {
     upsert,
     // `timed`'s entry, also filed under its kind (`deletes.*`) for the save line and the logs.
     deleteMany: async (table, ids, label, step) => {
       const isContracts = table.entitySetName === CAPEX_CONTRACTS.entitySetName;
-      if (isContracts ? deferContractDeletes : deferCostDeletes) {
+      const deferred = isContracts ? deferContractDeletes : deferCostDeletes;
+      if (deferred) {
         // Only a deferred kind: `executeSavePlan` sends it after the writes settled.
         logAction(backgroundDeleteStartLine(
           isContracts ? "contracts" : "costs", ids.length, elapsed(started),
           (isContracts ? contractDeleteGate : costDeleteGate).inFlight(),
           isContracts ? CONTRACT_DELETE_LIMIT : COST_DELETE_LIMIT,
         ));
+        if (backgroundAction.open === 0) {
+          backgroundAction.failed = false;
+          backgroundAction.end = beginAction("Add Cost from Table deferred deletes");
+        }
+        backgroundAction.open += 1;
       }
       const kind = deleteKind(table);
       const t0 = performance.now();
@@ -1060,6 +1075,14 @@ export async function saveAddCostSheetBulk(args: SaveAddCostSheetArgs): Promise<
         });
         // A delete never lands among the background reconcile's steps: its batch is in `batches`.
         if (!printed) entries.push(entry);
+        if (deferred) {
+          if (!ok) backgroundAction.failed = true;
+          backgroundAction.open -= 1;
+          if (backgroundAction.open === 0) {
+            backgroundAction.end?.(!backgroundAction.failed);
+            backgroundAction.end = undefined;
+          }
+        }
       }
     },
     // The reconcile sums what the contracts will hold once every pending delete landed: rows an

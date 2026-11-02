@@ -27,11 +27,13 @@
  * Nothing here plans rows or decides what a save writes; callers pass `UpsertTarget`s already
  * shaped by their own planner.
  */
+import type { IOperationResult } from "@microsoft/power-apps/data";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
 import { CreateMultipleService } from "@/generated/services/CreateMultipleService";
 import { UpdateMultipleService } from "@/generated/services/UpdateMultipleService";
 import { DataError, RecordGoneError, unwrap } from "@/platform/errors";
+import { logAction, logData, loggedCall } from "@/platform/requestLog";
 import { fetchAll } from "./client";
 import { chunk, idIn } from "./odata";
 import { DELETE_CONCURRENCY, createGate, forEachLimit } from "./concurrency";
@@ -210,10 +212,41 @@ export type BulkAction = "create" | "update";
 function bulkTransport(
   action: BulkAction, onDuration?: (ms: number) => void, meter?: RequestMeter,
 ): BulkUpsertTransport {
-  return action === "create"
-    ? (es, targets) => gated(() => CreateMultipleService.CreateMultiple(es, [...targets]), onDuration, meter)
-    : (es, targets) => gated(() => UpdateMultipleService.UpdateMultiple(es, [...targets]), onDuration, meter);
+  const send: BulkUpsertTransport = action === "create"
+    ? (es, targets) => CreateMultipleService.CreateMultiple(es, [...targets])
+    : (es, targets) => UpdateMultipleService.UpdateMultiple(es, [...targets]);
+  return (es, targets) => gated(
+    () => loggedBulkRequest(action, es, targets.length, () => send(es, targets)), onDuration, meter,
+  );
 }
+
+/**
+ * One `[VSB] DATA` entry per bulk request (D78; D72 left bulk actions as HTTP lines only), timed
+ * inside the gate like the HTTP line. A bulk action answers `{ success: false }` rather than
+ * throwing, so the entry takes ok / failed from the result, and counts rows only when it landed.
+ * Counts and the table name only, never row values. The result is returned untouched.
+ */
+async function loggedBulkRequest(
+  kind: BulkAction, target: string, rows: number, send: () => Promise<IOperationResult<unknown>>,
+): Promise<IOperationResult<unknown>> {
+  const t0 = performance.now();
+  try {
+    const result = await send();
+    const ok = result?.success !== false;
+    logData({
+      kind, target, ms: performance.now() - t0, ok,
+      ...(ok ? { rows } : { error: shortError(result?.error) }),
+    });
+    return result;
+  } catch (error) {
+    logData({ kind, target, ms: performance.now() - t0, ok: false, error: shortError(error) });
+    throw error;
+  }
+}
+
+/** The failure text of a DATA entry: the message only, cut like `loggedCall` cuts it. */
+const shortError = (error: unknown): string =>
+  (error instanceof Error ? error.message : typeof error === "string" ? error : "request failed").slice(0, 120);
 
 /**
  * One request's duration for the log: `980 ms` under a second, else seconds with one decimal
@@ -557,7 +590,8 @@ async function sendGroup(
   } catch (error) {
     if (!isBulkNotImplemented(error)) throw error;
     rememberBulk501(action);
-    console.warn(bulk501WarningLine(BULK_ACTION_NAME[action], groupLabel, rows.length));
+    // `[VSB] ACTION …` at warning level, like every other line of the save (D78).
+    logAction(bulk501WarningLine(BULK_ACTION_NAME[action], groupLabel, rows.length), "warn");
   }
   track.path = "per-row after 501";
   return refusedBulkRequests(rows.length) + (await upsertEachRow(table, rows, groupLabel, guard, meter)).requests;
@@ -901,7 +935,12 @@ export async function deepInsertContracts(
   const track: GroupTrack = { path: "deep insert", durations: [] };
   const durations = track.durations as number[];
   const settled = await Promise.allSettled(groups.map((group) => gated(
-    async () => unwrap(await Vsb_capexprojectcontractsService.create(deepInsertBody(group) as never), groupLabel),
+    // One `[VSB] DATA create … (deep insert)` entry per POST: the contract and its nested rows (D78).
+    () => loggedCall(
+      "create", `${CAPEX_CONTRACTS.entitySetName} (deep insert)`,
+      async () => unwrap(await Vsb_capexprojectcontractsService.create(deepInsertBody(group) as never), groupLabel),
+      () => 1 + group.costs.length,
+    ),
     (ms) => { durations.push(ms); }, opts.meter,
   )));
   const landed = groups.filter((_, i) => settled[i]?.status === "fulfilled");

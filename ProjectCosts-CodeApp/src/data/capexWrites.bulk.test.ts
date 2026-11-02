@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COMMENT_TYPE } from "@/features/cost/capex-costs/comments";
+import { logText } from "@/test/logLines";
 import { reconcilePayments } from "@/features/cost/capex-costs/rules";
 import type { CostLine, Payment } from "@/features/cost/costing/model";
 
@@ -241,7 +242,7 @@ beforeEach(() => {
 });
 
 /** The panel's one-line summaries (`CAPEX panel …`), in the order printed. */
-const summaries = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]))
+const summaries = () => vi.mocked(console.info).mock.calls.map((c) => logText(c[0]))
   .filter((l) => l.startsWith("CAPEX panel "));
 const lastSummary = () => summaries().at(-1) ?? "";
 
@@ -578,7 +579,7 @@ describe("deleteCostLineBulk", () => {
 
 describe("a refused comment delete stops the next phase (CA-18, rule 14)", () => {
   const payments = [cost("c1", 1, 1), cost("c2", 2, 1)];
-  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]));
+  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => logText(c[0]));
   const seedComments = () => {
     comments.set("k1", { contract: CONTRACT, type: COMMENT_TYPE.general });
     comments.set("k2", { contract: CONTRACT, type: COMMENT_TYPE.paymentDate });
@@ -676,7 +677,7 @@ describe("the console lines", () => {
 
 describe("the readable panel log (D59)", () => {
   const groupTitles = () => vi.mocked(console.groupCollapsed).mock.calls.map((c) => String(c[0]));
-  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => String(c[0]));
+  const infoLines = () => vi.mocked(console.info).mock.calls.map((c) => logText(c[0]));
   const twelve = () => months(12, () => 100).map((p, i) => ({ ...p, id: `c${i + 1}` }));
 
   it("UT-CAPEXLOG-001 steps are listed in START order, though the months answered before the contract", async () => {

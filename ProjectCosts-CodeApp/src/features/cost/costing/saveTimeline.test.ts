@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deferSaveLog, emitSaveLog } from "@/data/saveLog";
+import { logText } from "@/test/logLines";
 import {
   PAINT_TIMEOUT_MS, addCostSaveTimeline, clientTimelineReport, type ClientTimeline,
 } from "./saveTimeline";
@@ -104,7 +105,7 @@ describe("addCostSaveTimeline (store)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     lines = [];
-    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(String(t)); });
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(logText(t)); });
     vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
     vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
     vi.spyOn(console, "table").mockImplementation(() => undefined);
@@ -209,7 +210,7 @@ describe("deferSaveLog (WS-E)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     lines = [];
-    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(String(t)); });
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(logText(t)); });
     vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
     vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
   });

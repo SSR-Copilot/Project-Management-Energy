@@ -8,6 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SavePlanDeps } from "./addCostSheetBulk";
+import { logText } from "@/test/logLines";
 
 /** What the double orchestrator does with the deps the save hands it. */
 let script: (deps: SavePlanDeps) => Promise<void>;
@@ -48,7 +49,7 @@ describe("saveAddCostSheetBulk — the client timeline's first-request mark (P0.
   let lines: string[];
   beforeEach(() => {
     lines = [];
-    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(String(t)); });
+    vi.spyOn(console, "info").mockImplementation((t: unknown) => { lines.push(logText(t)); });
     vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
     vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
     vi.spyOn(console, "table").mockImplementation(() => undefined);
