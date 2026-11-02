@@ -14,6 +14,7 @@ const notify: Notify = {
   info: (...a) => probe.current?.info(...a),
   warning: (...a) => probe.current?.warning(...a),
   error: (...a) => probe.current?.error(...a),
+  progress: (...a) => probe.current?.progress(...a) ?? (() => undefined),
   dismissAll: () => probe.current?.dismissAll(),
 };
 function Probe() {
