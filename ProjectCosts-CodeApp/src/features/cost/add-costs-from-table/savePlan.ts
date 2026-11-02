@@ -7,7 +7,9 @@
  *
  *   1. contract upserts — new contracts, changed contracts, and every touched contract's total
  *      that differs from the stored one (or whose stored total is unknown). A touched contract
- *      with matching columns AND total gets no target, but keeps its entry in `totals`;
+ *      with matching columns AND total gets no target, but keeps its entry in `totals`. An
+ *      existing contract's update carries only the columns (and total) that change
+ *      (`CHANGED_COLUMNS_ONLY`); a create carries all of them;
  *   2. cost upserts — one per changed month cell (no-op cells are left out);
  *   3. cost deletes — blanked months, ONLY under contracts that survive this save;
  *   4. contract deletes — their cost rows and comments go by the Dataverse cascade.
@@ -118,7 +120,19 @@ interface BuildSavePlanDeps {
    * key across attempts (see the module note); injected so the planner stays pure.
    */
   newId: (identityKey: string) => string;
+  /** Overrides `CHANGED_COLUMNS_ONLY` for this one plan (tests). */
+  changedColumnsOnly?: boolean;
 }
+
+/**
+ * REQUEST SHAPE, not a data DIVERGENCE (WS-D, B5): an existing contract's UPDATE carries only the
+ * columns whose planned value differs from the stored one, and `vsb_totalcost` only when the total
+ * changes (or the stored total is unknown). The final Dataverse row is the same as with the full
+ * column bag; only the request is smaller. A CREATE always carries the full bag, its binds and its
+ * total. `false` restores the earlier shape exactly: any differing column sends every
+ * `contractFields` column plus the total.
+ */
+export const CHANGED_COLUMNS_ONLY = true;
 
 /**
  * The contract columns a sheet edit writes. The ONE definition: the legacy per-row save's
@@ -155,16 +169,46 @@ function savedContractColumns(u: ContractUpsert): SavedContractColumns {
   };
 }
 
-/** True when writing `contractFields(u)` would leave the stored contract exactly as it is. */
-function contractUnchanged(u: ContractUpsert, c: ExistingContract): boolean {
-  return c.name === u.name
-    && c.applyVat === u.applyVat
-    && c.depreciation === u.depreciation
-    && c.costType === u.costType
-    && c.distribution === u.distribution
-    && c.distributionScheme === u.distributionScheme
-    && c.isEditedFromPcf === u.isEditedFromPcf
-    && c.initialContractSource === u.initialContractSource;
+/** The stored contract under `contractFields`' keys, as `loadContracts` (`data/addCostSheet.ts`) read it. */
+function storedContractFields(c: ExistingContract): Record<string, unknown> {
+  return {
+    vsb_name: c.name,
+    vsb_applyvat: c.applyVat,
+    vsb_depreciation: c.depreciation,
+    vsb_costtype: c.costType,
+    vsb_distribution: c.distribution,
+    vsb_distributionscheme: c.distributionScheme,
+    vsb_iseditedfrompcf: c.isEditedFromPcf,
+    vsb_initialcontractsource: c.initialContractSource,
+  };
+}
+
+/**
+ * The reading `loadContracts` gives a BLANK column that it cannot tell from a value: `vsb_name ??
+ * ""` and `vsb_iseditedfrompcf === true`. Every other column keeps its null. A planned value equal
+ * to this reading may still be a change (blank → value), so the column is sent whenever another
+ * column of the same row is — exactly when the full bag would have sent it — and never on its own,
+ * exactly as the full bag never was. That keeps the final row identical in both cases.
+ */
+const BLANK_READS_AS: Readonly<Record<string, unknown>> = { vsb_name: "", vsb_iseditedfrompcf: false };
+
+/**
+ * The columns of `contractFields(u)` that writing would change on the stored contract `c`, plus
+ * the `BLANK_READS_AS` columns that may; `null` when writing `contractFields(u)` would leave the
+ * stored contract exactly as it is (every column equal, compared with `===`). In
+ * `contractFields` order.
+ */
+function changedContractFields(u: ContractUpsert, c: ExistingContract): Record<string, unknown> | null {
+  const planned = contractFields(u);
+  const stored = storedContractFields(c);
+  const keys = Object.keys(planned);
+  if (keys.every((k) => planned[k] === stored[k])) return null;
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    const maybeBlank = k in BLANK_READS_AS && BLANK_READS_AS[k] === planned[k];
+    if (planned[k] !== stored[k] || maybeBlank) out[k] = planned[k];
+  }
+  return out;
 }
 
 /** True when the stored `vsb_totalcost` is known and already equals `total` (rounded). */
@@ -177,6 +221,7 @@ function totalUnchanged(c: ExistingContract | undefined, total: number): boolean
 interface PendingContract {
   id: string;
   isNew: boolean;
+  /** The columns to send (all of them, or only the changed ones: `CHANGED_COLUMNS_ONLY`). */
   fields: Record<string, unknown> | null;
   /** `fields` in domain terms (`SavedSheetChanges`); null exactly when `fields` is. */
   columns: SavedContractColumns | null;
@@ -190,6 +235,7 @@ const quotedList = (values: readonly string[]): string[] => [...new Set(values)]
 
 export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): SheetSavePlan {
   const { projectId, owningBusinessUnitId, changedRows, existingContracts, existingCosts } = input;
+  const changedColumnsOnly = deps.changedColumnsOnly ?? CHANGED_COLUMNS_ONLY;
   // Rule 4: only a CREATE carries the owning-BU bind; an update must not move the row.
   const buBind = owningBusinessUnitId ? bind("businessunits", owningBusinessUnitId) : null;
 
@@ -261,9 +307,14 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sh
       contractsCreated += 1;
     } else {
       // An existing contract whose stored columns already equal the upsert gets its total only.
-      // Same final state as the legacy save's unconditional update, one fewer column set.
+      // Same final state as the legacy save's unconditional update, one fewer column set. Otherwise
+      // it gets its changed columns (`CHANGED_COLUMNS_ONLY`) or all of them. One outside the
+      // snapshot cannot be compared, so it gets all of them.
       const existing = contractById.get(id);
-      const fields = existing && contractUnchanged(u, existing) ? null : contractFields(u);
+      const changed = existing ? changedContractFields(u, existing) : contractFields(u);
+      const fields = changed === null ? null : (changedColumnsOnly ? changed : contractFields(u));
+      // `columns` describes the contract's FINAL columns, not what was sent: the book patch
+      // (`applySavedSheetToBook`) overwrites every column it carries.
       contracts.set(id, { id, isNew: false, fields, columns: fields === null ? null : savedContractColumns(u) });
     }
   }
@@ -427,10 +478,12 @@ export function buildSavePlan(input: SavePlanInput, deps: BuildSavePlanDeps): Sh
     // whose STORED total already equals this one. `recomputeContractTotal` has already rounded
     // `total`; the stored value is compared exactly, so a stored 100.4 against a total of 100 is
     // still written (it would change). An unknown stored total (null / undefined) is written.
-    if (!p.isNew && p.fields === null && totalUnchanged(contractById.get(p.id), total)) continue;
+    const sameTotal = !p.isNew && totalUnchanged(contractById.get(p.id), total);
+    if (p.fields === null && sameTotal) continue;
 
     const fields = p.fields ?? {};
-    fields.vsb_totalcost = total;
+    // `CHANGED_COLUMNS_ONLY`: an update whose stored total already matches sends its columns alone.
+    if (!(changedColumnsOnly && sameTotal)) fields.vsb_totalcost = total;
     contractTargets.push({ id: p.id, isNew: p.isNew, fields: Object.freeze(fields) });
     if (!p.isNew) contractsUpdated += 1;
   }

@@ -110,19 +110,25 @@ describe("buildSavePlan", () => {
   });
 
   it("UT-ACSAVE-004 an existing contract with a field change gets its columns plus its total", () => {
-    const plan = buildSavePlan(input({
+    const args = input({
       changedRows: [row({ projectContractId: "c-1", costPaidBy: "SPV", months: months({ 1: 100, 2: 50 }) })],
       existingContracts: [settled()],
       existingCosts: [cost(), cost({ id: "k-2", month: 2, cost: 50 })],
-    }), { newId: counter() });
+    });
+    // `CHANGED_COLUMNS_ONLY` (the default): the changed column, plus the (unknown) stored total.
+    const plan = buildSavePlan(args, { newId: counter() });
     expect(plan.contractUpserts).toEqual([{
+      id: "c-1", isNew: false, fields: { vsb_costtype: CHOICE.costPaidType.spv, vsb_totalcost: 150 },
+    }]);
+    expect(plan.contractUpserts[0]?.fields).not.toHaveProperty("vsb_Project@odata.bind");
+    expect(plan.stats.contractsUpdated).toBe(1);
+    // With the flag off: every `contractFields` column, as before.
+    expect(buildSavePlan(args, { newId: counter(), changedColumnsOnly: false }).contractUpserts).toEqual([{
       id: "c-1", isNew: false,
       fields: { ...contractFields(contractUpserts(
         [row({ projectContractId: "c-1", costPaidBy: "SPV" })], [settled()],
       )[0] as ContractUpsert), vsb_totalcost: 150 },
     }]);
-    expect(plan.contractUpserts[0]?.fields).not.toHaveProperty("vsb_Project@odata.bind");
-    expect(plan.stats.contractsUpdated).toBe(1);
   });
 
   it("UT-ACSAVE-005 a contract whose columns already match is a total-only target", () => {
@@ -542,10 +548,11 @@ describe("buildSavePlan: a contract that would not change is not written", () =>
     }
   });
 
-  it("UT-ACSAVE-035 changed columns give the full target even when the total is unchanged", () => {
+  it("UT-ACSAVE-035 changed columns give a target even when the total is unchanged", () => {
     const p = plan(100, { costPaidBy: "SPV" }, 0);
     expect(p.contractUpserts).toHaveLength(1);
-    expect(p.contractUpserts[0]?.fields).toMatchObject({ vsb_costtype: CHOICE.costPaidType.spv, vsb_totalcost: 100 });
+    // `CHANGED_COLUMNS_ONLY`: the changed column alone; the stored total already matches.
+    expect(p.contractUpserts[0]?.fields).toEqual({ vsb_costtype: CHOICE.costPaidType.spv });
   });
 
   it("UT-ACSAVE-036 rounding: stored 100 against a planned sum of 100.4 is equal, so no target", () => {
@@ -693,7 +700,11 @@ function applyPlan(dv: Dv, plan: ReturnType<typeof buildSavePlan>) {
     const existing = dv.contracts.get(t.id);
     const stripped: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields)) if (!k.includes("@odata.bind")) stripped[k] = v;
-    if (existing) { Object.assign(existing.fields, stripped); existing.total = vsb_totalcost as number; } else {
+    if (existing) {
+      // An UPDATE leaves every column it does not carry as stored, the total included.
+      Object.assign(existing.fields, stripped);
+      if ("vsb_totalcost" in t.fields) existing.total = vsb_totalcost as number;
+    } else {
       dv.contracts.set(t.id, { fields: stripped, total: vsb_totalcost as number });
     }
   }
@@ -953,5 +964,183 @@ describe("buildSavePlan — applied (SavedSheetChanges)", () => {
     expect(Object.isFrozen(plan.applied)).toBe(true);
     expect(Object.isFrozen(plan.applied.costs)).toBe(true);
     expect(Object.isFrozen(plan.applied.contracts)).toBe(true);
+  });
+});
+
+/* ── `CHANGED_COLUMNS_ONLY`: an update sends only what changes (WS-D, B5) ── */
+
+describe("buildSavePlan: an existing contract's update carries only its changed columns", () => {
+  /** c-1 (stored Jan = 100) under `over`; the sheet row writes Jan = `jan`, so the total is `jan`. */
+  const args = (over: Partial<ExistingContract> = {}, rowOver: Partial<SheetRow> = {}, jan = 100) => input({
+    owningBusinessUnitId: "bu-1",
+    changedRows: [row({ projectContractId: "c-1", months: months({ 1: jan }), ...rowOver })],
+    existingContracts: [settled({ totalCost: 100, ...over })],
+    existingCosts: [cost()],
+  });
+  const on = (a: SavePlanInput) => buildSavePlan(a, { newId: counter() });
+  const off = (a: SavePlanInput) => buildSavePlan(a, { newId: counter(), changedColumnsOnly: false });
+  const fieldsOf = (p: ReturnType<typeof buildSavePlan>) => p.contractUpserts.map((t) => t.fields);
+  /** The full bag the flag-off plan sends for c-1 under `a`, total included. */
+  const fullBag = (a: SavePlanInput, total: number) => ({
+    ...contractFields(contractUpserts(a.changedRows, a.existingContracts)[0] as ContractUpsert), vsb_totalcost: total,
+  });
+
+  it("UT-ACSAVE-PAYLOAD-001 an unchanged contract with a matching total gets no write, flag on or off", () => {
+    const a = args({}, {}, 100);
+    expect(on(a).contractUpserts).toEqual([]);
+    expect(off(a).contractUpserts).toEqual([]);
+    expect(on(a).applied).toEqual(off(a).applied);
+  });
+
+  it("UT-ACSAVE-PAYLOAD-002 only the total changed: {vsb_totalcost} alone, flag on or off", () => {
+    const a = args({}, {}, 300);
+    expect(fieldsOf(on(a))).toEqual([{ vsb_totalcost: 300 }]);
+    expect(fieldsOf(off(a))).toEqual([{ vsb_totalcost: 300 }]);
+  });
+
+  it("UT-ACSAVE-PAYLOAD-003 one changed column: that column, plus the total only when it changes", () => {
+    expect(fieldsOf(on(args({}, { applyVat: "No" }, 100)))).toEqual([{ vsb_applyvat: false }]);
+    expect(fieldsOf(on(args({}, { applyVat: "No" }, 250)))).toEqual([{ vsb_applyvat: false, vsb_totalcost: 250 }]);
+    // An unknown stored total is always written.
+    for (const totalCost of [null, undefined]) {
+      expect(fieldsOf(on(args({ totalCost }, { applyVat: "No" }, 100))), String(totalCost))
+        .toEqual([{ vsb_applyvat: false, vsb_totalcost: 100 }]);
+    }
+  });
+
+  it("UT-ACSAVE-PAYLOAD-004 several changed columns: exactly those, in contractFields order", () => {
+    // Stored Equal + % on a not-yet-edited contract, SPV, no VAT; the sheet forces Individual +
+    // Absolute and writes DevCo, Yes, Yes, and the edited flag.
+    const a = args({
+      distribution: CHOICE.distributionType.equal, distributionScheme: CHOICE.distributionScheme.percent,
+      costType: CHOICE.costPaidType.spv, applyVat: false, isEditedFromPcf: false,
+    });
+    const fields = fieldsOf(on(a))[0] as Record<string, unknown>;
+    expect(fields).toEqual({
+      vsb_applyvat: true, vsb_costtype: CHOICE.costPaidType.devCo,
+      vsb_distribution: CHOICE.distributionType.individual,
+      vsb_distributionscheme: CHOICE.distributionScheme.absoluteValues, vsb_iseditedfrompcf: true,
+    });
+    expect(Object.keys(fields)).toEqual(Object.keys(contractFields(contractUpserts(a.changedRows, a.existingContracts)[0] as ContractUpsert))
+      .filter((k) => k in fields));
+  });
+
+  it("UT-ACSAVE-PAYLOAD-005 a stored null differs from every planned value, so it is sent", () => {
+    // `loadContracts` keeps these blank columns null; the planner always writes a value.
+    const a = args({ costType: null, depreciation: null, applyVat: null, distribution: null, distributionScheme: null });
+    expect(fieldsOf(on(a))).toEqual([{
+      vsb_applyvat: true, vsb_depreciation: true, vsb_costtype: CHOICE.costPaidType.devCo,
+      vsb_distribution: CHOICE.distributionType.individual,
+      vsb_distributionscheme: CHOICE.distributionScheme.absoluteValues,
+    }]);
+    // A blank Initial Contract Source is coalesced to PCF (`initialContractSource`), so it is a change.
+    expect(fieldsOf(on(args({ initialContractSource: null })))).toEqual([{
+      vsb_initialcontractsource: CHOICE.initialContractSource.pcf,
+    }]);
+  });
+
+  it("UT-ACSAVE-PAYLOAD-006 a column the read cannot tell from blank travels with another change, never alone", () => {
+    // An untouched Powerapps standard contract: the planner writes Is Edited from PCF = No, and
+    // the read gives false for both No and blank.
+    const standard = {
+      isStandardContract: true, initialContractSource: CHOICE.initialContractSource.powerapps, isEditedFromPcf: false,
+    };
+    expect(on(args(standard)).contractUpserts).toEqual([]);
+    expect(fieldsOf(on(args(standard, {}, 300)))).toEqual([{ vsb_totalcost: 300 }]);
+    expect(fieldsOf(on(args(standard, { applyVat: "No" })))).toEqual([{ vsb_applyvat: false, vsb_iseditedfrompcf: false }]);
+    // `vsb_name ?? ""`: a blank description is the same case.
+    const blankName = { name: "" };
+    expect(on(args(blankName, { description: "" })).contractUpserts).toEqual([]);
+    expect(fieldsOf(on(args(blankName, { description: "", costPaidBy: "SPV" }))))
+      .toEqual([{ vsb_name: "", vsb_costtype: CHOICE.costPaidType.spv }]);
+    // A planned value the read CAN tell apart is not sent along.
+    expect(fieldsOf(on(args({}, { applyVat: "No" })))).toEqual([{ vsb_applyvat: false }]);
+  });
+
+  it("UT-ACSAVE-PAYLOAD-007 flag off: any change sends today's full bag plus the total", () => {
+    for (const [over, rowOver] of [
+      [{}, { applyVat: "No" }],
+      [{ costType: null }, {}],
+      [{ isStandardContract: true, initialContractSource: CHOICE.initialContractSource.powerapps, isEditedFromPcf: false }, { applyVat: "No" }],
+    ] as [Partial<ExistingContract>, Partial<SheetRow>][]) {
+      const a = args(over, rowOver);
+      expect(fieldsOf(off(a)), JSON.stringify(over)).toEqual([fullBag(a, 100)]);
+    }
+  });
+
+  it("UT-ACSAVE-PAYLOAD-008 a create is unchanged: full bag, binds, the owning BU and the total", () => {
+    const a = input({ owningBusinessUnitId: "bu-1", changedRows: [row({ months: months({ 1: 7 }) })] });
+    const created = on(a).contractUpserts;
+    expect(created).toEqual(off(a).contractUpserts);
+    expect(created[0]?.fields).toEqual({
+      ...contractFields(contractUpserts(a.changedRows, [])[0] as ContractUpsert),
+      "vsb_Project@odata.bind": "/vsb_projects(p-1)",
+      "vsb_Account@odata.bind": "/vsb_capexaccountlists(sub-1)",
+      [BU]: "/businessunits(bu-1)",
+      vsb_totalcost: 7,
+    });
+  });
+
+  it("UT-ACSAVE-PAYLOAD-009 an existing contract outside the snapshot cannot be compared: full bag", () => {
+    const a = input({ changedRows: [row({ projectContractId: "c-9", months: months({ 1: 5 }) })] });
+    const [t] = on(a).contractUpserts;
+    expect(t).toMatchObject({ id: "c-9", isNew: false });
+    expect(t?.fields).toEqual({ ...contractFields(contractUpserts(a.changedRows, [])[0] as ContractUpsert), vsb_totalcost: 5 });
+  });
+
+  it("UT-ACSAVE-PAYLOAD-010 an update never carries the owning-BU bind or a parent bind", () => {
+    const p = on(args({ costType: null }, {}, 300));
+    expect(p.contractUpserts[0]?.fields).toEqual({ vsb_costtype: CHOICE.costPaidType.devCo, vsb_totalcost: 300 });
+  });
+
+  it("UT-ACSAVE-PAYLOAD-011 applied (and stats) are identical flag on or off, in every case above", () => {
+    const cases: SavePlanInput[] = [
+      args(), args({}, {}, 300), args({}, { applyVat: "No" }), args({}, { applyVat: "No" }, 250),
+      args({ costType: null, distribution: CHOICE.distributionType.equal }),
+      args({ isStandardContract: true, initialContractSource: CHOICE.initialContractSource.powerapps, isEditedFromPcf: false }, { applyVat: "No" }),
+      input({ changedRows: [row({ months: months({ 1: 7 }) })] }),
+    ];
+    for (const a of cases) {
+      const [p, q] = [on(a), off(a)];
+      expect(p.applied).toEqual(q.applied);
+      expect(p.stats).toEqual(q.stats);
+      expect([...p.totals]).toEqual([...q.totals]);
+    }
+    // `columns` holds the FINAL columns, not only the one sent.
+    expect(on(args({}, { applyVat: "No" })).applied.contracts[0]?.columns).toEqual({
+      subaccountId: "sub-1", name: "My Cost", payer: "DevCo", depreciation: true, vat: false,
+      distribution: "individual", distributionScheme: "absolute",
+    });
+  });
+
+  it("UT-ACSAVE-PAYLOAD-012 over 400 random saves: same final state, same targets and applied; never a wider request", () => {
+    let narrower = 0;
+    let withoutTotal = 0;
+    for (let seed = 1; seed <= 400; seed += 1) {
+      const c = withStoredTotals(randomCase(prng(seed)), prng(seed + 100_000));
+      const p = buildSavePlan(c, { newId: counter("new") });
+      const q = buildSavePlan(c, { newId: counter("new"), changedColumnsOnly: false });
+      const dp = seedState(c.existingContracts, c.existingCosts);
+      const dq = seedState(c.existingContracts, c.existingCosts);
+      applyPlan(dp, p);
+      applyPlan(dq, q);
+      expect(dp, `seed ${seed}: final state`).toEqual(dq);
+      expect(p.applied, `seed ${seed}: applied`).toEqual(q.applied);
+      expect(p.stats, `seed ${seed}: stats`).toEqual(q.stats);
+      expect(p.costUpserts, `seed ${seed}: costs`).toEqual(q.costUpserts);
+      expect(p.contractUpserts.map((t) => [t.id, t.isNew]), `seed ${seed}: targets`)
+        .toEqual(q.contractUpserts.map((t) => [t.id, t.isNew]));
+      p.contractUpserts.forEach((t, i) => {
+        const full = q.contractUpserts[i]?.fields as Record<string, unknown>;
+        if (t.isNew) { expect(t.fields, `seed ${seed}: create ${t.id}`).toEqual(full); return; }
+        // Every column sent is one the full bag sends, with the same value.
+        for (const [k, v] of Object.entries(t.fields)) expect(full[k], `seed ${seed}: ${t.id}.${k}`).toEqual(v);
+        if (Object.keys(t.fields).length < Object.keys(full).length) narrower += 1;
+        if (!("vsb_totalcost" in t.fields)) withoutTotal += 1;
+      });
+    }
+    // The generator reaches both savings.
+    expect(narrower).toBeGreaterThan(0);
+    expect(withoutTotal).toBeGreaterThan(0);
   });
 });
