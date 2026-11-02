@@ -6292,3 +6292,62 @@ UT-ACBG-001…007 (`backgroundSave.test.ts`), 010…015 and 020…022
 5. Other tabs do not see the lock (unchanged, but more likely to matter when the user leaves sooner).
    Related, existing and not caused by D77: CA-25 (a sheet opened during another Cost write keeps a
    snapshot read mid-write).
+
+## D78 · Feature2810 merged into RounakDev1; the Add Cost from Table logs follow the request-log format (2 Nov 2026) — PROPOSED
+
+**Status: PROPOSED, local branch `merge/Feature2810`, not product-approved.** Requested by the user: merge
+`origin/Feature2810` (Shakti Singh Rajput, `b2ad018` + `782076a`) into `RounakDev1`, keep every RounakDev1
+behaviour of the Add Cost from Table Save, and make its console lines follow Feature2810's request log
+(D72, D74; CONVENTIONS rule 23).
+
+### 1. What the merge brings
+Everything in `b2ad018` (131 files): the Playwright parity suite (`e2e/`, `@playwright/test`, not part of
+`verify`), the Application Settings parity fixes (D64, D68, D69, D71), numbers by browser language (D70), the
+request log (D72, D74), the "Show all years" switch (D73), and, confirmed with the user before the merge,
+D62 (Add Cost from Table as a right panel), D63 (no footer strip), D65 (hover hints), D66 (Cluster Check
+List parity), D67 (no Apply bars), plus the shared `ExpandChevron`, the admin page title in the header, the
+test-file moves, CONVENTIONS rule 23 and AGENT-GUIDE item 7.
+
+**Decision numbers.** The Feature2810 commit message cites "D56–D68"; in the file they are **D62–D74**
+(renumbered in its own merge of master). This file uses the file's numbers. The only text conflict was here:
+both sides had appended after D61; the resolution keeps D62–D74, then D75–D77, with no text dropped.
+
+**Removed after the merge:** `src/resolve.mjs`, a merge-conflict helper script committed into `src/` by
+mistake (not app code; nothing imported or ran it), on the user's instruction.
+
+### 2. Overlaps checked by hand (files both branches changed)
+| # | Overlap | Finding | Done |
+|---|---|---|---|
+| 1 | D62 right panel vs the Save's client timeline (D75 P0.1) | The CAPEX paint mark fired only when its grid became visible. It works today only because the two routes' elements differ (`<CapexCostsScreen/>` vs a fragment), so `back()` remounts the CAPEX screen. Keeping that screen mounted under the panel, the obvious later optimisation, would have turned every timeline into a 10 s "not painted" line. | `useSavePaintMark` (new) also re-runs on the location key; UT-ACPERF-050…052; mutation caught |
+| 2 | D62 vs the background Save (D77, off) and the saved-state-at-once patch (D51 §11.19) | No change needed: the Add Cost screen already unmounted on `back()` before D62, and the hook-level `onSuccess` (patch, refetch, background follow-up) does not depend on the screen staying mounted. | Pinned by the existing UT-ACBG-*, UT-ACSHEET-QUERY-* |
+| 3 | D73 one-year view vs the Save's prepare and timeline | No change needed: `SpreadSheet` writes a one-year edit back into the full grid (`fromView`); `onDataChange`, Copy Table, the read-back and `prepareSheetSave` always get every year. | Pinned by UT-ADDCOST-VIEW-* |
+
+### 3. The log alignment (no behaviour change)
+- `emitSaveLog` prints every summary as `[VSB] ACTION …`: the save, failure, prepare, background-deletes,
+  book-patch failure, client timeline and CAPEX panel lines. The builders stay prefix-free
+  (`SAVE_LOG_PREFIX` is added in `printReport`); the collapsed groups are unchanged.
+- The 501 fallback warning (`bulkSend.ts`) and the CAPEX panel busy lines (`useCostBook.ts`) go through
+  `logAction`, which gains an optional `warn` level.
+- **Bulk requests are DATA lines** (D72 had listed them as HTTP-only): each `CreateMultiple` /
+  `UpdateMultiple` request and each deep-insert POST is one `[VSB] DATA` entry with its rows, timed inside
+  the gate like its HTTP line. A bulk action answers `{ success: false }` rather than throwing, so the entry
+  takes ok / FAILED from the result and counts rows only when it landed.
+- **Readable action names** (`app/queryLog.ts` `actionName`): "Add Cost from Table save" (was
+  `Write ["cost-write","<project guid>","add-cost-sheet"]`), "Cost write (<family>)" for the other Cost
+  writes, "Add Cost from Table load (category N)". No project GUID in these names.
+- **The deferred deletes are their own ACTION**, "Add Cost from Table deferred deletes", opened with the
+  first deferred batch and closed when the last one settles (FAILED, as a warning, if a batch failed). The
+  name is deliberately not "background deletes", which is the D59 outcome line's wording: a first version
+  used it, and a console filter (and five tests) then matched two different lines.
+- Tests: the shared `src/test/logLines.ts` (`logText`) replaces per-file prefix stripping (rule 17);
+  UT-SAVELOG-020…023 now pin the prefix; new UT-REQLOG-ACS-001…003 and 010…014, UT-ACDEEP-030. Mutation
+  checks: 8 of 8 caught, every file restored byte for byte.
+
+### 4. Open
+- **Not seen live yet** (CONVENTIONS rule 23): the new DATA, ACTION and deferred-deletes lines must be
+  checked in a real Save on DEV through `pac code run` before this counts as done.
+- Overlapping actions still both count the requests made meanwhile (D72: "a trace, not an invoice"); the
+  deferred deletes can still carry a reload's id beside their own.
+- The failure summaries of the save log stay at info level, as before; only the request log's own lines
+  (DATA FAILED, ACTION FAILED, ERROR) are warnings or errors.
+- Everything from Feature2810 keeps its own PROPOSED status (D62–D74).

@@ -124,6 +124,18 @@ Re-check the code before you trust any line here. The previous handoff,
   writes test rows; decisions on D76 and D77; whether a Dataverse admin may act on the audit
   findings 4 and 6.
 
+### Addendum, 2 Nov 2026 (later): Feature2810 merged (D78)
+
+- `origin/Feature2810` (Shakti: parity pass, request log, Playwright suite, Add Cost year view, D62–D74)
+  merged on the local branch `merge/Feature2810`, then the Add Cost from Table logs aligned to the
+  `[VSB]` request-log format, with no behaviour change (D78). Its handoff is
+  `16-SESSION-HANDOFF-2026-10-29.md`.
+- Add Cost from Table is now a right panel over DEVEX/CAPEX (D62); the Save timeline's paint mark was
+  made independent of whether that screen remounts (D78 §2).
+- **Owed:** see the `[VSB]` lines of a real Save on DEV (CONVENTIONS rule 23), including
+  `[VSB] DATA create|update vsb_capexcosts`, `[VSB] ACTION Add Cost from Table save` and
+  `[VSB] ACTION Add Cost from Table deferred deletes`.
+
 ## Docs updated with this handoff
 
 - `ProjectDocs/instructions/AGENT-GUIDE.md`: "Start here" now points to this file; `14-…` moved to
