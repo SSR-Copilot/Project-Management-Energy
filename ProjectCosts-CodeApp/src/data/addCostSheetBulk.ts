@@ -17,6 +17,16 @@
  *             (3') the `costDeletesIfExist` ids verify found, when verify answered (phase 3)
  *   finally   wait for ALL of the above to settle → on any failure, reconcile, then throw
  *
+ * DEEP INSERT (WS-B, `SavePlanDeps.deepInsert`, absent by default: `DEEP_INSERT_NEW_CONTRACTS`
+ * in `./addCostSheet.ts` is off). When given, and `deepInsertPlan` accepts the plan (at most
+ * `DEEP_INSERT_MAX_CONTRACTS` new contracts with cost rows, at most `DEEP_INSERT_MAX_COSTS` rows
+ * each), the serial hop (1) → (2b) goes: each new contract that has cost rows is created WITH them,
+ * one atomic deep-insert POST per contract, as operation (1') (phase 1, log step
+ * `upsert new contracts with their costs (deep insert)`), started together with (1) and (2a);
+ * (1) keeps the other contract rows and (2b) is empty. A failed (1') says which contracts landed
+ * (`landedIds`); one that did not land took its nested rows with it, so the reconcile leaves it out
+ * as it leaves out a new contract (1) did not create. Otherwise the graph is unchanged.
+ *
  * A DEFERRED delete group (either flag below) is the exception to "t = 0": it starts only once
  * every WRITE has settled — verify, (1), (2a) and (2b) — so its server cascade never contends with
  * the writes for locks (measured on DEV, 27 Oct: see the note at the late start). (3') follows
@@ -80,7 +90,9 @@
  * that carries the outcome of the deletes) with its cause (CONVENTIONS rules 3 and 14).
  */
 import { ES, ES_ADMIN } from "./dataverseNames";
-import type { BulkTableInfo, ExistingIdsReader, SaveBuildPlan, UpsertTarget } from "./bulkTypes";
+import type {
+  BulkTableInfo, DeepInsertGroup, ExistingIdsReader, SaveBuildPlan, UpsertTarget,
+} from "./bulkTypes";
 import { BulkValidationError } from "./bulkWrites";
 import { chunk, OWNING_BU_BIND } from "./odata";
 import {
@@ -165,6 +177,15 @@ export interface SavePlanDeps {
    * would return still waits for everything and behaves exactly as with `false`.
    */
   deferCostDeletes?: boolean;
+  /**
+   * WS-B, deep insert (`DEEP_INSERT_NEW_CONTRACTS` in `./addCostSheet.ts`, default off: absent).
+   * When given, and `deepInsertPlan` accepts the plan as sent (after phase 0's retry flip), the
+   * new contracts that have new cost rows are created WITH those rows, one atomic create each,
+   * as operation (1') — see the module note. Throws when any failed; a failure must say which
+   * contracts landed (`landedIds`, `DeepInsertError` in `./bulkSend.ts`), or none is trusted.
+   * Absent: (2b) waits for (1), exactly as before.
+   */
+  deepInsert?: (groups: readonly DeepInsertGroup[], label: string, step: string) => Promise<{ requests: number }>;
 }
 
 /**
@@ -360,15 +381,85 @@ const STAGE_STEP = {
   costsA: "upsert costs (existing contracts)",
   costsB: "upsert costs (new contracts)",
   costDeletesIfExist: "delete costs (left by a failed attempt)",
+  contractsDeep: "upsert new contracts with their costs (deep insert)",
 } as const;
+
+/* ═════════════════════════════════════════════════════════ deep insert (WS-B) ══ */
+
+/**
+ * WS-B: at most this many deep-insert POSTs (new contracts that carry cost rows) per save; above
+ * it the plan keeps today's path. Each POST is its own request through the shared write gate
+ * (`SAVE_REQUEST_LIMIT`), beside up to 4 bulk groups of up to `BULK_PARALLEL_CHUNKS` requests
+ * each; 8 leaves the gate room for them. PROVISIONAL until measured live (D51 P0.2).
+ */
+export const DEEP_INSERT_MAX_CONTRACTS = 8;
+
+/**
+ * WS-B: at most this many cost rows nested in ONE contract's create; a plan with a bigger group
+ * keeps today's path. The server processes a request's rows one after another (≈ 22–32 ms each,
+ * `TUNED_BULK_TUNING`'s model), so nesting k rows adds about b × k to that contract's create, and
+ * it saves the separate (2b) request (556 ms measured, D51 §11.16). Past about a / b ≈ 18 rows the
+ * nested rows cost what the hop saved, and (2b)'s own split (`BULK_TUNING`) then wins; 24 (two
+ * years of months) is the break-even's upper bound. PROVISIONAL until measured live.
+ */
+export const DEEP_INSERT_MAX_COSTS = 24;
+
+/** What a plan sends when the new contracts go by deep insert. */
+interface DeepInsertSplit {
+  /** One per new contract that has new cost rows. */
+  groups: DeepInsertGroup[];
+  /** The contract targets left for (1): every update, and every new contract without cost rows. */
+  flatContracts: UpsertTarget[];
+}
+
+/**
+ * Whether, and how, this plan's NEW contracts are created with their cost rows nested (WS-B).
+ * `contractUpserts` / `stageB` are the targets as sent: after phase 0's retry flip, so a new
+ * contract an earlier attempt created is already an update and its costs are in stage A.
+ * Undefined — today's path, unchanged — when no new contract has a stage-B cost row, when more than
+ * `limits.maxContracts` would, when one would nest more than `limits.maxCosts` rows, or when a
+ * stage-B row is not itself new (defensive: only a create can be nested). Each nested row is the
+ * planner's target with its contract bind taken out; every other field (the owning-BU bind, rule
+ * 4) and its id (D51 §3a) are kept. Pure.
+ */
+export function deepInsertPlan(
+  contractUpserts: readonly UpsertTarget[], stageB: readonly UpsertTarget[],
+  limits: { maxContracts: number; maxCosts: number } = {
+    maxContracts: DEEP_INSERT_MAX_CONTRACTS, maxCosts: DEEP_INSERT_MAX_COSTS,
+  },
+): DeepInsertSplit | undefined {
+  if (stageB.length === 0 || stageB.some((t) => !t.isNew)) return undefined;
+  const byContract = new Map<string, UpsertTarget[]>();
+  for (const target of stageB) {
+    const key = (boundContractId(target.fields) ?? "").toLowerCase();
+    const fields: Record<string, unknown> = { ...target.fields };
+    delete fields[CONTRACT_BIND];
+    const nested: UpsertTarget = { id: target.id, isNew: true, fields: Object.freeze(fields) };
+    const list = byContract.get(key);
+    if (list) list.push(nested);
+    else byContract.set(key, [nested]);
+  }
+  const groups: DeepInsertGroup[] = [];
+  const flatContracts: UpsertTarget[] = [];
+  for (const contract of contractUpserts) {
+    const costs = contract.isNew ? byContract.get(contract.id.toLowerCase()) : undefined;
+    if (costs) groups.push({ contract, costs });
+    else flatContracts.push(contract);
+  }
+  if (groups.length > limits.maxContracts) return undefined;
+  if (groups.some((g) => g.costs.length > limits.maxCosts)) return undefined;
+  return { groups, flatContracts };
+}
 
 /* ══════════════════════════════════════════════════════════════════ operations ══ */
 
 /**
- * The six write operations: `costsA` / `costsB` are both phase 2, `costDeletes` /
+ * The seven write operations: `contracts` / `contractsDeep` are both phase 1 (`contractsDeep`
+ * only with `SavePlanDeps.deepInsert`), `costsA` / `costsB` both phase 2, `costDeletes` /
  * `costDeletesIfExist` both phase 3.
  */
-type OpKey = "contracts" | "costsA" | "costsB" | "costDeletes" | "costDeletesIfExist" | "contractDeletes";
+type OpKey =
+  | "contracts" | "contractsDeep" | "costsA" | "costsB" | "costDeletes" | "costDeletesIfExist" | "contractDeletes";
 
 /** The timing key of each operation (the two phase-3 deletes share `costDeletes`). */
 type TimingKey = Exclude<OpKey, "costDeletesIfExist">;
@@ -377,11 +468,11 @@ type TimingKey = Exclude<OpKey, "costDeletesIfExist">;
 type HeldKey = "costDeletes" | "contractDeletes";
 
 const OP_PHASE: Record<OpKey, SavePhase> = {
-  contracts: 1, costsA: 2, costsB: 2, costDeletes: 3, costDeletesIfExist: 3, contractDeletes: 4,
+  contracts: 1, contractsDeep: 1, costsA: 2, costsB: 2, costDeletes: 3, costDeletesIfExist: 3, contractDeletes: 4,
 };
 
 const OP_TIMING: Record<OpKey, TimingKey> = {
-  contracts: "contracts", costsA: "costsA", costsB: "costsB",
+  contracts: "contracts", contractsDeep: "contractsDeep", costsA: "costsA", costsB: "costsB",
   costDeletes: "costDeletes", costDeletesIfExist: "costDeletes", contractDeletes: "contractDeletes",
 };
 
@@ -395,12 +486,23 @@ type OpOutcome =
   | { key: OpKey; size: number; status: "ok"; requests: number; removed?: number }
   | { key: OpKey; size: number; status: "failed"; cause: unknown; nothingSent?: boolean };
 
-/** The three upsert operations, once they were started (or decided not to be). */
+/** The upsert operations, once they were started (or decided not to be). */
 interface UpsertOps {
   contracts: Promise<OpOutcome>;
+  /** (1'), the deep inserts: `empty` unless `SavePlanDeps.deepInsert` took this plan. */
+  contractsDeep: Promise<OpOutcome>;
   costsA: Promise<OpOutcome>;
   costsB: Promise<OpOutcome>;
 }
+
+/**
+ * The plan as SENT, for the reconcile: `contractUpserts` after the retry flip, and when (1') ran,
+ * which of them went by deep insert (`deep.contractIds`) and which by (1) (`deep.flat`, in (1)'s
+ * row order, so (1)'s `rowsCommitted` prefix still reads against it).
+ */
+type SentPlan = SaveBuildPlan & {
+  deep?: { flat: readonly UpsertTarget[]; contractIds: readonly string[] };
+};
 
 const now = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
@@ -493,22 +595,41 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
 
   // The contract rows (1) actually sent, after the retry flip; the reconcile reads its prefix.
   let sentContracts: readonly UpsertTarget[] = plan.contractUpserts;
+  // When (1') ran: the contracts it created, and what (1) sent instead of `sentContracts`.
+  let sentDeep: SentPlan["deep"];
+  const noDeep: Promise<OpOutcome> = Promise.resolve({ key: "contractsDeep", size: 0, status: "empty" });
 
   const launch = (contractUpserts: readonly UpsertTarget[], costUpserts: readonly UpsertTarget[]): UpsertOps => {
     sentContracts = contractUpserts;
     const { stageA, stageB } = splitCostTargets(contractUpserts, costUpserts);
-    const contracts = watch(run("contracts", contractUpserts.length,
-      () => deps.upsert(CAPEX_CONTRACTS, contractUpserts, PHASE_LABEL[1])));
+    const deepInsert = deps.deepInsert;
+    const deep = deepInsert ? deepInsertPlan(contractUpserts, stageB) : undefined;
+    if (!deepInsert || !deep) {
+      const contracts = watch(run("contracts", contractUpserts.length,
+        () => deps.upsert(CAPEX_CONTRACTS, contractUpserts, PHASE_LABEL[1])));
+      const costsA = watch(run("costsA", stageA.length,
+        () => deps.upsert(CAPEX_COSTS, stageA, PHASE_LABEL[2], STAGE_STEP.costsA)));
+      // Stage B: the new contracts' cost rows, as soon as (1) succeeded — not after the slow (4) —
+      // and only while no operation has failed. It overlaps whatever still runs.
+      const costsB = contracts.then((c): OpOutcome | Promise<OpOutcome> => {
+        if (stageB.length === 0) return { key: "costsB", size: 0, status: "empty" };
+        if (c.status !== "ok" || failureSeen) return { key: "costsB", size: stageB.length, status: "skipped" };
+        return run("costsB", stageB.length, () => deps.upsert(CAPEX_COSTS, stageB, PHASE_LABEL[2], STAGE_STEP.costsB));
+      });
+      return { contracts, contractsDeep: noDeep, costsA, costsB };
+    }
+    // WS-B, (1'): every stage-B row travels inside its new contract's create, so there is no
+    // stage B left to wait for (1). (1) keeps the other contract rows, (2a) is unchanged; all
+    // three start together.
+    sentDeep = { flat: deep.flatContracts, contractIds: deep.groups.map((g) => g.contract.id) };
+    const contracts = watch(run("contracts", deep.flatContracts.length,
+      () => deps.upsert(CAPEX_CONTRACTS, deep.flatContracts, PHASE_LABEL[1])));
+    const contractsDeep = watch(run("contractsDeep", deep.groups.length,
+      () => deepInsert(deep.groups, PHASE_LABEL[1], STAGE_STEP.contractsDeep)));
     const costsA = watch(run("costsA", stageA.length,
       () => deps.upsert(CAPEX_COSTS, stageA, PHASE_LABEL[2], STAGE_STEP.costsA)));
-    // Stage B: the new contracts' cost rows, as soon as (1) succeeded — not after the slow (4) —
-    // and only while no operation has failed. It overlaps whatever still runs.
-    const costsB = contracts.then((c): OpOutcome | Promise<OpOutcome> => {
-      if (stageB.length === 0) return { key: "costsB", size: 0, status: "empty" };
-      if (c.status !== "ok" || failureSeen) return { key: "costsB", size: stageB.length, status: "skipped" };
-      return run("costsB", stageB.length, () => deps.upsert(CAPEX_COSTS, stageB, PHASE_LABEL[2], STAGE_STEP.costsB));
-    });
-    return { contracts, costsA, costsB };
+    const costsB: Promise<OpOutcome> = Promise.resolve({ key: "costsB", size: 0, status: "empty" });
+    return { contracts, contractsDeep, costsA, costsB };
   };
 
   /** The upserts were never sent: rows gone (`skipped`), or the verify read failed. */
@@ -521,6 +642,7 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
     );
     return {
       contracts: stopped("contracts", plan.contractUpserts.length),
+      contractsDeep: noDeep,
       costsA: stopped("costsA", stageA.length),
       costsB: Promise.resolve(stageB.length === 0
         ? { key: "costsB", size: 0, status: "empty" }
@@ -571,18 +693,23 @@ export async function executeSavePlan(plan: SaveBuildPlan, deps: SavePlanDeps): 
   // early-return decision, on every path: on the early path they run in the background; on every
   // other path the save waits for them and then behaves exactly as before.
   if (deferContracts || deferCosts) {
-    await settleAll([["contracts", ops.contracts], ["costsA", ops.costsA], ["costsB", ops.costsB]]);
+    await settleAll([
+      ["contracts", ops.contracts], ["contractsDeep", ops.contractsDeep], ["costsA", ops.costsA], ["costsB", ops.costsB],
+    ]);
     await verification;
   }
   const contractDeletes = contractDeletesNow ?? startContractDeletes();
   const costDeletes = costDeletesNow ?? startCostDeletes();
   const ifExistDeletes = ifExistDeletesNow ?? startIfExistDeletes();
-  // Every operation, in this order (it is the order of `failures` within a phase).
+  // Every operation, in this order (it is the order of `failures` within a phase). (1') is
+  // `empty` unless it ran, and an empty operation changes no decision below.
   const all: readonly OpEntry[] = [
-    ["contractDeletes", contractDeletes], ["contracts", ops.contracts], ["costsA", ops.costsA],
-    ["costDeletes", costDeletes], ["costDeletesIfExist", ifExistDeletes], ["costsB", ops.costsB],
+    ["contractDeletes", contractDeletes], ["contracts", ops.contracts], ["contractsDeep", ops.contractsDeep],
+    ["costsA", ops.costsA], ["costDeletes", costDeletes], ["costDeletesIfExist", ifExistDeletes], ["costsB", ops.costsB],
   ];
-  const effective = (): SaveBuildPlan => ({ ...plan, contractUpserts: sentContracts });
+  const effective = (): SentPlan => ({
+    ...plan, contractUpserts: sentContracts, ...(sentDeep ? { deep: sentDeep } : {}),
+  });
 
   if (deferContracts || deferCosts) {
     // D51 option A: settle everything that is NOT deferred first. Return early only when that all
@@ -655,7 +782,7 @@ async function settleAll(entries: readonly OpEntry[]): Promise<OpOutcome[]> {
  * result, which must not change after it was returned.
  */
 function backgroundOf(
-  deferred: readonly OpEntry[], others: readonly OpOutcome[], plan: SaveBuildPlan, deps: SavePlanDeps,
+  deferred: readonly OpEntry[], others: readonly OpOutcome[], plan: SentPlan, deps: SavePlanDeps,
 ): Promise<BackgroundOutcome> {
   const work = async (): Promise<BackgroundOutcome> => {
     const settled = await settleAll(deferred);
@@ -686,7 +813,8 @@ function backgroundOf(
 }
 
 function addRequests(requests: SavePlanRequests, key: OpKey, sent: number): void {
-  if (key === "contracts") requests.contracts += sent;
+  // (1') counts as contracts: its nested cost rows travel inside the contracts' requests.
+  if (key === "contracts" || key === "contractsDeep") requests.contracts += sent;
   else if (key === "costsA" || key === "costsB") requests.costs += sent;
   else if (key === "costDeletes" || key === "costDeletesIfExist") requests.costDeletes += sent;
   else requests.contractDeletes += sent;
@@ -827,17 +955,22 @@ interface CommitProgress {
   deletedCount?: number;
   /** `BulkDeleteError.removedCount`: rows this delete removed itself (confirmed 404s left out). */
   removedCount?: number;
+  /** `DeepInsertError.landedIds`: the contracts (1') created, each with its nested rows (WS-B). */
+  landedIds?: readonly string[];
 }
 
 function commitProgress(error: unknown): CommitProgress {
   if (typeof error !== "object" || error === null) return {};
   const e = error as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const ids = Array.isArray(e.landedIds) && e.landedIds.every((id) => typeof id === "string")
+    ? e.landedIds as string[] : undefined;
   return {
     rowsCommitted: num(e.rowsCommitted),
     chunksCommitted: num(e.chunksCommitted),
     deletedCount: num(e.deletedCount),
     removedCount: num(e.removedCount),
+    ...(ids ? { landedIds: ids } : {}),
   };
 }
 
@@ -856,6 +989,7 @@ function mayHaveLanded(o: OpOutcome): boolean {
   if (o.status !== "failed" || sentNothing(o)) return false;
   const p = commitProgress(o.cause);
   if (isDelete(o.key)) return p.deletedCount === undefined || p.deletedCount > 0;
+  if (o.key === "contractsDeep" && p.landedIds !== undefined) return p.landedIds.length > 0;
   if (p.rowsCommitted === undefined && p.chunksCommitted === undefined) return true;
   return (p.rowsCommitted ?? 0) > 0 || (p.chunksCommitted ?? 0) > 0;
 }
@@ -904,9 +1038,16 @@ function needsReconcile(outcomes: readonly OpOutcome[]): boolean {
  * land and is left out. The executor sends chunks in row order, so the first `rowsCommitted`
  * rows are the ones that landed. Deleted contracts, and `exclude` (contracts phase 0 found gone),
  * are left out in every case.
+ *
+ * With (1') (`plan.deep`, WS-B), (1)'s prefix reads against `deep.flat`, and a deep-inserted
+ * contract landed exactly when (1') succeeded or names it in `landedIds` (each create is atomic:
+ * a contract that did not land took its nested cost rows with it, so it is left out like a new
+ * contract past `rowsCommitted`). A landed one is compared: its nested rows may be missing
+ * (`childrenMissing`), and the compare then rewrites its total. A (1') failure that names no
+ * landed ids leaves its contracts `unverified`.
  */
 function reconcileScope(
-  plan: SaveBuildPlan, contracts: OpOutcome, exclude: ReadonlySet<string>,
+  plan: SentPlan, contracts: OpOutcome, exclude: ReadonlySet<string>, contractsDeep?: OpOutcome,
 ): { ids: string[]; force: ReadonlySet<string>; unverified: string[] } {
   const deleted = new Set(plan.contractDeletes.map((id) => id.toLowerCase()));
   const candidates = [...plan.totals.keys()]
@@ -919,12 +1060,24 @@ function reconcileScope(
   const targeted = new Set(rows.map((r) => r.id.toLowerCase()));
 
   // How many of (1)'s rows are known to have landed; undefined = unknown.
+  const flat = plan.deep?.flat ?? rows;
   let landedCount: number | undefined;
-  if (contracts.status === "ok") landedCount = rows.length;
+  if (contracts.status === "ok") landedCount = flat.length;
   else if (contracts.status !== "failed") landedCount = 0;
   else if (sentNothing(contracts)) landedCount = 0;
   else landedCount = commitProgress(contracts.cause).rowsCommitted;
-  const landed = new Set(rows.slice(0, landedCount ?? 0).map((r) => r.id.toLowerCase()));
+  const landed = new Set(flat.slice(0, landedCount ?? 0).map((r) => r.id.toLowerCase()));
+
+  // (1'): which deep-inserted contracts landed; undefined = unknown.
+  const deepIds = new Set((plan.deep?.contractIds ?? []).map((id) => id.toLowerCase()));
+  let deepLanded: readonly string[] | undefined = [];
+  if (deepIds.size > 0 && contractsDeep) {
+    if (contractsDeep.status === "ok") deepLanded = [...deepIds];
+    else if (contractsDeep.status === "failed" && !sentNothing(contractsDeep)) {
+      deepLanded = commitProgress(contractsDeep.cause).landedIds;
+    }
+  }
+  for (const id of deepLanded ?? []) landed.add(id.toLowerCase());
 
   const ids: string[] = [];
   const force = new Set<string>();
@@ -933,7 +1086,7 @@ function reconcileScope(
     const k = id.toLowerCase();
     if (landed.has(k) || !targeted.has(k)) ids.push(id);
     else if (!isNew.has(k)) { ids.push(id); force.add(id); }
-    else if (landedCount === undefined) unverified.push(id);
+    else if (deepIds.has(k) ? deepLanded === undefined : landedCount === undefined) unverified.push(id);
   }
   return { ids, force, unverified };
 }
@@ -946,7 +1099,7 @@ interface ReconcileOutcome {
 
 /** After every operation settled: re-reads, recomputes and writes back what may be wrong. */
 async function reconcileTotals(
-  plan: SaveBuildPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
+  plan: SentPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
   timings: SavePlanTimings, exclude: ReadonlySet<string>,
 ): Promise<ReconcileOutcome> {
   // Nothing of this save committed (every delete confirmed it removed 0 rows, every upsert reported
@@ -956,7 +1109,8 @@ async function reconcileTotals(
     return { reconciled: true, unverifiedContractIds: [] };
   }
   const contracts = outcomes.find((o) => o.key === "contracts") as OpOutcome;
-  const { ids, force, unverified } = reconcileScope(plan, contracts, exclude);
+  const contractsDeep = outcomes.find((o) => o.key === "contractsDeep");
+  const { ids, force, unverified } = reconcileScope(plan, contracts, exclude, contractsDeep);
   const t0 = now();
   try {
     if (ids.length > 0) {
@@ -984,7 +1138,7 @@ function failuresOf(outcomes: readonly OpOutcome[]): { phase: SavePhase; cause: 
 
 /** A failed operation: reconcile if needed, then build the error. */
 async function failAndReconcile(
-  plan: SaveBuildPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
+  plan: SentPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
   timings: SavePlanTimings,
 ): Promise<SavePlanError> {
   const failures = failuresOf(outcomes);
@@ -1006,7 +1160,7 @@ async function failAndReconcile(
  * gone contracts are never written (an update of a missing id would fail, an upsert re-create it).
  */
 async function goneAndReconcile(
-  plan: SaveBuildPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
+  plan: SentPlan, deps: SavePlanDeps, outcomes: readonly OpOutcome[], requests: SavePlanRequests,
   timings: SavePlanTimings, verified: Verified,
 ): Promise<RowsGoneError> {
   const committedBefore = outcomes.some(committedSomething);
