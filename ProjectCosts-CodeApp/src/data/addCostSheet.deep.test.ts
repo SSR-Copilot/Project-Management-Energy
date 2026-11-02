@@ -118,7 +118,7 @@ for (const name of [
 const { DEEP_INSERT_NEW_CONTRACTS, saveAddCostSheetBulk } = await import("./addCostSheet");
 const {
   deepInsertBody, deepInsertContracts, isDeepInsertAvailable, resetBulkWriteAvailability, resetDeepInsertState,
-  CONTRACT_COSTS_NAV,
+  CONTRACT_COSTS_NAV, DeepInsertError,
 } = await import("./bulkSend");
 const { SavePlanError } = await import("./addCostSheetBulk");
 const { BulkValidationError } = await import("./bulkWrites");
@@ -269,6 +269,9 @@ describe("DEEP_INSERT_NEW_CONTRACTS on — the new contract travels with its cos
     expect((error as InstanceType<typeof SavePlanError>).phase).toBe(1);
     expect((error as InstanceType<typeof SavePlanError>).reconciled).toBe(true);
     const newId = String(creates[0]?.vsb_capexprojectcontractid);
+    const cause = (error as InstanceType<typeof SavePlanError>).cause;
+    expect(cause).toBeInstanceOf(DeepInsertError);
+    expect(cause).toMatchObject({ childrenMissing: true, landedIds: [newId], failedIds: [] });
     const fix = upsertCalls.find((c) => c.action === "update" && c.targets.some((t) => t.vsb_capexprojectcontractid === newId));
     expect(fix?.targets.find((t) => t.vsb_capexprojectcontractid === newId)?.vsb_totalcost).toBe(0);
     expect(isDeepInsertAvailable()).toBe(false);

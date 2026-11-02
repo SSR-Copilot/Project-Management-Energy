@@ -186,6 +186,10 @@ describe("deepInsertPlan — which new contracts carry their cost rows", () => {
     expect(deepInsertPlan(contracts, rows(DEEP_INSERT_MAX_COSTS + 1))).toBeUndefined();
   });
 
+  it("UT-ACDEEP-016 the two thresholds are the provisional 8 contracts and 24 rows per contract", () => {
+    expect([DEEP_INSERT_MAX_CONTRACTS, DEEP_INSERT_MAX_COSTS]).toEqual([8, 24]);
+  });
+
   it("UT-ACDEEP-005 nothing in stage B, or a stage-B row that is not new, keeps today's path", () => {
     expect(deepInsertPlan(plan().contractUpserts, [])).toBeUndefined();
     expect(deepInsertPlan(plan().contractUpserts, [...stageB, costUpdate("k-x", "c-a", 1)])).toBeUndefined();
