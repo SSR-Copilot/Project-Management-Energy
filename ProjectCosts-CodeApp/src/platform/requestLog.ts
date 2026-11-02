@@ -172,6 +172,14 @@ export function flushDataLog(): void {
   }
 }
 
+const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * A failure text with every record id replaced by `<id>` (D78). Dataverse fault text often names
+ * the row ("… With Id = <guid> Does Not Exist"), and a DATA line carries counts and names only.
+ */
+export const redactIds = (text: string): string => text.replace(GUID, "<id>");
+
 /**
  * One DATA line per kind and table, however many calls it took: 40 single-row deletes of one table
  * print as "40 rows, 40 calls, … ms in total (average, slowest)". The line appears once the table
@@ -200,7 +208,7 @@ export function logData(call: DataCall): void {
   b.lastEnd = end;
   if (!call.ok) {
     b.failed += 1;
-    if (call.error) b.lastError = call.error;
+    if (call.error) b.lastError = redactIds(call.error);
   }
   batches.set(key, b);
   if (flushTimer !== undefined) clearTimeout(flushTimer);

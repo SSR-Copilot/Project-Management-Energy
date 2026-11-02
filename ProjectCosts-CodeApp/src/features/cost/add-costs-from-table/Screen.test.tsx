@@ -15,7 +15,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { AddCostSheetData } from "@/data/addCostSheet";
 import { CHOICE, rowIdentity, type ExistingContract, type SheetRow } from "./rules";
 import { saveButtonDisabled, saveRequestRows, sheetLocked } from "./saveRetry";
@@ -350,5 +350,31 @@ describe("Add Cost from Table without spinners (D58)", () => {
     renderScreen();
     for (const id of lockable) expect(screen.getByTestId(id), id).toHaveProperty("disabled", false);
     expect(screen.getByTestId("add-costs-grid").hasAttribute("inert")).toBe(false);
+  });
+});
+
+describe("Add Cost from Table — the right panel keeps unsaved edits (D62, D78)", () => {
+  const renderWithCapex = () => render(
+    <MemoryRouter initialEntries={["/costs/add-from-table?category=1"]}>
+      <Routes>
+        <Route path="/costs/add-from-table" element={<AddCostsFromTableScreen />} />
+        <Route path="/costs/capex" element={<div data-testid="capex-screen-stub" />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
+
+  it("UT-ADDCOST-PANEL-001 a click beside the sheet (the backdrop) does not close it, as the canvas scrim did not", () => {
+    renderWithCapex();
+    expect(backdrop()).not.toBeNull();
+    fireEvent.click(backdrop()!);
+    expect(screen.queryByTestId("capex-screen-stub")).toBeNull();
+    expect(screen.getByTestId("add-costs-grid")).toBeTruthy();
+  });
+
+  it("UT-ADDCOST-PANEL-002 the ✕ still goes back to DEVEX/CAPEX", () => {
+    renderWithCapex();
+    fireEvent.click(screen.getByTestId("ico_PopUpConfirmation_BodyHeader_2"));
+    expect(screen.getByTestId("capex-screen-stub")).toBeTruthy();
   });
 });

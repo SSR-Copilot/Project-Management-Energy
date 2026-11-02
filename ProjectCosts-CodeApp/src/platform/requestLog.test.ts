@@ -49,6 +49,13 @@ describe("request log", () => {
     expect(lines(warn)).toEqual(["[VSB] DATA delete vsb_costs: 0 rows, 5 ms, 1 FAILED (403)"]);
   });
 
+  it("UT-REQLOG-ACS-020 a record id in a DATA failure text is replaced by <id> (D78)", () => {
+    const id = "3F2504E0-4F89-11D3-9A0C-0305E82C3301";
+    logData({ kind: "update", target: "vsb_capexcosts", ms: 5, ok: false, error: `vsb_capexcost With Id = ${id} Does Not Exist` });
+    flushDataLog();
+    expect(lines(warn)).toEqual(["[VSB] DATA update vsb_capexcosts: 0 rows, 5 ms, 1 FAILED (vsb_capexcost With Id = <id> Does Not Exist)"]);
+  });
+
   it("UT-REQLOG-006 an action sums the requests and rows made while it was open", () => {
     const end = beginAction("Write @ /project/generators");
     logHttp({ url: "/a", method: "GET", statusCode: 200, duration: 1 });

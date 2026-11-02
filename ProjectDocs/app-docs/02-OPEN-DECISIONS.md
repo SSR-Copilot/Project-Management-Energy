@@ -6343,7 +6343,24 @@ mistake (not app code; nothing imported or ran it), on the user's instruction.
   UT-SAVELOG-020…023 now pin the prefix; new UT-REQLOG-ACS-001…003 and 010…014, UT-ACDEEP-030. Mutation
   checks: 8 of 8 caught, every file restored byte for byte.
 
+### 3a. Independent review, and its fixes
+A fresh reviewer read the follow-up commits and the four auto-merged files: no high or medium defect;
+the logging changes no write, order, result or error, and the deferred-deletes counter balances on every
+path. Fixed from its low findings:
+- **Record ids in DATA failure text** (rule 23): Dataverse fault text can name a row; `logData` now replaces
+  every GUID with `<id>` (`redactIds`), which also covers the older `loggedCall` path. A bulk action's
+  plain `{ message }` error now gives its message instead of "request failed". UT-REQLOG-ACS-020, 011.
+- **The sheet closed on a click beside it** (from D62): the panel is not `dirty`-guarded, so a backdrop
+  click dropped every unsaved edit; the canvas scrim never closed the pop-up. The panel now passes the
+  shared `keepOpenOnOutsideClick` (✕, Cancel and Escape still close it). UT-ADDCOST-PANEL-001, 002.
+- Test gaps closed: the counter on the path where the Save waits for its deferred deletes
+  (UT-REQLOG-ACS-015) and the remount path `routes.tsx` uses today (UT-ACPERF-053).
+- Mutation checks for these: 3 of 3 caught.
+
 ### 4. Open
+- **Escape inside a sheet cell** (live check): Escape still closes the panel, as on every other panel. Whether
+  an Escape pressed while editing a cell also reaches the panel (and so drops unsaved edits) needs a browser.
+- **Per-row fallback writes** after a 501 (`upsertEachRow`) still show as HTTP lines only, with no DATA entry.
 - **Not seen live yet** (CONVENTIONS rule 23): the new DATA, ACTION and deferred-deletes lines must be
   checked in a real Save on DEV through `pac code run` before this counts as done.
 - Overlapping actions still both count the requests made meanwhile (D72: "a trace, not an invoice"); the

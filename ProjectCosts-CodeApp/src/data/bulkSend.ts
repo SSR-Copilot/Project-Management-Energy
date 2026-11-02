@@ -244,9 +244,16 @@ async function loggedBulkRequest(
   }
 }
 
-/** The failure text of a DATA entry: the message only, cut like `loggedCall` cuts it. */
-const shortError = (error: unknown): string =>
-  (error instanceof Error ? error.message : typeof error === "string" ? error : "request failed").slice(0, 120);
+/**
+ * The failure text of a DATA entry: the message only (an SDK `result.error` is often a plain
+ * `{ message }` object, not an `Error`), cut like `loggedCall` cuts it. `logData` replaces any
+ * record id in it (`redactIds`).
+ */
+const shortError = (error: unknown): string => {
+  const message = (error as { message?: unknown } | null)?.message;
+  return (typeof message === "string" && message !== "" ? message
+    : typeof error === "string" ? error : "request failed").slice(0, 120);
+};
 
 /**
  * One request's duration for the log: `980 ms` under a second, else seconds with one decimal

@@ -467,6 +467,9 @@ export default function AddCostsFromTableScreen() {
       closeTestId="ico_PopUpConfirmation_BodyHeader_2"
       closeLabel="Cancel"
       onDismiss={back}
+      // The canvas pop-up's scrim never closed it: a click beside the sheet must not drop unsaved
+      // edits (the panel is not `dirty`-guarded). Only ✕, Cancel or Escape close it (D78).
+      keepOpenOnOutsideClick
       busy={locked}
       footer={!gridShown ? null : (
         <>

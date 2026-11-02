@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * UT-ACPERF-050…052: the DEVEX/CAPEX paint mark under Add Cost from Table's right panel (D62).
+ * UT-ACPERF-050…053: the DEVEX/CAPEX paint mark under Add Cost from Table's right panel (D62).
  * The CAPEX screen can stay mounted while the panel closes, so the mark must fire on the
  * navigation itself, not only when the screen mounts or `gridShown` flips.
  */
@@ -49,6 +49,21 @@ describe("useSavePaintMark", () => {
     render(<MemoryRouter initialEntries={["/costs/add-from-table"]}><Shell gridShown={false} /></MemoryRouter>);
     act(() => { go("/costs/capex"); });
     expect(shown).not.toHaveBeenCalled();
+  });
+
+  it("UT-ACPERF-053 as routes.tsx is today: the panel route's CAPEX element differs, so back() remounts it and marks", () => {
+    const shown = vi.spyOn(addCostSaveTimeline, "capexShown");
+    render(
+      <MemoryRouter initialEntries={["/costs/add-from-table"]}>
+        <Routes>
+          <Route path="/costs/capex" element={<Capex gridShown />} />
+          <Route path="/costs/add-from-table" element={<><Capex gridShown /><div /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(shown).toHaveBeenCalledTimes(1);
+    act(() => { go("/costs/capex"); });
+    expect(shown).toHaveBeenCalledTimes(2);
   });
 
   it("UT-ACPERF-052 a re-render with nothing changed does not mark again", () => {

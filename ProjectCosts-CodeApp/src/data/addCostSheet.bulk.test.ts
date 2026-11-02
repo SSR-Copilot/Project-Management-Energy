@@ -2418,7 +2418,20 @@ describe("saveAddCostSheetBulk — the request-log format (D78)", () => {
     refusedActions = new Set(["update"]);
     await expect(saveAddCostSheetBulk({ ...typical(), deferContractDeletes: false, deferCostDeletes: false })).rejects.toThrow();
     flushDataLog();
-    expect(raw(warn)).toContainEqual(expect.stringMatching(new RegExp(`^\\[VSB\\] DATA update ${ES_COSTS}: 0 rows, .*1 FAILED`)));
+    // The SDK's `result.error` is a plain `{ message }` object: its message is the failure text.
+    expect(raw(warn)).toContainEqual(expect.stringMatching(
+      new RegExp(`^\\[VSB\\] DATA update ${ES_COSTS}: 0 rows, .*1 FAILED \\(update bulk write refused\\)`),
+    ));
+  });
+
+  it("UT-REQLOG-ACS-015 a Save that waits for its deferred deletes (another step failed) still closes their ACTION once", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    refusedActions = new Set(["update"]); // a write fails, so the Save waits for the deferred deletes
+    await expect(saveAddCostSheetBulk(typical())).rejects.toThrow();
+    const all = [...raw(warn), ...raw(vi.mocked(console.info) as unknown as InfoSpy)];
+    expect(all.filter((l) => l.startsWith("[VSB] ACTION Add Cost from Table deferred deletes:"))).toHaveLength(1);
   });
 
   it("UT-REQLOG-ACS-012 the 501 fallback warning carries the ACTION prefix, at warning level", async () => {
