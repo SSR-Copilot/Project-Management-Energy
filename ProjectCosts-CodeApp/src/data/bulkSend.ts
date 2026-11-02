@@ -94,9 +94,14 @@ export const LEGACY_BULK_TUNING: BulkTuning = Object.freeze({
  *    the 3,500-row sheet this was sized for. Inside Microsoft's 100–1,000 guidance.
  *  - `writeGate` 24 (was 16): binds only on large saves. Modelled, with FIFO queueing: a 1,000-row
  *    save 3.4 s at 16 → 2.4 s at 24, a 3,500-row save 8.1 s → 6.4 s; 20 gives 2.7 s and 6.4 s, 32
- *    gives no more than 24. Peak in flight: 24 writes + 4 contract cascades + 4 cost deletes = 32,
- *    36 with the CAPEX panel's own delete gate of 4 (`capexWrites.ts`), under Dataverse's 52 per
- *    user and leaving 16 for reads (the phase-0 and 404 read-backs are not gated).
+ *    gives no more than 24. Peak GATED in flight: 24 writes + 4 contract cascades + 4 cost deletes
+ *    = 32, 36 with the CAPEX panel's own delete gate of 4 (`capexWrites.ts`), under Dataverse's 52
+ *    per user. Reads are NOT gated and are not bounded by this (review low, D75): `existingIds`
+ *    sends one read per 40 ids all at once (phase 0, the 404 read-back, the per-row guard, the
+ *    deep-insert read-back), so a large read beside full write slots can pass 52. Example: a
+ *    1,000-row update group whose `UpdateMultiple` answered 501 in a skipped-verify save reads 25
+ *    batches at once beside 24 writes and 8 deferred deletes = 57 (49 with the legacy gate of 16).
+ *    That path needs a 501 flag and a large group; it is left as an open item, not gated here.
  *
  * EXPECTED (inferred, not measured): the 60-row save on existing contracts goes from 1,607 ms to
  * about 0.82–0.87 s: its cost groups become 10-row chunks (≈ 0.82 s) and the 865 ms contract update,
