@@ -17,7 +17,7 @@
  * box. It was `<details>/<summary>` with a floated `⌄` glyph and a two-across month grid,
  * which is what the client saw as "distorted".
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, tokens,
 } from "@fluentui/react-components";
@@ -87,6 +87,7 @@ import {
 } from "./panelRules";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
+import { addCostSaveTimeline } from "../costing/saveTimeline";
 
 /**
  * CA-15 — while the screen is mounted a failed CAPEX write is already shown, by the banner built
@@ -411,6 +412,16 @@ export default function CapexCostsScreen() {
       <div className="canvas-error" role="alert">{(writeError as Error).message}</div>
     ) : null}
   </>;
+
+  /*
+   * P0.1 (measurement only): the grid has committed a book. An Add Cost from Table Save waiting for
+   * this ends its client timeline on the next paint (`saveTimeline.ts`); otherwise a no-op. After the
+   * grid's own layout effects, which build its DOM (`PcfGrid`).
+   */
+  const gridShown = !isLoading && Boolean(book) && !error && !isSummaryTab(category);
+  useEffect(() => {
+    if (gridShown) addCostSaveTimeline.capexShown();
+  }, [gridShown]);
 
   if (isLoading) {
     return <div className="canvas-cost-screen">

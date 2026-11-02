@@ -19,6 +19,8 @@ import { excludePendingFromBook, excludePendingFromSheet, pendingDeletes } from 
 import type { CostBook, CostLine, CostPeriod, Payment } from "./model";
 import { panelBusyLogLine } from "@/data/capexWrites";
 import { applySavedSheetToBook } from "./savedSheetPatch";
+import { addCostSaveTimeline } from "./saveTimeline";
+import { beginBackgroundSave, type BackgroundSaveHandle } from "./backgroundSave";
 import { costWriteKey } from "@/domain/writeGuard";
 
 /**
@@ -554,6 +556,15 @@ export function useAddCostSheet(category: number) {
  *     again, so a row whose delete failed shows again.
  * Steps 1–2 are synchronous; the network part stays fire-and-forget (D51 §11: the Save must not
  * wait for any refetch).
+ *
+ * BACKGROUND SAVE (WS-F, `BACKGROUND_SAVE`, OFF; a `DIVERGENCE`, see `./backgroundSave`). A Save
+ * sent with `background: true` has already left the sheet. Every callback here is a HOOK-level
+ * option, which TanStack keeps running after the screen unmounts, so this is where it is finished:
+ * `onMutate` raises the status, takes the unload guard and registers the Save (`beginBackgroundSave`);
+ * `onSuccess` patches and invalidates exactly as above; `onSettled` refetches on a failure (nothing
+ * was patched, and part of the Save may have landed), re-reads a sheet opened meanwhile, and settles
+ * the handle. The CA-15 lock is the mutation itself: it stays pending, under its `costWriteKey`,
+ * until `onSettled` has run. A Save without `background` takes none of these branches.
  */
 export function useSaveAddCostSheet(category: number) {
   const { projectId, project } = useSession();
@@ -562,6 +573,7 @@ export function useSaveAddCostSheet(category: number) {
   // `<AppToaster />` is mounted once by `app/Providers.tsx` and outlives every route.
   const notify = useNotify();
   const bookKey = ["cost-book", projectId, category];
+  const sheetKey = ["add-cost-sheet", projectId, category];
 
   const invalidate = async () => {
     // A read of these two keys that started BEFORE this point would land a pre-save (or
@@ -573,7 +585,7 @@ export function useSaveAddCostSheet(category: number) {
     await Promise.all([
       // Not refetched here: the screen navigates away on success, so a reload of the whole sheet
       // would be thrown away. It is marked stale and reloads on the next visit (or on demand).
-      client.invalidateQueries({ queryKey: ["add-cost-sheet", projectId, category], refetchType: "none" }),
+      client.invalidateQueries({ queryKey: sheetKey, refetchType: "none" }),
       // The CAPEX keys refetch even while inactive: the DEVEX/CAPEX screen is about to mount.
       client.invalidateQueries({ queryKey: bookKey, refetchType: "all" }),
       // The period screens' book (no CAPEX lines): refetched only if one is showing.
@@ -589,9 +601,11 @@ export function useSaveAddCostSheet(category: number) {
 
   return useMutation({
     mutationKey: costWriteKey(projectId, "add-cost-sheet"), // CA-15
-    mutationFn: (args: Omit<Parameters<
-      ReturnType<typeof costRepository>["saveAddCostSheet"]
-    >[0], "projectId" | "owningBusinessUnitId">) =>
+    // WS-F: only a background Save gets a handle; any other Save returns `undefined`, as with no
+    // `onMutate` at all (TanStack awaits this either way, so the first request is not delayed).
+    onMutate: (args: SaveAddCostSheetVariables): BackgroundSaveHandle | undefined =>
+      (args.background && projectId ? beginBackgroundSave(projectId, { notify }) : undefined),
+    mutationFn: ({ background: _background, ...args }: SaveAddCostSheetVariables) =>
       costRepository().saveAddCostSheet({
         ...args,
         projectId: projectId as string,
@@ -600,11 +614,15 @@ export function useSaveAddCostSheet(category: number) {
     // Fire-and-forget: returning the promise would make `mutateAsync` (and so the Save button)
     // wait for every invalidated query to refetch before the screen may navigate.
     onSuccess: (result: SaveAddCostSheetResult | undefined) => {
+      // P0.1 (measurement only): when the data layer resolved, and what this synchronous part costs.
+      const startedAt = performance.now();
+      addCostSaveTimeline.mark("resolved", startedAt);
       const release = result?.background
         ? pendingDeletes.add({ contractIds: result.deferredContractIds, costIds: result.deferredCostIds })
         : undefined;
       const applied = result?.applied;
       if (applied) {
+        const patchStarted = performance.now();
         try {
           // An updater returning `undefined` (no book cached for this key) leaves the cache alone.
           client.setQueryData<CostBook>(bookKey, (book) => (book ? applySavedSheetToBook(book, applied, category) : book));
@@ -613,6 +631,7 @@ export function useSaveAddCostSheet(category: number) {
           // refetch below still brings the saved state. Readable line, then the raw error (D59).
           emitSaveLog(() => bookPatchFailureReport(error));
         }
+        addCostSaveTimeline.measure("patchMs", performance.now() - patchStarted);
       }
       void invalidate();
       if (result?.background) {
@@ -621,9 +640,34 @@ export function useSaveAddCostSheet(category: number) {
           deferredCosts: result.deferredCosts ?? 0,
         }, invalidate, notify, release);
       }
+      addCostSaveTimeline.measure("onSuccessMs", performance.now() - startedAt);
+    },
+    // WS-F, a background Save only (`context` is its handle); synchronous, nothing awaits a refetch.
+    onSettled: (_result, error, _args, context) => {
+      if (!context) return;
+      try {
+        // A failure: nothing was patched and part of the Save may have landed, so the DEVEX/CAPEX
+        // book, the totals and the DevCo reads are read again, to show what Dataverse holds.
+        if (error) void invalidate().catch(() => undefined);
+        // A sheet opened while this ran (it is locked) is re-read now; a closed one reads on open.
+        void client.invalidateQueries({ queryKey: sheetKey, refetchType: "active" }).catch(() => undefined);
+      } finally {
+        context.settle(error ? "failed" : "saved");
+      }
     },
   });
 }
+
+/** What the screen passes to `useSaveAddCostSheet`'s `mutateAsync`. */
+type SaveAddCostSheetVariables = Omit<Parameters<
+  ReturnType<typeof costRepository>["saveAddCostSheet"]
+>[0], "projectId" | "owningBusinessUnitId"> & {
+  /**
+   * WS-F: the screen has already left the sheet (`BACKGROUND_SAVE`). Never sent to the data layer;
+   * the screen leaves it out entirely when the flag is off.
+   */
+  background?: boolean;
+};
 
 /**
  * The deferred deletes of a Save — contracts and cleared cells (D51 option A and its extension,

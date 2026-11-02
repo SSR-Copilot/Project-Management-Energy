@@ -9,9 +9,15 @@
  * through `console.table`, durations in the readable `formatRequestDuration` form. A console
  * without groups or tables gets the same content as indented plain lines.
  *
- * PURE BUILDERS, ONE EMITTER. Everything here except `emitSaveLog` is pure: no console, no clock,
- * no React. `emitSaveLog` never throws; logging must not turn a successful save into a failure,
- * or a background outcome into a rejection.
+ * PURE BUILDERS, ONE EMITTER. Everything here except `emitSaveLog` and `deferSaveLog` is pure: no
+ * console, no clock, no React. `emitSaveLog` never throws; logging must not turn a successful save
+ * into a failure, or a background outcome into a rejection.
+ *
+ * DEFERRED REPORTS (WS-E, P0.1). `deferSaveLog` prints a report one task later instead of now, so
+ * a report built on a save's critical path (Add Cost from Table's prepare line) prints after the
+ * save's first request left. The ORDER of the lines is kept: `emitSaveLog` first prints every
+ * report still deferred, so a line that comes earlier than the timer (a save refused in its
+ * plan, all in microtasks) still follows the deferred one.
  *
  * WHAT IS NEVER PRINTED READABLY: record ids and record names (D59 decision 3). Counts only. Error
  * messages pass `messageOf`, which replaces every GUID with `<id>`. The one exception is the raw
@@ -187,9 +193,10 @@ function averageMs(meter: RequestMeter): number {
 }
 
 /**
- * The summary line's gate tail: `gate peak 4/16, req avg 1,240 ms max 1,900 ms`. The peak and the
- * averages are THIS save's write requests only (D59 decision 4); when the shared gate held more at
- * once (other work writing), `, shared gate peak 6/16` follows.
+ * The summary line's gate tail: `gate peak 4/24, req avg 1,240 ms max 1,900 ms` (the denominator
+ * is `SAVE_REQUEST_LIMIT`: 24 tuned, 16 legacy). The peak and the averages are THIS save's write
+ * requests only (D59 decision 4); when the shared gate held more at once (other work writing),
+ * `, shared gate peak 6/24` follows.
  */
 export function gateTail(meter: RequestMeter): string {
   return `gate peak ${meter.peak}/${SAVE_REQUEST_LIMIT}, `
@@ -250,6 +257,12 @@ type ConsoleLike = Partial<Pick<Console, "info" | "error" | "groupCollapsed" | "
  * throw on a save path: it is then built inside this guard too.
  */
 export function emitSaveLog(input: SaveLogReport | (() => SaveLogReport)): void {
+  flushDeferredSaveLogs();
+  printReport(input);
+}
+
+/** `emitSaveLog` without the flush: the print itself. Never throws. */
+function printReport(input: SaveLogReport | (() => SaveLogReport)): void {
   try {
     const report = typeof input === "function" ? input() : input;
     const c: ConsoleLike = console;
@@ -280,5 +293,50 @@ export function emitSaveLog(input: SaveLogReport | (() => SaveLogReport)): void 
     }
   } catch {
     // Logging must never fail the save.
+  }
+}
+
+/** Reports `deferSaveLog` still holds, oldest first; each removes itself before it prints. */
+const deferredLogs: Array<() => void> = [];
+
+/** Prints every deferred report now, oldest first. Never throws. */
+function flushDeferredSaveLogs(): void {
+  while (deferredLogs.length > 0) {
+    const next = deferredLogs[0];
+    try { next?.(); } catch { /* each run guards itself; this only keeps the loop going */ }
+    // A run removes itself; a broken one is dropped here so the loop always ends.
+    if (deferredLogs[0] === next) deferredLogs.shift();
+  }
+}
+
+/**
+ * `emitSaveLog`, one task later (`setTimeout(…, 0)`), or earlier when another save line is
+ * emitted first (see "DEFERRED REPORTS"). `onEmitted` receives when printing started and how long
+ * it took (`performance.now()`, ms), for the client timeline. Never throws; a report is printed
+ * once.
+ */
+export function deferSaveLog(
+  input: SaveLogReport | (() => SaveLogReport),
+  onEmitted?: (startedAt: number, ms: number) => void,
+): void {
+  let done = false;
+  const run = (): void => {
+    if (done) return;
+    done = true;
+    const i = deferredLogs.indexOf(run);
+    if (i >= 0) deferredLogs.splice(i, 1);
+    let startedAt = 0;
+    try { startedAt = performance.now(); } catch { /* measurement only */ }
+    // Not `emitSaveLog`: every older deferred report has printed already (timers fire in order,
+    // a flush runs oldest first), and flushing here would put a NEWER one ahead of this one.
+    printReport(input);
+    try { onEmitted?.(startedAt, performance.now() - startedAt); } catch { /* measurement only */ }
+  };
+  try {
+    deferredLogs.push(run);
+    setTimeout(run, 0);
+  } catch {
+    // No timer: print now rather than never.
+    run();
   }
 }

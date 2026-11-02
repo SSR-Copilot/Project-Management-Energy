@@ -1290,6 +1290,61 @@ show an error until then.
   each fail them.
 - **Not verified** in a browser; the first look on DEV is owed.
 
+### CA-24 · Add Cost from Table: a split contract group that partly landed left its new contracts' totals unrepaired (found 2 Nov 2026, fixed 2 Nov 2026, local branch `feature/AddCostSavePerf`)
+
+**A code-app defect** (data integrity), found by the independent review of the D75 wave.
+- **What happened.** `upsertMultiple` splits a group into parallel chunks; each chunk is one
+  all-or-nothing request. When some chunks landed and others did not, it threw
+  `BulkPartialWriteError`, which deliberately carries no prefix count. For the contract step (1),
+  `reconcileScope` then read "count unknown" and marked every NEW contract `unverified`, so it never
+  rewrote their totals. Stage (2b) is skipped when (1) fails, so the new contracts that did land kept
+  `vsb_totalcost` = the plan's total with zero cost rows, and `SavePlanError` said
+  `reconciled: false`. Nothing repaired them unless the user retried from the same sheet.
+- **Why now.** Before D75 a group split only from 50 rows. The WS-A tuning (minChunk 10) splits from
+  20, so a creates-only group of 20–49 new contracts (for example a copied table) entered the window.
+  The same gap existed before for 50+ rows, and for the two-group case (new and existing contracts in
+  one step), whose error carried no counts either.
+- **The fix (D75 §2.5).** `BulkPartialWriteError.landedIds`: every row of each fulfilled chunk (a set,
+  not a prefix). `upsertRowsByAction`'s two-group error (`GroupsWriteError`, still a `DataError`, no
+  counts) carries the create group's `landedIds` when they are exact: the whole group when it
+  succeeded, the `landedIds` of a partial split, the `rowsCommitted` prefix of a `BulkWriteError`.
+  `reconcileScope` compares the landed new contracts and leaves the others out (an upsert of an id
+  that does not exist would create a bare contract). An error with neither counts nor ids still
+  leaves them `unverified`, as before.
+- **Assumption, as before.** A refused chunk is taken as not landed (the same assumption
+  `BulkWriteError.rowsCommitted` makes of its failed chunk). A timeout after a server-side commit
+  would break it; that is not new.
+- **Tests.** UT-ACREV-001…007; 6 mutations, each killed.
+- **Not verified live.**
+
+### CA-25 · Add Cost from Table: a sheet opened while a CAPEX write or a Save runs keeps a snapshot read mid-write (found 2 Nov 2026, open)
+
+**A code-app defect** (stale data), found while building D77. Existing behaviour, not caused by it.
+- `useCapexWrites`' `invalidate()` does not include the `add-cost-sheet` query key. A sheet opened
+  while a CAPEX panel write runs keeps a snapshot read mid-write, and its Save is re-enabled when that
+  write ends (it is greyed only while `writeInFlight`).
+- Likewise with `BACKGROUND_SAVE` off: if the user leaves the sheet through the rail mid-Save and
+  comes back, the Save's success invalidation of the sheet is `refetchType: 'none'`, so the reopened
+  sheet is not re-read.
+- D77's `'active'` re-read closes this only for background Saves. Suggested fix: invalidate the
+  `add-cost-sheet` key (with `'active'`) from every Cost write that changes CAPEX costs or contracts.
+- **Not fixed.** Needs a decision on scope; it touches `useCapexWrites`.
+
+### CA-26 · Bulk saves: `existingIds` reads are not gated and can pass Dataverse's 52 requests per user (found 2 Nov 2026, open)
+
+**A code-app risk** (throttling), found by the D75 review.
+- `existingIds` sends one read per 40 ids all at once (`Promise.all`): phase 0's verify, the 404
+  read-back, the per-row guard and the deep-insert read-back. Writes pass the shared gate
+  (`SAVE_REQUEST_LIMIT`, 24 with the D75 tuning, 16 before); reads do not.
+- Worst case found: a skipped-verify save whose 1,000-row update group answered 501 reads 25
+  batches at once beside 24 writes and 8 deferred deletes, 57 in flight (49 with the legacy gate). A
+  429 on a write is not retried. On a retry of a 3,500-row save the phase-0 verify alone is about 90
+  reads at once.
+- Needs a 501 flag or a large retry to bite. Options: a small read gate (about 8–16) around
+  `existingIds`' batches, or a write gate sized against the worst read fan-out. Either changes the
+  verify timing, so measure first (`17-ADDCOST-SAVE-PERF-PLAN.md`).
+- **Not fixed.** The `TUNED_BULK_TUNING` comment now states the worst case.
+
 ---
 
 ## Verification notes

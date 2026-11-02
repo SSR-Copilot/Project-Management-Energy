@@ -289,8 +289,10 @@ const {
 // The shared bulk sender (`./bulkSend.ts`): the same module instance `./addCostSheet` uses.
 const {
   resetBulkWriteAvailability, BULK_PARALLEL_CHUNKS, CONTRACT_DELETE_LIMIT, COST_DELETE_LIMIT,
-  formatRequestDuration,
+  formatRequestDuration, SAVE_REQUEST_LIMIT, BULK_TUNING, bulkRequestCount,
 } = await import("./bulkSend");
+/** `gate peak N/<limit>` with the write gate in force (WS-A tuning: 24; 16 before it). */
+const GATE = String(SAVE_REQUEST_LIMIT);
 const { DataError, RecordGoneError, isRecordGone } = await import("@/platform/errors");
 const { BulkDeleteError, BulkWriteError, upsertMultiple } = await import("./bulkWrites");
 const { RowsGoneError, SavePlanError, executeSavePlan } = await import("./addCostSheetBulk");
@@ -692,8 +694,12 @@ describe("saveAddCostSheetBulk — the phase-0 existence read (finding 2)", () =
     expect(selectOf(contractChecks[0])).toEqual(["vsb_capexprojectcontractid"]);
     // The phase-0 read is the first read of the save (phase order itself: UT-ACBULK-018).
     expect(reads.findIndex((r) => r.label.startsWith("check existing "))).toBe(0);
-    // Every row exists, so it is one UpdateMultiple per table and no CreateMultiple at all.
-    expect(callSet()).toEqual([`update:${ES_CONTRACTS}`, `update:${ES_COSTS}`].sort());
+    // Every row exists, so it is UpdateMultiple only, no CreateMultiple at all: one request for the
+    // contract, and the 48 costs split as the tuning in force says (WS-A, `bulkRequestCount`).
+    expect(callSet()).toEqual([
+      `update:${ES_CONTRACTS}`,
+      ...Array.from({ length: bulkRequestCount(48) }, () => `update:${ES_COSTS}`),
+    ].sort());
   });
 
   it("UT-ACSHEET-BULK-018 an existing cost deleted by someone else stops the save before any upsert", async () => {
@@ -1092,12 +1098,12 @@ describe("saveAddCostSheetBulk — performance follow-ups (D51 §11.11)", () => 
     createGate = new Promise<void>((resolve) => { setTimeout(resolve, 40); });
     await saveAddCostSheetBulk(typical());
     const line = logLine(info);
-    const m = /; gate peak (\d+)\/16, req avg (\d+) ms max (\d+) ms, verify (skipped|ran), (\d+) already gone$/.exec(line);
+    const m = new RegExp(`; gate peak (\\d+)/${GATE}, req avg (\\d+) ms max (\\d+) ms, verify (skipped|ran), (\\d+) already gone$`).exec(line);
     expect(m, line).not.toBeNull();
     const [, peak, avg, max, verify, gone] = m as RegExpExecArray;
     // Contract delete, cost delete and both contract groups start together.
     expect(Number(peak)).toBeGreaterThanOrEqual(2);
-    expect(Number(peak)).toBeLessThanOrEqual(16);
+    expect(Number(peak)).toBeLessThanOrEqual(SAVE_REQUEST_LIMIT);
     expect(Number(max)).toBeGreaterThanOrEqual(30);
     expect(Number(avg)).toBeLessThanOrEqual(Number(max));
     expect(verify).toBe("skipped");
@@ -1364,23 +1370,29 @@ describe("saveAddCostSheetBulk — parallel chunks and deferred contract deletes
     return state;
   };
 
-  it("UT-ACSHEET-BULK-048 passes parallel 4, and 120 new cost rows go out as 4 concurrent CreateMultiple calls", async () => {
-    expect(BULK_PARALLEL_CHUNKS).toBe(4);
+  // Changed (WS-A): was "passes parallel 4 … as 4 concurrent calls" of 30 rows; the numbers now
+  // come from the tuning in force (8 × 15 tuned, 4 × 30 with TUNED_CHUNKING off).
+  it("UT-ACSHEET-BULK-048 passes the tuning's parallel, and 120 new cost rows go out as that many concurrent CreateMultiple calls", async () => {
+    expect(BULK_PARALLEL_CHUNKS).toBe(BULK_TUNING.parallel);
+    const expected = bulkRequestCount(120);
+    expect(expected).toBe(BULK_PARALLEL_CHUNKS);
     let release: () => void = () => undefined;
     createGate = new Promise<void>((resolve) => { release = resolve; });
     const save = saveAddCostSheetBulk(bigSheet());
-    // All four are SENT while none has answered: they are in flight together.
-    await vi.waitFor(() => expect(callShape().filter((c) => c === `create:${ES_COSTS}`)).toHaveLength(4));
+    // All of them are SENT while none has answered: they are in flight together.
+    await vi.waitFor(() => expect(callShape().filter((c) => c === `create:${ES_COSTS}`)).toHaveLength(expected));
     expect(answered.filter((a) => a === `create:${ES_COSTS}`)).toEqual([]);
     createGate = null;
     release();
     await save;
     const creates = upsertCalls.filter((c) => c.action === "create" && c.entitySetName === ES_COSTS);
-    expect(creates.map((c) => c.targets.length)).toEqual([30, 30, 30, 30]);
-    // Every bulk group is sent with the option (the 120-row one is the one that splits).
+    expect(creates.map((c) => c.targets.length)).toEqual(new Array<number>(expected).fill(120 / expected));
+    // Every bulk group is sent with the options (the 120-row one is the one that splits).
     const options = vi.mocked(upsertMultiple).mock.calls.map((c) => c[3]);
     expect(options.length).toBeGreaterThan(0);
-    for (const o of options) expect(o).toMatchObject({ parallel: 4 });
+    for (const o of options) {
+      expect(o).toMatchObject({ parallel: BULK_TUNING.parallel, chunkSize: BULK_TUNING.maxChunk, minChunk: BULK_TUNING.minChunk });
+    }
   });
 
   it("UT-ACSHEET-BULK-049 the save resolves before a slow contract delete finishes; background resolves afterwards", async () => {
@@ -1481,12 +1493,14 @@ describe("saveAddCostSheetBulk — parallel chunks and deferred contract deletes
     notImplemented = new Set(["create"]);
     rowUpsertAllowed = true;
     await saveAddCostSheetBulk(bigSheet());
-    // Four parallel CreateMultiple requests, all 501, then every new cost row per row.
-    expect(callShape().filter((c) => c === `create:${ES_COSTS}`)).toHaveLength(4);
+    // Every parallel CreateMultiple request (8 tuned, 4 legacy: WS-A), all 501, then every new
+    // cost row per row.
+    const refused = bulkRequestCount(120);
+    expect(callShape().filter((c) => c === `create:${ES_COSTS}`)).toHaveLength(refused);
     expect(rowUpserts.filter((r) => r.startsWith(`${ES_COSTS}:`))).toHaveLength(120);
-    // The contract update stayed bulk; the refused requests are all counted.
+    // The contract update stayed bulk; the refused requests are all counted (was "create 124").
     expect(rowUpserts.filter((r) => r.startsWith(`${ES_CONTRACTS}:`))).toEqual([]);
-    expect(logEntries(saveLine(info), "upsert costs")).toContain("create 124 req per-row after 501");
+    expect(logEntries(saveLine(info), "upsert costs")).toContain(`create ${120 + refused} req per-row after 501`);
   });
 });
 
@@ -1566,7 +1580,7 @@ describe("saveAddCostSheetBulk — cost deletes: own gate, deferred (D51 §11.15
     expect(saveLine(info)).not.toMatch(/delete costs \d+ req/);
     expect(saveLine(info)).not.toContain("delete contracts deferred");
     // The gate stats are the writes' only: 3 bulk calls, never the 16 deletes.
-    expect(saveLine(info)).toMatch(/gate peak [1-3]\/16/);
+    expect(saveLine(info)).toMatch(new RegExp(`gate peak [1-3]/${GATE}`));
     expect(backgroundLines(info)).toEqual([]);
 
     release();
@@ -1739,7 +1753,8 @@ describe("saveAddCostSheetBulk — deferred deletes start after the writes; per-
     // The held create's own time shows; the update beside it answered at once.
     expect(Number(m?.[1])).toBeGreaterThanOrEqual(60);
     expect(Number(m?.[2])).toBeLessThan(60);
-    // One bracketed entry per request: 120 new cost rows go out as 4 parallel CreateMultiple calls.
+    // One bracketed entry per request: 120 new cost rows go out as `bulkRequestCount(120)` parallel
+    // CreateMultiple calls (8 tuned, 4 legacy: WS-A).
     info.mockClear();
     await saveAddCostSheetBulk({
       projectId: PROJECT_ID, owningBusinessUnitId: BU,
@@ -1747,7 +1762,10 @@ describe("saveAddCostSheetBulk — deferred deletes start after the writes; per-
       existingContracts: [contract(C1, "C1")], existingCosts: [], contractDeleteIds: [],
     });
     // Changed (D59): the stage's log name; C1 already exists, so its costs are stage A.
-    expect(saveLine(info)).toMatch(/upsert costs \(existing contracts\) \(create 4 req bulk \[\d+ ms, \d+ ms, \d+ ms, \d+ ms\]\)/);
+    const n = bulkRequestCount(120);
+    expect(saveLine(info)).toMatch(new RegExp(
+      `upsert costs \\(existing contracts\\) \\(create ${n} req bulk \\[${new Array<string>(n).fill("\\d+ ms").join(", ")}\\]\\)`,
+    ));
     expect(saveLines(info)).toHaveLength(1);
   });
 });
@@ -2164,7 +2182,7 @@ describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
     const e = await saveAddCostSheetBulk(args).then(() => null, (err: unknown) => err);
     expect(e).toBeInstanceOf(SheetConflictError);
     const line = out.find((l) => l.startsWith("Add Cost from Table save failed after")) ?? "";
-    expect(line).toMatch(/^Add Cost from Table save failed after [\d,]+ ms, 0 requests \(plan failed [\d,]+ ms\); gate peak 0\/16, .*; nothing was written; error: SheetConflictError: refused while planning \(conflict between sheet rows\); the rows' detail is in the raw error group$/);
+    expect(line).toMatch(new RegExp(`^Add Cost from Table save failed after [\\d,]+ ms, 0 requests \\(plan failed [\\d,]+ ms\\); gate peak 0/${GATE}, .*; nothing was written; error: SheetConflictError: refused while planning \\(conflict between sheet rows\\); the rows' detail is in the raw error group$`));
     expect(group(out, "Failure")).toContain("Refused while planning: nothing was sent");
     expect(upsertCalls).toEqual([]);
   });
@@ -2194,12 +2212,12 @@ describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
     expect(bg).toMatch(/, failed, totals reconciled; error: .*403 refused$/);
     const rec = group(out, "Background reconcile", out.indexOf(bg));
     expect(rec).toContain("Contract totals: reconciled (they match what landed)");
-    expect(rec).toContain("Write requests of the background reconcile: 1; at most 1 of 16 in flight at once");
+    expect(rec).toContain(`Write requests of the background reconcile: 1; at most 1 of ${GATE} in flight at once`);
     expect(rec.some((l) => /^\| reconcile read \| [\d.]+ m?s \| \d+ ms \| – \| – \| ok$/.test(l))).toBe(true);
     expect(rec.some((l) => /^\| reconcile totals \| [\d.]+ m?s \| \d+ ms \| 1 \| update \d+ rows?: 1 request, bulk \[\d+ ms\] \| ok$/.test(l))).toBe(true);
     // The reconcile write is not in the save line, nor in its request count.
     expect(saveLine).not.toContain("reconcile");
-    expect(saveCount).toMatch(/^Write requests of this save: 4; at most [1-4] of 16 in flight at once$/);
+    expect(saveCount).toMatch(new RegExp(`^Write requests of this save: 4; at most [1-4] of ${GATE} in flight at once$`));
     expect(group(out, "Errors", out.indexOf(bg)).some((l) => l.startsWith("Cost delete: BulkDeleteError: "))).toBe(true);
   });
 
@@ -2215,11 +2233,11 @@ describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
       await other;
     }
     const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
-    const peak = Number(/gate peak (\d+)\/16/.exec(line)?.[1]);
-    const shared = Number(/shared gate peak (\d+)\/16/.exec(line)?.[1]);
+    const peak = Number(new RegExp(`gate peak (\\d+)/${GATE}`).exec(line)?.[1]);
+    const shared = Number(new RegExp(`shared gate peak (\\d+)/${GATE}`).exec(line)?.[1]);
     expect(shared).toBeGreaterThan(peak);
-    expect(group(out, "Requests")[0]).toBe(`Write requests of this save: 4; at most ${peak} of 16 in flight at once`);
-    expect(group(out, "Requests")).toContain(`Shared write gate: up to ${shared} of 16 in flight, other work included`);
+    expect(group(out, "Requests")[0]).toBe(`Write requests of this save: 4; at most ${peak} of ${GATE} in flight at once`);
+    expect(group(out, "Requests")).toContain(`Shared write gate: up to ${shared} of ${GATE} in flight, other work included`);
   });
 
   it("UT-ACSHEET-LOG-009 the success groups: plan counts, deferred deletes and the verify state", async () => {
@@ -2227,7 +2245,7 @@ describe("saveAddCostSheetBulk — the readable save log (D59)", () => {
     const result = await saveAddCostSheetBulk(typical());
     await result.background;
     const line = out.find((l) => l.startsWith("Add Cost from Table save:")) ?? "";
-    expect(line).toMatch(/, delete costs deferred, delete contracts deferred\); gate peak \d+\/16, req avg [\d,]+ ms max [\d,]+ ms, verify skipped, 0 already gone$/);
+    expect(line).toMatch(new RegExp(`, delete costs deferred, delete contracts deferred\\); gate peak \\d+/${GATE}, req avg [\\d,]+ ms max [\\d,]+ ms, verify skipped, 0 already gone$`));
     expect(group(out, "Plan")).toEqual([
       "Contracts: 1 created, 1 updated, 1 deleted",
       "Cost rows: 1 created, 1 updated, 1 deleted",

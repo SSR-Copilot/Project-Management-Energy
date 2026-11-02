@@ -9,7 +9,7 @@ import {
   CAPEX_CONTRACTS, CAPEX_COSTS, RowsGoneError, SavePlanError, executeSavePlan, type SavePlanDeps,
 } from "./addCostSheetBulk";
 import type { BulkTableInfo, SaveBuildPlan, UpsertTarget } from "./bulkTypes";
-import { BulkValidationError } from "./bulkWrites";
+import { BulkPartialWriteError, BulkValidationError } from "./bulkWrites";
 import { OWNING_BU_BIND } from "./odata";
 import type { ExistingCost } from "@/features/cost/add-costs-from-table/rules";
 
@@ -1721,5 +1721,74 @@ describe("executeSavePlan — committedBefore is exact for deletes that removed 
     const fake2 = fakeDataverse(goneSeed());
     const err2 = await executeSavePlan(typicalPlan(), fake2.deps).then(() => null, (x: unknown) => x);
     expect((err2 as RowsGoneError).committedBefore).toBe(true);
+  });
+});
+
+/* ═══════════════════════════════════════════ review fix: split contract groups (D75) ══ */
+
+describe("executeSavePlan — a split contract group that partly landed (review fix, D75)", () => {
+  /** Three new contracts with one stage-B cost each; nothing existing. */
+  const newOnlyPlan = () => typicalPlan({
+    contractUpserts: [contractRow("n-1", 10, true), contractRow("n-2", 20, true), contractRow("n-3", 30, true)],
+    costUpserts: [costRow("kn-1", "n-1", 10), costRow("kn-2", "n-2", 20), costRow("kn-3", "n-3", 30)],
+    costDeletes: [], contractDeletes: [],
+    totals: new Map([["n-1", 10], ["n-2", 20], ["n-3", 30]]),
+  });
+
+  /** (1) lands `landed` (with their planned totals) and then throws `error`. */
+  function partialContracts(fake: ReturnType<typeof fakeDataverse>, landed: readonly string[], error: unknown): SavePlanDeps {
+    return {
+      ...fake.deps,
+      upsert: async (table, rows, label) => {
+        if (table !== CAPEX_CONTRACTS || label === "reconcile totals") return fake.deps.upsert(table, rows, label);
+        for (const r of rows) if (landed.includes(r.id)) fake.contracts.set(r.id, Number(r.fields.vsb_totalcost));
+        throw error;
+      },
+    };
+  }
+
+  it("UT-ACREV-002 a creates-only group's BulkPartialWriteError: the landed contracts are reconciled, the others left out, reconciled true", async () => {
+    const fake = fakeDataverse({ contracts: {}, costs: [] });
+    const partial = new BulkPartialWriteError("upsert contracts (create)", CAPEX_CONTRACTS.entitySetName, 1, 2,
+      [new Error("chunk 2 refused")], ["n-1", "n-3"]);
+    const error = await caught(executeSavePlan(newOnlyPlan(), partialContracts(fake, ["n-1", "n-3"], partial)));
+    expect(error.phase).toBe(1);
+    expect(error.unverifiedContractIds).toEqual([]);
+    expect(error.reconciled).toBe(true);
+    // (2b) never ran, so the two contracts that landed hold no costs: their totals go to 0.
+    expect(fake.calls.find((c) => c.kind === "load")?.ids).toEqual(["n-1", "n-3"]);
+    expect(fake.calls.find((c) => c.label === "reconcile totals")?.ids).toEqual(["n-1", "n-3"]);
+    expect(fake.contracts.get("n-1")).toBe(0);
+    expect(fake.contracts.get("n-3")).toBe(0);
+    // The one that did not land is never written (an upsert would create a bare contract).
+    expect(fake.contracts.has("n-2")).toBe(false);
+  });
+
+  it("UT-ACREV-003 the two-group error with the create group's landedIds: landed new ones compared, the rest left out, existing ones forced", async () => {
+    const fake = fakeDataverse({ contracts: { "c-1": 100 }, costs: [cost("k-1", "c-1", 100)] });
+    const plan = typicalPlan({
+      contractUpserts: [contractRow("c-1", 300), contractRow("n-1", 10, true), contractRow("n-2", 20, true)],
+      costUpserts: [costRow("k-1", "c-1", 300, false), costRow("kn-1", "n-1", 10), costRow("kn-2", "n-2", 20)],
+      costDeletes: [], contractDeletes: [],
+      totals: new Map([["c-1", 300], ["n-1", 10], ["n-2", 20]]),
+    });
+    // The shape `upsertRowsByAction` throws (`GroupsWriteError`): no counts, the create group's ids.
+    const twoGroups = Object.assign(new Error("the update group failed while the create group was saved"), { landedIds: ["n-1"] });
+    const error = await caught(executeSavePlan(plan, partialContracts(fake, ["n-1"], twoGroups)));
+    expect(error.unverifiedContractIds).toEqual([]);
+    expect(error.reconciled).toBe(true);
+    expect(fake.contracts.get("n-1")).toBe(0);
+    expect(fake.contracts.has("n-2")).toBe(false);
+    // c-1's own row did not land (or may not have): its actual sum (k-1 → 300 by (2a)) is forced.
+    expect(fake.contracts.get("c-1")).toBe(fake.sumOf("c-1"));
+    expect(fake.calls.find((c) => c.label === "reconcile totals")?.ids).toEqual(["c-1", "n-1"]);
+  });
+
+  it("UT-ACREV-004 a contract failure with neither counts nor landedIds still leaves every new contract unverified", async () => {
+    const fake = fakeDataverse({ contracts: {}, costs: [] });
+    const error = await caught(executeSavePlan(newOnlyPlan(), partialContracts(fake, ["n-1"], new Error("opaque"))));
+    expect(error.unverifiedContractIds).toEqual(["n-1", "n-2", "n-3"]);
+    expect(error.reconciled).toBe(false);
+    expect(fake.calls.some((c) => c.label === "reconcile totals")).toBe(false);
   });
 });

@@ -13,32 +13,18 @@
 import { useCallback, useEffect, useState, type ReactNode, type SyntheticEvent } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DISCARD_TEXT, type CloseReason, type DiscardText } from "./discardText";
-
-const onBeforeUnload = (e: BeforeUnloadEvent) => {
-  e.preventDefault();
-  // Older Chromium and Safari show the prompt only when `returnValue` is set.
-  e.returnValue = "";
-};
-/** How many `useBeforeUnload` callers are active right now. */
-let beforeUnloadUsers = 0;
+import { holdBeforeUnload } from "./beforeUnload";
 
 /**
  * Registers `beforeunload` while `active`.
  *
  * `FormPanel` calls this for every dirty open panel, and Milestones / Contracts also call it
- * themselves. All callers share ONE window listener (reference-counted), so a screen and its
- * panel never stack two handlers — one registration, one prompt.
+ * themselves. All callers share ONE window listener (reference-counted, `./beforeUnload`, which a
+ * write that outlives its screen holds too), so a screen and its panel never stack two handlers —
+ * one registration, one prompt.
  */
 export function useBeforeUnload(active: boolean): void {
-  useEffect(() => {
-    if (!active || typeof window === "undefined") return undefined;
-    if (beforeUnloadUsers === 0) window.addEventListener("beforeunload", onBeforeUnload);
-    beforeUnloadUsers += 1;
-    return () => {
-      beforeUnloadUsers -= 1;
-      if (beforeUnloadUsers === 0) window.removeEventListener("beforeunload", onBeforeUnload);
-    };
-  }, [active]);
+  useEffect(() => (active ? holdBeforeUnload() : undefined), [active]);
 }
 
 export interface DiscardGuardOptions {

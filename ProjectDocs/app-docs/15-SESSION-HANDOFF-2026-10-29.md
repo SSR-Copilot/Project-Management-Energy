@@ -108,6 +108,22 @@ Re-check the code before you trust any line here. The previous handoff,
   guarantee that the existing app record is kept.
 - **Commit with a message file** (`git commit -F`), and list the exact scope before any commit.
 
+## Addendum, 2 Nov 2026: Add Cost from Table Save performance wave (D75–D77)
+
+- **Where:** the local-only branch `feature/AddCostSavePerf`, in the worktree
+  `C:\Personal\Code App Mordenization\Project-Management-Energy-perf\feature`. Not merged into
+  `RounakDev1` or `master`, not pushed, not deployed. Merging needs the user's approval.
+- **Read:** D75 (client timeline, chunk tuning `TUNED_CHUNKING`, changed-columns-only contract
+  updates `CHANGED_COLUMNS_ONLY`, both on), D76 (deep insert for new contracts,
+  `DEEP_INSERT_NEW_CONTRACTS`, off), D77 (background Save, `BACKGROUND_SAVE`, off, a DIVERGENCE) in
+  `02-OPEN-DECISIONS.md`; the plan `17-ADDCOST-SAVE-PERF-PLAN.md` (bottlenecks B1–B8, the benchmark,
+  the P0.3 probe, the flags, the Dataverse audit); bugs CA-24 (fixed), CA-25 and CA-26 (open).
+- **Nothing measured live.** Modelled: S about 0.82–0.87 s (target 643 ms), M about 1.9 s (target
+  766 ms); the 2.5× target is not reached by the client changes alone.
+- **Owed by the user:** the P0.2 benchmark on DEV (`17-…` §4); approval for the P0.3 probe, which
+  writes test rows; decisions on D76 and D77; whether a Dataverse admin may act on the audit
+  findings 4 and 6.
+
 ## Docs updated with this handoff
 
 - `ProjectDocs/instructions/AGENT-GUIDE.md`: "Start here" now points to this file; `14-…` moved to

@@ -31,9 +31,11 @@ import { unwrap } from "../platform/errors";
 export const DEFAULT_BULK_CHUNK = 500;
 
 /**
- * The smallest chunk a parallel phase is split into. A phase below 2 × this stays ONE request
- * (no chunk of a parallel split is ever made smaller than this on purpose; only the remainder
- * chunk can be).
+ * The smallest chunk a parallel phase is split into, by DEFAULT (a caller passes `minChunk` to
+ * override it; the bulk sender does, from its `BULK_TUNING` in `./bulkSend.ts`). A phase below
+ * 2 × the minimum stays ONE request (no chunk of a parallel split is ever made smaller than the
+ * minimum on purpose; only the remainder chunk can be). 25 is the pre-tuning value, kept as the
+ * executor's default so a caller that passes nothing behaves exactly as before.
  */
 export const MIN_PARALLEL_CHUNK = 25;
 
@@ -93,6 +95,12 @@ export class BulkWriteError extends Error {
  *
  * `rowsLanded` (the rows in the chunks that succeeded) and `chunksFailed` are informational only.
  * `cause` is the first failure in chunk order; `causes` lists every failure in chunk order.
+ *
+ * `landedIds`: the ids of every row in a fulfilled chunk, in input order. Each chunk is one
+ * all-or-nothing request, so these rows landed and every other row of the phase did not (the same
+ * assumption `BulkWriteError.rowsCommitted` makes of its failed chunk). The orchestrator reads it as
+ * a SET, like `DeepInsertError.landedIds`, never as a prefix (review fix: a creates-only contract
+ * group split into parallel chunks left every new contract "unverified" and their totals unrepaired).
  */
 export class BulkPartialWriteError extends Error {
   readonly label: string;
@@ -101,6 +109,8 @@ export class BulkPartialWriteError extends Error {
   readonly chunksFailed: number;
   /** Rows in the fulfilled chunks. Informational: NOT a prefix of the input. */
   readonly rowsLanded: number;
+  /** Ids of the rows in the fulfilled chunks (a set, not a prefix; see the class note). */
+  readonly landedIds: readonly string[];
   readonly causes: readonly unknown[];
   /** `Error.cause` exists on the base type, hence the modifier. */
   override readonly cause: unknown;
@@ -111,6 +121,7 @@ export class BulkPartialWriteError extends Error {
     chunksFailed: number,
     rowsLanded: number,
     causes: readonly unknown[],
+    landedIds: readonly string[] = [],
   ) {
     const first = causes[0];
     const detail = first instanceof Error ? first.message : String(first);
@@ -123,6 +134,7 @@ export class BulkPartialWriteError extends Error {
     this.table = table;
     this.chunksFailed = chunksFailed;
     this.rowsLanded = rowsLanded;
+    this.landedIds = landedIds;
     this.causes = causes;
     this.cause = first;
   }
@@ -267,7 +279,8 @@ export function toUpsertTargets(
  *
  * `parallel` (default 1 = the sequential behaviour above, exact prefix counts). When it is > 1
  * and the phase splits into more than one chunk (`parallelChunkSize`: at most `parallel` chunks
- * up to `parallel × chunkSize` rows, `ceil(n / chunkSize)` above that), every chunk is sent at
+ * up to `parallel × chunkSize` rows, `ceil(n / chunkSize)` above that; `minChunk`, default
+ * `MIN_PARALLEL_CHUNK`, is the smallest chunk a split makes), every chunk is sent at
  * once (`Promise.allSettled`; the caller's transport is already gated by the shared concurrency
  * limiter, so no limiter is added here) and each result is unwrapped. Then:
  * - all succeeded → `{ requests, rows }`;
@@ -279,10 +292,11 @@ export async function upsertMultiple(
   table: BulkTableInfo,
   rows: readonly UpsertTarget[],
   transport: BulkUpsertTransport,
-  opts: { chunkSize?: number; label?: string; parallel?: number } = {},
+  opts: { chunkSize?: number; label?: string; parallel?: number; minChunk?: number } = {},
 ): Promise<{ requests: number; rows: number }> {
   const size = opts.chunkSize ?? DEFAULT_BULK_CHUNK;
   const parallel = opts.parallel ?? 1;
+  const minChunk = opts.minChunk ?? MIN_PARALLEL_CHUNK;
   const label = opts.label ?? `upsert ${table.logicalName}`;
   if (!Number.isInteger(size) || size < 1) {
     throw new BulkValidationError(label, table.entitySetName, `chunkSize must be a positive integer, got ${size}.`);
@@ -290,13 +304,19 @@ export async function upsertMultiple(
   if (!Number.isInteger(parallel) || parallel < 1) {
     throw new BulkValidationError(label, table.entitySetName, `parallel must be a positive integer, got ${parallel}.`);
   }
+  if (!Number.isInteger(minChunk) || minChunk < 1) {
+    throw new BulkValidationError(label, table.entitySetName, `minChunk must be a positive integer, got ${minChunk}.`);
+  }
   if (rows.length === 0) return { requests: 0, rows: 0 };
 
   const targetsAll = toUpsertTargets(table, rows, label);
   if (parallel > 1) {
-    const parallelChunks = chunk(targetsAll, parallelChunkSize(rows.length, parallel, size));
+    const split = parallelChunkSize(rows.length, parallel, size, minChunk);
+    const parallelChunks = chunk(targetsAll, split);
     if (parallelChunks.length > 1) {
-      return sendParallel(table, parallelChunks, transport, label, rows.length);
+      // The ids per chunk, cut the same way (`identify` may not carry the primary key).
+      const idChunks = chunk(rows.map((r) => r.id), split);
+      return sendParallel(table, parallelChunks, idChunks, transport, label, rows.length);
     }
   }
 
@@ -318,23 +338,27 @@ export async function upsertMultiple(
 }
 
 /**
- * Chunk size for a parallel phase: `ceil(rowCount / parallel)`, never below `MIN_PARALLEL_CHUNK`,
- * never above `maxChunk`. A phase under 2 × `MIN_PARALLEL_CHUNK` rows stays one request, so a
- * small save is not split into a full chunk plus a tiny remainder.
+ * Chunk size for a parallel phase: `ceil(rowCount / parallel)`, never below `minChunk` (default
+ * `MIN_PARALLEL_CHUNK`), never above `maxChunk`. A phase under 2 × `minChunk` rows stays one
+ * request, so a small save is not split into a full chunk plus a tiny remainder.
  *
  * So a phase is split into AT MOST `parallel` chunks only up to `parallel × maxChunk` rows (2,000
- * with `parallel` 4 and the default 500). Above that the `maxChunk` cap wins and the phase is
- * `ceil(rowCount / maxChunk)` chunks of `maxChunk` — MORE than `parallel` — and `upsertMultiple`
- * sends every one of them at once (the caller's gate still bounds what is in flight).
+ * with `parallel` 4 and the default 500; 4,000 with `parallel` 8). Above that the `maxChunk` cap
+ * wins and the phase is `ceil(rowCount / maxChunk)` chunks of `maxChunk` — MORE than `parallel` —
+ * and `upsertMultiple` sends every one of them at once (the caller's gate still bounds what is in
+ * flight).
  */
-export function parallelChunkSize(rowCount: number, parallel: number, maxChunk = DEFAULT_BULK_CHUNK): number {
-  if (rowCount < 2 * MIN_PARALLEL_CHUNK) return Math.max(1, Math.min(maxChunk, rowCount));
-  return Math.min(maxChunk, Math.max(MIN_PARALLEL_CHUNK, Math.ceil(rowCount / parallel)));
+export function parallelChunkSize(
+  rowCount: number, parallel: number, maxChunk = DEFAULT_BULK_CHUNK, minChunk = MIN_PARALLEL_CHUNK,
+): number {
+  if (rowCount < 2 * minChunk) return Math.max(1, Math.min(maxChunk, rowCount));
+  return Math.min(maxChunk, Math.max(minChunk, Math.ceil(rowCount / parallel)));
 }
 
 async function sendParallel(
   table: BulkTableInfo,
   chunks: Record<string, unknown>[][],
+  idChunks: readonly (readonly string[])[],
   transport: BulkUpsertTransport,
   label: string,
   rowCount: number,
@@ -348,16 +372,16 @@ async function sendParallel(
     }),
   );
   const causes: unknown[] = [];
-  let rowsLanded = 0;
+  const landedIds: string[] = [];
   settled.forEach((outcome, index) => {
-    if (outcome.status === "fulfilled") rowsLanded += (chunks[index] as unknown[]).length;
+    if (outcome.status === "fulfilled") landedIds.push(...(idChunks[index] ?? []));
     else causes.push(outcome.reason);
   });
   if (causes.length === 0) return { requests: chunks.length, rows: rowCount };
   if (causes.length === chunks.length) {
     throw new BulkWriteError(label, table.entitySetName, 0, 0, 0, causes[0]);
   }
-  throw new BulkPartialWriteError(label, table.entitySetName, causes.length, rowsLanded, causes);
+  throw new BulkPartialWriteError(label, table.entitySetName, causes.length, landedIds.length, causes, landedIds);
 }
 
 /**

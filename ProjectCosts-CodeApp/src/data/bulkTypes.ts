@@ -126,6 +126,18 @@ export interface SheetSavePlan extends SaveBuildPlan {
   applied: SavedSheetChanges;
 }
 
+/**
+ * One NEW contract and the new cost rows that travel inside its create (WS-B, deep insert,
+ * `DEEP_INSERT_NEW_CONTRACTS`). `costs` are the planner's own cost targets with the contract bind
+ * (`vsb_Contract@odata.bind`) taken out: inside a deep insert the parent links them itself. Every
+ * other field is the planner's, the owning-BU bind (CONVENTIONS rule 4) and the client-minted id
+ * (D51 §3a) included.
+ */
+export interface DeepInsertGroup {
+  contract: UpsertTarget;
+  costs: readonly UpsertTarget[];
+}
+
 /** What the executor needs to address one table. */
 export interface BulkTableInfo {
   /** e.g. `vsb_capexcosts`. */

@@ -24,9 +24,13 @@ import { costAllowedStart, SENTINEL_YEAR } from "@/features/cost/capex-costs/clu
 import { CATEGORY_LABELS, resolveCategory } from "@/features/cost/capex-costs/rules";
 import { useAddCostSheet, useSaveAddCostSheet } from "@/features/cost/costing/useCostBook";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
+import {
+  BACKGROUND_SAVE, backgroundSaveApplies, useBackgroundSaveRunning,
+} from "@/features/cost/costing/backgroundSave";
 import { costWriteStatusLabel } from "@/domain/writeGuard";
 import { prepareLogReport, screenSaveFailureReport, toSaveFailure } from "@/data/addCostSheet";
-import { emitSaveLog } from "@/data/saveLog";
+import { deferSaveLog, emitSaveLog } from "@/data/saveLog";
+import { addCostSaveTimeline } from "@/features/cost/costing/saveTimeline";
 import { rootCauseDetail } from "@/platform/errors";
 import {
   ADDCOST_MSG, buildInitialSheet, canOpenBulkEdit, canSaveBulkEdit, saveFailureText,
@@ -74,6 +78,10 @@ export default function AddCostsFromTableScreen() {
   const writeInFlight = useCostWriteInFlight(projectId);
   /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
   const reportFailure = useWriteFailureReport("Add Costs from Table");
+  /** WS-F — a background Save of this project still runs: this sheet was opened meanwhile. */
+  const backgroundRunning = useBackgroundSaveRunning(projectId);
+  /** WS-F — this sheet has already handed a Save to the background (a second click is ignored). */
+  const handedOff = useRef(false);
 
   const currentYear = new Date().getFullYear();
   const codDate = project?.milestones?.operationsStartCod;
@@ -211,9 +219,22 @@ export default function AddCostsFromTableScreen() {
   };
 
   const doSave = async () => {
+    // WS-F: a click that lands before the navigation has unmounted this sheet. Only a background
+    // Save sets it, so with the flag off this never returns.
+    if (handedOff.current) return;
+    // P0.1: the Save's client timeline starts at the click (measurement only, `saveTimeline.ts`).
+    addCostSaveTimeline.begin();
+    /*
+     * WS-E checked: these two stay here. React bails out when they are already null (the usual
+     * first Save); only a showing banner (a retry) costs a render before the first request, and
+     * clearing it after the send could wipe the banner of a Save refused within the same tick.
+     */
     setSaveError(null);
     setSaveNotice(null);
-    if (!canSaveBulkEdit(permissions, errors) || !loaded) return;
+    if (!canSaveBulkEdit(permissions, errors) || !loaded) {
+      addCostSaveTimeline.cancel();
+      return;
+    }
 
     /*
      * Refuse to save at all if a contract the sheet was BUILT from no longer resolves once the
@@ -237,12 +258,18 @@ export default function AddCostsFromTableScreen() {
       canvasParityDeletion: CANVAS_PARITY_DELETION,
       now: () => performance.now(),
     });
+    addCostSaveTimeline.mark("prepared");
+    addCostSaveTimeline.measure("prepareMs", prepared.timings.total);
     // One line (plus a collapsed group, D59), so a slow Save can be pinned on the client side or
     // the network side at a glance.
     const readBack = readBackMs.current;
     const validation = validationMs.current;
-    emitSaveLog(() => prepareLogReport(prepared.timings, readBack, validation, currentRows.length));
+    const rowCount = currentRows.length;
+    const prepareLog = () => prepareLogReport(prepared.timings, readBack, validation, rowCount);
     if (prepared.kind === "lost") {
+      // Nothing is sent, so nothing waits behind the log: it prints now, and no timeline line.
+      emitSaveLog(prepareLog);
+      addCostSaveTimeline.cancel();
       setSaveError(ROUND_TRIP_FAILED(prepared.lost.map((l) => l.description)));
       return;
     }
@@ -253,40 +280,81 @@ export default function AddCostsFromTableScreen() {
       changed, orphanCleanup, currentRows, sentBefore: sentInFailedAttempts.current,
     });
 
+    /*
+     * WS-F (`BACKGROUND_SAVE`, OFF): DIVERGENCE, see `costing/backgroundSave.ts`. The Save is
+     * started and the sheet left at once; the hook finishes it (status, lock, unload guard, patch
+     * or refetch). Never when the past-cost guard spared something: that Save must stay to say so.
+     */
+    const background = backgroundSaveApplies({
+      enabled: BACKGROUND_SAVE, blockedByPastCosts: deletion.blockedByPastCosts.length,
+    });
+
     // Drop the previous attempt's technical line so it never sits under a newer outcome.
     save.reset();
     try {
-      await save.mutateAsync({
+      // Started inside an async wrapper, so even a synchronous throw arrives as a rejection and
+      // the deferred prepare log below is still scheduled.
+      const sending = (async () => save.mutateAsync({
         changedRows,
         existingContracts,
         existingCosts,
         contractDeleteIds,
         idCache: idCache.current,
         refreshBeforePlan,
+        // Left out entirely when off, so the call is exactly what it was.
+        ...(background ? { background: true } : {}),
+      }))();
+      if (background) {
+        handedOff.current = true;
+        // The client timeline now ends on the DEVEX/CAPEX paint, before the Save resolves; the bulk
+        // save's own line still times the requests.
+        addCostSaveTimeline.awaitPaint();
+        back();
+      }
+      /*
+       * WS-E: the prepare line prints one task later, not on the critical path. Everything from
+       * `mutateAsync` to the save's first request runs in microtasks (no timer in between), so the
+       * request has left when this prints; `console.table` / `groupCollapsed` are slow with DevTools
+       * open. Same content; any save line emitted earlier (a plan refused within the same tick)
+       * still prints after it (`deferSaveLog`).
+       */
+      deferSaveLog(prepareLog, (startedAt, ms) => {
+        addCostSaveTimeline.mark("prepareLog", startedAt);
+        addCostSaveTimeline.measure("prepareLogMs", ms);
       });
+      await sending;
+      addCostSaveTimeline.mark("returned");
       idCache.current.clear();
       sentInFailedAttempts.current.clear();
+      // WS-F: already navigated; the hook has patched the book and cleared the status.
+      if (background) return;
       if (deletion.blockedByPastCosts.length > 0) {
         // Saved, but something the user asked to remove was deliberately spared — stay put and
         // say so rather than navigating away from a half-applied intention.
         setSaveNotice(ADDCOST_MSG.pastCostGuard(deletion.blockedByPastCosts.map((c) => c.name)));
         // The save no longer waits for a reload (it navigates away), so staying here reloads now.
         void sheetQuery.refetch();
+        addCostSaveTimeline.end("stayed");
         return;
       }
+      // Before `navigate`, so the DEVEX/CAPEX screen's first commit already finds it waiting.
+      addCostSaveTimeline.awaitPaint();
       back();
     } catch (error) {
+      addCostSaveTimeline.mark("returned");
       // The canvas wording, plus what the bulk save says about the failure. The id cache is
       // deliberately NOT cleared here: a retry must reuse the ids this attempt sent. Part of
       // this attempt may have landed, so the retry plans against a fresh read, not the snapshot.
       for (const id of sentIdentities) sentInFailedAttempts.current.add(id);
       const failure = toSaveFailure(error);
       const userText = saveFailureText(failure);
-      // CA-15: the sheet's banner while it is mounted; the error toast if the user has left.
-      reportFailure(userText, setSaveError);
+      // CA-15: the sheet's banner while it is mounted; the error toast if the user has left. A
+      // background Save (WS-F) has left by definition, even if the unmount has not committed yet.
+      reportFailure(userText, background ? undefined : setSaveError);
       // The full chain (phase → chunk → Dataverse fault) for support, readable with ids replaced,
       // then the raw error object in its own collapsed group (D59); the screen shows one line.
       emitSaveLog(() => screenSaveFailureReport(error, failure.kind, userText));
+      addCostSaveTimeline.end("failed");
     }
   };
 
@@ -328,7 +396,9 @@ export default function AddCostsFromTableScreen() {
   const categoryName = CATEGORY_LABELS[category] ?? "";
   const title = sheetTitle(project?.projectName ?? "", categoryName);
   // D58: no scrim while saving, so the sheet and its edit/leave controls lock instead.
-  const locked = sheetLocked({ isPending: save.isPending });
+  // WS-F: also while a background Save of this project runs (this sheet was opened meanwhile; it is
+  // re-read when that Save settles). Never true with the flag off.
+  const locked = sheetLocked({ isPending: save.isPending || backgroundRunning });
 
   return (
     <div
