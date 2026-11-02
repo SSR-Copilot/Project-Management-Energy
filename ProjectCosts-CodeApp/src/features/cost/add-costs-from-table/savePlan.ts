@@ -125,12 +125,20 @@ interface BuildSavePlanDeps {
 }
 
 /**
- * REQUEST SHAPE, not a data DIVERGENCE (WS-D, B5): an existing contract's UPDATE carries only the
- * columns whose planned value differs from the stored one, and `vsb_totalcost` only when the total
- * changes (or the stored total is unknown). The final Dataverse row is the same as with the full
- * column bag; only the request is smaller. A CREATE always carries the full bag, its binds and its
- * total. `false` restores the earlier shape exactly: any differing column sends every
- * `contractFields` column plus the total.
+ * REQUEST SHAPE (WS-D, B5; D75): an existing contract's UPDATE carries only the columns whose
+ * planned value differs from the stored one, and `vsb_totalcost` only when the total changes (or
+ * the stored total is unknown). A CREATE always carries the full bag, its binds and its total.
+ * `false` restores the earlier shape exactly: any differing column sends every `contractFields`
+ * column plus the total.
+ *
+ * The final Dataverse row equals the full-bag path ONLY while the snapshot ("stored") equals the
+ * row in Dataverse. DIVERGENCE (concurrent edits only; review low, D75): when another tab or user
+ * changed a column after the sheet loaded (or after the `refreshBeforePlan` re-read), the canvas
+ * Patch and the full bag overwrote it with the sheet's value; here a column the sheet did not
+ * change keeps the other writer's value (column-level instead of row-level last-writer-wins).
+ * The DEVEX/CAPEX book is still patched with every column (`applied.columns`, the sheet's final
+ * values), so until the post-save refetch replaces it, the book can show the sheet's value for
+ * such a column where Dataverse holds the other writer's.
  */
 export const CHANGED_COLUMNS_ONLY = true;
 
