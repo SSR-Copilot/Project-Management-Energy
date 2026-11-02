@@ -3,11 +3,13 @@ import {
   MAX_MESSAGE, MAX_TABLE_ROWS, emitSaveLog, errorChainLines, failureSection, gateTail, inStartOrder,
   groupsText, messageOf, plural, rawErrorSection, requestsSection, rootMessageOf, stepsSection, type SaveLogStep,
 } from "./saveLog";
-import { bulk501WarningLine, createRequestMeter, formatMs } from "./bulkSend";
+import { SAVE_REQUEST_LIMIT, bulk501WarningLine, createRequestMeter, formatMs } from "./bulkSend";
 import { createGate } from "./concurrency";
 import { DataError } from "@/platform/errors";
 
 const GUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+/** The write gate the log names (WS-A tuning: 24; 16 before it). */
+const GATE = SAVE_REQUEST_LIMIT;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -96,19 +98,19 @@ describe("saveLog — pure builders (D59)", () => {
 
   it("UT-SAVELOG-009 gateTail: this save's peak and stats in exact ms; the shared peak only when higher", () => {
     const m = { ...createRequestMeter(), count: 4, totalMs: 4960, maxMs: 1900, peak: 4, sharedPeak: 4 };
-    expect(gateTail(m)).toBe("gate peak 4/16, req avg 1,240 ms max 1,900 ms");
-    expect(gateTail({ ...m, sharedPeak: 6 })).toBe("gate peak 4/16, req avg 1,240 ms max 1,900 ms, shared gate peak 6/16");
-    expect(gateTail(createRequestMeter())).toBe("gate peak 0/16, req avg 0 ms max 0 ms");
+    expect(gateTail(m)).toBe(`gate peak 4/${GATE}, req avg 1,240 ms max 1,900 ms`);
+    expect(gateTail({ ...m, sharedPeak: 6 })).toBe(`gate peak 4/${GATE}, req avg 1,240 ms max 1,900 ms, shared gate peak 6/${GATE}`);
+    expect(gateTail(createRequestMeter())).toBe(`gate peak 0/${GATE}, req avg 0 ms max 0 ms`);
   });
 
   it("UT-SAVELOG-010 requestsSection says it in words, with the shared gate only when it differs", () => {
     const m = { ...createRequestMeter(), count: 5, totalMs: 6200, maxMs: 1900, peak: 4, sharedPeak: 4 };
     expect(requestsSection(m).lines).toEqual([
-      "Write requests of this save: 5; at most 4 of 16 in flight at once",
+      `Write requests of this save: 5; at most 4 of ${GATE} in flight at once`,
       "Time per write request (inside the gate, queueing excluded): average 1.2 s, slowest 1.9 s",
     ]);
     expect(requestsSection({ ...m, sharedPeak: 7 }, ["extra"]).lines.slice(2))
-      .toEqual(["Shared write gate: up to 7 of 16 in flight, other work included", "extra"]);
+      .toEqual([`Shared write gate: up to 7 of ${GATE} in flight, other work included`, "extra"]);
     expect(requestsSection(createRequestMeter()).lines[1]).toBe("Time per write request: none sent");
   });
 
@@ -236,8 +238,8 @@ describe("saveLog — shared step text (D59 review)", () => {
 
   it("UT-SAVELOG-031 requestsSection names whose requests they are", () => {
     const m = { ...createRequestMeter(), count: 1, totalMs: 10, maxMs: 10, peak: 1, sharedPeak: 1 };
-    expect(requestsSection(m).lines[0]).toBe("Write requests of this save: 1; at most 1 of 16 in flight at once");
+    expect(requestsSection(m).lines[0]).toBe(`Write requests of this save: 1; at most 1 of ${GATE} in flight at once`);
     expect(requestsSection(m, [], "the background reconcile").lines[0])
-      .toBe("Write requests of the background reconcile: 1; at most 1 of 16 in flight at once");
+      .toBe(`Write requests of the background reconcile: 1; at most 1 of ${GATE} in flight at once`);
   });
 });
