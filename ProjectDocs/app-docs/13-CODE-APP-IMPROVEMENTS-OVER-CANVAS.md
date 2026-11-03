@@ -215,6 +215,15 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 - **UI parity (26 Oct):** grid, Add/Edit panel and delete popups matched to the canvas (650 px
   panel, 42 px headers, scrollbar, 11 pt captions, canvas date picker, dropdown lists), through an
   optional `canvasFooter` setting on `ConfirmDialog` used only here.
+- **Parity run fixes (3 Nov 2026, D79, uncommitted):**
+  - **Fixed:** a refused delete now fails visibly. Land Lease, OPEX and Contracts deletes go through `deleteRecord`
+    (CA-27; the canvas `Remove` is silent too).
+  - **Reproduced:** the text sizes, weights and colours are now the canvas values; the earlier +0.5 pt is gone.
+    Validation matches the canvas for spaces and `"1."` (V1–V3), with the earlier trimming kept as the
+    `"trimmed"` twin. A Year change clears the custom inflation % (V4, `SOURCE DEFECT` reproduced).
+  - **Fixed (rule 16):** the Year / Month / Month accessible names; the period row's hover text (X1, X2).
+  - **New gate:** the Land Lease Playwright parity suite (`e2e/landlease.*`; rule map
+    `e2e/RULEMAP-land-lease.md`).
 
 ---
 
@@ -249,6 +258,7 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 ## Request log (29 Oct 2026, D72) — fixed / new
 
 - **Cross-cutting:** every request, data call, page load and save now prints a `[VSB]` line in the browser console (requests, rows, milliseconds), in every build. The canvas has no such trace. The Add Cost from Table lines use the same format.
+- **Fixed (3 Nov 2026, D79, CA-28):** a load named by its raw query key printed the project GUID; `keyText` now prints `<id>` (UT-REQLOG-023).
 
 ## Add Cost from Table, year view (29 Oct 2026, D73) — fixed (default is a divergence, not approved)
 

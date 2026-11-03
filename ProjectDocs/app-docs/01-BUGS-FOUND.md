@@ -1345,7 +1345,13 @@ show an error until then.
   verify timing, so measure first (`17-ADDCOST-SAVE-PERF-PLAN.md`).
 - **Not fixed.** The `TUNED_BULK_TUNING` comment now states the worst case.
 
-### CA-27 · Land Lease (and OPEX, Contracts): deletes go through the generated `delete()`, so a refused delete looks like success (found 2 Nov 2026, open)
+### CA-27 · Land Lease (and OPEX, Contracts): deletes go through the generated `delete()`, so a refused delete looks like success (found 2 Nov 2026, fixed 3 Nov 2026, uncommitted)
+
+**Fixed (3 Nov 2026, D79, branch `feature/LandLeaseParity2`, uncommitted).** Every delete in `data/landLease.ts`,
+`data/periodWrites.ts` and `data/contracts.ts` now goes through `deleteRecord` (`data/client.ts`), which
+checks the result, names the operation and prints its `[VSB]` DATA / ERROR line. No raw
+`Service.delete(` call is left in the three files. Tests: UT-PWRITE-032 and UT-LLDATA-014 (a refused delete
+rejects); the mocks route every delete through `deleteRecord`. The original finding follows.
 
 **A code-app defect** against CONVENTIONS rule 14, found by the Land Lease parity rule map (row F9,
 `ProjectDocs/app-docs/e2e/RULEMAP-land-lease.md`) and confirmed in the source.
@@ -1362,7 +1368,22 @@ show an error until then.
   Add Cost from Table and admin paths already do. **Not fixed**: the parity setup reports app defects and
   does not change app code (E2E-PARITY-PROMPT.md ground rule 4). E2E-LANDLEASE-047 covers the happy path.
 
-### CA-28 · Request log: no `[VSB] HTTP` line is printed under `pac code run` (found 3 Nov 2026, open)
+### CA-28 · Request log: no `[VSB] HTTP` line is printed under `pac code run` (found 3 Nov 2026; explained and closed 3 Nov 2026)
+
+**Explained, not an app defect (3 Nov 2026, D79).** The HTTP lines are printed; they arrive LATE.
+- The SDK (`@microsoft/power-apps` 1.3.1, `telemetry/LoggerManager.js`) gets the `networkRequest` metrics from the
+  host through the `PowerApps.AppMonitorReceiver` message receiver, in batches. A read-only probe on the
+  same project saw `[VSB] HTTP GET` lines some seconds after the screen's `ACTION Load` line.
+- E2E-LANDLEASE-002 looked for an HTTP line straight after the first ACTION line, so it never waited for
+  them. It now polls for up to 30 s, and passes.
+- With that check reachable, the test found a real rule-23 gap behind it. A query key that has no readable name
+  was printed raw, project GUID included (`[VSB] ACTION Load ["land-lease-book","<guid>"]`).
+  `app/queryLog.ts` `keyText` now passes the key through the shared `redactIds`, so it prints `<id>`.
+  Test: UT-REQLOG-023. This affects every screen's load lines, not only Land Lease.
+- Still true: an ACTION Load line counts "0 requests" when the batch of metrics comes after the action has closed
+  (D72: "a trace, not an invoice").
+
+The original finding follows.
 
 **A code-app gap** against D72 / CONVENTIONS rule 23, found by E2E-LANDLEASE-002 on the Land Lease parity run.
 - Opening Land Lease through the local play URL prints `[VSB] ACTION Load …` and `[VSB] DATA read …` lines, but **no
@@ -1374,6 +1395,17 @@ show an error until then.
   request is visible only through its DATA / ERROR line.
 - Next: open the deployed app on DEV and look for `[VSB] HTTP` lines; then decide whether the local case needs a fix. **Not
   fixed.** Report: `E2E-PARITY-REPORT-LANDLEASE-2026-11-03.md`.
+
+### CA-29 · Land Lease: card and some control test ids are built from names, not ids (found 3 Nov 2026, recorded, not changed)
+
+**A code-app gap** against CONVENTIONS rule 16, found by E2E-LANDLEASE-004.
+- The nine sub-account cards are `leasecard-<card name>` (e.g. `leasecard-Permanent Access Routes & Crane Pads`). Rule 16
+  asks for a stable row id in a repeated control's test id, never a display value.
+- Several panel controls carry their own `lease-*` ids (`lease-currency`, `lease-otp`, `lease-years`, `lease-months`,
+  `lease-frequency`, …) where the canvas control name exists.
+- **Left as they are, on the user's decision (3 Nov 2026):** rule 16 also says "never change an existing value", and tests
+  and the parity suite key on these ids. The suite maps them explicitly. If Tosca modules are recorded against the canvas
+  names, a later change can add the canvas names; record it then (D79 §5).
 
 ---
 

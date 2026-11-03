@@ -423,6 +423,20 @@ export const leaseSaveError = {
       source}. Message: ${message}${httpResponse}`,
 } as const;
 
+/**
+ * The canvas `AccessibleLabel`s that differ from the visible caption (CONVENTIONS rule 16, X1 in
+ * the Land Lease parity report of 3 Nov 2026). These replaced `Duration years`,
+ * `Duration months` and `Distribution Frequency` as the aria-labels (D79).
+ */
+export const LEASE_ACCESSIBLE = {
+  /** `drp_…_DurationYears_1.AccessibleLabel` (LL:2615) — verbatim. */
+  durationYears: "Year",
+  /** `drp_…_DurationMonths_1.AccessibleLabel` (LL:2551) — verbatim. */
+  durationMonths: "Month",
+  /** `drp_…_DistributionFrequency_Month_1.AccessibleLabel` (LL:3682) — verbatim, "Month". */
+  distributionFrequency: "Month",
+} as const;
+
 /** Panel field labels, each from the control named. */
 export const LEASE_LABELS = {
   /** `lbl_LandLease_RightPanel_NewEditCost_BodyContentDescription_1.Text` (LL:2233). */
@@ -520,6 +534,24 @@ export const LAND_LEASE_COLUMNS: readonly LeaseColumn[] = [
   { key: "allocation", label: "Allocation", width: 100, align: "left" },
   { key: "otp", label: "OTP", width: 90, align: "left" },
 ];
+
+/**
+ * The weight of one period-table cell.
+ * - `Description_2.FontWeight: =If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1632).
+ * - `StartDate_2` (LL:1592) and `OTP` (LL:990):
+ *   `=If(con_Costs_ProjectCostsInAccount.Visible, FontWeight.Normal, FontWeight.Semibold)`.
+ *   That container lives on the CAPEX screen (Capex Costs Screen.pa.yaml:4368), and the running
+ *   canvas draws both cells Semibold (Land Lease parity run, 3 Nov 2026: 600 on 18 cells).
+ * - Every other cell is `=FontWeight.Normal`.
+ */
+export function leaseCellWeight(
+  key: string,
+  periodOneBold: boolean,
+): "bold" | "semibold" | "normal" {
+  if (key === "description") return periodOneBold ? "bold" : "normal";
+  if (key === "startDate" || key === "otp") return "semibold";
+  return "normal";
+}
 
 /**
  * The four money headers are currency-code interpolated. `Fix Costs p.a.` falls back to
@@ -1475,7 +1507,8 @@ export function oneTimePaymentPayload(
       dueDate: null, amount: null, dueDate2: null, amount2: null, dueDate3: null, amount3: null,
     };
   }
-  const money = (v: string) => parseNumber(v, locale) ?? null;
+  // `Value("1.")` = 1 in the canvas (D79): the same reading the validators use.
+  const money = (v: string) => leaseNumber(v, locale, LEASE_INPUT_MODE) ?? null;
   const text = (v: string) => (isBlankValue(v) ? null : v);
   return {
     dueDate: text(values.dueDate), amount: money(values.amount),
@@ -1650,6 +1683,26 @@ export function resolveInflationProfileValue(args: {
   return null;
 }
 
+/**
+ * Whether a change to the Inflation Start Year resets the percentage box.
+ *
+ * SOURCE DEFECT (reproduced, D79, V4 of the Land Lease parity run 3 Nov 2026):
+ * `txt_…_InflationProfile_1` is a modern `TextInput` whose `Value` (LL:4616) references
+ * `txt_…_InflationStartYear_1.Value`. Each change to the year re-evaluates that formula, and the
+ * box drops what was typed and shows the formula's value again: the stored profile, or blank on
+ * a contract without one. The Save gate needs the box filled (clause E), so Save goes off until
+ * the % is typed again. Confirmed with a canvas probe: profile "2.0" plus year 2027 → 2028 leaves
+ * the box "" and Save off. Only the custom (country OFF) box is affected; with the country
+ * toggle on, the box is read-only and shows the country profile for the new year anyway.
+ */
+export function inflationProfileResetsOnYearChange(
+  previousYear: string,
+  nextYear: string,
+  countryInflationChecked: boolean,
+): boolean {
+  return previousYear !== nextYear && !countryInflationChecked;
+}
+
 /* ═════════════════════════════════════════════════════════════════ validation ══ */
 
 /**
@@ -1719,17 +1772,60 @@ export type LeaseNumericField = keyof typeof LEASE_NUMERIC_SPEC;
  * behavioural one; noted because it is the kind of thing that stops being harmless the day
  * somebody edits one instance.
  */
+/**
+ * How the panel's validators read a typed value (D79, Land Lease parity run 3 Nov 2026).
+ *
+ * - `"canvas"` (live): as Power Fx does.
+ *   - `IsBlank(" ")` is false, so a lone space is validated and shows its format message (V1).
+ *   - `IsMatch` reads the raw text, so `" 2027"` / `" 01/2027"` fail the format (V3).
+ *   - `Value("1.")` is 1, so a trailing decimal separator is a number (V2).
+ * - `"trimmed"`: the code app's earlier behaviour, kept as the reversible twin. It trims before
+ *   every check, so a lone space counts as blank and a leading space is accepted, and it refuses
+ *   `"1."` with the range message.
+ *
+ * DIVERGENCE (from the earlier build, not from the canvas): the switch to `"canvas"` reverses
+ * the earlier, unrecorded trimming. Recorded as D79; flip `LEASE_INPUT_MODE` to go back.
+ */
+export type LeaseInputMode = "canvas" | "trimmed";
+export const LEASE_INPUT_MODE: LeaseInputMode = "canvas";
+
+/** Power Fx `IsBlank` on a text box: only an empty value is blank, `" "` is not. */
+function isBlankCanvas(v: string | null | undefined): boolean {
+  return v === null || v === undefined || v === "";
+}
+
+const blankFor = (mode: LeaseInputMode) => (mode === "canvas" ? isBlankCanvas : isBlankValue);
+
+/**
+ * The number in a value that already passed `isDecimal`. In `"canvas"` mode a trailing
+ * separator (`"1."`, `"1,"` in a comma locale) is dropped first, as `Value("1.")` = 1; the
+ * shape check has already ruled out any other non-digit last character.
+ */
+function leaseNumber(
+  value: string | null | undefined,
+  locale: string | undefined,
+  mode: LeaseInputMode,
+): number | undefined {
+  if (mode === "trimmed") return parseNumber(value, locale);
+  const t = (value ?? "").trim();
+  return parseNumber(/\d$/.test(t) ? t : t.slice(0, -1), locale);
+}
+
 export function validateLeaseNumber(
   field: LeaseNumericField,
   value: string | null | undefined,
   locale?: string,
+  mode: LeaseInputMode = LEASE_INPUT_MODE,
 ): string | null {
-  if (isBlankValue(value)) return null;
+  if (blankFor(mode)(value)) return null;
   const spec = LEASE_NUMERIC_SPEC[field];
   // `fn_Numeric.IsTwoDecimal` accepts a leading `-`; see PARITY NOTE 3 in @/domain/numeric.
   if (!isDecimal(value, { places: 2, allowNegative: true, locale })) return spec.decimalMessage;
-  if (!inRange(value, spec.min, spec.max, locale)) return spec.rangeMessage;
-  return null;
+  if (mode === "trimmed") {
+    return inRange(value, spec.min, spec.max, locale) ? null : spec.rangeMessage;
+  }
+  const n = leaseNumber(value, locale, mode);
+  return n !== undefined && n >= spec.min && n <= spec.max ? null : spec.rangeMessage;
 }
 
 /**
@@ -1741,9 +1837,13 @@ export function validateLeaseNumber(
  */
 const MM_YYYY = /^(0[1-9]|1[0-2])\/\d{4}$/;
 
-export function validateDueDate(value: string | null | undefined): string | null {
-  if (isBlankValue(value)) return null;
-  return MM_YYYY.test((value ?? "").trim()) ? null : LEASE_MSG.dueDateFormat;
+export function validateDueDate(
+  value: string | null | undefined,
+  mode: LeaseInputMode = LEASE_INPUT_MODE,
+): string | null {
+  if (blankFor(mode)(value)) return null;
+  const text = mode === "canvas" ? value ?? "" : (value ?? "").trim();
+  return MM_YYYY.test(text) ? null : LEASE_MSG.dueDateFormat;
 }
 
 /**
@@ -1751,9 +1851,13 @@ export function validateDueDate(value: string | null | undefined): string | null
  * `And(Not(IsBlank(v)), Not(IsMatch(v, "^\d{4}$")))`. Four digits, no range check at all, so
  * `"0000"` and `"9999"` both pass.
  */
-export function validateInflationStartYear(value: string | null | undefined): string | null {
-  if (isBlankValue(value)) return null;
-  return /^\d{4}$/.test((value ?? "").trim()) ? null : LEASE_MSG.inflationStartYearFormat;
+export function validateInflationStartYear(
+  value: string | null | undefined,
+  mode: LeaseInputMode = LEASE_INPUT_MODE,
+): string | null {
+  if (blankFor(mode)(value)) return null;
+  const text = mode === "canvas" ? value ?? "" : (value ?? "").trim();
+  return /^\d{4}$/.test(text) ? null : LEASE_MSG.inflationStartYearFormat;
 }
 
 /**
@@ -1769,13 +1873,14 @@ export function validateInflationProfile(
   value: string | null | undefined,
   countryInflationChecked: boolean,
   locale?: string,
+  mode: LeaseInputMode = LEASE_INPUT_MODE,
 ): string | null {
   if (countryInflationChecked) return null;
-  if (isBlankValue(value)) return null;
+  if (blankFor(mode)(value)) return null;
   if (!isDecimal(value, { places: 1, allowNegative: false, locale })) {
     return LEASE_MSG.inflationProfileOneDecimal;
   }
-  const n = parseNumber(value, locale);
+  const n = leaseNumber(value, locale, mode);
   if (n === undefined) return LEASE_MSG.inflationProfileNotANumber;
   if (n < 0 || n > 100) return LEASE_MSG.inflationProfileRange;
   return null;
@@ -2147,8 +2252,9 @@ function periodBlockComplete(form: LandLeaseForm, technology: number | null): bo
 export function canSaveLandLease(args: LeaseSaveContext): boolean {
   const { form, locale } = args;
 
-  // A — `Not(IsBlank(txt_…_Description_1.Value))`. NOT trimmed in the canvas.
-  if (isBlankValue(form.description)) return false;
+  // A — `Not(IsBlank(txt_…_Description_1.Value))`. NOT trimmed in the canvas: a lone space passes
+  // (V1, D79; the "trimmed" twin refuses it).
+  if (blankFor(LEASE_INPUT_MODE)(form.description)) return false;
 
   // B — every error label hidden.
   if (Object.keys(leaseFieldErrors(form, locale)).length > 0) return false;
@@ -2260,7 +2366,7 @@ export function buildCostPayload(args: {
 }): Record<string, unknown> {
   const { form, ctx } = args;
   const payments = oneTimePaymentPayload(form.oneTimePaymentsOn, form.payments, args.locale);
-  const num = (v: string) => parseNumber(v, args.locale) ?? null;
+  const num = (v: string) => leaseNumber(v, args.locale, LEASE_INPUT_MODE) ?? null;
 
   return {
     [LEASE_COST_COL.name]: landLeaseCostName(
@@ -2309,7 +2415,7 @@ export function buildPeriodPayload(args: {
   locale?: string;
 }): Record<string, unknown> {
   const { form, ctx } = args;
-  const num = (v: string) => parseNumber(v, args.locale) ?? null;
+  const num = (v: string) => leaseNumber(v, args.locale, LEASE_INPUT_MODE) ?? null;
   const period = args.panelState === "New"
     ? (args.canvasParityPeriodWrap
       ? nextPeriodCanvasParity(args.parentPeriod?.period ?? null)

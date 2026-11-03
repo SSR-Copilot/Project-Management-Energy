@@ -1,0 +1,205 @@
+{
+ "cards": [
+  "Locations",
+  "Distance and Rotor Overfly Areas",
+  "Permanent Access Routes & Crane Pads",
+  "Cabling and Overhead Lines",
+  "Substation / Transfer Station",
+  "Compansation and Replacement Measures",
+  "Temporary Areas",
+  "Leaseholders",
+  "Other"
+ ],
+ "gates": {
+  "card 0 \"Locations\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 1 \"Distance and Rotor Overfly Areas\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 2 \"Permanent Access Routes & Crane Pads\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 3 \"Cabling and Overhead Lines\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 4 \"Substation / Transfer Station\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 5 \"Compansation and Replacement Measures\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": true,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 6 \"Temporary Areas\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": true,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 7 \"Leaseholders\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 8 \"Other\" open": {
+   "Add Contract Type": true,
+   "Add Period": false,
+   "Add Standard Contract": false,
+   "Edit": false,
+   "Delete": false
+  },
+  "card 0 row 0 selected": {
+   "Add Contract Type": false,
+   "Add Period": true,
+   "Add Standard Contract": false,
+   "Edit": true,
+   "Delete": true
+  }
+ },
+ "saveGate": {
+  "empty": false,
+  "descriptionOnly": false
+ },
+ "edit": {
+  "texts": {
+   "description": "Allocate All WTG",
+   "euroMWh": "2400",
+   "euroMW": "",
+   "euroWTG": "",
+   "fixCosts": "",
+   "shareOfRevenues": ""
+  },
+  "dropdowns": {
+   "durationYears": {
+    "value": "5 years",
+    "enabled": true,
+    "options": [
+     "0 years",
+     "1 year",
+     "2 years",
+     "3 years",
+     "4 years",
+     "5 years",
+     "6 years",
+     "7 years",
+     "8 years",
+     "9 years",
+     "10 years",
+     "11 years",
+     "12 years",
+     "13 years",
+     "14 years",
+     "15 years",
+     "16 years",
+     "17 years",
+     "18 years",
+     "19 years",
+     "20 years",
+     "21 years",
+     "22 years",
+     "23 years",
+     "24 years",
+     "25 years",
+     "26 years",
+     "27 years",
+     "28 years",
+     "29 years",
+     "30 years",
+     "31 years",
+     "32 years",
+     "33 years",
+     "34 years",
+     "35 years"
+    ],
+    "label": "Year"
+   },
+   "durationMonths": {
+    "value": "0 months",
+    "enabled": true,
+    "options": [
+     "0 months",
+     "1 month",
+     "2 months",
+     "3 months",
+     "4 months",
+     "5 months",
+     "6 months",
+     "7 months",
+     "8 months",
+     "9 months",
+     "10 months",
+     "11 months"
+    ],
+    "label": "Month"
+   },
+   "currency": {
+    "value": "Euro",
+    "enabled": false,
+    "options": [
+     "Euro",
+     "Leu",
+     "Złoty"
+    ],
+    "label": null
+   },
+   "aggregation": {
+    "value": "SUM",
+    "enabled": true,
+    "options": [
+     "SUM",
+     "MAX",
+     "MIN"
+    ],
+    "label": null
+   },
+   "distributionFrequency": {
+    "value": "3 months",
+    "enabled": true,
+    "options": [
+     "1 month",
+     "2 months",
+     "3 months",
+     "6 months",
+     "12 months"
+    ],
+    "label": "Month"
+   }
+  },
+  "toggles": {
+   "secured": false,
+   "allWtg": true,
+   "oneTimePayment": false,
+   "inflation": false
+  }
+ },
+ "hovers": {
+  "rowTitle": "Allocate All WTG",
+  "panelClose": "Cancel"
+ }
+}

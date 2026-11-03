@@ -29,7 +29,7 @@ import type { Vsb_bopcontractsstandardassumptionses } from "@/generated/models/V
 import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountlistsModel";
 import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexprojectcontractsModel";
 import { unwrap } from "@/platform/errors";
-import { fetchAll } from "./client";
+import { deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
@@ -451,8 +451,9 @@ export async function saveContract(w: ContractWrite): Promise<BopContract> {
   return toContract(unwrap(result, w.id ? "update BoP contract" : "create BoP contract"));
 }
 
+/** Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success. */
 export async function deleteContract(id: string): Promise<void> {
-  await Vsb_bopprojectscontractsesService.delete(id);
+  await deleteRecord("delete BoP contract", ES.bopContracts, id);
 }
 
 /**
@@ -481,7 +482,7 @@ export async function replaceDevCoLinks(args: {
   if (!args.isNewContract) {
     const existing = await listDevCoLinks([args.contractId]);
     await Promise.all(
-      existing.map((row) => Vsb_bopcontractsdevcocostsesService.delete(row.id)),
+      existing.map((row) => deleteRecord("delete a contract's DevCo-cost link", ES.devCoCosts, row.id)),
     );
   }
   await Promise.all(
@@ -532,5 +533,5 @@ export async function savePaymentTarget(w: PaymentTargetWrite): Promise<PaymentT
 }
 
 export async function deletePaymentTarget(id: string): Promise<void> {
-  await Vsb_bopcontractspaymenttargetsesService.delete(id);
+  await deleteRecord("delete payment target", ES.paymentTargets, id);
 }

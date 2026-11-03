@@ -56,7 +56,7 @@ import {
   type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
   type LeasePeriodRow, type LeaseSubaccountRow, type LeaseWrite,
 } from "@/features/cost/periods/landLeaseRules";
-import { fetchAll } from "./client";
+import { deleteRecord, fetchAll } from "./client";
 import { ACTIVE, and, chunk, eq, lookupEq, lookupIn } from "./odata";
 
 /** Option sets arrive as a number or as its string form depending on the column. */
@@ -452,6 +452,9 @@ interface LeaseWriter {
 }
 
 /**
+ * Deletes go through `deleteRecord` (CONVENTIONS rule 14, CA-27): the generated `delete()` returns nothing,
+ * so a refused delete (403, a cascade restriction) resolved as success and the row came back on reload.
+ *
  * The three generated services are structurally different types, so each is adapted to one
  * signature here. The `as never` on the payload is the same cast `src/data/periodWrites.ts`
  * uses: the generated `…Base` types demand columns (`ownerid`, `statecode`) that Dataverse
@@ -463,7 +466,7 @@ const WRITERS: Record<string, LeaseWriter> = {
     create: (p) => Vsb_landleaseprojectcostsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
       Vsb_landleaseprojectcostsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => Vsb_landleaseprojectcostsService.delete(id),
+    remove: (id) => deleteRecord("delete Land Lease contract", LEASE_ENTITY_SET.cost, id),
     label: "Land Lease contract",
   },
   [LEASE_ENTITY_SET.period]: {
@@ -471,7 +474,7 @@ const WRITERS: Record<string, LeaseWriter> = {
     create: (p) => Vsb_landleaseperiodsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
       Vsb_landleaseperiodsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => Vsb_landleaseperiodsService.delete(id),
+    remove: (id) => deleteRecord("delete Land Lease period", LEASE_ENTITY_SET.period, id),
     label: "Land Lease period",
   },
   [LEASE_ENTITY_SET.allocation]: {
@@ -480,7 +483,7 @@ const WRITERS: Record<string, LeaseWriter> = {
       Vsb_landleaseallocationwtgsService.create(p as never) as unknown as Promise<IOperationResult<Row>>,
     update: (id, p) =>
       Vsb_landleaseallocationwtgsService.update(id, p as never) as unknown as Promise<IOperationResult<Row>>,
-    remove: (id) => Vsb_landleaseallocationwtgsService.delete(id),
+    remove: (id) => deleteRecord("delete Land Lease WTG allocation", LEASE_ENTITY_SET.allocation, id),
     label: "Land Lease WTG allocation",
   },
 };

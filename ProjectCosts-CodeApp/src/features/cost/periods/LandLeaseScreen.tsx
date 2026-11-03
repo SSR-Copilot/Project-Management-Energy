@@ -66,6 +66,7 @@ import {
 } from "@/features/cost/costing/useCostBook";
 import {
   AGGREGATION_LABELS, DURATION_MONTH_OPTIONS, DURATION_YEAR_OPTIONS, LAND_LEASE_AGGREGATION,
+  LEASE_ACCESSIBLE,
   LEASE_DESCRIPTION_MAX_LENGTH, LEASE_ENTITY_SET, LEASE_LABELS, LEASE_MSG,
   addPaymentButton, additionalPeriodsWarningVisible, allocationEditable, allocationVisible,
   areaInflationVisible, buildContracts, canSaveLandLease,
@@ -73,8 +74,8 @@ import {
   deleteDialog,
   durationMonthLabel, durationYearLabel, emptyLandLeaseForm, headerEditable, hintVisible,
   inflationProfileLabel, inflationSectionVisible, inflationStartYearDefault, isPeriodOne,
-  guardLeaseCommands, landLeaseColumns, landLeaseFormFrom, lastPeriod, leaseAssumptionQuery,
-  leaseCommands, leaseCurrencyLabel,
+  guardLeaseCommands, inflationProfileResetsOnYearChange, landLeaseColumns, landLeaseFormFrom, lastPeriod, leaseAssumptionQuery,
+  leaseCellWeight, leaseCommands, leaseCurrencyLabel,
   leaseFieldErrors, leasePanelTitle, leaseSaveError, orderedSubaccounts,
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
@@ -282,9 +283,8 @@ const useStyles = makeStyles({
   th: {
     textAlign: "left", fontWeight: tokens.fontWeightSemibold,
     color: palette.black,
-    // 10 pt on the canvas; 10.5 pt here, because the canvas draws in the wider Open Sans and this
-    // app keeps Segoe UI (canvas "Other" screenshot, 26 Oct 2026).
-    fontSize: "10.5pt", height: "34px",
+    // `gblAppSizes.Font.Small`, 10 pt, as the canvas (D79; was 10.5 pt to make up for Open Sans).
+    fontSize: "10pt", height: "34px",
     paddingTop: 0, paddingBottom: 0,
     paddingLeft: "6px", paddingRight: "6px",
     overflow: "visible",
@@ -302,8 +302,9 @@ const useStyles = makeStyles({
    * (8 pt) with `PaddingLeft/Right: =6` and `Wrap: =false`, so text past the width is cut.
    */
   td: {
-    // 8 pt on the canvas; 8.5 pt here for the same Open Sans / Segoe UI width difference.
-    fontSize: "8.5pt", height: "30px",
+    // `gblAppSizes.Font.ExtraExtraSmall`, 8 pt, in `gblAppStyles.Label.Color` (`palette.black`), as
+    // the canvas (D79; was 8.5 pt in the inherited #000).
+    fontSize: "8pt", color: palette.black, height: "30px",
     paddingTop: 0, paddingBottom: 0,
     paddingLeft: "6px", paddingRight: "6px",
     overflow: "hidden", textOverflow: "ellipsis",
@@ -316,13 +317,13 @@ const useStyles = makeStyles({
    */
   rowsSpacer: { flexShrink: 0 },
   /*
-   * Row label weights. Every cell but Description is
-   * `If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` (LL:990, LL:1592) — and the
-   * running canvas draws them NORMAL (canvas "Other" screenshot, 26 Oct 2026), so that control
-   * reads as visible. Description alone is `If(ThisItem.Period = 'Period 1', Bold, Normal)`
-   * (LL:1632).
+   * Row label weights, chosen by `leaseCellWeight` (landLeaseRules.ts). Start Date and OTP are
+   * `If(con_Costs_ProjectCostsInAccount.Visible, Normal, Semibold)` (LL:990, LL:1592) and the
+   * running canvas draws them Semibold (parity run, 3 Nov 2026); Description is
+   * `If(ThisItem.Period = 'Period 1', Bold, Normal)` (LL:1632); the rest are Normal.
    */
   tdBold: { fontWeight: tokens.fontWeightBold },
+  tdSemibold: { fontWeight: tokens.fontWeightSemibold },
   tdNormal: { fontWeight: tokens.fontWeightRegular },
   /*
    * A selected row is NOT tinted. `gblAppStyles.Gallery.TemplateFill` is `Color.Transparent`
@@ -361,7 +362,8 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-field": { gap: 0 },
     "&.canvas-panel .canvas-field > span:first-child": {
       position: "relative", display: "flex", alignItems: "center", height: "32px",
-      fontSize: "11.6pt", fontWeight: tokens.fontWeightRegular, color: palette.black,
+      // `gblAppSizes.Font.Medium`, 11 pt, as the canvas (D79; was 11.6 pt).
+      fontSize: "11pt", fontWeight: tokens.fontWeightRegular, color: palette.black,
     },
     /*
      * `lbl_…_Asterisk_1` — `palette.Error`, Semibold, 10 px wide at `X: =label.X - Self.Width`:
@@ -473,8 +475,9 @@ const useStyles = makeStyles({
      * (canvas screenshot, 26 Oct 2026) — not Fluent's pale disabled grey, which made it look
      * missing rather than unavailable.
      */
+    // rgb(89, 89, 89) measured on the canvas Save caption (parity run, 3 Nov 2026; D79, was #605e5c).
     "&.canvas-panel .canvas-panel-footer button:disabled": {
-      color: "#605e5c", backgroundColor: "transparent",
+      color: "#595959", backgroundColor: "transparent",
     },
     "&.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": { color: "#323130" },
     /*
@@ -485,8 +488,12 @@ const useStyles = makeStyles({
      */
     "&.canvas-panel .canvas-panel-footer > .fui-Text": {
       flexGrow: 0, marginRight: "auto",
-      fontSize: "9pt", fontWeight: tokens.fontWeightRegular, lineHeight: 1.3,
+      // `FontWeight.Lighter` draws at 100 on the canvas (parity run, 3 Nov 2026; D79, was 400).
+      fontSize: "9pt", fontWeight: 100, lineHeight: 1.3,
       whiteSpace: "nowrap", color: palette.Error,
+      // The canvas `AutoHeight` label's text sits 6 px above the Save caption; centred, it sat 1 px
+      // below (parity run, 3 Nov 2026; D79).
+      position: "relative", top: "-7px",
     },
   },
   /*
@@ -501,10 +508,11 @@ const useStyles = makeStyles({
   },
   /*
    * Every field container is 76 px (78 for Description): a 32 px caption, a 32 px box and
-   * 13 px to the next caption — 77 px a field as measured on the canvas Edit Contract
-   * screenshot (26 Oct 2026) — not Fluent's tighter stack.
+   * 12 px to the next caption. The Land Lease parity run (3 Nov 2026, D79) measured exactly 76 px
+   * between captions on the canvas, in both columns; the 13 px taken from a screenshot
+   * (26 Oct 2026) drifted 1 px a field, about 9 px by the footer hint.
    */
-  panelColumn: { display: "flex", flexDirection: "column", gap: "13px", minWidth: 0 },
+  panelColumn: { display: "flex", flexDirection: "column", gap: "12px", minWidth: 0 },
   /*
    * `drp_…_DurationYears_1.Width = 100`, `…_DurationMonths_1.Width = 120`, and the months box
    * sits at `DurationYears.X + DurationYears.Width + 20` — so a 20px gap (`LL:2543`, `:2607`).
@@ -628,10 +636,22 @@ const useStyles = makeStyles({
   },
   /*
    * `con_…_AlignWithProjectDuration_*` — toggles 42 px apart on the canvas (Edit Contract
-   * screenshot, 26 Oct 2026). The column already adds 13 px between children, so the row is a
-   * FIXED 29 px — a `minHeight` let Fluent's taller Switch stretch it to ~33 px.
+   * screenshot, 26 Oct 2026). The column adds 12 px between children (D79; was 13), so the row is
+   * a FIXED 30 px (was 29) and the toggles stay 42 px apart — a `minHeight` let Fluent's taller
+   * Switch stretch it to ~33 px.
    */
-  toggleRow: { display: "flex", alignItems: "center", gap: space.s, height: "29px" },
+  /*
+   * The toggles sit at `X: =12` (LL:3830 and the rest), left of the fields' `X: =20`; the parity
+   * run (3 Nov 2026) measured the toggle captions and the One-Time payment buttons 10 px further
+   * right here than on the canvas, so both move 10 px left (D79). The captions are the modern
+   * `Toggle@1.1.5` `Label`, drawn in Fluent's neutral foreground (rgb(36, 36, 36)), not `Label.Color`.
+   */
+  toggleRow: {
+    display: "flex", alignItems: "center", gap: space.s, height: "30px", marginLeft: "-10px",
+    // The stock Fluent value, not this app's theme token, which maps to #000.
+    "& > .fui-Text": { color: "#242424" },
+  },
+  paymentButtonShift: { marginLeft: "-10px" },
   /*
    * `con_…_InflationToggles_1` holds Inflation Profile and Country Inflation Profile together,
    * 33 px apart rather than a full row each (canvas screenshot, 26 Oct 2026).
@@ -646,13 +666,16 @@ const useStyles = makeStyles({
     position: "absolute", left: "-10px", top: "2px", lineHeight: "20px",
     color: palette.Error, fontWeight: tokens.fontWeightSemibold,
   },
+  requiredBold: { fontWeight: tokens.fontWeightBold },
   /** `lbl_…_BodyContent_*` — a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
   label: {
     position: "relative", display: "flex", alignItems: "center", height: "32px",
-    fontWeight: tokens.fontWeightRegular, fontSize: "11.6pt", color: palette.black,
+    fontWeight: tokens.fontWeightRegular, fontSize: "11pt", color: palette.black,
   },
   // `lbl_…_AllocationWtg_1` is the one panel caption with `FontWeight.Semibold` (LL:3997).
   labelStrong: { fontWeight: tokens.fontWeightSemibold },
+  // `lbl_…_AreaInflationProfile_1.FontWeight: =FontWeight.Lighter` (LL:4460).
+  labelLighter: { fontWeight: 100 },
   warning: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
 });
 
@@ -1357,6 +1380,8 @@ function SubaccountCard({
                       row.selected && styles.rowSelected,
                     )}
                     onClick={select}
+                    /* The canvas row shows its description on hover (X2, parity run 3 Nov 2026). */
+                    title={row.cells.description}
                     aria-label="Select period"
                     data-testid={`btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_2-${row.id}`}
                   >
@@ -1383,7 +1408,9 @@ function SubaccountCard({
                         key={c.key}
                         className={mergeClasses(
                           styles.td, c.align === "right" && styles.tdRight,
-                          c.key === "description" && row.bold ? styles.tdBold : styles.tdNormal,
+                          {
+                            bold: styles.tdBold, semibold: styles.tdSemibold, normal: styles.tdNormal,
+                          }[leaseCellWeight(c.key, row.bold)],
                         )}
                       >
                         {row.cells[c.key] ?? ""}
@@ -1472,8 +1499,12 @@ function LeasePanelBody({
     return true;
   })();
 
-  const required = (on = true) =>
-    (on ? <span className={styles.required}>*</span> : null);
+  /*
+   * `bold`: the Duration, Distribution Frequency and Allocation markers are `FontWeight.Bold`
+   * (LL:2697, LL:3736, LL:4011); Start Date and Area are `FontWeight.Semibold` (LL:2452, LL:4489).
+   */
+  const required = (on = true, bold = false) =>
+    (on ? <span className={mergeClasses(styles.required, bold && styles.requiredBold)}>*</span> : null);
 
   const paymentButton = (n: 2 | 3) => addPaymentButton(n, {
     showSecondPayment: form.showSecondPayment,
@@ -1573,11 +1604,11 @@ function LeasePanelBody({
 
         <div>
           <Text className={styles.label}>
-            {required(periodBlockRequired)}{LEASE_LABELS.duration}
+            {required(periodBlockRequired, true)}{LEASE_LABELS.duration}
           </Text>
           <div className={styles.duration}>
             <Dropdown
-              aria-label={`${LEASE_LABELS.duration} years`}
+              aria-label={LEASE_ACCESSIBLE.durationYears}
               {...canvasList}
               value={form.durationYears === null ? "" : durationYearLabel(form.durationYears)}
               selectedOptions={form.durationYears === null ? [] : [String(form.durationYears)]}
@@ -1595,7 +1626,7 @@ function LeasePanelBody({
               ))}
             </Dropdown>
             <Dropdown
-              aria-label={`${LEASE_LABELS.duration} months`}
+              aria-label={LEASE_ACCESSIBLE.durationMonths}
               {...canvasList}
               value={form.durationMonths === null ? "" : durationMonthLabel(form.durationMonths)}
               selectedOptions={form.durationMonths === null ? [] : [String(form.durationMonths)]}
@@ -1678,10 +1709,10 @@ function LeasePanelBody({
 
         <div>
           <Text className={styles.label}>
-            {required(periodBlockRequired)}{LEASE_LABELS.distributionFrequency}
+            {required(periodBlockRequired, true)}{LEASE_LABELS.distributionFrequency}
           </Text>
           <Dropdown
-            aria-label={LEASE_LABELS.distributionFrequency}
+            aria-label={LEASE_ACCESSIBLE.distributionFrequency}
             {...canvasList}
             className={styles.panelDropdown}
             value={DISTRIBUTION_FREQUENCIES
@@ -1740,7 +1771,7 @@ function LeasePanelBody({
 
             <div data-testid="lease-allocation">
               <Text className={mergeClasses(styles.label, styles.labelStrong)}>
-                {required(periodBlockRequired)}{LEASE_LABELS.allocation}
+                {required(periodBlockRequired, true)}{LEASE_LABELS.allocation}
               </Text>
               <Dropdown
                 multiselect
@@ -1821,7 +1852,20 @@ function LeasePanelBody({
               placeholder={LEASE_LABELS.inflationStartYearPlaceholder}
               disabled={!headerOn}
               error={errorFor("inflationStartYear")}
-              onChange={(v) => patch({ inflationStartYear: v })}
+              onChange={(v) => patch({
+                inflationStartYear: v,
+                // V4, D79: the canvas box re-evaluates its `Value` on every year change (LL:4616).
+                ...(inflationProfileResetsOnYearChange(
+                  form.inflationStartYear, v, form.countryInflationChecked,
+                ) ? {
+                  inflationProfile: formatProfile(resolveInflationProfileValue({
+                    selectedCost: panel.cost,
+                    countryInflationChecked: false,
+                    countryName: ctx.countryName,
+                    countryProfile: null,
+                  })),
+                } : {}),
+              })}
             />
 
             {/* `con_…_AreaInflationProfile_1.Visible` (LL:4391) — Italy only. */}
@@ -1831,7 +1875,7 @@ function LeasePanelBody({
               countryName: ctx.countryName,
             }) ? (
               <div>
-                <Text className={styles.label}>
+                <Text className={mergeClasses(styles.label, styles.labelLighter)}>
                   {required()}{LEASE_LABELS.area}
                 </Text>
                 <Dropdown
@@ -1915,7 +1959,7 @@ function LeasePanelBody({
           <Button
             appearance="transparent"
             className={mergeClasses(
-              styles.command, !paymentButton(2).enabled && styles.commandDisabled,
+              styles.command, styles.paymentButtonShift, !paymentButton(2).enabled && styles.commandDisabled,
             )}
             icon={paymentButton(2).icon === "Add" ? <AddFilled /> : <DeleteFilled />}
             disabled={!paymentButton(2).enabled}
@@ -1935,7 +1979,7 @@ function LeasePanelBody({
           <Button
             appearance="transparent"
             className={mergeClasses(
-              styles.command, !paymentButton(3).enabled && styles.commandDisabled,
+              styles.command, styles.paymentButtonShift, !paymentButton(3).enabled && styles.commandDisabled,
             )}
             icon={paymentButton(3).icon === "Add" ? <AddFilled /> : <DeleteFilled />}
             disabled={!paymentButton(3).enabled}

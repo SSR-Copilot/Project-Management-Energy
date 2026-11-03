@@ -14,7 +14,14 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   base: "./",
-  server: { port: 3000, strictPort: true },
+  server: {
+    port: 3000,
+    strictPort: true,
+    // The Playwright parity suite writes its traces, reports and sessions under `e2e/` while it drives this dev server. Watching
+    // them made Vite reload the app in the browser mid-test, for every trace snapshot written (Land Lease run, 3 Nov 2026). The
+    // app never imports from `e2e/`, so it is left out of the watcher.
+    watch: { ignored: ["**/e2e/**"] },
+  },
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },

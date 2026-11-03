@@ -6368,3 +6368,74 @@ path. Fixed from its low findings:
 - The failure summaries of the save log stay at info level, as before; only the request log's own lines
   (DATA FAILED, ACTION FAILED, ERROR) are warnings or errors.
 - Everything from Feature2810 keeps its own PROPOSED status (D62–D74).
+
+## D79 · Land Lease parity fixes from the 3 Nov 2026 Playwright run (3 Nov 2026) — PROPOSED
+
+**Status: PROPOSED, branch `feature/LandLeaseParity2`, uncommitted, not product-approved.** The user asked to
+fix the Land Lease parity findings (`E2E-PARITY-REPORT-LANDLEASE-2026-11-03.md`) in the code app, and chose for
+each group below. Everything is in `features/cost/periods/` unless named.
+
+### 1. Text sizes, weights and colours: the canvas values (report section 1)
+The code app drew every Land Lease size about half a point larger, to make up for the canvas's wider Open
+Sans (recorded only in comments, no decision). The canvas values are now used:
+- the column headers are `gblAppSizes.Font.Small`, 10 pt (was 10.5);
+- the row values are `ExtraExtraSmall`, 8 pt (was 8.5), in `Label.Color` `palette.black` #0b0b0b (was the inherited #000);
+- the panel captions are `Medium`, 11 pt (was 11.6).
+
+Weights and colours, from the canvas YAML and the measured run:
+- Start Date and OTP cells are Semibold (`leaseCellWeight`, LL:990 and LL:1592).
+- The Duration, Distribution Frequency and Allocation asterisks are Bold (LL:2697, 3736, 4011); the others stay Semibold.
+- The footer hint is `FontWeight.Lighter` (100), as is the Area caption (LL:4460).
+- The toggle captions are rgb(36, 36, 36), the modern `Toggle@1.1.5` label colour.
+- The disabled Save caption is #595959 (was #605e5c).
+- The toggles and the One-Time payment buttons are 10 px further left.
+
+Spacing, from the re-run:
+- The panel columns' gap is 12 px (was 13) and the toggle rows 30 px (was 29). The run measured exactly 76 px between canvas
+  captions; 13 px drifted 1 px a field. Toggles stay 42 px apart.
+- The footer hint is 7 px higher, 6 px above the Save caption as on the canvas.
+
+Not changed:
+- the panel title, still 12.7 pt, and the error text, still 8.5 pt (the run flagged neither);
+- the delete pop-up's 15.6 / 15.4 px text: it comes from the shared `ConfirmDialog` `canvasFooter`, which six screens use, and
+  needs its own decision.
+
+### 2. Validation V1–V3: canvas behaviour, the earlier behaviour kept as a twin
+`LEASE_INPUT_MODE = "canvas"` (`landLeaseRules.ts`); `"trimmed"` is the code app's earlier behaviour, one flag
+away. In canvas mode:
+- **V1:** a lone space is not blank (Power Fx `IsBlank(" ")` is false), so it shows the field's format
+  message and Save stays off.
+- **V2:** `"1."` is a number (`Value("1.")` = 1). It is accepted and written as 1; the write plans read
+  numbers the same way.
+- **V3:** a leading space fails the Year and Due Date formats (`IsMatch` reads the raw text).
+- **Clause A, the same V1 rule:** a description of `" "` is not blank, so it does not block Save, as on the canvas
+  (UT-LEASE-052). The validation re-run found this last difference.
+
+The shared `domain/numeric.ts` helpers are unchanged, so other screens keep their behaviour. This is a
+`DIVERGENCE` from the earlier build, not from the canvas. Tests: UT-LEASE-041…048, 052. Validation re-run: 0 differences
+on 130 inputs.
+
+### 3. V4: a Year change clears the custom inflation % (canvas defect, reproduced)
+A read-only canvas probe confirmed the cause. `txt_…_InflationProfile_1.Value` (LL:4616) references the
+Inflation Start Year, so the modern TextInput re-evaluates on every Year change. The typed % is dropped and
+the box goes back to the stored profile, or blank. The Save gate needs the % (clause E), so Save goes off.
+
+The code app now does the same: `inflationProfileResetsOnYearChange`, UT-LEASE-051, reproduced as a `SOURCE
+DEFECT`. Product question: keep the reproduction, or keep the typed % (a one-line change in `LandLeaseScreen.tsx`).
+
+### 4. Accessible names and hover text (X1, X2)
+- **X1:** the Duration years, Duration months and Distribution Frequency dropdowns now carry the canvas
+  `AccessibleLabel`s "Year", "Month" and "Month" (`LEASE_ACCESSIBLE`, UT-LEASE-049).
+
+  This changes three existing aria-labels. The user approved it; rule 16 says the canvas `AccessibleLabel`
+  wins. The two "Month" labels are the same on the canvas too.
+- **X2:** a period row shows its description on hover (`title`), as the canvas row does.
+
+### 5. Not changed, recorded
+- **Test ids built from names (CA-29):** left as they are, on the user's decision. Changing them would break
+  the tests and the parity suite that key on them.
+- **CA-27 deletes:** fixed, see `01-BUGS-FOUND.md` CA-27.
+- **CA-28:** explained (late host metrics), and the test fixed. It also led to the query-key GUID fix in
+  `app/queryLog.ts`, which affects every screen's load lines.
+- **Still open from the report:** X3 (allocation order), X4 (a PV module in "all WTGs"), X5 (later periods not
+  shifted), X6 (frequency not carried over).

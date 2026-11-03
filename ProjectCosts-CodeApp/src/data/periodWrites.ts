@@ -62,7 +62,8 @@ import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/servi
 import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import { unwrap } from "@/platform/errors";
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
-import { fetchAll } from "./client";
+import { deleteRecord, fetchAll } from "./client";
+import { ES, ES_PLANT } from "./dataverseNames";
 import { ACTIVE, and, bind, eq, guid, lookupEq, lookupIn, money } from "./odata";
 import {
   LAND_LEASE_PERIOD_CHOICE, LAND_LEASE_SECURED, THRESHOLD_TYPE_VALUE,
@@ -459,8 +460,9 @@ export async function saveOpexPeriod(
  */
 export async function deleteOpexPeriod(period: CostPeriod): Promise<void> {
   const children = await childrenOfChain(period.id);
-  for (const child of children) await Vsb_opexprojectcostsService.delete(child.id);
-  await Vsb_opexprojectcostsService.delete(period.id);
+  // Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success.
+  for (const child of children) await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, child.id);
+  await deleteRecord("delete OPEX period", ES_PLANT.opexProjectCosts, period.id);
 }
 
 /* ══════════════════════════════════════════════════════════════════ Land Lease ══ */
@@ -741,7 +743,7 @@ async function reconcileLandLeaseAllocations(
     );
   }
   for (const [generatorId, rowId] of existing) {
-    if (!target.has(generatorId)) await Vsb_landleaseallocationwtgsService.delete(rowId);
+    if (!target.has(generatorId)) await deleteRecord("delete a Land Lease WTG allocation", ES.landLeaseAllocationWtgs, rowId);
   }
 }
 
@@ -818,7 +820,7 @@ export async function saveLandLeasePeriod(
 export async function deleteLandLeasePeriod(period: CostPeriod): Promise<void> {
   const headerId = period.contractId;
   if (!headerId || (period.periodIndex ?? 1) !== 1) {
-    await Vsb_landleaseperiodsService.delete(period.id);
+    await deleteRecord("delete Land Lease period", ES.landLeasePeriods, period.id);
     return;
   }
 
@@ -839,10 +841,10 @@ export async function deleteLandLeasePeriod(period: CostPeriod): Promise<void> {
   ]);
 
   for (const a of allocations) {
-    await Vsb_landleaseallocationwtgsService.delete(a.vsb_landleaseallocationwtgid);
+    await deleteRecord("delete Land Lease WTG allocation", ES.landLeaseAllocationWtgs, a.vsb_landleaseallocationwtgid);
   }
-  for (const p of periods) await Vsb_landleaseperiodsService.delete(p.vsb_landleaseperiodid);
-  await Vsb_landleaseprojectcostsService.delete(headerId);
+  for (const p of periods) await deleteRecord("delete Land Lease period", ES.landLeasePeriods, p.vsb_landleaseperiodid);
+  await deleteRecord("delete Land Lease contract", ES_PLANT.landLeaseProjectCosts, headerId);
 }
 
 /* ══════════════════════════════════════════════ Add Standard Contract ══ */

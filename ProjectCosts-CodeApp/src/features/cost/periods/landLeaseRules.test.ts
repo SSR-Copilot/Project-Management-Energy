@@ -43,6 +43,7 @@ import {
   countryInflationDisplay, inflationStartYearDefault, inflationStartYearFromCod,
   resolveInflationProfileValue,
   validateLeaseNumber, validateDueDate, validateInflationStartYear, validateInflationProfile,
+  LEASE_ACCESSIBLE, LEASE_INPUT_MODE, leaseCellWeight, inflationProfileResetsOnYearChange,
   validateLeaseDescription, validateStartDate, startDateErrorVisibleCanvasParity,
   landLeaseFormFrom, emptyLandLeaseForm, formHasAnyRate, periodHasAnyRate, leaseFieldErrors,
   hintVisible, additionalPeriodsWarningVisible, canSaveLandLease,
@@ -2007,5 +2008,95 @@ describe("leaseSelectionAfterWrite (CA-17)", () => {
   it("UT-LEASE-SEL-005 a deselect made mid-write stays deselected", () => {
     expect(leaseSelectionAfterWrite({ atStart: a, current: { ...NO_LEASE_SELECTION } }))
       .toEqual(NO_LEASE_SELECTION);
+  });
+});
+
+/* D79 — the Land Lease parity fixes of 3 Nov 2026 (V1–V3, X1, the row weights). */
+describe("Land Lease parity fixes (D79)", () => {
+  it("UT-LEASE-041 the live input mode is the canvas one", () => {
+    expect(LEASE_INPUT_MODE).toBe("canvas");
+  });
+
+  it("UT-LEASE-042 V1: a lone space is not blank, so every validator shows its message", () => {
+    expect(validateLeaseNumber("eurPerWtg", " ")).toBe(LEASE_MSG.twoDecimal);
+    expect(validateLeaseNumber("amount", " ")).toBe(LEASE_MSG.amountNotANumber);
+    expect(validateDueDate(" ")).toBe(LEASE_MSG.dueDateFormat);
+    expect(validateInflationStartYear(" ")).toBe(LEASE_MSG.inflationStartYearFormat);
+    expect(validateInflationProfile(" ", false)).toBe(LEASE_MSG.inflationProfileOneDecimal);
+    // An empty box is still blank.
+    expect(validateLeaseNumber("eurPerWtg", "")).toBeNull();
+    expect(validateDueDate("")).toBeNull();
+  });
+
+  it("UT-LEASE-043 V1 twin: the trimmed mode treats a lone space as blank", () => {
+    expect(validateLeaseNumber("eurPerWtg", " ", undefined, "trimmed")).toBeNull();
+    expect(validateDueDate(" ", "trimmed")).toBeNull();
+    expect(validateInflationStartYear(" ", "trimmed")).toBeNull();
+    expect(validateInflationProfile(" ", false, undefined, "trimmed")).toBeNull();
+  });
+
+  it("UT-LEASE-044 V2: \"1.\" is a number, as Value(\"1.\") = 1", () => {
+    expect(validateLeaseNumber("eurPerWtg", "1.")).toBeNull();
+    expect(validateLeaseNumber("fixedCosts", "1.")).toBeNull();
+    expect(validateInflationProfile("1.", false)).toBeNull();
+    // The range still applies to the number it reads.
+    expect(validateLeaseNumber("eurPerMw", "100000001.")).not.toBeNull();
+  });
+
+  it("UT-LEASE-045 V2 twin: the trimmed mode refuses \"1.\" with the range message", () => {
+    expect(validateLeaseNumber("eurPerWtg", "1.", undefined, "trimmed"))
+      .toBe(validateLeaseNumber("eurPerWtg", "100000000000"));
+    expect(validateInflationProfile("1.", false, undefined, "trimmed"))
+      .toBe(LEASE_MSG.inflationProfileNotANumber);
+  });
+
+  it("UT-LEASE-046 V3: a leading space fails the year and due-date formats; the twin trims", () => {
+    expect(validateInflationStartYear(" 2027")).toBe(LEASE_MSG.inflationStartYearFormat);
+    expect(validateDueDate(" 01/2027")).toBe(LEASE_MSG.dueDateFormat);
+    expect(validateInflationStartYear("2027")).toBeNull();
+    expect(validateDueDate("01/2027")).toBeNull();
+    expect(validateInflationStartYear(" 2027", "trimmed")).toBeNull();
+    expect(validateDueDate(" 01/2027", "trimmed")).toBeNull();
+  });
+
+  it("UT-LEASE-047 V1 closes Save: a space in a rate box is a field error", () => {
+    expect(leaseFieldErrors(form({ eurPerWtg: " " }))).toHaveProperty("eurPerWtg");
+  });
+
+  it("UT-LEASE-048 V2 writes the number: \"1.\" is stored as 1, not blank", () => {
+    const p = buildPeriodPayload({
+      form: form({ eurPerWtg: "1." }),
+      ctx: ctx(), costId: "cost-1", panelState: "Edit",
+      parentPeriod: null, selectedPeriod: period({ period: LAND_LEASE_PERIOD.period2 }),
+    });
+    expect(p[LEASE_PERIOD_COL.eurPerWtg]).toBe(1);
+  });
+
+  it("UT-LEASE-049 X1: the three dropdowns carry the canvas AccessibleLabels", () => {
+    expect(LEASE_ACCESSIBLE).toEqual({
+      durationYears: "Year", durationMonths: "Month", distributionFrequency: "Month",
+    });
+  });
+
+  it("UT-LEASE-052 V1, clause A: a lone-space description is not blank, so it does not block Save", () => {
+    expect(canSaveLandLease(saveCtx({ form: form({ description: " " }) }))).toBe(true);
+    expect(canSaveLandLease(saveCtx({ form: form({ description: "" }) }))).toBe(false);
+  });
+
+  it("UT-LEASE-051 V4: a year change resets the custom % box, as the canvas TextInput does", () => {
+    expect(inflationProfileResetsOnYearChange("2027", "2028", false)).toBe(true);
+    expect(inflationProfileResetsOnYearChange("2027", "abc", false)).toBe(true);
+    // No change, no reset; the read-only country box is not the one reset.
+    expect(inflationProfileResetsOnYearChange("2027", "2027", false)).toBe(false);
+    expect(inflationProfileResetsOnYearChange("2027", "2028", true)).toBe(false);
+  });
+
+  it("UT-LEASE-050 row weights: Start Date and OTP Semibold, Description Bold on Period 1", () => {
+    expect(leaseCellWeight("startDate", false)).toBe("semibold");
+    expect(leaseCellWeight("otp", true)).toBe("semibold");
+    expect(leaseCellWeight("description", true)).toBe("bold");
+    expect(leaseCellWeight("description", false)).toBe("normal");
+    expect(leaseCellWeight("endDate", true)).toBe("normal");
+    expect(leaseCellWeight("secured", false)).toBe("normal");
   });
 });

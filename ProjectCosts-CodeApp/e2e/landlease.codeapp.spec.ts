@@ -53,7 +53,9 @@ test.describe("Land Lease (code app): smoke, logs, accessibility, deep link, zoo
     await openCodeCost(page, projectId, COST_SCREEN);
     await expect.poll(() => lines.filter((l) => /^\[VSB\] ACTION Load .*: \d+ ms, \d+ requests?, .*\[a\d+\]$/.test(l)).length, { timeout: 15_000 }).toBeGreaterThan(0);
     expect(lines.some((l) => l.startsWith("[VSB] DATA read "))).toBe(true);
-    expect(lines.some((l) => l.startsWith("[VSB] HTTP GET "))).toBe(true);
+    // The host pushes the SDK's `networkRequest` metrics in batches, AFTER the load's ACTION line
+    // (CA-28, 3 Nov 2026: present some seconds later). So wait for the HTTP line too.
+    await expect.poll(() => lines.some((l) => l.startsWith("[VSB] HTTP GET ")), { timeout: 30_000 }).toBe(true);
     // Counts and names only: no record id in a DATA or ACTION line (a URL's $filter may carry the project id).
     const guid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     expect(lines.filter((l) => !l.startsWith("[VSB] HTTP ") && guid.test(l)), "ids outside HTTP lines").toEqual([]);

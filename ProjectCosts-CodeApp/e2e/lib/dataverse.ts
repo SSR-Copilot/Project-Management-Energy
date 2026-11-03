@@ -51,7 +51,42 @@ export async function readLeaseByTag(page: Page, tag: string): Promise<LeaseRows
 /** Deletes every row of this run's tag (allocations, periods, then the header) and returns what could NOT be deleted. */
 export async function deleteLeaseByTag(page: Page, tag: string): Promise<string[]> {
   assertTag(tag);
-  const rows = await readLeaseByTag(page, tag);
+  return deleteLeaseRows(page, await readLeaseByTag(page, tag));
+}
+
+/**
+ * For rows a run creates WITHOUT its tag (the standard-contract import, F8, names its contracts after the assumptions): the
+ * headers of this project created at or after `sinceIso`, optionally under one sub-account, with their periods and allocations.
+ * Narrow on purpose — a cleanup built on this deletes only what this run itself created.
+ */
+export async function readLeaseCreatedSince(page: Page, projectId: string, sinceIso: string, subaccountId?: string): Promise<LeaseRows> {
+  if (!/^[0-9a-f-]{36}$/i.test(projectId) || (subaccountId && !/^[0-9a-f-]{36}$/i.test(subaccountId))) throw new Error("ids must be GUIDs");
+  if (Number.isNaN(Date.parse(sinceIso))) throw new Error(`not a timestamp: ${sinceIso}`);
+  return codeFrame(page).evaluate(async ({ pid, since, sub }) => {
+    const unwrap = (r: { success?: boolean; data?: unknown; error?: unknown }) => {
+      if (r?.success === false) throw new Error(`read failed: ${JSON.stringify(r.error).slice(0, 300)}`);
+      return (r?.data ?? []) as Record<string, unknown>[];
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const load = (path: string) => import(/* @vite-ignore */ path) as Promise<any>;
+    const { Vsb_landleaseprojectcostsService: Costs } = await load("/src/generated/services/Vsb_landleaseprojectcostsService.ts");
+    const { Vsb_landleaseperiodsService: Periods } = await load("/src/generated/services/Vsb_landleaseperiodsService.ts");
+    const { Vsb_landleaseallocationwtgsService: Allocs } = await load("/src/generated/services/Vsb_landleaseallocationwtgsService.ts");
+    const filter = `_vsb_project_value eq ${pid} and createdon ge ${since}${sub ? ` and _vsb_subaccount_value eq ${sub}` : ""}`;
+    const costs = unwrap(await Costs.getAll({ filter }));
+    const periods: Record<string, unknown>[] = [];
+    const allocations: Record<string, unknown>[] = [];
+    for (const c of costs) {
+      const id = String(c.vsb_landleaseprojectcostid);
+      periods.push(...unwrap(await Periods.getAll({ filter: `_vsb_projectcost_value eq ${id}` })));
+      allocations.push(...unwrap(await Allocs.getAll({ filter: `_vsb_projectcost_value eq ${id}` })));
+    }
+    return { costs, periods, allocations };
+  }, { pid: projectId, since: new Date(sinceIso).toISOString(), sub: subaccountId });
+}
+
+/** Deletes the given rows (allocations, periods, then headers) through `deleteRecord`; returns what could NOT be deleted. */
+export async function deleteLeaseRows(page: Page, rows: LeaseRows): Promise<string[]> {
   return codeFrame(page).evaluate(async (r) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { deleteRecord } = await (import(/* @vite-ignore */ "/src/data/client.ts" as string) as Promise<any>);

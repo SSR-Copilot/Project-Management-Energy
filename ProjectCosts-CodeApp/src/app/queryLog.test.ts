@@ -41,6 +41,11 @@ describe("query log", () => {
     expect(warn.at(-1)).toMatch(/^\[VSB\] ACTION Write @ \/project\/team: \d+ ms, 0 requests, 0 rows, FAILED \[a\d+\]$/);
   });
 
+  it("UT-REQLOG-023 a record id in a query key is logged as <id>, never the GUID (rule 23)", () => {
+    expect(keyText(["land-lease-book", "ABCDEF01-0000-4000-8000-00000000abcd"]))
+      .toBe('["land-lease-book","<id>"]');
+  });
+
   it("UT-REQLOG-022 a long query key is cut", () => {
     expect(keyText(["a".repeat(200)])).toHaveLength(80);
     expect(keyText(["x", 1])).toBe('["x",1]');

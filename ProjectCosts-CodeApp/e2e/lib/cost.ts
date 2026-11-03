@@ -10,7 +10,7 @@
  *   CODEAPP_URL            default: the local play URL `pac code run` serves
  *   CANVAS_COST_URL        default: the Cost canvas app in VSBCloud_Dev
  */
-import { expect, type FrameLocator, type Page, test } from "@playwright/test";
+import { expect, type FrameLocator, type Locator, type Page, test } from "@playwright/test";
 import { CANVAS_FRAME, CODE_FRAME } from "./parity";
 
 export const CODEAPP_URL = process.env.CODEAPP_URL
@@ -53,6 +53,12 @@ export async function waitForStable(page: Page, app: FrameLocator, { pollMs = 70
     const n = await app.locator("body").evaluate((b) => {
       const busy = b.querySelector("[aria-busy='true'], [role='progressbar'], .fui-Spinner");
       if (busy && (busy as HTMLElement).offsetParent !== null) return -1;
+      // The apps' own busy messages ("Saving Land Lease Contract...", "Deleting ...", "Loading ..."; canvas pop-up and code
+      // overlay alike). A save is still writing while one shows: leaving the screen then aborts it (Stage B run, 3 Nov 2026).
+      for (const e of Array.from(b.querySelectorAll<HTMLElement>("div, span, p, label"))) {
+        if (e.children.length > 0 || e.offsetParent === null) continue;
+        if (/^(Saving|Deleting|Loading)\b.*\.{3}$/.test((e.textContent ?? "").trim())) return -1;
+      }
       const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
       let count = 0;
       for (let t = w.nextNode(); t; t = w.nextNode()) if (t.textContent?.trim()) count++;
@@ -63,6 +69,24 @@ export async function waitForStable(page: Page, app: FrameLocator, { pollMs = 70
     last = n;
     await page.waitForTimeout(pollMs);
   }
+}
+
+/**
+ * Waits until the app shows none of its busy messages ("Saving …...", "Deleting …...", "Loading …...") and FAILS if one is still
+ * there after `timeoutMs`: after a Save the test must not move on (a navigation would abort the save part-way).
+ */
+export async function waitForNotBusy(app: FrameLocator, timeoutMs = 180_000): Promise<void> {
+  const busy = () => app.locator("body").evaluate((b) => Array.from(b.querySelectorAll<HTMLElement>("div, span, p, label")).some((e) =>
+    e.children.length === 0 && e.offsetParent !== null && /^(Saving|Deleting|Loading)\b.*\.{3}$/.test((e.textContent ?? "").trim())));
+  const deadline = Date.now() + timeoutMs;
+  // Give the busy message a moment to appear after the click, then wait for it to go (two clear reads in a row).
+  let clear = 0;
+  while (Date.now() < deadline) {
+    clear = (await busy().catch(() => true)) ? 0 : clear + 1;
+    if (clear >= 3) return;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  throw new Error(`still busy after ${timeoutMs} ms (a "Saving / Deleting / Loading..." message is shown)`);
 }
 
 /** The Cost canvas app on one project, then a left-menu screen ("Land Lease"). */
@@ -110,6 +134,8 @@ const LEASE_CHEVRONS = "[data-control-name='ico_LandLease_Content_SubaccountsCar
 export async function toggleLeaseCard(kind: Kind, page: Page, app: FrameLocator, index: number): Promise<void> {
   if (kind === "code") {
     const header = app.locator("[data-testid^='leasecard-']").nth(index);
+    // A fresh load can still be fetching the cards after the header showed (Stage B run, 3 Nov 2026): wait for them first.
+    await header.waitFor({ state: "visible", timeout: 90_000 });
     await header.scrollIntoViewIfNeeded();
     await header.click({ timeout: 15_000 });
   } else {
@@ -128,6 +154,41 @@ export async function toggleLeaseCard(kind: Kind, page: Page, app: FrameLocator,
     if (!clicked) throw new Error(`Canvas card ${index}: no visible chevron on its header row`);
   }
   await waitForStable(page, app);
+}
+
+/**
+ * The command `caption` of card `index`'s OWN command bar. Another card's bar can be on screen too (a card above scrolled half
+ * out of view; the standard-import run, 3 Nov 2026), so "the first visible Add Standard Contract" may be the wrong card's.
+ *  canvas  : the first visible command BELOW card `index`'s title (its bar sits right under the header)
+ *  code app: the command inside the card's own section
+ */
+export async function cardCommand(kind: Kind, app: FrameLocator, index: number, caption: string): Promise<Locator> {
+  if (kind === "code") {
+    return app.locator("section").filter({ has: app.locator("[data-testid^='leasecard-']").nth(index) })
+      .getByText(caption, { exact: true }).first();
+  }
+  const title = await app.locator(`[data-control-name='${LEASE_CARD_TITLE}']`).nth(index).boundingBox();
+  if (!title) throw new Error(`Canvas card ${index}: title not on screen`);
+  const items = app.getByText(caption, { exact: true });
+  let best = -1;
+  let bestDy = Number.POSITIVE_INFINITY;
+  for (let k = 0, n = await items.count(); k < n; k++) {
+    const b = await items.nth(k).boundingBox();
+    if (!b || !(await items.nth(k).isVisible())) continue;
+    const dy = b.y - title.y;
+    if (dy > 0 && dy < bestDy) { bestDy = dy; best = k; }
+  }
+  if (best < 0) throw new Error(`Canvas card ${index}: no visible "${caption}" under its title`);
+  return items.nth(best);
+}
+
+/** Enabled / disabled of one command of card `index`'s own bar (see `cardCommand`). */
+export async function cardCommandEnabled(kind: Kind, app: FrameLocator, index: number, caption: string): Promise<boolean> {
+  const item = await cardCommand(kind, app, index, caption);
+  return item.evaluate((e, k) => {
+    const host = (e.closest("button, [role='menuitem']") ?? e) as HTMLButtonElement;
+    return k === "canvas" ? host.getAttribute("aria-disabled") !== "true" : !host.disabled && host.getAttribute("aria-disabled") !== "true";
+  }, kind);
 }
 
 /** The card titles in screen order (canvas: scrolled through, because its gallery renders only the cards near the viewport). */
@@ -184,6 +245,38 @@ export async function selectLeaseRow(kind: Kind, page: Page, app: FrameLocator, 
   if (index === undefined) throw new Error(`${kind}: no visible period row ${n} (visible rows: ${shown.length}); open a card with rows first`);
   await app.locator(LEASE_ROW[kind]).nth(index).click({ force: kind === "canvas", timeout: 15_000 });
   await waitForStable(page, app);
+}
+
+export const LEASE_COMMANDS = ["Add Contract Type", "Add Period", "Add Standard Contract", "Edit", "Delete"] as const;
+
+/**
+ * Enabled / disabled of the Land Lease commands that a user can see (folded cards keep theirs in the canvas page, clipped).
+ *  canvas  : the PCF CommandBar marks a disabled item with `aria-disabled="true"` (the button itself stays enabled; probe 3 Nov)
+ *  code app: a disabled item is a `disabled` button
+ * Returns caption -> enabled for the FIRST visible bar (open one card at a time).
+ */
+export async function leaseCommandStates(kind: Kind, app: FrameLocator): Promise<Record<string, boolean>> {
+  return app.locator("body").evaluate((b, { k, captions }) => {
+    const out: Record<string, boolean> = {};
+    for (const e of Array.from(b.querySelectorAll<HTMLButtonElement>("button, [role='menuitem']"))) {
+      const t = (e.textContent || "").replace(/[^\x20-\x7E]/g, "").trim();
+      if (!captions.includes(t) || t in out) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      let clipped = false;
+      for (let a = e.parentElement; a && a !== b && !clipped; a = a.parentElement) {
+        const as = getComputedStyle(a);
+        if (!/(hidden|clip|auto|scroll)/.test(as.overflowX + as.overflowY)) continue;
+        const ar = a.getBoundingClientRect();
+        const cx = r.x + r.width / 2;
+        const cy = r.y + r.height / 2;
+        if (cx < ar.left || cx > ar.right || cy < ar.top || cy > ar.bottom) clipped = true;
+      }
+      if (clipped) continue;
+      out[t] = k === "canvas" ? e.getAttribute("aria-disabled") !== "true" : !e.disabled && e.getAttribute("aria-disabled") !== "true";
+    }
+    return out;
+  }, { k: kind, captions: [...LEASE_COMMANDS] as string[] });
 }
 
 /**

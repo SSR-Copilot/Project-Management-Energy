@@ -8,7 +8,7 @@
  * Attached once, to the app's one `QueryClient`.
  */
 import type { QueryClient } from "@tanstack/react-query";
-import { beginAction } from "@/platform/requestLog";
+import { beginAction, redactIds } from "@/platform/requestLog";
 
 const MAX_KEY = 80;
 
@@ -20,7 +20,11 @@ const routeOf = (): string => {
   }
 };
 
-/** `["projects","list",{"page":1}]` cut to a readable stem. */
+/**
+ * `["projects","list",{"page":1}]` cut to a readable stem. Record ids are replaced by `<id>`: the
+ * Land Lease smoke test (E2E-LANDLEASE-002, 3 Nov 2026) found the project GUID printed in
+ * `[VSB] ACTION Load ["land-lease-book","<guid>"]`.
+ */
 export const keyText = (key: readonly unknown[]): string => {
   let text: string;
   try {
@@ -28,6 +32,8 @@ export const keyText = (key: readonly unknown[]): string => {
   } catch {
     text = String(key);
   }
+  // A record id is logged as `<id>`, never the GUID (CONVENTIONS rule 23, the shared `redactIds`).
+  text = redactIds(text);
   return text.length > MAX_KEY ? `${text.slice(0, MAX_KEY - 1)}…` : text;
 };
 

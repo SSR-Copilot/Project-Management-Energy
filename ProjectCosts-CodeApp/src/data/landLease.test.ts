@@ -20,10 +20,21 @@ interface Write { op: string; table: string; id?: string; payload?: Record<strin
 let writes: Write[] = [];
 const NEW_ID: Record<string, string[]> = {};
 
+/** Entity set -> the table key the service doubles record under, for deletes that go through `deleteRecord` (CA-27). */
+const DELETE_TABLE: Record<string, string> = {
+  vsb_landleaseprojectcosts: "cost", vsb_landleaseperiods: "period", vsb_landleaseallocationwtgs: "alloc",
+};
+/** Ids whose delete Dataverse refuses: `deleteRecord` then throws, as the real one does on `{ success: false }`. */
+let refusedDeletes = new Set<string>();
+
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
+  },
+  deleteRecord: async (operation: string, entitySet: string, id: string) => {
+    if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
+    writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
   },
 }));
 
@@ -361,5 +372,16 @@ describe("applyLeaseWrites", () => {
     await expect(applyLeaseWrites([
       { op: "delete", entitySet: "vsb_somethingelse", id: "x" },
     ] as never)).rejects.toThrow(/No writer/);
+  });
+
+  it("UT-LLDATA-014 a delete Dataverse refuses rejects the write plan instead of resolving as done (CA-27, rule 14)", async () => {
+    refusedDeletes = new Set(["alloc-2"]);
+    try {
+      await expect(applyLeaseWrites([
+        { op: "delete", entitySet: LEASE_ENTITY_SET.allocation, id: "alloc-2" },
+      ] as never)).rejects.toThrow(/delete Land Lease WTG allocation failed/);
+    } finally {
+      refusedDeletes = new Set();
+    }
   });
 });

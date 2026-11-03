@@ -179,7 +179,15 @@ and the two saved sessions (`npm run e2e:auth:codeapp`, `npm run e2e:auth:canvas
 | 4 | `e2e:landlease:smoke` | E2E-LANDLEASE-001…006 on the code app: errors, the `[VSB]` load log, aria-label / test id, ids from names, deep link + refresh, zoom |
 | 5 | `e2e:landlease:write` | Only with `$env:PARITY_WRITE = "1"` (writes `PW-` rows to DEV): E2E-LANDLEASE-046 the same contract created in both apps, rows and columns compared with the Owning Business Unit; 047 deleted in both apps, nothing left. Every `PW-` row of the run is deleted afterwards |
 
-Shared harness: `e2e/lib/cost.ts` (open a Cost screen for a project in both apps, `waitForStable`),
+| 6 | `e2e:landlease:gates` | Read-only: E2E-LANDLEASE-050…054, command gates per card and per selection, Save gates, the Edit panel load, dropdown options, accessible names, hover texts |
+| 7 | `e2e:landlease:flows` | `PARITY_WRITE=1`: E2E-LANDLEASE-060, nine steps (create, add periods, gates and prompts per period, edit, delete a period, payments, inflation, de-allocate one generator, move the start date), rows compared after each |
+| 8 | `e2e:landlease:standard` | `PARITY_WRITE=1`: E2E-LANDLEASE-070, "Add Standard Contract" on `LANDLEASE_STD_CARD` (default 6), imports compared and deleted |
+
+Run the Playwright commands ONE AT A TIME: each run empties `e2e/results/`, which breaks a run already going. `vite.config.ts`
+does not watch `e2e/`, or the dev server would reload the app under test for every trace file written.
+
+Shared harness: `e2e/lib/cost.ts` (open a Cost screen for a project in both apps, `waitForStable`, `waitForNotBusy`),
+`e2e/lib/leaseFlows.ts` (the Land Lease UI flows and the row comparison shared by the write specs),
 `e2e/lib/known.ts` (accepted differences that cannot go stale), `e2e/lib/dataverse.ts` (raw reads and
 `deleteRecord` cleanup through the code app's own modules on the dev server).
 

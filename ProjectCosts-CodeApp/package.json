@@ -28,6 +28,9 @@
     "e2e:landlease:smoke": "playwright test --project=codeapp landlease.codeapp",
     "e2e:landlease:validation": "playwright test --project=parity landlease.validation.parity",
     "e2e:landlease:write": "playwright test --project=parity landlease.write.parity",
+    "e2e:landlease:gates": "playwright test --project=parity landlease.gates.parity",
+    "e2e:landlease:flows": "playwright test --project=parity landlease.flows.parity",
+    "e2e:landlease:standard": "playwright test --project=parity landlease.standard.parity",
     "e2e:landlease:report": "node e2e/report-parity.mjs landlease"
   },
   "dependencies": {

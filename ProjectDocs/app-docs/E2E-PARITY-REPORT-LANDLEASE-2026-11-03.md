@@ -93,7 +93,69 @@ suite cannot force one).
 4. Rule-map findings not exercised by these runs (C4 Start Date standard flag, E2 unused `validateStartDate`, D5/F3 allocation
    rules, D1 currency reset): see `e2e/RULEMAP-land-lease.md` section 6.
 
+## 5a. Extension, 3 Nov 2026 (later): the areas the first run did not cover
+
+Added after the first run, at the user's request: three specs, all run against the same test project, Canvas first.
+
+| Spec | What it compares | Result |
+|---|---|---|
+| `landlease.gates.parity` (E2E-LANDLEASE-050…054, read-only) | Enabled / disabled of the five commands with each of the 9 cards open and with a period selected; the Save gate of an empty and of a description-only new contract; what the Edit panel loads (text values, dropdown values, which dropdowns are enabled, the full option lists, toggle states); accessible names; hover texts | **Everything matches except the 4 predicted findings** below. Both apps enable "Add Standard Contract" only on cards 5 and 6, both keep Currency disabled in the Edit panel, both load the same values and option lists |
+| `landlease.flows.parity` (E2E-LANDLEASE-060, writes PW- rows) | Each app, on its own tagged contract: S1 create; S2/S3 Add Period twice; S4 the gates and the delete prompt per period; S5 edit Period 2; S6 delete Period 3 only; S7 One-Time Payments 1 and 2 plus inflation; S8 take one generator off ("Allocate to all WTGs" off, one item unticked); S9 move Period 1's Start Date. Dataverse rows compared after every step | **Pass: identical rows after all nine steps** (header / periods / allocations 1/1/5 → 1/2/5 → 1/3/5 → 1/3/5 → 1/2/5 → 1/2/5 → 1/2/4 → 1/2/4), identical delete prompts; gates identical except the accepted D-entry (Add Period on any period in the code app, only on the last in the canvas) |
+| `landlease.standard.parity` (E2E-LANDLEASE-070, writes rows) | "Add Standard Contract" on card 6 in each app, the imported rows compared, then deleted | **Pass: identical** (1 header "…Standard LL Temporary Areas - Germany - Wind", 1 period, 5 allocations, Owning Business Unit on every row) |
+
+**Findings of the extension**
+
+| # | Finding | Rule map | Class |
+|---|---|---|---|
+| X1 | Accessible names of the Duration years, Duration months and Distribution Frequency dropdowns: canvas `Year` / `Month` / `Month`, code app `Duration years` / `Duration months` / `Distribution Frequency` (rule 16) | H1–H3 confirmed | Defect (rule 16) |
+| X2 | The period row's hover text: the canvas shows the row's description ("Allocate All WTG"), the code app none | H6 confirmed | Defect (minor) |
+| X3 | The selected WTGs are listed in a different order in the Allocation field (canvas "RIHV_3, RIHV_4, RIHV_1, …", code app "RIHV_1, RIHV_2, RIHV_3, …"); the list items and the saved allocations are the same | new | Unknown, needs a decision (display only) |
+| X4 | "Allocate to all WTGs" includes a PV module ("Test PV Module") in both apps | new | Same in both apps; product question (data or wording) |
+| X5 | Moving Period 1's Start Date does not move the later periods in either app (Period 2 still starts 16 Feb 2030 after Period 1 moved to 20 Feb 2029) | new | Same in both apps; product question (overlap) |
+| X6 | Add Period: the canvas carries the name, start date and contract fields over from the previous period but NOT the Distribution Frequency | new | Same in both apps (both require it) |
+
+**Not reachable with this data:** C4 (the Start Date standard-assumption flag). A contract created with "Add Contract Type"
+stores the flag as `false` in both apps, and only standard imports start with it `true` — but both apps disable Edit on a
+standard contract (gate B5), so the case C4 describes cannot be driven through the UI here. Also not covered: a refused delete
+(CA-27; the suite cannot force one) and the save-error path (F6).
+
+**Harness fixes found by the extension** (in the suite, no app code changed): wait until the app's own "Saving / Deleting /
+Loading …" message has gone before moving on (leaving earlier aborted a code-app save part-way); scope a command to its own
+card's bar; read canvas dropdowns as native `<select>`s and the canvas date through its calendar; a 30 s action timeout so a
+click on a disabled control fails instead of hanging; and **`vite.config.ts` no longer watches `e2e/`** — the dev server was
+reloading the code app in the browser for every trace file Playwright wrote, which caused the intermittent code-app failures
+(a dev-server setting only).
+
 ## 6. Defects recorded
 
 CA-27 (Land Lease, OPEX and Contracts deletes through the generated `delete()`, rule 14) and CA-28 (no `[VSB] HTTP` lines under
 `pac code run`) in `01-BUGS-FOUND.md`. Not fixed: the parity setup reports app defects and does not change app code.
+
+## 7. After the fixes (D79, 3 Nov 2026, uncommitted)
+
+The user then asked for the findings to be fixed in the code app (`02-OPEN-DECISIONS.md` D79). The same suites were
+re-run on the fixed code, the Canvas recordings unchanged.
+
+| Layer | Before | After |
+|---|---|---|
+| Visual, 11 states | about 550 differences (sizes, colours, weights, toggle x) | **18**, none of them new; listed below |
+| Validation, 130 inputs | 33 differences (V1–V4) | **0** |
+| E2E-LANDLEASE-002 request log | fail (CA-28) | **pass**: the HTTP lines arrive late and the test now waits for them. It then found the project GUID in an ACTION line, now `<id>` |
+| CA-27 deletes | not surfaced | fixed, UT-PWRITE-032 / UT-LLDATA-014 |
+
+What was changed to get there, beyond the decisions the user took:
+- **The 13 px field gap is now 12 px, and the toggle rows are 30 px.** The run measured 76 px between canvas captions; the 13 px
+  gap had drifted 1 px a field, 9 px by the footer.
+- **The footer hint is 7 px higher.**
+- **V4's cause is a canvas defect, now reproduced.** A Year change clears the typed custom %, found with a read-only Canvas probe.
+
+The 18 left:
+- **"Share of Revenues [%]", 10 states, 7 px.** The right-aligned header comes out narrower in Segoe UI than in the canvas Open
+  Sans: a font difference, just over the 6 px tolerance.
+- **The delete pop-up title and text, 15.6 / 15.4 px against 14.67 px (11 pt).** They come from the shared `ConfirmDialog`
+  `canvasFooter`, which six screens use; not changed without a decision.
+- **The empty card's commands, 9–17 px further right.** Present in the first run as well; not investigated.
+- **One `*` pairing in the inflation state.** A tool artefact: the code app draws some asterisks with CSS `::before`, which the
+  text capture does not read.
+
+Still open from section 5a: X3, X4, X5, X6 (product questions).

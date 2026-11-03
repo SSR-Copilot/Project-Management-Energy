@@ -38,6 +38,9 @@ export default defineConfig({
     channel: "chrome",
     launchOptions: { args: ["--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,BlockInsecurePrivateNetworkRequests"] },
     viewport: { width: 1920, height: 1040 },
+    // A single click / fill that waits longer than this is stuck (e.g. a click on a DISABLED control retries for ever: Land
+    // Lease run, 3 Nov 2026); it fails with the reason instead of eating the whole test's time. A call can pass its own timeout.
+    actionTimeout: 30_000,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

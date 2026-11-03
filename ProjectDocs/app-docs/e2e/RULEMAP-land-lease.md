@@ -128,8 +128,8 @@ All header fields share the gate `DisplayMode: =If(locSelectedLandLeasePeriod.Pe
 | E9 | `lbl_…_DueDate_ErrorMessage_1` / `2` / `3` (PA:4830, 5186, 5543) | `Text: ="Due Date must be in format MM/YYYY."`; `Visible: And(Not(IsBlank(v)), Not(IsMatch(v, "^(0[1-9]\|1[0-2])\/\d{4}$")))` | `validateDueDate`, `LEASE_MSG.dueDateFormat` | UT-LAND-072 | E2E-LANDLEASE-038 | Matched |
 | E10 | `lbl_…_InflationStartYear_ErrorMessage_1` (PA:4290–4296) | `Text: ="Year value must be in format YYYY."`; `Visible: And(Not(IsBlank(v)), Not(IsMatch(v, "^\d{4}$")))` | `validateInflationStartYear` | UT-LAND-073 | E2E-LANDLEASE-039 | Matched |
 | E11 | `lbl_…_InflationProfile_ErrorMessage_1` (PA:4568–4613) | `If(country.Checked, "", If(And(Not(IsBlank(v)), Not(fn_Numeric_LL.IsOneDecimal(v))), $"Value must be a numeric with 1 decimal place", And(IsNumeric(v), Not(And(Value(v) >= 0, Value(v) <= 100))), $"Please select a value between 0 and 100.", Not(IsNumeric(v)), "Value must be a number with 1 decimal place"))`; `Visible` false while the country toggle is on | `validateInflationProfile` | UT-LAND-074 | E2E-LANDLEASE-040 | Matched |
-| E12 | all text inputs | `IsBlank(" ")` is false and `IsMatch` does not trim: a space, or a value with a leading/trailing space, fails the pattern and shows the format message; a description of `" "` passes `Not(IsBlank(…))` | `isBlankValue`, `isDecimal`, `validateDueDate`, `validateInflationStartYear` all `trim()` | none | E2E-LANDLEASE-032…040 | Divergent, unmarked: the code accepts `" 2027"`, `" 01/2027"`, `" 5"` and treats `" "` as blank (no message; a `" "` description blocks Save) |
-| E13 | `fn_Numeric_LL.IsTwoDecimal` / `IsOneDecimal` + `InRange` | `\.\d{0,2}` accepts `"1."`; `InRange` then needs `IsNumeric("1.")` | `isDecimal` accepts `"1."`, `parseNumber` rejects it (`^[+-]?\d*\.?\d+$`) | none | E2E-LANDLEASE-034 | Divergent, unmarked (derived, to be confirmed): the code shows the range message (rates) or "Value must be a number with 1 decimal place" (profile) for `"1."`; the canvas most likely shows nothing |
+| E12 | all text inputs | `IsBlank(" ")` is false and `IsMatch` does not trim: a space, or a value with a leading/trailing space, fails the pattern and shows the format message; a description of `" "` passes `Not(IsBlank(…))` | `isBlankValue`, `isDecimal`, `validateDueDate`, `validateInflationStartYear` all `trim()` | none | E2E-LANDLEASE-032…040 | **Matched since D79 (3 Nov 2026)**: `LEASE_INPUT_MODE = "canvas"` (`validate*`, clause A); the earlier trimming is the `"trimmed"` twin. UT-LEASE-042…047, 052. Was: divergent, unmarked (the code accepted `" 2027"`, `" 01/2027"` and treated `" "` as blank) |
+| E13 | `fn_Numeric_LL.IsTwoDecimal` / `IsOneDecimal` + `InRange` | `\.\d{0,2}` accepts `"1."`; `InRange` then needs `IsNumeric("1.")` | `isDecimal` accepts `"1."`, `parseNumber` rejects it (`^[+-]?\d*\.?\d+$`) | none | E2E-LANDLEASE-034 | **Matched since D79**: the Canvas run confirmed `"1."` is accepted (Save on); the code now reads it as 1 (`leaseNumber`), and writes 1. UT-LEASE-044, 045, 048. Was: divergent, unmarked (range message) |
 | E14 | `fn_Numeric.*` `Language()` switch; `Text(max, "#,##0.0#")` | the decimal separator is `.` only when the user language is `en`, `,` otherwise; the range figure is formatted in the user's locale | `isDecimal` / `parseNumber` use `localeInfo(locale)`; `LEASE_NUMERIC_SPEC` range texts are fixed English strings ("100,000,000.0") | UT-LAND-069…071 | E2E-LANDLEASE-041 (non-en run) | Divergent, unmarked: in a German session the canvas reads "…zwischen 0 und 100.000.000,0."-style figures and the code keeps "100,000,000.0" (to be confirmed by a de-DE Canvas run) |
 | E15 | `lbl_LandLease_RightPanel_NewEditPeriod_BodyButtons_Hint_1` (PA:6127–6151) | `Text: ="Please fill in at least one commercial figure"`; `Visible: If(IsBlank(locSelectedLandLeaseCost) \|\| locSelectedLandLeasePeriod.Period = 'Period 1', And(<five rates blank>, IsBlank(Amount_1), IsBlank(DueDate_1)), And(<five rates blank>))` | `hintVisible`, `LEASE_MSG.atLeastOneFigure` | UT-LAND-077 | E2E-LANDLEASE-042 | Matched (one line per D49 §3) |
 | E16 | `con_LandLease_WarningOnSaveWithCost.Visible` (PA:5818) | `If(Or(<five rate boxes not blank>), false, If(And(Or(<five stored rates on locSelectedLandLeasePeriod not blank>), With({varLastPeriod: Last(Sort(Filter(colLandLeasePeriods, 'Project Cost'… = locSelectedLandLeaseCost…), Period))}, If(locSelectedLandLeasePeriod.Period < varLastPeriod.Period, true, false))), true, false))` | `additionalPeriodsWarningVisible` | UT-LAND-078, -079, -089 | E2E-LANDLEASE-043 | Matched |
@@ -310,14 +310,16 @@ differ; those are the unmarked rows E12–E14.
 
 ### 4.6 Inflation Start Year (B-infl) — "Year value must be in format YYYY."
 
+Every row types into the Year AFTER the baseline filled the profile, so the typed % is already cleared (V4). The `Code differs` column describes the build before D79; since D79 the code matches every row.
+
 | Input | Canvas message | Save enabled | Code differs |
 |---|---|---|---|
 | `abc` | yes | no | |
 | `-1` | yes | no | |
 | `0` | yes | no | |
 | `1` | yes | no | |
-| `2027` | none | yes | |
-| `0000` | none (no range check; writes 0) | yes | |
+| `2027` | none | **no** after any earlier Year change (V4: the Year change clears the typed % and clause E closes Save; confirmed by a Canvas probe, 3 Nov 2026). Reproduced since D79 | |
+| `0000` | none (no range check; writes 0) | **no**, as `2027` (V4) | |
 | `99999` | yes | no | |
 | `2027.5` | yes | no | |
 | `␠2027` | yes | no | yes: no message, Save yes (E12) |

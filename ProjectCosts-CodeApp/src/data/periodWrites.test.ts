@@ -41,10 +41,22 @@ let writes: Write[] = [];
 const NEW_ID: Record<string, string[]> = {};
 const nextId = (table: string) => NEW_ID[table]?.shift() ?? `${table}-new`;
 
+/** Entity set -> the table key the service doubles record under, for deletes that go through `deleteRecord` (CA-27). */
+const DELETE_TABLE: Record<string, string> = {
+  vsb_opexprojectcosts: "opex", vsb_landleaseprojectcosts: "llcost",
+  vsb_landleaseperiods: "llperiod", vsb_landleaseallocationwtgs: "llalloc",
+};
+/** Ids whose delete Dataverse refuses: `deleteRecord` then throws, as the real one does on `{ success: false }`. */
+let refusedDeletes = new Set<string>();
+
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
     (queriedBy[label] ??= []).push(options);
     return rowsByLabel[label] ?? [];
+  },
+  deleteRecord: async (operation: string, entitySet: string, id: string) => {
+    if (refusedDeletes.has(id)) throw new Error(`${operation} failed: refused`);
+    writes.push({ op: "delete", table: DELETE_TABLE[entitySet] ?? entitySet, id });
   },
 }));
 
@@ -645,6 +657,17 @@ describe("deleteLandLeasePeriod", () => {
   it("UT-PWRITE-015 deletes a later period alone and leaves the contract standing", async () => {
     await deletePeriod({ ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 });
     expect(writes).toEqual([{ op: "delete", table: "llperiod", id: "p2" }]);
+  });
+
+  it("UT-PWRITE-032 a delete Dataverse refuses rejects instead of resolving as done (CA-27, rule 14)", async () => {
+    refusedDeletes = new Set(["p2"]);
+    try {
+      await expect(deletePeriod({ ...LAND_PERIOD, id: "p2", contractId: HDR_COST101, periodIndex: 2 }))
+        .rejects.toThrow(/delete Land Lease period failed/);
+      expect(writes).toEqual([]);
+    } finally {
+      refusedDeletes = new Set();
+    }
   });
 });
 
