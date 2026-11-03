@@ -138,8 +138,11 @@ const useStyles = makeStyles({
     height: "35px",
     borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.Grayscale30,
     "& td": { fontSize: "12.67px", paddingTop: "2px", paddingBottom: "2px", verticalAlign: "middle" },
-    // The Country text sits 10 px further in than its cell (canvas pair, 3 Nov 2026).
-    "& td:nth-child(3)": { paddingLeft: "18px" },
+    // The Country text sits 10 px further in than its cell (canvas pair, 3 Nov 2026), and stops
+    // ~62 px before Completion Date as on the canvas (label 450 inside a 482 column, padding 5).
+    "& td:nth-child(3)": { paddingLeft: "18px", paddingRight: "48px" },
+    // No hover / pressed highlight on a record (PO, 3 Nov 2026) — the canvas gallery has none.
+    ":hover, :hover:active, :active, :focus-within": { backgroundColor: "transparent", boxShadow: "none" },
   },
   // The first row starts 10 px under the captions, as on the canvas.
   firstRow: { "& td": { paddingTop: "15px" } },
@@ -164,11 +167,36 @@ const useStyles = makeStyles({
     minWidth: "80px", width: "80px", height: "26px", paddingLeft: 0, paddingRight: 0, fontSize: "12px", flexShrink: 0,
     fontWeight: tokens.fontWeightRegular, ...radius("4px"), ...border(ROW_BUTTON_BORDER),
     backgroundColor: palette.white, color: palette.Grayscale10,
+    // Canvas disabled look: `DisabledFill: RGBA(242,242,241,0)` (none), `DisabledColor: RGBA(161,159,157)`,
+    // the same faded border — not Fluent's grey block.
+    ":disabled, :disabled:hover, :disabled:hover:active": {
+      backgroundColor: palette.white, color: "rgb(161, 159, 157)", ...border(ROW_BUTTON_BORDER),
+    },
   },
   /** `but_…_ListRow_Complete.Fill` — `ColorFade(palette.Green, 0.4)` when highlighted, text Grayscale00. */
-  completeDone: { backgroundColor: "rgb(180, 201, 120)", color: palette.Grayscale00, ":hover": { backgroundColor: "rgb(180, 201, 120)", color: palette.Grayscale00 } },
+  // The fills hold while disabled (a write runs): the canvas `DisabledFill` is transparent, so its
+  // own `Fill` shows through.
+  completeDone: {
+    backgroundColor: "rgb(180, 201, 120)", color: palette.Grayscale00,
+    ":disabled, :disabled:hover": { backgroundColor: "rgb(180, 201, 120)", color: palette.Grayscale00 },
+  },
   /** `but_…_ListRow_InProgress.Fill` — themeLight while In Progress, text Grayscale00. */
-  inProgressOn: { backgroundColor: palette.themeLight, color: palette.Grayscale00, ":hover": { backgroundColor: palette.themeLight, color: palette.Grayscale00 } },
+  inProgressOn: {
+    backgroundColor: palette.themeLight, color: palette.Grayscale00,
+    ":disabled, :disabled:hover": { backgroundColor: palette.themeLight, color: palette.Grayscale00 },
+  },
+  /**
+   * The canvas hovers, whatever the state (canvas pair, 3 Nov 2026): In Progress `HoverFill:
+   * ColorFade(akzent1, 0.3)`, `HoverColor: white`, `PressedFill: RGBA(16, 110, 190)`; Complete
+   * `HoverFill: ColorFade(akzent3, 0.2)`, `HoverColor: white`.
+   */
+  inProgressHover: {
+    ":hover:enabled": { backgroundColor: "rgb(126, 185, 227)", color: palette.white },
+    ":hover:active:enabled": { backgroundColor: "rgb(16, 110, 190)", color: palette.white },
+  },
+  completeHover: {
+    ":hover:enabled, :hover:active:enabled": { backgroundColor: "rgb(155, 183, 75)", color: palette.white },
+  },
   /** `but_…_ListRow_History.Fill` — `ColorFade(akzent1, 0.3)`. */
   historyButton: { backgroundColor: "rgb(126, 185, 227)" },
   // `ico_…_ListRow_Comments`: `Icon.Note`, 20 x 24, themePrimary with a note, `Grayscale20` without.
@@ -396,6 +424,8 @@ export default function CheckListScreen() {
   const [confirmReturn, setConfirmReturn] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [dateRowId, setDateRowId] = useState<string | null>(null);
+  /** The row whose Complete write is in flight — drawn green meanwhile, as the canvas does. */
+  const [completingRowId, setCompletingRowId] = useState<string | null>(null);
   const [showHolding, setShowHolding] = useState(true);
 
   /* ── the two sequences and the selected cluster. */
@@ -531,9 +561,12 @@ export default function CheckListScreen() {
     const kind = rowActionKind(row, ra.iconVisible);
     if (kind === "needDate") { setInfo(COMPLETION_DATE_MESSAGE); return; }
     if (kind === "panel") { openPanel({ kind: "checklist", row }); return; }
+    // The canvas paints the row green at once (it patches its collection first); do the same while
+    // the write runs, then the refetched row takes over (canvas pair, 3 Nov 2026).
+    setCompletingRowId(row.id);
     void writes.patchRow(row, completeTaskPatch(), {
       progress: MSG.taskChanged, error: MSG.taskError,
-    });
+    }).finally(() => setCompletingRowId(null));
   };
 
   const onSave = async () => {
@@ -648,7 +681,9 @@ export default function CheckListScreen() {
                 const disabledRow = locked || busy;
                 const completeButton = (
                   <Button size="small" appearance="secondary" aria-label={label}
-                    className={mergeClasses(s.rowButton, rowCompleteHighlighted(row, label) && s.completeDone)}
+                    // Already green: hovering keeps the colour (PO, 3 Nov 2026); otherwise the canvas hover.
+                    className={mergeClasses(s.rowButton,
+                      rowCompleteHighlighted(row, label) || completingRowId === row.id ? s.completeDone : s.completeHover)}
                     data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_Complete"
                     disabled={disabledRow || !rowActionEnabled(row, label, cancelVisible)}
                     onClick={() => onRowAction(row)}>
@@ -707,7 +742,7 @@ export default function CheckListScreen() {
                           </span>
                           {!cancelVisible ? (
                             <Button size="small" appearance="secondary" aria-label={UI.inProgress}
-                              className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn)}
+                              className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn, s.inProgressHover)}
                               aria-pressed={row.taskState === CHOICE_PROCESS.taskState.inProgress}
                               data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_InProgress"
                               disabled={disabledRow}
@@ -761,6 +796,8 @@ export default function CheckListScreen() {
         open={panel !== null}
         title={panel ? rightPanelTitle(panel, next) : ""}
         width="threeQuarter" panelClassName={mergeClasses(s.panelSkin, s.panelHistory)} closeTooltip={UI.closeTooltip}
+        // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
+        keepOpenOnOutsideClick
         onDismiss={closePanel}
         footer={panel ? (
           <>
@@ -889,6 +926,8 @@ export default function CheckListScreen() {
         open={commentForm !== null}
         title={UI.commentFormTitle}
         width="narrow" panelClassName={mergeClasses(s.panelSkin, s.panelComment)}
+        // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
+        keepOpenOnOutsideClick
         onDismiss={() => setCommentForm(null)}
         footer={<PanelButtons
           onSave={() => {

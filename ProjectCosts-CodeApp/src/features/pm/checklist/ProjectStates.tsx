@@ -15,7 +15,7 @@
 import type { ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
-  ArrowClockwiseRegular, ArrowLeftRegular, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
+  ArrowClockwiseRegular, ArrowLeftRegular, CheckmarkFilled, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
   InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
@@ -99,8 +99,11 @@ const useStyles = makeStyles({
   bar: {
     display: "flex", alignItems: "center", justifyContent: "center", flex: "1 1 auto", minWidth: 0,
     height: "24px", color: "#ffffff", ...radius("4px"), backgroundColor: STATE_FILL.notStarted,
-    // The canvas ✓ is a large 18-px glyph (pair of 3 Nov 2026).
-    "& svg": { fontSize: "18px", width: "18px", height: "18px" },
+    // The canvas ✓ is a large 18-px glyph (pair of 3 Nov 2026), drawn bold (PO, 3 Nov 2026):
+    // the Filled glyph plus a thin outline of its own colour.
+    // Always white — clicking the card (a Fluent Button) must not recolour it to the bar's green.
+    "& svg": { fontSize: "18px", width: "18px", height: "18px", color: "#ffffff !important" },
+    "& svg path": { fill: "#ffffff !important", stroke: "#ffffff !important", strokeWidth: "0.75px", strokeLinejoin: "round" },
   },
   // `circ_State_Card_Gate_Approval` (30, the state fill) under `but_State_Card_Gate_Approval`
   // (32, IconOnly): Transparent once Completed, so the filled circle shows; Secondary otherwise —
@@ -294,7 +297,7 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
               <span className={s.track}>
                 <span className={mergeClasses(s.line, s.lineStart, index === 0 && s.lineHidden)} />
                 <span className={s.bar} style={fill ? { backgroundColor: STATE_FILL[fill] } : undefined}>
-                  {step.stateLabel === "Completed" ? <CheckmarkRegular aria-hidden /> : null}
+                  {step.stateLabel === "Completed" ? <CheckmarkFilled aria-hidden /> : null}
                 </span>
                 <span className={mergeClasses(s.line, !step.gate && s.lineEnd, index === steps.length - 1 && s.lineHidden)} />
                 {step.gate ? (
