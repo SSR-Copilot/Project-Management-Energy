@@ -21,7 +21,14 @@
     "e2e:auth:canvas": "node e2e/auth.mjs canvas",
     "e2e:codeapp": "playwright test --project=codeapp",
     "e2e:canvas": "playwright test --project=canvas",
-    "e2e:report": "playwright show-report e2e/report"
+    "e2e:report": "playwright show-report e2e/report",
+    "e2e:landlease:explore": "playwright test --project=parity landlease.parity -g EXPLORE",
+    "e2e:landlease:canvas": "playwright test --project=parity landlease.parity -g \"Canvas first\"",
+    "e2e:landlease:code": "playwright test --project=parity landlease.parity -g \"code app\"",
+    "e2e:landlease:smoke": "playwright test --project=codeapp landlease.codeapp",
+    "e2e:landlease:validation": "playwright test --project=parity landlease.validation.parity",
+    "e2e:landlease:write": "playwright test --project=parity landlease.write.parity",
+    "e2e:landlease:report": "node e2e/report-parity.mjs landlease"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.7",

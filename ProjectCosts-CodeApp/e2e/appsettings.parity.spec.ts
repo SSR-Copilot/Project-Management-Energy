@@ -1,9 +1,10 @@
 /**
  * Application Settings parity run: Check List Settings, Project Gates, CAPEX Accounts, Costs, Contracts.
  *
- * Standing order (29 Oct 2026): the Canvas app runs FIRST. For each screen and state it collects every visible named control
- * (text, text style, size) into `e2e/reference/<screen>.<state>.canvas.json`; the code app run then collects the same and diffs them
- * control by control (`compareFacts`). Output: `e2e/results/parity/<screen>.<state>.diff.json` plus a screenshot of each app.
+ * Standing order (29 Oct 2026): the Canvas app runs FIRST. For each screen and state it collects every visible text
+ * (size, weight, colour, position) into `e2e/reference/<screen>.<state>.canvas.texts.json`; the code app run then collects the
+ * same and pairs them by their words (`compareTexts`, `lib/texts.ts`). Output: `e2e/parity-out/<screen>.<state>.diff.json`
+ * plus a screenshot of each app.
  * Read-only: panels are opened and cancelled, nothing is saved.
  *
  *   npx playwright test --project=parity appsettings.parity -g "Canvas"      # step 1

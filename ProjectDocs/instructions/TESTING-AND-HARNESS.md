@@ -165,6 +165,24 @@ signed-in browser and live data). Before every commit or merge the user is asked
 The prompt, the inputs to ask for and the rule are in `ProjectDocs/instructions/E2E-PARITY-PROMPT.md`.
 It is the answer to the G-WALK gap listed below.
 
+**Land Lease parity (2 Nov 2026).** Rule map: `ProjectDocs/app-docs/e2e/RULEMAP-land-lease.md` (97 rules,
+112 input rows, 12 KNOWN entries). The test project is never written into a file: set
+`$env:LANDLEASE_PROJECT_ID` for the run. Prerequisites: `npm run dev`, `pac code run --appUrl http://localhost:3000`,
+and the two saved sessions (`npm run e2e:auth:codeapp`, `npm run e2e:auth:canvas`). Then, from `ProjectCosts-CodeApp/`:
+
+| Step | Script | What it does |
+|---|---|---|
+| 0 | `e2e:landlease:explore` | Lists the sub-account cards with their row counts in both apps, to choose `LANDLEASE_CARD` (a card with periods and costs), `LANDLEASE_EMPTY_CARD` and `LANDLEASE_ROW` (a non-standard contract with One-Time Payment and Inflation off) |
+| 1 | `e2e:landlease:canvas` | Canvas first: the visible texts of 11 states to `e2e/reference/landlease.<state>.canvas.texts.json` |
+| 2 | `e2e:landlease:code` | The code app compared state by state; `e2e:landlease:report` prints the differences |
+| 3 | `e2e:landlease:validation` | The rule map's inputs typed into both apps (Canvas first): messages and Save state compared; the Canvas run also lists rule-map rows to correct |
+| 4 | `e2e:landlease:smoke` | E2E-LANDLEASE-001…006 on the code app: errors, the `[VSB]` load log, aria-label / test id, ids from names, deep link + refresh, zoom |
+| 5 | `e2e:landlease:write` | Only with `$env:PARITY_WRITE = "1"` (writes `PW-` rows to DEV): E2E-LANDLEASE-046 the same contract created in both apps, rows and columns compared with the Owning Business Unit; 047 deleted in both apps, nothing left. Every `PW-` row of the run is deleted afterwards |
+
+Shared harness: `e2e/lib/cost.ts` (open a Cost screen for a project in both apps, `waitForStable`),
+`e2e/lib/known.ts` (accepted differences that cannot go stale), `e2e/lib/dataverse.ts` (raw reads and
+`deleteRecord` cleanup through the code app's own modules on the dev server).
+
 ## The reference harness — five layers, nine gates
 
 `ProjectDocs/app-docs/VSBCloud-Harness-Plan.md` defines this for the *skeleton's* 23-

@@ -1345,6 +1345,36 @@ show an error until then.
   verify timing, so measure first (`17-ADDCOST-SAVE-PERF-PLAN.md`).
 - **Not fixed.** The `TUNED_BULK_TUNING` comment now states the worst case.
 
+### CA-27 · Land Lease (and OPEX, Contracts): deletes go through the generated `delete()`, so a refused delete looks like success (found 2 Nov 2026, open)
+
+**A code-app defect** against CONVENTIONS rule 14, found by the Land Lease parity rule map (row F9,
+`ProjectDocs/app-docs/e2e/RULEMAP-land-lease.md`) and confirmed in the source.
+- `data/landLease.ts:466-483`: the `remove` arm of every Land Lease writer (project cost, period, WTG
+  allocation) is `Vsb_…Service.delete(id)`. The generated method returns `Promise<void>` and discards
+  the `IOperationResult`, and the SDK never throws, so a 403 or a cascade refusal resolves as success.
+  `applyLeaseWrites` then reports the delete as done and the screen drops the row until a reload.
+- The same pattern is in `data/periodWrites.ts` (lines 462-463 OPEX periods, 744, 821, 842-845 Land
+  Lease) and `data/contracts.ts` (455, 484, 535).
+- The canvas has no `IfError` on these `Remove` / `RemoveIf` calls either (App `OnError` records the
+  error, its `Notify` is commented out), so the canvas is equally silent; the code app's rule 14 asks
+  for more than parity here.
+- Fix: route each through `deleteRecord` in `data/client.ts` (which checks the result), as the CAPEX,
+  Add Cost from Table and admin paths already do. **Not fixed**: the parity setup reports app defects and
+  does not change app code (E2E-PARITY-PROMPT.md ground rule 4). E2E-LANDLEASE-047 covers the happy path.
+
+### CA-28 · Request log: no `[VSB] HTTP` line is printed under `pac code run` (found 3 Nov 2026, open)
+
+**A code-app gap** against D72 / CONVENTIONS rule 23, found by E2E-LANDLEASE-002 on the Land Lease parity run.
+- Opening Land Lease through the local play URL prints `[VSB] ACTION Load …` and `[VSB] DATA read …` lines, but **no
+  `[VSB] HTTP …` line at all**. D72 says every SDK request prints one, fed by the SDK's `networkRequest` metric
+  (`platform/powerClient.ts` → `logHttp`).
+- Likely cause, unverified: the SDK does not emit the `networkRequest` metric in a locally played app, or the logger
+  registration in `powerClient.ts` is not reached there. The deployed app (DEV) has not been checked.
+- Effect: the per-request method, path, status, duration and `SLOW` flag are missing from the console, so a slow or failing
+  request is visible only through its DATA / ERROR line.
+- Next: open the deployed app on DEV and look for `[VSB] HTTP` lines; then decide whether the local case needs a fix. **Not
+  fixed.** Report: `E2E-PARITY-REPORT-LANDLEASE-2026-11-03.md`.
+
 ---
 
 ## Verification notes

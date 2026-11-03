@@ -1,0 +1,690 @@
+{
+ "euroMWh": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "100000000": {
+   "messages": [],
+   "save": true
+  },
+  "100000001": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": true
+  },
+  "100000000.01": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  },
+  "+1": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "euroMW": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "100000000": {
+   "messages": [],
+   "save": true
+  },
+  "100000001": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": true
+  },
+  "100000000.01": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  },
+  "+1": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "euroWTG": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "100000000": {
+   "messages": [],
+   "save": true
+  },
+  "100000001": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": true
+  },
+  "100000000.01": {
+   "messages": [
+    "Please select a value between 0 and 100,000,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  },
+  "+1": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "fixCosts": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "1000000000": {
+   "messages": [],
+   "save": true
+  },
+  "1000000001": {
+   "messages": [
+    "Value must be between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Value must be between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a numeric with two decimal place."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": true
+  },
+  "1000000000.01": {
+   "messages": [
+    "Value must be between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "shareOfRevenues": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "10000": {
+   "messages": [],
+   "save": true
+  },
+  "10001": {
+   "messages": [
+    "Please select a value between 0 and 10,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Enter a number with no more than two decimal places."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Please select a value between 0 and 10,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Enter a number with no more than two decimal places."
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Enter a number with no more than two decimal places."
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Enter a number with no more than two decimal places."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Enter a number with no more than two decimal places."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": true
+  },
+  "10000.01": {
+   "messages": [
+    "Please select a value between 0 and 10,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "otpAmount1": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "1000000000": {
+   "messages": [],
+   "save": true
+  },
+  "1000000001": {
+   "messages": [
+    "Please select a value between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a number"
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Please select a value between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a number"
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a number"
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a number"
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a number"
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": false
+  },
+  "1000000000.01": {
+   "messages": [
+    "Please select a value between 0 and 1,000,000,000.0."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "inflationProfile": {
+  "0": {
+   "messages": [],
+   "save": true
+  },
+  "1": {
+   "messages": [],
+   "save": true
+  },
+  "100": {
+   "messages": [],
+   "save": true
+  },
+  "101": {
+   "messages": [
+    "Please select a value between 0 and 100."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  "1.5": {
+   "messages": [],
+   "save": true
+  },
+  "1,5": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  "0.555": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  "1e3": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Value must be a numeric with 1 decimal place"
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": false
+  },
+  "100.1": {
+   "messages": [
+    "Please select a value between 0 and 100."
+   ],
+   "save": false
+  },
+  "1.": {
+   "messages": [],
+   "save": true
+  }
+ },
+ "inflationStartYear": {
+  "0": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "1": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "2027": {
+   "messages": [],
+   "save": false
+  },
+  "99999": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "-1": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "0000": {
+   "messages": [],
+   "save": false
+  },
+  "2027.5": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  " 2027": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [
+    "Year value must be in format YYYY."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": false
+  }
+ },
+ "otpDueDate1": {
+  "01/2027": {
+   "messages": [],
+   "save": true
+  },
+  "12/2027": {
+   "messages": [],
+   "save": true
+  },
+  "1/2027": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "13/2027": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "00/2027": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "01-2027": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "abc": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "29/02/2028": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "02/0000": {
+   "messages": [],
+   "save": true
+  },
+  " 01/2027": {
+   "messages": [
+    "Due Date must be in format MM/YYYY."
+   ],
+   "save": false
+  },
+  "": {
+   "messages": [],
+   "save": false
+  }
+ },
+ "description": {
+  "Lease A": {
+   "messages": [],
+   "save": true
+  },
+  "standard": {
+   "messages": [
+    "The term \"Standard\" is applicable only for system-prefilled contracts."
+   ],
+   "save": false
+  },
+  "Non-standard lease": {
+   "messages": [
+    "The term \"Standard\" is applicable only for system-prefilled contracts."
+   ],
+   "save": false
+  },
+  "STANDARD": {
+   "messages": [
+    "The term \"Standard\" is applicable only for system-prefilled contracts."
+   ],
+   "save": false
+  },
+  " ": {
+   "messages": [],
+   "save": true
+  },
+  "": {
+   "messages": [],
+   "save": false
+  },
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+   "messages": [],
+   "save": true
+  }
+ }
+}

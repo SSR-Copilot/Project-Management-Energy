@@ -56,18 +56,45 @@ const BENIGN_CONSOLE = [
   /Keyborg instance .* is being disposed incorrectly/,
   // The generic text of a failed load; the URL of the failing response is collected separately (`bad`).
   /^Failed to load resource: the server responded with a status of/,
+  // The same for a network-level failure (no response at all); its URL is collected separately (`failed`).
+  /^Failed to load resource: net::/,
+];
+
+/** Requests that fail at network level and belong to the Microsoft 365 player, not to the app (first seen 2 Nov 2026). */
+const BENIGN_FAILED: { re: RegExp; why: string }[] = [
+  { re: /^GET https:\/\/config\.fp\.measure\.office\.com\//, why: "the player's Office telemetry config; TLS name mismatch on this network" },
+];
+
+/**
+ * HTTP errors that come from the Power Apps player / host, not from the app's own calls (first seen on the Land Lease run,
+ * 2 Nov 2026). Each is matched narrowly by URL and kept in `benign` so it is still reported, just not as an app failure.
+ */
+const BENIGN_HTTP: { re: RegExp; why: string }[] = [
+  { re: /^403 GET https:\/\/[^/]+\.environment\.api\.powerplatform\.com\/powerapps\/apps\/local\/permissions/, why: "player's permission check for a locally played app (pac code run)" },
+  { re: /^404 GET https:\/\/graph\.microsoft\.com\/v1\.0\/users\/[^/]+\/photo\/\$value/, why: "the signed-in user has no profile photo" },
+  { re: /^404 POST https:\/\/[^/]+\.environment\.api\.powerplatform\.com\/powerapps\/apis\/shared_sql\/connections\/[^/]+\/usages/, why: "host's connection-usage report for the Fabric SQL connection (D54), not an app read" },
 ];
 
 /**
  * Console errors, failed requests and HTTP errors collected during a test (the smoke layer, section 4.1).
- * `errors` excludes the benign messages above; `bad` names every response of 400 or more with its URL.
+ * `errors` excludes the benign messages above; `bad` names every response of 400 or more with its URL, except the host's own
+ * (`BENIGN_HTTP`), which go to `benign` with their reason.
  */
-export function watchProblems(page: Page): { errors: string[]; failed: string[]; bad: string[] } {
-  const seen = { errors: [] as string[], failed: [] as string[], bad: [] as string[] };
+export function watchProblems(page: Page): { errors: string[]; failed: string[]; bad: string[]; benign: string[] } {
+  const seen = { errors: [] as string[], failed: [] as string[], bad: [] as string[], benign: [] as string[] };
   page.on("console", (m) => {
     if (m.type() === "error" && !BENIGN_CONSOLE.some((re) => re.test(m.text()))) seen.errors.push(m.text());
   });
-  page.on("requestfailed", (r) => seen.failed.push(`${r.method()} ${r.url()} ${r.failure()?.errorText ?? ""}`));
-  page.on("response", (r) => { if (r.status() >= 400) seen.bad.push(`${r.status()} ${r.request().method()} ${r.url()}`); });
+  page.on("requestfailed", (r) => {
+    const line = `${r.method()} ${r.url()} ${r.failure()?.errorText ?? ""}`;
+    const host = BENIGN_FAILED.find((b) => b.re.test(line));
+    if (host) seen.benign.push(`${line.slice(0, 140)} (${host.why})`); else seen.failed.push(line);
+  });
+  page.on("response", (r) => {
+    if (r.status() < 400) return;
+    const line = `${r.status()} ${r.request().method()} ${r.url()}`;
+    const host = BENIGN_HTTP.find((b) => b.re.test(line));
+    if (host) seen.benign.push(`${line.slice(0, 140)} (${host.why})`); else seen.bad.push(line);
+  });
   return seen;
 }

@@ -1,6 +1,6 @@
 /**
  * E2E-MILESTONES: Admin Milestones in the code app, read-only (no save is ever clicked).
- * Rule map: ProjectDocs/app-docs/e2e/RULEMAP-admin-milestones.md. Canvas twin: milestones.canvas.spec.ts (not written until a Canvas URL exists).
+ * Rule map: ProjectDocs/app-docs/e2e/RULEMAP-admin-milestones.md. Canvas twin: milestones.canvas.spec.ts (the reference run).
  * Needs a signed-in session (`node e2e/auth.mjs codeapp`) and `npm run dev` + `pac code run` running.
  */
 import { expect, test, type Page } from "@playwright/test";

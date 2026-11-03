@@ -1,8 +1,9 @@
 /**
- * Prints the differences found by the Application Settings parity run, per screen and state, from e2e/results/parity/*.diff.json.
+ * Prints the differences found by a parity run, per screen and state, from e2e/parity-out/*.diff.json.
  *
  *   node e2e/report-parity.mjs              all screens
  *   node e2e/report-parity.mjs gates        one screen (the key used in appsettings.parity.spec.ts)
+ *   node e2e/report-parity.mjs landlease    the Land Lease states (landlease.parity.spec.ts)
  */
 import { readdirSync, readFileSync } from "node:fs";
 

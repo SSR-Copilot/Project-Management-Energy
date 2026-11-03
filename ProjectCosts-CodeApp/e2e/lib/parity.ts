@@ -13,8 +13,9 @@ import { expect, type FrameLocator, type Locator, type Page, test } from "@playw
 
 export const CANVAS_FRAME = "iframe[name='fullscreen-app-host'], iframe#fullscreen-app-host";
 export const CODE_FRAME = "iframe[src*='localhost:3000']";
-export const CANVAS_PM_URL = "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/a/67054ad6-e70b-4738-a3e6-125384fe2b4b?tenantId=e3bab30b-3902-4ce6-b575-f005f94c78c1";
-export const CODE_URL = "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/app/local?_localAppUrl=http://localhost:3000&_localConnectionUrl=http://localhost:8080";
+// From the environment like the other projects (`playwright.config.ts`); the defaults are the VSBCloud_Dev apps.
+export const CANVAS_PM_URL = process.env.CANVAS_URL ?? "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/a/67054ad6-e70b-4738-a3e6-125384fe2b4b?tenantId=e3bab30b-3902-4ce6-b575-f005f94c78c1";
+export const CODE_URL = process.env.CODEAPP_URL ?? "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/app/local?_localAppUrl=http://localhost:3000&_localConnectionUrl=http://localhost:8080";
 
 export interface Fact {
   name: string;
