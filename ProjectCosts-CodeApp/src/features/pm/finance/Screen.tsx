@@ -284,6 +284,9 @@ const useStyles = makeStyles({
     "& svg": { width: "20px", height: "20px" },
   },
   trancheDotLocked: { cursor: "default", color: tokens.colorNeutralForegroundDisabled },
+  // Inside the name button: pulled back over the button's left padding so the dot and the name keep
+  // the positions they had when the dot stood before the button.
+  trancheDotInButton: { marginLeft: "-7px", marginRight: "6px" },
   // No row fill: the canvas header sets no `Fill`; the selection shows only through the filled dot.
   trancheSelected: {},
   // `con_DSRA_DSRF_Data_Buttons`: 60 high; Edit (80 wide, X 15) then Activate / Deactivate (110 wide,
@@ -902,20 +905,20 @@ export default function ProjectFinanceScreen() {
     return (
       <div key={i.id} className={mergeClasses(s.tranche, selected && s.trancheSelected)} aria-selected={selected}>
         <div className={mergeClasses(s.trancheHeader, !isFolded && s.trancheHeaderOpen)}>
-          {/* `img_…_SeniorDebt_CardHeader_RowSelectionDot`: an 18 x 18 SVG at X 5 — an empty ring, filled
-              for the selected tranche (`ThisItem = locSelectedSeniorDebtTranche`). */}
-          {/* Decorative (`aria-hidden`): no canvas test id, as the other decorative icons (D29). */}
-          {/* Clicking the dot selects as the name button does; the button carries the accessible action. */}
-          <span className={mergeClasses(s.trancheDot, locked && s.trancheDotLocked)} aria-hidden
-            onClick={locked ? undefined : () => setSelectedTrancheId(selected ? null : i.id)}>
-            {selected ? <RadioButtonFilled /> : <CircleRegular />}
-          </span>
           <Tooltip content={FIN_LABEL.seniorDebtTooltip} relationship="description">
             <Button
               appearance="transparent" className={mergeClasses(s.cardTitle, s.trancheTitle)} aria-label={FIN_LABEL.seniorDebtTooltip} disabled={locked}
               data-testid="btn_FinancingInput_DisplayProject_Body_Form_SeniorDebt_CardHeader_RowTransparent"
               onClick={() => setSelectedTrancheId(selected ? null : i.id)}
             >
+              {/* `img_…_SeniorDebt_CardHeader_RowSelectionDot`: an 18 x 18 SVG at X 5 — an empty ring, filled
+                  for the selected tranche (`ThisItem = locSelectedSeniorDebtTranche`). Decorative
+                  (`aria-hidden`, no canvas test id, as the other decorative icons, D29); it sits INSIDE the
+                  name button, so clicking the dot selects as the name does (the canvas
+                  `btn_…_RowTransparent` lies over both). */}
+              <span className={mergeClasses(s.trancheDot, s.trancheDotInButton, locked && s.trancheDotLocked)} aria-hidden>
+                {selected ? <RadioButtonFilled /> : <CircleRegular />}
+              </span>
               {trancheName(i)}
             </Button>
           </Tooltip>

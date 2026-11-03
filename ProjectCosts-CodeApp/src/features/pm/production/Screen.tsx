@@ -650,7 +650,8 @@ export default function ProductionScreen() {
                       <Text className={s.cellCaption}>{UI.distribution}</Text>
                       {/* `txt_…_Month`: a `DisplayMode.View` input — the grey box, dark text. */}
                       <Input readOnly value={row.month} appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={row.month} />
+                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={row.month}
+                        data-testid={`txt_ProductionSeasonalityYield${technology}_Month-${row.id}`} />
                       <Input value={row.text}
                         appearance={FIELD_APPEARANCE}
                         className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.isStandard)))}
@@ -687,7 +688,8 @@ export default function ProductionScreen() {
                     <div key={row.year} className={s.cellRow}>
                       <Text className={s.cellCaption}>{UI.reduction}</Text>
                       <Input readOnly value={String(row.year)} appearance={FIELD_APPEARANCE}
-                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={String(row.year)} />
+                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={String(row.year)}
+                        data-testid={`txt_ProductionNegativePrice${technology}_Year-${row.year}`} />
                       <Input value={row.text}
                         appearance={FIELD_APPEARANCE}
                         className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.standardAssumption)))}
