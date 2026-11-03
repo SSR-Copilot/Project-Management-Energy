@@ -75,7 +75,7 @@ import {
   heightPopupTypeName, inverterCardValues, isBodyVisible, isDummySupplier, isOtherSupplierModule,
   isPageLocked, newTurbineHeights, nextTurbineIndex, numberOfGeneratorsMessage, numericOr,
   opexDependencyMessage, overHeightLimit, pageCount, pageLock, pagerVisible, paginationText,
-  permissionStateLabel, planCreateGeneratorType, planDeleteGeneratorType, planDeleteInverterOrSubstructure,
+  permissionStateLabel, permissionStateTone, planCreateGeneratorType, planDeleteGeneratorType, planDeleteInverterOrSubstructure,
   planDeletePvType, planDeleteSimple, planDeleteTurbine, planGeneratorTypeFollowUp, planPvFollowUp,
   planSavePvType, planSaveSimple, planSaveTurbine, planToggleStatus, projectCatalog, pvCardValues,
   pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
@@ -213,6 +213,34 @@ const useStyles = makeStyles({
   },
   replaceGridPv: { gridTemplateColumns: "310px 310px", columnGap: "40px" },
   replaceColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
+  /**
+   * The "Replace to" country toggle: its caption runs ~50 px past the 314-px fields on the canvas, so
+   * it wraps on two lines (about 300 px of text), not three (user screenshot, 3 Nov 2026).
+   */
+  /*
+   * The "Replace to" country filter as the canvas `con_GeneratorData_RightPanel_Form_Filter_Country`
+   * (Y:14039-14169, the same block the Add Generator Type panel uses): a 94-high container holding
+   *  - `tgl_…_Filter_Country`, a `Toggle@1.1.5` with NO label of its own, 40 high at the left;
+   *  - `lbl_…_Filter_Country_Text`, a separate classic Label at X + 60 / Y 3 (5-px padding), 40 high,
+   *    text centred, `gblAppSizes.Font.Medium` (11 pt = 14.67 px), rgb(50, 49, 48) — two lines;
+   *  - `con_…_Filter_CountryAvailability`, its own 32-high row under the toggle: the 18-px info icon
+   *    15 px in, the message 20 px after it.
+   * Positions measured off the 1.21.753 canvas Replace panel (3 Nov 2026): the caption runs ~50 px past
+   * the 314-px fields, and the availability row sits 63 px down.
+   */
+  // +70: the caption's 14.67-px first line ("…available in my", ~292 px on the canvas) needs ~320 px of
+  // text width to wrap on two lines, not three — still inside the 830-px panel.
+  countryFilter: { position: "relative", flexShrink: 0, height: "95px", width: "calc(100% + 70px)", marginTop: "5px" },
+  countryFilterSwitch: { position: "absolute", left: "3px", top: 0, height: "40px", display: "flex", alignItems: "center" },
+  countryFilterText: {
+    position: "absolute", left: "65px", right: 0, top: "3px", height: "40px",
+    display: "flex", alignItems: "center",
+    fontSize: "14.67px", lineHeight: "20px", color: "rgb(50, 49, 48)",
+  },
+  countryFilterInfo: {
+    position: "absolute", left: "15px", right: 0, top: "63px", height: "32px",
+    display: "flex", alignItems: "center", columnGap: "5px", fontSize: "14px", color: "#242424",
+  },
   /** The column heading: semibold, over a 1-px rule that runs a little past the fields. */
   replaceHeading: {
     fontSize: "15px", fontWeight: tokens.fontWeightSemibold, color: "#323130",
@@ -283,6 +311,94 @@ const useStyles = makeStyles({
     borderTopColor: palette.Grayscale10, borderRightColor: palette.Grayscale10,
     borderBottomColor: palette.Grayscale10, borderLeftColor: palette.Grayscale10,
     backgroundColor: palette.Grayscale40,
+  },
+  /**
+   * `con_…_RequestState` (Y:3688-3758): a 165 × 24 box, 1-px border, the label centred at
+   * `gblAppSizes.Font.Medium`, coloured by state — border and text `gblAppColors.Success / Error /
+   * Warning`, fill the matching `…Bg` (the palette colour + `20` alpha: 12.5 %). Canceled: no border
+   * or fill, the text `ButtonDisabledBg` #bdbdbd.
+   */
+  permChip: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    width: "165px", height: "24px", boxSizing: "border-box", borderRadius: "4px",
+    fontSize: "14.67px", whiteSpace: "nowrap",
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: "transparent", borderRightColor: "transparent",
+    borderBottomColor: "transparent", borderLeftColor: "transparent",
+  },
+  permSuccess: {
+    color: palette.akzent3, backgroundColor: `${palette.Green}20`,
+    borderTopColor: palette.akzent3, borderRightColor: palette.akzent3,
+    borderBottomColor: palette.akzent3, borderLeftColor: palette.akzent3,
+  },
+  permError: {
+    color: palette.akzent5, backgroundColor: `${palette.Error}20`,
+    borderTopColor: palette.akzent5, borderRightColor: palette.akzent5,
+    borderBottomColor: palette.akzent5, borderLeftColor: palette.akzent5,
+  },
+  permWarning: {
+    color: palette.Warning, backgroundColor: `${palette.Warning}20`,
+    borderTopColor: palette.Warning, borderRightColor: palette.Warning,
+    borderBottomColor: palette.Warning, borderLeftColor: palette.Warning,
+  },
+  permDisabled: { color: "#bdbdbd" },
+  /*
+   * `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information` (Y:17341-17506): a black 50 %
+   * scrim; a white, square, 500-wide card (the container's default width); the 64-high #006EB9 header
+   * (PaddingLeft/Right 32) with the white 15-px title and a 20-px white ✕; the body (Padding 13 / 32,
+   * LayoutGap 15): the light-blue `…_InformationTag` (rgba(204,226,241,.5), 50 high) holding the 18-px
+   * Grayscale10 info icon at X 10 and the message (`rgb(44,44,44)`, `Font.Small`) 5 to its right, a
+   * 2-px #d5d5d5 rule across the card, and the outlined blue "Close" (`Button@0.0.45` Secondary) at
+   * the end.
+   */
+  infoScrim: { backgroundColor: "rgba(0, 0, 0, 0.5)" },
+  // 520 wide, measured off the live canvas pop-up (3 Nov 2026); the YAML sets no Width.
+  infoSurface: {
+    width: "520px", maxWidth: "calc(100vw - 32px)", boxSizing: "border-box",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+    borderRadius: 0, backgroundColor: palette.white, overflow: "hidden",
+    // Fluent's surface has a 1-px transparent border, and the white card showed through it as a
+    // white line round the blue header; the canvas header runs to the card's edge.
+    borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0,
+  },
+  infoHeader: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", columnGap: "12px",
+    height: "64px", paddingLeft: "32px", paddingRight: "32px", boxSizing: "border-box",
+    backgroundColor: "rgb(0, 110, 185)",
+  },
+  infoTitle: { flex: "1 1 auto", minWidth: 0, color: palette.white, fontSize: "15px", fontWeight: 400, lineHeight: "20px" },
+  infoClose: {
+    minWidth: "20px", width: "20px", height: "20px", paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+    color: palette.white, backgroundColor: "transparent",
+    ":hover": { color: palette.white, backgroundColor: "transparent" },
+    ":hover:active": { color: "rgb(16, 110, 190)", backgroundColor: "transparent" },
+    "& svg": { width: "20px", height: "20px" },
+    // The dialog focuses its first button on open; the canvas ✕ shows no focus box.
+    ":focus, :focus-visible, &[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    "::after": { display: "none" },
+  },
+  infoBody: {
+    display: "flex", flexDirection: "column", alignItems: "center", rowGap: "15px",
+    paddingTop: "13px", paddingBottom: "13px", paddingLeft: "32px", paddingRight: "32px",
+  },
+  infoTag: {
+    display: "flex", alignItems: "center", columnGap: "5px", alignSelf: "stretch", boxSizing: "border-box",
+    minHeight: "50px", paddingLeft: "10px", paddingRight: "10px", paddingTop: "4px", paddingBottom: "4px",
+    backgroundColor: "rgba(204, 226, 241, 0.5)",
+  },
+  infoTagIcon: { flexShrink: 0, width: "18px", height: "18px", fontSize: "18px", color: palette.Grayscale10 },
+  // `Font.Small` is 10 pt (13.33 px), three lines in a 62-px tag on the canvas.
+  infoTagText: { color: "rgb(44, 44, 44)", fontSize: "13.33px", lineHeight: "18px" },
+  infoRule: { alignSelf: "stretch", height: "2px", marginLeft: "-32px", marginRight: "-32px", backgroundColor: "rgb(213, 213, 213)" },
+  infoButton: {
+    alignSelf: "flex-end", color: "rgb(0, 110, 185)",
+    borderTopColor: "rgb(0, 110, 185)", borderRightColor: "rgb(0, 110, 185)",
+    borderBottomColor: "rgb(0, 110, 185)", borderLeftColor: "rgb(0, 110, 185)",
   },
   /** `con_Generator_GeneratorStatus` while Active: Green border, SuccessLight fill. */
   chipActive: {
@@ -1470,6 +1586,7 @@ export default function GeneratorsScreen() {
 
   /* ── galleries ── */
   const iso = project?.isoCurrencyCode;
+  const PERM_TONE_CLASS = { success: s.permSuccess, error: s.permError, warning: s.permWarning, disabled: s.permDisabled };
   const titleOf = (family: PlantFamily, label: string, row: SimpleTypeRow | GeneratorTypeRow, extra?: ReactNode) => {
     const chip = showsPermissionChip(family) ? permissionStateLabel(row.requestPermissionState) : null;
     const cancelName = CANCEL_BUTTON[family];
@@ -1477,7 +1594,9 @@ export default function GeneratorsScreen() {
       <span className={s.title}>
         <span className={s.titleText}>{label}</span>
         {extra}
-        {chip ? <span className={s.chip}>{chip}</span> : null}
+        {chip ? (
+          <span className={mergeClasses(s.permChip, PERM_TONE_CLASS[permissionStateTone(row.requestPermissionState)])}>{chip}</span>
+        ) : null}
         {cancelName && cancelRequestVisible(family, row) ? (
           <Button
             size="small" appearance="secondary" icon={<DismissRegular />}
@@ -2243,9 +2362,14 @@ export default function GeneratorsScreen() {
               options={selectedTypeModel?.turbineType ? [{ value: "from", label: selectedTypeModel.turbineType }] : []}
               onChange={() => {}}
             />
-            <InputField
-              label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required
-              readOnly disabledLook value={fmtHubHeight(selectedTypeModel?.hubHeight, lang)}
+            {/* `cmb_Supplier_8` is a disabled combobox like the two above (chevron), showing the hub
+                height as stored — "169", not "169.00" (canvas screenshot, 3 Nov 2026). */}
+            <SelectField
+              label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required disabled
+              disabledClassName={s.comboDisabled}
+              value={selectedTypeModel?.hubHeight != null ? "from" : null}
+              options={selectedTypeModel?.hubHeight != null ? [{ value: "from", label: fmtHubHeight(selectedTypeModel.hubHeight, lang) }] : []}
+              onChange={() => {}}
             />
             <InputField
               label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
@@ -2256,15 +2380,19 @@ export default function GeneratorsScreen() {
           <div className={s.replaceColumn}>
             <Text className={s.replaceHeading}>{REPLACE_LABELS.replaceTo}</Text>
             {/* canvas-identity-ignore: 1.21.753-only control */}
-            <Switch
-              checked={replaceWtg.inCountry}
-              label={REPLACE_LABELS.countryFilter} aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
-              data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_1"
-              onChange={(_, d) => setReplaceWtg(emptyReplaceWtg(d.checked))}
-            />
-            <div className={s.filterAvailability}>
-              <InfoRegular aria-hidden="true" fontSize={18} color={replaceWtg.inCountry ? palette.Success : palette.Warning} />
-              <Text>{typeFilterMessage(replaceWtg.inCountry, project?.countryName)}</Text>
+            <div className={s.countryFilter}>
+              <Switch
+                className={s.countryFilterSwitch}
+                checked={replaceWtg.inCountry}
+                aria-label="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"
+                data-testid="tgl_btn_GeneratorData_RightPanel_Form_Filter_Country_1"
+                onChange={(_, d) => setReplaceWtg(emptyReplaceWtg(d.checked))}
+              />
+              <span className={s.countryFilterText}>{REPLACE_LABELS.countryFilter}</span>
+              <div className={s.countryFilterInfo}>
+                <InfoRegular aria-hidden="true" fontSize={18} color={replaceWtg.inCountry ? palette.Success : palette.Warning} />
+                <span>{typeFilterMessage(replaceWtg.inCountry, project?.countryName)}</span>
+              </div>
             </div>
             <SelectField
               label={REPLACE_LABELS.supplier} name="cmb_Supplier_3" ariaLabel="cmb_Supplier" required
@@ -2413,24 +2541,40 @@ export default function GeneratorsScreen() {
 
       {/* ── `con_PopUp_Common_Generators_PreventTotalCapacity` — information only ── */}
       <Dialog open={dialog?.kind === "blocked"} onOpenChange={(_, d) => { if (!d.open) closeDialog(); }}>
-        <DialogSurface aria-label={LAST_CAPACITY_TITLES.delete}>
-          <DialogBody>
-            <DialogTitle>{LAST_CAPACITY_TITLES.delete}</DialogTitle>
-            <DialogContent>
-              {dialog?.kind === "blocked" && dialog.reason !== "Capacity"
-                ? opexDependencyMessage(dialog.reason, dialog.name)
-                : LAST_CAPACITY_MESSAGES.delete}
-            </DialogContent>
-            <DialogActions>
-              <Button
-                appearance="primary" aria-label={DIALOG_LABELS.close}
-                data-testid="btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close"
-                onClick={closeDialog}
-              >
-                {DIALOG_LABELS.close}
-              </Button>
-            </DialogActions>
-          </DialogBody>
+        <DialogSurface
+          aria-label={LAST_CAPACITY_TITLES.delete} className={s.infoSurface}
+          backdrop={{ className: s.infoScrim }}
+          data-testid="con_PopUp_Common_Generators_PreventTotalCapacity_Information"
+        >
+          <div className={s.infoHeader}>
+            <span className={s.infoTitle} data-testid="txt_PopUp_Common_Generators_PreventTotalCapacity_Title">
+              {LAST_CAPACITY_TITLES.delete}
+            </span>
+            <Button
+              appearance="transparent" className={s.infoClose} icon={<DismissRegular />}
+              aria-label="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel"
+              data-testid="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel"
+              onClick={closeDialog}
+            />
+          </div>
+          <div className={s.infoBody}>
+            <div className={s.infoTag}>
+              <InfoRegular className={s.infoTagIcon} aria-hidden="true" />
+              <span className={s.infoTagText} data-testid="lbl_PopUp_Common_Generators_PreventTotalCapacity_Information">
+                {dialog?.kind === "blocked" && dialog.reason !== "Capacity"
+                  ? opexDependencyMessage(dialog.reason, dialog.name)
+                  : LAST_CAPACITY_MESSAGES.delete}
+              </span>
+            </div>
+            <span className={s.infoRule} aria-hidden="true" />
+            <Button
+              appearance="secondary" className={s.infoButton} aria-label={DIALOG_LABELS.close}
+              data-testid="btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close"
+              onClick={closeDialog}
+            >
+              {DIALOG_LABELS.close}
+            </Button>
+          </div>
         </DialogSurface>
       </Dialog>
 

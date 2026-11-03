@@ -159,13 +159,16 @@ export function useEntraPeople(ids: readonly (string | null)[]): ScreenData<Map<
   return out(q, NO_PEOPLE);
 }
 
-/** The Germany / France municipality comboboxes. */
+/**
+ * The Germany / France municipality comboboxes' `Items`: Germany lists the Area's municipalities
+ * from the first letter (all of them while nothing is typed); France waits for three letters.
+ */
 export function useMunicipalitySearch(
   mode: MunicipalityMode,
   search: string,
   areaName?: string | null,
 ): ScreenData<MunicipalityRow[]> {
-  const germany = mode === "germany" && Boolean(areaName) && !municipalitySearchIsSuppressed(search.trim());
+  const germany = mode === "germany" && Boolean(areaName);
   const france = mode === "france" && !municipalitySearchIsSuppressed(search);
   const q = useQuery({
     queryKey: germany ? qk.germanMunicipalities(areaName!, search.trim()) : qk.frenchMunicipalities(search),

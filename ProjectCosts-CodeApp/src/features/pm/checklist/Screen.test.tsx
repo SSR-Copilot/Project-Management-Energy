@@ -142,8 +142,9 @@ describe("Project General CheckList Screen (connected)", () => {
     const [rowArg, data, texts] = state.patchRow.mock.calls[0] as [ChecklistRow, Record<string, unknown>, { progress: string; success: string }];
     expect(rowArg.id).toBe("cl-1");
     expect(data).toEqual({ [CHECKLIST_COL.taskState]: TASK.completed });
-    expect(texts.progress).toBe(MSG.taskChanging("Land secured"));
-    expect(texts.success).toBe(MSG.taskChanged);
+    // The save popup carries the success text; no green bar afterwards (PO, 3 Nov 2026).
+    expect(texts.progress).toBe(MSG.taskChanged);
+    expect(texts.success).toBeUndefined();
   });
 
   it("UT-CHKLST-904 a task with an active approval opens the panel; Request Approval is visible but disabled", async () => {
@@ -158,7 +159,8 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(await screen.findByText("Request Check List completion approval")).toBeTruthy();
     const request = await screen.findByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval") as HTMLButtonElement;
     expect(request.disabled).toBe(true);
-    expect(request.title).toBe(EXCLUDED.requestApproval);
+    // The hover text is the selected cluster's name, as on the canvas (PO, 3 Nov 2026).
+    expect(request.title).not.toBe("");
     expect(request.getAttribute("aria-label")).toBe(ARIA.requestApproval);
     // SOURCE DEFECT fix: no Save in Checklist Completion mode.
     expect(screen.queryByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save")).toBeNull();

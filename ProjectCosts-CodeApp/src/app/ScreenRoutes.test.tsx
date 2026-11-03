@@ -29,7 +29,7 @@ vi.mock("@/data/generalData", () => ({
   loadGeneralDataProject: async () => null, listGeneralDataCountries: async () => [], listCountryAreas: async () => [],
   listProjectStates: async () => [], listTerrainUtilizations: async () => [], listShareholders: async () => [],
   listStateTrackings: async () => [], searchGermanMunicipalities: async () => [], searchFrenchMunicipalities: async () => [],
-  lookupGermanTradeTaxRate: async () => null, MUNICIPALITY_SEARCH_TOP: 50,
+  lookupGermanTradeTaxRate: async () => null, MUNICIPALITY_SEARCH_TOP: 5000,
 }));
 vi.mock("@/data/milestones", () => ({
   loadMilestoneProject: async () => null, countIndividualVolumeContracts: async () => 0,
