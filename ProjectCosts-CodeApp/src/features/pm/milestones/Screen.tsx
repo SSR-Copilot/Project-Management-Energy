@@ -159,6 +159,8 @@ const LOCK_TEXT = "rgb(255, 255, 255)";
 
 /** `gblAppColors.ButtonDisabledBg` (`App.pa.yaml`) — the two separators' Fill. */
 const SEPARATOR_FILL = "#bdbdbd";
+/** A disabled Save / Cancel caption: the canvas PowerCAT ActionButton's dark grey (sampled, 3 Nov 2026). */
+const DISABLED_ACTION_TEXT = "#323130";
 
 /*
  * Layout transcribed from the canvas containers (UI layout pass, 20 Oct 2026):
@@ -308,10 +310,13 @@ const useStyles = makeStyles({
   /**
    * `pcf_btn_…_Buttons_Save` — `cat_PowerCAT.Icon` ActionButton, Width 96, Height 32, FontSize 16:
    * `FillColor: themePrimary`, `FontColor: white`; hover `hoverButton` with themePrimary text.
-   * Disabled it is the plain grey icon + caption (the locked page).
+   * Disabled (the PowerCAT ActionButton): no fill, the icon `palette.black`
+   * (`IconColor: If(Disabled, black, …)`) and a dark caption — sampled off the canvas, not Fluent's
+   * pale #BDBDBD (user screenshot, 3 Nov 2026).
    */
   saveButton: {
     width: "96px", minWidth: "96px", height: "32px", fontSize: "16px", fontWeight: 400,
+    ":disabled": { color: DISABLED_ACTION_TEXT, "& .fui-Button__icon": { color: palette.black } },
     ":enabled": {
       backgroundColor: palette.themePrimary, color: palette.white,
       "& .fui-Button__icon": { color: palette.white },
@@ -328,6 +333,8 @@ const useStyles = makeStyles({
   cancelButton: {
     // Same 16 px caption as Save (PO, 27 Oct 2026; the YAML sets FontSize on Save only).
     width: "96px", minWidth: "96px", height: "32px", fontSize: "16px", fontWeight: 400,
+    // Disabled as Save: no fill or border, black icon (`IconColor: If(Disabled, black, …)`), dark caption.
+    ":disabled": { color: DISABLED_ACTION_TEXT, "& .fui-Button__icon": { color: palette.black } },
     ":enabled": {
       backgroundColor: palette.white, color: palette.themePrimary,
       borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",

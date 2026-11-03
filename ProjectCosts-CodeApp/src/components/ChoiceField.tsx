@@ -20,8 +20,17 @@ import { FIELD_APPEARANCE, displayModeOf, useFieldControlClass, useFieldSkin } f
 import { useStandardValueClass, type StandardProp } from "./standardValue";
 
 const useStyles = makeStyles({
-  /** Fluent's `Dropdown` ships a 250-px `minWidth`; the canvas box is its cell's width. */
+  /**
+   * Fluent's `Dropdown` ships a 250-px `minWidth`; the canvas box is its cell's width. The canvas
+   * modern dropdown keeps its text on ONE line (`valueText`); Fluent wrapped it and grew the box.
+   */
   dropdown: { minWidth: "0px", width: "100%" },
+  /*
+   * The button is a CSS grid (text, chevron), and its text a bare grid item that overflowed under the
+   * chevron; wrapped in this span it is clipped at the chevron's column — plainly, with no "…", as the
+   * canvas modern dropdown clips it ("Operating company with infrastruc", General Data, 3 Nov 2026).
+   */
+  valueText: { minWidth: 0, overflowX: "hidden", textOverflow: "clip", whiteSpace: "nowrap", textAlign: "left" },
 });
 
 export interface ChoiceOption { value: string; label: string }
@@ -91,6 +100,7 @@ export function ChoiceField({
         multiselect={multiselect}
         {...(listboxClassName ? { listbox: { className: listboxClassName } } : {})}
         {...(view ? { open: false, expandIcon: null } : {})}
+        button={{ children: <span className={s.valueText}>{text || placeholder}</span> }}
         value={text}
         selectedOptions={selected}
         onOptionSelect={(_, d) => {

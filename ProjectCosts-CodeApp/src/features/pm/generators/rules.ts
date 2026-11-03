@@ -1867,21 +1867,25 @@ export function canSaveTurbine(args: {
 
 /* ════════════════════════════════════════════════════════════════ permissions ════ */
 
-/** Rule 25 — the permission-state chip label, and the `StateChip` colour it maps to. */
+/**
+ * Rule 25 — the permission-state chip label: `lbl_…_RequestState.Text: =ThisItem.'Request Permission
+ * State'`, i.e. the column's own option label — "Request Approved / Declined / Pending / Canceled"
+ * (Y:3756). It read "Permission …" (the `gblAppConstants` names) until 3 Nov 2026.
+ */
 export function permissionStateLabel(state: number | null | undefined): string | null {
   switch (state) {
-    case CHOICE_PLANT.requestPermissionState.approved: return "Permission Approved";
-    case CHOICE_PLANT.requestPermissionState.declined: return "Permission Declined";
-    case CHOICE_PLANT.requestPermissionState.pending: return "Permission Pending";
-    case CHOICE_PLANT.requestPermissionState.canceled: return "Permission Canceled";
+    case CHOICE_PLANT.requestPermissionState.approved: return "Request Approved";
+    case CHOICE_PLANT.requestPermissionState.declined: return "Request Declined";
+    case CHOICE_PLANT.requestPermissionState.pending: return "Request Pending";
+    case CHOICE_PLANT.requestPermissionState.canceled: return "Request Canceled";
     default: return null;
   }
 }
 
 /**
  * Rule 25 — `Switch(Text('Request Permission State'),
- *   "Permission Approved", Success, "Permission Declined", Error,
- *   "Permission Pending", Warning, ButtonDisabledBg)`
+ *   "Request Approved", Success, "Request Declined", Error,
+ *   "Request Pending", Warning, "Request Canceled", ButtonDisabledBg)` (Y:3692-3748)
  * Six near-identical copies in the canvas; one function here.
  */
 export type PermissionTone = "success" | "error" | "warning" | "disabled";
@@ -2385,7 +2389,8 @@ export const textIntOr = (value: number | null | undefined, alt: string, lang: L
 export const fmtCapacity = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.0#", lang);
 
 /** `Text(…, "#0.00")`. */
-export const fmtHubHeight = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.00", lang);
+/** The "Replace from" hub height: the stored value as the canvas combobox shows it — "169", "169.5". */
+export const fmtHubHeight = (v: number | null | undefined, lang: Lang = "en-US"): string => textFormat(v, "#0.##", lang);
 
 /** `TotalHeight` grid column — `Text(ThisRecord.'Total Height', "#0.0#")` (Y:2138). */
 export const fmtHeight = fmtCapacity;

@@ -108,6 +108,8 @@
 /* `pcf_Left_Navigation_Menu` first, `con_Left_Navigation_Header` (45 high) pinned below it. */
 .canvas-rail-pm { overflow-x: hidden; }
 .canvas-rail-pm a { white-space: nowrap; }
+/* The PM rail's labels are black (#000, sampled off the canvas rail, 3 Nov 2026). */
+.canvas-rail-pm a, .canvas-rail-pm a[aria-current="page"] { color: #000; }
 /* A collapsed rail's group header: an empty Nav row, as tall as a link (`LeftNav.tsx`). */
 .canvas-rail-blank { display: block; flex-shrink: 0; min-height: 44px; }
 .canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
