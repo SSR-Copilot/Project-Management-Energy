@@ -59,10 +59,13 @@ const inputs: FinancingInputRow[] = [
     [INPUT_COL.dateOfExpiry]: "2055-12-31", [INPUT_COL.durationOfSaving]: "0015" }),
 ];
 
+/** The `useDebtAssumptions` result: not connected by default (the cases written before Fabric). */
+const NO_DEBT = { data: { debt: [], decommissioning: [], dsra: [] }, isLoading: false, error: undefined as unknown, connected: false };
 const state = {
   project: baseProject as FinanceProject | null,
   inputs: inputs as FinancingInputRow[],
   error: undefined as unknown,
+  debt: NO_DEBT,
 };
 const run = vi.fn(async (_job: PlanJob): Promise<string[] | null> => []);
 const duplicates = vi.fn(async (_key: string): Promise<string[]> => []);
@@ -75,7 +78,7 @@ vi.mock("./hooks", () => ({
   TABLES: ["vsb_financinginputs"],
   useFinanceProject: () => ({ data: state.project, isLoading: false, error: state.error, connected: true }),
   useFinancingCategories: () => ok(categories),
-  useDebtAssumptions: () => ({ data: { debt: [], decommissioning: [], dsra: [] }, isLoading: false, error: undefined, connected: false }),
+  useDebtAssumptions: () => state.debt,
   useBanks: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
   useKfwTranches: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
   useFinancingInputs: () => ok(state.inputs),
@@ -105,15 +108,16 @@ beforeEach(() => {
   state.project = baseProject;
   state.inputs = inputs;
   state.error = undefined;
+  state.debt = NO_DEBT;
   run.mockClear();
   duplicates.mockClear();
 });
 
 describe("UT-FIN Screen (connected)", () => {
-  it("UT-FIN-901 renders the five category cards folded, the Fabric notice and no not-connected notice", () => {
+  it("UT-FIN-901 renders the five category cards folded and no not-connected or Fabric notice", () => {
     renderScreen();
     expect(screen.queryByTestId("not-connected-notice")).toBeNull();
-    expect(screen.getByTestId("finance-assumptions-not-connected").textContent).toBe(FINANCE_SCREEN_TEXT.assumptionsNotConnected);
+    expect(screen.queryByTestId("finance-assumptions-not-connected")).toBeNull();
     for (const id of ["c1", "c2", "c3", "c4", "c5"]) expect(card(id)).toBeTruthy();
     expect(screen.queryByTestId("con_ProjectFinance_DisplayProject_Body_Form_FinancingInputs_Card-c6")).toBeNull();
     // B9 — every card starts folded: no body.
@@ -169,6 +173,35 @@ describe("UT-FIN Screen (connected)", () => {
     await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
     const plans = await Promise.all(run.mock.calls.map(([job]) => planOf(job)));
     expect(plans[0]!.writes[0]!.data).toEqual({ vsb_financingoptions: CHOICE_FINANCE.financingOptions.debtFinancing });
+    expect(plans.slice(1).map((p) => p.writes[0]!.data?.vsb_name)).toEqual(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]);
+  });
+
+  it("UT-FIN-914 Fabric connected: the visit waits for the debt rows, then seeds every missing input", async () => {
+    state.project = { ...baseProject, id: "p-1", financingOptions: null };
+    state.inputs = [];
+    state.debt = { ...NO_DEBT, isLoading: true, connected: true };
+    const view = renderScreen();
+    await new Promise((r) => setTimeout(r, 0));
+    // Still loading: nothing is written (no Fabric seed from an empty row set).
+    expect(run).not.toHaveBeenCalled();
+    state.debt = { ...NO_DEBT, isLoading: false, connected: true };
+    view.rerender(
+      <FluentProvider theme={vsbTheme}><MemoryRouter><ProjectFinanceScreen /></MemoryRouter></FluentProvider>,
+    );
+    await waitFor(() => expect(run.mock.calls.length).toBeGreaterThan(3));
+    const names = (await Promise.all(run.mock.calls.map(([job]) => planOf(job))))
+      .slice(1).map((p) => p.writes[0]!.data?.vsb_name);
+    expect(names).toEqual(expect.arrayContaining(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]));
+    expect(names.length).toBeGreaterThan(2);
+  });
+
+  it("UT-FIN-915 a failed Fabric debt read keeps the Fabric-built seeds withheld (Equity and VAT only)", async () => {
+    state.project = { ...baseProject, id: "p-1", financingOptions: null };
+    state.inputs = [];
+    state.debt = { ...NO_DEBT, connected: true, error: new Error("Fabric unreachable") };
+    renderScreen();
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
+    const plans = await Promise.all(run.mock.calls.map(([job]) => planOf(job)));
     expect(plans.slice(1).map((p) => p.writes[0]!.data?.vsb_name)).toEqual(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]);
   });
 

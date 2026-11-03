@@ -9,11 +9,13 @@
  *  - the active turbine count (generator types → turbines, D8);
  *  - at Save time, the tranche duplicate check (`UniqueKeyString`, all projects as the canvas).
  *
- * NOT CONNECTED (D2): `Assumptions Debt SQL`, `Assumptions Banks SQL` and `AssumptionsKfWTrancheSQL`
- * are Fabric SQL (`[dbo].[AssumptionsDebt]` / `[AssumptionsBanks]` / `[AssumptionsKfWTranche]`),
- * not Dataverse. `useDebtAssumptions`, `useBanks` and `useKfwTranches` return no rows; the standard
- * assumptions are therefore empty, the bank and KfW pickers offer only the stored value, and the
- * Senior Debt, DSRA/DSRF and Decommissioning seeds are withheld (`seedsAllowed`).
+ * FABRIC SQL (connected 3 Nov 2026): `Assumptions Debt SQL`, `Assumptions Banks SQL` and
+ * `AssumptionsKfWTrancheSQL` (`[dbo].[AssumptionsDebt]` / `[AssumptionsBanks]` /
+ * `[AssumptionsKfWTranche]`, D54) are read only by `useDebtAssumptions` (the project country's rows,
+ * split by `debttype`), `useBanks` and `useKfwTranches`. They feed the senior-debt, DSRA/DSRF and
+ * decommissioning standards and seeds, and the bank and KfW pickers. While the debt read is loading
+ * or has failed, the Screen treats it as unavailable, so no Fabric-built seed is written from empty
+ * rows (`seedsAllowed`).
  *
  * WRITES — `WritePlan`s from `rules.ts`, run in order by `usePlanWrite`:
  *  - on visit: the guarded `'Financing Options'` patch (`financingOptionOnVisit`, SOURCE DEFECT 2)
@@ -39,15 +41,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_FINANCE, ES_PLANT } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
-import { notConnected, type ScreenData } from "@/data/notConnected";
+import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import {
-  countActiveTurbines, findFinancingInputsByKey, listFinancingCategories, listFinancingInputs,
-  listRepaymentAmounts, listStepUpMargins, loadFinanceProject, loadTotalDevexCapex,
+  countActiveTurbines, findFinancingInputsByKey, listBanks, listDebtAssumptions,
+  listFinancingCategories, listFinancingInputs, listKfwTranches, listRepaymentAmounts,
+  listStepUpMargins, loadFinanceProject, loadTotalDevexCapex,
 } from "@/data/finance";
-import type {
-  BankRow, DebtAssumptionSlices, FinanceProject, FinancingCategory, FinancingInputRow,
-  StoredRepaymentRow, StoredStepUpMarginRow,
+import {
+  sliceDebtAssumptions,
+  type BankRow, type DebtAssumptionSlices, type FinanceProject, type FinancingCategory,
+  type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "./rules";
 
 /** The Dataverse entity sets the screen reads and writes. */
@@ -88,19 +92,39 @@ export function useFinancingCategories(): ScreenData<FinancingCategory[]> {
   return out<FinancingCategory[]>(q, []);
 }
 
-/** `Assumptions Debt SQL` — Fabric SQL, NOT connected (D2). No rows, ever. */
-export function useDebtAssumptions(): ScreenData<DebtAssumptionSlices> {
-  return notConnected<DebtAssumptionSlices>({ debt: [], decommissioning: [], dsra: [] });
+const NO_SLICES: DebtAssumptionSlices = { debt: [], decommissioning: [], dsra: [] };
+
+/** `Assumptions Debt SQL` (Fabric SQL, read only) for the project's country, split by `debttype`. */
+export function useDebtAssumptions(countryName: string | null): ScreenData<DebtAssumptionSlices> {
+  const q = useQuery({
+    queryKey: qk.financeReference("debtAssumptions", countryName ?? "-"),
+    queryFn: async () => sliceDebtAssumptions(await listDebtAssumptions(countryName!)),
+    enabled: Boolean(countryName),
+    staleTime: REFERENCE_STALE,
+  });
+  // Once enabled, `isLoading` is true from the first render until the rows are in (the visit seeds
+  // wait for it, see the Screen); with no country the read never runs and there is no standard.
+  return out<DebtAssumptionSlices>(q, NO_SLICES);
 }
 
-/** `Assumptions Banks SQL` — Fabric SQL, NOT connected (D2). */
+/** `Assumptions Banks SQL` (Fabric SQL, read only) — the bank picker. */
 export function useBanks(): ScreenData<BankRow[]> {
-  return notConnected<BankRow[]>([]);
+  const q = useQuery({
+    queryKey: qk.financeReference("banks"),
+    queryFn: listBanks,
+    staleTime: REFERENCE_STALE,
+  });
+  return out<BankRow[]>(q, []);
 }
 
-/** `AssumptionsKfWTrancheSQL` — Fabric SQL, NOT connected (D2). */
+/** `AssumptionsKfWTrancheSQL` (Fabric SQL, read only) — the KfW-Tranche picker. */
 export function useKfwTranches(): ScreenData<string[]> {
-  return notConnected<string[]>([]);
+  const q = useQuery({
+    queryKey: qk.financeReference("kfwTranches"),
+    queryFn: listKfwTranches,
+    staleTime: REFERENCE_STALE,
+  });
+  return out<string[]>(q, []);
 }
 
 /** `colFinancingInputInProject` — needs the categories for each row's `Order`. */

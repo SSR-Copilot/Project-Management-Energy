@@ -32,11 +32,11 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Button, Dropdown, MessageBar, MessageBarBody, Option, Switch, Text, Tooltip,
+  Button, Dropdown, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, 
+  AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, CircleRegular, RadioButtonFilled,
   DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
@@ -47,7 +47,7 @@ import {
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_FINANCE } from "@/data/dataverseNames";
-import { palette, space } from "@/theme/tokens";
+import { media, palette, space } from "@/theme/tokens";
 import {
   CARD_FORMAT, CATEGORY_CARD_ORDERS, CATEGORY_ORDER, CHOICE_LABEL, DSRA_TOGGLE_LABEL,
   FINANCE_SCREEN_TEXT, FINANCING_OPTION_LABEL, FIN_LABEL, FREQUENCY_OPTIONS, INPUT_COL, MSG,
@@ -93,8 +93,12 @@ import {
 // 12 px); `gblAppSizes.Position.X` = 20, `gblAppSizes.Padding.Page` = 10. The shell's content area
 // scrolls, so the page grows with its content and never clips itself to the viewport.
 const useStyles = makeStyles({
-  /** The command bar's first icon starts on the left edge of the content under it (PO, 21 Oct 2026); `CommandBar` has no inset of its own. Category bars over the first caption ("Free Equity [%]", "Base Rate", …); the tranche bar over "Term Sheet". */
-  commandBar: { paddingLeft: "20px" },
+  /**
+   * The card's command bar (`pcf_…_CommandBar`, a PowerCAT bar) draws its first icon 7 px in from
+   * the card edge, measured on the live canvas at 100 % (3 Nov 2026; F5's X 20 came from a zoomed
+   * screenshot). `CommandBar` has no inset of its own.
+   */
+  commandBar: { paddingLeft: "7px" },
   // The right content: white, vertical, PaddingLeft 15 / PaddingRight 15, no gap. It fills the shell's
   // content area and does not scroll itself: the lock banner and Financing Options stay at the top and
   // the category gallery (`Height: Parent.Height - 130`, Y:2432) is the scroller (PO screenshots, 21 Oct 2026).
@@ -113,43 +117,55 @@ const useStyles = makeStyles({
   lockText: { color: "#ffffff" },
   // `con_ProjectFinance_DisplayProjectBodyRight_FinancingOptions`: 110 high, PaddingTop 10; the
   // caption (Semibold) at X 20, Y 10 and the radio under it.
+  // Caption at Y 10 (ManualLayout: the container's PaddingTop moves nothing).
   options: {
     display: "flex", alignItems: "flex-start", minHeight: "110px", boxSizing: "border-box", flex: "none",
-    paddingTop: "20px", paddingLeft: "20px", paddingRight: "20px",
+    // PaddingLeft 17: the caption 20 px right of the cards' edge, as measured (the legend adds 3).
+    paddingTop: "10px", paddingLeft: "17px", paddingRight: "20px",
     "& legend": { fontWeight: 600 },
   },
   // `gal_ProjectFinance_DisplayProject_Body_Form_FinancingInputs`: X 20, `Parent.Width - 40` wide,
   // TemplatePadding 0, `Height: Parent.Height - 130` — the list scrolls on its own, its scrollbar at
   // the right of the list; a subtle shadow on its right edge (PO screenshot).
+  // Live canvas (3 Nov 2026, 100 %): the cards start 20 px LEFT of the Financing Options caption, so
+  // the gallery sits on the page padding (the 1.21.709 YAML's X 20 is not what the live app shows).
   gallery: {
-    display: "flex", flexDirection: "column", marginLeft: "20px", marginRight: "20px", minWidth: 0,
+    display: "flex", flexDirection: "column", marginLeft: 0, marginRight: 0, minWidth: 0,
     flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden",
     boxShadow: "inset -1px 0 0 rgba(0, 0, 0, 0.06), 2px 0 4px -2px rgba(0, 0, 0, 0.12)",
   },
   // `con_…_FinancingInputs_Card`: white, no border, `Parent.Width - 10` wide.
-  card: { backgroundColor: palette.white, marginRight: "10px", minWidth: 0, flex: "none" },
-  // `con_Generators_…_GeneratorType_CardHeader_1` (canvas 42 high; 46 in the PO screenshot): the name at
-  // X 10, the status pill and the chevron at the right; a 1 px RGBA(0, 120, 212, 1) rule under it.
+  // The card container sets no `DropShadow`, so the GroupContainer default draws a soft 1-px shadow under
+  // each card (the grey line between the cards on the live canvas).
+  card: {
+    backgroundColor: palette.white, marginRight: "10px", minWidth: 0, flex: "none",
+    boxShadow: "0 1px 1.5px rgba(0, 0, 0, 0.13)",
+  },
+  // `con_Generators_…_GeneratorType_CardHeader_1`: 42 high (measured on the live canvas at 100 %, 3 Nov
+  // 2026; F6's 46 came from a zoomed screenshot); the name at X 10, the status pill and the chevron at
+  // the right; a 1 px RGBA(0, 120, 212, 1) rule at Y 41.
   cardHeader: {
-    display: "flex", alignItems: "center", gap: "10px", height: "46px", boxSizing: "border-box",
+    display: "flex", alignItems: "center", gap: "10px", height: "42px", boxSizing: "border-box",
     paddingLeft: "10px", paddingRight: "2px",
     borderBottom: "1px solid rgb(0, 120, 212)",
   },
-  // `txt_Generators_…_GeneratorType_1`: Text@0.0.51, Regular; ~15 px in the PO screenshot.
+  // `txt_Generators_…_GeneratorType_1`: Text@0.0.51, Regular, its default 14 px.
   cardTitle: {
-    flexGrow: 1, minWidth: 0, fontSize: "15px", fontWeight: 400, color: palette.black,
+    flexGrow: 1, minWidth: 0, fontSize: "14px", fontWeight: 400, color: palette.black,
     textAlign: "left", justifyContent: "flex-start",
     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
   },
-  // `ico_…_Up_1` / `_Down_1`: a 20 x 18 icon in `gblAppColors.Icon.Color` (themePrimary).
-  chevron: { minWidth: "30px", width: "30px", height: "30px", color: palette.themePrimary },
+  // `ico_…_Up_1` / `_Down_1`: a 20 x 18 icon in `gblAppColors.Icon.Color` (themePrimary), its glyph
+  // 32 px right of the status pill and 8 px in from the card edge (live canvas).
+  chevron: { minWidth: "30px", width: "30px", height: "30px", color: palette.themePrimary, marginLeft: "16px" },
   // `con_Generator_GeneratorStatus_1` / `con_FinancingInputs_SeniorDebt_Status`: 24 high, a pill
   // (radius 34), 1 px border Green (Active) or Grayscale10, Fill SuccessLight or Grayscale40; the label
   // is ExtraSmall (9 pt), Grayscale00, centred, 80 wide.
-  // Canvas 24 high, label 80 wide; ~90 x 28 in the PO screenshot.
+  // Canvas 24 high, label 80 wide — 81 x 25 measured on the live canvas at 100 % (F6's ~90 x 28 came
+  // from a zoomed screenshot).
   status: {
     display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none",
-    height: "28px", minWidth: "90px", boxSizing: "border-box", paddingLeft: "8px", paddingRight: "8px",
+    height: "24px", minWidth: "80px", boxSizing: "border-box", paddingLeft: "6px", paddingRight: "6px",
     fontSize: "12px", color: palette.Grayscale00,
     borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
     borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
@@ -163,8 +179,9 @@ const useStyles = makeStyles({
     backgroundColor: palette.Grayscale40,
     borderTopColor: palette.Grayscale10, borderRightColor: palette.Grayscale10, borderBottomColor: palette.Grayscale10, borderLeftColor: palette.Grayscale10,
   },
-  // `con_Finance_…_FinanceInputType_CardDetails`: vertical, gap 10; command bars are 40 high.
-  cardBody: { display: "flex", flexDirection: "column", gap: "10px", paddingTop: "5px", paddingBottom: "10px" },
+  // `con_Finance_…_FinanceInputType_CardDetails`: vertical, gap 10, no padding — the 40-high command bar
+  // right under the header rule, then the 70-high tile rows (rule → next card = 120 on the live canvas).
+  cardBody: { display: "flex", flexDirection: "column", gap: "10px" },
   /*
    * The field rows (`con_…_General_Fields`, `con_Decommissioning_Data_Display_Tranche_1`, …): PaddingTop 10,
    * 70-high tiles, each a View-mode `TextInput@0.0.54` (the filled grey box, PO screenshot) under a
@@ -173,30 +190,48 @@ const useStyles = makeStyles({
    * (the canvas wraps 320-wide tiles, `lbl_ColumnsToShowValue = RoundDown((Width - 30) / 320)`).
    */
   fields: {
-    // 320-wide columns as the canvas wraps them, at most four (the PO screenshots): 4 at 1919, 3 at 1366.
-    display: "grid", gridTemplateColumns: "repeat(auto-fill, 320px)", maxWidth: "1280px", paddingTop: "10px", rowGap: "4px",
+    // 320-wide columns as the canvas wraps them, `lbl_ColumnsToShowValue = RoundDown((Width - 30) / 320)`
+    // — five on the live canvas at 1700 (3 Nov 2026; the earlier "at most four" came from a zoomed
+    // screenshot). A 70-high tile = caption, the 32-high box 25 below the tile top, #F5F5F5.
+    // PaddingTop 10 (`con_…_General_Fields`, `con_Decommissioning_Data_Display_Tranche_1`, …); the
+    // Equity / VAT rows have none (`fieldsRow`).
+    display: "grid", gridTemplateColumns: "repeat(auto-fill, 320px)", paddingTop: "10px",
     "& > .fui-Field": {
       minWidth: 0, minHeight: "70px", boxSizing: "border-box", paddingLeft: "20px", paddingRight: "20px", rowGap: "5px",
     },
-    "& .fui-Field__label": { fontWeight: 600, fontSize: "14px" },
+    // Caption cap ~3 below the tile top, the box 25 below it (live canvas).
+    "& .fui-Field__label": {
+      fontWeight: 600, fontSize: "14px", lineHeight: "20px", paddingTop: 0, paddingBottom: 0, marginBottom: 0,
+    },
+    "& .fui-Input": { minHeight: "32px", backgroundColor: "#f5f5f5" },
     "& .fui-Input__input": { color: palette.black },
   },
+  // Equity / VAT: 300-wide tiles with 260-wide boxes (live canvas).
   fieldsRow: {
-    display: "flex", flexWrap: "wrap",
-    "& > .fui-Field": { width: "320px", paddingRight: "10px" },
+    display: "flex", flexWrap: "wrap", paddingTop: 0,
+    "& > .fui-Field": { width: "300px", paddingRight: "20px" },
   },
   // DSRA / DSRF: `TextInput` `Appearance: FilledLighter` on white — plain text, no box — `FontWeight:
   // Semibold`; the captions `lbl_Decommissioning_Data_Display_Card_*_3` are Regular, Grayscale10, PaddingLeft 10.
   dsraFields: {
-    "& .fui-Field__label": { fontWeight: 400, color: palette.Grayscale10, paddingLeft: "10px" },
+    "& .fui-Field__label": { fontWeight: 400, color: palette.Grayscale10, paddingLeft: "10px", paddingTop: "2px" },
     "& .fui-Input": {
       borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent",
       backgroundColor: "transparent", "::after": { display: "none" },
     },
     "& .fui-Input__input": { fontWeight: 600 },
+    // The value text 32 below its caption (live canvas).
+    "& > .fui-Field": { rowGap: "6px" },
   },
-  // `con_Decommissioning_Data_Display_Card_Duration_of_Saving_3` (Type): full width, 55 high.
-  dsraType: { gridTemplateColumns: "320px", "& > .fui-Field": { minHeight: "55px" } },
+  // `con_Decommissioning_Data_Display_Card_Duration_of_Saving_3` (Type): full width, 55 high, right
+  // under the buttons (no gap, caption 10 below the buttons; live canvas, 3 Nov 2026).
+  dsraType: { gridTemplateColumns: "320px", paddingTop: 0, marginTop: "-7px", "& > .fui-Field": { minHeight: "55px" } },
+  // A tranche's details: the tags and field blocks with no gap; each block is rows x 70 high, its
+  // PaddingTop 10 overflowing into the next tag (live canvas: "Conditions" 180 below "General").
+  trancheBody: { display: "flex", flexDirection: "column" },
+  trancheFields: { marginBottom: "-10px" },
+  // The other DSRA tiles follow the Type tile with no gap; the card ends 322 below its rule.
+  dsraRest: { marginTop: "-20px", paddingBottom: "17px" },
   /*
    * `DisplayMode.Disabled` on a modern `TextInput` (`txt_EquityData_ShareholderLoanEUR`,
    * `txt_DecommissioningData_End_Date_of_Saving_1`): white box, grey border, grey text (PO screenshot) —
@@ -215,28 +250,45 @@ const useStyles = makeStyles({
   },
   // `con_SeniorDebt_Data_Display_Card_General_Tag`: 40 high; the Semibold caption at X 20, Y 15 and a
   // 5 px Grayscale20 bar under it at Y 38, as wide as the caption box.
+  // The 5-px separator sits at Y 38 of the 40-high tag and is clipped: 2 px of Grayscale20 show.
   tag: {
-    display: "flex", flexDirection: "column", height: "40px", boxSizing: "border-box",
+    display: "flex", flexDirection: "column", height: "40px", boxSizing: "border-box", overflow: "hidden",
     paddingTop: "15px", marginLeft: "20px", marginRight: "20px",
-    fontWeight: 600, color: palette.black,
+    fontWeight: 600, color: palette.black, lineHeight: "20px",
   },
-  tagRule: { display: "block", height: "5px", marginTop: "3px", backgroundColor: palette.Grayscale20 },
+  tagRule: { display: "block", flex: "none", height: "2px", marginTop: "3px", backgroundColor: palette.Grayscale20 },
   // `gal_SeniorDebt_Data_Display_TrancheData_Card`: centred, `Parent.Width - 30` wide, PaddingBottom 20.
   trancheList: { display: "flex", flexDirection: "column", marginLeft: "15px", marginRight: "15px", paddingBottom: "20px" },
   // `con_FinancingInput_…_SeniorDebt_CardHeader`: 42 high, DropShadow Semilight, the name Semibold at
   // X 30, a 2 px Grayscale20 line at Y 40.
   tranche: { backgroundColor: palette.white },
+  // Live canvas (3 Nov 2026): a folded tranche row shows no line or shadow; an expanded one has the
+  // Semilight drop shadow under its header (`trancheHeaderOpen`).
   trancheHeader: {
     display: "flex", alignItems: "center", gap: "10px", height: "42px", boxSizing: "border-box",
     paddingLeft: "5px", paddingRight: "2px",
-    boxShadow: "0 1.6px 3.6px rgba(0, 0, 0, 0.13), 0 0.3px 0.9px rgba(0, 0, 0, 0.11)",
-    borderBottom: `2px solid ${palette.Grayscale20}`,
   },
-  trancheTitle: { fontWeight: 600 },
-  trancheSelected: { backgroundColor: palette.neutralLighter },
+  // The Semilight shadow as the live canvas draws it — BELOW the header only, five rows fading
+  // #DBDBDB → #FEFEFE (sampled 3 Nov 2026); a blurred box-shadow bled onto the top and sides.
+  trancheHeaderOpen: {
+    boxShadow: "0 1px 0 #dbdbdb, 0 2px 0 #e7e7e7, 0 3px 0 #f1f1f1, 0 4px 0 #f7f7f7, 0 5px 0 #fbfbfb",
+  },
+  // The name 30 px into the row (45 from the card edge; live canvas, 3 Nov 2026): the dot box, the
+  // header gap cancelled, then 5 of button padding.
+  trancheTitle: { fontWeight: 600, paddingLeft: "5px" },
+  // A 16-px ring 6 px into the row (the 20-px glyph box puts it 2 px in); filled when selected. In the
+  // theme blue and clickable like the name beside it (user, 3 Nov 2026).
+  trancheDot: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", cursor: "pointer",
+    width: "20px", height: "20px", marginLeft: "-1px", marginRight: "-10px", fontSize: "20px", color: palette.themePrimary,
+    "& svg": { width: "20px", height: "20px" },
+  },
+  trancheDotLocked: { cursor: "default", color: tokens.colorNeutralForegroundDisabled },
+  // No row fill: the canvas header sets no `Fill`; the selection shows only through the filled dot.
+  trancheSelected: {},
   // `con_DSRA_DSRF_Data_Buttons`: 60 high; Edit (80 wide, X 15) then Activate / Deactivate (110 wide,
   // X 110), both Transparent with a 2 px themePrimary border and themePrimary text.
-  dsraButtons: { display: "flex", alignItems: "flex-start", gap: "15px", height: "60px", paddingTop: "5px", paddingLeft: "15px", boxSizing: "border-box" },
+  dsraButtons: { display: "flex", alignItems: "flex-start", gap: "15px", height: "60px", paddingTop: "10px", paddingLeft: "15px", boxSizing: "border-box" },
   dsraButton: {
     color: palette.themePrimary,
     borderTopWidth: "2px", borderRightWidth: "2px", borderBottomWidth: "2px", borderLeftWidth: "2px",
@@ -256,10 +308,58 @@ const useStyles = makeStyles({
   buttons: { display: "flex", gap: space.s, flexWrap: "wrap" },
   panel: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
   pair: { display: "flex", gap: "20px", alignItems: "flex-end" },
-  // The tranche panel columns (350 / 340 / 350); they wrap when the panel is narrower.
-  trancheColumns: { display: "flex", flexWrap: "wrap", columnGap: "20px", rowGap: space.m, alignItems: "flex-start" },
-  trancheColumn: { display: "flex", flexDirection: "column", gap: space.m, flex: "1 1 300px", maxWidth: "350px", minWidth: 0 },
-  pairItem: { flexGrow: 1, flexBasis: 0, minWidth: 0 },
+  // The tranche panel columns `InpForm_1` / `_2` (Individual only) / `_3`: 350 / 340 / 350 wide with
+  // `PaddingLeft 5`, `PaddingTop 10`, their fields at X 20 and 280 wide (canvas Add Tranche, 3 Nov
+  // 2026: boxes at 25 and 375 of the 700) — 700 or 1040 in all (`350*2(+340)`). They never wrap: the
+  // panel's scrollbar overlays the last column's right padding, as the canvas one does.
+  trancheSkin: { "&.canvas-panel .canvas-panel-body": { paddingTop: "10px", paddingRight: 0, paddingBottom: 0, paddingLeft: 0 } },
+  trancheColumns: {
+    display: "grid", gridAutoFlow: "column", gridAutoColumns: "350px", alignItems: "start",
+    [media.belowMd]: { gridAutoFlow: "row", gridAutoColumns: "minmax(0, 1fr)" },
+  },
+  trancheColumn: {
+    display: "flex", flexDirection: "column", minWidth: 0, boxSizing: "border-box",
+    paddingLeft: "25px", paddingRight: "45px",
+  },
+  trancheColumnMid: { paddingLeft: "20px", paddingRight: "20px", width: "340px" },
+  // `lbl_…_DSCR`: a 30-high caption container, no box.
+  trancheSection: { flexShrink: 0, height: "30px", lineHeight: "20px", fontSize: "14px", fontWeight: 600, color: "#242424" },
+  // `lbl_…_InterestRate`: 40 high, the caption 5 down and a 300-wide rule 35 down.
+  trancheRuleTitle: {
+    boxSizing: "border-box", flexShrink: 0, height: "36px", marginBottom: "4px", width: "300px", paddingTop: "5px",
+    lineHeight: "20px", fontSize: "14px", fontWeight: 600, color: "#242424",
+    borderBottom: "1px solid #e3e3e3", boxShadow: "0 1px 0 #f1f1f1",
+  },
+  // `lbl_SeniorDebtData_TrancheStatus_ErrorMessage`: at Y 114 of the 130-high Status container.
+  trancheStatusError: { display: "block", height: "16px", lineHeight: "16px", marginTop: "-17px", marginBottom: "-1px", paddingLeft: "5px", color: "#d20532", fontSize: "12px" },
+  // `ico_…_Financial_Close_Reset`: 20 px, at the date box's right edge + 8, centred on the box.
+  trancheDateRow: { position: "relative" },
+  trancheReset: {
+    position: "absolute", left: "calc(100% + 8px)", top: "25px", height: "32px", display: "flex", alignItems: "center",
+    "& button": { minWidth: "20px", width: "20px", height: "20px", paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0 },
+    "& button svg": { width: "20px", height: "20px" },
+  },
+  /*
+   * The Finance panels' canvas chrome (`con_GeneralData_RightPanel_*_Form`): the 48-high header
+   * (canvas.css), a 45-high button row with no rule above it, and no focus box on the ✕ the drawer
+   * focuses on open — as the Revenues panels (D57).
+   */
+  panelSkin: {
+    "&.canvas-panel .canvas-panel-footer": { height: "45px", borderTopColor: "transparent" },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+  },
+  // A field of a side-by-side pair (DSCR Contracted / Uncontracted, …): it and its message stay inside
+  // its half — the message wraps instead of running under the neighbour (the 310-wide columns).
+  pairItem: {
+    flexGrow: 1, flexBasis: 0, minWidth: 0,
+    "& .fui-Field, & .fui-Input, & .fui-Dropdown": { minWidth: 0 },
+    "& .fui-Field__validationMessage": { minWidth: 0, overflowWrap: "anywhere", whiteSpace: "normal" },
+  },
   withAction: { display: "flex", gap: space.xs, alignItems: "flex-end" },
   grow: { flexGrow: 1, minWidth: 0 },
   dropdown: { minWidth: "0px", width: "100%" },
@@ -267,6 +367,9 @@ const useStyles = makeStyles({
   sectionTitle: { fontWeight: tokens.fontWeightSemibold },
   resetIcon: { color: palette.themePrimary, minWidth: "32px" },
 });
+
+/** `canvas.css` `.pm-canvas-panel` / `.finance-canvas-panel`: the canvas field metrics of the Finance panels. */
+const FINANCE_PANEL = "pm-canvas-panel finance-canvas-panel";
 
 /* ═══════════════════════════════════════════════════════════════ value reads ══ */
 
@@ -513,7 +616,7 @@ export default function ProjectFinanceScreen() {
   const project = projectQ.data;
   const categoriesQ = useFinancingCategories();
   const categories = categoriesQ.data;
-  const slicesQ = useDebtAssumptions();
+  const slicesQ = useDebtAssumptions(project?.countryName ?? null);
   const inputsQ = useFinancingInputs(projectId, categories);
   const repaymentsQ = useRepaymentAmounts(projectId);
   const stepUpsQ = useStepUpMargins(projectId);
@@ -523,7 +626,12 @@ export default function ProjectFinanceScreen() {
   const turbinesQ = useActiveTurbineCount(projectId);
   const writes = useFinanceWrites(projectId);
 
-  const assumptionsConnected = slicesQ.connected;
+  // The debt standard is usable only once its rows are in: while they load, or if the Fabric read
+  // fails, the Fabric-built seeds stay withheld and the SQL resets stay disabled (no "standard"
+  // zeros from an empty row set).
+  const assumptionsLoading = slicesQ.isLoading;
+  const assumptionsConnected = Boolean(project?.countryName) && slicesQ.connected
+    && !assumptionsLoading && !slicesQ.error;
   const loading = projectQ.isLoading || categoriesQ.isLoading || inputsQ.isLoading;
   const loadError = projectQ.error ?? categoriesQ.error ?? inputsQ.error ?? repaymentsQ.error ?? stepUpsQ.error;
   const inputs = inputsQ.data;
@@ -556,6 +664,9 @@ export default function ProjectFinanceScreen() {
   const visited = useRef<string | null>(null);
   useEffect(() => {
     if (!project || !projectId || loading || loadError || categories.length === 0) return;
+    // Wait for the debt assumptions: the Senior Debt, DSRA/DSRF and Decommissioning seeds are built
+    // from them (a failed read still lets Equity / VAT seed, `seedsAllowed`).
+    if (assumptionsLoading) return;
     if (visited.current === projectId) return;
     visited.current = projectId;
     const optionPlan = planFinancingOptionOnVisit(project);
@@ -569,7 +680,7 @@ export default function ProjectFinanceScreen() {
       for (const job of seedJobs(seeds, project)) await writes.run(job);
     })();
     // The visit writes depend only on the loaded rows of this project.
-  }, [project, projectId, loading, loadError, categories, inputs, standard, dsraStandard, decStandard, tech, assumptionsConnected, writes]);
+  }, [project, projectId, loading, loadError, categories, inputs, standard, dsraStandard, decStandard, tech, assumptionsConnected, assumptionsLoading, writes]);
 
   /* ─────────────────────────────────────────────────────────── local state ── */
 
@@ -617,7 +728,8 @@ export default function ProjectFinanceScreen() {
   const locked = !loading && isPageLocked(project);
   // `gal_…_FinancingInputs.Visible: And(!IsBlank('Cluster State'.Name), 'Cluster State'.Name <> "Draft")`.
   const galleryVisible = Boolean(project?.clusterStateName) && project?.clusterStateName !== "Draft";
-  const financingOption = project?.financingOptions ?? null;
+  const [pendingOption, setPendingOption] = useState<number | null>(null);
+  const financingOption = pendingOption ?? project?.financingOptions ?? null;
 
   const trancheName = (i: FinancingInputRow | null): string => (i === null ? "" : trancheDisplayName(
     num(i.raw[INPUT_COL.trancheStatus]),
@@ -718,7 +830,13 @@ export default function ProjectFinanceScreen() {
     if (vatInput && vatInput.raw[INPUT_COL.isDeactivatedByButton] !== CHOICE_FINANCE.yesNo.yes) {
       setFolded(new Set(cards.map((c) => c.order)));
     }
-    await writes.run(financingOptionJob(planFinancingOption(project, option, inputs)));
+    // The radio moves at once (as the canvas control does); the stored value takes over after the refresh.
+    setPendingOption(option);
+    try {
+      await writes.run(financingOptionJob(planFinancingOption(project, option, inputs)));
+    } finally {
+      setPendingOption(null);
+    }
   };
 
   const saveTranche = async () => {
@@ -783,7 +901,15 @@ export default function ProjectFinanceScreen() {
     const toggleFold = () => setTrancheFolded((m) => new Map(m).set(i.id, !isFolded));
     return (
       <div key={i.id} className={mergeClasses(s.tranche, selected && s.trancheSelected)} aria-selected={selected}>
-        <div className={s.trancheHeader}>
+        <div className={mergeClasses(s.trancheHeader, !isFolded && s.trancheHeaderOpen)}>
+          {/* `img_…_SeniorDebt_CardHeader_RowSelectionDot`: an 18 x 18 SVG at X 5 — an empty ring, filled
+              for the selected tranche (`ThisItem = locSelectedSeniorDebtTranche`). */}
+          {/* Decorative (`aria-hidden`): no canvas test id, as the other decorative icons (D29). */}
+          {/* Clicking the dot selects as the name button does; the button carries the accessible action. */}
+          <span className={mergeClasses(s.trancheDot, locked && s.trancheDotLocked)} aria-hidden
+            onClick={locked ? undefined : () => setSelectedTrancheId(selected ? null : i.id)}>
+            {selected ? <RadioButtonFilled /> : <CircleRegular />}
+          </span>
           <Tooltip content={FIN_LABEL.seniorDebtTooltip} relationship="description">
             <Button
               appearance="transparent" className={mergeClasses(s.cardTitle, s.trancheTitle)} aria-label={FIN_LABEL.seniorDebtTooltip} disabled={locked}
@@ -809,9 +935,9 @@ export default function ProjectFinanceScreen() {
           )}
         </div>
         {isFolded ? null : (
-          <div className={s.cardBody}>
+          <div className={s.trancheBody}>
             <Tag caption={FIN_LABEL.generalTag} />
-            <div className={s.fields}>
+            <div className={mergeClasses(s.fields, s.trancheFields)}>
               {field(TRANCHE_FORM_LABEL.status, label(TRANCHE_STATUS_LABEL, num(r[INPUT_COL.trancheStatus])), "txt_SeniorDebt_Data_Display_Card_Status")}
               {field(TRANCHE_FORM_LABEL.bank, bankDisplayName(str(r[INPUT_COL.bank]), str(r[INPUT_COL.otherBankName]), banks), "txt_SeniorDebt_Data_Display_Card_Bank")}
               {field(TRANCHE_FORM_LABEL.kfwTranche, str(r[INPUT_COL.kfwTrancheValue]) ?? "", "txt_SeniorDebt_Data_Display_Card_Status_1")}
@@ -823,7 +949,7 @@ export default function ProjectFinanceScreen() {
               {field(FIN_LABEL.repaymentProfile, label(CHOICE_LABEL.repaymentProfile, num(r[INPUT_COL.repaymentProfile])), "txt_SeniorDebt_Data_Display_Card_Status_2")}
             </div>
             <Tag caption={FIN_LABEL.conditionsTag} />
-            <div className={s.fields}>
+            <div className={mergeClasses(s.fields, s.trancheFields)}>
               {field(TRANCHE_FORM_LABEL.drawdown, label(CHOICE_LABEL.drawdown, num(r[INPUT_COL.drawdown])), "txt_SeniorDebt_Data_Display_Card_Drawdown")}
               {field(FIN_LABEL.dscrContracted, dscr(num(r[INPUT_COL.dscrContractedDecimal])), "txt_SeniorDebt_Data_Display_Card_DSCRContracted")}
               {field(FIN_LABEL.dscrUncontracted, dscr(num(r[INPUT_COL.dscrUncontractedDecimal])), "txt_SeniorDebt_Data_Display_Card_DSCRUncontracted")}
@@ -878,7 +1004,7 @@ export default function ProjectFinanceScreen() {
         <div className={mergeClasses(s.fields, s.dsraFields, s.dsraType)}>
           {field(FIN_LABEL.type, dsraInput ? (isDsrf ? "DSRF" : "DSRA") : "", "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_3", cardStd.dsra.locIsStandardType)}
         </div>
-        <div className={mergeClasses(s.fields, s.dsraFields)}>
+        <div className={mergeClasses(s.fields, s.dsraFields, s.dsraRest)}>
           {isDsrf ? field(TRANCHE_FORM_LABEL.commitmentFeeValue, fmtCard(num(raw[INPUT_COL.commitmentFeeValue]), CARD_FORMAT.dsraCommitmentFee), "txt_Decommissioning_Data_Display_Card_Cost_of_Decommissioning_3", cardStd.dsra.locIsStandardCommitmentFee) : null}
           {isDsrf ? field(TRANCHE_FORM_LABEL.commitmentFeeFreePeriod, dsraPeriodLabel(num(raw[INPUT_COL.commitmentFeePeriodYear]), num(raw[INPUT_COL.commitmentFeePeriodMonth])), "txt_Decommissioning_Data_Display_Card_Cost_of_Guarantee_3", cardStd.dsra.locIsStandardCommitmentFeeFreeDuration) : null}
           {field(FIN_LABEL.baseRate, label(BASE_RATE_OPTION_LABEL, num(raw[INPUT_COL.baseRate])), "txt_Decommissioning_Data_Display_Card_Date_of_Issue_3", cardStd.dsra.locIsStandardBaseRate)}
@@ -988,12 +1114,6 @@ export default function ProjectFinanceScreen() {
       {loading ? <LoadingOverlay mode="inline" label={FIN_LABEL.loading} /> : null}
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="finance" />
 
-      {!assumptionsConnected ? (
-        <MessageBar intent="info" data-testid="finance-assumptions-not-connected">
-          <MessageBarBody>{FINANCE_SCREEN_TEXT.assumptionsNotConnected}</MessageBarBody>
-        </MessageBar>
-      ) : null}
-
       {/* `con_Milestones_Page_LockMessage_8` */}
       {locked && lockBullets.length > 0 ? (
         <div className={s.lock} data-testid="con_Milestones_Page_LockMessage_8" role="status">
@@ -1040,6 +1160,7 @@ export default function ProjectFinanceScreen() {
       {/* ─────────────────────────────────────────────────────── Equity panel ── */}
       <FormPanel
         open={panel === "equity" && equity !== null} title={FIN_LABEL.equityTitle} width="narrow"
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
         onDismiss={closePanel}
         closeTestId="ico_EditEquity_RightPanel_BodyHeaderCancel" closeLabel="ico_EditEquity_RightPanel_BodyHeaderCancel"
         footer={<PanelButtons
@@ -1103,6 +1224,7 @@ export default function ProjectFinanceScreen() {
       {/* ─────────────────────────────────────────────────────────── VAT panel ── */}
       <FormPanel
         open={panel === "vat" && vat !== null} title={FIN_LABEL.vatTitle} width="narrow" onDismiss={closePanel}
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
         closeTestId="ico_EditEquity_RightPanel_BodyHeaderCancel_1" closeLabel="ico_EditEquity_RightPanel_BodyHeaderCancel_1"
         footer={<PanelButtons
           onSave={() => {
@@ -1177,8 +1299,9 @@ export default function ProjectFinanceScreen() {
       <FormPanel
         open={panel === "tranche" && form !== null}
         title={form ? trancheFormTitle(form) : FIN_LABEL.addTrancheTitle}
-        // `Width: If(InpForm_2.Visible, 350*2+340, 350*2)` — the nearest presets (960 / 750).
-        width={form?.repaymentProfile === CHOICE_FINANCE.repaymentProfile.individual ? "wide" : "cost"}
+        // `Width: If(InpForm_2.Visible, 350*2+340, 350*2)` — exactly (FormPanel takes a px width).
+        width={form?.repaymentProfile === CHOICE_FINANCE.repaymentProfile.individual ? 1040 : 700}
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL, s.trancheSkin)} keepOpenOnOutsideClick
         onDismiss={closePanel}
         closeTestId="ico_EditEquity_RightPanel_BodyHeaderCancel_2" closeLabel="ico_EditEquity_RightPanel_BodyHeaderCancel_2"
         footer={<PanelButtons onSave={() => { void saveTranche(); }}
@@ -1188,11 +1311,6 @@ export default function ProjectFinanceScreen() {
       >
         {form && project ? (
           <div className={s.panel}>
-            {!assumptionsConnected ? (
-              <MessageBar intent="info" data-testid="finance-tranche-assumptions-not-connected">
-                <MessageBarBody>{FINANCE_SCREEN_TEXT.assumptionsNotConnected}</MessageBarBody>
-              </MessageBar>
-            ) : null}
             {/* `con_SeniorDebt_Data_RightPanel_2_SeniorDebt_Form`: horizontal; `InpForm_1` (350), `InpForm_2`
                 (340, Individual repayment only) and `InpForm_3` (350). */}
             <div className={s.trancheColumns}>
@@ -1208,7 +1326,7 @@ export default function ProjectFinanceScreen() {
                 }}
               />
               {standardAssumptionConflict(form.trancheStatus ?? -1, form.otherTranches, form.trancheId)
-                ? <Text className={s.error} role="alert">{FIN_LABEL.standardTrancheCantBeAdded}</Text> : null}
+                ? <Text className={s.trancheStatusError} role="alert">{FIN_LABEL.standardTrancheCantBeAdded}</Text> : null}
               <SelectChoice
                 caption={TRANCHE_FORM_LABEL.bank} testId="cmb_SeniorDebt_Data_Bank" required={!isStd}
                 value={form.bankId} disabled={tDisabled} choices={bankChoices} combo placeholder={FIN_LABEL.findBank}
@@ -1233,22 +1351,20 @@ export default function ProjectFinanceScreen() {
                 choices={kfwChoices}
                 onChange={(v) => patchTranche({ kfwValue: v })}
               />
-              <div className={s.withAction}>
-                <div className={s.grow}>
-                  <DateBox
-                    caption={TRANCHE_FORM_LABEL.financialClose} testId="dte_SeniorDebt_Data_Financial_Close" required
-                    value={form.financialClose} disabled={tDisabled} standard={form.financialCloseStandard === true}
-                    onChange={(v) => patchTranche({ financialClose: v, financialCloseStandard: false })}
-                  />
-                </div>
+              <div className={s.trancheDateRow}>
+                <DateBox
+                  caption={TRANCHE_FORM_LABEL.financialClose} testId="dte_SeniorDebt_Data_Financial_Close" required
+                  value={form.financialClose} disabled={tDisabled} standard={form.financialCloseStandard === true}
+                  onChange={(v) => patchTranche({ financialClose: v, financialCloseStandard: false })}
+                />
                 {!isStd ? (
-                  <ResetIcon
+                  <div className={s.trancheReset}><ResetIcon
                     tooltip={FIN_LABEL.resetFinancialClose} testId="ico_SeniorDebt_Data_Financial_Close_Reset"
                     // `DisplayMode: If(locIsFinancialCloseDateStandard, Disabled, Edit)`; the standard FC needs
                     // `months_from_cluster_5_to_fc` from Fabric SQL (D2).
                     disabled={busy || form.financialCloseStandard === true || !assumptionsConnected}
                     onClick={() => patchTranche({ financialClose: standard?.financialClose ?? null, financialCloseStandard: true })}
-                  />
+                  /></div>
                 ) : null}
               </div>
               <YearMonth
@@ -1262,27 +1378,22 @@ export default function ProjectFinanceScreen() {
                 value={form.drawdown} choices={options(CHOICE_LABEL.drawdown)} disabled={busy} readOnly={isStd}
                 onChange={(v) => patchTranche({ drawdown: v })}
               />
-              <Text className={s.sectionTitle}>{TRANCHE_FORM_LABEL.dscr}</Text>
-              <div className={s.pair}>
-                <div className={s.pairItem}>
-                  <TextField
-                    label={TRANCHE_FORM_LABEL.dscrContracted} testId="txt_SeniorDebt_Data_DSCR_Contracted" ariaLabel="txt_SeniorDebt_Data_DSCR_Contracted" maxLength={PANEL_MAX_LENGTH.other} counter={false}
-                    required={form.gearing === CHOICE_FINANCE.gearing.debtSizing}
-                    value={form.dscrContracted} disabled={tDisabled}
-                    error={validateDscr(form.dscrContracted, lang).message || undefined}
-                    onChange={(v) => patchTranche({ dscrContracted: v })}
-                  />
-                </div>
-                <div className={s.pairItem}>
-                  <TextField
-                    label={TRANCHE_FORM_LABEL.dscrUncontracted} testId="txt_SeniorDebtData_DSCR_Uncontracted" ariaLabel="txt_SeniorDebtData_DSCR_Uncontracted" maxLength={PANEL_MAX_LENGTH.other} counter={false}
-                    required={form.gearing === CHOICE_FINANCE.gearing.debtSizing}
-                    value={form.dscrUncontracted} disabled={tDisabled}
-                    error={validateDscr(form.dscrUncontracted, lang).message || undefined}
-                    onChange={(v) => patchTranche({ dscrUncontracted: v })}
-                  />
-                </div>
-              </div>
+              <Text className={s.trancheSection}>{TRANCHE_FORM_LABEL.dscr}</Text>
+              {/* Contracted over Uncontracted, each in its own 70-high container (canvas, 3 Nov 2026). */}
+              <TextField
+                label={TRANCHE_FORM_LABEL.dscrContracted} testId="txt_SeniorDebt_Data_DSCR_Contracted" ariaLabel="txt_SeniorDebt_Data_DSCR_Contracted" maxLength={PANEL_MAX_LENGTH.other} counter={false}
+                required={form.gearing === CHOICE_FINANCE.gearing.debtSizing}
+                value={form.dscrContracted} disabled={tDisabled}
+                error={validateDscr(form.dscrContracted, lang).message || undefined}
+                onChange={(v) => patchTranche({ dscrContracted: v })}
+              />
+              <TextField
+                label={TRANCHE_FORM_LABEL.dscrUncontracted} testId="txt_SeniorDebtData_DSCR_Uncontracted" ariaLabel="txt_SeniorDebtData_DSCR_Uncontracted" maxLength={PANEL_MAX_LENGTH.other} counter={false}
+                required={form.gearing === CHOICE_FINANCE.gearing.debtSizing}
+                value={form.dscrUncontracted} disabled={tDisabled}
+                error={validateDscr(form.dscrUncontracted, lang).message || undefined}
+                onChange={(v) => patchTranche({ dscrUncontracted: v })}
+              />
               <RadioChoice
                 caption={FIN_LABEL.energyYield} testId="rad_SeniorDebt_Data_EnergyYield"
                 value={form.energyYield ?? null} choices={options(CHOICE_LABEL.energyYield)} disabled={busy} readOnly={isStd}
@@ -1342,7 +1453,7 @@ export default function ProjectFinanceScreen() {
             </div>
             {/* `con_GeneralData_RightPanel_SeniorDebt_InpForm_2.Visible: Repayment Profile = Individual` */}
             {form.repaymentProfile === CHOICE_FINANCE.repaymentProfile.individual ? (
-              <div className={s.trancheColumn}>
+              <div className={mergeClasses(s.trancheColumn, s.trancheColumnMid)}>
                 {repaymentRows.map((r, i) => (
                 <TextField
                   key={r.year} label={`${r.year}${FIN_LABEL.repaymentAmountInfix}${unit}`} required
@@ -1392,7 +1503,7 @@ export default function ProjectFinanceScreen() {
                 yy={form.commitmentFeePeriodYears} mm={form.commitmentFeePeriodMonths} disabled={tDisabled}
                 onChange={(yy, mm) => patchTranche({ commitmentFeePeriodYears: yy, commitmentFeePeriodMonths: mm })}
               />
-              <Text className={s.sectionTitle}>{TRANCHE_FORM_LABEL.interestRate}</Text>
+              <Text className={s.trancheRuleTitle}>{TRANCHE_FORM_LABEL.interestRate}</Text>
               <RadioChoice
                 caption={TRANCHE_FORM_LABEL.baseRate} testId="rad_SeniorDebtData_BaseRate_2"
                 value={form.baseRate} disabled={tDisabled} choices={baseRateChoices(country)}
@@ -1541,6 +1652,7 @@ export default function ProjectFinanceScreen() {
       <FormPanel
         open={panel === "decommissioning" && decom !== null} title={FIN_LABEL.decommissioningTitle}
         width="narrow" onDismiss={closePanel}
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
         closeTestId="Icon5" closeLabel="Icon5"
         footer={<PanelButtons
           onSave={() => {
@@ -1678,6 +1790,7 @@ export default function ProjectFinanceScreen() {
       {/* ──────────────────────────────────────────────────────── DSRA/DSRF panel ── */}
       <FormPanel
         open={panel === "dsra" && dsra !== null} title={FIN_LABEL.dsraTitle} width="narrow" onDismiss={closePanel}
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
         closeTestId="ico_EditDSRA_DRSF_RightPanel_BodyHeaderCancel" closeLabel="ico_EditDSRA_DRSF_RightPanel_BodyHeaderCancel"
         footer={<PanelButtons
           onSave={() => {
@@ -1782,6 +1895,8 @@ export default function ProjectFinanceScreen() {
         open={dialog === "category" && toggleDialog !== null}
         title={toggleDialog?.title ?? ""} description={toggleDialog?.description ?? ""}
         confirmText={toggleDialog?.confirmText} cancelText={FIN_LABEL.cancel}
+        // `cmp_PopUp_Confirmation_1` — the PM pop-up: 490 wide, 40-high header, dark scrim (D57).
+        classicPopUp darkScrim
         onCancel={closeDialog}
         onConfirm={() => {
           const target = toggleTarget;
@@ -1793,7 +1908,9 @@ export default function ProjectFinanceScreen() {
         open={dialog === "trancheActivation" || dialog === "trancheDeletion"}
         title={trancheDialog.title} description={trancheDialog.description}
         confirmText={FIN_LABEL.confirm} cancelText={FIN_LABEL.cancel}
-        destructive={dialog === "trancheDeletion"}
+        // `cmp_PopUp_ActivationForSeniorDebtTranche` / `cmp_PopUp_Confirmation_3`: the PM pop-up, its
+        // confirm the themePrimary button with ✓ for the deletion too (as the live Revenues canvas, D57).
+        classicPopUp darkScrim
         onCancel={closeDialog}
         onConfirm={() => {
           const deletion = dialog === "trancheDeletion";
@@ -1810,6 +1927,7 @@ export default function ProjectFinanceScreen() {
       <ConfirmDialog
         open={dialog === "dsra"} title={dsraDialog.title} description={dsraDialog.description}
         confirmText={FIN_LABEL.confirm} cancelText={FIN_LABEL.cancel}
+        classicPopUp darkScrim
         onCancel={closeDialog}
         onConfirm={() => {
           closeDialog();

@@ -61,7 +61,8 @@
  * No flow is called from this screen: no `.Run(` occurs in `Project Finance Screen.pa.yaml`.
  * The sources `Assumptions Debt SQL`, `Assumptions Banks SQL` and `AssumptionsKfWTrancheSQL` are
  * Fabric SQL (`[dbo].[AssumptionsDebt]` … on `Lakehouse_Gold`, `References/DataSources.json`),
- * not Dataverse, and stay unconnected (D2): every rule below that reads them gets no rows.
+ * not Dataverse. They are read only (connected 3 Nov 2026, `data/finance.ts`); every rule below
+ * that reads them gets those rows, or none while the read is loading or has failed.
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, inRangeAbs, isDecimalWithPlaces, isBlank,
@@ -1344,12 +1345,14 @@ export function mmyyLabel(value: string | null | undefined): string {
 /**
  * Rule 35 — the year/month pair renders with a `0#` pad and a singular/plural switch:
  * `Text(y, "0#") & If(y <= 1, " Year ", " Years ") & Text(m, "0#") & If(m <= 1, " Month", " Months")`.
- * NOTE the canvas's `<= 1`, which makes ZERO singular: `"00 Year 00 Month"`.
+ * `"0#"` forces ONE digit and pads a single digit to two, but leaves zero as "0" — the live canvas
+ * shows "0 Year 03 Months" and "03 Years 0 Month" (3 Nov 2026; the old "00" reading was wrong).
+ * NOTE the canvas's `<= 1`, which makes ZERO singular: `"0 Year 0 Month"`.
  */
 export function yearMonthLabel(years: number | null, months: number | null): string {
   const y = years ?? 0;
   const m = months ?? 0;
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const pad = (n: number) => (n === 0 ? "0" : String(n).padStart(2, "0"));
   return `${pad(y)}${y <= 1 ? " Year " : " Years "}${pad(m)}${m <= 1 ? " Month" : " Months"}`;
 }
 
@@ -1784,9 +1787,9 @@ export const isOtherBank = (bankId: string | null, bankName: string | null): boo
  * errors count whatever the gearing (only the blank check is Debt-Sizing-only), and an
  * Individual profile with no rows passes (`CountIf(…, Valid = false) = 0`).
  *
- * DIVERGENCE (D34): the canvas requires `cmb_SeniorDebt_Data_Bank.Selected.bankname`. The bank
- * names come from `Assumptions Banks SQL` (Fabric, not connected — D2), so the stored bank id is
- * checked instead; otherwise no Term Sheet / Credit Agreement tranche could be saved at all.
+ * DIVERGENCE (D34): the canvas requires `cmb_SeniorDebt_Data_Bank.Selected.bankname`; the stored
+ * bank id is checked instead. Now that `Assumptions Banks SQL` is read, a picked bank always has
+ * both, so the two agree; the id check also keeps a tranche whose bank row left the table savable.
  */
 export function canSaveSeniorDebtTranche(
   form: SeniorDebtFormState, lang: Lang = "en-US",
@@ -2981,12 +2984,10 @@ export const SEED_NOTIFY_NAME: Readonly<Record<SeedCategory, string>> = Object.f
   decommissioning: "Decommissioning",
 });
 
-/** NEW texts (no canvas equivalent): the load-error state (rule 19), the Fabric notice (D2), refusals. */
+/** NEW texts (no canvas equivalent): the load-error state (rule 19) and the refusals. */
 export const FINANCE_SCREEN_TEXT = {
   loadFailedTitle: "Financing data is unavailable",
   loadFailedDescription: "The financing inputs of this project could not be loaded. Reload the page to try again.",
-  assumptionsNotConnected:
-    "The standard debt assumptions, banks and KfW tranches come from Fabric SQL (Assumptions Debt SQL, Assumptions Banks SQL, AssumptionsKfWTrancheSQL), which is not connected yet. Standard values cannot be applied, and Senior Debt, DSRA/DSRF and Decommissioning inputs are not created automatically.",
   noProject: "The project is not loaded.",
   noInput: "The financing input of this category does not exist for this project.",
   noCategory: "The financing category is missing.",
@@ -3018,11 +3019,12 @@ const update = (entitySet: string, id: string, data: Record<string, unknown>, re
 /* ═══════════════════════════════════════════════════════════════════ seeding ══ */
 
 /**
- * DIVERGENCE (D34, D2) — only the seeds whose values do NOT come from Fabric SQL are created while
- * `Assumptions Debt SQL` is unconnected: Equity (10 / 90) and VAT-Financing (base rate by country,
- * 1.5, Calculated). The Senior Debt, DSRA/DSRF and Decommissioning seeds are built from the SQL
- * standard; without it they would store zeros and blanks flagged as "standard". They are withheld
- * and the screen says so.
+ * With the `Assumptions Debt SQL` rows in (connected 3 Nov 2026), every missing seed is created, as
+ * the canvas. DIVERGENCE (D34) — while that read is unavailable (no country, or the read failed),
+ * only the seeds whose values do NOT come from Fabric SQL are created: Equity (10 / 90) and
+ * VAT-Financing (base rate by country, 1.5, Calculated). The Senior Debt, DSRA/DSRF and
+ * Decommissioning seeds are built from the SQL standard; without it they would store zeros and
+ * blanks flagged as "standard", so they are withheld. (The Screen waits while the read loads.)
  */
 export function seedsAllowed(seeds: readonly SeedRow[], assumptionsConnected: boolean): SeedRow[] {
   return assumptionsConnected ? [...seeds] : seeds.filter((s) => s.category === "equity" || s.category === "vatFinancing");
@@ -3872,9 +3874,9 @@ export function openDsraForm(row: FinancingInputRow | null, language: Lang = "en
  * debt service savings recomputed (COD + the longest active tenor − 1 day). The base rate takes the
  * DSRF standard whatever the type — `DefaultSelectedItems: Coalesce(…BaseRateDSRF, …)`, reproduced.
  *
- * DIVERGENCE (D34, D2): with `Assumptions Debt SQL` unconnected there is no standard to apply; the
- * type and the end date change, the other values and their flags stay as they are (the canvas
- * would blank or zero them and flag them standard).
+ * DIVERGENCE (D34): with no standard (the `Assumptions Debt SQL` read loading or failed) there is
+ * nothing to apply; the type and the end date change, the other values and their flags stay as
+ * they are (the canvas would blank or zero them and flag them standard).
  */
 export function applyDsraTypeChange(
   form: DsraForm, type: number, standard: DsraStandard | null, endOfSavings: Date | null, language: Lang = "en-US",
