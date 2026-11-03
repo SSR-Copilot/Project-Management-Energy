@@ -15,11 +15,14 @@
 import type { ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
-  ArrowLeftRegular, ArrowResetRegular, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
-  InfoRegular, LockClosedRegular, MailRegular, PeopleRegular, SubtractCircleRegular,
+  ArrowClockwiseRegular, ArrowLeftRegular, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
+  InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
 import { ARIA, EXCLUDED, UI, type TerminalKind } from "./rules";
+
+/** Outline at rest, filled on hover (Fluent's bundled-icon pair). */
+const InfoBundle = bundleIcon(InfoFilled, InfoRegular);
 
 /* ─────────────────────────────────────────────────────────────── colours */
 
@@ -49,39 +52,55 @@ const radius = (r: string) => ({ borderTopLeftRadius: r, borderTopRightRadius: r
 const useStyles = makeStyles({
   // `cmp_CheckList_Project_States`: 104 high, `Parent.Width - 8`. `con_Project_States` is
   // `Parent.Width - 32` when the refresh button shows; `btn_Refresh` is 24 x 24 at X = W - 29, Y = 12.
-  wrap: { display: "flex", alignItems: "flex-start", gap: "8px", width: "calc(100% - 8px)", flex: "none", boxSizing: "border-box" },
+  // Canvas pair (3 Nov 2026): the refresh sits on its own row at the top right and the steps run
+  // the full width under it.
+  wrap: { display: "flex", flexDirection: "column", alignItems: "stretch", width: "calc(100% - 8px)", flex: "none", boxSizing: "border-box" },
   stepper: {
     // 104 high; it grows instead of clipping when a narrow card wraps its title to a third line.
     display: "flex", alignItems: "stretch", flex: "1 1 auto", minWidth: 0, minHeight: "104px", boxSizing: "border-box",
     paddingTop: "7px", paddingBottom: "5px", overflowX: "auto",
   },
+  // With no clusters (New Project mode) the canvas keeps 40 px more under the lock (canvas pair, 3 Nov 2026).
+  stepperEmpty: { minHeight: "144px" },
   // `but_Project_States_CheckList_Refresh`: `Icon: ="ArrowReset"`, IconOnly, 24 high. The canvas draws it as a plain blue
   // glyph with no box (27 Oct 2026: it was a boxed `ArrowSync`, the developers-only `btn_Refresh` icon).
   refresh: {
-    flex: "none", marginTop: "12px", marginRight: "5px", minWidth: "24px", width: "24px", height: "24px", paddingLeft: 0, paddingRight: 0,
+    // `order: -1`: drawn above the steps although it follows them in the markup.
+    order: -1, flex: "none", alignSelf: "flex-end", marginTop: "8px", marginBottom: "11px", marginRight: "8px", minWidth: "24px", width: "24px", height: "24px", paddingLeft: 0, paddingRight: 0,
     color: palette.themePrimary, fontSize: "20px",
   },
   // `con_State_Card`: radius 2; selected = Fill ButtonSelectedBg, a 1 px `gblAppColors.BorderColor`
   // (Grayscale30) border and `DropShadow.Light`.
   card: {
     display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-start",
-    position: "relative", flex: "1 1 0", minWidth: "120px", paddingTop: 0, paddingBottom: "4px", paddingLeft: 0, paddingRight: 0,
+    position: "relative", flex: "1 1 0", minWidth: "120px", overflowX: "visible", overflowY: "visible", paddingTop: 0, paddingBottom: "4px", paddingLeft: 0, paddingRight: 0,
     ...edges("transparent"), ...radius("2px"), fontWeight: tokens.fontWeightRegular, backgroundColor: "transparent",
     ":hover": { backgroundColor: "transparent" },
+    // No focus square after a click; the selected card's grey border and shadow are the only mark.
+    "::after": { display: "none" },
+    ":focus, :focus-visible": { outlineStyle: "none" },
+    "&[data-fui-focus-visible]": { outlineStyle: "none" },
   },
   cardSelected: {
     backgroundColor: PM_GRAYSCALE40, ...edges(palette.Grayscale30), boxShadow: tokens.shadow4,
     ":hover": { backgroundColor: PM_GRAYSCALE40 },
+    // Fluent's keyboard-focus ring (a black 2-px outline) is not drawn; the grey border stays.
+    "&[data-fui-focus-visible], &:focus-visible": { ...edges(palette.Grayscale30), outlineStyle: "none", boxShadow: tokens.shadow4 },
   },
   cardSkipped: { opacity: 0.55 },
   // `con_State_Card_Button` (the top half): rec_First (10 x 2) · but_State (24 high, radius 4) ·
   // rec_Last (10 x 2) · the gate (32) and its 10 px line.
   track: { display: "flex", alignItems: "center", height: "36px", flex: "none" },
   line: { flex: "0 0 10px", height: "2px", backgroundColor: LINE_COLOR },
+  // Over the card's 1-px transparent border, so two cards' lines meet with no white gap.
+  lineStart: { marginLeft: "-1px", flexBasis: "11px" },
+  lineEnd: { marginRight: "-1px", flexBasis: "11px" },
   lineHidden: { visibility: "hidden" },
   bar: {
     display: "flex", alignItems: "center", justifyContent: "center", flex: "1 1 auto", minWidth: 0,
     height: "24px", color: "#ffffff", ...radius("4px"), backgroundColor: STATE_FILL.notStarted,
+    // The canvas ✓ is a large 18-px glyph (pair of 3 Nov 2026).
+    "& svg": { fontSize: "18px", width: "18px", height: "18px" },
   },
   // `circ_State_Card_Gate_Approval` (30, the state fill) under `but_State_Card_Gate_Approval`
   // (32, IconOnly): Transparent once Completed, so the filled circle shows; Secondary otherwise —
@@ -100,14 +119,22 @@ const useStyles = makeStyles({
   },
   gateInProgress: { color: STATE_FILL.inProgress },
   // `con_State_Card_Data`: the title (Bold, ExtraSmall 9 pt, RGBA(50, 49, 48, 1)) over the state.
+  // Under the bar only (the gate's 42 px excluded), as `lbl_State_Card_Data_Title` is; the name
+  // breaks at ": " only while that is under 200 px wide (`If(Self.Width < 200, …)`).
   title: {
-    display: "flex", flexDirection: "column", alignItems: "center", paddingLeft: "14px", paddingRight: "14px",
+    display: "flex", flexDirection: "column", alignItems: "center", paddingLeft: "10px", paddingRight: "10px",
+    containerType: "inline-size", marginTop: "-2px",
     fontSize: "12px", fontWeight: tokens.fontWeightBold, color: "rgb(50, 49, 48)", lineHeight: "16px",
     // `lbl_State_Card_Data_Title` is 2/3 of a fixed 60 px block and `lbl_State_Card_Data_SubTitle` sits at a fixed Y
     // under it, so the state text is on one line across the cards whether the name takes one line or two.
     minHeight: "32px",
   },
-  state: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "12px", minHeight: "16px", color: LABEL_COLOR },
+  titleGate: { paddingRight: "52px" },
+  stateGate: { paddingRight: "43px" },
+  titleSplit: { display: "flex", flexDirection: "column", alignItems: "center", "@container (min-width: 200px)": { display: "none" } },
+  titleWhole: { display: "none", whiteSpace: "nowrap", "@container (min-width: 200px)": { display: "block" } },
+  // 34 px under the title's first line (canvas pairs, 3 Nov 2026).
+  state: { marginTop: "3px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "12px", minHeight: "16px", color: LABEL_COLOR },
   // `btn_clockAlarm_Icon`: 32 wide at `X: =con_State_Card_Gate.X`, `Y: =40` (under the gate), `RGBA(125, 125, 125)`, outline.
   // The gate sits 10 px (its line) from the card's right edge and is 30 / 32 wide, so a 32 wide clock starts at its left edge.
   clock: {
@@ -120,13 +147,13 @@ const useStyles = makeStyles({
   // PaddingLeft 12, PaddingTop 8, `LayoutOverflowX: Scroll`. Every button is 32 high.
   actions: {
     display: "flex", alignItems: "flex-start", gap: "10px", minHeight: "86px", flex: "none", boxSizing: "border-box",
-    paddingLeft: "12px", paddingTop: "8px", overflowX: "auto",
+    paddingLeft: "12px", paddingTop: "3px", overflowX: "auto",
   },
   // PowerCAT `Icon` ActionButtons. Outlined = FillColor white, BorderColor / FontColor / IconColor
   // themePrimary; primary (NextCluster) = FillColor themePrimary, FontColor white.
   action: {
     height: "32px", flexShrink: 0, whiteSpace: "nowrap", fontWeight: tokens.fontWeightRegular, ...radius("2px"),
-    paddingLeft: "10px", paddingRight: "10px",
+    paddingLeft: "7px", paddingRight: "10px",
   },
   outlined: {
     backgroundColor: palette.white, color: palette.themePrimary, ...edges(palette.themePrimary),
@@ -139,9 +166,38 @@ const useStyles = makeStyles({
     backgroundColor: palette.themePrimary, color: palette.white,
     "& .fui-Button__icon": { color: palette.white },
   },
+  // Abandon / Inactivate while disabled (the page locked): no box, a dark-grey caption, the icon still
+  // blue; enabled they are the outlined buttons (canvas pairs, 3 Nov 2026).
+  plain: {
+    backgroundColor: "transparent", color: "rgb(50, 49, 48)", ...edges("transparent"),
+    "& .fui-Button__icon": { color: palette.themePrimary },
+    // Hover, press, focus and disabled (the page locks, or a write runs, after a click) look the same.
+    ...Object.fromEntries([":hover", ":hover:active", ":active", ":focus", ":disabled", ":disabled:hover", ":disabled:hover:active"]
+      .flatMap((state) => [
+        [`&${state}`, { backgroundColor: "transparent", color: "rgb(50, 49, 48)", ...edges("transparent") }],
+        [`&${state} .fui-Button__icon`, { color: palette.themePrimary }],
+      ])),
+  },
   primary: {
     backgroundColor: palette.themePrimary, color: palette.white, ...edges(palette.themePrimary),
-    ":hover": { backgroundColor: palette.themeDarkAlt, color: palette.white },
+    // `HoverFillColor: =hoverButton`, `HoverFontColor` / `HoverIconColor: =themePrimary` (Y:1868-1870);
+    // canvas pair of 3 Nov 2026: pale blue fill, blue caption and bolt, no dark outline.
+    ...Object.fromEntries([":hover", ":hover:active"].flatMap((state) => [
+      [`&${state}`, { backgroundColor: palette.hoverButton, color: palette.themePrimary, ...edges(palette.hoverButton) }],
+      [`&${state} .fui-Button__icon`, { color: palette.themePrimary }],
+    ])),
+    "&:focus-visible, &[data-fui-focus-visible]": { outlineStyle: "none", ...edges(palette.themePrimary) },
+  },
+  // Disabled, the canvas draws the next-cluster button without a box: grey caption and icon (pair of 3 Nov 2026).
+  nextWrap: { display: "inline-flex", flexShrink: 0 },
+  primaryDisabled: {
+    "&:disabled, &:disabled:hover, &:disabled:hover:active, &:disabled:focus": {
+      backgroundColor: "transparent", color: "rgb(96, 94, 92)", ...edges("transparent"), cursor: "default", outlineStyle: "none",
+      // The hover goes to the wrapper, which carries the tooltip.
+      pointerEvents: "none",
+    },
+    "&:disabled .fui-Button__icon, &:disabled:hover .fui-Button__icon": { color: "rgb(96, 94, 92)" },
+    "::after": { display: "none" },
   },
   // The transcribed widths: CancelApproval 250, Return 220, Next 260, Abandon 120, Inactive 200
   // (100 while it reads "Activate").
@@ -149,13 +205,27 @@ const useStyles = makeStyles({
   text16: { fontSize: "16px" },
   w250: { minWidth: "250px" },
   w220: { minWidth: "220px" },
-  w260: { minWidth: "260px" },
+  w260: { minWidth: "257px" },
   w120: { minWidth: "120px" },
   w200: { minWidth: "200px" },
   w100: { minWidth: "100px" },
   // `con_…_Buttons_Info`: 120 x 32; the 24 px InfoButton then "Info" in Warning, ExtraExtraSmall (8 pt).
   info: { display: "inline-flex", alignItems: "center", width: "120px", height: "32px", flexShrink: 0, color: palette.Warning, fontSize: "10.67px" },
-  infoButton: { color: palette.Warning },
+  // Canvas pair (3 Nov 2026): no focus square; on hover the outline glyph becomes a filled grey one.
+  infoButton: {
+    color: palette.Warning,
+    "::after": { display: "none" },
+    "&:focus-visible, &[data-fui-focus-visible]": { outlineStyle: "none", ...edges("transparent") },
+    ":hover .fui-Icon-filled, :hover:active .fui-Icon-filled": { display: "inline", color: "rgb(96, 94, 92)" },
+    ":hover .fui-Icon-regular, :hover:active .fui-Icon-regular": { display: "none" },
+  },
+  infoIcon: { color: palette.Warning },
+  // The tooltip: a white card, the message in Warning orange at 12 px, no arrow.
+  infoTip: {
+    backgroundColor: palette.white, color: palette.Warning, fontSize: "12px", lineHeight: "18px",
+    paddingTop: "10px", paddingBottom: "10px", paddingLeft: "12px", paddingRight: "12px", maxWidth: "280px",
+    boxShadow: tokens.shadow8,
+  },
 });
 
 /* ─────────────────────────────────────────────────────────────── stepper */
@@ -205,7 +275,7 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
   const s = useStyles();
   return (
     <div className={s.wrap}>
-      <div className={s.stepper} data-testid="cmp_CheckList_Project_States">
+      <div className={mergeClasses(s.stepper, steps.length === 0 && s.stepperEmpty)} data-testid="cmp_CheckList_Project_States">
         {steps.map((step, index) => {
           const fill = BAR_FILL[step.stateLabel];
           const gateFill = step.gate ? BAR_FILL[step.gate.progressLabel] : undefined;
@@ -222,11 +292,11 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
               onClick={() => onSelect(step.id)}
             >
               <span className={s.track}>
-                <span className={mergeClasses(s.line, index === 0 && s.lineHidden)} />
+                <span className={mergeClasses(s.line, s.lineStart, index === 0 && s.lineHidden)} />
                 <span className={s.bar} style={fill ? { backgroundColor: STATE_FILL[fill] } : undefined}>
                   {step.stateLabel === "Completed" ? <CheckmarkRegular aria-hidden /> : null}
                 </span>
-                <span className={mergeClasses(s.line, index === steps.length - 1 && s.lineHidden)} />
+                <span className={mergeClasses(s.line, !step.gate && s.lineEnd, index === steps.length - 1 && s.lineHidden)} />
                 {step.gate ? (
                   <>
                     <span
@@ -235,14 +305,15 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
                     >
                       {step.gate.icon === "Mail" ? <MailRegular aria-hidden /> : <PeopleRegular aria-hidden />}
                     </span>
-                    <span className={s.line} />
+                    <span className={mergeClasses(s.line, s.lineEnd)} />
                   </>
                 ) : null}
               </span>
-              <span className={s.title}>
-                {step.lines.map((l) => <span key={l}>{l}</span>)}
+              <span className={mergeClasses(s.title, step.gate !== null && s.titleGate)}>
+                <span className={s.titleSplit}>{step.lines.map((l) => <span key={l}>{l}</span>)}</span>
+                <span className={s.titleWhole}>{step.lines.join(": ")}</span>
               </span>
-              <span className={s.state}>
+              <span className={mergeClasses(s.state, step.gate !== null && s.stateGate)}>
                 <span>{step.stateLabel}</span>
               </span>
               {step.clock ? <span className={s.clock} aria-hidden="true"><ClockAlarmRegular /></span> : null}
@@ -257,7 +328,7 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
         */}
       {refresh ? (
         <Tooltip content={UI.refresh} relationship="description" withArrow>
-          <Button appearance="transparent" size="small" className={s.refresh} icon={<ArrowResetRegular />}
+          <Button appearance="transparent" size="small" className={s.refresh} icon={<ArrowClockwiseRegular />}
             aria-label="RefreshProjectStates" data-testid="but_Project_States_CheckList_Refresh"
             disabled={refresh.disabled} onClick={refresh.onClick} />
         </Tooltip>
@@ -314,20 +385,24 @@ export function ClusterActions({ cancelApprovalVisible, reset, next, info, termi
         </Button>
       ) : null}
       {next ? (
+        // The tooltip sits on a wrapper so it also shows while the button is disabled (a disabled
+        // button gets no hover events in the browser).
         <Tooltip content={next.tooltip} relationship="description" withArrow>
-          <Button appearance="primary" className={mergeClasses(s.action, s.text16, !next.disabled && s.primary, s.w260)}
+          <span className={s.nextWrap}>
+          <Button appearance="primary" className={mergeClasses(s.action, s.text16, next.disabled ? s.primaryDisabled : s.primary, s.w260)}
             disabled={next.disabled} aria-label={ARIA.nextCluster}
             // `IconName`: "TriggerApproval" (a lightning bolt) for an active gate, "CheckMark" otherwise.
             icon={next.icon === "TriggerApproval" ? <FlashRegular /> : <CheckmarkRegular />}
             data-testid="pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster" onClick={next.onClick}>
             {next.caption}
           </Button>
+          </span>
         </Tooltip>
       ) : null}
       {info !== null ? (
         <span className={s.info} data-testid="con_Checklist_DisplayProject_Body_Content_Buttons_Info">
-          <Tooltip content={info} relationship="label" withArrow>
-            <Button appearance="transparent" size="small" className={s.infoButton} icon={<InfoRegular />}
+          <Tooltip content={{ children: info, className: s.infoTip }} relationship="label" positioning="above-start">
+            <Button appearance="transparent" size="small" className={s.infoButton} icon={<InfoBundle className={s.infoIcon} />}
               aria-label={info} data-testid="but_Checklist_DisplayProject_Body_Content_Buttons_Info" />
           </Tooltip>
           <span>{UI.info}</span>
@@ -337,7 +412,7 @@ export function ClusterActions({ cancelApprovalVisible, reset, next, info, termi
         <Button key={t.kind} appearance="secondary"
           aria-label={t.kind === "abandon" ? ARIA.abandon : ARIA.inactive}
           data-testid={t.kind === "abandon" ? ARIA.abandon : ARIA.inactive}
-          className={mergeClasses(s.action, s.outlined, t.kind === "abandon" ? s.w120 : t.active ? s.w100 : s.w200, t.active && s.outlinedActive)}
+          className={mergeClasses(s.action, s.outlined, t.kind === "abandon" ? s.w120 : t.active ? s.w100 : s.w200, t.active && s.outlinedActive, t.disabled && s.plain)}
           aria-pressed={t.active} icon={terminalIcon(t)} disabled={t.disabled} onClick={t.onClick}>
           {t.label}
         </Button>

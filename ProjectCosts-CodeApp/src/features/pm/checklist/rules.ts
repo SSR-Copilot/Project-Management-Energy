@@ -2011,8 +2011,15 @@ export interface ChecklistLockEntry {
  * condition, so the two cannot disagree.
  */
 export function pageLock(project: ChecklistProject | null): ChecklistLockEntry[] {
+  // No project yet (New Project mode): every field is blank, so the canvas lists all four sections
+  // (canvas pair, 3 Nov 2026).
   if (!project) {
-    return [{ reason: "General", label: "• General", hint: "No project is loaded." }];
+    return [
+      { reason: "General", label: "• General", hint: "No project is loaded." },
+      { reason: "Milestones", label: "• Milestones", hint: "No project is loaded." },
+      { reason: "Generator", label: "• Generator", hint: "No project is loaded." },
+      { reason: "Production", label: "• Production", hint: "No project is loaded." },
+    ];
   }
   const out: ChecklistLockEntry[] = [];
   const m = project.milestones;
@@ -2271,6 +2278,8 @@ export const UI = {
   infoWaiting: "Please complete the previous cluster or wait for cluster approval.",
   /** `txt_Info_TipCluster_Checklist_1.Text` */
   technologyTip: "Tip: For selected technology cluster checklist is not available.",
+  /** The change-cluster panel's ✕ tooltip, as on the canvas. */
+  closeTooltip: "Home",
   /** `lbl_Checklist_DisplayProject_Body_Content_OverviewHeader_*.Text`, left to right. */
   header: {
     gateRelevance: "Gate Relevance",
