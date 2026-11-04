@@ -216,13 +216,14 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: "4px", borderBottomRightRadius: "4px",
   },
   /*
-   * `canvasFooter`: sized to the canvas "Delete Period?" screenshot (26 Oct 2026). The canvas
-   * draws in Open Sans, which this app does not load, so the Segoe UI sizes are set to fill the
-   * same widths: a 15.6 px title, a 15.4 px description on 20 px lines, 14 px regular-weight
-   * captions, and the PowerCAT icons in a 20 px box (a filled bin).
+   * `canvasFooter`: the description on 20 px lines, 14 px regular-weight captions, and the
+   * PowerCAT icons in a 20 px box (a filled bin), as the canvas "Delete Period?" screenshot
+   * (26 Oct 2026). The title and the description keep the component's own `Size: =11`
+   * (14.67 px, `title` / `descriptionPlain`): D49 had enlarged them to 15.6 / 15.4 px so Segoe UI
+   * filled the width of the canvas's Open Sans, and the parity harness then measured the live
+   * canvas at 14.6667 px for both (D80, 4 Nov 2026), so the sizes are transcribed again (rule 6).
    */
-  titleCanvas: { fontSize: "15.6px" },
-  descriptionCanvas: { fontSize: "15.4px", lineHeight: "20px" },
+  descriptionCanvas: { lineHeight: "20px" },
   buttonCanvas: {
     fontWeight: tokens.fontWeightRegular, fontSize: "14px",
     "& svg": { fontSize: "20px", width: "20px", height: "20px" },
@@ -333,7 +334,7 @@ export interface ConfirmDialogProps {
   lockWhileBusy?: boolean;
   /**
    * Optional (Land Lease): the canvas buttons row — a divider above it, regular-weight captions
-   * and 16 px icons. Off by default, so every existing caller keeps its look.
+   * and 20 px icons, the description on 20 px lines. Off by default, so every existing caller keeps its look.
    */
   canvasFooter?: boolean;
   /** With `canvasFooter`: draw the divider above the buttons (default). The Team pop-up has none. */
@@ -410,7 +411,7 @@ export function ConfirmDialog({
         backdrop={{ className: mergeClasses(styles.backdrop, darkScrim && styles.backdropDark) }}
       >
         <div className={mergeClasses(styles.header, compact && styles.headerCompact, pmHeader && styles.headerClassic)}>
-          <h2 className={mergeClasses(styles.title, canvasFooter && styles.titleCanvas, pmHeader && styles.titleClassic)}>{title}</h2>
+          <h2 className={mergeClasses(styles.title, pmHeader && styles.titleClassic)}>{title}</h2>
           {/* `ico_PopUpConfirmation_BodyHeader_3.OnSelect: =…OnCancel()` — the ✕ cancels. */}
           <button type="button" className={mergeClasses(styles.close, pmHeader && styles.closeClassic)} aria-label="Close" title={HINTS.cancel}
             data-testid="ico_PopUpConfirmation_BodyHeader_3" onClick={onCancel} disabled={locked}>

@@ -41,6 +41,28 @@ describe("DateField", () => {
     expect((screen.getByTestId("disabled") as HTMLInputElement).disabled).toBe(true);
   });
 
+  it("UT-DATEFIELD-005 the calendar button carries the field's test id plus -calendar and the caption 'Open calendar' (CA-30)", () => {
+    render(<>
+      <DateField label="End" name="dtp_end" value={null} format="LongAbbreviated" />
+      <DateField label="Issue" testId="dte_issue" ariaLabel="Date of Issue" value={null} format="dd.mm.yyyy" />
+      <DateField label="Locked" testId="locked" value="2026-10-19" format="LongAbbreviated" readOnly />
+      <DateField label="Unnamed" value={null} format="LongAbbreviated" />
+    </>, { wrapper });
+    for (const id of ["dtp_end", "dte_issue"]) {
+      const button = screen.getByTestId(`${id}-calendar`);
+      expect(button).toHaveAttribute("role", "button");
+      expect(button).toHaveAttribute("aria-label", "Open calendar");
+      expect(button).not.toHaveAttribute("aria-labelledby");
+      expect(button).toHaveAttribute("aria-expanded", "false");
+    }
+    // The field's own identity is unchanged.
+    expect(screen.getByTestId("dte_issue")).toHaveAttribute("aria-label", "Date of Issue");
+    // `DisplayMode.View` draws the icon only (no button to name); a field without an id gives its button none.
+    expect(screen.queryByTestId("locked-calendar")).toBeNull();
+    expect(document.querySelectorAll('[data-testid$="-calendar"]')).toHaveLength(2);
+    expect(document.querySelector('[data-testid="undefined-calendar"]')).toBeNull();
+  });
+
   it("UT-DATEFIELD-003 a typed date (IsEditable) is committed on leaving the box as a local YYYY-MM-DD", () => {
     const onChange = vi.fn();
     render(<DateField label="End" name="dtp_end" value={null} format="LongAbbreviated" onChange={onChange} />, { wrapper });

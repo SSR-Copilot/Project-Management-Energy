@@ -26,7 +26,7 @@
  * `DateInput` is the bare box, for a screen that lays out its own caption row (a gallery cell, the
  * General Data cluster panel with its CalendarAdd button); `DateField` adds the Fluent `Field`.
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, type ComponentProps } from "react";
 import { Field, Input, mergeClasses } from "@fluentui/react-components";
 import { DatePicker } from "@fluentui/react-datepicker-compat";
 import { CalendarMonthRegular } from "@fluentui/react-icons";
@@ -37,6 +37,21 @@ import { useStandardValueClass, type StandardProp } from "./standardValue";
 
 /** `StartOfWeek.Monday` / `"Monday"` — Fluent's `DayOfWeek.Monday`. */
 const MONDAY = 1;
+
+/**
+ * The caption of the picker's own calendar button (CA-30, D80, 4 Nov 2026). The compat `DatePicker` renders it as a
+ * `span[role="button"]` after the input with neither a `data-testid` nor a caption of its own (its name came from
+ * `aria-labelledby` = the input), which failed rule 16 in every state with a date field. The canvas picker has no
+ * separate control for it, so there is no canvas string to transcribe: the caption says what the button does.
+ */
+const CALENDAR_BUTTON_LABEL = "Open calendar";
+
+/** The calendar button's identity: `<field test id>-calendar`, the field's own id plus a stable suffix (rule 16). */
+const calendarButtonTestId = (fieldTestId: string | undefined): string | undefined =>
+  fieldTestId ? `${fieldTestId}-calendar` : undefined;
+
+/** The props handed to the picker's `contentAfter` slot (the calendar button): span props plus the test id. */
+type CalendarButtonProps = ComponentProps<"span"> & { "data-testid"?: string };
 
 export interface DateInputProps {
   /** The stored date (`YYYY-MM-DD` / an ISO date-time) or a `Date`; blank = no date. */
@@ -91,6 +106,16 @@ export function DateInput({
   const label = ariaLabel ?? name;
   const id = testId ?? name;
   const classes = mergeClasses(controlClass(mode, standardClass(standard)), className);
+  /*
+   * CA-30: the calendar button gets this field's identity. The compat picker labels it with `aria-labelledby`
+   * (the input), which would win over the caption, so that attribute is dropped; its `role="button"` and
+   * `aria-expanded` stay.
+   */
+  const calendarButton: CalendarButtonProps = {
+    "data-testid": calendarButtonTestId(id),
+    "aria-label": CALENDAR_BUTTON_LABEL,
+    "aria-labelledby": undefined,
+  };
   if (mode === "view") {
     // `DisplayMode.View`: the text in the grey box, the icon shown, nothing to open.
     return (
@@ -119,6 +144,7 @@ export function DateInput({
       parseDateFromString={parseCanvasDate}
       firstDayOfWeek={MONDAY}
       onSelectDate={(d: Date | null | undefined) => onChange?.(d ? dateOnly(d) : null)}
+      contentAfter={calendarButton}
       aria-invalid={invalid || undefined}
       aria-label={label}
       data-testid={id}

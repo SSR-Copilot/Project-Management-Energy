@@ -3628,7 +3628,9 @@ Recorded 26 Oct 2026 from the code. Commits, none with a D-entry:
   `false`**. When it is on:
   - a 1 px `#edebe9` divider above the buttons row;
   - a flat surface, with no shadow and 4 px corners;
-  - a 15.6 px title and a 15.4 px description on 20 px lines;
+  - a 15.6 px title and a 15.4 px description on 20 px lines (**changed 4 Nov 2026, D80 §3:** both are the
+    component's own 11 pt = 14.6667 px again, which is what the parity harness measured on the live canvas; the
+    20 px lines stay);
   - 14 px regular-weight captions and 20 px icons;
   - a **filled** bin when `confirmIcon="delete"`.
 - **Why the sizes.** The sizes match a canvas "Delete Period?" screenshot (26 Oct 2026). The canvas
@@ -6439,3 +6441,76 @@ DEFECT`. Product question: keep the reproduction, or keep the typed % (a one-lin
   `app/queryLog.ts`, which affects every screen's load lines.
 - **Still open from the report:** X3 (allocation order), X4 (a PV module in "all WTGs"), X5 (later periods not
   shifted), X6 (frequency not carried over).
+
+
+## D80 · One-hour parity harness for any screen, Canvas vs code app (3–4 Nov 2026) — PROPOSED
+
+**Status: PROPOSED, branch `feature/ParityHarness`, uncommitted, not product-approved.** The user asked for every parity check
+(functional, UX, UI, data) of one screen to run within an hour, and for the harness to work for any screen, not only Land Lease.
+Plan and design: `ProjectDocs/app-docs/e2e/PARITY-ONE-HOUR-PLAN.md`. Code: `ProjectCosts-CodeApp/e2e/harness/` and
+`e2e/screens/<slug>/` (Land Lease and a first OPEX manifest).
+
+### 1. What it is
+- A screen is a manifest (`e2e/screens/<slug>/manifest.ts`, checked by `validateManifest`). The six generic lanes (visual, UX,
+  validation, gates, flows, platform) read it, so a new screen needs a manifest, not new specs.
+- Lanes run side by side: three on the Canvas, two on the code app, then the two write lanes. Facts are recorded per app and
+  compared offline; a full run keeps the Canvas facts as the reference for a later compare-only run.
+- The test project is asked for at the start of each run and lives only in environment variables (never in a file). The
+  write lanes run only with `PARITY_WRITE=1` and delete every `PW-` row they create.
+- `npm run parity:sweep` removes the `PW-` rows of a run whose own cleanup failed (`PARITY_SWEEP_DRY=1` only lists them).
+- The code app exposes an idle hook (`window.__vsbIdle`) only when the harness sets `localStorage __vsbE2E`, so waits ask the
+  app instead of polling the page.
+
+### 2. Live runs on DEV (Land Lease, 3–4 Nov 2026)
+| Run | Time | Result |
+|---|---|---|
+| 1 | 45 min | harness defects: serial lanes, budget as a failure, wrong frame for the write cleanup (left 14 `PW-` rows, swept 4 Nov) |
+| 2 | 60 min 17 s | over the hour: Canvas validation read every message with its own lookup (23 s per input) |
+| 3–8 | 31–48 min | each fixed one more harness defect (panels read too early, clipped command chosen, row selection timing) |
+| 9 | 30 min 1 s | clean: no harness failure, no flaky test, no data or flow difference beyond the two known ones |
+| 10–11 | 33 min / 3 min | a flaky row click (rows not drawn yet); the Canvas player stuck on "Fetching your app" (preflight now reloads once) |
+| 12, 13 | 29 min 52 s, 32 min 30 s | clean |
+| mutation proof | 13–19 min (compare mode) | 6 of 6 caught after two fixes: a gate mutation that hid two others, and a text window that cut the panel's top fields |
+| 16 | 37 min 10 s | after the §3 fixes: **new 0** (was 64), known 2, artefacts 58 (icon-font glyphs and the Share-of-Revenues font width only), no lane over budget (canvas-B 21 min of 20, inside the 20 % margin: the player was slower today), Canvas reference promoted. 3 flaky (passed on the re-run): the smoke pair (an aborted player script counted as a failed call, classified since, §3) and one Dataverse read (`country-inflation`) that hung 90 s at the host |
+
+The fixes are listed in file 13 (D80 entry). After run 15 the only failing check left was a real gap, CA-30, plus the 64
+visual differences of section 3.
+
+### 3. Findings, and what was done with them (4 Nov 2026, on the user's "Proceed for fixes in the Code Apps for the LandLeaseScreen")
+
+The 64 "new" visual differences of runs 9–15 came from six causes. Four were code-app differences and are fixed; two were
+the harness measuring the two apps differently and are fixed in the reader. Each is in file 13 (section H and the D80 entry).
+**Run 16 (4 Nov 2026, 37 min 10 s) confirmed all of them live: 0 new differences**, the command captions at the Canvas's
+exact x (263 / 418 / 527 / 708 / 771), the dropdown values rgb(36, 36, 36), the pop-up title 14.6667 px, the Description
+asterisk captured at weight 600, and no unlabelled control in any state (CA-30).
+
+| Cause | Rows | Where it came from | Done |
+|---|---|---|---|
+| Command bar captions 9–17 px further right (4 px more per command) | 30 | Fluent v9 draws a command's icon in a 20 px box; the PowerCAT bar (Fluent v8) in a 16 px one. The 3 px pull of the first command (PO, 21 Oct 2026) compensated for the 20 px glyph inset | **Fixed, shared:** `components/commandRow.ts` sets the icon box to 16 px and drops the 3 px pull, so the caption pitch is the canvas's (`textWidth + 40`) and the first icon box and caption land on the canvas's x (239 / 263). Every PowerCAT-replacement bar changes with it (CommandBar, OPEX, Land Lease, Contracts, Admin Cost); re-measure the other screens in their next parity run |
+| Panel dropdown values `rgb(0,0,0)` against `rgb(36,36,36)` | 10 | This app's theme maps `colorNeutralForeground1` to `palette.neutralPrimary` (#000); the canvas `DropDown@0.0.45` is a modern control and draws its value in Fluent's stock #242424, as the toggles D79 already corrected | **Fixed (Land Lease panel):** `.fui-Dropdown__button` in the panel skin uses `MODERN_TEXT` (#242424), the one constant the toggle captions use. A disabled dropdown keeps #bdbdbd |
+| Panel dropdown values about 13 px further right | 12 | A harness artefact: the Canvas value is a native `<select>`, which the reader placed at its BOX; the code app's value is read by its text range | **Fixed (harness):** `selectValuePageTexts` places the value where its text starts (after the border and padding, centred), UT-PHREAD-DOM-006 |
+| Delete pop-up title / description 15.6 / 15.4 px against 14.6667 px | 2 | D49 §1 had enlarged `canvasFooter`'s sizes so Segoe UI filled the width of the canvas's Open Sans; the live canvas renders `Size: =11` | **Fixed, shared (one caller):** the `canvasFooter` title and description keep the component's own 11 pt (rule 6); the 20 px line height stays. Only Land Lease uses `canvasFooter` |
+| Description asterisk weight 700 against 600 | 4 (plus 56 "artefact" rows) | A harness artefact: the code app draws the Description `*` with CSS `::before`, which no text node carries, so the n-th `*` of one app paired with the next `*` of the other | **Fixed (harness):** `collectPageTexts` reads a `::before` / `::after` whose `content` is a quoted string as a text, placed from its own computed style (UT-PHREAD-DOM-004, 005). The `common-asterisk` artefact rule stays for screens not yet measured |
+| `new-period-panel`: Add Contract Type grey and Add Period / Edit / Delete black, the canvas the other way round | 4 | A **behaviour** difference, visible as colours: the canvas "Add Period" arm (LL:396) blanks `locSelectedLandLeasePeriod` and keeps the cost and the sub-account, so while that panel is open (and after its Cancel) no row is selected. The code app kept the row | **Fixed (reproduced):** `leaseSelectionOnAddPeriod` (UT-LEASE-SEL-006, UT-LLUI-017). Edit blanks and re-sets the period, so it keeps the row, as before |
+
+Also done: **CA-30** (the `DateInput` calendar button's identity, `01-BUGS-FOUND.md`), the last failing check.
+
+Not changed:
+- **Possible canvas defect, unconfirmed:** a Canvas row click stores the gallery's Selected card (LL:1762), and Edit / Delete
+  need it to be the row's own card (LL:347, LL:367). A user who opens card A, then card B, then selects a row of A may get
+  Edit / Delete disabled. The harness met this state; it is not yet confirmed as a user path.
+
+Two harness fixes after run 16, from its three flaky tests (not yet run live):
+- `lib/ui.ts` `benignFailure`: a `net::ERR_ABORTED` on a `content.powerapps.com` resource is the player cancelling its own
+  request when it navigates on to the app, reported under `hostOnly`, not a failed call (UT-PHPROB-001, 002). It had failed
+  the smoke test once, and its fresh worker then sat on the player's splash screen for the 6-minute fixture timeout, which
+  failed the `[VSB]` log test too.
+- The Land Lease `tidy` waits for the app to be idle before it clicks (after a save the code app's write status is a modal
+  overlay for a while: four 10-second click timeouts and reloads in the write lanes), and closes a pop-up only through a
+  Cancel a user can see (one reload after the Escape had already closed it).
+
+### 4. Open
+- Acceptance: three clean full runs in a row (runs 12 and 13 so far; run 16 had no failure after its re-run pass but 3
+  flaky tests) and the mutation proof (done: 6 of 6, 4 Nov 2026). Whether a run with flaky-then-passed tests counts as
+  clean is the user's call.
+- The OPEX manifest is a draft and has not run live.

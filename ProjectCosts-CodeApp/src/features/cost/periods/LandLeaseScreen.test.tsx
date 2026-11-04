@@ -417,6 +417,30 @@ describe("LandLeaseScreen", () => {
     expect(screen.queryByText("Locations")).not.toBeInTheDocument();
   });
 
+  it("UT-LLUI-017 Add Period clears the row selection while its panel is open, as the canvas (LL:396; D80)", () => {
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    const bar = card("Locations");
+
+    fireEvent.click(screen.getByTestId("lease-select-p2"));
+    fireEvent.click(within(bar).getByTestId("lease-newLandLeasePeriodKey"));
+    expect(screen.getByText("Add Period - Locations")).toBeInTheDocument();
+
+    // `locSelectedLandLeasePeriod: Blank()`: the radio is clear, Add Contract Type is on, the row commands are off.
+    expect(screen.getByTestId("lease-select-p2")).not.toBeChecked();
+    expect(within(bar).getByTestId("lease-newLandLeaseContractKey")).toBeEnabled();
+    expect(within(bar).getByTestId("lease-newLandLeasePeriodKey")).toBeDisabled();
+    expect(within(bar).getByTestId("lease-EditLandLeasePeriodKey")).toBeDisabled();
+    expect(within(bar).getByTestId("lease-deleteLandLeasePeriodKey")).toBeDisabled();
+
+    // Edit blanks and re-sets the period (the `"EditLandLeasePeriodKey"` arm), so it keeps the row.
+    fireEvent.click(screen.getByLabelText("Close panel"));
+    fireEvent.click(screen.getByTestId("lease-select-p2"));
+    fireEvent.click(within(bar).getByTestId("lease-EditLandLeasePeriodKey"));
+    expect(screen.getByTestId("lease-select-p2")).toBeChecked();
+    expect(within(bar).getByTestId("lease-EditLandLeasePeriodKey")).toBeEnabled();
+  });
+
   /* ── D58: no spinner; a status line and a write guard instead ────────── */
 
   const WRITE_COMMAND_IDS = [

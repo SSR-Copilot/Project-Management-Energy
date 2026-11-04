@@ -1407,6 +1407,23 @@ The original finding follows.
   and the parity suite key on these ids. The suite maps them explicitly. If Tosca modules are recorded against the canvas
   names, a later change can add the canvas names; record it then (D79 §5).
 
+### CA-30 · Shared `DateInput`: the calendar button has no `data-testid` (found 3 Nov 2026, fixed 4 Nov 2026, uncommitted)
+
+**A code-app gap** against CONVENTIONS rule 16, found by the D80 parity harness. Its visual lane records the unlabelled
+controls of EVERY state, not only the rest state that E2E-LANDLEASE-003 checked.
+- `components/DateField.tsx` `DateInput` renders a Fluent `DatePicker` (`@fluentui/react-datepicker-compat`) with
+  `aria-label` and `data-testid` on the picker. The picker's own calendar button, a `span` with `role="button"` after the
+  input, gets neither the test id nor a caption of its own. Its accessible name comes from `aria-labelledby`, which points at
+  the input's generated id (`datePicker-input_r_2o_`).
+- Seen in every Land Lease panel with a Start Date: `new-contract-panel`, `-otp-on`, `-inflation-on`, `-allwtg-toggled`,
+  `new-period-panel` and `edit-panel` (live run 2, 3 Nov 2026). The component is shared, so every screen with a date field has it.
+- **Fixed (4 Nov 2026, on the user's go-ahead "Proceed for fixes in the Code Apps for the LandLeaseScreen"):** the
+  calendar button gets `data-testid="<field test id>-calendar"` and the `aria-label` "Open calendar" through the
+  DatePicker's `contentAfter` slot; the compat picker's own `aria-labelledby` (the input) is dropped there, because it
+  would have won over the caption. A new id only: no existing value changes, and a `DisplayMode.View` field, which draws
+  the icon without a button, is unchanged. The component is shared, so every date field in the app gains the id. Pinned
+  by UT-DATEFIELD-005. Confirmed live in parity run 16 (4 Nov 2026): no unlabelled control in any of the 11 Land Lease states.
+
 ---
 
 ## Verification notes

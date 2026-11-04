@@ -79,7 +79,7 @@ import {
   leaseFieldErrors, leasePanelTitle, leaseSaveError, orderedSubaccounts,
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
-  leaseSelectionAfterWrite, toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
+  leaseSelectionAfterWrite, leaseSelectionOnAddPeriod, toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
   type GeneratorOption, type LandLeaseForm, type LeaseAllocationRow, type LeaseContract,
   type LeaseCostRow, type LeasePeriodRow, type LeaseProjectContext, type LeaseSubaccountCard,
 } from "./landLeaseRules";
@@ -153,6 +153,13 @@ const canvasScrollbar = {
 
 /** The radio's lane: `Description.X = 40` (LL:909). */
 const SELECT_COLUMN_WIDTH = 40;
+
+/*
+ * The text colour of the canvas MODERN controls (`DropDown@0.0.45`, `Toggle@1.1.5`): Fluent's stock
+ * neutral foreground, rgb(36, 36, 36), measured on the live canvas (D79 toggles, D80 dropdown values,
+ * 3–4 Nov 2026). Not this app's `colorNeutralForeground1`, which maps to `palette.neutralPrimary` (#000).
+ */
+const MODERN_TEXT = "#242424";
 
 const useStyles = makeStyles({
   /*
@@ -420,6 +427,12 @@ const useStyles = makeStyles({
       borderBottomColor: "#e0e0e0", borderLeftColor: "#e0e0e0",
       WebkitTextFillColor: "#bdbdbd",
     },
+    /*
+     * A `DropDown@0.0.45`'s selected value is drawn in the modern controls' rgb(36, 36, 36), not
+     * in this app's #000 (D80: "5 years", "SUM", "3 months" measured on the live canvas, 4 Nov 2026).
+     * The disabled rule below still wins for a disabled dropdown (#bdbdbd, as the canvas "Euro").
+     */
+    "&.canvas-panel .fui-Dropdown__button": { color: MODERN_TEXT },
     "&.canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled)": {
       backgroundColor: palette.white,
       borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
@@ -648,8 +661,7 @@ const useStyles = makeStyles({
    */
   toggleRow: {
     display: "flex", alignItems: "center", gap: space.s, height: "30px", marginLeft: "-10px",
-    // The stock Fluent value, not this app's theme token, which maps to #000.
-    "& > .fui-Text": { color: "#242424" },
+    "& > .fui-Text": { color: MODERN_TEXT },
   },
   paymentButtonShift: { marginLeft: "-10px" },
   /*
@@ -882,6 +894,10 @@ export default function LandLeaseScreen() {
     }));
     setWorkingDate(null);
     setResetFlag(false);
+    // `"newLandLeasePeriodKey"` (LL:396) blanks `locSelectedLandLeasePeriod` and keeps the cost and
+    // the sub-account: while the panel is open (and after its Cancel) no period row is selected, so
+    // the bar shows Add Contract Type on and Add Period / Edit / Delete off (`leaseSelectionOnAddPeriod`).
+    setSelection(leaseSelectionOnAddPeriod);
   };
 
   const openEdit = (card: LeaseSubaccountCard) => {

@@ -29,6 +29,7 @@ import {
   isStandardPeriodName, isStandardPeriodNameLower,
   toggleLeaseSelection, toggleLeaseSelectionCanvasParity, NO_LEASE_SELECTION,
   leaseSelectionAfterWrite,
+  leaseSelectionOnAddPeriod,
   writesContractHeader, headerEditable, landLeaseCostName, leasePanelTitle, nextPeriodName,
   resolveStartDate, resetStartDateVisible, resetStartDate,
   defaultDurationMonths, defaultDurationYears, defaultAggregation, defaultCurrencyCode,
@@ -2008,6 +2009,13 @@ describe("leaseSelectionAfterWrite (CA-17)", () => {
   it("UT-LEASE-SEL-005 a deselect made mid-write stays deselected", () => {
     expect(leaseSelectionAfterWrite({ atStart: a, current: { ...NO_LEASE_SELECTION } }))
       .toEqual(NO_LEASE_SELECTION);
+  });
+
+  it("UT-LEASE-SEL-006 Add Period blanks the period and keeps the cost and the sub-account (LL:396)", () => {
+    expect(leaseSelectionOnAddPeriod(a)).toEqual({ subaccountId: "sub-1", periodId: null, costId: "c-1" });
+    expect(leaseSelectionOnAddPeriod({ ...NO_LEASE_SELECTION })).toEqual(NO_LEASE_SELECTION);
+    // Pure: the input is not mutated.
+    expect(a.periodId).toBe("p-1");
   });
 });
 

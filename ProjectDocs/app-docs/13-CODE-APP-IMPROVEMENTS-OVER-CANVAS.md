@@ -224,6 +224,14 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
   - **Fixed (rule 16):** the Year / Month / Month accessible names; the period row's hover text (X1, X2).
   - **New gate:** the Land Lease Playwright parity suite (`e2e/landlease.*`; rule map
     `e2e/RULEMAP-land-lease.md`).
+- **Parity harness fixes (4 Nov 2026, D80 §3, uncommitted; confirmed live in run 16: 0 new differences):**
+  - **Reproduced:** "Add Period" clears the selected row while its panel is open, as the canvas arm `"newLandLeasePeriodKey"`
+    (LL:396) blanks `locSelectedLandLeasePeriod` (`leaseSelectionOnAddPeriod`, UT-LEASE-SEL-006, UT-LLUI-017). Edit keeps
+    the row, as before.
+  - **Reproduced (rule 6):** the panel dropdown values are the modern controls' rgb(36, 36, 36), not this app's #000
+    (`MODERN_TEXT`, shared with the toggle captions of D79); the delete pop-up title and description are the canvas 11 pt
+    again (D49 §1 had enlarged them to 15.6 / 15.4 px).
+  - **Fixed, shared:** the card toolbars' icon box and first-command offset (see the D80 entry below).
 
 ---
 
@@ -263,6 +271,39 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 ## Add Cost from Table, year view (29 Oct 2026, D73) — fixed (default is a divergence, not approved)
 
 - A "Show all years" switch limits the table to the current year's columns, so clicking and Tab are fast on big sheets. Display only: save, validation and Copy Table still use every year. The canvas always shows every year.
+
+## One-hour parity harness, any screen (3–4 Nov 2026, D80) — new gate, proposed (not approved)
+
+- **New gate:** `npm run parity` checks one screen across every layer, in both apps, within an hour. The layers are visual,
+  UX, validation (every input in both apps), gates, write flows with Owning Business Unit, and platform. The Land Lease full
+  run takes 30 min on DEV (run 9, 4 Nov 2026). A screen is a manifest
+  (`e2e/screens/<slug>/manifest.ts`), not new specs. The canvas has no automated parity check.
+- **Code app (test-only):** `platform/e2eHook.ts` exposes `window.__vsbIdle()` only when the harness sets `localStorage
+  __vsbE2E`, and `LoadingOverlay` marks itself `data-vsb-busy`. Users see no change.
+- **Harness defects fixed during the live runs (3–4 Nov 2026):**
+  - Lanes now run in default mode, and an over-budget lane only gets a warning; before, one failure cost the rest of the lane.
+  - A screen is read only once its rest marker shows (`openScreenReady`).
+  - The code-app frame is matched by origin; before, the write cleanup ran in the player page and left 14 `PW-` rows, which
+    the new `parity:sweep` removed.
+  - Validation messages are read in one page call, down from 23 s to about 4 s per Canvas input.
+  - A visual state can wait for its panel (`until`).
+  - The Land Lease text window starts at y 80, so the first card title is captured.
+  - A folded Canvas card's clipped command is never chosen (the standard import had used the wrong card).
+  - A Canvas row selection accounts for the gallery's Selected card.
+  - The preflight reloads a Canvas player stuck on "Fetching your app" once, and a row click waits for the rows to show.
+  - The Land Lease text window starts at y 50, so an open panel's top fields are compared too.
+- **Proved:** the mutation proof (6 deliberate code-app changes, one per layer) is caught 6 of 6 (4 Nov 2026). Runs 12
+  and 13 were clean.
+- **Found by the harness, then fixed (4 Nov 2026, D80 §3, on the user's go-ahead; confirmed live in run 16, 37 min 10 s,
+  0 new differences):**
+  - **Fixed (rule 16), CA-30:** every date field's calendar button now carries `<field test id>-calendar` and the caption
+    "Open calendar" (shared `DateInput`; UT-DATEFIELD-005). The canvas picker has no separate control for it.
+  - **Fixed, shared:** the command rows' icon box is the PowerCAT 16 px, not Fluent's 20 px, and the first command's 3 px
+    pull is gone, so every command bar's captions sit where the canvas's do (`commandRow.ts`; measured on Land Lease, the
+    other screens are re-measured in their next parity run).
+  - **Harness, fixed:** CSS-drawn texts (`::before` / `::after` with a quoted `content`) are read as texts, and a native
+    `<select>` value is placed where its text starts (UT-PHREAD-DOM-004…006). Before, 64 of the Land Lease "differences"
+    were these two measuring artefacts plus the four code-app differences listed under section H.
 
 ## Troubleshooting aids (29 Oct 2026, D74) — new
 

@@ -1037,6 +1037,21 @@ export function toggleLeaseSelectionCanvasParity(
 }
 
 /**
+ * The selection once "Add Period" opens its panel — `pcf_…_SubaccountsCommandBar_1.OnSelect`,
+ * arm `"newLandLeasePeriodKey"` (LL:396): `UpdateContext({locSelectedLandLeaseSubaccount:
+ * locSelectedLandLeaseSubaccount, locSelectedLandLeaseCost: varLandLeaseCost,
+ * locSelectedLandLeasePeriod: Blank(), …})`. The period is blanked, the cost and the sub-account
+ * stay, so while the panel is open (and after its Cancel, `pcf_…_Cancel_1.OnChange` restores
+ * nothing, LL:6090) the card is still the selected one but no row is: Add Contract Type is on,
+ * Add Period / Edit / Delete are off, and the row's radio is clear. The Edit arm blanks and
+ * re-sets both, so Edit keeps the row (D80 live run 15, 4 Nov 2026: the code app had kept the
+ * row during Add Period, and the bar's colours differed from the canvas on that state).
+ */
+export function leaseSelectionOnAddPeriod(current: LeaseSelection): LeaseSelection {
+  return { ...current, periodId: null };
+}
+
+/**
  * The selection once a successful write ends (CA-17).
  *
  * The canvas clears it after every Land Lease save, standard import and delete

@@ -191,6 +191,56 @@ Shared harness: `e2e/lib/cost.ts` (open a Cost screen for a project in both apps
 `e2e/lib/known.ts` (accepted differences that cannot go stale), `e2e/lib/dataverse.ts` (raw reads and
 `deleteRecord` cleanup through the code app's own modules on the dev server).
 
+### One-hour parity harness, any screen (D80, 3–4 Nov 2026, proposed)
+
+The successor to the per-screen specs above. Design: `ProjectDocs/app-docs/e2e/PARITY-ONE-HOUR-PLAN.md`. Code:
+- `e2e/harness/`: the runner, the lanes and the readers;
+- `e2e/screens/<slug>/`: one manifest per screen, plus the screen's own lanes if it needs any.
+
+Prerequisites, then one command from `ProjectCosts-CodeApp/`:
+1. `pa app run` (or `npm run dev` plus `pac code run --appUrl http://localhost:3000`).
+2. The two saved sessions: `npm run e2e:auth:codeapp` and `npm run e2e:auth:canvas`.
+3. The run:
+   ```powershell
+   $env:PARITY_WRITE = "1"   # only when the write flows may run (they create and delete PW- rows on DEV)
+   npm run parity -- --screen land-lease --tier full --mode full
+   ```
+
+How a run goes:
+- **The project ids are asked for every run** (read project; write project per app, Enter = the read project). They stay in
+  environment variables only (`PARITY_READ_PROJECT_ID`, `PARITY_WRITE_PROJECT_CANVAS`, `PARITY_WRITE_PROJECT_CODE`) and
+  are printed masked. Never write them into a file.
+- **Phases:**
+  - preflight;
+  - the read lanes side by side (canvas-A/B/C, code-A/B);
+  - the write lanes;
+  - one re-run of the failed tests (a test that passes only then is listed as flaky);
+  - the offline report.
+
+  The hard limit is 60 minutes per screen.
+- **Output:** `e2e/runs/<batch>/<screen>/summary.md` (lanes, budgets, differences classed as new / known / stale /
+  artefact), plus facts, traces and timings. It is git-ignored.
+- **Reference:** a full run with no Canvas failure updates the Canvas reference (`e2e/reference/<screen>/`). After that,
+  `npm run parity:compare` records the code app only (13-19 minutes measured, 4 Nov 2026) and `npm run parity:smoke` is the quick check.
+
+Other commands:
+- `npm run parity:sweep`: deletes the `PW-` rows a failed cleanup left. Set `PARITY_SCREEN`, `PARITY_SWEEP_TAG=PW-<runId>…`
+  and `PARITY_WRITE=1`. With `PARITY_SWEEP_DRY=1` it only lists the run tags it would delete; check those first.
+- `npm run parity:gen`: drafts a manifest from a canvas `.pa.yaml`.
+- `npm run parity:mutate`: the mutation proof (apply, run in compare mode, `check`, revert).
+- `npx vitest run e2e/harness`: the harness's own unit tests (UT-PH*); `npm run typecheck:e2e` type-checks `e2e/`.
+
+Live state (4 Nov 2026), Land Lease on DEV:
+- Full runs take 30-33 min; a compare run 13-19 min. Runs 12 and 13 were clean (no harness failure, no flaky test).
+- The mutation proof caught 6 of 6 (4 Nov 2026).
+- After run 15 the one failing check was the real gap CA-30, with 64 visual differences waiting for a decision. Both were
+  fixed on 4 Nov 2026 (D80 §3: CA-30, four code-app differences, two reader artefacts), and run 16 (full, 37 min 10 s)
+  confirmed them: 0 new differences, 3 flaky tests (passed on the re-run). Run a FULL run first after a reader change: it
+  refreshes the Canvas reference, which a compare run reuses.
+- Acceptance is three clean runs in a row plus the mutation proof.
+
+The same rule as the old specs applies: run one parity command at a time.
+
 ## The reference harness — five layers, nine gates
 
 `ProjectDocs/app-docs/VSBCloud-Harness-Plan.md` defines this for the *skeleton's* 23-
