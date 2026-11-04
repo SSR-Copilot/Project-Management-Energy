@@ -1,0 +1,28 @@
+{
+  // The Playwright suites and the one-hour parity harness (D80): `npm run typecheck:e2e`.
+  // Playwright loads these files itself (extensionless relative imports), so resolution is "bundler", not "nodenext".
+  // The DOM lib is on because page.evaluate() callbacks run in the browser. Nothing is emitted.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["e2e/**/*.ts", "e2e/**/*.d.mts", "scripts/*.d.mts", "playwright.config.ts"],
+  // Two old Land Lease specs (committed in 34f8790) have one unused name each (noUnusedLocals / noUnusedParameters); they are
+  // left as they are and excluded until they are retired or touched again.
+  "exclude": ["e2e/landlease.flows.parity.spec.ts", "e2e/landlease.write.parity.spec.ts"]
+}

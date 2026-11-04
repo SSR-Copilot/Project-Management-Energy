@@ -1,0 +1,13 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "ux",
+  "key": "edit-panel-toggles",
+  "recordedAt": "2026-11-04T04:58:19.867Z",
+  "data": {
+    "secured": false,
+    "allWtg": true,
+    "oneTimePayment": false,
+    "inflation": false
+  }
+}

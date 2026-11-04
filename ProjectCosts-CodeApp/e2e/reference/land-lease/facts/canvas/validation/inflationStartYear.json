@@ -1,0 +1,69 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "inflationStartYear",
+  "recordedAt": "2026-11-04T05:08:02.382Z",
+  "data": {
+    "0": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "1": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "2027": {
+      "messages": [],
+      "save": false
+    },
+    "99999": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "abc": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "-1": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "0000": {
+      "messages": [],
+      "save": false
+    },
+    "2027.5": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    " 2027": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    " ": {
+      "messages": [
+        "Year value must be in format YYYY."
+      ],
+      "save": false
+    },
+    "": {
+      "messages": [],
+      "save": false
+    }
+  }
+}

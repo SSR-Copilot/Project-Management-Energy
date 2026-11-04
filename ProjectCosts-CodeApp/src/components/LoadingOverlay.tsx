@@ -113,7 +113,8 @@ function LoadingOverlayBody({ mode = "blocking", label, testId }: Omit<LoadingOv
 
   if (mode === "inline") {
     return (
-      <div className={styles.inline} role="status" aria-live="polite" aria-busy="true" data-testid={testId}>
+      // `data-vsb-busy`: read by the test-only E2E idle hook (`platform/e2eHook.ts`); no visual effect.
+      <div className={styles.inline} role="status" aria-live="polite" aria-busy="true" data-testid={testId} data-vsb-busy="true">
         <Spinner size="medium" label={label} />
       </div>
     );
@@ -122,7 +123,8 @@ function LoadingOverlayBody({ mode = "blocking", label, testId }: Omit<LoadingOv
   return (
     // `aria-modal` plus a live region: the canvas version was a plain container with no
     // role at all, which is one of the 239 acc-AccessibleLabelNeeded findings.
-    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true" data-testid={testId}>
+    // `data-vsb-busy`: read by the test-only E2E idle hook (`platform/e2eHook.ts`); no visual effect.
+    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true" data-testid={testId} data-vsb-busy="true">
       <div className={styles.card}>
         {/* `InformationText = ""` (no label) ⇒ a 120 px spinner box; any text ⇒ 90 px. */}
         <div className={mergeClasses(styles.spinnerBox, label ? styles.spinnerBoxWithLabel : styles.spinnerBoxNoLabel)}>

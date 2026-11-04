@@ -31,7 +31,14 @@
     "e2e:landlease:gates": "playwright test --project=parity landlease.gates.parity",
     "e2e:landlease:flows": "playwright test --project=parity landlease.flows.parity",
     "e2e:landlease:standard": "playwright test --project=parity landlease.standard.parity",
-    "e2e:landlease:report": "node e2e/report-parity.mjs landlease"
+    "e2e:landlease:report": "node e2e/report-parity.mjs landlease",
+    "parity": "node e2e/harness/run.mjs",
+    "parity:compare": "node e2e/harness/run.mjs --mode compare",
+    "parity:smoke": "node e2e/harness/run.mjs --tier smoke --mode compare",
+    "parity:gen": "node scripts/gen-parity-manifest.mjs",
+    "parity:mutate": "node scripts/parity-mutate.mjs",
+    "parity:sweep": "playwright test --config e2e/harness/playwright.harness.config.ts --project sweep",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.7",

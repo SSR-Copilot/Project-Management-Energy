@@ -1,23 +1,22 @@
 /**
- * The Cost-screen parity harness: open a Cost screen for one project in both apps (E2E-PARITY-PROMPT.md section 2).
+ * The Cost-screen parity harness: open a Cost screen for one project in both apps (E2E-PARITY-PROMPT.md section 2), plus the
+ * Land Lease card, row and command helpers the older specs and the Land Lease manifest share.
  *
- *   canvas  : the Cost canvas app, opened with `&projectId=<guid>` exactly as Edit Costs opens it; then the left menu
- *   code app: the `pac code run` play URL plus the launch parameters Edit Costs sends (`costScreen` + `projectId`,
- *             CONVENTIONS rule 12), so the run takes the same deep-link path a user does
+ * Opening and waiting (`openCanvasCost`, `openCodeCost`, `waitForStable`, `waitForNotBusy`, `busyNow`, `unclippedIndexesOf`,
+ * the app URLs) live in the screen-neutral `lib/appFrame.ts`. They are re-exported here, so the older specs keep their imports.
  *
  * Everything that differs per run comes from the environment, never from code (no project, no URL is written in a test):
  *   LANDLEASE_PROJECT_ID   the test project (required by the Land Lease specs; they skip without it)
- *   CODEAPP_URL            default: the local play URL `pac code run` serves
- *   CANVAS_COST_URL        default: the Cost canvas app in VSBCloud_Dev
+ *   CODEAPP_URL            default: the local play URL `pac code run` serves (`lib/appFrame.ts`)
+ *   CANVAS_COST_URL        default: the Cost canvas app in VSBCloud_Dev (`lib/appFrame.ts`)
  */
-import { expect, type FrameLocator, type Locator, type Page, test } from "@playwright/test";
-import { CANVAS_FRAME, CODE_FRAME } from "./parity";
+import { type FrameLocator, type Locator, type Page, test } from "@playwright/test";
+import { unclippedIndexesOf, waitForStable } from "./appFrame";
 
-export const CODEAPP_URL = process.env.CODEAPP_URL
-  ?? "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/app/local"
-  + "?_localAppUrl=http://localhost:3000&_localConnectionUrl=http://localhost:8080";
-export const CANVAS_COST_URL = process.env.CANVAS_COST_URL
-  ?? "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/a/ab3554c5-a4fc-4436-8825-8a84484ec5ea?tenantId=e3bab30b-3902-4ce6-b575-f005f94c78c1";
+export {
+  BUSY_INDICATORS, BUSY_MESSAGE, busyNow, CANVAS_COST_URL, CODEAPP_URL, openCanvasCost, openCodeCost, unclippedIndexesOf,
+  waitForNotBusy, waitForStable,
+} from "./appFrame";
 
 export type Kind = "canvas" | "code";
 
@@ -28,95 +27,6 @@ export function projectIdOrSkip(variable = "LANDLEASE_PROJECT_ID"): string {
   return id;
 }
 
-const withParams = (base: string, params: Record<string, string>): string => {
-  const url = new URL(base);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  return url.toString();
-};
-
-async function pressSignIn(page: Page): Promise<void> {
-  for (const f of page.frames()) {
-    const b = f.getByRole("button", { name: "Sign in", exact: true });
-    if (await b.count().catch(() => 0)) await b.first().click({ timeout: 2000 }).catch(() => {});
-  }
-}
-
-/**
- * Waits until the screen stops changing: the number of visible text nodes in the app frame is the same on two
- * polls in a row and no busy indicator is shown. A condition, not a fixed sleep (prompt section 3.3).
- */
-export async function waitForStable(page: Page, app: FrameLocator, { pollMs = 700, timeoutMs = 45_000 } = {}): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let last = -1;
-  let same = 0;
-  while (Date.now() < deadline) {
-    const n = await app.locator("body").evaluate((b) => {
-      const busy = b.querySelector("[aria-busy='true'], [role='progressbar'], .fui-Spinner");
-      if (busy && (busy as HTMLElement).offsetParent !== null) return -1;
-      // The apps' own busy messages ("Saving Land Lease Contract...", "Deleting ...", "Loading ..."; canvas pop-up and code
-      // overlay alike). A save is still writing while one shows: leaving the screen then aborts it (Stage B run, 3 Nov 2026).
-      for (const e of Array.from(b.querySelectorAll<HTMLElement>("div, span, p, label"))) {
-        if (e.children.length > 0 || e.offsetParent === null) continue;
-        if (/^(Saving|Deleting|Loading)\b.*\.{3}$/.test((e.textContent ?? "").trim())) return -1;
-      }
-      const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
-      let count = 0;
-      for (let t = w.nextNode(); t; t = w.nextNode()) if (t.textContent?.trim()) count++;
-      return count;
-    }).catch(() => -1);
-    same = n >= 0 && n === last ? same + 1 : 0;
-    if (same >= 2) return;
-    last = n;
-    await page.waitForTimeout(pollMs);
-  }
-}
-
-/**
- * Waits until the app shows none of its busy messages ("Saving …...", "Deleting …...", "Loading …...") and FAILS if one is still
- * there after `timeoutMs`: after a Save the test must not move on (a navigation would abort the save part-way).
- */
-export async function waitForNotBusy(app: FrameLocator, timeoutMs = 180_000): Promise<void> {
-  const busy = () => app.locator("body").evaluate((b) => Array.from(b.querySelectorAll<HTMLElement>("div, span, p, label")).some((e) =>
-    e.children.length === 0 && e.offsetParent !== null && /^(Saving|Deleting|Loading)\b.*\.{3}$/.test((e.textContent ?? "").trim())));
-  const deadline = Date.now() + timeoutMs;
-  // Give the busy message a moment to appear after the click, then wait for it to go (two clear reads in a row).
-  let clear = 0;
-  while (Date.now() < deadline) {
-    clear = (await busy().catch(() => true)) ? 0 : clear + 1;
-    if (clear >= 3) return;
-    await new Promise((r) => setTimeout(r, 700));
-  }
-  throw new Error(`still busy after ${timeoutMs} ms (a "Saving / Deleting / Loading..." message is shown)`);
-}
-
-/** The Cost canvas app on one project, then a left-menu screen ("Land Lease"). */
-export async function openCanvasCost(page: Page, projectId: string, menuLabel: string): Promise<FrameLocator> {
-  await page.goto(withParams(CANVAS_COST_URL, { projectId }));
-  const app = page.frameLocator(CANVAS_FRAME);
-  for (let i = 0; i < 45; i++) {
-    if ((await app.locator("[data-control-name]").count().catch(() => 0)) > 20) break;
-    await pressSignIn(page);
-    await page.waitForTimeout(4000);
-  }
-  await expect(app.locator("[data-control-name]").first()).toBeVisible({ timeout: 60_000 });
-  await app.getByText(menuLabel, { exact: true }).first().click({ force: true, timeout: 60_000 });
-  await waitForStable(page, app);
-  return app;
-}
-
-/** The code app on one project and screen, through the Edit Costs launch parameters. */
-export async function openCodeCost(page: Page, projectId: string, costScreen: string): Promise<FrameLocator> {
-  await page.goto(withParams(CODEAPP_URL, { costScreen, projectId }));
-  const app = page.frameLocator(CODE_FRAME);
-  for (let i = 0; i < 15 && !(await app.getByTestId("header-user").isVisible().catch(() => false)); i++) {
-    await pressSignIn(page);
-    await page.waitForTimeout(3000);
-  }
-  await app.getByTestId("header-user").waitFor({ state: "visible", timeout: 30_000 });
-  await waitForStable(page, app);
-  return app;
-}
-
 /** Clicks a visible text in either app. A canvas control sits under an invisible button, so the canvas click is forced. */
 export async function clickText(kind: Kind, app: FrameLocator, text: string, nth = 0): Promise<void> {
   await app.getByText(text, { exact: true }).nth(nth).click({ force: kind === "canvas", timeout: 15_000 });
@@ -124,6 +34,23 @@ export async function clickText(kind: Kind, app: FrameLocator, text: string, nth
 
 const LEASE_CARD_TITLE = "lbl_LandLease_Content_SubaccountsCardHeader_SubaccountName_2";
 const LEASE_CHEVRONS = "[data-control-name='ico_LandLease_Content_SubaccountsCardHeader_Down_2'], [data-control-name='ico_LandLease_Content_SubaccountsCardHeader_Up_2']";
+
+/**
+ * The title of Canvas card `index` in SCREEN order: the `index`th title from the top (by y), not the `index`th in the page.
+ * A guard: the Canvas gallery positions its items absolutely, so page order is not guaranteed to be screen order (the probe
+ * of 4 Nov 2026 found them equal; the standard import's wrong card was a clipped command, see `cardCommand`). Falls back to
+ * page order when fewer titles than `index + 1` have a box.
+ */
+export async function canvasCardTitle(app: FrameLocator, index: number): Promise<Locator> {
+  const titles = app.locator(`[data-control-name='${LEASE_CARD_TITLE}']`);
+  const byY = await titles.evaluateAll((els) => els
+    .map((e, i) => ({ i, r: e.getBoundingClientRect() }))
+    .filter((x) => x.r.width > 0 || x.r.height > 0)
+    .sort((a, b) => a.r.top - b.r.top)
+    .map((x) => x.i));
+  const at = byY[index];
+  return titles.nth(at ?? index);
+}
 
 /**
  * Folds or unfolds Land Lease sub-account card `index` (screen order).
@@ -139,7 +66,7 @@ export async function toggleLeaseCard(kind: Kind, page: Page, app: FrameLocator,
     await header.scrollIntoViewIfNeeded();
     await header.click({ timeout: 15_000 });
   } else {
-    const title = app.locator(`[data-control-name='${LEASE_CARD_TITLE}']`).nth(index);
+    const title = await canvasCardTitle(app, index);
     await title.scrollIntoViewIfNeeded({ timeout: 15_000 });
     const t = await title.boundingBox();
     if (!t) throw new Error(`Canvas card ${index}: title not on screen`);
@@ -164,17 +91,24 @@ export async function toggleLeaseCard(kind: Kind, page: Page, app: FrameLocator,
  */
 export async function cardCommand(kind: Kind, app: FrameLocator, index: number, caption: string): Promise<Locator> {
   if (kind === "code") {
-    return app.locator("section").filter({ has: app.locator("[data-testid^='leasecard-']").nth(index) })
+    // The `index`th card SECTION. Not `filter({ has: header.nth(index) })`: `has` is matched inside each section, and each
+    // holds exactly one header, so only index 0 ever matched (live run 3, 4 Nov 2026, the standard import on card 6).
+    return app.locator("section").filter({ has: app.locator("[data-testid^='leasecard-']") }).nth(index)
       .getByText(caption, { exact: true }).first();
   }
-  const title = await app.locator(`[data-control-name='${LEASE_CARD_TITLE}']`).nth(index).boundingBox();
+  const title = await (await canvasCardTitle(app, index)).boundingBox();
   if (!title) throw new Error(`Canvas card ${index}: title not on screen`);
   const items = app.getByText(caption, { exact: true });
+  // Only commands a user can SEE: a folded card keeps its bar laid out but clipped, 49 px under its own title, which is just
+  // below the NEXT card's title (probe, 4 Nov 2026: card 5's hidden "Add Standard Contract" at y 340, card 6's title at 333,
+  // card 6's own command at 382). Playwright's isVisible ignores clipping, so the standard import clicked card 5's button.
+  const seen = new Set(await unclippedIndexesOf(items));
   let best = -1;
   let bestDy = Number.POSITIVE_INFINITY;
   for (let k = 0, n = await items.count(); k < n; k++) {
+    if (!seen.has(k)) continue;
     const b = await items.nth(k).boundingBox();
-    if (!b || !(await items.nth(k).isVisible())) continue;
+    if (!b) continue;
     const dy = b.y - title.y;
     if (dy > 0 && dy < bestDy) { bestDy = dy; best = k; }
   }
@@ -199,33 +133,19 @@ export async function leaseCardTitles(kind: Kind, app: FrameLocator): Promise<st
   for (let i = 0; i < 60; i++) {
     const n = await titles.count();
     if (i >= n) break;
-    await titles.nth(i).scrollIntoViewIfNeeded().catch(() => {});
-    seen.push((await titles.nth(i).innerText().catch(() => "")).trim());
+    const title = await canvasCardTitle(app, i); // screen order, not page order
+    await title.scrollIntoViewIfNeeded().catch(() => {});
+    seen.push((await title.innerText().catch(() => "")).trim());
   }
   return seen;
 }
 
 /**
- * The indexes of the elements matching `selector` that a user can actually see. The canvas lays out the rows of a FOLDED card too
- * and hides them by clipping (an overflow ancestor cuts them off; CSS still says "visible"), the same reason `lib/texts.ts` skips
- * clipped text. So an element counts only when it has a box and its centre lies inside every clipping ancestor.
+ * The indexes of the elements matching `selector` that a user can actually see (`lib/appFrame.ts` unclippedIndexesOf: a folded
+ * canvas card keeps its rows laid out but clipped).
  */
 export async function unclippedIndexes(app: FrameLocator, selector: string): Promise<number[]> {
-  return app.locator(selector).evaluateAll((els) => els.flatMap((e, i) => {
-    const r = e.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return [];
-    const cs = getComputedStyle(e);
-    if (cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) === 0) return [];
-    const cx = r.x + r.width / 2;
-    const cy = r.y + r.height / 2;
-    for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
-      const as = getComputedStyle(a);
-      if (!/(hidden|clip|auto|scroll)/.test(as.overflowX + as.overflowY)) continue;
-      const ar = a.getBoundingClientRect();
-      if (cx < ar.left || cx > ar.right || cy < ar.top || cy > ar.bottom) return [];
-    }
-    return [i];
-  }));
+  return unclippedIndexesOf(app.locator(selector));
 }
 
 /** The visible period rows of the open cards, in screen order (canvas: the row containers; code app: the row select buttons). */
@@ -240,7 +160,13 @@ export async function leaseRowCount(kind: Kind, app: FrameLocator): Promise<numb
 
 /** Selects the `n`th visible period row (a forced click on the canvas lands on the transparent button covering the row). */
 export async function selectLeaseRow(kind: Kind, page: Page, app: FrameLocator, n = 0): Promise<void> {
-  const shown = await unclippedIndexes(app, LEASE_ROW[kind]);
+  // A card's rows can render a moment after it opens (live run 10, 4 Nov 2026: "visible rows: 0" right after the open), so
+  // the row is waited for, up to 20 s, before it is called missing.
+  let shown = await unclippedIndexes(app, LEASE_ROW[kind]);
+  for (let end = Date.now() + 20_000; shown[n] === undefined && Date.now() < end;) {
+    await page.waitForTimeout(500);
+    shown = await unclippedIndexes(app, LEASE_ROW[kind]);
+  }
   const index = shown[n];
   if (index === undefined) throw new Error(`${kind}: no visible period row ${n} (visible rows: ${shown.length}); open a card with rows first`);
   await app.locator(LEASE_ROW[kind]).nth(index).click({ force: kind === "canvas", timeout: 15_000 });

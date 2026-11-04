@@ -1,0 +1,67 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "otpDueDate1",
+  "recordedAt": "2026-11-04T05:09:05.633Z",
+  "data": {
+    "01/2027": {
+      "messages": [],
+      "save": true
+    },
+    "12/2027": {
+      "messages": [],
+      "save": true
+    },
+    "1/2027": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "13/2027": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "00/2027": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "01-2027": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "abc": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "29/02/2028": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "02/0000": {
+      "messages": [],
+      "save": true
+    },
+    " 01/2027": {
+      "messages": [
+        "Due Date must be in format MM/YYYY."
+      ],
+      "save": false
+    },
+    "": {
+      "messages": [],
+      "save": false
+    }
+  }
+}

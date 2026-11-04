@@ -1,0 +1,50 @@
+[
+  {
+    "id": "caption",
+    "layer": "visual",
+    "file": "src/features/cost/periods/landLeaseRules.ts",
+    "find": "description: \"Description\",",
+    "replace": "description: \"Descripton\",",
+    "expectKey": "^visual\\.[^\\[]+\\[\"Descripton\"\\]\\.extra(#\\d+)?$"
+  },
+  {
+    "id": "size",
+    "layer": "visual",
+    "file": "src/features/cost/periods/LandLeaseScreen.tsx",
+    "find": "fontSize: \"10pt\", height: \"34px\",",
+    "replace": "fontSize: \"11pt\", height: \"34px\",",
+    "expectKey": "^visual\\.[^\\[]+\\[\"(Description|Start Date|Duration|End Date|Currency|Inflation Profile|Fix Costs p\\.a\\. \\[[^\\]]*\\]|Share of Revenues \\[%\\]|[^\"]*/MWh p\\.a\\.|[^\"]*/MW p\\.a\\.|[^\"]*/WTG p\\.a\\.|Aggregation|Secured|Allocation|OTP)\"\\]\\.fontSize(#\\d+)?$"
+  },
+  {
+    "id": "gate",
+    "layer": "gates",
+    "file": "src/features/cost/periods/landLeaseRules.ts",
+    "find": "const addStandardContract = args.hasMatchingAssumption",
+    "replace": "const addStandardContract = !args.hasMatchingAssumption",
+    "expectKey": "^gates\\.[^\\[]+\\[\"Add Standard Contract\"\\]\\.enabled$"
+  },
+  {
+    "id": "message",
+    "layer": "validation",
+    "file": "src/features/cost/periods/landLeaseRules.ts",
+    "find": "dueDateFormat: \"Due Date must be in format MM/YYYY.\",",
+    "replace": "dueDateFormat: \"Due Date must be in format MM/YY.\",",
+    "expectKey": "^validation\\.[^\\[]*[Dd]ue-?[Dd]ate[^\\[]*\\[.*\\]\\.messages$"
+  },
+  {
+    "id": "written-column",
+    "layer": "flows",
+    "file": "src/features/cost/periods/landLeaseRules.ts",
+    "find": "[LEASE_PERIOD_COL.eurPerWtg]: num(form.eurPerWtg),",
+    "replace": "[LEASE_PERIOD_COL.eurPerWtg]: (num(form.eurPerWtg) ?? 0) + 1,",
+    "expectKey": "^flows\\.[^\\[]+\\[\".*\"\\]\\[\\d+\\]\\.vsb_eurwtg$"
+  },
+  {
+    "id": "aria-label",
+    "layer": "ux",
+    "file": "src/features/cost/periods/landLeaseRules.ts",
+    "find": "durationYears: \"Year\",",
+    "replace": "durationYears: \"Years\",",
+    "expectKey": "^ux\\.[^.]*(accessible|aria|a11y|label)[^.]*\\.(value|durationYears)$"
+  }
+]

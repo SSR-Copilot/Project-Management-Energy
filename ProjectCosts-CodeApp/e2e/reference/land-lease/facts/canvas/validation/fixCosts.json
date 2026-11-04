@@ -1,0 +1,81 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "fixCosts",
+  "recordedAt": "2026-11-04T04:59:10.929Z",
+  "data": {
+    "0": {
+      "messages": [],
+      "save": true
+    },
+    "1": {
+      "messages": [],
+      "save": true
+    },
+    "1000000000": {
+      "messages": [],
+      "save": true
+    },
+    "1000000001": {
+      "messages": [
+        "Value must be between 0 and 1,000,000,000.0."
+      ],
+      "save": false
+    },
+    "abc": {
+      "messages": [
+        "Value must be a numeric with two decimal place."
+      ],
+      "save": false
+    },
+    "-1": {
+      "messages": [
+        "Value must be between 0 and 1,000,000,000.0."
+      ],
+      "save": false
+    },
+    "1.5": {
+      "messages": [],
+      "save": true
+    },
+    "1,5": {
+      "messages": [
+        "Value must be a numeric with two decimal place."
+      ],
+      "save": false
+    },
+    "0.555": {
+      "messages": [
+        "Value must be a numeric with two decimal place."
+      ],
+      "save": false
+    },
+    "1e3": {
+      "messages": [
+        "Value must be a numeric with two decimal place."
+      ],
+      "save": false
+    },
+    " ": {
+      "messages": [
+        "Value must be a numeric with two decimal place."
+      ],
+      "save": false
+    },
+    "": {
+      "messages": [],
+      "save": true
+    },
+    "1000000000.01": {
+      "messages": [
+        "Value must be between 0 and 1,000,000,000.0."
+      ],
+      "save": false
+    },
+    "1.": {
+      "messages": [],
+      "save": true
+    }
+  }
+}

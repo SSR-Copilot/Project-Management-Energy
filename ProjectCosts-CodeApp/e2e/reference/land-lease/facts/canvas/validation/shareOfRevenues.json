@@ -1,0 +1,81 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "shareOfRevenues",
+  "recordedAt": "2026-11-04T05:01:27.192Z",
+  "data": {
+    "0": {
+      "messages": [],
+      "save": true
+    },
+    "1": {
+      "messages": [],
+      "save": true
+    },
+    "10000": {
+      "messages": [],
+      "save": true
+    },
+    "10001": {
+      "messages": [
+        "Please select a value between 0 and 10,000.0."
+      ],
+      "save": false
+    },
+    "abc": {
+      "messages": [
+        "Enter a number with no more than two decimal places."
+      ],
+      "save": false
+    },
+    "-1": {
+      "messages": [
+        "Please select a value between 0 and 10,000.0."
+      ],
+      "save": false
+    },
+    "1.5": {
+      "messages": [],
+      "save": true
+    },
+    "1,5": {
+      "messages": [
+        "Enter a number with no more than two decimal places."
+      ],
+      "save": false
+    },
+    "0.555": {
+      "messages": [
+        "Enter a number with no more than two decimal places."
+      ],
+      "save": false
+    },
+    "1e3": {
+      "messages": [
+        "Enter a number with no more than two decimal places."
+      ],
+      "save": false
+    },
+    " ": {
+      "messages": [
+        "Enter a number with no more than two decimal places."
+      ],
+      "save": false
+    },
+    "": {
+      "messages": [],
+      "save": true
+    },
+    "10000.01": {
+      "messages": [
+        "Please select a value between 0 and 10,000.0."
+      ],
+      "save": false
+    },
+    "1.": {
+      "messages": [],
+      "save": true
+    }
+  }
+}

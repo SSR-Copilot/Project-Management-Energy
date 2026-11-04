@@ -1,0 +1,759 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "visual",
+  "key": "new-contract-otp-on",
+  "recordedAt": "2026-11-04T04:51:01.803Z",
+  "data": [
+    {
+      "text": "*",
+      "x": 1279,
+      "y": 56,
+      "w": 8,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(178, 39, 39)"
+    },
+    {
+      "text": "Description",
+      "x": 1289,
+      "y": 61,
+      "w": 78,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Secured",
+      "x": 1669,
+      "y": 67,
+      "w": 50,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(36, 36, 36)"
+    },
+    {
+      "text": "Locations",
+      "x": 231,
+      "y": 86,
+      "w": 65,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Allocate to all WTGs",
+      "x": 1669,
+      "y": 109,
+      "w": 124,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(36, 36, 36)"
+    },
+    {
+      "text": "Add Contract Type",
+      "x": 263,
+      "y": 127,
+      "w": 115,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(0, 0, 0)"
+    },
+    {
+      "text": "Add Period",
+      "x": 418,
+      "y": 127,
+      "w": 69,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(89, 89, 89)"
+    },
+    {
+      "text": "Add Standard Contract",
+      "x": 527,
+      "y": 127,
+      "w": 141,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(89, 89, 89)"
+    },
+    {
+      "text": "Edit",
+      "x": 708,
+      "y": 127,
+      "w": 23,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(89, 89, 89)"
+    },
+    {
+      "text": "Delete",
+      "x": 771,
+      "y": 127,
+      "w": 40,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(89, 89, 89)"
+    },
+    {
+      "text": "",
+      "x": 239,
+      "y": 129,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(0, 110, 185)"
+    },
+    {
+      "text": "",
+      "x": 394,
+      "y": 129,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(200, 198, 196)"
+    },
+    {
+      "text": "",
+      "x": 503,
+      "y": 129,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(200, 198, 196)"
+    },
+    {
+      "text": "",
+      "x": 684,
+      "y": 129,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(200, 198, 196)"
+    },
+    {
+      "text": "",
+      "x": 747,
+      "y": 129,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(200, 198, 196)"
+    },
+    {
+      "text": "Start Date",
+      "x": 1289,
+      "y": 139,
+      "w": 69,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Allocation",
+      "x": 1614,
+      "y": 145,
+      "w": 71,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Description",
+      "x": 276,
+      "y": 165,
+      "w": 74,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Start Date",
+      "x": 451,
+      "y": 165,
+      "w": 65,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Duration",
+      "x": 579,
+      "y": 165,
+      "w": 57,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "End Date",
+      "x": 668,
+      "y": 165,
+      "w": 58,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Currency",
+      "x": 736,
+      "y": 165,
+      "w": 58,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Inflation Profile",
+      "x": 836,
+      "y": 165,
+      "w": 100,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Fix Costs p.a. [EUR]",
+      "x": 955,
+      "y": 165,
+      "w": 121,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Share of Revenues [%]",
+      "x": 1103,
+      "y": 165,
+      "w": 143,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/MWh p.a.",
+      "x": 1265,
+      "y": 165,
+      "w": 91,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/MW p.a.",
+      "x": 1383,
+      "y": 165,
+      "w": 83,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/WTG p.a.",
+      "x": 1488,
+      "y": 165,
+      "w": 88,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Aggregation",
+      "x": 1586,
+      "y": 165,
+      "w": 78,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Secured",
+      "x": 1686,
+      "y": 165,
+      "w": 52,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Allocation",
+      "x": 1776,
+      "y": 165,
+      "w": 64,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "OTP",
+      "x": 1876,
+      "y": 165,
+      "w": 26,
+      "h": 18,
+      "fontSize": "13.3333px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "",
+      "x": 1552,
+      "y": 171,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(0, 120, 212)"
+    },
+    {
+      "text": "Allocate All WTG",
+      "x": 277,
+      "y": 199,
+      "w": 87,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "700",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "16.02.29",
+      "x": 473,
+      "y": 199,
+      "w": 42,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "5 years",
+      "x": 539,
+      "y": 199,
+      "w": 36,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "0 months",
+      "x": 588,
+      "y": 199,
+      "w": 47,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "15.02.34",
+      "x": 683,
+      "y": 199,
+      "w": 42,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Euro",
+      "x": 737,
+      "y": 199,
+      "w": 23,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "2,400.0",
+      "x": 1319,
+      "y": 199,
+      "w": 36,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "SUM",
+      "x": 1587,
+      "y": 199,
+      "w": 23,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "No",
+      "x": 1687,
+      "y": 199,
+      "w": 14,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Yes",
+      "x": 1777,
+      "y": 199,
+      "w": 17,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "No",
+      "x": 1877,
+      "y": 199,
+      "w": 15,
+      "h": 14,
+      "fontSize": "10.6667px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Duration",
+      "x": 1289,
+      "y": 215,
+      "w": 61,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Inflation Profile",
+      "x": 1669,
+      "y": 226,
+      "w": 94,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(36, 36, 36)"
+    },
+    {
+      "text": "Distance and Rotor Overfly Areas",
+      "x": 231,
+      "y": 252,
+      "w": 226,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "One-Time Payment",
+      "x": 1669,
+      "y": 265,
+      "w": 119,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(36, 36, 36)"
+    },
+    {
+      "text": "Currency",
+      "x": 1289,
+      "y": 291,
+      "w": 62,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Permanent Access Routes & Crane Pads",
+      "x": 231,
+      "y": 294,
+      "w": 272,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "*",
+      "x": 1604,
+      "y": 296,
+      "w": 8,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(178, 39, 39)"
+    },
+    {
+      "text": "One-Time Payment 1 Date",
+      "x": 1614,
+      "y": 301,
+      "w": 185,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Euro",
+      "x": 1302,
+      "y": 322,
+      "w": 28,
+      "h": 20,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(189, 189, 189)"
+    },
+    {
+      "text": "Cabling and Overhead Lines",
+      "x": 231,
+      "y": 336,
+      "w": 191,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Fix Costs p.a. [EUR]",
+      "x": 1289,
+      "y": 367,
+      "w": 130,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "*",
+      "x": 1604,
+      "y": 372,
+      "w": 8,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(178, 39, 39)"
+    },
+    {
+      "text": "One-Time Payment 1 [EUR]",
+      "x": 1614,
+      "y": 377,
+      "w": 190,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "600",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Substation / Transfer Station",
+      "x": 231,
+      "y": 378,
+      "w": 195,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Compansation and Replacement Measures",
+      "x": 231,
+      "y": 420,
+      "w": 294,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Share of Revenues [%]",
+      "x": 1289,
+      "y": 443,
+      "w": 152,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Add One-Time payment",
+      "x": 1632,
+      "y": 454,
+      "w": 153,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "600",
+      "color": "rgb(189, 189, 189)"
+    },
+    {
+      "text": "Temporary Areas",
+      "x": 231,
+      "y": 462,
+      "w": 118,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Leaseholders",
+      "x": 231,
+      "y": 504,
+      "w": 91,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/MWh p.a.",
+      "x": 1289,
+      "y": 519,
+      "w": 98,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Other",
+      "x": 231,
+      "y": 546,
+      "w": 40,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/MW p.a.",
+      "x": 1289,
+      "y": 595,
+      "w": 89,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "EUR/WTG p.a.",
+      "x": 1289,
+      "y": 671,
+      "w": 94,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Aggregation",
+      "x": 1289,
+      "y": 747,
+      "w": 82,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "SUM",
+      "x": 1302,
+      "y": 778,
+      "w": 30,
+      "h": 20,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(36, 36, 36)"
+    },
+    {
+      "text": "Distribution Frequency",
+      "x": 1289,
+      "y": 823,
+      "w": 156,
+      "h": 20,
+      "fontSize": "14.6667px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "Please fill in at least one commercial figure",
+      "x": 1289,
+      "y": 945,
+      "w": 131,
+      "h": 31,
+      "fontSize": "12px",
+      "fontWeight": "100",
+      "color": "rgb(178, 39, 39)"
+    },
+    {
+      "text": "Save",
+      "x": 1733,
+      "y": 951,
+      "w": 29,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(89, 89, 89)"
+    },
+    {
+      "text": "Cancel",
+      "x": 1843,
+      "y": 951,
+      "w": 41,
+      "h": 19,
+      "fontSize": "14px",
+      "fontWeight": "400",
+      "color": "rgb(0, 110, 185)"
+    },
+    {
+      "text": "",
+      "x": 1709,
+      "y": 953,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(11, 11, 11)"
+    },
+    {
+      "text": "",
+      "x": 1819,
+      "y": 953,
+      "w": 16,
+      "h": 16,
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "color": "rgb(0, 110, 185)"
+    }
+  ]
+}

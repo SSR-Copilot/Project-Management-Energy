@@ -1,0 +1,45 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "flows",
+  "key": "periods.S4-gates.ui",
+  "recordedAt": "2026-11-04T05:15:44.828Z",
+  "data": {
+    "gates": [
+      {
+        "period": "period 1",
+        "Add Contract Type": false,
+        "Add Period": false,
+        "Add Standard Contract": false,
+        "Edit": true,
+        "Delete": true
+      },
+      {
+        "period": "period 2",
+        "Add Contract Type": false,
+        "Add Period": false,
+        "Add Standard Contract": false,
+        "Edit": true,
+        "Delete": false
+      },
+      {
+        "period": "period 3",
+        "Add Contract Type": false,
+        "Add Period": true,
+        "Add Standard Contract": false,
+        "Edit": true,
+        "Delete": true
+      }
+    ],
+    "prompts": [
+      {
+        "period": "period 1",
+        "text": "Delete Land Lease? Are you sure that you want to permanently delete Land Lease \"<tag>\" and all related Periods? Delete Cancel"
+      },
+      {
+        "period": "period 3",
+        "text": "Delete Period? Are you sure that you want to permanently delete Period 3 expense in the \"<tag> - 3\" Land Lease? Delete Cancel"
+      }
+    ]
+  }
+}

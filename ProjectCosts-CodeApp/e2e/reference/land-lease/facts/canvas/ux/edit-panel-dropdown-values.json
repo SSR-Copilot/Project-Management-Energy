@@ -1,0 +1,14 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "ux",
+  "key": "edit-panel-dropdown-values",
+  "recordedAt": "2026-11-04T04:58:05.070Z",
+  "data": {
+    "durationYears": "5 years",
+    "durationMonths": "0 months",
+    "currency": "Euro",
+    "aggregation": "SUM",
+    "distributionFrequency": "3 months"
+  }
+}

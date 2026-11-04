@@ -1,0 +1,14 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "gates",
+  "key": "card-0-open",
+  "recordedAt": "2026-11-04T04:58:57.987Z",
+  "data": {
+    "Add Contract Type": true,
+    "Add Period": false,
+    "Add Standard Contract": false,
+    "Edit": false,
+    "Delete": false
+  }
+}

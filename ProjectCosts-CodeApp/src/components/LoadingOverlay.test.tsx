@@ -54,4 +54,18 @@ describe("LoadingOverlay", () => {
     mount(<LoadingOverlay label="" />);
     expect(screen.getByLabelText("Waiting").parentElement).toHaveStyle({ height: "120px" });
   });
+
+  // D80: the test-only E2E idle hook (`platform/e2eHook.ts`) treats this marker as "still busy".
+  it("UT-LOADOVL-008 Every mode marks its outer element data-vsb-busy=\"true\"", () => {
+    const blocking = mount(<LoadingOverlay label="Saving..." />);
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-vsb-busy", "true");
+    blocking.unmount();
+
+    const portal = mount(<LoadingOverlay label="Saving..." portal />);
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-vsb-busy", "true");
+    portal.unmount();
+
+    mount(<LoadingOverlay mode="inline" label="Loading..." />);
+    expect(screen.getByRole("status")).toHaveAttribute("data-vsb-busy", "true");
+  });
 });

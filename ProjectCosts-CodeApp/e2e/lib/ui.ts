@@ -63,7 +63,16 @@ const BENIGN_CONSOLE = [
 /** Requests that fail at network level and belong to the Microsoft 365 player, not to the app (first seen 2 Nov 2026). */
 const BENIGN_FAILED: { re: RegExp; why: string }[] = [
   { re: /^GET https:\/\/config\.fp\.measure\.office\.com\//, why: "the player's Office telemetry config; TLS name mismatch on this network" },
+  // `net::ERR_ABORTED` is the browser cancelling a request (a navigation, a closed frame), never a server or network
+  // failure; the player's own resources are cancelled when it navigates on to the app (D80 run 16, 4 Nov 2026:
+  // `es6.webplayer-host-ui.js` aborted on the smoke load, which failed the test once and passed on the re-run).
+  { re: /^GET https:\/\/content\.powerapps\.com\/.* net::ERR_ABORTED$/, why: "a player resource cancelled by the player's own navigation, not a network failure" },
 ];
+
+/** The reason a failed request is the host's, not the app's (`BENIGN_FAILED`), or null when it counts as a failure. */
+export function benignFailure(line: string): string | null {
+  return BENIGN_FAILED.find((b) => b.re.test(line))?.why ?? null;
+}
 
 /**
  * HTTP errors that come from the Power Apps player / host, not from the app's own calls (first seen on the Land Lease run,
@@ -87,8 +96,8 @@ export function watchProblems(page: Page): { errors: string[]; failed: string[];
   });
   page.on("requestfailed", (r) => {
     const line = `${r.method()} ${r.url()} ${r.failure()?.errorText ?? ""}`;
-    const host = BENIGN_FAILED.find((b) => b.re.test(line));
-    if (host) seen.benign.push(`${line.slice(0, 140)} (${host.why})`); else seen.failed.push(line);
+    const why = benignFailure(line);
+    if (why) seen.benign.push(`${line.slice(0, 140)} (${why})`); else seen.failed.push(line);
   });
   page.on("response", (r) => {
     if (r.status() < 400) return;

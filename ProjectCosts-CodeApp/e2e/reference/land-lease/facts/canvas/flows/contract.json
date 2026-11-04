@@ -1,0 +1,127 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "flows",
+  "key": "contract",
+  "recordedAt": "2026-11-04T05:12:16.000Z",
+  "data": {
+    "create": {
+      "costs": [
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_currency_value": "<guid>",
+          "_vsb_currency_value@name": "Euro",
+          "_vsb_project_value": "<project>",
+          "_vsb_subaccount_value": "<guid>",
+          "_vsb_subaccount_value@name": "Locations",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_allwtgallocated": true,
+          "vsb_amountonetimepayment": null,
+          "vsb_amountonetimepayment2": null,
+          "vsb_amountonetimepayment3": null,
+          "vsb_description": "<tag>",
+          "vsb_duedateonetimepayment": null,
+          "vsb_duedateonetimepayment2": null,
+          "vsb_duedateonetimepayment3": null,
+          "vsb_inflationcountryarea": null,
+          "vsb_inflationprofile": null,
+          "vsb_inflationstartyear": 2030,
+          "vsb_isstandardcontract": false,
+          "vsb_isstartdatestandardassumption": false,
+          "vsb_landowner": null,
+          "vsb_name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "vsb_secured": 952850001,
+          "vsb_usecountryinflationprofile": false,
+          "vsb_useinflationprofile": false
+        }
+      ],
+      "periods": [
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_aggregation": 952850000,
+          "vsb_distributionfrequency": 1,
+          "vsb_duration": null,
+          "vsb_eurmw": null,
+          "vsb_eurmwh": null,
+          "vsb_eurwtg": 1000,
+          "vsb_fixedcosts": null,
+          "vsb_landleasedurationmonths": 0,
+          "vsb_landleasedurationyears": 1,
+          "vsb_name": "<tag>",
+          "vsb_ofrevenues": null,
+          "vsb_period": 952850000,
+          "vsb_startdate": "2029-02-16"
+        }
+      ],
+      "allocations": [
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_generatorinproject_value": "<guid>",
+          "_vsb_generatorinproject_value@name": "PVT-1250",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_name": "-<tag>-PVT-1250"
+        },
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_generatorinproject_value": "<guid>",
+          "_vsb_generatorinproject_value@name": "WTG RIHV_1",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_name": "-<tag>-WTG RIHV_1"
+        },
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_generatorinproject_value": "<guid>",
+          "_vsb_generatorinproject_value@name": "WTG RIHV_2",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_name": "-<tag>-WTG RIHV_2"
+        },
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_generatorinproject_value": "<guid>",
+          "_vsb_generatorinproject_value@name": "WTG RIHV_3",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_name": "-<tag>-WTG RIHV_3"
+        },
+        {
+          "_owningbusinessunit_value": "<guid>",
+          "_owningbusinessunit_value@name": "Germany",
+          "_vsb_generatorinproject_value": "<guid>",
+          "_vsb_generatorinproject_value@name": "WTG RIHV_4",
+          "_vsb_projectcost_value": "<guid>",
+          "_vsb_projectcost_value@name": "Revenue Individual Hedge Volume-Locations-<tag>",
+          "statecode": 0,
+          "statuscode": 1,
+          "vsb_name": "-<tag>-WTG RIHV_4"
+        }
+      ]
+    },
+    "delete": {
+      "costs": [],
+      "periods": [],
+      "allocations": []
+    }
+  }
+}

@@ -11,6 +11,7 @@
  * Sign in once with `npm run e2e:auth:codeapp` / `npm run e2e:auth:canvas` (a headed browser; MFA by hand).
  */
 import { defineConfig } from "@playwright/test";
+import { BROWSER_USE } from "./e2e/lib/browser";
 
 const DEFAULT_CODEAPP_URL =
   "https://apps.powerapps.com/play/e/be41add6-6f60-ebb0-9c73-2480d6bc615d/app/local"
@@ -33,14 +34,9 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: "e2e/report" }]],
   outputDir: "e2e/results",
   use: {
-    // Real Chrome with Chrome's local-network checks off: the play page calls http://localhost:3000 and :8080,
-    // which the bundled Chromium blocks (the player then says "We could not retrieve your app").
-    channel: "chrome",
-    launchOptions: { args: ["--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,BlockInsecurePrivateNetworkRequests"] },
-    viewport: { width: 1920, height: 1040 },
-    // A single click / fill that waits longer than this is stuck (e.g. a click on a DISABLED control retries for ever: Land
-    // Lease run, 3 Nov 2026); it fails with the reason instead of eating the whole test's time. A call can pass its own timeout.
-    actionTimeout: 30_000,
+    // Real Chrome without its local-network checks, 1920 x 1040, a 30 s action timeout: shared with the parity harness
+    // (`e2e/lib/browser.ts`, where each setting's reason is written down).
+    ...BROWSER_USE,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

@@ -1,0 +1,14 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "flows",
+  "key": "periods.S9-change-start-date.ui",
+  "recordedAt": "2026-11-04T05:20:01.832Z",
+  "data": {
+    "shown": [
+      {
+        "startDate": "Tue, Feb 20, 2029"
+      }
+    ]
+  }
+}

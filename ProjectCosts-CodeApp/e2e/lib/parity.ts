@@ -28,16 +28,27 @@ export interface Fact {
 
 export interface Diff { name: string; property: string; canvas: unknown; code: unknown }
 
-async function pressSignIn(page: Page): Promise<void> {
+/** Presses the player's "Sign in" button wherever it shows (the session is there; the player still asks). Also used by the harness preflight. */
+export async function pressSignIn(page: Page): Promise<void> {
   for (const f of page.frames()) {
     const b = f.getByRole("button", { name: "Sign in", exact: true });
     if (await b.count().catch(() => 0)) await b.first().click({ timeout: 2000 }).catch(() => {});
   }
 }
 
-/** Opens the Canvas Project Management app and waits until its controls are on screen. */
-export async function openCanvas(page: Page): Promise<FrameLocator> {
-  await page.goto(CANVAS_PM_URL);
+/** `base` with `params` set as query parameters (launch parameters for the player). */
+export function withParams(base: string, params: Record<string, string> = {}): string {
+  const url = new URL(base);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return url.toString();
+}
+
+/**
+ * Opens the Canvas Project Management app and waits until its controls are on screen. `params` are launch parameters
+ * (`projectid` opens a project on General Data, as the App Loading Screen's `Param("projectid")` reads it).
+ */
+export async function openCanvas(page: Page, params?: Record<string, string>): Promise<FrameLocator> {
+  await page.goto(withParams(CANVAS_PM_URL, params));
   const app = page.frameLocator(CANVAS_FRAME);
   for (let i = 0; i < 45; i++) {
     if ((await app.locator("[data-control-name]").count().catch(() => 0)) > 20) break;
@@ -48,9 +59,12 @@ export async function openCanvas(page: Page): Promise<FrameLocator> {
   return app;
 }
 
-/** Opens the code app (local build through `pac code run`) and waits for its header. */
-export async function openCode(page: Page): Promise<FrameLocator> {
-  await page.goto(CODE_URL);
+/**
+ * Opens the code app (local build through `pac code run`) and waits for its header. `params` are launch parameters
+ * (`pmScreen` + `projectId` is the Edit Project deep link, `src/app/deepLinks.ts` `projectAppUrl`).
+ */
+export async function openCode(page: Page, params?: Record<string, string>): Promise<FrameLocator> {
+  await page.goto(withParams(CODE_URL, params));
   const app = page.frameLocator(CODE_FRAME);
   for (let i = 0; i < 15 && !(await app.getByTestId("header-user").isVisible().catch(() => false)); i++) {
     await pressSignIn(page);
@@ -60,24 +74,42 @@ export async function openCode(page: Page): Promise<FrameLocator> {
   return app;
 }
 
-/** Application Settings in each app: the user menu entry, then the left menu item. */
+/**
+ * The item only the Application Settings left menu has (`App.pa.yaml` `LeftAdminNavigationMenu`, line 322). The project menu
+ * (`LeftNavigationMenu`, line 157) is drawn by the same `pcf_Left_Navigation_Menu` control and shares captions with it
+ * ("Milestones" at lines 173 and 387), so a menu counts as the settings menu only while it shows this item.
+ */
+export const SETTINGS_MENU_MARKER = "Check List Settings";
+
+/**
+ * Application Settings in each app: the user menu entry, then the left menu item. Every lookup is scoped to the menu that
+ * holds `SETTINGS_MENU_MARKER`, so a project-menu item with the same caption is never clicked: on a project screen the
+ * settings are opened first, and it throws, naming the label, when no settings menu shows after that.
+ */
 export async function openSettingsScreen(kind: "canvas" | "code", app: FrameLocator, leftMenuLabel: string): Promise<void> {
+  const marker = (scope: FrameLocator | Locator) => scope.getByText(SETTINGS_MENU_MARKER, { exact: true });
   if (kind === "canvas") {
-    // Scoped to the left menu: other controls on the screens carry the same words ("Costs", "Contracts").
-    const menu = app.locator("[data-control-name=pcf_Left_Navigation_Menu]").first();
-    if (!(await menu.getByText(leftMenuLabel, { exact: true }).first().isVisible().catch(() => false))) {
+    // Scoped to the left menu (other controls on the screens carry the same words, "Costs", "Contracts"), and to the one
+    // that is the settings menu (the project menu has "Milestones" and "General" too). A `has` locator must come from the
+    // same frame locator (Playwright drops the shared frame part and matches it inside the menu).
+    const menu = app.locator("[data-control-name=pcf_Left_Navigation_Menu]").filter({ has: marker(app) }).first();
+    if (!(await marker(menu).first().isVisible().catch(() => false))) {
       await app.locator("[data-control-name=cml_Main_User_Badge]").first().click();
       await app.getByRole("menuitem", { name: "Application Settings" }).click();
-      await menu.getByText("Check List Settings", { exact: true }).first().waitFor({ timeout: 60_000 });
+      await marker(menu).first().waitFor({ timeout: 60_000 }).catch(() => {
+        throw new Error(`openSettingsScreen: no Application Settings menu (with "${SETTINGS_MENU_MARKER}") shows; not clicking "${leftMenuLabel}", which the project menu may also have`);
+      });
     }
     await menu.getByText(leftMenuLabel, { exact: true }).first().click();
   } else {
-    if (!(await app.getByRole("navigation").getByText(leftMenuLabel, { exact: true }).first().isVisible().catch(() => false))) {
+    const nav = app.getByRole("navigation").filter({ has: marker(app) }).first();
+    if (!(await marker(nav).first().isVisible().catch(() => false))) {
       await app.getByTestId("header-user").click();
       await app.getByTestId("header-user-app-settings").click();
     }
-    const nav = app.getByRole("navigation");
-    await nav.getByText("Check List Settings", { exact: true }).waitFor();
+    await marker(nav).first().waitFor({ timeout: 30_000 }).catch(() => {
+      throw new Error(`openSettingsScreen: no Application Settings navigation (with "${SETTINGS_MENU_MARKER}") shows; not clicking "${leftMenuLabel}", which the project menu may also have`);
+    });
     if ((await nav.getByText(leftMenuLabel, { exact: true }).count()) === 0) await nav.getByText("Standard Assumptions", { exact: true }).click();
     await nav.getByText(leftMenuLabel, { exact: true }).click();
   }

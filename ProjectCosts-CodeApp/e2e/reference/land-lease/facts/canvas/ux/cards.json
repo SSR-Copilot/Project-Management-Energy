@@ -1,0 +1,45 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "ux",
+  "key": "cards",
+  "recordedAt": "2026-11-04T04:56:05.584Z",
+  "data": [
+    {
+      "title": "Locations",
+      "rows": 1
+    },
+    {
+      "title": "Distance and Rotor Overfly Areas",
+      "rows": 0
+    },
+    {
+      "title": "Permanent Access Routes & Crane Pads",
+      "rows": 0
+    },
+    {
+      "title": "Cabling and Overhead Lines",
+      "rows": 0
+    },
+    {
+      "title": "Substation / Transfer Station",
+      "rows": 0
+    },
+    {
+      "title": "Compansation and Replacement Measures",
+      "rows": 0
+    },
+    {
+      "title": "Temporary Areas",
+      "rows": 0
+    },
+    {
+      "title": "Leaseholders",
+      "rows": 0
+    },
+    {
+      "title": "Other",
+      "rows": 0
+    }
+  ]
+}

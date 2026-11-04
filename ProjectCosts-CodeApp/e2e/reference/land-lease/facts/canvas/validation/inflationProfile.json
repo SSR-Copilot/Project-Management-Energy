@@ -1,0 +1,81 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "inflationProfile",
+  "recordedAt": "2026-11-04T05:06:32.725Z",
+  "data": {
+    "0": {
+      "messages": [],
+      "save": true
+    },
+    "1": {
+      "messages": [],
+      "save": true
+    },
+    "100": {
+      "messages": [],
+      "save": true
+    },
+    "101": {
+      "messages": [
+        "Please select a value between 0 and 100."
+      ],
+      "save": false
+    },
+    "abc": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    "-1": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    "1.5": {
+      "messages": [],
+      "save": true
+    },
+    "1,5": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    "0.555": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    "1e3": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    " ": {
+      "messages": [
+        "Value must be a numeric with 1 decimal place"
+      ],
+      "save": false
+    },
+    "": {
+      "messages": [],
+      "save": false
+    },
+    "100.1": {
+      "messages": [
+        "Please select a value between 0 and 100."
+      ],
+      "save": false
+    },
+    "1.": {
+      "messages": [],
+      "save": true
+    }
+  }
+}

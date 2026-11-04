@@ -59,7 +59,8 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    // `e2e/harness/**/*.test.ts`: the parity harness's pure modules (D80); they never start a browser.
+    include: ["src/**/*.test.{ts,tsx}", "e2e/harness/**/*.test.ts"],
     /**
      * Pre-bundle node_modules for the test workers.
      *

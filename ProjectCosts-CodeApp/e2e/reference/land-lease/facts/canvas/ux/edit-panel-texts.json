@@ -1,0 +1,15 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "ux",
+  "key": "edit-panel-texts",
+  "recordedAt": "2026-11-04T04:57:40.095Z",
+  "data": {
+    "description": "Allocate All WTG",
+    "euroMWh": "2400",
+    "euroMW": "",
+    "euroWTG": "",
+    "fixCosts": "",
+    "shareOfRevenues": ""
+  }
+}

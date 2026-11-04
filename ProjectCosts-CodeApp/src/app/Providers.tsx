@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { AppToaster, ErrorBoundary } from "@/components";
 import { vsbTheme } from "@/theme/fluent";
 import { isRetryable } from "@/platform/errors";
+import { installE2EHook } from "@/platform/e2eHook";
 import { attachQueryLog } from "./queryLog";
 import { SessionProvider } from "./SessionContext";
 
@@ -30,6 +31,10 @@ export const queryClient = new QueryClient({
 
 // Every load and save prints one `[VSB] ACTION` summary line in the console (`app/queryLog.ts`).
 attachQueryLog(queryClient);
+
+// Test-only (D80): defines `window.__vsbIdle()` for the Playwright parity harness, and only when
+// `localStorage.__vsbE2E === "1"`. Inactive for users: without the flag it does nothing.
+installE2EHook(queryClient);
 
 /**
  * The app's router: a HASH data router.

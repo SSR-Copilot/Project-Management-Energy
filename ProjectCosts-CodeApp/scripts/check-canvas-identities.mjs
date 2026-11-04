@@ -32,6 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readCanvasIndex } from "./lib/paYaml.mjs";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MSAPP = path.resolve(APP, "../ProjectDocs/_extracted/msapp");
@@ -105,33 +106,9 @@ const INTERACTIVE_TAGS = new Set(["button", "Button", "input", "select", "textar
 const CONTAINER = /^(GroupContainer|Gallery|Group|Container|Screen|Component|DataTable|Form|Card|TypedDataCard)/;
 
 // ---------------------------------------------------------------- canvas index
-function parseCanvasFile(file, screen) {
-  const out = new Map();
-  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
-  const stack = []; // {indent, name}
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^(\s*)- ([A-Za-z0-9_'.\- ]+?):\s*$/);
-    if (m && /^\s*Control:\s*/.test(lines[i + 1] ?? "")) {
-      const indent = m[1].length;
-      while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
-      const name = m[2].replace(/^'|'$/g, "");
-      const type = (lines[i + 1].match(/Control:\s*([A-Za-z_]+)/) || [])[1] ?? "?";
-      out.set(name, { name, type, screen, accessibleLabel: undefined, file });
-      stack.push({ indent, name });
-      continue;
-    }
-    const al = lines[i].match(/^(\s*)AccessibleLabel:\s*(.*)$/);
-    if (al && stack.length) {
-      const owner = [...stack].reverse().find((s) => s.indent < al[1].length);
-      if (owner) {
-        const raw = al[2].trim();
-        const lit = raw.match(/^="((?:[^"]|"")*)"$/);
-        out.get(owner.name).accessibleLabel = lit ? lit[1].replace(/""/g, '"') : { formula: raw };
-      }
-    }
-  }
-  return out;
-}
+// The YAML reading is shared with gen-parity-manifest.mjs (`scripts/lib/paYaml.mjs`); `readCanvasIndex` returns the same
+// name -> { name, type, screen, accessibleLabel, file } map this script always built.
+const parseCanvasFile = readCanvasIndex;
 
 const canvasCache = new Map();
 function canvasIndex(app) {

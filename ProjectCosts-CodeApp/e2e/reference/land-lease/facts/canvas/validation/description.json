@@ -1,0 +1,43 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "validation",
+  "key": "description",
+  "recordedAt": "2026-11-04T05:09:56.079Z",
+  "data": {
+    "Lease A": {
+      "messages": [],
+      "save": true
+    },
+    "standard": {
+      "messages": [
+        "The term \"Standard\" is applicable only for system-prefilled contracts."
+      ],
+      "save": false
+    },
+    "Non-standard lease": {
+      "messages": [
+        "The term \"Standard\" is applicable only for system-prefilled contracts."
+      ],
+      "save": false
+    },
+    "STANDARD": {
+      "messages": [
+        "The term \"Standard\" is applicable only for system-prefilled contracts."
+      ],
+      "save": false
+    },
+    " ": {
+      "messages": [],
+      "save": true
+    },
+    "": {
+      "messages": [],
+      "save": false
+    },
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+      "messages": [],
+      "save": true
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "platform",
+  "key": "canvas-refresh",
+  "recordedAt": "2026-11-04T04:55:52.835Z",
+  "data": {
+    "before": {
+      "shows": true
+    },
+    "after": {
+      "shows": false,
+      "controls": 30
+    }
+  }
+}

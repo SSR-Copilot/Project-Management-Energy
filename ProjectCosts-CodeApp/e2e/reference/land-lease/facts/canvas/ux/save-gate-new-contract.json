@@ -1,0 +1,11 @@
+{
+  "screen": "land-lease",
+  "kind": "canvas",
+  "layer": "ux",
+  "key": "save-gate-new-contract",
+  "recordedAt": "2026-11-04T04:57:05.684Z",
+  "data": {
+    "empty": false,
+    "descriptionOnly": false
+  }
+}
