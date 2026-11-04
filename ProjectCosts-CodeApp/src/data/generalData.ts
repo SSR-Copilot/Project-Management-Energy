@@ -257,8 +257,11 @@ export interface MunicipalityRow {
   tradetaxrate: string | null;
 }
 
-/** One page of suggestions; the canvas combobox listed the whole filtered collection. */
-export const MUNICIPALITY_SEARCH_TOP = 50;
+/**
+ * The canvas comboboxes list the WHOLE filtered collection (an Area's municipalities, every French
+ * match), so this is a full Dataverse page, not a short suggestion list (user, 3 Nov 2026: as the YAML).
+ */
+export const MUNICIPALITY_SEARCH_TOP = 5000;
 
 /**
  * `cmb_…_Municipality_Germany.Items` (Y:3638-3651) — `SortByColumns(Search(Filter(

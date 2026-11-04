@@ -101,6 +101,27 @@ const useStyles = makeStyles({
     fontWeight: "400",
     // Only the leading icon carries the brand colour.
     "& .fui-Button__icon": { color: palette.themePrimary },
+    /*
+     * The PowerCAT command bar is Fluent v8's `CommandBar`; its `CommandBarButton` states, verbatim
+     * (`CommandBarButton.styles.ts`) on the VSB palette: hover `neutralLighter` fill + `neutralDark`
+     * text + `themeDarkAlt` icon; pressed and menu-open `neutralLight` + `themeDark` icon; an open
+     * menu hovered `neutralQuaternaryAlt`; the chevron `neutralPrimary`. Fluent v9's transparent
+     * button had no fill on hover at all (user, 3 Nov 2026).
+     */
+    ":enabled:hover": {
+      backgroundColor: palette.neutralLighter, color: palette.neutralDark,
+      "& .fui-Button__icon": { color: palette.themeDarkAlt },
+      "& .fui-MenuButton__menuIcon": { color: palette.neutralPrimary },
+    },
+    ":enabled:hover:active": {
+      backgroundColor: palette.neutralLight, color: palette.neutralDark,
+      "& .fui-Button__icon": { color: palette.themeDark },
+    },
+    "&[aria-expanded='true']": {
+      backgroundColor: palette.neutralLight, color: palette.neutralDark,
+      "& .fui-Button__icon": { color: palette.themeDark },
+    },
+    "&[aria-expanded='true']:hover": { backgroundColor: palette.neutralQuaternaryAlt },
   },
   disabled: {
     // Fluent already dims a disabled button; the canvas greys the label to #595959

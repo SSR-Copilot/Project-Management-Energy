@@ -18,17 +18,17 @@
 import { useState } from "react";
 import {
   Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
-  Field, Input, MessageBar, MessageBarBody, Switch, Text, Tooltip,
+  Input, MessageBar, MessageBarBody, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  ArrowResetRegular, DismissRegular, InfoRegular, LockClosedRegular,
+  ArrowClockwiseRegular, DismissRegular, InfoRegular, LockClosedRegular,
   RadioButtonFilled, RadioButtonRegular,
 } from "@fluentui/react-icons";
 import {
   Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, LoadingOverlay,
   FIELD_APPEARANCE, NumericField, PanelButtons, ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback,
-  useFieldControlClass, useFieldSkin, useStandardValueClass,
+  useFieldControlClass, useStandardValueClass,
   ExpandChevron, HINTS,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
@@ -155,46 +155,101 @@ const useStyles = makeStyles({
     "& label": { fontWeight: tokens.fontWeightSemibold, fontSize: "14.67px" },
   },
   alignRight: { "& input": { textAlign: "right" } },
+  /*
+   * The panel chrome (`con_ProductionData{WTG|PV}_RightPanel`): no body padding — each column carries
+   * its own — and the body does not scroll: the fields column and each side gallery scroll on their
+   * own (`LayoutOverflowY: Scroll`, canvas screenshot 3 Nov 2026). The 45-high footer has no rule
+   * above it, and the ✕ the drawer focuses on open shows no focus box (as the Finance panels).
+   */
+  panelSkin: {
+    "&.canvas-panel .canvas-panel-body": {
+      paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0, display: "flex", overflowY: "hidden",
+      [media.belowMd]: { overflowY: "auto" },
+    },
+    "&.canvas-panel .canvas-panel-footer": { height: "45px", borderTopColor: "transparent" },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+      outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+  },
   // `con_ProductionData{WTG|PV}_RightPanelBodyParent`: horizontal, the fields column, then the
-  // Seasonality and Negative Prices columns when their toggles are on.
-  // The side columns always open to the RIGHT of the fields, and the panel widens to hold them
-  // (PO, 21 Oct 2026: they must never drop underneath). They only stack on a phone-sized window.
-  columns: { display: "flex", alignItems: "flex-start", [media.belowMd]: { flexDirection: "column" } },
-  // `con_ProductionData{WTG|PV}_Fields`: vertical, LayoutGap 2, padding 5; 450 wide
-  // (`gblAppSizes.RightPanel.MinWidth`), 280 once a side column shows.
+  // Seasonality and Negative Prices columns when their toggles are on: 450, 280 + 360 or 280 + 2 x 360.
+  // The side columns always open to the RIGHT of the fields (PO, 21 Oct 2026); they only stack on a
+  // phone-sized window.
+  columns: {
+    display: "flex", alignItems: "stretch", flex: "1 1 auto", minHeight: 0, minWidth: 0,
+    [media.belowMd]: { flexDirection: "column", minHeight: "auto" },
+  },
+  // `con_ProductionData{WTG|PV}_Fields`: vertical, LayoutGap 2, padding 5, scrolls; 450 wide
+  // (`gblAppSizes.RightPanel.MinWidth`), 280 once a side column shows. Each container puts caption
+  // and box at X 20 (25 from the column edge) and a text input is `Parent.Width/2 + X` wide —
+  // 155 of the 270 container, i.e. half the caption width + 30.
   column: {
     display: "flex", flexDirection: "column", gap: "2px", flex: "0 0 450px", maxWidth: "100%", minWidth: 0,
-    paddingTop: "5px", paddingBottom: "5px", paddingLeft: "5px", paddingRight: "5px", boxSizing: "border-box",
-    // Each field container puts caption and control at `gblAppSizes.Position.X` = 20, which the
-    // shared panel body padding (20) already gives; a text input is `Parent.Width/2 + X` wide.
-    "& .fui-Input": { width: "calc(50% + 20px)", maxWidth: "100%" },
+    overflowY: "auto", overflowX: "hidden",
+    paddingTop: "5px", paddingBottom: "5px", paddingLeft: "25px", paddingRight: "5px", boxSizing: "border-box",
+    "& .fui-Input": { width: "calc(50% + 30px)", maxWidth: "100%" },
+    // The containers keep their heights; the column scrolls instead of squeezing them together.
+    "& > *": { flexShrink: 0 },
+    // The radio groups: `rad_…_Assesment` at Y 25 of a 100-high container; the captionless ones at Y 5
+    // of 75 (`_Allocation`) or 80 (`_Lossessp50`, `_UncertaintyNet`).
+    "& .canvas-radio-group": { paddingBottom: "11px" },
+    "& .canvas-radio-group legend + label": { marginTop: "5px" },
+    "& .canvas-radio-group:not(:has(legend))": { paddingTop: "5px" },
+    "& .canvas-radio-group[data-testid$='_Allocation']": { paddingBottom: "6px" },
+    // `con_…_ConsiderSeasonality` / `_ConsiderNegativePrice`: 50 high, the toggle at X 10.
+    "& .fui-Switch": { minHeight: "50px", alignItems: "center", marginLeft: "-7px" },
+    [media.belowMd]: { overflowY: "visible" },
   },
   columnNarrow: { flex: "0 0 280px" },
   // `con_ProductionData{WTG|PV}_SeasonalityYeildRightPanelBody` / `_NegativePriceRightPanelBody`:
-  // 360 wide, vertical, items centred, padding 5.
+  // 360 wide, padding 5; the 340-wide header, rule and gallery centred in it.
   sideColumn: {
-    display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", flex: "1 1 360px", maxWidth: "360px", minWidth: "260px",
-    paddingTop: "5px", paddingBottom: "5px", paddingLeft: "5px", paddingRight: "5px", boxSizing: "border-box",
-  },
-  // The 36-high header row (`con_ProductionWTGSeoasonalityHeader`), over the 330-wide rows.
-  columnHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: space.s, width: "100%", maxWidth: "330px", height: "36px" },
-  columnTitle: { fontWeight: tokens.fontWeightSemibold },
-  // One gallery row, 330 wide, padding 5/10: the 100-wide month, then the 180-wide value 8 to its right.
-  cellRow: {
-    // Fluid, so a Negative Prices row (year 100 + value + the 32-px reset icon) never runs past
-    // the column under the panel's scroll bar (PO, 21 Oct 2026); it used to be a fixed 330.
-    display: "flex", alignItems: "flex-end", gap: "8px", width: "100%", maxWidth: "350px", boxSizing: "border-box",
+    display: "flex", flexDirection: "column", flex: "0 0 360px", width: "360px", minHeight: 0, boxSizing: "border-box",
     paddingTop: "5px", paddingBottom: "5px", paddingLeft: "10px", paddingRight: "10px",
+    [media.belowMd]: { flex: "none" },
   },
-  cellMonth: { flex: "0 1 100px", minWidth: "64px", paddingBottom: space.xs },
-  cellValue: { flex: "1 1 180px", minWidth: "120px", maxWidth: "180px" },
-  cellReset: { flex: "0 0 auto" },
-  /**
-   * `con_ProductionSeasonality{WTG|PV}_TotalDetails` (Y:4755-4801): "Total Sum [%]" (`ModernText`,
-   * 160 wide) over a read-only `ModernTextInput` (`DisplayMode.View`, 160 wide, 4 px below), both at
-   * the X of the Distribution column — so it sits in a `cellRow` behind an empty month cell.
+  // `con_ProductionWTGSeoasonalityHeader`: 36 high; the title `Size 14.5` Semibold with `PaddingLeft 8`
+  // and 300 wide, then the 20-px Reset All icon.
+  columnHead: { display: "flex", alignItems: "center", flexShrink: 0, height: "36px" },
+  columnTitle: { width: "300px", flexShrink: 0, paddingLeft: "8px", boxSizing: "border-box", fontSize: "14.5px", fontWeight: tokens.fontWeightSemibold, color: "#242424" },
+  // `shp_Production{WTG|PV}_Seasonality` / `_NegativePrice`: a 1-px themePrimary rule.
+  columnRule: { flexShrink: 0, height: "1px", backgroundColor: "rgb(0, 120, 212)" },
+  // `gal_…Details`: fills the column and scrolls; 80-high templates, 5 apart.
+  gallery: {
+    display: "flex", flexDirection: "column", gap: "5px", flex: "1 1 0", minHeight: 0, overflowY: "auto", overflowX: "hidden",
+    [media.belowMd]: { overflowY: "visible", flex: "none" },
+  },
+  /*
+   * One gallery template, 80 high (a ManualLayout): the 100-wide month / year at X 10, the 180-wide
+   * Semibold 14 px caption at X 118 (month + 8) over the 160-wide value at X 118, Y 25; the 20-px reset
+   * icon at the value's right edge + 8, centred on it; the error 2 under the value.
    */
-  totalValue: { flex: "0 0 160px", width: "160px", "& .fui-Input": { width: "100%" } },
+  cellRow: {
+    display: "grid", flexShrink: 0, height: "80px", boxSizing: "border-box",
+    gridTemplateColumns: "10px 100px 8px 160px 8px 20px", gridTemplateRows: "20px 5px 32px auto",
+  },
+  cellCaption: {
+    gridColumn: "4", gridRow: "1", width: "180px", whiteSpace: "nowrap", lineHeight: "20px",
+    fontSize: "14px", fontWeight: tokens.fontWeightSemibold, color: "#242424",
+  },
+  cellMonth: { gridColumn: "2", gridRow: "3", minWidth: 0 },
+  cellValue: { gridColumn: "4", gridRow: "3", minWidth: 0 },
+  cellReset: {
+    gridColumn: "6", gridRow: "3", alignSelf: "center", minWidth: "20px", width: "20px", height: "20px",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0, color: "rgb(0, 120, 212)",
+    "& svg": { width: "20px", height: "20px" },
+    ":hover": { color: "rgb(16, 110, 190)" },
+  },
+  cellError: { gridColumn: "4 / 7", gridRow: "4", marginTop: "2px", fontSize: "10px", fontWeight: tokens.fontWeightSemibold, color: palette.Error },
+  /**
+   * `con_ProductionSeasonality{WTG|PV}_TotalDetails` (Y:4755-4801): 80 high under the gallery; "Total
+   * Sum [%]" (`ModernText`, 160 wide) over a read-only `ModernTextInput` (`DisplayMode.View`, 160 wide,
+   * 4 px below) at `Parent.Width - 160 - 60`, i.e. 2 right of the Distribution column.
+   */
+  totalRow: { gridTemplateRows: "20px 4px 32px auto", paddingLeft: "2px" },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
   // `InfoButtonCanvas2`: 30 x 30, 10 right of the Irradiation input.
   info: { display: "flex", alignItems: "flex-end", gap: "10px" },
@@ -210,11 +265,13 @@ const UNCERTAINTY_OPTIONS: readonly UncertaintyInputMode[] = ["Input Uncertainty
 
 /**
  * `con_ProductionData{WTG|PV}_RightPanel.Width` = the fields column (450, or 280 beside a side
- * column) + 360 per visible side column: 450, 640 or 1000. The shared `FormPanel` offers fixed
- * widths only, so the nearest is used: narrow 450, fieldsAndSide 680 and threeColumn 1040 (the canvas width + the body padding).
+ * column) + 360 per visible side column: 450, 640 or 1000 — exactly, as the body has no padding.
  */
 const panelWidth = (seasonality: boolean, negative: boolean) =>
-  seasonality && negative ? "threeColumn" : seasonality || negative ? "fieldsAndSide" : "narrow";
+  seasonality && negative ? 1000 : seasonality || negative ? 640 : 450;
+
+/** `canvas.css` `.pm-canvas-panel`: the canvas field-container metrics shared with the Finance panels. */
+const PM_PANEL = "pm-canvas-panel";
 
 type PanelState = { technology: Technology; editing: EnergyYieldRow | null };
 type Confirm = { kind: "delete"; row: EnergyYieldRow } | { kind: "status"; row: EnergyYieldRow } | { kind: "prevent" };
@@ -225,7 +282,6 @@ export default function ProductionScreen() {
   const s = useStyles();
   /* The italic "calculated default" treatment of a standard-assumption cell (rule 20). */
   const standardClass = useStandardValueClass();
-  const skin = useFieldSkin();
   const controlClass = useFieldControlClass();
   const { projectId, locale } = useSession();
   const lang = locale;
@@ -475,6 +531,7 @@ export default function ProductionScreen() {
         open={panel !== null}
         title={panelTitle(technology, panel?.editing ?? null)}
         width={panelWidth(form.considerSeasonality, form.considerNegativePrices)}
+        panelClassName={mergeClasses(s.panelSkin, PM_PANEL)} keepOpenOnOutsideClick
         onDismiss={closePanel}
         closeTestId={technology === "PV" ? "pcf_CommandBar_ProductionDataWTG_1" : "pcf_CommandBar_ProductionDataWTG"}
         footer={<PanelButtons onSave={onSave} onCancel={closePanel} disabled={!saveable}
@@ -579,38 +636,42 @@ export default function ProductionScreen() {
               <div className={s.columnHead}>
                 <Text className={s.columnTitle}>{UI.seasonality}</Text>
                 <Tooltip content={UI.resetToStandard} relationship="label" withArrow>
-                  <Button appearance="transparent" icon={<ArrowResetRegular />} aria-label={UI.resetToStandard}
+                  <Button appearance="transparent" className={s.cellReset} icon={<ArrowClockwiseRegular />} aria-label={UI.resetToStandard}
                     data-testid={technology === "PV" ? "ico_ProductionSeasonalityYieldPV_MonthValueReset_1" : "ico_ProductionSeasonalityYieldWTG_MonthValueResetAll"}
                     onClick={() => setSeasonEdits(buildSeasonalityRows(standard.seasonality, technology, lang))} />
                 </Tooltip>
               </div>
-              {seasonRows.map((row) => {
-                const error = validateCellPercent(row.text, lang);
-                return (
-                  <div key={row.id} className={s.cellRow}>
-                    <Text className={s.cellMonth}>{row.month}</Text>
-                    <Field className={mergeClasses(s.cellValue, skin.field)} label={UI.distribution} validationState={error ? "error" : "none"} validationMessage={error ?? undefined}>
+              <div className={s.columnRule} aria-hidden="true" />
+              <div className={s.gallery}>
+                {seasonRows.map((row) => {
+                  const error = validateCellPercent(row.text, lang);
+                  return (
+                    <div key={row.id} className={s.cellRow}>
+                      <Text className={s.cellCaption}>{UI.distribution}</Text>
+                      {/* `txt_…_Month`: a `DisplayMode.View` input — the grey box, dark text. */}
+                      <Input readOnly value={row.month} appearance={FIELD_APPEARANCE}
+                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={row.month}
+                        data-testid={`txt_ProductionSeasonalityYield${technology}_Month-${row.id}`} />
                       <Input value={row.text}
                         appearance={FIELD_APPEARANCE}
-                        className={controlClass("edit", standardClass(row.isStandard))}
-                        aria-label={`${row.month} ${UI.distribution}`}
+                        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.isStandard)))}
+                        aria-label={`${row.month} ${UI.distribution}`} aria-invalid={error ? true : undefined}
                         data-testid={`txt_ProductionSeasonalityYield${technology}_MonthValue-${row.id}`}
                         onChange={(_, d) => setSeasonEdits(applyMonthEdit(seasonRows, row.id, d.value, lang))} />
-                    </Field>
-                  </div>
-                );
-              })}
-              <div className={s.cellRow}>
-                <span className={s.cellMonth} aria-hidden="true" />
-                <Field className={mergeClasses(s.totalValue, skin.field)} label={UI.totalSum}>
-                  <Input readOnly value={fmtPercentTotal(seasonalityTotal(seasonRows, lang))}
-                    appearance={FIELD_APPEARANCE}
-                    className={controlClass("view")}
-                    aria-label={UI.totalSum}
-                    data-testid={`txt_ProductionSeasonality${technology}_TotalValue`} />
-                </Field>
+                      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
+                    </div>
+                  );
+                })}
               </div>
-              {seasonalityTotalError(seasonRows, lang) ? <span className={s.error} role="alert">{MSG.seasonalityTotal}</span> : null}
+              <div className={mergeClasses(s.cellRow, s.totalRow)}>
+                <Text className={s.cellCaption}>{UI.totalSum}</Text>
+                <Input readOnly value={fmtPercentTotal(seasonalityTotal(seasonRows, lang))}
+                  appearance={FIELD_APPEARANCE}
+                  className={mergeClasses(s.cellValue, controlClass("view"))}
+                  aria-label={UI.totalSum}
+                  data-testid={`txt_ProductionSeasonality${technology}_TotalValue`} />
+                {seasonalityTotalError(seasonRows, lang) ? <Text className={s.cellError} role="alert">{MSG.seasonalityTotal}</Text> : null}
+              </div>
             </div>
           ) : null}
 
@@ -619,28 +680,33 @@ export default function ProductionScreen() {
               <div className={s.columnHead}>
                 <Text className={s.columnTitle}>{UI.negativePrices}</Text>
               </div>
-              {negativeRows.map((row) => {
-                const error = validateCellPercent(row.text, lang);
-                return (
-                  <div key={row.year} className={s.cellRow}>
-                    <Text className={s.cellMonth}>{row.year}</Text>
-                    <Field className={mergeClasses(s.cellValue, skin.field)} label={UI.reduction} validationState={error ? "error" : "none"} validationMessage={error ?? undefined}>
+              <div className={s.columnRule} aria-hidden="true" />
+              <div className={s.gallery}>
+                {negativeRows.map((row) => {
+                  const error = validateCellPercent(row.text, lang);
+                  return (
+                    <div key={row.year} className={s.cellRow}>
+                      <Text className={s.cellCaption}>{UI.reduction}</Text>
+                      <Input readOnly value={String(row.year)} appearance={FIELD_APPEARANCE}
+                        className={mergeClasses(s.cellMonth, controlClass("view"))} aria-label={String(row.year)}
+                        data-testid={`txt_ProductionNegativePrice${technology}_Year-${row.year}`} />
                       <Input value={row.text}
                         appearance={FIELD_APPEARANCE}
-                        className={controlClass("edit", standardClass(row.standardAssumption))}
-                        aria-label={`${row.year} ${UI.reduction}`}
+                        className={mergeClasses(s.cellValue, controlClass("edit", standardClass(row.standardAssumption)))}
+                        aria-label={`${row.year} ${UI.reduction}`} aria-invalid={error ? true : undefined}
                         data-testid={`txt_ProductionNegativePrice${technology}_YearValue-${row.year}`}
                         onChange={(_, d) => setNegativeEdits(applyReductionEdit(negativeRows, row.year, d.value, lang))} />
-                    </Field>
-                    <Tooltip content={UI.resetToStandard} relationship="label" withArrow>
-                      <Button appearance="transparent" icon={<ArrowResetRegular />} className={s.cellReset}
-                        aria-label={`${UI.resetToStandard} ${row.year}`}
-                        data-testid={`ico_ProductionNegativePrice${technology}_YearValueReset-${row.year}`}
-                        onClick={() => setNegativeEdits(resetNegativePriceRow(negativeRows, row.year, lang))} />
-                    </Tooltip>
-                  </div>
-                );
-              })}
+                      <Tooltip content={UI.resetToStandard} relationship="label" withArrow>
+                        <Button appearance="transparent" icon={<ArrowClockwiseRegular />} className={s.cellReset}
+                          aria-label={`${UI.resetToStandard} ${row.year}`}
+                          data-testid={`ico_ProductionNegativePrice${technology}_YearValueReset-${row.year}`}
+                          onClick={() => setNegativeEdits(resetNegativePriceRow(negativeRows, row.year, lang))} />
+                      </Tooltip>
+                      {error ? <Text className={s.cellError} role="alert">{error}</Text> : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
         </div>

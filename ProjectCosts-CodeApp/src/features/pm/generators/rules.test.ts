@@ -809,7 +809,7 @@ describe("permissions and flows", () => {
     expect(permissionStateTone(CHOICE_PLANT.requestPermissionState.canceled)).toBe("disabled");
     expect(permissionStateTone(null)).toBe("disabled");
     expect(permissionStateLabel(CHOICE_PLANT.requestPermissionState.pending)).toBe(
-      "Permission Pending",
+      "Request Pending",
     );
     expect(permissionStateLabel(null)).toBeNull();
   });

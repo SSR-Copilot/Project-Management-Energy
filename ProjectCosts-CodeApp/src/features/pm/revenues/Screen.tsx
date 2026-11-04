@@ -286,8 +286,10 @@ const useStyles = makeStyles({
   // section's fields start 40 further on (canvas screenshots, 29 Oct 2026).
   // Each section carries a 10-px left gutter (`panelColumn`) for the hanging `*`, so the grid is
   // 270 + 30 and the body pads 20 on the left: the fields still start at 30, 260 + 40 + 400 wide.
+  // 3 Nov 2026 (user): the panel is 800 wide and each section keeps a fixed scrollbar gutter, so the
+  // 260-wide fields never shrink under a scrollbar and the bar sits clear of the next section.
   panel: {
-    display: "grid", columnGap: "30px", gridTemplateColumns: "270px minmax(0, 1fr)",
+    display: "grid", columnGap: "30px", gridTemplateColumns: "298px minmax(0, 1fr)",
     flexGrow: 1, minHeight: 0,
     "& .fui-Field__label": { fontWeight: 300, fontSize: "14.67px" },
     [media.belowMd]: { gridTemplateColumns: "1fr", rowGap: space.m },
@@ -297,11 +299,27 @@ const useStyles = makeStyles({
   // padding keeps the hanging `*` inside the scroll box — `overflowX: hidden` clipped it otherwise.
   panelColumn: {
     display: "flex", flexDirection: "column", gap: "12px", minWidth: 0, minHeight: 0, boxSizing: "border-box",
-    overflowY: "auto", overflowX: "hidden", paddingLeft: "10px", paddingBottom: "8px",
+    overflowY: "auto", overflowX: "hidden", paddingLeft: "10px", paddingBottom: "8px", scrollbarGutter: "stable",
     [media.belowMd]: { overflowY: "visible" },
   },
-  // The right section: the two toggles 38 apart, the radios 34, the hedge box under them.
-  panelColumnRight: { gap: "6px" },
+  // The left section: 10 px between its boxes and its scrollbar.
+  panelColumnLeft: {
+    paddingRight: "10px",
+  },
+  // The right section: the two toggles 38 apart, the radios 34, the hedge box under them. It does not
+  // scroll itself: only the Individual Volumes gallery does (`Height: =Parent.Height`), so the toggles
+  // and the hedge radios stay in view (live canvas, 3 Nov 2026).
+  // No gutter of its own (only the gallery scrolls), so no empty strip right of the gallery's bar.
+  panelColumnRight: {
+    gap: "6px", overflowY: "hidden", scrollbarGutter: "auto", [media.belowMd]: { overflowY: "visible" },
+  },
+  // `gal_ProjectRevenue_RightPanel_IndividualVolumeDetails`: fills the rest of the section and scrolls;
+  // 10 px between the value boxes and its scrollbar (user, 3 Nov 2026).
+  volumeGallery: {
+    display: "flex", flexDirection: "column", gap: "12px", flex: "1 1 0", minHeight: "120px",
+    overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable", paddingBottom: "8px", paddingRight: "10px",
+    [media.belowMd]: { overflowY: "visible", flex: "none" },
+  },
   column: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
   // A toggle's red `*` (`lbl_…_InflationProfileToggleAsterisk_1`): `palette.Error` #B22727, Bold,
   // Medium, in a 10-wide box hanging LEFT of the section edge, so the toggles line up.
@@ -334,8 +352,9 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-panel-footer button:disabled, &.canvas-panel .canvas-panel-footer button:disabled .fui-Button__icon": {
       color: "#595959",
     },
-    // Fields 30 from either edge: 20 + (10 gutter + 260) + 30 + (10 gutter + 400) + 30 = 760.
-    "&.canvas-panel .canvas-panel-body": { paddingLeft: "20px", paddingRight: "30px" },
+    // Fields 30 from the left edge: 20 + (10 gutter + 260 + scrollbar gutter) + 30 + (10 + the rest) + 30.
+    // The right scrollbar ends near the panel edge, not 30 px in (user, 3 Nov 2026).
+    "&.canvas-panel .canvas-panel-body": { paddingLeft: "20px", paddingRight: "8px" },
     // Footer: no rule above Save / Cancel.
     "&.canvas-panel .canvas-panel-footer": { borderTopColor: "transparent" },
     // Every box #F5F5F5 and 32 high (the dropdowns were 30).
@@ -375,9 +394,11 @@ const useStyles = makeStyles({
   },
   // One Individual Volume row: the period box (`txt_…_IndividualVolume_Year`, 180 wide) beside the
   // `* Individual Volume [MWh]` caption and input of the same gallery template.
-  volumeRow: { display: "grid", gridTemplateColumns: "180px minmax(0, 1fr)", columnGap: "16px", alignItems: "start" },
-  // The period box sits level with the value input under its caption.
-  volumePeriod: { paddingTop: "24px" },
+  // `txt_…_IndividualVolume_Year` (180 wide, View) and `…_Value` 10 after it, both 5 below the caption
+  // row (`lbl_…_IndividualVolume_Header`, over the value column): 32 + 32 + the 12 gap = 76 a row.
+  volumeRow: { display: "grid", gridTemplateColumns: "180px minmax(0, 1fr)", columnGap: "10px", alignItems: "start" },
+  // The period box level with the value box: its own (empty) 32-high caption row puts it there.
+  volumePeriod: { paddingTop: 0 },
   // The open list of a canvas `DropDown@0.0.45` (live canvas, 29 Oct 2026): square, a 1-px grey
   // outline, no shadow, 27-px rows in 14 px, no check mark, the selected row solid themePrimary with
   // white text. Fluent portals the list out of the panel, so it is set on the `listbox` slot.
@@ -1060,7 +1081,7 @@ export default function ProjectRevenuesScreen() {
           <div className={s.panelBody}>
             <div className={s.panel}>
               {/* `con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent` — scrolls on its own. */}
-              <div className={s.panelColumn} data-testid="con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent">
+              <div className={mergeClasses(s.panelColumn, s.panelColumnLeft)} data-testid="con_ProjectRevenues_RightPanel_LeftSection_NewEditCost_BodyContent">
                 <SelectField
                   label={SCREEN_LABEL.type}
                   name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_Label_1"
@@ -1355,16 +1376,16 @@ export default function ProjectRevenuesScreen() {
                   />
                 ) : null}
                 {form.hedge.type === "individual" ? (
-                  <div data-testid="gal_ProjectRevenue_RightPanel_IndividualVolumeDetails" className={s.column}>
+                  <div data-testid="gal_ProjectRevenue_RightPanel_IndividualVolumeDetails" className={s.volumeGallery}>
                     {volumesQ.isLoading ? <Spinner size="tiny" /> : null}
                     {form.hedge.individual.map((row, i) => (
                       <div key={row.year} className={s.volumeRow}>
                         {/* Individual-volume rows repeat literal ids, as the canvas gallery (D16 c). */}
                         <div className={s.volumePeriod}>
+                          {/* `DisplayMode.View` (read-only: the grey box, dark text — not the disabled look). */}
                           <TextInputField
                             label=""
                             name="txt_ProjectRevenue_RightPanel_IndividualVolume_Year"
-                            disabled
                             value={volumeRowLabel(row)}
                           />
                         </div>

@@ -446,10 +446,13 @@ describe("MMYY packing (rule 29)", () => {
     expect(padMMYY(null)).toBe("0000");
   });
 
-  it("UT-FIN-035b the year/month label pads and pluralises, treating 0 as singular", () => {
+  it("UT-FIN-035b the year/month label pads (\"0#\": 3 → 03, 0 → 0) and pluralises, treating 0 as singular", () => {
     expect(yearMonthLabel(15, 6)).toBe("15 Years 06 Months");
     expect(yearMonthLabel(1, 1)).toBe("01 Year 01 Month");
-    expect(yearMonthLabel(0, 0)).toBe("00 Year 00 Month");
+    expect(yearMonthLabel(0, 0)).toBe("0 Year 0 Month");
+    // Live canvas (3 Nov 2026): Start Repayment and Tenor.
+    expect(yearMonthLabel(0, 3)).toBe("0 Year 03 Months");
+    expect(yearMonthLabel(3, 0)).toBe("03 Years 0 Month");
   });
 });
 

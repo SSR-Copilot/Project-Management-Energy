@@ -255,13 +255,13 @@ export function useChecklistWrites(projectId: string | undefined) {
     },
   });
 
-  const patchRow = (row: ChecklistRow, data: Record<string, unknown>, texts: { progress: string; success: string; error: (d: string) => string }) =>
-    w.run({ progress: texts.progress, success: texts.success, errorText: texts.error, plan: planChecklistRowPatch(row.id, data, row.title) });
+  const patchRow = (row: ChecklistRow, data: Record<string, unknown>, texts: { progress: string; success?: string; error: (d: string) => string }) =>
+    w.run({ progress: texts.progress, ...(texts.success ? { success: texts.success } : {}), errorText: texts.error, plan: planChecklistRowPatch(row.id, data, row.title) });
 
   /** `pcf_…_Buttons_Save` (Y:5235-5411): the direct move, with the cluster's task table as the note. */
   const saveTransition = (req: TransitionRequest) => w.run({
     progress: MSG.clusterSaving(req.state.name),
-    success: MSG.clusterSaved(req.state.name),
+    // No green "Cluster data '…' will be saved." bar after the move (PO, 3 Nov 2026).
     errorText: MSG.projectStatusError,
     plan: async () => {
       const [trackings, rows] = await Promise.all([listChecklistTrackings(id), listClusterChecklist(id, req.state.id)]);

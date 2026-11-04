@@ -29,7 +29,7 @@ export const PANEL_RADIO_ROW = "canvas-radio-row";
 
 export type FormPanelWidth =
   | "wide" | "narrow" | "cost" | "period" | "comments" | "twoColumn" | "fieldsAndSide" | "threeColumn"
-  | "full" | "grid" | number;
+  | "full" | "grid" | "threeQuarter" | number;
 
 /** The CSS width of a `FormPanel` preset or px number. */
 export function formPanelWidth(width: FormPanelWidth): string | number {
@@ -40,15 +40,17 @@ export function formPanelWidth(width: FormPanelWidth): string | number {
     // `grid` (95vw) is Add Cost from Table: a spreadsheet of fixed columns plus 12 months per year,
     // which the canvas gave 90 % of the screen. The CAPEX screen stays visible as a strip behind it.
     case "grid": return "95vw";
+    // `threeQuarter` (75vw) is the Checklist change-cluster panel, `(Parent.Width / 4) * 3`.
+    case "threeQuarter": return "75vw";
     case "cost": return 750;
     case "period": return 660;
     // `comments` is 600 because the canvas comments panel is `Width: =Min(600, Parent.Width)`
     // (`CapexScreenCode.txt:8041`); its Type/Year/Month row is a fixed 250+100+100 and does not
     // fit the 450 of `narrow`.
     case "comments": return 600;
-    // `twoColumn` (760) is the PM Revenues contract panel, `Min(760, Parent.Width)`: two independently
-    // scrolling columns. The live-canvas screenshots (29 Oct 2026) measure 760; 860 was a misreading.
-    case "twoColumn": return 760;
+    // `twoColumn` is the PM Revenues contract panel: two independently scrolling columns. The canvas is
+    // `Min(760, Parent.Width)`; 800 by the user's choice (3 Nov 2026) so each column's scrollbar has room.
+    case "twoColumn": return 800;
     // `fieldsAndSide` (680) is the canvas 640-wide Production panel with one side column (fields 280 +
     // 360) plus the 2 x 20 body padding.
     case "fieldsAndSide": return 680;

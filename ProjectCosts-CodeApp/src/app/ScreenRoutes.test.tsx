@@ -29,7 +29,7 @@ vi.mock("@/data/generalData", () => ({
   loadGeneralDataProject: async () => null, listGeneralDataCountries: async () => [], listCountryAreas: async () => [],
   listProjectStates: async () => [], listTerrainUtilizations: async () => [], listShareholders: async () => [],
   listStateTrackings: async () => [], searchGermanMunicipalities: async () => [], searchFrenchMunicipalities: async () => [],
-  lookupGermanTradeTaxRate: async () => null, MUNICIPALITY_SEARCH_TOP: 50,
+  lookupGermanTradeTaxRate: async () => null, MUNICIPALITY_SEARCH_TOP: 5000,
 }));
 vi.mock("@/data/milestones", () => ({
   loadMilestoneProject: async () => null, countIndividualVolumeContracts: async () => 0,
@@ -67,12 +67,13 @@ vi.mock("@/data/revenues", () => ({
   loadRevenueProject: async () => null, listRevenueContracts: async () => [], listBalancingPrices: async () => [],
   listIndividualVolumes: async () => [], listIndividualVolumeIds: async () => [], hasNegativePriceProduction: async () => false,
   loadFirstRevenueSubaccount: async () => null, findCurrency: async () => null, listRevenueCountryInflation: async () => [],
-  listOverlappingContracts: async () => [],
+  listOverlappingContracts: async () => [], listRevenueAssumptionRows: async () => [],
 }));
 vi.mock("@/data/finance", () => ({
   loadFinanceProject: async () => null, listFinancingCategories: async () => [], listFinancingInputs: async () => [],
   listRepaymentAmounts: async () => [], listStepUpMargins: async () => [], loadTotalDevexCapex: async () => 0,
   countActiveTurbines: async () => 0, findFinancingInputsByKey: async () => [],
+  listDebtAssumptions: async () => [], listBanks: async () => [], listKfwTranches: async () => [],
 }));
 /*
  * `@/data/adminGatesApprovals` is both the PM read side (mocked below, as before) and the Project

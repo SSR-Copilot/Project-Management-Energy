@@ -9,8 +9,9 @@
  * `listProjectTurbines` (`data/generators.ts`) — reused, not copied (rule 17).
  *
  * `Assumptions Debt SQL`, `Assumptions Banks SQL` and `AssumptionsKfWTrancheSQL` are Fabric SQL
- * sources (`References/DataSources.json`: `shared_sql`, `Lakehouse_Gold`), NOT Dataverse tables,
- * and are not read here (D2).
+ * sources (`[dbo].[AssumptionsDebt]` / `[AssumptionsBanks]` / `[AssumptionsKfWTranche]` on
+ * `Lakehouse_Gold`, registered in D54), NOT Dataverse tables. They are read only, at the end of
+ * this file (connected 3 Nov 2026, as Revenues in D57).
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_financingcategoriesService } from "@/generated/services/Vsb_financingcategoriesService";
@@ -19,10 +20,13 @@ import { Vsb_financinginputsrepaymentamountsService } from "@/generated/services
 import { Vsb_financinginputstepupmarginsesService } from "@/generated/services/Vsb_financinginputstepupmarginsesService";
 import { Vsb_capexprojectcontractsService } from "@/generated/services/Vsb_capexprojectcontractsService";
 import { Vsb_capexcostsService } from "@/generated/services/Vsb_capexcostsService";
+import { AssumptionsDebtService } from "@/generated/services/AssumptionsDebtService";
+import { AssumptionsBanksService } from "@/generated/services/AssumptionsBanksService";
+import { AssumptionsKfWTrancheService } from "@/generated/services/AssumptionsKfWTrancheService";
 import {
   INPUT_COL, PROJECT_FINANCING_OPTIONS_COL, REPAYMENT_COL, STEPUP_COL, totalDevexCapex,
-  type FinanceProject, type FinancingCategory, type FinancingInputRow, type StoredRepaymentRow,
-  type StoredStepUpMarginRow,
+  type BankRow, type DebtAssumptionRow, type FinanceProject, type FinancingCategory,
+  type FinancingInputRow, type StoredRepaymentRow, type StoredStepUpMarginRow,
 } from "@/features/pm/finance/rules";
 import { PROJECT_COL } from "@/features/pm/revenues/rules";
 import { fetchAll, fetchPage } from "./client";
@@ -185,4 +189,52 @@ export async function findFinancingInputsByKey(key: string): Promise<string[]> {
     { select: [INPUT_COL.id], filter: eq(INPUT_COL.uniqueKeyString, key), top: 5 },
   ));
   return rows.map((r) => String(r[INPUT_COL.id]));
+}
+
+/* ════════════════════════════════════════════════════ Fabric SQL (read only) ══ */
+
+/**
+ * `colStandardAssumptionsDebt` / `…Decommissioning` / `…DSRA_DSRF` (`OnVisible`, Y:119-150): every
+ * `Filter('Assumptions Debt SQL', country = <project country>, debttype = …)`, read once. The rows
+ * are re-checked against the country (in case the connector does not apply the filter) and split by
+ * `debttype` in `sliceDebtAssumptions` (rules). A blank `category` is "", as the canvas sees it.
+ */
+export async function listDebtAssumptions(countryName: string): Promise<DebtAssumptionRow[]> {
+  const rows = await fetchAll(
+    "read the debt assumptions (Fabric SQL)",
+    (o) => AssumptionsDebtService.getAll(o),
+    { select: ["country", "debttype", "category", "pv", "wind"], filter: eq("country", countryName) },
+  );
+  return rows
+    .filter((r) => r.country === countryName)
+    .map((r) => ({
+      country: r.country ?? "", debttype: r.debttype ?? "", category: r.category ?? "",
+      wind: r.wind ?? null, pv: r.pv ?? null,
+    }));
+}
+
+/**
+ * `colAssumptionBanks` = `'Assumptions Banks SQL'` (Y:1878), the whole table. A tranche stores the
+ * bank row's `id` (`LookUp(colAssumptionBanks, id = ThisItem.Bank, bankname)`, Y:3624).
+ */
+export async function listBanks(): Promise<BankRow[]> {
+  const rows = await fetchAll(
+    "read the banks (Fabric SQL)",
+    (o) => AssumptionsBanksService.getAll(o),
+    { select: ["id", "bankname"] },
+  );
+  return rows.flatMap((r) => (r.id ? [{ id: String(r.id), bankname: r.bankname ?? "" }] : []));
+}
+
+/**
+ * `colAssumptionKfWs` = `AssumptionsKfWTrancheSQL` (Y:1874), the whole table: the KfW-Tranche
+ * dropdown's `loantenor_repayfreeperiod_ratefixing` values, in table order, blanks dropped.
+ */
+export async function listKfwTranches(): Promise<string[]> {
+  const rows = await fetchAll(
+    "read the KfW tranches (Fabric SQL)",
+    (o) => AssumptionsKfWTrancheService.getAll(o),
+    { select: ["loantenor_repayfreeperiod_ratefixing"] },
+  );
+  return rows.flatMap((r) => (r.loantenor_repayfreeperiod_ratefixing ? [r.loantenor_repayfreeperiod_ratefixing] : []));
 }

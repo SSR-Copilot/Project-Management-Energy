@@ -143,8 +143,8 @@ export const qk = {
   /** PM Finance (D34). Everything project-scoped sits under `financeAll(projectId)`. */
   financeAll: (projectId: string) => ["pmFinance", projectId] as const,
   finance: (projectId: string, ...part: readonly (string | number)[]) => ["pmFinance", projectId, ...part] as const,
-  /** PM Finance reference data (the six Financing Categories). */
-  financeReference: (part: string) => ["pmFinanceReference", part] as const,
+  /** PM Finance reference data (the six Financing Categories; the Fabric debt rows per country, banks, KfW). */
+  financeReference: (part: string, id = "-") => ["pmFinanceReference", part, id] as const,
   planningChoices: (fieldName: string, countryId: string | null) => ["planningChoices", fieldName, countryId ?? "-"] as const,
   generatorCatalog: (fid: string) => ["generatorCatalog", fid] as const,
   generatorModels: (ids: readonly string[]) => ["generatorModels", ...ids] as const,

@@ -12,7 +12,7 @@
  * `data-testid` derived from `testId` (rule 16).
  */
 import { useState } from "react";
-import { Avatar, Button, Field, Input, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { Button, Field, Input, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
 import { useFieldSkin } from "./fieldSkin";
 
@@ -55,10 +55,15 @@ const noBorder = outline("transparent");
 
 const useStyles = makeStyles({
   root: { position: "relative", display: "flex", flexDirection: "column", rowGap: tokens.spacingVerticalXS, minWidth: 0 },
+  /**
+   * The `Field` grid's one column may shrink below its content: otherwise a long name's min-content
+   * widened the field past its 260-px cell (290 on General Data), and the name was never cut.
+   */
+  field: { minWidth: 0, gridTemplateColumns: "minmax(0, 1fr)" },
   /** The PCF box: 1-px dark outline, chips and the search input on one wrapping line. */
   box: {
     boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center",
-    columnGap: "4px", rowGap: "2px", minHeight: "32px", width: "100%",
+    columnGap: "4px", rowGap: "2px", minHeight: "32px", width: "100%", minWidth: 0,
     paddingTop: "2px", paddingBottom: "2px", paddingLeft: "4px", paddingRight: "4px",
     borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
     borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
@@ -68,6 +73,11 @@ const useStyles = makeStyles({
     ":focus-within": outline(tokens.colorCompoundBrandStroke),
   },
   boxDisabled: { ...outline(tokens.colorNeutralStrokeDisabled), cursor: "not-allowed" },
+  /**
+   * At `MaxPeople` the box is one line: the chips and the (hidden) search box never wrap, so a long
+   * name no longer pushes the search box onto a second row and doubles the box's height.
+   */
+  boxFull: { flexWrap: "nowrap" },
   /** The persona chip: grey pill, initials circle, name, ✕. */
   chip: {
     display: "inline-flex", alignItems: "center", columnGap: "4px", maxWidth: "100%", minWidth: 0,
@@ -77,8 +87,22 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground3,
     fontSize: "14px",
   },
-  chipName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 },
-  chipRemove: { minWidth: "20px", width: "20px", height: "20px" },
+  /** A lone person at `MaxPeople`: the chip fills the box, the name cut with "…", ✕ at its end (canvas, 3 Nov 2026). */
+  chipFill: { flexGrow: 1, flexShrink: 1 },
+  chipName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flexGrow: 1 },
+  // The PCF's ✕ is a 12-px glyph (canvas, 3 Nov 2026), not Fluent's 16-px small icon.
+  chipRemove: { minWidth: "20px", width: "20px", height: "20px", flexShrink: 0, "& svg": { width: "12px", height: "12px" } },
+  /**
+   * The PCF's Fluent v8 `PersonaCoin` (size 24): a filled circle in the v8 initials colour of the name,
+   * the first initial in white — the canvas draws "Azure VSB Cloud Flow Service User" in rust #8E562E.
+   */
+  coin: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    width: "24px", height: "24px", borderRadius: "50%",
+    color: "#ffffff", fontSize: "12px", fontWeight: 600, lineHeight: "24px",
+  },
+  /** The suggestion list's size-32 coin. */
+  coinLarge: { width: "32px", height: "32px", fontSize: "14px", lineHeight: "32px" },
   /**
    * The search input, borderless inside the box. The `Field` marks it invalid, and Fluent's red
    * invalid border (`:not(:focus-within)`) out-ranks a plain class, so it is cleared on the same
@@ -103,7 +127,7 @@ const useStyles = makeStyles({
   /** At `MaxPeople` the PCF shows no search text box; ours stays (disabled) but takes no room. */
   searchFull: { flex: "0 0 0px", minWidth: 0, width: 0, paddingLeft: 0, paddingRight: 0, overflow: "hidden" },
   /** The box and its suggestions callout, which is positioned against it. */
-  anchor: { position: "relative", width: "100%" },
+  anchor: { position: "relative", width: "100%", minWidth: 0 },
   /**
    * The PCF's suggestions callout (Fluent v8 `PeoplePicker`): floats over the form under the box,
    * as wide as it, white with a shadow — it never pushes the fields below it down.
@@ -153,6 +177,30 @@ const SUGGESTIONS_HEADER = "Suggested People";
 
 const caption = (p: PickerPerson): string => `${p.displayName} (${p.mail})`;
 
+/*
+ * Fluent v8 `getPersonaInitialsColor` (`@fluentui/react` `PersonaInitialsColor.ts`), which the canvas
+ * PCF renders with: a hash of the display name picks one of these 20 swatches, in this order.
+ * Fluent v9's `Avatar color="colorful"` hashes differently, so the same person had another colour.
+ */
+const V8_INITIALS_COLORS = [
+  "#4F6BED", "#0078D4", "#004E8C", "#038387", "#498205", "#0B6A0B", "#C239B3", "#E3008C", "#881798", "#5C2E91",
+  "#CA5010", "#D13438", "#A4262C", "#8764B8", "#986F0B", "#750B1C", "#7A7574", "#005B70", "#8E562E", "#69797E",
+] as const;
+
+function v8InitialsColor(name: string): string {
+  if (!name) return "#0078D4";
+  let hash = 0;
+  for (let i = name.length - 1; i >= 0; i--) {
+    const ch = name.charCodeAt(i);
+    const shift = i % 8;
+    hash ^= (ch << shift) + (ch >> (8 - shift));
+  }
+  return V8_INITIALS_COLORS[hash % V8_INITIALS_COLORS.length]!;
+}
+
+/** The coin's single initial, as the canvas shows it. */
+const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase();
+
 export function PeoplePicker({
   label, placeholder, tooltip, testId, value, onChange, onPick, maxPeople, term, onTermChange,
   suggestions, required, errorMessage, disabled, removeLabel = "Remove", ariaLabel,
@@ -174,7 +222,7 @@ export function PeoplePicker({
   return (
     <div className={s.root}>
       <Field
-        className={skin.field}
+        className={mergeClasses(skin.field, s.field)}
         label={label}
         required={required}
         validationState={errorMessage ? "error" : "none"}
@@ -182,10 +230,12 @@ export function PeoplePicker({
       >
         <div className={s.anchor}>
         {/* The PCF keeps its dark outline when invalid: only the message below shows the error. */}
-        <div className={mergeClasses(s.box, disabled && s.boxDisabled)}>
+        <div className={mergeClasses(s.box, full && s.boxFull, disabled && s.boxDisabled)}>
           {value.map((p) => (
-            <span key={p.id} className={s.chip} title={caption(p)}>
-              <Avatar name={p.displayName || p.mail} size={24} color="colorful" aria-hidden="true" />
+            <span key={p.id} className={mergeClasses(s.chip, full && maxPeople === 1 && s.chipFill)} title={caption(p)}>
+              <span className={s.coin} style={{ backgroundColor: v8InitialsColor(p.displayName || p.mail) }} aria-hidden="true">
+                {initialOf(p.displayName || p.mail)}
+              </span>
               <span className={s.chipName}>{p.displayName || p.mail}</span>
               <Button
                 appearance="transparent"
@@ -238,7 +288,9 @@ export function PeoplePicker({
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(p)}
                 >
-                  <Avatar name={p.displayName || p.mail} size={32} color="colorful" aria-hidden="true" />
+                  <span className={mergeClasses(s.coin, s.coinLarge)} style={{ backgroundColor: v8InitialsColor(p.displayName || p.mail) }} aria-hidden="true">
+                    {initialOf(p.displayName || p.mail)}
+                  </span>
                   <span className={s.suggestionText}>
                     <span className={s.suggestionName}>{p.displayName || p.mail}</span>
                     <span className={s.suggestionMail}>{p.mail}</span>

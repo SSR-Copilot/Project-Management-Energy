@@ -153,8 +153,9 @@ describe("Project General CheckList Screen (connected)", () => {
     const [rowArg, data, texts] = state.patchRow.mock.calls[0] as [ChecklistRow, Record<string, unknown>, { progress: string; success: string }];
     expect(rowArg.id).toBe("cl-1");
     expect(data).toEqual({ [CHECKLIST_COL.taskState]: TASK.completed });
-    expect(texts.progress).toBe(MSG.taskChanging("Land secured"));
-    expect(texts.success).toBe(MSG.taskChanged);
+    // The save popup carries the success text; no green bar afterwards (PO, 3 Nov 2026).
+    expect(texts.progress).toBe(MSG.taskChanged);
+    expect(texts.success).toBeUndefined();
   });
 
   it("UT-CHKLST-904 a task with an active approval opens the panel; Request Approval needs a comment, then starts the checklist flow (D81)", async () => {
@@ -170,6 +171,8 @@ describe("Project General CheckList Screen (connected)", () => {
     const request = await screen.findByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval") as HTMLButtonElement;
     // `DisplayMode`: the comment error label hides the button's Edit mode (Y:5452) — empty at first.
     expect(request.disabled).toBe(true);
+    // The hover text is the selected cluster's name, as on the canvas (PO, 3 Nov 2026).
+    expect(request.title).toBe("Draft");
     expect(request.getAttribute("aria-label")).toBe(ARIA.requestApproval);
     fireEvent.change(screen.getByTestId("txt_GeneralData_RightPanel_ProjectState_InpForm_Comment_1"), { target: { value: "Go" } });
     await waitFor(() => expect(request.disabled).toBe(false));

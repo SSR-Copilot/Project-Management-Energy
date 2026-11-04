@@ -83,7 +83,6 @@ const LAT_MAX_LENGTH = 11;
 const LNG_MAX_LENGTH = 12;
 /** `txt_…_ShareholdingEntity_InpForm_BodyForm_Percentage.MaxLength` (Y:6673). */
 const PERCENT_MAX_LENGTH = 6;
-
 /** Screen-only texts that are not canvas captions (NEW — the load-error state, rule 19). */
 const SCREEN_TEXT = {
   loadFailedTitle: "The project data could not be loaded",
@@ -147,6 +146,8 @@ const useStyles = makeStyles({
    */
   placementRow: {},
   fullWidthCombo: { width: "100%", minWidth: 0 },
+  /** An empty municipality list is not drawn: it opened as a bare white strip over the error label. */
+  hiddenListbox: { display: "none" },
   latLngRow: {
     minHeight: "120px",
     // `lbl_…_Latitude_ErrMessage` / `_Longitude_ErrMessage` are `AutoHeight: true`: they wrap.
@@ -314,6 +315,8 @@ export default function GeneralDataScreen() {
   const [managerSearch, setManagerSearch] = useState("");
   const [deputySearch, setDeputySearch] = useState("");
   const [muniSearch, setMuniSearch] = useState("");
+  /** The municipality box is in search mode (clicked / focused) — see `muniComboProps`. */
+  const [muniEditing, setMuniEditing] = useState(false);
   const [picked, setPicked] = useState<Map<string, PickerPerson>>(new Map());
   const [draft, setDraft] = useState<ShareholderDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -345,6 +348,8 @@ export default function GeneralDataScreen() {
   const country = countries.find((c) => c.id === live.countryId);
   const muniMode = municipalityMode(country?.name);
   const areaName = selectedAreas.data.find((a) => a.id === live.areaId)?.name ?? null;
+  // Both boxes search on every keystroke. DIVERGENCE (user, 3 Nov 2026): the canvas Germany box has
+  // `DelayOutput: true` (waits for a typing pause); it now loads at once, as the France box does.
   const municipalities = useMunicipalitySearch(muniMode, muniSearch, areaName);
   const managers = useEntraSearch(managerSearch);
   const deputies = useEntraSearch(deputySearch);
@@ -541,13 +546,32 @@ export default function GeneralDataScreen() {
     return <LoadingOverlay mode="inline" label={SCREEN_TEXT.loading} />;
   }
 
-  /** The municipality combobox: typing searches (`muniSearch`), picking applies the canvas OnChange. */
+  /*
+   * The municipality combobox, as the canvas `ModernCombobox@1.1.1` (`cmb_…_Municipality_Germany` /
+   * `_France_1`, Y:3622-3715):
+   *  - the chosen municipality (`DefaultSelectedItems: LookUp(…, municipality = locMunicipality)`) is
+   *    the box's value; a click (or focus) does NOT put a caret into it to edit or delete — the box
+   *    goes to SEARCH mode, empty with the "Type 3 or more letters" placeholder, and the list opens;
+   *  - `Items`: Germany — the Area's municipalities searched from the first letter (all of them while
+   *    nothing is typed), the chosen one ticked; France — nothing below three letters;
+   *  - leaving the box puts the chosen value back; picking runs the canvas `OnChange`.
+   */
+  const storedMunicipality = (muniMode === "germany" ? live?.municipalityGermany : live?.municipalityFrance) ?? "";
+  const storedMunicipalityUid = municipalities.data.find((m) => m.municipality === storedMunicipality)?.uid;
   const pickMunicipality = (key: string | undefined) => {
+    setMuniSearch("");
+    setMuniEditing(false);
+    // The pick commits: the box leaves focus showing the chosen name, so a key press can no longer
+    // erase letters of it — the next click starts a fresh search, as the canvas combobox does.
+    requestAnimationFrame(() => {
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.getAttribute("role") === "combobox") el.blur();
+    });
     const m = municipalities.data.find((x) => x.uid === key);
     if (!m) return;
-    setMuniSearch("");
     patch(muniMode === "germany" ? applyGermanMunicipality(m, lang) : applyFrenchMunicipality(m.municipality));
   };
+  const startMuniSearch = () => { if (!saving && !muniEditing) { setMuniSearch(""); setMuniEditing(true); } };
   const muniComboProps = {
     appearance: FIELD_APPEARANCE,
     // Fill the cell like the dropdowns above it: Fluent's Combobox keeps a ~250 px minimum width
@@ -556,9 +580,29 @@ export default function GeneralDataScreen() {
     freeform: true,
     placeholder: GD_LABELS.municipalityPlaceholder,
     disabled: saving,
-    selectedOptions: [] as string[],
-    onChange: (e: ChangeEvent<HTMLInputElement>) => setMuniSearch(e.target.value),
+    value: muniEditing ? muniSearch : storedMunicipality,
+    // No browser autofill list (it offered the Latitude typed earlier) and no spell-check squiggle
+    // under a municipality name: the canvas box has neither.
+    autoComplete: "off",
+    spellCheck: false,
+    selectedOptions: storedMunicipalityUid ? [storedMunicipalityUid] : [] as string[],
+    onFocus: startMuniSearch,
+    onClick: startMuniSearch,
+    onBlur: () => { setMuniEditing(false); setMuniSearch(""); },
+    // Typing always searches from an empty box: a key pressed while the chosen name still shows
+    // (focus kept by the keyboard) starts a NEW search with that key, never edits the name.
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      const typed = e.target.value;
+      if (!muniEditing) {
+        const fresh = typed.startsWith(storedMunicipality) ? typed.slice(storedMunicipality.length) : "";
+        setMuniEditing(true);
+        setMuniSearch(fresh);
+        return;
+      }
+      setMuniSearch(typed);
+    },
     onOptionSelect: (_: unknown, d: { optionValue?: string }) => pickMunicipality(d.optionValue),
+    ...(municipalities.data.length === 0 ? { listbox: { className: s.hiddenListbox } } : {}),
   };
   const muniOptions = municipalities.data.map((m) => (
     <Option key={m.uid} value={m.uid} text={m.municipality} data-testid={`general-data-municipality-suggestion-${m.uid}`}>
@@ -785,7 +829,6 @@ export default function GeneralDataScreen() {
                         {...muniComboProps}
                         aria-label="cmb_GeneralData_DisplayProject_Body_General_Content_Municipality_Germany"
                         data-testid="cmb_GeneralData_DisplayProject_Body_General_Content_Municipality_Germany"
-                        value={muniSearch || (live.municipalityGermany ?? "")}
                       >
                         {muniOptions}
                       </Combobox>
@@ -794,7 +837,6 @@ export default function GeneralDataScreen() {
                         {...muniComboProps}
                         aria-label="cmb_GeneralData_DisplayProject_Body_General_Content_Municipality_France"
                         data-testid="cmb_GeneralData_DisplayProject_Body_General_Content_Municipality_France_1"
-                        value={muniSearch || (live.municipalityFrance ?? "")}
                       >
                         {muniOptions}
                       </Combobox>

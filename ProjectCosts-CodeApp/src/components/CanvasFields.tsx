@@ -31,7 +31,19 @@ const useStyles = makeStyles({
    * `makeStyles` rejects shorthands here, so every edge is longhand.
    */
   /** `btn_…_Buttons_Save` — `Icon: ="Checkmark"`, `Text: ="Save"`, `FontSize: =15` (`:17409-17414`). */
-  save: { height: "32px", minWidth: "96px", fontSize: "15px" },
+  save: {
+    height: "32px", minWidth: "96px", fontSize: "15px",
+    // PowerCAT Save: `HoverFillColor: =hoverButton`, `HoverFontColor`/`HoverIconColor: =themePrimary`
+    // (32 of the 33 canvas Save buttons; canvas pair of 3 Nov 2026) — not Fluent's darker primary.
+    ...Object.fromEntries([":hover:enabled", ":hover:active:enabled"].flatMap((state) => [
+      [`&${state}`, {
+        backgroundColor: palette.hoverButton, color: palette.themePrimary,
+        borderTopColor: palette.hoverButton, borderRightColor: palette.hoverButton,
+        borderBottomColor: palette.hoverButton, borderLeftColor: palette.hoverButton,
+      }],
+      [`&${state} .fui-Button__icon`, { color: palette.themePrimary }],
+    ])),
+  },
   /** `look="brand"` (the Application Settings pair): the buttons keep canvas.css's 96 px band chrome. */
   brandButton: { minWidth: "96px" },
   /** `gap={20}`: CAPEX Accounts places Save at `Cancel.X - Self.Width - 20` (CAX:1440); the extra 10 px is a left margin on Cancel. */

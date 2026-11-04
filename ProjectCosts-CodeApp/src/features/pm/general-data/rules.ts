@@ -1047,10 +1047,12 @@ export const municipalityMode = (countryName: string | null | undefined): Munici
   countryName === "Germany" ? "germany" : countryName === "France" ? "france" : "text";
 
 /**
- * The municipality list is empty below three characters. France: the canvas rule
+ * FRANCE only — its list is empty below three characters, the canvas rule
  * (`If(Len(Self.SearchText) < 3, Filter(colAssumptionsFranceSQL, false), …)`, Y:3673).
- * Germany: CHANGED (PO, 28 Oct 2026) — the canvas searches from the first letter although its
- * placeholder says "Type 3 or more letters"; both lists now wait for three.
+ * Germany has no such rule: `cmb_…_Municipality_Germany.Items` searches the Area's municipalities
+ * from the first letter and lists them all while nothing is typed (Y:3638), although its placeholder
+ * says "Type 3 or more letters". Back to the canvas (user, 3 Nov 2026: "exact same functionality"
+ * as the YAML), reversing the 28 Oct change that made Germany wait for three too.
  */
 export const municipalitySearchIsSuppressed = (searchText: string): boolean =>
   searchText.length < 3;

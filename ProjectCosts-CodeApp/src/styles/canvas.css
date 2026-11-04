@@ -108,6 +108,8 @@
 /* `pcf_Left_Navigation_Menu` first, `con_Left_Navigation_Header` (45 high) pinned below it. */
 .canvas-rail-pm { overflow-x: hidden; }
 .canvas-rail-pm a { white-space: nowrap; }
+/* The PM rail's labels are black (#000, sampled off the canvas rail, 3 Nov 2026). */
+.canvas-rail-pm a, .canvas-rail-pm a[aria-current="page"] { color: #000; }
 /* A collapsed rail's group header: an empty Nav row, as tall as a link (`LeftNav.tsx`). */
 .canvas-rail-blank { display: block; flex-shrink: 0; min-height: 44px; }
 .canvas-rail-collapse { flex-shrink: 0; margin-top: auto; position: relative; height: 45px; display: flex; align-items: center; }
@@ -201,6 +203,7 @@
 .canvas-radio-group legend { margin-bottom: 4px; }
 .canvas-radio-group label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; color: #242424; font-weight: 400; }
 .canvas-radio-group input { accent-color: #006eb9; width: 16px; height: 16px; }
+.canvas-radio-group label:has(> input:enabled), .canvas-radio-group input:enabled { cursor: pointer; }
 .canvas-cost-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .canvas-capex-tabs { display: flex; flex-shrink: 0; height: 50px; border-bottom: 1px solid #f1f1f1; overflow-x: auto; padding: 0 14px; gap: 26px; }
 /* Tab labels: 14px, #424242 idle / #242424 + semibold when selected — without an explicit
@@ -520,6 +523,57 @@
    not the 15 px the DEVEX/CAPEX buttons set). The hint is at `X: =20`. */
 .opex-canvas-panel .canvas-panel-footer { height: 60px; gap: 20px; padding: 0 20px; }
 .opex-canvas-panel .canvas-panel-footer button { width: 96px; min-width: 96px; height: 32px; font-size: 14px; }
+
+/* PM panels built from the canvas field containers — Finance (`con_GeneralData_RightPanel_*_Form`) and
+   Production (`con_AddEdit{WTG|PV}_ProjectProd`) — scoped by `FormPanel panelClassName` `pm-canvas-panel`.
+   Measured on the canvas Add Tranche (3 Nov 2026): every field is a 70-high
+   ManualLayout container — the 20-high Semibold 14 px caption at Y 0, the 32-high box at Y 25, the
+   error under it; the red `*` (`gblAppColors.Error`) hangs 10 px left of the caption; a radio group
+   is the caption plus 32-px options with the first circle centred 38 down; a `DisplayMode.Disabled`
+   box is white with a light grey outline and #bdbdbd text. The containers stack with no gap. */
+.pm-canvas-panel .canvas-field,
+.pm-canvas-panel .fui-Field { gap: 0; row-gap: 0; height: 70px; flex-shrink: 0; align-content: start; }
+/* The containers keep their 70 when the error shows (it overlaps the next one's top), except the
+   year + month pairs: `con_…_Tenor` is `If(<error>.Visible, 90, 70)`. */
+.pm-canvas-panel .canvas-field[data-invalid] { height: 90px; }
+/* A year + month pair: one container, its two captionless dropdowns side by side 10 apart (135 each). */
+.pm-canvas-panel .canvas-field .canvas-field { height: auto; }
+.pm-canvas-panel .canvas-field > div:has(> div > .canvas-field) { gap: 10px; }
+.pm-canvas-panel .canvas-field > span:first-child,
+.pm-canvas-panel .fui-Field__label,
+.pm-canvas-panel .canvas-radio-group legend {
+  position: relative; display: block; height: 20px; line-height: 20px; padding: 0; margin: 0;
+  font-size: 14px; font-weight: 600; color: #242424;
+}
+.pm-canvas-panel .canvas-field > span:first-child,
+.pm-canvas-panel .fui-Field__label { margin-bottom: 5px; }
+.pm-canvas-panel .canvas-field > span[data-required="true"]::before,
+.pm-canvas-panel .canvas-radio-group legend > span[data-required="true"]::before {
+  content: '*'; position: absolute; left: -10px; top: 6px; line-height: 1; font-weight: 400; color: #d20532;
+}
+.pm-canvas-panel .fui-Field__label .fui-Label__required {
+  position: absolute; left: -10px; top: 6px; width: auto; margin: 0; padding: 0;
+  line-height: 1; font-weight: 400; color: #d20532;
+}
+.pm-canvas-panel .canvas-field-error,
+.pm-canvas-panel .fui-Field__validationMessage { color: #d20532; font-size: 12px; line-height: 16px; margin-top: 0; padding-left: 1px; white-space: nowrap; }
+.pm-canvas-panel .canvas-radio-group { min-height: 0; padding-bottom: 16px; flex-shrink: 0; }
+/* `con_SeniorDebtData_BaseRate_15` is 140 high for its three options (Status is 130). */
+.pm-canvas-panel .canvas-radio-group[data-testid="rad_SeniorDebtData_BaseRate_2"] { padding-bottom: 24px; }
+.pm-canvas-panel .canvas-radio-group label { gap: 9px; padding-left: 5px; color: #000; }
+.pm-canvas-panel .canvas-radio-group input { accent-color: #0f6cbd; }
+.pm-canvas-panel label:has(> input[type="radio"]:disabled) { color: #bdbdbd; }
+/* Finance disabled boxes: TextInput #e0e0e0, DropDown / ComboBox #e9e9e9 (sampled), no underline.
+   (Production's read-only yields stay the grey filled box, as its canvas screenshot shows.) */
+.finance-canvas-panel :is(.fui-Input, .fui-DatePicker):has(input:disabled) { background: #fff; border: 1px solid #e0e0e0; }
+.finance-canvas-panel .fui-Dropdown:has(button:disabled) { background: #fff; border: 1px solid #e9e9e9; box-shadow: none; }
+.finance-canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled)::after { content: unset; }
+.finance-canvas-panel :is(.fui-Input, .fui-Dropdown, .fui-DatePicker):has(:disabled) :is(input, button, svg) {
+  background: transparent; color: #bdbdbd; -webkit-text-fill-color: #bdbdbd; font-style: normal;
+}
+/* `Toggle@1.1.5` (`FontWeight.Semibold`). Finance: centred in its 60-high container, the track 11 px in. */
+.pm-canvas-panel .fui-Switch .fui-Switch__label { font-weight: 600; }
+.finance-canvas-panel .fui-Switch { min-height: 60px; align-items: center; margin-left: 3px; }
 
 /* Add Cost from Table panel (`FormPanel panelClassName="add-cost-table-panel"`): the body hosts a
    spreadsheet, so it does not scroll itself — the grid wrapper does, and the toolbar and error
