@@ -141,7 +141,13 @@ const useStyles = makeStyles({
     minHeight: "70px", paddingLeft: "20px", paddingRight: "20px", boxSizing: "border-box",
     "& .fui-Field__label, & label": { fontWeight: 600 },
   },
-  fieldMulti: { minHeight: "102px" },
+  // The three multiline boxes (Grid Operator, Grid expansion details, Substation operator) are
+  // `Height: =64` on the canvas (Y:642, 880, 1017); `rows={2}` drew them ~52 (canvas pair, 4 Nov 2026).
+  fieldMulti: {
+    minHeight: "102px",
+    "& .fui-Textarea.fui-Textarea": { height: "64px", minHeight: "64px" },
+    "& .fui-Textarea textarea.fui-Textarea__textarea": { height: "100%", minHeight: 0, maxHeight: "none" },
+  },
   // `con_GridOperator_DisplayProjectBodyRightContent_Buttons`: 50 high, gap 10, justified to the
   // end, PaddingRight 10; both buttons are 96 x 32.
   // On the canvas screenshot the pair are plain text buttons with an icon, in a strip under a
@@ -155,6 +161,20 @@ const useStyles = makeStyles({
     // with a black glyph. The disabled Save matches it.
     "& button:disabled": { color: "#605e5c", backgroundColor: "transparent" },
     "& button:disabled .fui-Button__icon": { color: palette.black },
+  },
+  /**
+   * `pcf_…_ButtonsSave` hovered: `HoverFillColor: =hoverButton`, `HoverFontColor` / `HoverIconColor:
+   * =themePrimary` — pale blue with blue caption and tick, not Fluent's darker primary (canvas pair,
+   * 4 Nov 2026). The canvas hover text "Filter projects details list view." is a copy-paste SOURCE
+   * DEFECT (CONVENTIONS rule 22); the tooltip stays "Save".
+   */
+  saveEnabled: {
+    ":hover, :hover:active": {
+      backgroundColor: palette.hoverButton, color: palette.themePrimary,
+      borderTopColor: palette.hoverButton, borderRightColor: palette.hoverButton,
+      borderBottomColor: palette.hoverButton, borderLeftColor: palette.hoverButton,
+    },
+    ":hover .fui-Button__icon, :hover:active .fui-Button__icon": { color: palette.themePrimary },
   },
 });
 
@@ -255,6 +275,8 @@ export default function GridOperatorScreen() {
             <div className={`${s.field} ${s.fieldMulti}`}>
               <TextAreaField
                 label={FIELD_LABEL.operator} value={text("operator")} rows={2} maxLength={CHAR_MAX_LENGTH}
+                // The n/55 counter only once there is text (canvas pair, 4 Nov 2026).
+                counter={text("operator").length > 0}
                 disabled={!editable("operator")} onChange={(v) => setField("operator", v)}
                 ariaLabel="txt_GridOperator_DisplayProjectBodyRightContent_GridOperator"
                 testId="txt_GridOperator_DisplayProjectBodyRightContent_GridOperator"
@@ -289,6 +311,8 @@ export default function GridOperatorScreen() {
             <div className={`${s.field} ${s.fieldMulti}`}>
               <TextAreaField
                 label={FIELD_LABEL.expansionDetails} value={text("expansionDetails")} rows={2} maxLength={CHAR_MAX_LENGTH}
+                // The n/55 counter only once there is text (canvas pair, 4 Nov 2026).
+                counter={text("expansionDetails").length > 0}
                 disabled={!editable("expansionDetails")} onChange={(v) => setField("expansionDetails", v)}
                 ariaLabel="txt_GridOperator_DisplayProjectBodyRightContent_GridExpansionDetails"
                 testId="txt_GridOperator_DisplayProjectBodyRightContent_GridExpansionDetails"
@@ -317,6 +341,8 @@ export default function GridOperatorScreen() {
             <div className={`${s.field} ${s.fieldMulti}`}>
               <TextAreaField
                 label={FIELD_LABEL.substationOperator} value={text("substationOperator")} rows={2} maxLength={CHAR_MAX_LENGTH}
+                // The n/55 counter only once there is text (canvas pair, 4 Nov 2026).
+                counter={text("substationOperator").length > 0}
                 disabled={!editable("substationOperator")} onChange={(v) => setField("substationOperator", v)}
                 ariaLabel="txt_GridOperator_DisplayProjectBodyRightContent_SubstationOperator"
                 testId="txt_GridOperator_DisplayProjectBodyRightContent_SubstationOperator"
@@ -367,6 +393,7 @@ export default function GridOperatorScreen() {
           <Button
             // Filled blue when it can save, plain grey text when it cannot (canvas, 27 Oct 2026).
             appearance={saveEnabled ? "primary" : "subtle"}
+            className={saveEnabled ? s.saveEnabled : undefined}
             icon={<CheckmarkRegular />}
             disabled={!saveEnabled}
             onClick={() => void onSave()}

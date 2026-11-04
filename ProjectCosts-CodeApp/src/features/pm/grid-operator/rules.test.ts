@@ -553,12 +553,11 @@ describe("D35 — the shared leave guard", () => {
   });
 });
 
-describe("UT-GRID-RANGE — grid voltage stays inside the Dataverse column range", () => {
-  it("rejects a value above 100000000000 and accepts the bounds", () => {
-    expect(validateVoltage("32424242242424240")).toEqual({ valid: false, message: MSG.voltageRange });
-    expect(validateVoltage("-100000000001").message).toBe(MSG.voltageRange);
-    expect(validateVoltage("100000000000")).toEqual({ valid: true });
-    expect(validateVoltage("-100000000000")).toEqual({ valid: true });
+describe("UT-GRID-RANGE — grid voltage has no range check, as on the canvas (PO, 4 Nov 2026)", () => {
+  it("accepts any number, however large; only a non-number shows the canvas message", () => {
+    expect(validateVoltage("32424242242424240")).toEqual({ valid: true });
+    expect(validateVoltage("-100000000001")).toEqual({ valid: true });
     expect(validateVoltage("110")).toEqual({ valid: true });
+    expect(validateVoltage("abc")).toEqual({ valid: false, message: MSG.numeric });
   });
 });
