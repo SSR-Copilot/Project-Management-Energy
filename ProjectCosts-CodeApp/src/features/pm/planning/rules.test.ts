@@ -387,6 +387,14 @@ describe("UT-PLAN the acquisition panel", () => {
     expect(v.required.message).toBe("Required must be number");
   });
 
+  it("a filled but non-numeric Required also flags Secured, as the canvas label does (Y:3259-3285)", () => {
+    const v = validateAquisition({ secured: "353", required: "vcg" });
+    expect(v.secured.message).toBe(MSG.securedTooHigh);
+    expect(v.required.message).toBe("Required must be number");
+    // A blank Required leaves Secured alone.
+    expect(validateAquisition({ secured: "353", required: "" }).secured.valid).toBe(true);
+  });
+
   it("UT-PLAN-023 the save stores the fraction and re-writes Project, Type and Owning Business Unit", () => {
     const payload = buildAquisitionPayload({ secured: "25", required: "100" }, { project: project(), typeId: "at-1" });
     expect(payload).toEqual({

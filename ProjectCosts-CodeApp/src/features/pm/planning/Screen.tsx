@@ -60,7 +60,7 @@ import {
   aquisitionRowsFor, canEditLegalPlanningBasis, canEditPlanning, canReset, canSave, canSaveAquisition,
   canSavePermit, canSwitchTabs, clearAquisitionJob, cooperationDetailsEditable, countCell, customChoiceOptions,
   deletePermitDescription, deletePermitJob, emptyPermitDraft, pageLock, parseTab, percentCell,
-  permitCommandState, permitDateCell, permitDateIsActual, permitDateValue, permitDraftFrom,
+  permitCommandState, permitDateCellCanvasParity, permitDateIsActual, permitDateValue, permitDraftFrom,
   permitInputDate, permitPanelTitle, resetPlanningForm,
   saveAquisitionJob, savePermitJob, savePlanningJob, securedPercent, showCooperationDetailsCanvasParity,
   showCooperationPartner, showHeightLimit, showRepoweringDetails, showSecuredAccess, toPlanningForm,
@@ -176,7 +176,8 @@ const useStyles = makeStyles({
     "& th": { fontWeight: tokens.fontWeightSemibold, height: "32px", borderBottomWidth: 0 },
   },
   // Rows: TemplateSize 34, no padding.
-  permitRow: { height: "34px" },
+  // No rule between the rows on the canvas (pair of 4 Nov 2026).
+  permitRow: { height: "34px", borderBottomWidth: 0 },
   // Measured off the canvas screenshot: captions at 28 / 253 / 422 px from the table's edge.
   colSelect: { width: "21px", paddingLeft: 0, paddingRight: 0 },
   // The widths add up to the table's 656 px so it does not stretch them: captions at 28 / 253 /
@@ -190,7 +191,9 @@ const useStyles = makeStyles({
   /** `lbl_…_PermitsRowSubmitted` / `…Approved` `.FontColor` for an Actual date. */
   actualDate: { color: palette.themePrimary },
   // `img_…_PermitsRowSelectionDot`: 16 px at X = 4.
-  radio: { color: palette.themePrimary, minWidth: "24px", "& svg": { fontSize: "16px" } },
+  // `CircleEmpty` (grey ring) unselected, `CircleDotBlue` selected (Y:1644; canvas pair, 4 Nov 2026).
+  radio: { color: "#605e5c", minWidth: "24px", "& svg": { fontSize: "16px" } },
+  radioChecked: { color: palette.themePrimary },
   // `con_…_AquisitionStatusForm`: vertical, LayoutGap 10, PaddingTop 10; each block
   // `Min(780, Parent.Width)` with PaddingTop 10.
   // Canvas screenshot (28 Oct 2026): the first band 13 px under the tab rule, the tables 5 px further
@@ -228,6 +231,8 @@ const useStyles = makeStyles({
     "&:first-child td": { paddingTop: "4px" },
     // Secured and Required sit flush with their column's right edge on the canvas.
     "& td:nth-child(2), & td:nth-child(3)": { paddingRight: 0 },
+    // Secured, Required and the percentage are Semibold on the canvas (pair of 4 Nov 2026).
+    "& td:nth-child(2), & td:nth-child(3), & td:nth-child(4)": { fontWeight: tokens.fontWeightSemibold },
     // Row text 2 px further in than the header caption above it.
     "& td:first-child": { paddingLeft: "10px" },
   },
@@ -286,8 +291,8 @@ const useStyles = makeStyles({
       position: "absolute", left: "-10px",
     },
     "& .canvas-radio-group legend": { marginBottom: "6px" },
-    // Focused, a box keeps no outline: only the 2 px theme-colour underline, as on the canvas.
-    "& .canvas-field > input:focus": { outlineStyle: "none", boxShadow: `inset 0 -2px 0 ${palette.themePrimary}` },
+    // Focused, a box keeps no outline: only a 1 px theme-colour underline (PO, 4 Nov 2026: thinner than 2).
+    "& .canvas-field > input:focus": { outlineStyle: "none", boxShadow: `inset 0 -1px 0 ${palette.themePrimary}` },
     "& .canvas-radio-group > label:first-of-type": { marginLeft: "5px" },
     "& .canvas-radio-group > label + label": { marginLeft: "-15px" },
     "& > :nth-child(3), & > :nth-child(5)": { marginTop: "-4px" },
@@ -310,7 +315,7 @@ const useStyles = makeStyles({
     "& .canvas-field": { position: "relative" },
     "& .canvas-field[data-invalid] > input": { outlineStyle: "none" },
     // Focused, the canvas box shows only its theme-blue underline, no outline.
-    "& .canvas-field > input:focus": { outlineStyle: "none", boxShadow: `inset 0 -2px 0 ${palette.themePrimary}` },
+    "& .canvas-field > input:focus": { outlineStyle: "none", boxShadow: `inset 0 -1px 0 ${palette.themePrimary}` },
     // The typed value 1 px larger than the shared 14 px, in a 4 px-rounded box (canvas, 28 Oct 2026).
     "& .canvas-field > input": { fontSize: "15px", borderRadius: "4px" },
     "& .canvas-field-error": {
@@ -365,6 +370,22 @@ const useStyles = makeStyles({
     borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
     "& .fui-Button__icon": { color: palette.themePrimary },
     ":hover": { color: palette.themePrimary, backgroundColor: palette.themeLighter },
+  },
+  /**
+   * The header ✕ as the canvas command-bar icon draws it (canvas pair, 4 Nov 2026): no focus box
+   * when the drawer focuses it on open; on hover a light-grey square with a dark ✕ (and the tooltip,
+   * `closeTooltipBox`, in a white box below).
+   */
+  closeLikeCanvas: {
+    "&.canvas-panel .canvas-panel-header button": {
+      outlineStyle: "none",
+      borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": { outlineStyle: "none", boxShadow: "none" },
+    "&.canvas-panel .canvas-panel-header button:hover, &.canvas-panel .canvas-panel-header button:hover:active": {
+      backgroundColor: "#f3f2f1", color: "#605e5c",
+    },
   },
   permitPanelSkin: {
     "&.canvas-panel .canvas-panel-header": { height: "48px" },
@@ -755,14 +776,14 @@ export default function PlanningScreen() {
                               aria-checked={checked}
                               aria-label="img_ProjectPlanning_DisplayProjectBodyRightContent_PermitsRowSelectionDot"
                               data-testid={`img_${C}_PermitsRowSelectionDot-${p.id}`}
-                              className={s.radio}
+                              className={mergeClasses(s.radio, checked && s.radioChecked)}
                               icon={checked ? <RecordRegular /> : <CircleRegular />}
                               onClick={(e) => { e.stopPropagation(); toggle(); }}
                             />
                           </TableCell>
                           <TableCell>{p.name ?? ""}</TableCell>
-                          <TableCell className={permitDateIsActual(p.submissionDateType) ? s.actualDate : undefined}>{permitDateCell(p.submissionDate)}</TableCell>
-                          <TableCell className={permitDateIsActual(p.approvalDateType) ? s.actualDate : undefined}>{permitDateCell(p.approvalDate)}</TableCell>
+                          <TableCell className={permitDateIsActual(p.submissionDateType) ? s.actualDate : undefined}>{permitDateCellCanvasParity(p.submissionDate)}</TableCell>
+                          <TableCell className={permitDateIsActual(p.approvalDateType) ? s.actualDate : undefined}>{permitDateCellCanvasParity(p.approvalDate)}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -848,8 +869,9 @@ export default function PlanningScreen() {
         open={permitPanel !== null}
         title={permitPanelTitle(permitPanel?.permitId === null)}
         width="narrow"
-        panelClassName={s.permitPanelSkin}
+        panelClassName={mergeClasses(s.permitPanelSkin, s.closeLikeCanvas)}
         closeTooltip="Cancel"
+        closeTooltipBox
         onDismiss={closePermitPanel}
         closeTestId="pcf_com_ProjectPlanning_RightPanel_NewEditPermitBodyHeader_CommandBar"
         closeLabel="pcf_com_ProjectPlanning_RightPanel_NewEditPermitBodyHeader_CommandBar"
@@ -916,8 +938,9 @@ export default function PlanningScreen() {
         open={aquisition !== null}
         title={aquisitionPanelTitle(aquisition ? LLA_TYPE_LABEL[aquisition.lla] : "")}
         width="narrow"
-        panelClassName={s.aqPanelSkin}
+        panelClassName={mergeClasses(s.aqPanelSkin, s.closeLikeCanvas)}
         closeTooltip="Home"
+        closeTooltipBox
         onDismiss={() => setAquisition(null)}
         closeTestId="pcf_ProjectPlanning_RightPanel_AquisitionStatus_FormHeader_CommandBar"
         closeLabel="pcf_ProjectPlanning_RightPanel_AquisitionStatus_FormHeader_CommandBar"

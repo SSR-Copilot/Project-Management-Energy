@@ -970,7 +970,7 @@ function dateParts(date: string | null): { y: number; m: number; d: number } | n
 /**
  * The Permits grid's date cells (`lbl_…_PermitsRowSubmitted` / `…Approved` `.Text`, Y:1628, 1639).
  *
- * DIVERGENCE (D31 L3, product owner 20 Oct 2026): `dd/mm/yyyy` — a two-digit day. The canvas
+ * NOT LIVE since 4 Nov 2026 (the grid uses `permitDateCellCanvasParity`). Was D31 L3 (20 Oct 2026): `dd/mm/yyyy`. The canvas
  * formats `Text(ThisItem.'… Date', "d/mm/yyyy")` (no leading zero on the day);
  * `permitDateCellCanvasParity` keeps that. A blank date is "" in both. Built from the stored
  * date's own parts (rule 18), never `toISOString()`.
@@ -981,7 +981,7 @@ export function permitDateCell(date: string | null): string {
   return `${String(p.d).padStart(2, "0")}/${String(p.m).padStart(2, "0")}/${p.y}`;
 }
 
-/** NOT LIVE — the canvas `Text(date, "d/mm/yyyy")`: "1/10/2026". */
+/** LIVE (PO, 4 Nov 2026) — the canvas `Text(date, "d/mm/yyyy")`: "1/10/2026". */
 export function permitDateCellCanvasParity(date: string | null): string {
   const p = dateParts(date);
   if (!p) return "";
@@ -1111,6 +1111,11 @@ export function validateAquisition(draft: AquisitionDraft, language: Lang = "en-
   if (out.secured.valid && out.required.valid && parseNumber(secured, language) > parseNumber(required, language)) {
     out.secured = { valid: false, message: MSG.securedTooHigh };
     out.required = { valid: false, message: MSG.requiredTooLow };
+  } else if (out.secured.valid && !isBlank(required) && !isNumeric(required, language)) {
+    // The canvas Secured label (Y:3259-3285): once Required is filled, `Not(And(IsNumeric(Required), …))`
+    // also flags a NON-NUMERIC Required on Secured, beside Required's own "must be number" (canvas pair,
+    // 4 Nov 2026).
+    out.secured = { valid: false, message: MSG.securedTooHigh };
   }
   return out;
 }

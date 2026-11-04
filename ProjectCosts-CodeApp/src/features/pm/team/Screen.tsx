@@ -91,13 +91,16 @@ const useStyles = makeStyles({
     borderBottomWidth: 0,
     // Captions 2 px left of the cell text under them, as on the canvas screenshot.
     "& th:not(:first-child)": { paddingLeft: "6px" },
-    "& th": { borderBottomWidth: 0, height: "32px", paddingTop: 0, paddingBottom: 0, fontSize: "10.67px", fontWeight: tokens.fontWeightSemibold },
+    "& th": { borderBottomWidth: 0, height: "32px", paddingTop: 0, paddingBottom: 0, fontSize: "10.25px", fontWeight: tokens.fontWeightSemibold },
   },
+  // Table text 10.25 px (PO, 4 Nov 2026: 1 px under the 11.25 px that matched the canvas widths).
   // Each row: TemplateSize 34, labels ExtraExtraSmall (8 pt).
   // No rule between or under the rows on the canvas.
+  // Canvas pair (4 Nov 2026): rows 35 apart (they rendered 32 — the cells kept Fluent's own size),
+  // so the height is set on the cells as well.
   bodyRow: {
-    height: "34px", borderBottomWidth: 0,
-    "& td": { fontSize: "10.67px", paddingTop: 0, paddingBottom: 0 },
+    height: "35px", borderBottomWidth: 0,
+    "& td": { fontSize: "10.25px", paddingTop: 0, paddingBottom: 0, height: "35px", boxSizing: "border-box" },
     "& td:not(:first-child)": { paddingLeft: "10px" },
   },
   col: { width: "250px", overflowX: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
@@ -144,10 +147,10 @@ const useStyles = makeStyles({
         borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
       },
     },
-    // The hint text starts 11 px inside the frame.
+    // The hint text starts ~7 px inside the frame (PO, 4 Nov 2026: 4 px further left than the 11 it was).
     "& > :nth-child(2) .fui-Input": {
       backgroundColor: "transparent", minHeight: "28px", height: "28px", paddingLeft: 0,
-      "& input": { paddingLeft: "7px" },
+      "& input": { paddingLeft: "3px" },
     },
     "& > :nth-child(3)": { marginTop: "30px" },
     "& > :nth-child(3) .fui-Field__label": { marginBottom: "5px" },
@@ -165,6 +168,14 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-panel-header h2": { fontSize: "17px", fontWeight: tokens.fontWeightBold },
     "&.canvas-panel .canvas-panel-header button": { color: "rgba(255, 255, 255, 0.6)" },
     "&.canvas-panel .canvas-panel-header button svg": { fontSize: "22px" },
+    // No box round the ✕ — the drawer focuses it on open, and Fluent's focus ring / hover fill drew a
+    // dark square the canvas ✕ never has (canvas pair, 4 Nov 2026).
+    "&.canvas-panel .canvas-panel-header button, &.canvas-panel .canvas-panel-header button:hover, &.canvas-panel .canvas-panel-header button:hover:active": {
+      backgroundColor: "transparent", outlineStyle: "none",
+      borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
+    "&.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": { outlineStyle: "none", boxShadow: "none" },
     // Title and ✕ ride 4 px above the bar's middle on the canvas.
     "&.canvas-panel .canvas-panel-header > *": { transform: "translateY(-4px)" },
     "&.canvas-panel .canvas-panel-footer": { borderTopWidth: 0, columnGap: "10px" },
@@ -357,6 +368,10 @@ export default function TeamScreen() {
         onDismiss={closePanel}
         closeTestId="psf_Team_RightPanel_Member_Form_CommandBar"
         closeLabel="psf_Team_RightPanel_Member_Form_CommandBar"
+        // The canvas ✕ is the command-bar item `ItemDisplayName: "Home"`; its hover is a white box saying
+        // "Home" (PO, 4 Nov 2026 — kept although it reads like a copy-paste name).
+        closeTooltip="Home"
+        closeTooltipBox
         footer={
           <PanelButtons
             onSave={() => void onSave()}
@@ -446,13 +461,14 @@ export default function TeamScreen() {
         description={deleteDialogDescription(selectedMember?.displayName ?? "")}
         confirmText={DELETE_DIALOG_BUTTONS.confirm}
         cancelText={DELETE_DIALOG_BUTTONS.cancel}
-        // Canvas `cmp_PopUp_Confirmation` look: flat card on a dark scrim, regular-weight
-        // captions, no footer rule, a 120 px Yes.
+        // Canvas `cmp_PopUp_Confirmation` at its own size (canvas pair, 4 Nov 2026): 490 x 260, a
+        // 40 px header, 12-pt title, flat card on a dark scrim, regular-weight captions, no footer
+        // rule, a 128 px Yes (`Width: =128`). It was the 459 x 242 compact card, ~6 % small.
         canvasFooter
         footerDivider={false}
         darkScrim
-        confirmWidth={120}
-        compact
+        confirmWidth={128}
+        classicPopUp
         onConfirm={() => void onDelete()}
         onCancel={() => setDeleteOpen(false)}
       />

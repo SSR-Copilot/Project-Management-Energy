@@ -169,16 +169,7 @@ export const MSG = {
   lengthRange: "Please select a value between 0 and 99.",
   /** `lbl_…_DiameterInternalCabeling_ErrorMessage.Text` / `…DiameterExternal…` — verbatim. */
   diameterRange: "Please select a value between 0 and 999.",
-  /**
-   * NOT in the canvas, which let any number through and failed on Save with Dataverse's
-   * `DecimalValueOutOfRange` (27 Oct 2026). Worded like the two range messages above.
-   */
-  voltageRange: "Please select a value between -100000000000 and 100000000000.",
 } as const;
-
-/** `vsb_gridoperator.vsb_voltagelevel`'s Dataverse range (decimal column). */
-export const VOLTAGE_MIN = -100_000_000_000;
-export const VOLTAGE_MAX = 100_000_000_000;
 
 /** `pcf_GridOperator_DisplayProjectBodyRightContent_ButtonsSave.OnChange` `Notify(…, Success, 1000)` — verbatim. */
 export const SAVE_SUCCESS = "Grid operator data was saved successfully!";
@@ -268,8 +259,8 @@ export function validateVoltage(text: string): FieldValidity {
   if (!isNumeric(text, "en-US") || text.includes(",")) {
     return { valid: false, message: MSG.numeric };
   }
-  // The column's range, so an out-of-range value is caught here rather than failing the Save.
-  if (!inRange(text, VOLTAGE_MIN, VOLTAGE_MAX, "en-US")) return { valid: false, message: MSG.voltageRange };
+  // No range check, exactly as the canvas (PO, 4 Nov 2026): a number outside the column's
+  // ±100000000000 is accepted here and refused by Dataverse on Save (`DecimalValueOutOfRange`).
   return { valid: true };
 }
 
