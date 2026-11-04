@@ -26,7 +26,8 @@ YAML (`ProjectDocs/_extracted/msapp/projectmanagement/Src`), the live VSBCloud_D
 - `Run` returns when the flow reaches its "Respond to a Power App or flow" action (within the platform's 120 s), or
   when the flow ends if it has none; the canvas `.Run()` behaves the same. A flow that keeps running after it responded
   (the approval flows wait for the approval afterwards) is not awaited.
-- The `.power/` folder is git-ignored: on a fresh checkout each flow is re-added with the same command (section 6).
+- `.power/schemas` (the flow schemas included) is tracked in git since `3c234a2` (29 Oct 2026); only `.power/tmp/` is
+  ignored. A checkout that lacks a flow's schema re-adds it with the same command (section 6).
 - Running the command again with the same id refreshes the generated files after a flow change; `pa app remove flow`
   removes one. CONVENTIONS rule 9's footgun applies: `dataSourcesInfo.ts` is regenerated, so `npm run check:power`
   runs after every add (4 Nov 2026: 89 tables survived each of the six adds).
@@ -189,7 +190,9 @@ does tables; on a fresh checkout the flows are re-added with the commands in sec
 | Generators | `RequestModulePermission`, `Requestpermissioncancellation` | not added (§3b); the D27 `EXCLUDED` states stay until then | — |
 
 The shared pieces: `data/flows.ts` (UT-FLOWS-001…005) and `PlanJob.then` in `data/usePlanWrite.ts` (UT-PLANWRITE-006…008).
-Not yet run live: the first live run is the test plan of §7.
+Deployed to DEV on 4 Nov 2026 (D83, build `b517659`): the four flows are callable from the deployed app, and the first
+open may ask each user to consent to the Power Automate connection. Not yet run live: the first live run is the test
+plan of §7.
 
 ## 6. Fresh checkout / DEV push additions
 

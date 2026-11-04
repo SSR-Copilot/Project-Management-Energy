@@ -37,3 +37,6 @@ coverage/
 
 # Local-only, not part of this app
 codeapp-knowledge-base/
+
+# Functional test-case workbook template (local copy, ProjectDocs/instructions/FUNCTIONAL-TEST-CASES.md)
+/VSBCloud-Functional-Test-Case-Template.xlsx

@@ -279,12 +279,16 @@ it. Lint warnings do not fail the gate, but do not add new ones.
 
 Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failure.
 
-1. **Clean install.** `npm ci`, so the build uses exactly the lockfile.
+1. **Clean install.** `npm ci`, so the build uses exactly the lockfile. Ask the user to stop
+   `pa app run` (or `npm run dev` + `pac code run`) first: Vite holds `esbuild.exe` and the rollup
+   binary open, so the install fails half-way while they run, and the agent must not end the
+   user's processes (D83).
 2. **Data sources present.** `npm run check:power` must report 93 registered and 0 problems
    (count as of 4 Nov 2026: 81 tables, the `CreateMultiple`, `UpdateMultiple` and
    `UpsertMultiple` actions (D51), the 5 Fabric SQL tables (D54) and the 4 PM cloud flows (D81;
    95 once the two Generators flows are added); it grows as screens register tables).
-   `.power/` is git-ignored, so on a fresh checkout regenerate it first: re-add each table in
+   `.power/schemas` is tracked in git since `3c234a2` (29 Oct 2026; only `.power/tmp/` is ignored),
+   so a fresh checkout normally has it. If it is missing or stale, regenerate it: re-add each table in
    `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, and the
    `CreateMultiple` and `UpdateMultiple` actions (plus `UpsertMultiple` while its generated
    files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds), then each
@@ -292,8 +296,11 @@ Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failur
    the SQL tables with the D54 command, then restore the `datasetOverride` the CLI does not
    write, and re-run the check.
 3. **The full gate.** `npm run verify` must exit 0.
-4. **Hygiene.** `npx -y knip@5`: no new unused files or dependencies. No file may be
-   byte-identical to another in `src/`.
+4. **Hygiene.** `npx -y knip@5` with `$env:PARITY_SCREEN = "land-lease"` set (without it knip
+   stops when it loads `playwright.config.ts`): no new unused files or dependencies. The recorded
+   baseline is 36 files (D83, 4 Nov 2026: 20 known plus the 16 D80 harness files the parity runner
+   loads by name). No file may be byte-identical to another in `src/`, except the three generated
+   `*MultipleModel.ts` stubs (waived in D51).
 5. **Local smoke test against VSBCloud_Dev.**
    - Start two terminals: `npm run dev` (port 3000) and
      `pac code run --appUrl http://localhost:3000` (port 8080).
@@ -304,15 +311,47 @@ Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failur
      Add Costs from Table) on a test project. On each, add, edit and delete a record, then
      reload to confirm the change persisted.
    - Do the same on the six Admin screens and the ten PM screens: all are connected (D18–D36).
-     Creating a project and anything that starts an approval flow stay disabled.
+     Creating a project stays disabled. Since D81 the Check List and General Data approval flows
+     are callable and send real mails, Teams cards and approvals: do not start one in a smoke
+     test without the test plan of `16-PM-FLOWS-IN-THE-CODE-APP.md` §7.
 6. **Right environment.** `pac auth list` and `pac org who` must both show VSBCloud_Dev
    (environment `be41add6-6f60-ebb0-9c73-2480d6bc615d`, the one in `power.config.json`).
-   `pac code push` deploys to the ACTIVE profile.
-7. **Push, then confirm.** Run `pac code push`. Open the deployed app in VSBCloud_Dev and repeat
-   the step-5 smoke test there.
+   Both CLIs deploy to the ACTIVE `pac` profile.
+7. **Push, then confirm.** Run `npx -y @microsoft/power-apps-cli@1.3.0 app push --non-interactive`
+   (the npm CLI; since the app has connector sources with connection references — the Fabric SQL
+   tables and the cloud flows — Microsoft advises it over `pac code push`, and it keeps the app
+   record, name and id; D55, D83). Without `--solution-id`: the app is already a VSBCloud component
+   (D55). The CLI rewrites `power.config.json` with LF line endings and nothing else: check with
+   `git diff --ignore-cr-at-eol -- power.config.json`, then `git checkout -- power.config.json`.
+   Open the deployed app in VSBCloud_Dev and repeat the step-5 smoke test there.
 
 Never push from a tree where `verify` was skipped, or where a step above was waived without
 recording the reason in `ProjectDocs/app-docs/02-OPEN-DECISIONS.md`.
+
+## The Azure DevOps mirror (`azure/develop`)
+
+The code app is mirrored to `develop` of `https://dev.azure.com/vsbazure/vsbcloud/_git/VSB Cloud Code App`
+(remote `azure`), on the user's explicit ask, normally after a DEV push. It is **not** a shared history:
+each sync is one snapshot commit (D78 `3674054`, D83 `a3699fb`) whose tree is `master:ProjectCosts-CodeApp`
+at the repository root — tracked files only, so `.power/schemas` and `e2e/` are in and nothing git-ignored
+is — plus Azure's own `README.md`. `ProjectDocs/` is not mirrored. Build it with plumbing from
+`ProjectCosts-CodeApp/`, never by copying files:
+
+```powershell
+$env:GIT_INDEX_FILE = "<temp file>"      # a temporary index; the working tree and the real index stay untouched
+git read-tree master:ProjectCosts-CodeApp
+$readme = (git ls-tree --full-tree azure/develop README.md) -split '\s+'   # --full-tree: the path is repo-relative
+git update-index --add --cacheinfo "$($readme[0]),$($readme[2]),README.md"
+$tree = git write-tree; Remove-Item Env:\GIT_INDEX_FILE
+$commit = git commit-tree $tree -p (git rev-parse azure/develop) -F <message file>
+git update-ref refs/heads/azure-develop $commit
+```
+
+Before pushing, check three things: `git diff --name-only master:ProjectCosts-CodeApp $commit` prints
+`README.md` only; `git rev-parse "${commit}:README.md"` is Azure's blob; the parent is `azure/develop`.
+Then `git push azure azure-develop:develop` (a fast-forward) and `git fetch azure` to confirm. The message
+names the source ("Source: ProjectCosts-CodeApp/ from GitHub master at <sha> …") and the decisions the
+snapshot brings. Credentials come from Git Credential Manager; never store a PAT.
 
 ## What NOT to copy from the skeleton or migration-plans
 

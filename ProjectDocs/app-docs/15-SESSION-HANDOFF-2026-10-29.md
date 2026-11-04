@@ -2,7 +2,7 @@
 
 Start a new chat by reading this file. Then read these, in `02-OPEN-DECISIONS.md` unless stated:
 - **D51** §11.17–§11.19 (the Add Cost from Table save, and the CAPEX refresh after it);
-- **D53**, D55 (the two DEV pushes);
+- **D53**, D55, **D83** (the DEV pushes; D83 is the current DEV build, `b517659`, 4 Nov 2026);
 - **D54** (the Fabric SQL data sources);
 - bugs **CA-13** and **CA-14** in `01-BUGS-FOUND.md`.
 
@@ -13,13 +13,14 @@ Re-check the code before you trust any line here. The previous handoff,
 
 | | |
 |---|---|
-| `master` and `RounakDev1` (local and GitHub) | Both at **`70b4b7d`**, identical, 0 ahead and 0 behind. |
-| **Working tree: uncommitted, decision owed** | `ProjectCosts-CodeApp/.gitignore` no longer ignores `.power/` (a local edit, not the agent's). `master`'s `70b4b7d` removed `.power/` from the root `.gitignore` too, so `ProjectCosts-CodeApp/.power/` now shows as untracked. CONVENTIONS rule 9 and the comment in that `.gitignore` still say `.power/` is pac output that must never be committed. Ask the user whether `.power/` should be tracked before staging anything. |
+| `master` and `RounakDev1` (local and GitHub) | *(updated 4 Nov 2026)* Both at **`b517659`**, the D82 merge tip (origin/master's 3 Nov commits merged into RounakDev1, then both fast-forwarded), identical, pushed. |
+| ~~**Working tree: uncommitted, decision owed**~~ | *(resolved)* `.power/schemas` is tracked since `3c234a2` (29 Oct 2026); only `.power/tmp/` is ignored. CONVENTIONS step 2 and `16-PM-FLOWS…` §1 say so since 4 Nov 2026; rule 9's "never hand-edit" still holds. |
 | `ProjectDocs/Capex Cost Screen/` | Local only, excluded through `.git/info/exclude`. **Never commit it.** |
-| Deployed to VSBCloud_Dev | App `807a2fba-665c-40f3-b158-ffe822aa7da4` ("Project App", `vsb_projectapp_2f794`), built from **`644b486`** on 28 Oct (D55). It was pushed with `npx @microsoft/power-apps-cli@1.3.0 app push`, not pac. **DEV does NOT have** the 7 `pm-general` / `ui-changes` commits merged into `master` on 28 Oct (`e81eb37`…`8facef8`, 36 files of PM and OPEX/Land Lease UI work) or `70b4b7d`. |
+| Deployed to VSBCloud_Dev | *(updated 4 Nov 2026)* App `807a2fba-665c-40f3-b158-ffe822aa7da4` ("Project App", `vsb_projectapp_2f794`), built from **`b517659`** on 4 Nov 2026 (D83; 81 commits after the `644b486` build of D55). Pushed with `npx -y @microsoft/power-apps-cli@1.3.0 app push --non-interactive`, not pac. First DEV build with the four PM cloud flows (D81) and the Fabric-backed Finance screen. **The step-5 smoke test on DEV is owed by the user** (D83). |
 | Solution | The code app is now a component of the unmanaged solution **VSBCloud** (`44aa38f9-6c1f-45e1-a963-5c51941fbe73`). It was added with `pac solution add-solution-component`, with the same app id and name (D55). |
-| Last `npm run verify` | 28 Oct on `644b486`: 160 files, 4,357 tests, all green, build OK; `check:power` 89 registered, 0 problems; knip 22 unused files (12 known plus 10 SQL, D54). **Not run on `8facef8` / `70b4b7d`** (the merged `pm-general` work). Run it first. |
-| Dev servers | Stopped by the agent for `npm ci`. The user restarts them. |
+| Last `npm run verify` | *(updated)* 4 Nov 2026 on `b517659`: 220 files, 5,158 tests (3 todo), all green, build OK; `check:power` 93 registered, 0 problems; knip 36 unused files = the 20 baseline plus 16 D80 harness files knip cannot reach (D83 step 4). |
+| Dev servers | Stopped by the user for the D83 `npm ci` (4 Nov 2026). Restart with `pa app run`. |
+| Azure DevOps `develop` (remote `azure`) | *(added 4 Nov 2026)* Snapshot `a3699fb` of `master:ProjectCosts-CodeApp` at `b517659` (D83), after `3674054` (D78, 2 Nov). Snapshot commits, no shared history with GitHub, `ProjectDocs/` not mirrored. Procedure: CONVENTIONS, "The Azure DevOps mirror". |
 
 ## Commits this session (27–28 Oct)
 

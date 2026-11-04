@@ -49,6 +49,9 @@ folder in the workspace.
 - @MIGRATION-STRATEGY.md — how a canvas screen becomes a code-app screen here
 - @TESTING-AND-HARNESS.md — how to run/extend the test suite, and the gates that exist
   today vs. the gates the reference harness defines
+- `FUNCTIONAL-TEST-CASES.md` — the functional test-case workbook (`VSBCloud-Functional-Test-Case-Template.xlsx`):
+  every column, how to write the cases for a screen from its canvas source, run them and record the results
+  (skill `functional-test-cases`)
 - @KNOWN-RISKS-AND-DECISIONS.md — standing risks, open decisions, and documented
   contradictions between planning docs — read before touching the Cost module's delete/save
   paths especially

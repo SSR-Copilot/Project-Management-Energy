@@ -6587,4 +6587,71 @@ touched other lines), no `EXCLUDED` reference remains, master's `patchRow` optio
 master's code comments (municipality search from the first letter with a 5,000-row page and no `DelayOutput`; the four
 page-lock sections with no project) are now in RounakDev1 and listed in file 13 (section B).
 
-**Result:** see the verify line in the merge commit; `RounakDev1` and `master` point at the same merge commit, pushed.
+**Result:** merge commit `4f91c41` (parents `6c11447` RounakDev1 and `73e4cc6` origin/master), then `b517659` with this
+record and the file 13 rows. `npm run verify` on the merged tree before the commit: `check:power` 93 registered, 0 problems;
+typecheck, lint and both gates clean; 220 test files, 5,158 tests passed (3 todo); build OK. `RounakDev1` and `master`
+were fast-forwarded to `b517659` and pushed (4 Nov 2026); the scratch branch was deleted. Deployed to DEV the same
+afternoon (D83).
+
+## D83 · DEV push of `master` `b517659` (4 Nov 2026)
+
+**What was done.**
+- **Deployed.** `master` = `RounakDev1` at `b517659` (the D82 merge tip) went to app `807a2fba-665c-40f3-b158-ffe822aa7da4`
+  ("Project App", `vsb_projectapp_2f794`) in VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`) at 13:43 on 4 Nov 2026,
+  on the user's instruction "Now Build this Application & push this to DEV Environment." It supersedes the `644b486` build
+  (D55, 28 Oct): 81 commits, D56–D82 — the CAPEX panel bulk Save and parallel Delete (D56), Revenues and Finance on the
+  Fabric SQL sources (D57, `23f4f78`), the Cost busy indicators and readable logs (D58–D60), the contract panel (D61),
+  the D62–D69 UI passes, the Add Cost from Table Save performance wave (D75–D77) and the Feature2810 merge (D78), the Land
+  Lease parity fixes (D79), the shared command-row and dialog fixes and CA-30 (D80 §3), the four PM cloud flows (D81),
+  the 3 Nov cluster checklist and General Data parity commits (D82), plus the PM screens and the Application Insights
+  client that came through master (`47b1d39`; it starts only when `vsb_ApplicationInsightsConnectionString` has a value).
+  The parity harness itself (D80) lives in `e2e/` and is not in the build.
+- **Pushed with the npm CLI**, as D55: `npx -y @microsoft/power-apps-cli@1.3.0 app push --non-interactive` (connector
+  sources with connection references; the app record, name and id were kept; "App pushed successfully" after 60 s;
+  `pac canvas list` shows "Project App" modified 4 Nov 2026). It is the first DEV build that carries the four
+  `shared_logicflows` connection references of D81 in `power.config.json`.
+- The CLI rewrote `power.config.json` with LF line endings and nothing else (`git diff --ignore-cr-at-eol` empty);
+  the file was restored with `git checkout`, so the tree holds no code change.
+
+**Checklist (CONVENTIONS "Before pushing to DEV").**
+1. **`npm ci`:** passed. The user stopped `pa app run` first (Vite holds `esbuild.exe` and the rollup binary, which
+   would have broken the install; the agent must not end the user's processes). `npm audit` reports 5 findings in the
+   committed lockfile (3 moderate, 2 high); the lockfile was not touched for a push.
+2. **`check:power`:** 93 registered, 0 problems.
+3. **`npm run verify`:** exit 0 on `b517659` — typecheck; lint with pre-existing warnings only; labels 0 missing; canvas
+   C1–C5 all 0; **220 files, 5,158 tests passed, 3 todo** (516 s); build OK (`dist/` 166 files, 24.6 MB).
+4. **Hygiene:** no byte-identical files in `src/` except the three generated `*MultipleModel.ts` stubs, waived in D51.
+   knip lists **36 unused files against the baseline of 20** (2 Nov, `43a6a73`): the 16 extra are D80's parity-harness
+   files, which the runner loads by file name and knip cannot reach from its entry points (`e2e/harness/lanes/*.lane.ts`,
+   `common.ts`, `session.ts`, `waits.ts`, `preflight.setup.ts`, `report.run.ts`, `sweep.run.ts`, `runPlan.d.mts`, the
+   `e2e/screens/*` manifests and lanes) and the `.d.mts` stubs of the two new scripts. No unused dependency, and
+   nothing under `src/` is newly unused. knip needs `PARITY_SCREEN` set (`land-lease`), or it stops when it loads
+   `playwright.config.ts`. **Proposed, not done:** a `knip.json` listing the harness entry files, so the baseline is
+   honest again.
+5. **Local smoke test:** waived for the agent (it cannot drive the browser; a Playwright smoke run was offered and not
+   requested). **Owed by the user on DEV:** Project Overview, the five Cost screens, the admin and PM screens, with the
+   console open for errors and the `[VSB]` lines.
+6. **Environment:** `pac auth list` active profile `ServiceAccount_DEV`; `pac org who` VSBCloud_Dev `be41add6-…`,
+   re-checked immediately before the push.
+7. **Push:** accepted.
+
+**To check first on DEV.**
+- **The flows (D81).** The first open may ask each user to consent to the Power Automate connection. No flow has run
+  live yet: the first Request Approval or Cancel is the test plan of `16-PM-FLOWS-IN-THE-CODE-APP.md` §7 (real mails,
+  Teams cards and approvals); agree the project and the approvers before it. The two Generators flows are still not
+  in the app (D81 §3b, the run-only connection change).
+- **The Fabric reads** (Revenues D57, Finance `23f4f78`) against the DEV binding of `vsb_VSBCloudFabricSQL`.
+- **The bulk Saves** (Add Cost from Table D75–D77, the CAPEX panel D56): their `[VSB]` save lines (CONVENTIONS rule 23).
+- **Application Insights** (`47b1d39`): off unless the DEV environment variable has a connection string.
+
+**Azure DevOps mirror (same day, 14:44).** On the user's "merge these changes to the Azure DevOps develop branch",
+`develop` of `https://dev.azure.com/vsbazure/vsbcloud/_git/VSB Cloud Code App` (remote `azure`) received snapshot commit
+`a3699fb` (parent `3674054`, the D78 snapshot of 2 Nov). That branch shares no history with GitHub: each sync is one
+commit whose tree is `master:ProjectCosts-CodeApp` placed at the repository root (tracked files only, so `.power/schemas`
+and `e2e/` are in and nothing git-ignored is) plus Azure's own `README.md`; `ProjectDocs/` is not mirrored. It was built
+with plumbing and no working tree (a temporary `GIT_INDEX_FILE`, `read-tree master:ProjectCosts-CodeApp`,
+`update-index --cacheinfo` with Azure's README blob, `write-tree`, `commit-tree -p azure/develop`), pushed as
+`azure-develop:develop` after three checks: the tree differs from the subtree in `README.md` only, that blob is Azure's,
+the parent is `azure/develop`. Result: 217 files changed, +33,524 / −798 against the D78 snapshot, 956 files, the
+fast-forward confirmed by a fetch. Credentials came from Git Credential Manager; no PAT was typed or stored. The
+procedure is now in CONVENTIONS, "The Azure DevOps mirror".
