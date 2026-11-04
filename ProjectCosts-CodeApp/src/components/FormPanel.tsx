@@ -26,7 +26,7 @@
  *   - `ariaLabel`: the drawer's accessible name (defaults to `title`).
  *   - `panelClassName`: extra class on the drawer surface, for screen-scoped chrome overrides.
  */
-import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle } from "@fluentui/react-components";
+import { Button, Drawer, DrawerBody, DrawerHeader, DrawerHeaderTitle, Tooltip } from "@fluentui/react-components";
 import { DismissRegular } from "@fluentui/react-icons";
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useBeforeUnload, useDiscardGuard } from "./discardGuard";
@@ -52,6 +52,11 @@ export interface FormPanelProps {
   closeLabel?: string;
   /** The canvas close icon's hover `Tooltip`; default "Cancel" (`HINTS.cancel`: 33 canvas ✕ icons say it). */
   closeTooltip?: string;
+  /**
+   * Opt-in (PM Team): show `closeTooltip` in Fluent's white tooltip box under the ✕, as the canvas
+   * command-bar item draws it, instead of the browser's native `title`. Off by default.
+   */
+  closeTooltipBox?: boolean;
   /** Blocks every dismissal while true (a save is running). */
   busy?: boolean;
   /** Implies `busy`; shows the blocking spinner with this text inside the panel. */
@@ -89,7 +94,7 @@ export interface FormPanelProps {
 }
 
 export function FormPanel({
-  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip,
+  open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
   coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false,
 }: FormPanelProps) {
@@ -127,11 +132,17 @@ export function FormPanel({
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}
         style={style}>
         <DrawerHeader className="canvas-panel-header">
-          <DrawerHeaderTitle action={
+          <DrawerHeaderTitle action={closeTooltipBox ? (
+            <Tooltip content={closeTooltip ?? HINTS.cancel} relationship="description" positioning="below">
+              <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
+                data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
+                disabled={locked} onClick={() => requestClose("dismiss")} />
+            </Tooltip>
+          ) : (
             <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"} title={closeTooltip ?? HINTS.cancel}
               data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}
               disabled={locked} onClick={() => requestClose("dismiss")} />
-          }>
+          )}>
             {title}
           </DrawerHeaderTitle>
         </DrawerHeader>
