@@ -156,7 +156,10 @@ const useStyles = makeStyles({
     borderRadius: "4px",
     backgroundColor: palette.white,
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12)",
-    paddingTop: 0, paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
+    // 10 px above the captions, INSIDE the card (canvas pair, 4 Nov 2026: labels at 17 vs 7, headings at
+    // 149 vs 137), so the grid starts lower and its last row shows only its top above the pager, as on the
+    // canvas. Not page padding — that opened a second rule above the card.
+    paddingTop: "10px", paddingRight: "2px", paddingBottom: "2px", paddingLeft: "2px",
   },
   /** An equal share of the card, never narrower than 250 px; narrower screens wrap pairs. */
   filterColumn: {
@@ -324,6 +327,15 @@ const useStyles = makeStyles({
     flex: 1, minHeight: 0, overflow: "auto",
     backgroundImage: "linear-gradient(#e1dfdd, #e1dfdd)", backgroundRepeat: "no-repeat",
     backgroundSize: "100% 1px", backgroundPosition: "0 43px", backgroundAttachment: "local",
+  },
+  /**
+   * The heading row stays put while the rows scroll under it, as the canvas grid's headers do
+   * (canvas pair, 4 Nov 2026). White behind it so rows do not show through; above the rows' stripes.
+   * The 1 px rule under the headings rides with it (the card-wide background line scrolls away).
+   */
+  stickyHeader: {
+    position: "sticky", top: 0, zIndex: 2, backgroundColor: palette.white,
+    boxShadow: "inset 0 -1px 0 #e1dfdd",
   },
   /** The sum of `COLUMN_WIDTH`, fixed, so every column keeps the width the canvas gives it. */
   // No separator under any row (the last one showed a line); rows are told apart by the stripe.
@@ -1190,7 +1202,7 @@ export default function ProjectOverviewScreen() {
       ) : (
         <div className={styles.gridWrap}>
           <Table size="small" aria-label="Projects" className={styles.table}>
-            <TableHeader>
+            <TableHeader className={styles.stickyHeader}>
               <TableRow>
                 <TableHeaderCell
                   className={styles.selectCell}
