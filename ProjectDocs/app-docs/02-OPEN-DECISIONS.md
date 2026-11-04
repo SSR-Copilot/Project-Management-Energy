@@ -6559,4 +6559,32 @@ test plan (§7).
 1. The `invoker` → `embedded` change on the two Generators flows (owner action in DEV; the mails and approvals of those
    flows then go through the service account's connections, as the other four flows' already do).
 2. The live test plan: which project, which approvers, who receives the mails and Teams cards.
-3. Whether the General Data Draft-reset cancellation (D25) is wanted now that the flow is callable (the design says yes).
+3. ~~Whether the General Data Draft-reset cancellation (D25) is wanted now that the flow is callable~~ — built in D81 on
+   the user's "proceed" (4 Nov 2026); the first live test confirms it.
+
+## D82 · master merged into RounakDev1, then master fast-forwarded (4 Nov 2026)
+
+**Why a merge commit:** `master` had moved by six commits since RounakDev1 branched at `47011d8` (all 3 Nov 2026):
+`23f4f78` Finance Screen is Completed with Fabric Dependency (Sourabh Kumar), `f000dbd` Cluster Checklist has been
+Completed still Cloud flows Pending (Tanya Amera), `5271005` fix(pm-checklist): canvas parity for the cluster checklist
+rows, stepper and panels (Tanya Amera), `260fb5b` Cluster Checklist Screen and UX fixes in project management screens
+(Sourabh Kumar), `e723743` a merge commit (pm-cluster-list into pm-finance), `73e4cc6` Small fixes. A fast-forward of
+master to RounakDev1 (D79–D81, five commits) was therefore impossible, and master's history already held a merge commit.
+On the user's instruction ("commit, push and merge these changes into master with the required changes") origin/master
+was merged into RounakDev1 on a scratch branch, verified, and both branches were fast-forwarded to the merge commit.
+
+**Overlap:** 9 files changed on both sides (the checklist screen's rules / hooks / Screen / ProjectStates / Screen.test,
+the General Data rules / hooks / Screen, `data/generalData.ts`). Seven auto-merged; two conflicted, both in the Request
+Approval button of the checklist panel and its test:
+- master: the canvas arrow icon, the selected cluster's name as hover text (PO, 3 Nov 2026), the button still disabled
+  ("Cloud flows pending");
+- RounakDev1 (D81): the button enabled by the comment gate and wired to the flow.
+- **Resolution:** both — arrow, hover text, the D81 gate and click. UT-CHKLST-904 pins the "Draft" hover text too.
+
+Checked after the auto-merge: `ClusterActions` keeps the D81 `cancelApproval` prop (master's ProjectStates restyle
+touched other lines), no `EXCLUDED` reference remains, master's `patchRow` optional success text and the dropped
+"Cluster data … will be saved." bar (PO, 3 Nov) coexist with the three new flow jobs. The 3 Nov decisions recorded in
+master's code comments (municipality search from the first letter with a 5,000-row page and no `DelayOutput`; the four
+page-lock sections with no project) are now in RounakDev1 and listed in file 13 (section B).
+
+**Result:** see the verify line in the merge commit; `RounakDev1` and `master` point at the same merge commit, pushed.
