@@ -227,7 +227,11 @@ export async function listStateTrackings(projectId: string): Promise<TrackingRow
     "list the project's state trackings",
     (o) => Vsb_projectstatetrackingsService.getAll(o),
     {
-      select: ["vsb_projectstatetrackingid", "_vsb_clusterstate_value", TRACKING_COL.approvalClusterState, TRACKING_COL.flowRunId],
+      select: [
+        "vsb_projectstatetrackingid", "_vsb_clusterstate_value", TRACKING_COL.approvalClusterState, TRACKING_COL.flowRunId,
+        // D81: the Draft gate-approval cancellation names the approval by it.
+        TRACKING_COL.flowApprovalId,
+      ],
       filter: lookupEq("vsb_project", projectId),
     },
   );
@@ -238,6 +242,7 @@ export async function listStateTrackings(projectId: string): Promise<TrackingRow
       clusterStateId: r._vsb_clusterstate_value ?? "",
       approvalClusterState: num(x[TRACKING_COL.approvalClusterState]),
       flowRunId: str(x[TRACKING_COL.flowRunId]),
+      flowApprovalId: str(x[TRACKING_COL.flowApprovalId]),
     };
   });
 }

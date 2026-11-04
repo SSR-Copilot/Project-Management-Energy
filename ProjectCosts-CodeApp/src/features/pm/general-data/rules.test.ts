@@ -25,7 +25,8 @@ import {
   classifyStartClusterChange, startClusterChanged, milestoneChainErrors, clearSkippedMilestones,
   clusterPanelPatch, clusterPanelVisible, clusterPanelEditable, clusterPanelInfo, canSaveClusterPanel,
   openClusterPanel, applyCalendarAdd, calendarAddVisible, clusterPanelDateIsStandard,
-  plannedTrackingRows, shouldCancelGateApproval, startClusterChangeBlocked, saveBlockReason,
+  plannedTrackingRows, shouldCancelGateApproval, draftTrackingOf, draftGateCancellationPayload,
+  planGeneralDataSaveHead, planGeneralDataSaveTail,
   buildProjectPatch, planGeneralDataSave, owningBusinessUnits,
   mapMarker, MAP_DEFAULT, shouldConfirmLeave, AUTO_SKIPPED_COMMENT,
   coordinateMessage, coordinateFormatMessage, terrainRangeMessage, acquisitionPriceShapeMessage,
@@ -445,8 +446,6 @@ describe("UT-GDATA permissions, display modes and side effects", () => {
     const c = ctx({ p: null });
     expect(canSave({ ...c, perms: { canCreate: true, canEdit: false }, isDirty: true })).toBe(true);
     expect(canSave({ ...c, perms: { canCreate: false, canEdit: true }, isDirty: true })).toBe(false);
-    expect(saveBlockReason({ project: null, form: form(), trackings: [], projectStates: STATES })).toBeNull();
-    expect(saveBlockReason({ project: project(), form: form(), trackings: [], projectStates: STATES })).toBeNull();
   });
 
   it("UT-GDATA-027b save blocked when nothing is dirty", () => {
@@ -699,15 +698,48 @@ describe("UT-GDATA the save plan", () => {
     expect(p.log).toEqual([MSG.stepProjectSaved, MSG.stepTrackingRefreshed]);
   });
 
-  it("UT-GDATA-045 a running Draft approval refuses the start-cluster change (no flow call, D25)", () => {
-    const trackings: TrackingRow[] = [{ id: "t-draft", clusterStateId: "s-draft", approvalClusterState: CHOICE.approvalClusterState.inProgress, flowRunId: "run-1" }];
+  it("UT-GDATA-045 a running Draft approval no longer blocks the start-cluster change (D81): the head ends with Patch #2, the tail starts with the Draft return, the whole is both", () => {
+    const trackings: TrackingRow[] = [{ id: "t-draft", clusterStateId: "s-draft", approvalClusterState: CHOICE.approvalClusterState.inProgress, flowRunId: "run-1", flowApprovalId: "ap-1" }];
     expect(shouldCancelGateApproval(trackings[0])).toBe(true);
-    const f = form({ developmentType: CHOICE.developmentType.acquiredProject, startCluster: 3 });
-    expect(startClusterChangeBlocked({ project: project(), form: f, trackings, projectStates: STATES })).toBe(true);
-    expect(saveBlockReason({ project: project(), form: f, trackings, projectStates: STATES })).toBe(MSG.approvalInProgress);
-    expect(plan({ form: f, trackings }).refusedReason).toBe(MSG.approvalInProgress);
-    // Without a start-cluster change the same tracking does not block.
-    expect(startClusterChangeBlocked({ project: project(), form: form(), trackings, projectStates: STATES })).toBe(false);
+    expect(draftTrackingOf(trackings, STATES)?.id).toBe("t-draft");
+    expect(draftTrackingOf(trackings, STATES.filter((s) => s.name !== "Draft"))).toBeNull();
+    const f = form({ developmentType: CHOICE.developmentType.acquiredProject, startCluster: 3, acquisitionDate: "2026-01-01", acquisitionPrice: "1" });
+    const ctx = { project: project(), form: f, ref: ref(), trackings, shareholdersDirty: false, entities: [] };
+    const head = planGeneralDataSaveHead(ctx);
+    const tail = planGeneralDataSaveTail(ctx);
+    expect(head.refusedReason).toBeUndefined();
+    expect(head.writes.map((w) => w.reason)).toEqual(["save the project data", "set the internal project id and the owning business unit"]);
+    expect(tail.writes[0]!.reason).toBe("set the project's cluster state back to Draft");
+    const whole = plan({ form: f, trackings });
+    expect(whole.refusedReason).toBeUndefined();
+    expect(whole.writes).toEqual([...head.writes, ...tail.writes]);
+    expect(whole.log).toEqual([MSG.stepProjectSaved, MSG.stepTrackingRefreshed]);
+    // A manager-less form still refuses the head, and so the whole.
+    expect(planGeneralDataSaveHead({ ...ctx, form: form({ managerEntraRowId: null, managerName: null }) }).refusedReason).toBeTruthy();
+  });
+
+  it("UT-GDATA-083 the Draft cancellation record (step 1, Y:236-322): the gate of the state before the old start cluster, the next state, blanks as null", () => {
+    const draft: TrackingRow = { id: "t-draft", clusterStateId: "s-draft", approvalClusterState: CHOICE.approvalClusterState.inProgress, flowRunId: "run-1", flowApprovalId: "ap-1" };
+    const gates = [
+      { id: "g-c2", clusterStateId: "s-c2", portfolioManagerMail: "pm@x" },
+      { id: "g-draft", clusterStateId: "s-draft", portfolioManagerMail: null },
+    ];
+    const p = draftGateCancellationPayload({ project: project({ startCluster: 3 }), projectStates: STATES, oldStartClusterNo: 3, draftTracking: draft, gates })!;
+    expect(Object.keys(p)).toHaveLength(13);
+    expect(p).toEqual({
+      ProjectGuid: "p-1", ProjectId: "PL-1021", ProjectName: "Nordwind", StateGuid: "s-draft", StateName: "Draft",
+      StateTrackingGuid: "t-draft", HasGate: true, GateSettingsGuid: "g-c2", PreviousClusterGuid: null, NextClusterGuid: "s-c3",
+      PortfolioManager: "pm@x", FlowRunId: "run-1", FlowApprovalId: "ap-1",
+    });
+    // Old start cluster 0 and 1 both look at Draft's gate (`old <= 1 → 0`) and point at Cluster 1.
+    const zero = draftGateCancellationPayload({ project: project(), projectStates: STATES, oldStartClusterNo: 0, draftTracking: draft, gates })!;
+    expect([zero.GateSettingsGuid, zero.PortfolioManager, zero.NextClusterGuid]).toEqual(["g-draft", "", "s-c1"]);
+    const one = draftGateCancellationPayload({ project: project(), projectStates: STATES, oldStartClusterNo: 1, draftTracking: draft, gates })!;
+    expect([one.GateSettingsGuid, one.NextClusterGuid]).toEqual(["g-draft", "s-c1"]);
+    // No gate for that cluster: HasGate false, no id, PM "".
+    const none = draftGateCancellationPayload({ project: project(), projectStates: STATES, oldStartClusterNo: 5, draftTracking: draft, gates })!;
+    expect([none.HasGate, none.GateSettingsGuid, none.PortfolioManager, none.NextClusterGuid]).toEqual([false, null, "", "s-c5"]);
+    expect(draftGateCancellationPayload({ project: project(), projectStates: STATES.filter((s) => s.name !== "Draft"), oldStartClusterNo: 2, draftTracking: draft, gates })).toBeNull();
   });
 
   it("UT-GDATA-046 no running approval: the change saves and rebuilds", () => {

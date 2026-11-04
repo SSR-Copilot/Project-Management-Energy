@@ -1,0 +1,133 @@
+{
+  "name": "Perform Common Request of Gate Approval",
+  "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+  "type": "Microsoft.PowerApps/apis",
+  "properties": {
+    "displayName": "Perform Common Request of Gate Approval",
+    "isCustom": false,
+    "swagger": {
+      "swagger": "2.0",
+      "info": {
+        "title": "Perform Common Request of Gate Approval",
+        "version": "2015-02-01-preview"
+      },
+      "host": "europe-002.azure-apim.net",
+      "schemes": [
+        "https"
+      ],
+      "consumes": [
+        "application/json"
+      ],
+      "produces": [
+        "application/json"
+      ],
+      "paths": {
+        "/{connectionId}/triggers/manual/run": {
+          "post": {
+            "operationId": "Run",
+            "description": "Runs a logic flow trigger.",
+            "parameters": [
+              {
+                "name": "connectionId",
+                "in": "path",
+                "required": true,
+                "type": "string",
+                "x-ms-visibility": "internal"
+              },
+              {
+                "name": "input",
+                "description": "The trigger's input",
+                "in": "body",
+                "required": true,
+                "schema": {
+                  "$ref": "#/definitions/ManualTriggerInput"
+                }
+              },
+              {
+                "name": "api-version",
+                "description": "The api version",
+                "in": "query",
+                "required": true,
+                "default": "2015-02-01-preview",
+                "x-ms-visibility": "internal",
+                "type": "string"
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "Ok",
+                "schema": {
+                  "$ref": "#/definitions/ResponseActionOutput"
+                }
+              },
+              "default": {
+                "description": "The Flow Response.",
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "definitions": {
+        "ManualTriggerInput": {
+          "type": "object",
+          "properties": {
+            "text_1": {
+              "description": "Please enter your input",
+              "title": "ProjectGUID",
+              "type": "string",
+              "x-ms-content-hint": "TEXT",
+              "x-ms-dynamically-added": true
+            },
+            "text_2": {
+              "description": "Please enter your input",
+              "title": "StateGUID",
+              "type": "string",
+              "x-ms-content-hint": "TEXT",
+              "x-ms-dynamically-added": true
+            },
+            "text_3": {
+              "description": "Please enter your input",
+              "title": "StateTrackingGUID",
+              "type": "string",
+              "x-ms-content-hint": "TEXT",
+              "x-ms-dynamically-added": true
+            },
+            "text_4": {
+              "description": "Please enter your input",
+              "title": "DefaultApprovalGUID",
+              "type": "string",
+              "x-ms-content-hint": "TEXT",
+              "x-ms-dynamically-added": true
+            }
+          },
+          "required": [
+            "text_1",
+            "text_2",
+            "text_3",
+            "text_4"
+          ]
+        },
+        "ResponseActionOutput": {
+          "type": "object",
+          "properties": {
+            "runid": {
+              "title": "RunId",
+              "x-ms-dynamically-added": true,
+              "type": "string"
+            },
+            "approvalid": {
+              "title": "ApprovalId",
+              "x-ms-dynamically-added": true,
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "basePath": "/apim/logicflows"
+    }
+  }
+}

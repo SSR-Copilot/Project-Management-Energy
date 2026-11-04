@@ -33,6 +33,7 @@ const state = vi.hoisted(() => ({
   trackings: [] as unknown[],
   run: vi.fn(async (_job: unknown) => [] as string[]),
   readProject: vi.fn(async (_id: string) => null as unknown),
+  cancelDraftGateApproval: vi.fn(async (_args: unknown) => undefined),
 }));
 
 vi.mock("@/app/SessionContext", () => ({ useSession: () => state.session }));
@@ -53,7 +54,10 @@ vi.mock("./hooks", () => ({
   useGermanTradeTaxRate: () => ok(null),
   useMilestoneDurations: () => undefined,
   useProjectReader: () => state.readProject,
-  useGeneralDataWrites: () => ({ run: state.run, progress: null, error: null, success: null, clear: () => {} }),
+  useGeneralDataWrites: () => ({
+    run: state.run, progress: null, error: null, success: null, clear: () => {},
+    cancelDraftGateApprovalIfRunning: state.cancelDraftGateApproval,
+  }),
 }));
 
 import GeneralDataScreen from "./Screen";
@@ -116,14 +120,22 @@ describe("UT-GDATA General Data screen (connected)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: SAVE }));
     await waitFor(() => expect(state.run).toHaveBeenCalled());
-    const job = (state.run.mock.calls[0] as unknown as [{ progress: string; success: string; plan: { writes: { entitySet: string; data: Record<string, unknown> }[] } }])[0];
+    type Plan = { writes: { entitySet: string; data: Record<string, unknown> }[] };
+    const job = (state.run.mock.calls[0] as unknown as [{
+      progress: string; success: string; plan: Plan;
+      then: (first: { done: number; createdIds: string[] }, ctl: { setProgress: (t: string) => void }) => Promise<Plan>;
+    }])[0];
     expect(job.progress).toBe(MSG.savingProject);
     expect(job.success).toBe(`${MSG.stepProjectSaved} \n`);
-    expect(job.plan.writes[0]!.entitySet).toBe(ES.projects);
+    // D81: the job is the head (Patch #1, Patch #2), then the Draft-approval cancellation check, then the tail.
+    expect(job.plan.writes.map((w) => w.entitySet)).toEqual([ES.projects, ES.projects]);
     expect(job.plan.writes[0]!.data.vsb_district).toBe("Nord");
     expect(job.plan.writes[0]!.data.vsb_projectname).toBe("Wirmighausen");
-    // The project has a Draft tracking? No → the plan ends by creating it.
-    expect(job.plan.writes.at(-1)!.entitySet).toBe(ES.projectStateTrackings);
+    const tail = await job.then({ done: 2, createdIds: [] }, { setProgress: () => {} });
+    expect(state.cancelDraftGateApproval).toHaveBeenCalledTimes(1);
+    expect((state.cancelDraftGateApproval.mock.calls[0]![0] as { appId: string }).appId).toBe("");
+    // The project has a Draft tracking? No → the tail ends by creating it.
+    expect(tail.writes.at(-1)!.entitySet).toBe(ES.projectStateTrackings);
   });
 
   it("UT-GDATA-904 the delete dialog names the row and deletes at once", async () => {

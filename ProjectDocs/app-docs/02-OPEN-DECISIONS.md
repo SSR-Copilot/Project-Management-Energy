@@ -6512,5 +6512,51 @@ Two harness fixes after run 16, from its three flaky tests (not yet run live):
 ### 4. Open
 - Acceptance: three clean full runs in a row (runs 12 and 13 so far; run 16 had no failure after its re-run pass but 3
   flaky tests) and the mutation proof (done: 6 of 6, 4 Nov 2026). Whether a run with flaky-then-passed tests counts as
-  clean is the user's call.
+  clean is the user's call. **Decided 4 Nov 2026 (user):** run 16 accepted; no further screen before the commit;
+  committed as `c9b791d` + `5af7c05`, fast-forwarded into `RounakDev1` and pushed.
 - The OPEX manifest is a draft and has not run live.
+
+## D81 · The Project Management app's cloud flows in the code app (4 Nov 2026, in progress)
+
+**Instruction (user, 4 Nov 2026):** add the VSBCloud solution's Power Automate cloud flows that the Project Management
+app needs to the code app, with best practice and the connection references handled first. This supersedes the
+"left out" lists of D25 (the Draft-reset cancellation), D27 (the module-permission flows) and D29 (the approval flows).
+
+**Design and inventory:** `ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md`. In short:
+- Six flows are called live by the PM canvas app, all solution-aware instant flows with the Power Apps V2 trigger, all
+  present in VSBCloud_Dev (one, `Perform Request of Check List Approval Cancellation`, is not in the 1.21.709 export).
+  They are added with `pa app add flow --flow-id` (Power Apps CLI 1.2.0), which generates a typed `<Flow>Service.Run`
+  and a `shared_logicflows` entry per flow in `power.config.json`; the flow starts under the signed-in user, as in canvas.
+- The server-triggered flows need nothing; the Button-trigger child flows cannot be called from an app.
+- **Connection references** are solution components bound per environment; all 12 are Active in DEV and, except the
+  unused Power Automate Management one, bound to healthy connections of the service account. The flows' actions run
+  through them (`runtimeSource: embedded`).
+
+**State (4 Nov 2026, evening):** branch `feature/PMFlows` off `RounakDev1`, uncommitted. Four flows added (check list
+approval, gate approval, gate approval cancellation, check list approval cancellation); `check:power` 93 registered,
+0 problems (it now checks the flows too). **Wired, unit-tested, not yet run live:**
+- `data/flows.ts`: the four typed wrappers (the one positional mapping), logged as `[VSB] DATA execute flow <name>`,
+  a failed call thrown (UT-FLOWS-001…005).
+- `data/usePlanWrite.ts` `PlanJob.then`: a cloud flow between the canvas's writes, one job, one progress, one refresh
+  (UT-PLANWRITE-006…008).
+- Check List: Request Approval (both modes: pre-flow patch → flow → `runid`-gated write-back / note), Cancel Approval
+  Request (patch → flow with the 13-field record → note) and the row ✕ (flow → refresh); the D29 `EXCLUDED` states are
+  gone (UT-CHKLST-077…081, UT-CHKLST-904/907/907b/913).
+- General Data: the save is head (Patch #1, #2) → the Draft gate-approval cancellation flow when the start cluster
+  changes while that approval runs (`IfError(…, false)`: a failure is logged and the save goes on) → tail; D25's refusal
+  and its text are gone (UT-GDATA-045, 083, 903). DIVERGENCE: the gate record comes from the project's own country
+  and technology, not the canvas's cross-country `LookUp`.
+- `typecheck`, lint (baseline) and the affected suites pass; the full `verify` runs before the commit.
+
+**Two flows blocked:** `Request Module Permission` (Approvals, Mail and Office 365 Groups) and `Request permission
+cancellation` (Mail) have those connections set to *Provided by run-only user* (`invoker`) in DEV, which neither the
+CLI nor a code app can supply. Both flows are owned by the *Azure VSB Cloud Flow Service User* (the `pac` profile's
+account). **Needed:** switch them to the solution connection references (`16-PM-FLOWS-IN-THE-CODE-APP.md` §3b), then
+the two adds run and the Generators wiring follows (§5). A live test sends real mails / approvals and needs an agreed
+test plan (§7).
+
+**Open:**
+1. The `invoker` → `embedded` change on the two Generators flows (owner action in DEV; the mails and approvals of those
+   flows then go through the service account's connections, as the other four flows' already do).
+2. The live test plan: which project, which approvers, who receives the mails and Teams cards.
+3. Whether the General Data Draft-reset cancellation (D25) is wanted now that the flow is callable (the design says yes).

@@ -19,11 +19,11 @@
  * no changeset, so a plan can still half-apply (KNOWN-RISKS) and the error says how far it got.
  *
  * D29 (19 Oct 2026) — CONNECTED. Product decisions:
- *  - NOT CALLED (they send mails / Teams cards): `PerformCommonRequestofGateApproval`,
- *    `PerformCommonRequestofCheckListApproval` (Request Approval — both panel modes, including
- *    the Only-Notifications "Move to …" / "Complete" captions), `PerformRequestofGateApprovalCancellation`
- *    (Cancel Approval Request) and `PerformRequestofCheckListApprovalCancellation` (the row's ✕).
- *    The controls stay visible and disabled with `EXCLUDED.*`. Their payload rules are kept.
+ *  - The four flows — `PerformCommonRequestofGateApproval`, `PerformCommonRequestofCheckListApproval`
+ *    (Request Approval, both panel modes), `PerformRequestofGateApprovalCancellation` (Cancel Approval
+ *    Request) and `PerformRequestofCheckListApprovalCancellation` (the row's ✕) — were NOT called under
+ *    D29 (they send mails / Teams cards). **D81 (4 Nov 2026) calls them** through `data/flows.ts`; the
+ *    writes around each flow are the plans under "D81 — Request Approval" and `planGateCancel*` below.
  *  - Edits of existing rows ARE live: back-fill, ensure tracking, materialisation, Complete,
  *    In Progress, Completion Date, the comment form, the panel Save (Move to …), Reset to …,
  *    Abandon / Inactivate / Activate.
@@ -47,8 +47,8 @@
  *    refresh handler — orphan checklist rows are not deleted today and are not here.
  *  - `cmp_CheckList_Project_States.RefreshButtonVisibility`, a developer-only control
  *    gated on `colDevelopers` (rule 28).
- *  - The 13-field JSON blob built for `PerformRequestofGateApprovalCancellation`; the
- *    replacement custom API takes the state-tracking id alone.
+ *  - (Reinstated by D81.) The 13-field JSON record for `PerformRequestofGateApprovalCancellation` was
+ *    dropped for a planned custom API; the user chose the flow, so `gateCancellationPayload` builds it.
  *
  * DEFECTS FIXED, each commented at its rule:
  *  - ambiguity 1: `CanEditSelectedProject` is computed and never consumed — every write
@@ -56,7 +56,8 @@
  *  - ambiguity 2: the page lock omits the Draft clause. Kept omitted — deliberately, this
  *    is the screen that moves a project OUT of Draft — but the bullet list is built from
  *    the actual condition so it can no longer disagree with the banner.
- *  - ambiguity 3: `AppId` is unused by the cancellation flow. Not sent.
+ *  - ambiguity 3: `AppId` is declared required by the cancellation flow and read by none of its
+ *    actions. Sent anyway since D81 (`gblProjectManagmentAppID`, the environment variable), as the canvas does.
  *  - ambiguity 5: the "Checklist Completion" branch computes a `DefaultApprovalGUID` it
  *    never passes. Not carried forward; see `checklistApprovalArgs`.
  *
@@ -72,6 +73,7 @@ import { isBlank } from "@/domain/powerFxNumeric";
 import { dateOnly } from "@/data/odata";
 import { ES, ES_PROCESS, CHOICE, CHOICE_PROCESS, TEXT_MAX_LENGTH } from "@/data/dataverseNames";
 import { createdRowRef, emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import type { GateCancellationPayload } from "@/data/flows";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 
@@ -1852,22 +1854,22 @@ export function checklistCancelSucceeded(
 }
 
 /**
- * The cancel writes the canvas makes around `PerformRequestofGateApprovalCancellation` (Y:1547-1627).
- * NOT RUN (D29): Cancel Approval Request starts the cancellation flow (mails / Teams cards), so the
- * button is disabled; kept so the feature can be connected without re-deriving it.
+ * The cancel writes the canvas makes around `PerformRequestofGateApprovalCancellation`
+ * (`pcf_…_Buttons_CancelApproval.OnChange`, Y:1536-1640), in the canvas order: the tracking patch
+ * (`planGateCancelPatch`) → the flow (`data/flows.ts` cancelGateApproval, with `gateCancellationPayload`) →
+ * the note (`planGateCancelNote`). D29 kept both writes unrun; D81 (4 Nov 2026) connects them with the flow
+ * between. `planGateCancel` is the two halves together, for a caller with nothing between.
  */
-export function planGateCancel(args: {
+export function planGateCancelPatch(args: {
   project: ChecklistProject;
   tracking: TrackingRow;
-  comment: string;
-  /** `gblCurrentUser.DisplayName` — the note name ends with it. */
-  userDisplayName: string;
   canEdit: boolean;
 }): WritePlan {
   const plan = emptyPlan();
   const guard = requireEditPermission(args.canEdit, plan);
   if (guard) return guard;
-
+  // `{Project, 'Approval Cluster State': In Progress, 'Cluster Step State': Blank(), FlowRunId: Blank(), 'Owning
+  // Business Unit'}` (Y:1557-1563): no Cluster State, and FlowApprovalId stays (the flow cancels the approval by it).
   plan.writes.push({
     op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id,
     data: {
@@ -1879,6 +1881,18 @@ export function planGateCancel(args: {
     },
     reason: `${args.tracking.clusterStateName ?? "Cluster"} approval request cancelled`,
   });
+  return plan;
+}
+
+/** The note after the cancellation flow (Y:1617-1627): `"Request canceled - {Project Name}, {gblCurrentUser.DisplayName}"`. */
+export function planGateCancelNote(args: {
+  project: ChecklistProject;
+  tracking: TrackingRow;
+  comment: string;
+  /** `gblCurrentUser.DisplayName` — the note name ends with it. */
+  userDisplayName: string;
+}): WritePlan {
+  const plan = emptyPlan();
   plan.writes.push(
     trackingNoteWrite({
       name: `Request canceled - ${args.project.projectName ?? ""}, ${args.userDisplayName}`,
@@ -1889,6 +1903,169 @@ export function planGateCancel(args: {
       owningBusinessUnitId: args.project.owningBusinessUnitId,
     }),
   );
+  return plan;
+}
+
+export function planGateCancel(args: {
+  project: ChecklistProject;
+  tracking: TrackingRow;
+  comment: string;
+  userDisplayName: string;
+  canEdit: boolean;
+}): WritePlan {
+  const patch = planGateCancelPatch(args);
+  if (planWasRefused(patch)) return patch;
+  const note = planGateCancelNote(args);
+  return { writes: [...patch.writes, ...note.writes], log: [...patch.log, ...note.log] };
+}
+
+/**
+ * `varProject` of the gate cancellation (Y:1572-1598): the 13 fields the flow's `Parse_Gate_data` reads. It is
+ * built AFTER the tracking patch, as the canvas does: `varCurrentClusterState` is the PATCHED row, so `FlowRunId`
+ * is the blank the patch just wrote and only `FlowApprovalId` still names the approval (the flow cancels by it).
+ * `PortfolioManager` is the gate's (`LookUp('Project Default Approvals', id = locSelectedItemProjectState.Gate)
+ * .'Portfolio Manager'.Mail`), or "" without one.
+ */
+export function gateCancellationPayload(args: {
+  project: ChecklistProject;
+  state: SequenceEntry;
+  tracking: TrackingRow;
+  gate: GateSetting | null;
+  previous: { id: string } | null;
+  next: { id: string } | null;
+}): GateCancellationPayload {
+  return {
+    ProjectGuid: args.project.id,
+    ProjectId: args.project.projectNumber,
+    ProjectName: args.project.projectName,
+    StateGuid: args.tracking.clusterStateId,
+    StateName: args.tracking.clusterStateName,
+    StateTrackingGuid: args.tracking.id,
+    HasGate: args.state.hasGate,
+    GateSettingsGuid: args.state.gateId,
+    PreviousClusterGuid: args.previous?.id ?? null,
+    NextClusterGuid: args.next?.id ?? null,
+    PortfolioManager: args.gate?.portfolioManagerMail ?? "",
+    FlowRunId: null,
+    FlowApprovalId: args.tracking.flowApprovalId,
+  };
+}
+
+/* ═══════════════════════════════════════ D81 — Request Approval, the writes around the flows ════ */
+
+/**
+ * Request Approval, cluster mode — the tracking upsert BEFORE the gate flow (`pcf_…_Buttons_RequestApproval
+ * .OnChange`, Y:5570-5648): `Patch('Project State Trackings', Coalesce(LookUp(tracking), Defaults), {Project,
+ * 'Cluster State', 'Approval Comment' (the raw box value), 'Approval Due Date' (the picker's date while it is
+ * visible, else blank), 'Approval Cluster State': In Progress, 'Owning Business Unit', 'Last Triggered Approval
+ * Personas', 'Last Triggered Approval Mode'})`. The flow then reads this row; its id is the flow's StateTrackingGUID.
+ */
+export function planGateApprovalRequestPatch(args: {
+  project: ChecklistProject;
+  state: SequenceEntry;
+  tracking: TrackingRow | null;
+  gate: GateSetting | null;
+  comment: string;
+  approvalDueDate: string | null;
+  canEdit: boolean;
+}): WritePlan {
+  const plan = emptyPlan();
+  const guard = requireEditPermission(args.canEdit, plan);
+  if (guard) return guard;
+  const data: Record<string, unknown> = {
+    [`${LOOKUP.project}@odata.bind`]: `/${ES.projects}(${args.project.id})`,
+    [`${LOOKUP.clusterState}@odata.bind`]: `/${ES.projectStates}(${args.state.id})`,
+    [TRACKING_COL.approvalComment]: args.comment,
+    [TRACKING_COL.approvalDueDate]: args.approvalDueDate,
+    [TRACKING_COL.approvalClusterState]: ACS.inProgress,
+    ...ownerBind(args.project.owningBusinessUnitId),
+    ...approvalPersonaSnapshot(args.gate),
+  };
+  plan.writes.push(args.tracking
+    ? { op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id, data, reason: `${args.state.name} approval requested` }
+    : {
+      op: "create", entitySet: ES.projectStateTrackings, data: { ...data, [TRACKING_COL.name]: args.state.name },
+      reason: `${args.state.name} created, approval requested`,
+    });
+  return plan;
+}
+
+/**
+ * The note once the gate flow answered (Y:5687-5698) — written whether or not a `runid` came back; only the local
+ * mirror of the ids is gated on it (W10b), and the flow updates the tracking row itself. `Note` carries the history
+ * HTML (`html_CheckList_RightPanel_ChangeCluster_Form_History.HtmlText`), the same table the panel Save stores.
+ */
+export function planGateApprovalRequestNote(args: {
+  project: ChecklistProject;
+  state: SequenceEntry;
+  trackingId: string | null;
+  comment: string;
+  noteHtml: string | null;
+}): WritePlan {
+  const plan = emptyPlan();
+  plan.writes.push(
+    trackingNoteWrite({
+      name: `Approval requested - ${args.project.projectName ?? ""}, ${args.state.name}`,
+      trackingId: args.trackingId,
+      comment: `Approval requested - ${args.comment.trim()}`,
+      note: args.noteHtml,
+      noteType: CHOICE_PROCESS.noteType.checklistItem,
+      owningBusinessUnitId: args.project.owningBusinessUnitId,
+    }),
+  );
+  return plan;
+}
+
+/**
+ * Request Approval, checklist mode — the checklist patch BEFORE the flow (Y:5487-5499): `{'Approval Comment'
+ * (raw), 'Approval Due Date' (while the picker is visible), 'Approval Checklist State': In Progress}`.
+ */
+export function planChecklistApprovalRequestPatch(args: {
+  row: ChecklistRow;
+  comment: string;
+  approvalDueDate: string | null;
+  canEdit: boolean;
+}): WritePlan {
+  const plan = emptyPlan();
+  const guard = requireEditPermission(args.canEdit, plan);
+  if (guard) return guard;
+  plan.writes.push({
+    op: "update", entitySet: ES.projectChecklists, id: args.row.id,
+    data: {
+      [CHECKLIST_COL.approvalComment]: args.comment,
+      [CHECKLIST_COL.approvalDueDate]: args.approvalDueDate,
+      [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress,
+    },
+    reason: `${args.row.title} approval requested`,
+  });
+  return plan;
+}
+
+/**
+ * After the checklist flow answered (Y:5524-5560): the write-back ONLY with a `runid` (`flowWriteBackPatch`; the
+ * canvas Patch repeats `'Approval Checklist State': In Progress`), then the note in `'Project Checklist Tracking
+ * Note'` — "Approval requested" when the row's mode asks for approvals (the People icon), "Completed and notified
+ * about Check List" otherwise — the same text as name and comment.
+ */
+export function planChecklistApprovalRequestFollowUp(args: {
+  project: ChecklistProject;
+  row: ChecklistRow;
+  result: FlowResult | null;
+  approvalRequested: boolean;
+}): WritePlan {
+  const plan = emptyPlan();
+  const writeBack = flowWriteBackPatch(args.result, "checklist");
+  if (writeBack) {
+    plan.writes.push({
+      op: "update", entitySet: ES.projectChecklists, id: args.row.id,
+      data: { [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress, ...writeBack },
+      reason: `${args.row.title} flow ids`,
+    });
+  }
+  const text = `${args.approvalRequested ? "Approval requested" : "Completed and notified about Check List"} ${args.row.title} for Project ${args.project.projectName ?? ""}`;
+  plan.writes.push(checklistNoteWrite({
+    name: text, checklistId: args.row.id, comment: text, owningBusinessUnitId: args.project.owningBusinessUnitId,
+  }));
   return plan;
 }
 
@@ -2417,23 +2594,25 @@ export const MSG = {
    * confirmation has no progress text in the canvas; this canvas text is shown while it runs.
    */
   pleaseWait: "Please wait...",
+  /** `pcf_…_Buttons_CancelApproval.OnChange` (Y:1541) — D81. */
+  cancelApprovalSent: (state: string) => `Cancel Request Approval for '${state}' has been sent, please wait...`,
+  /** Y:1569 — while the cancellation flow runs. */
+  cancelClusterApproval: "Cancel Cluster Approval ...",
+  /** `ico_…_ListRow_CancelApproval.OnSelect` (Y:3692). */
+  cancelingChecklistApproval: "Canceling Check List completion approval request...",
+  /**
+   * NEW — no canvas equivalent (D81). The canvas stores the row ✕ flow's `.success` and shows nothing when
+   * it is false; here a false is reported (rule 3) and the request stays as it was.
+   */
+  checklistCancelFailed: (title: string) => `The approval request for '${title}' could not be cancelled.`,
+  /** NEW — no canvas equivalent (D81): Cancel Approval Request on a cluster without a tracking row. */
+  noTrackingToCancel: "There is no approval request to cancel for this cluster.",
 } as const;
 
-/**
- * NEW — no canvas equivalent: why a control the canvas has is visible but disabled here (product
- * decision D29: no flow that sends approval mails or Teams cards is called).
+/*
+ * D29's `EXCLUDED` reasons (Request Approval, Cancel Approval Request and the row ✕ shown disabled) are gone:
+ * D81 (4 Nov 2026) connects the four flows through `data/flows.ts`.
  */
-export const EXCLUDED = {
-  /** Request Approval — `PerformCommonRequestofGateApproval` / `PerformCommonRequestofCheckListApproval`. */
-  requestApproval:
-    "Requesting an approval or sending the notifications starts an approval flow (emails and Teams cards). It is not available in this app yet.",
-  /** Cancel Approval Request — `PerformRequestofGateApprovalCancellation`. */
-  cancelGateApproval:
-    "Cancelling the approval request runs an approval flow (emails and Teams cards). It is not available in this app yet; wait for the approval to finish and refresh.",
-  /** The row's ✕ — `PerformRequestofCheckListApprovalCancellation`. */
-  cancelChecklistApproval:
-    "Cancelling a checklist approval runs an approval flow (emails and Teams cards). It is not available in this app yet.",
-} as const;
 
 /** The canvas `AccessibilityLabel`s (rule 16) — the control names, set as literals on the PCF controls. */
 export const ARIA = {

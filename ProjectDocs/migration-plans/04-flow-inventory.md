@@ -41,8 +41,11 @@ including the code app's. Such a flow never appears in canvas YAML. Three rules 
 | `ReportDevOpsBug` | Commented out in both apps |
 | `SynchronizeStandardAssumptionCosts`, `ForCountriestriggerFabricrecalculationsforProjects`, `ForaProjecttriggerFabricDEVEX/CAPEXrecalculation`, `SynchroniseRecalculationCapexStandardCost` | **Commented out** in every canvas caller (Admin Cost, Admin Contract, Admin Milestones, PM Milestones, PM Production). The Apply buttons that would call the first one are hard-disabled. These are therefore **not** blockers for plans 003, 005, 006 and 010. |
 
-`ProjectCosts-CodeApp/power.config.json` has no connection references yet, so the code app cannot
-call any flow until one is set up. This first matters for PM Checklist, General Data and Generators.
+**Superseded 4 Nov 2026 (D81):** the six flows the PM app calls are added to the code app with `pa app add flow`
+(four done, the two Generators flows blocked on a run-only connection setting in DEV) and called through
+`src/data/flows.ts`; the inventory, the connection references and the per-screen wiring are in
+`ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md`. The "Replace with custom API" dispositions below for the
+cancellations were not taken up: the user chose the flows.
 
 ### Plugin steps (14 steps in the solution)
 

@@ -59,8 +59,8 @@ import {
   isAreaRequired, isFormDirty, isMunicipalityRequired, isSpvCompanyCodeVisible,
   isSpvLegalStructureRequired, isSpvLegalStructureVisible, isTerrainSizeRequired, isThirdParty,
   milestoneChainErrors, municipalityMode, onAreaChange, onCountryChange, onDevelopmentTypeChange,
-  onSpvNameChange, openClusterPanel, ownershipInputText, planClusterPanelSave, planGeneralDataSave,
-  planShareholderDelete, projectSaveErrorText, requiredFieldsContent, saveBlockReason,
+  onSpvNameChange, openClusterPanel, ownershipInputText, planClusterPanelSave,
+  planShareholderDelete, projectSaveErrorText, requiredFieldsContent, planGeneralDataSaveHead, planGeneralDataSaveTail,
   createdProjectSnapshot, planProjectCreate, planSaveFollowUps, startClusterChanged,
   shareholderDeleteErrorText, shareholderPanelErrors, shareholderPanelFull, shareholdingDescription,
   shareholdingFullMessage, shareholdingSum, stepLogText, taxFactorFallbackMunicipality, toForm, toSnapshot,
@@ -234,7 +234,6 @@ const useStyles = makeStyles({
     "& .fui-Button:hover": { color: palette.akzent5 },
     "& .fui-Button__icon": { color: palette.akzent5 },
   },
-  blocked: { color: palette.neutralSecondary, fontSize: tokens.fontSizeBase200, maxWidth: "48ch" },
   /** `con_…_Body_Content_ProjectInfo` — PaddingRight 20; the labels right-aligned. */
   stampBox: { paddingRight: "20px", alignItems: "flex-end" },
   /**
@@ -370,9 +369,8 @@ export default function GeneralDataScreen() {
   const isDirty = isFormDirty(live, baseline) || shareholdersDirty || deletedAny;
   // `DataSourceInfo` / `RecordInfo` have no SDK equivalent: Dataverse decides (D1, serverEnforcedProvider).
   const perms = { canCreate: true, canEdit: true };
-  const blockReason = saveBlockReason({ project: snapshot, form: live, trackings, projectStates });
   const saving = writes.progress !== null;
-  const saveEnabled = !saving && !blockReason && canSave({ ...ctx, perms, isDirty });
+  const saveEnabled = !saving && canSave({ ...ctx, perms, isDirty });
 
   const locks = formLocks(live, snapshot);
   const modes = fieldModes({ clusterStateOrder: snapshot?.clusterStateOrder ?? null, environmentName: ref.environmentName });
@@ -462,13 +460,26 @@ export default function GeneralDataScreen() {
     setOpenProjectId(newId);
   };
 
-  /** `btn_GeneralData_Save_Actual` */
+  /**
+   * `btn_GeneralData_Save_Actual`: Patch #1 and #2, then — when the start cluster changes while the Draft gate
+   * approval is running — the cancellation flow (D81, `IfError(…, false)`), then the Draft return, the tracking
+   * rebuild, the entities and the Draft tracking, all as one job in the canvas order.
+   */
   const runSave = async () => {
     if (isNewProject) return runCreate();
     if (!snapshot) return;
-    const plan = planGeneralDataSave({ project: snapshot, form: live, ref, trackings, shareholdersDirty, entities });
+    const saveCtx = { project: snapshot, form: live, ref, trackings, shareholdersDirty, entities };
+    const head = planGeneralDataSaveHead(saveCtx);
+    const tail = planGeneralDataSaveTail(saveCtx);
     const done = await writes.run({
-      progress: MSG.savingProject, success: stepLogText(plan.log), errorText: projectSaveErrorText, plan,
+      progress: MSG.savingProject, success: stepLogText([...head.log, ...tail.log]), errorText: projectSaveErrorText,
+      plan: head,
+      then: async () => {
+        await writes.cancelDraftGateApprovalIfRunning({
+          project: snapshot, form: live, projectStates, trackings, appId: envVars.vsb_ProjectManagementAppID ?? "",
+        });
+        return tail;
+      },
     });
     if (done !== null) cancel();
   };
@@ -928,7 +939,6 @@ export default function GeneralDataScreen() {
             appearance="primary" icon={<CheckmarkRegular />} className={l.button}
             aria-label="pcf_btn_GeneralData_DisplayProject_Body_Buttons_Save"
             data-testid="pcf_btn_GeneralData_DisplayProject_Body_Buttons_Save"
-            title={blockReason ?? undefined}
             disabled={!saveEnabled}
             onClick={save}
           >
@@ -948,7 +958,6 @@ export default function GeneralDataScreen() {
               </span>
             </span>
           ) : null}
-          {blockReason ? <Text className={s.blocked} data-testid="general-data-save-blocked">{blockReason}</Text> : null}
         </div>
         <div className={mergeClasses(l.stamp, s.stampBox)}>
           {/* Canvas names verbatim, including their doubled "Buttonscon_" prefix. */}

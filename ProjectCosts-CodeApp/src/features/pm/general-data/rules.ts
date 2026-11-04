@@ -291,17 +291,14 @@ export const MSG = {
   stepTrackingRefreshed: "Project start cluster tracking was refreshed successfully.",
   stepShareholdersSaved: "Project Shareholder Entitiy was saved/updated successfully.",
 
-  /* ── NEW — not canvas text: the two paths this app does not run (D25) ───────── */
+  /* ── NEW — not canvas text ──────────────────────────────────────────────────── */
   /**
    * NEW — the create succeeded but the new row could not be read back (it carries the autonumber
    * 'Project ID' that Patch #2 needs). Creating a project is in scope since PO 20 Oct 2026 (D25).
    */
   createReadBackFailed: "The project was created, but it could not be read back to finish the save.",
-  /**
-   * NEW — a start-cluster change would cancel a running Draft gate approval through
-   * `PerformRequestofGateApprovalCancellation`, which sends mails / Teams cards (left out, D25).
-   */
-  approvalInProgress: "The Draft gate approval of this project is in progress. Changing the Start Cluster would cancel it, which this app cannot do yet. Use the Project Management app for this change.",
+  // D25's `approvalInProgress` (the refused start-cluster change while a Draft gate approval runs) is gone:
+  // D81 (4 Nov 2026) calls the cancellation flow instead (`hooks.ts` cancelDraftGateApprovalIfRunning).
 } as const;
 
 /** `$"Keep ""{original}"" - you can only add to the end."` (Y:1238). */
@@ -1433,6 +1430,8 @@ export interface TrackingRow {
   clusterStateId: string;
   approvalClusterState: number | null;
   flowRunId: string | null;
+  /** The Approvals row of the running request — the cancellation flow cancels it by this id (D81). */
+  flowApprovalId?: string | null;
 }
 
 /**
@@ -1445,34 +1444,56 @@ export function shouldCancelGateApproval(draftTracking: TrackingRow | null | und
   return draftTracking.approvalClusterState === CHOICE.approvalClusterState.inProgress;
 }
 
-/**
- * DECISION (D25, product owner): `PerformRequestofGateApprovalCancellation` sends mails / Teams
- * cards, so this app does not call it. Rebuilding the trackings without it would blank the
- * running approval's `FlowRunId` and leave the approval alive in Outlook/Teams with nothing
- * pointing at it. So a start-cluster change is REFUSED exactly when the canvas would have called
- * the flow; every other start-cluster change saves and rebuilds as the canvas does.
- */
-export function startClusterChangeBlocked(args: {
-  project: ProjectSnapshot | null;
-  form: GeneralDataForm;
-  trackings: TrackingRow[];
-  projectStates: ProjectStateRef[];
-}): boolean {
-  if (!args.project?.id || !startClusterChanged(args.project, args.form)) return false;
-  const draft = args.projectStates.find((s) => s.name === "Draft");
-  const draftTracking = draft ? args.trackings.find((t) => t.clusterStateId === draft.id) : undefined;
-  return shouldCancelGateApproval(draftTracking);
+/** The Draft tracking row, when the states hold a Draft. */
+export function draftTrackingOf(trackings: TrackingRow[], projectStates: ProjectStateRef[]): TrackingRow | null {
+  const draft = projectStates.find((s) => s.name === "Draft");
+  return draft ? trackings.find((t) => t.clusterStateId === draft.id) ?? null : null;
 }
 
-/** Why Save is off although the canvas would allow it — or null. */
-export function saveBlockReason(args: {
-  project: ProjectSnapshot | null;
-  form: GeneralDataForm;
-  trackings: TrackingRow[];
+/**
+ * `btn_General_CancelActiveDraftGateApproval…` step 1 (Y:236-322): the record the cancellation flow gets as
+ * `JSON(...)` when the start cluster changes while the Draft approval is running. `varOldGateSourceState` is the
+ * checklist state whose ClusterNo is `old <= 1 ? 0 : old - 1`, `varOldDraftApprovalNextState` the one at
+ * `old = 0 ? 1 : old`, and `varOldGateRecord` the `Project Default Approvals` row whose Cluster State is the former
+ * (`HasGate` = it exists, `GateSettingsGuid` its id, `PortfolioManager` its manager's mail or ""). `PreviousClusterGuid`
+ * is `Blank()`. Null when the states hold no Draft.
+ *
+ * Until D81 (4 Nov 2026) this case was REFUSED (D25): the flow sends mails / Teams cards and was not called, and
+ * rebuilding the trackings without it would have left the approval alive in Outlook / Teams. Now the flow is called.
+ *
+ * DIVERGENCE (D81): the canvas `LookUp('Project Default Approvals', Not(IsBlank('Cluster State')) && 'Cluster State'
+ * = …)` runs over EVERY country and technology and takes the first row for that cluster; here the gates are the
+ * project's own country and technology (`listChecklistGates`, the active rows), the gate the running approval used.
+ */
+export function draftGateCancellationPayload(args: {
+  project: ProjectSnapshot;
   projectStates: ProjectStateRef[];
-}): string | null {
-  if (startClusterChangeBlocked(args)) return MSG.approvalInProgress;
-  return null;
+  oldStartClusterNo: number;
+  draftTracking: TrackingRow;
+  gates: ReadonlyArray<{ id: string; clusterStateId: string | null; portfolioManagerMail: string | null }>;
+}): import("@/data/flows").GateCancellationPayload | null {
+  const no = (s: ProjectStateRef): number | undefined => CHECKLIST_CLUSTER_NO[s.name];
+  const draft = args.projectStates.find((s) => s.name === "Draft");
+  if (!draft) return null;
+  const old = args.oldStartClusterNo;
+  const source = args.projectStates.find((s) => no(s) === (old <= 1 ? 0 : old - 1)) ?? null;
+  const nextState = args.projectStates.find((s) => no(s) === (old === 0 ? 1 : old)) ?? null;
+  const gate = source ? args.gates.find((g) => g.clusterStateId !== null && g.clusterStateId === source.id) ?? null : null;
+  return {
+    ProjectGuid: args.project.id ?? "",
+    ProjectId: args.project.projectNumber,
+    ProjectName: args.project.projectName ?? null,
+    StateGuid: draft.id,
+    StateName: draft.name,
+    StateTrackingGuid: args.draftTracking.id,
+    HasGate: gate !== null,
+    GateSettingsGuid: gate?.id ?? null,
+    PreviousClusterGuid: null,
+    NextClusterGuid: nextState?.id ?? null,
+    PortfolioManager: gate?.portfolioManagerMail ?? "",
+    FlowRunId: args.draftTracking.flowRunId,
+    FlowApprovalId: args.draftTracking.flowApprovalId ?? null,
+  };
 }
 
 /* ══════════════════════════════════════════ the cluster-change milestone panel ════ */
@@ -1890,30 +1911,45 @@ export interface SaveContext {
  *   1. Patch #1 — the form fields (`buildProjectPatch`).
  *   2. Patch #2 — `'Internal Project ID'` back-filled from `'Project ID'` when blank, and the owning
  *      business unit from `Countries.'Business Unit'`.
+ *   — here the canvas calls the Draft gate-approval cancellation flow when the start cluster changed
+ *     while that approval is running (D81; `hooks.ts` cancelDraftGateApprovalIfRunning, between
+ *     `planGeneralDataSaveHead` and `planGeneralDataSaveTail`).
  *   3. When the start cluster changed (`old <> new`): `Patch(Projects, {'Cluster State': Draft,
- *      Besitzer})`, then one tracking row per checklist cluster (create or update). The
- *      cancellation flow is NOT called (`startClusterChangeBlocked` refuses the case).
+ *      Besitzer})`, then one tracking row per checklist cluster (create or update).
  *   4. When the entities changed: one create / update per entity.
  *   5. When the project has no Draft tracking row: create it, In Progress.
  *
  * NOT TRANSACTIONAL (no changeset on the SDK): a failure stops the plan and the message says how
- * many writes had already been sent.
+ * many writes had already been sent. `planGeneralDataSave` is the whole; the Screen runs the head,
+ * the flow, then the tail as one job.
  */
 export function planGeneralDataSave(ctx: SaveContext): WritePlan {
-  const { project, form, ref, trackings } = ctx;
+  const head = planGeneralDataSaveHead(ctx);
+  if (head.refusedReason) return head;
+  const tail = planGeneralDataSaveTail(ctx);
+  return { writes: [...head.writes, ...tail.writes], log: [...head.log, ...tail.log] };
+}
+
+/** Steps 1 and 2 — Patch #1 and Patch #2, what runs BEFORE the cancellation flow. */
+export function planGeneralDataSaveHead(ctx: SaveContext): WritePlan {
+  const { project, form, ref } = ctx;
   const manager = assertManagerSelected(form);
   if (manager) return refusePlan(manager);
-  if (startClusterChangeBlocked({ project, form, trackings, projectStates: ref.projectStates })) {
-    return refusePlan(MSG.approvalInProgress);
-  }
-  const rest = planSaveFollowUps(ctx);
   return {
-    writes: [{
-      op: "update", entitySet: ES.projects, id: project.id!,
-      data: buildProjectPatch(form, ref, project), reason: "save the project data",
-    }, ...rest.writes],
-    log: [MSG.stepProjectSaved, ...rest.log],
+    writes: [
+      {
+        op: "update", entitySet: ES.projects, id: project.id!,
+        data: buildProjectPatch(form, ref, project), reason: "save the project data",
+      },
+      internalIdPatch(ctx),
+    ],
+    log: [MSG.stepProjectSaved],
   };
+}
+
+/** Steps 3 to 5 — the Draft return and the tracking rebuild, the entities, the Draft tracking: AFTER the flow. */
+export function planGeneralDataSaveTail(ctx: SaveContext): WritePlan {
+  return planClusterAndEntities(ctx);
 }
 
 /**
@@ -1953,21 +1989,32 @@ export const createdProjectSnapshot = (reRead: ProjectSnapshot): ProjectSnapshot
  * needs the autonumber 'Project ID' (`vsb_name`) Dataverse assigned.
  */
 export function planSaveFollowUps(ctx: SaveContext): WritePlan {
+  const rest = planClusterAndEntities(ctx);
+  return { writes: [internalIdPatch(ctx), ...rest.writes], log: rest.log };
+}
+
+/** Patch #2 (Y:636-648) — `'Internal Project ID'` back-filled from `'Project ID'` when blank, and the owning business unit. */
+function internalIdPatch(ctx: SaveContext): PlannedWrite {
+  const { project, form, ref } = ctx;
+  const { patch2: ownerBu } = owningBusinessUnits(form, ref, project);
+  return {
+    op: "update", entitySet: ES.projects, id: project.id!,
+    data: {
+      [PROJECT_COL.internalProjectId]: isBlank(project.internalProjectId) ? project.projectNumber : project.internalProjectId,
+      ...obu(ownerBu),
+    },
+    reason: "set the internal project id and the owning business unit",
+  };
+}
+
+/** Steps 3 to 5 of the save: the start-cluster rebuild, the shareholding entities, the Draft tracking. */
+function planClusterAndEntities(ctx: SaveContext): WritePlan {
   const { project, form, ref, trackings } = ctx;
   const projectId = project.id!;
   const writes: PlannedWrite[] = [];
   const log: string[] = [];
   const { patch2: ownerBu } = owningBusinessUnits(form, ref, project);
   const draftState = ref.projectStates.find((s) => s.name === "Draft");
-
-  writes.push({
-    op: "update", entitySet: ES.projects, id: projectId,
-    data: {
-      [PROJECT_COL.internalProjectId]: isBlank(project.internalProjectId) ? project.projectNumber : project.internalProjectId,
-      ...obu(ownerBu),
-    },
-    reason: "set the internal project id and the owning business unit",
-  });
 
   const changed = startClusterChanged(project, form);
   if (changed) {

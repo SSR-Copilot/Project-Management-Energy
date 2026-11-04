@@ -50,9 +50,12 @@ real screens):
   and the six admin "Application Settings" screens (`features/admin/*`, routed
   `/admin/<screen>`). The admin screens were first connected under D18–D24, then replaced on
   22 Oct 2026 by the RounakDev1 versions (D36; open points in
-  `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`). Still left out: creating
-  a project's Teams/SharePoint flow, approval flows that send mail or Teams cards, and the Fabric
-  SQL sources (D2). Status per screen: `ProjectDocs/app-docs/gap-analysis/README.md`.
+  `ProjectDocs/app-docs/09-APPLICATION-SETTINGS-PORT-OPEN-POINTS.md`). The approval flows the PM
+  app calls are being connected (D81, 4 Nov 2026, `ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md`):
+  Check List and General Data call theirs; the two Generators flows wait for a run-only connection
+  change in DEV. Still left out: creating a project's Teams/SharePoint flow is server-triggered and
+  needs nothing; the Fabric SQL sources are connected since D54. Status per screen:
+  `ProjectDocs/app-docs/gap-analysis/README.md`.
 - **Not ported**: PM's "App Loading Screen" — its job (launch parameters, deep-link routing) is
   done by `app/SessionContext.tsx` and the `Landing` route.
 

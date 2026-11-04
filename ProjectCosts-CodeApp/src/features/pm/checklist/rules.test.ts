@@ -26,6 +26,8 @@ import {
   stageTerminalToggle, terminalButtonVisible, planTerminalStateChange,
   planClusterTransition, planReturnToPreviousCluster, planGateCancel, planWasRefused,
   checklistApprovalArgs, gateApprovalArgs, gateCancelArgs, flowWriteBackPatch,
+  gateCancellationPayload, planGateCancelPatch, planGateCancelNote, planGateApprovalRequestPatch,
+  planGateApprovalRequestNote, planChecklistApprovalRequestPatch, planChecklistApprovalRequestFollowUp,
   checklistCancelSucceeded, showSaveCanvasParity,
   approvalPersonaSnapshot, parsePersonaList, personaTooltip, historyDescriptor,
   pageLock, isPageLocked, missingStartClusterMilestones, projectIsTerminal,
@@ -1646,5 +1648,91 @@ describe("UT-CHKLST D29 — texts and option values", () => {
     const d = new Date(iso);
     expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2027, 0, 31, 0]);
     expect(ymdToLocalIso("bad")).toBeNull();
+  });
+});
+
+/* D81 (4 Nov 2026) — the writes around the four flows, now called. */
+describe("D81 — the writes around the flows", () => {
+  const cluster2: SequenceEntry = {
+    id: "ps-2", name: "Cluster 2", clusterNo: 2, rowNumber: 2, clusterDescription: null, hasGate: true, gateId: "g-2",
+  };
+  const row: ChecklistRow = {
+    id: "cl-1", title: "Land secured", clusterStateId: "ps-2", gateRelevance: true, holdingDescription: null,
+    isCompletionDate: false, completionDate: null, taskState: null, approvalChecklistState: null, note: null, sort: 1,
+    projectDefaultChecklistId: "tpl-1", flowRunId: null, flowApprovalId: null,
+  };
+
+  it("UT-CHKLST-077 the gate cancellation record: 13 fields, FlowRunId already blank (the patched row), FlowApprovalId kept, the gate's PM mail or \"\"", () => {
+    const t = tracking({ id: "t-2", clusterStateId: "ps-2", clusterStateName: "Cluster 2", flowRunId: "run-2", flowApprovalId: "ap-2" });
+    const p = gateCancellationPayload({ project: project(), state: cluster2, tracking: t, gate: gate(), previous: { id: "ps-1" }, next: { id: "ps-3" } });
+    expect(Object.keys(p)).toEqual([
+      "ProjectGuid", "ProjectId", "ProjectName", "StateGuid", "StateName", "StateTrackingGuid", "HasGate", "GateSettingsGuid",
+      "PreviousClusterGuid", "NextClusterGuid", "PortfolioManager", "FlowRunId", "FlowApprovalId",
+    ]);
+    expect(p).toMatchObject({
+      ProjectGuid: project().id, StateGuid: "ps-2", StateName: "Cluster 2", StateTrackingGuid: "t-2", HasGate: true, GateSettingsGuid: "g-2",
+      PreviousClusterGuid: "ps-1", NextClusterGuid: "ps-3", FlowRunId: null, FlowApprovalId: "ap-2",
+    });
+    expect(p.PortfolioManager).toBe(gate().portfolioManagerMail);
+    const bare = gateCancellationPayload({ project: project(), state: cluster2, tracking: t, gate: null, previous: null, next: null });
+    expect([bare.PortfolioManager, bare.PreviousClusterGuid, bare.NextClusterGuid]).toEqual(["", null, null]);
+  });
+
+  it("UT-CHKLST-078 the gate cancel's two halves are the whole plan, in order: the patch (no Cluster State, FlowApprovalId untouched), then the note", () => {
+    const args = { project: project(), tracking: tracking({ id: "t-3", flowRunId: "run-1", flowApprovalId: "ap-1" }), comment: " Wrong approver ", userDisplayName: "Ada", canEdit: true };
+    const patch = planGateCancelPatch(args);
+    const note = planGateCancelNote(args);
+    expect(patch.writes).toHaveLength(1);
+    expect(patch.writes[0]!.data).not.toHaveProperty(`${LOOKUP.clusterState}@odata.bind`);
+    expect(patch.writes[0]!.data).not.toHaveProperty(TRACKING_COL.flowApprovalId);
+    expect(patch.writes[0]!.data![TRACKING_COL.flowRunId]).toBeNull();
+    expect(note.writes[0]!.data![NOTE_COL.name]).toBe("Request canceled - Windpark Nord, Ada");
+    expect(note.writes[0]!.data![NOTE_COL.comment]).toBe("Request canceled - Wrong approver");
+    expect(planGateCancel(args).writes).toEqual([...patch.writes, ...note.writes]);
+    expect(planWasRefused(planGateCancelPatch({ ...args, canEdit: false }))).toBe(true);
+    expect(planWasRefused(planGateCancel({ ...args, canEdit: false }))).toBe(true);
+  });
+
+  it("UT-CHKLST-079 Request Approval, cluster mode: the pre-flow upsert carries the raw comment, the due date, In Progress and the persona snapshot; a missing tracking is created with the state's name", () => {
+    const base = { project: project(), state: cluster2, gate: gate(), comment: " Go ", approvalDueDate: "2027-01-31T00:00:00.000Z", canEdit: true };
+    const update = planGateApprovalRequestPatch({ ...base, tracking: tracking({ id: "t-2" }) });
+    expect(update.writes[0]).toMatchObject({ op: "update", id: "t-2", entitySet: ES.projectStateTrackings });
+    expect(update.writes[0]!.data).toMatchObject({
+      [TRACKING_COL.approvalComment]: " Go ", [TRACKING_COL.approvalDueDate]: "2027-01-31T00:00:00.000Z",
+      [TRACKING_COL.approvalClusterState]: ACS.inProgress, [`${LOOKUP.clusterState}@odata.bind`]: `/${ES.projectStates}(ps-2)`,
+      [TRACKING_COL.lastTriggeredApprovalMode]: gate().approvalMode,
+    });
+    expect(update.writes[0]!.data).toHaveProperty(TRACKING_COL.lastTriggeredApprovalPersonas);
+    const create = planGateApprovalRequestPatch({ ...base, tracking: null });
+    expect(create.writes[0]).toMatchObject({ op: "create", data: { [TRACKING_COL.name]: "Cluster 2" } });
+    const note = planGateApprovalRequestNote({ project: project(), state: cluster2, trackingId: "t-2", comment: " Go ", noteHtml: "<table/>" });
+    expect(note.writes[0]!.data).toMatchObject({
+      [NOTE_COL.name]: "Approval requested - Windpark Nord, Cluster 2", [NOTE_COL.comment]: "Approval requested - Go",
+      [NOTE_COL.note]: "<table/>", [NOTE_COL.noteType]: CHOICE_PROCESS.noteType.checklistItem,
+    });
+  });
+
+  it("UT-CHKLST-080 Request Approval, checklist mode: the pre-flow patch, then the write-back only with a runid, then the note by mode", () => {
+    const patch = planChecklistApprovalRequestPatch({ row, comment: "Go", approvalDueDate: null, canEdit: true });
+    expect(patch.writes[0]).toMatchObject({ op: "update", entitySet: ES.projectChecklists, id: "cl-1" });
+    expect(patch.writes[0]!.data).toEqual({
+      [CHECKLIST_COL.approvalComment]: "Go", [CHECKLIST_COL.approvalDueDate]: null, [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress,
+    });
+    const withRun = planChecklistApprovalRequestFollowUp({ project: project(), row, result: { runid: "run-1", approvalid: "ap-1" }, approvalRequested: true });
+    expect(withRun.writes.map((w) => w.op)).toEqual(["update", "create"]);
+    expect(withRun.writes[0]!.data).toEqual({
+      [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress, [CHECKLIST_COL.flowRunId]: "run-1", [CHECKLIST_COL.flowApprovalId]: "ap-1",
+    });
+    expect(withRun.writes[1]!.data![NOTE_COL.name]).toBe("Approval requested Land secured for Project Windpark Nord");
+    const noRun = planChecklistApprovalRequestFollowUp({ project: project(), row, result: { runid: null, approvalid: null }, approvalRequested: false });
+    expect(noRun.writes.map((w) => w.op)).toEqual(["create"]);
+    expect(noRun.writes[0]!.data![NOTE_COL.comment]).toBe("Completed and notified about Check List Land secured for Project Windpark Nord");
+  });
+
+  it("UT-CHKLST-081 the canvas progress texts of the flows, verbatim", () => {
+    expect(MSG.cancelApprovalSent("Cluster 2")).toBe("Cancel Request Approval for 'Cluster 2' has been sent, please wait...");
+    expect(MSG.cancelClusterApproval).toBe("Cancel Cluster Approval ...");
+    expect(MSG.cancelingChecklistApproval).toBe("Canceling Check List completion approval request...");
+    expect(MSG.pleaseWait).toBe("Please wait...");
   });
 });

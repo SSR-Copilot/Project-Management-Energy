@@ -19,7 +19,7 @@ import {
   InfoRegular, LockClosedRegular, MailRegular, PeopleRegular, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
-import { ARIA, EXCLUDED, UI, type TerminalKind } from "./rules";
+import { ARIA, UI, type TerminalKind } from "./rules";
 
 /* ─────────────────────────────────────────────────────────────── colours */
 
@@ -278,8 +278,8 @@ export interface TerminalAction {
 }
 
 export interface ClusterActionsProps {
-  /** `pcf_…_Buttons_CancelApproval` — shown disabled (an approval flow, D29). */
-  cancelApprovalVisible: boolean;
+  /** `pcf_…_Buttons_CancelApproval` — null when hidden; runs the cancellation flow (D81, before that disabled under D29). */
+  cancelApproval: { disabled: boolean; onClick: () => void } | null;
   reset: { caption: string; disabled: boolean; onClick: () => void } | null;
   next: {
     caption: string;
@@ -293,16 +293,16 @@ export interface ClusterActionsProps {
   terminals: TerminalAction[];
 }
 
-export function ClusterActions({ cancelApprovalVisible, reset, next, info, terminals }: ClusterActionsProps) {
+export function ClusterActions({ cancelApproval, reset, next, info, terminals }: ClusterActionsProps) {
   const s = useStyles();
   const terminalIcon = (t: TerminalAction): ReactElement =>
     t.kind === "abandon" ? <SubtractCircleRegular /> : <LockClosedRegular />;
   return (
     <div className={s.actions}>
-      {cancelApprovalVisible ? (
+      {cancelApproval ? (
         <Button appearance="secondary" className={mergeClasses(s.action, s.outlined, s.text16, s.w250)} icon={<DismissRegular />}
-          disabled title={EXCLUDED.cancelGateApproval} aria-label={UI.cancelApprovalRequest}
-          data-testid="pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval">
+          disabled={cancelApproval.disabled} title={UI.cancelApprovalRequestTooltip} aria-label={UI.cancelApprovalRequest}
+          data-testid="pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval" onClick={cancelApproval.onClick}>
           {UI.cancelApprovalRequest}
         </Button>
       ) : null}

@@ -23,8 +23,9 @@
  *  - Plugin steps on `vsb_project` filter on `vsb_initialp50trigger`, `vsb_capexstandard…`,
  *    `vsb_construction`, `vsb_enddate`, `vsb_operationsstartdatecod` — none of which this screen
  *    writes (the cluster panel writes Project Start … 4-Legally binding permits only).
- *  - `PerformRequestofGateApprovalCancellation` (request-triggered, sends mails / Teams cards) is
- *    NOT called; the start-cluster change that would need it is refused (`startClusterChangeBlocked`).
+ *  - `PerformRequestofGateApprovalCancellation` IS called since D81 (4 Nov 2026; `data/flows.ts`), between
+ *    Patch #2 and the forced return to Draft, when the start cluster changes while the Draft gate approval
+ *    is running (`cancelDraftGateApprovalIfRunning`). Until then that change was refused (D25).
  *  - `WhenProjectDatagetsupdated-SendE-MailCardtoPortfolioManagers` is referenced in the inventory
  *    but missing from the solution export; whether it fires on a project update is unknown (D25).
  */
@@ -35,7 +36,10 @@ import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { searchEntraPeople, getEntraPeople } from "@/data/adminGatesApprovals";
+import { listChecklistGates } from "@/data/checklist";
 import { loadMilestoneDurations } from "@/data/costBook";
+import { cancelGateApproval } from "@/data/flows";
+import { trace } from "@/platform/telemetry";
 import {
   listCountryAreas, listGeneralDataCountries, listProjectStates, listShareholders,
   listStateTrackings, listTerrainUtilizations, loadGeneralDataProject, lookupGermanTradeTaxRate,
@@ -44,9 +48,10 @@ import {
 } from "@/data/generalData";
 import type { Persona } from "@/data/adminGatesApprovals";
 import {
-  municipalitySearchIsSuppressed, projectSaveErrorText,
-  type CountryRef, type MunicipalityMode, type ProjectRow, type ProjectStateRef,
-  type ShareholdingEntity, type TrackingRow,
+  draftGateCancellationPayload, draftTrackingOf, municipalitySearchIsSuppressed, projectSaveErrorText,
+  shouldCancelGateApproval, startClusterChanged, startClusterNo,
+  type CountryRef, type GeneralDataForm, type MunicipalityMode, type ProjectRow, type ProjectSnapshot,
+  type ProjectStateRef, type ShareholdingEntity, type TrackingRow,
 } from "./rules";
 
 export type { AreaOption, MunicipalityRow, UtilizationOption } from "@/data/generalData";
@@ -205,11 +210,42 @@ export function useMilestoneDurations(countryId: string | null | undefined, tech
  */
 export function useGeneralDataWrites(projectId: string | undefined) {
   const id = projectId ?? "";
-  return usePlanWrite({
+  const writes = usePlanWrite({
     invalidate: [qk.generalDataProject(id), qk.shareholders(id), qk.stateTrackings(id), qk.project(id)],
     action: "change this project's general data",
     errorText: projectSaveErrorText,
   });
+  return { ...writes, cancelDraftGateApprovalIfRunning };
+}
+
+/**
+ * Step 1 of the hidden `btn_General_CancelActiveDraftGateApproval…` (Y:288-323), D81: when the start cluster changes
+ * while the Draft tracking's approval is running (`shouldCancelGateApproval`),
+ * `IfError(PerformRequestofGateApprovalCancellation.Run(gblProjectManagmentAppID, JSON(…)), false)`. It runs between
+ * Patch #2 and the forced return to Draft (`PlanJob.then`). `IfError(…, false)`: the canvas swallows a failed
+ * cancellation and saves anyway; here the failure is logged with its cause (rule 23) and the save goes on.
+ */
+export async function cancelDraftGateApprovalIfRunning(args: {
+  project: ProjectSnapshot;
+  form: GeneralDataForm;
+  projectStates: ProjectStateRef[];
+  trackings: TrackingRow[];
+  /** `gblProjectManagmentAppID` — the environment variable `vsb_ProjectManagementAppID`. */
+  appId: string;
+}): Promise<void> {
+  if (!startClusterChanged(args.project, args.form)) return;
+  const draftTracking = draftTrackingOf(args.trackings, args.projectStates);
+  if (!draftTracking || !shouldCancelGateApproval(draftTracking)) return;
+  try {
+    const gates = await listChecklistGates({ countryId: args.project.countryId, technology: args.project.technology ?? null });
+    const payload = draftGateCancellationPayload({
+      project: args.project, projectStates: args.projectStates,
+      oldStartClusterNo: startClusterNo(args.project.startCluster), draftTracking, gates,
+    });
+    if (payload) await cancelGateApproval({ appId: args.appId, project: payload });
+  } catch (error) {
+    trace("warning", "General Data: the Draft gate-approval cancellation flow failed; the save continues, as the canvas (IfError … false)", error);
+  }
 }
 
 /**

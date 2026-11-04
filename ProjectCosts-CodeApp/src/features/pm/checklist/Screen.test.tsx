@@ -11,7 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import {
-  ARIA, CHECKLIST_COL, EXCLUDED, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, TRACKING_COL, UI,
+  ARIA, CHECKLIST_COL, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, TRACKING_COL, UI,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
   type ProjectStateRef, type TrackingRow,
 } from "./rules";
@@ -61,10 +61,16 @@ const state = vi.hoisted(() => ({
   changeTerminal: vi.fn(async (..._a: unknown[]) => [] as string[]),
   prepareCluster: vi.fn(async (..._a: unknown[]) => [] as string[]),
   refresh: vi.fn(async (_p?: string) => undefined),
+  requestApproval: vi.fn(async (_r: unknown) => [] as string[]),
+  cancelGateApproval: vi.fn(async (_r: unknown) => [] as string[]),
+  cancelChecklistApproval: vi.fn(async (_r: unknown) => [] as string[]),
 }));
 
 vi.mock("@/app/SessionContext", () => ({
-  useSession: () => ({ projectId: "p1", locale: "en-US", loading: false, envVars: {} }),
+  useSession: () => ({
+    projectId: "p1", locale: "en-US", loading: false,
+    envVars: { vsb_ProjectManagementAppID: "app-1" }, session: { fullName: "Ada Lovelace" },
+  }),
 }));
 
 const ok = <T,>(data: T) => ({ data, isLoading: false, error: undefined, connected: true });
@@ -80,6 +86,8 @@ vi.mock("./hooks", () => ({
     backfill: vi.fn(), prepareCluster: state.prepareCluster, patchRow: state.patchRow,
     saveTransition: state.saveTransition, returnToPrevious: state.returnToPrevious,
     changeTerminal: state.changeTerminal, refresh: state.refresh,
+    requestApproval: state.requestApproval, cancelGateApproval: state.cancelGateApproval,
+    cancelChecklistApproval: state.cancelChecklistApproval,
   }),
 }));
 
@@ -103,7 +111,10 @@ function renderScreen(opts: {
 
 afterEach(() => {
   cleanup();
-  for (const f of [state.patchRow, state.saveTransition, state.returnToPrevious, state.changeTerminal, state.prepareCluster]) f.mockClear();
+  for (const f of [
+    state.patchRow, state.saveTransition, state.returnToPrevious, state.changeTerminal, state.prepareCluster,
+    state.requestApproval, state.cancelGateApproval, state.cancelChecklistApproval,
+  ]) f.mockClear();
   state.error = undefined;
 });
 
@@ -146,7 +157,7 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(texts.success).toBe(MSG.taskChanged);
   });
 
-  it("UT-CHKLST-904 a task with an active approval opens the panel; Request Approval is visible but disabled", async () => {
+  it("UT-CHKLST-904 a task with an active approval opens the panel; Request Approval needs a comment, then starts the checklist flow (D81)", async () => {
     renderScreen({ settings: [{
       id: "s1", projectDefaultChecklistId: "tpl-1", approvalMode: MODE.formalApproval, gateActive: true,
       portfolioManagerMail: "pm@x", defaultApprovers: null, defaultContributors: null, defaultNotifications: null,
@@ -157,9 +168,20 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(state.patchRow).not.toHaveBeenCalled();
     expect(await screen.findByText("Request Check List completion approval")).toBeTruthy();
     const request = await screen.findByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval") as HTMLButtonElement;
+    // `DisplayMode`: the comment error label hides the button's Edit mode (Y:5452) — empty at first.
     expect(request.disabled).toBe(true);
-    expect(request.title).toBe(EXCLUDED.requestApproval);
     expect(request.getAttribute("aria-label")).toBe(ARIA.requestApproval);
+    fireEvent.change(screen.getByTestId("txt_GeneralData_RightPanel_ProjectState_InpForm_Comment_1"), { target: { value: "Go" } });
+    await waitFor(() => expect(request.disabled).toBe(false));
+    fireEvent.click(request);
+    await waitFor(() => expect(state.requestApproval).toHaveBeenCalledTimes(1));
+    const req = state.requestApproval.mock.calls[0]![0] as Record<string, unknown>;
+    // A formal approval shows the due-date picker, so its default date travels (`If(dtp.Visible, dtp.SelectedDate, Blank())`).
+    expect(req).toMatchObject({
+      kind: "checklist", checkListDefaultApprovalId: "s1", currentStateId: "ps-0", approvalRequested: true, comment: "Go",
+      approvalDueDate: expect.any(String),
+    });
+    expect((req.row as ChecklistRow).id).toBe("cl-1");
     // SOURCE DEFECT fix: no Save in Checklist Completion mode.
     expect(screen.queryByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save")).toBeNull();
   });
@@ -187,18 +209,52 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(req.approvalDueDate).toBeNull();
   });
 
-  it("UT-CHKLST-907 a running gate approval: Cancel Approval Request is visible but disabled, Reset is hidden", () => {
+  it("UT-CHKLST-907 a running gate approval: Cancel Approval Request starts the cancellation flow with the app id and the user; Reset is hidden (D81)", async () => {
+    renderScreen({
+      trackings: [trackingRow(0, ACS.completed), trackingRow(1, ACS.completed), trackingRow(2, ACS.inProgress, { flowRunId: "run-1", flowApprovalId: "ap-1", approvalComment: "Ready" })],
+      gates: [{ id: "g2", clusterStateId: "ps-2", approvalMode: MODE.formalApproval, gateActive: true, portfolioManagerId: null,
+        portfolioManagerMail: "pm@x", defaultApprovals: null, defaultContributors: null, defaultNotifications: null }],
+    });
+    const cancel = screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval") as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    expect(cancel.title).toBe(UI.cancelApprovalRequestTooltip);
+    expect(screen.queryByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Return_1")).toBeNull();
+    expect(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster").textContent)
+      .toBe("View Cluster 3 Request History");
+    fireEvent.click(cancel);
+    await waitFor(() => expect(state.cancelGateApproval).toHaveBeenCalledTimes(1));
+    const req = state.cancelGateApproval.mock.calls[0]![0] as { state: { name: string }; comment: string; appId: string; userDisplayName: string; gate: { id: string } | null; previous: { name: string } | null; next: { name: string } | null };
+    expect(req.state.name).toBe("Cluster 2");
+    expect(req.comment).toBe("Ready");
+    expect(req.appId).toBe("app-1");
+    expect(req.userDisplayName).toBe("Ada Lovelace");
+    expect(req.gate?.id).toBe("g2");
+    expect([req.previous?.name, req.next?.name]).toEqual(["Cluster 1", "Cluster 3"]);
+  });
+
+  it("UT-CHKLST-907b a running gate approval with no comment keeps Cancel Approval Request disabled (the comment error label)", () => {
     renderScreen({
       trackings: [trackingRow(0, ACS.completed), trackingRow(1, ACS.completed), trackingRow(2, ACS.inProgress, { flowRunId: "run-1" })],
       gates: [{ id: "g2", clusterStateId: "ps-2", approvalMode: MODE.formalApproval, gateActive: true, portfolioManagerId: null,
         portfolioManagerMail: null, defaultApprovals: null, defaultContributors: null, defaultNotifications: null }],
     });
-    const cancel = screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval") as HTMLButtonElement;
-    expect(cancel.disabled).toBe(true);
-    expect(cancel.title).toBe(EXCLUDED.cancelGateApproval);
-    expect(screen.queryByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Return_1")).toBeNull();
-    expect(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster").textContent)
-      .toBe("View Cluster 3 Request History");
+    expect((screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_CancelApproval") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("UT-CHKLST-913 the row's ✕ on a pending checklist approval starts the checklist cancellation flow for that row (D81)", async () => {
+    renderScreen({
+      rows: [task({ approvalChecklistState: ACS.inProgress, flowRunId: "run-1", flowApprovalId: "ap-1" })],
+      settings: [{
+        id: "s1", projectDefaultChecklistId: "tpl-1", approvalMode: MODE.formalApproval, gateActive: true,
+        portfolioManagerMail: "pm@x", defaultApprovers: null, defaultContributors: null, defaultNotifications: null,
+      }],
+    });
+    const x = screen.getByTestId("ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval") as HTMLButtonElement;
+    expect(x.disabled).toBe(false);
+    expect(x.title).toBe(UI.cancelApproval);
+    fireEvent.click(x);
+    await waitFor(() => expect(state.cancelChecklistApproval).toHaveBeenCalledTimes(1));
+    expect((state.cancelChecklistApproval.mock.calls[0]![0] as ChecklistRow).id).toBe("cl-1");
   });
 
   it("UT-CHKLST-908 Reset to … sits in the main bar and confirms before returning", async () => {

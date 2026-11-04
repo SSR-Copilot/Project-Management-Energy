@@ -21,8 +21,8 @@
  *   progress        `cmp_PopUp_Checklist_Saving_Dialog` / `cmp_PopUp_GateProcess_Saving_LoadingDialog_1`
  *                   (`WriteFeedback`)
  *
- * Request Approval, Cancel Approval Request and the row's cancel ✕ start approval flows (mails /
- * Teams cards): visible, disabled, with the `EXCLUDED.*` reason (D29).
+ * Request Approval, Cancel Approval Request and the row's cancel ✕ run the approval flows through
+ * `hooks.ts` / `data/flows.ts` (D81, 4 Nov 2026; under D29 they were visible and disabled).
  */
 import { Fragment, useState } from "react";
 import {
@@ -43,8 +43,8 @@ import { useSession } from "@/app/SessionContext";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import { palette, space } from "@/theme/tokens";
 import {
-  ARIA, COMMENT_MAX_LENGTH, COMPLETION_DATE_MESSAGE, EXCLUDED, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, UI,
-  approvalDueDateDefault, buildDisplaySequence, buildOperationalSequence, canSavePanel,
+  ARIA, COMMENT_MAX_LENGTH, COMPLETION_DATE_MESSAGE, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, UI,
+  approvalDueDateDefault, buildDisplaySequence, buildOperationalSequence, canCancelApproval, canRequestApproval, canSavePanel,
   checklistPersonaTooltip, checklistTableTitle, checklistTitleTooltip, commentAsteriskVisible,
   commentBlockVisible, commentError, commentPatch, commentReadOnly, completeTaskPatch, completionDatePatch,
   defaultSelectedCluster, fmtCanvasDate, gateFor, gatePersonaTooltip, gateRelevanceLabel, historyDescriptor,
@@ -61,7 +61,7 @@ import {
 import { ClusterActions, ProjectStates, type ProjectStateStep, type TerminalAction } from "./ProjectStates";
 import {
   useChecklistApprovalSettings, useChecklistOrchestration, useChecklistProject, useChecklistWrites,
-  useClusterChecklist, useClusterSequence, useHistory,
+  useClusterChecklist, useClusterSequence, useHistory, type ApprovalRequest,
 } from "./hooks";
 
 /* ────────────────────────────────────────────────────────────────── styles */
@@ -226,7 +226,7 @@ type PanelForm =
 
 export default function CheckListScreen() {
   const s = useStyles();
-  const { projectId, locale } = useSession();
+  const { projectId, locale, envVars, session } = useSession();
 
   const projectQ = useChecklistProject(projectId);
   const project = projectQ.data;
@@ -386,6 +386,34 @@ export default function CheckListScreen() {
     if (done !== null) { setPanelForm(null); setSelectedClusterId(null); }
   };
 
+  /** `pcf_…_Buttons_RequestApproval.OnChange` — both panel modes (D81). */
+  const onRequestApproval = async () => {
+    if (!panel || !project || !current) return;
+    const due = showApprovalDueDate(panel) && panel.approvalDueDate ? ymdToLocalIso(panel.approvalDueDate) : null;
+    const req: ApprovalRequest = panel.target.kind === "cluster"
+      ? { kind: "cluster", project, state: current, gate, comment: panel.comment, approvalDueDate: due }
+      : {
+        kind: "checklist", project, row: panel.target.row,
+        // `LookUp('Check List Default Approvals', template).'Check List Default Approval'` (Y:5517-5520): the first row, active or not.
+        checkListDefaultApprovalId: panel.target.first?.id ?? "",
+        currentStateId: current.id,
+        approvalRequested: rowApproval(settings, panel.target.row).icon === "People",
+        comment: panel.comment, approvalDueDate: due,
+      };
+    const done = await writes.requestApproval(req);
+    // The canvas closes the panel, refreshes and `Navigate`s to the screen again (Y:5709-5719).
+    if (done !== null) { setPanelForm(null); setSelectedClusterId(null); }
+  };
+
+  /** `pcf_…_Buttons_CancelApproval.OnChange` (D81) — the comment is the closed panel's box, i.e. the tracking's. */
+  const onCancelGateApproval = () => {
+    if (!clusterPanel || !project || !current) return;
+    void writes.cancelGateApproval({
+      project, state: current, gate, previous, next, comment: clusterPanel.comment,
+      userDisplayName: session?.fullName ?? "", appId: envVars.vsb_ProjectManagementAppID ?? "",
+    });
+  };
+
   const requestCaption = panel ? requestApprovalCaption(panel, next) : "";
   const dateRow = rows.find((r) => r.id === dateRowId) ?? null;
   const loadError = projectQ.error ?? sequenceQ.error ?? checklistQ.error;
@@ -422,7 +450,9 @@ export default function CheckListScreen() {
 
       {/* `con_Checklist_DisplayProject_Body_Content_Buttons` */}
       <ClusterActions
-        cancelApprovalVisible={clusterPanel !== null && showCancelApproval(clusterPanel)}
+        cancelApproval={clusterPanel && showCancelApproval(clusterPanel)
+          ? { disabled: locked || busy || !canCancelApproval(clusterPanel), onClick: onCancelGateApproval }
+          : null}
         reset={clusterPanel && showReturnToPrevious(clusterPanel, previous, startCluster) ? {
           caption: resetToPreviousCaption(previous),
           disabled: locked || busy,
@@ -543,8 +573,9 @@ export default function CheckListScreen() {
                           {cancelVisible ? (
                             <Button appearance="transparent" size="small" className={s.cancelIcon} icon={<DismissRegular />}
                               aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
-                              disabled title={EXCLUDED.cancelChecklistApproval}
-                              data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval" />
+                              disabled={disabledRow} title={UI.cancelApproval}
+                              data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
+                              onClick={() => void writes.cancelChecklistApproval(row)} />
                           ) : null}
                           {personaTip ? (
                             <Tooltip content={<span className={s.preLine}>{lines(personaTip)}</span>} relationship="description" withArrow>
@@ -619,7 +650,7 @@ export default function CheckListScreen() {
             {showRequestApproval(panel) && requestCaption ? (
               <Button appearance="primary" aria-label={ARIA.requestApproval}
                 data-testid="pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_RequestApproval"
-                disabled title={EXCLUDED.requestApproval}>
+                disabled={busy || !canRequestApproval(panel)} onClick={() => void onRequestApproval()}>
                 {requestCaption}
               </Button>
             ) : null}

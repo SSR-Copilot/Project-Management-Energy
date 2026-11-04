@@ -9,7 +9,7 @@ import { useCallback, useState } from "react";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
-import { executePlan, PlanError } from "./executePlan";
+import { executePlan, PlanError, type PlanResult } from "./executePlan";
 import type { WritePlan } from "./writePlan";
 
 /** One write: a ready plan, or a function that reads what it needs and returns the plan. */
@@ -24,6 +24,14 @@ export interface PlanJob {
   /** This job's canvas error text, when it differs from the screen's default. */
   errorText?: (detail: string) => string;
   plan: WritePlan | (() => Promise<WritePlan>);
+  /**
+   * A second step in the SAME job, after the plan's writes (D81): the canvas sequences `Patch → Flow.Run → Patch`
+   * call the cloud flow here, with the first plan's result (the id a create returned), and return the writes that
+   * follow — the `runid`-gated write-back, the audit note — or null when nothing follows. It may change the progress
+   * text. One progress, one error, one refresh for the whole sequence. A failure in it is reported like a failed
+   * write, and the first plan's writes stay, which is the canvas's own (non-transactional) order.
+   */
+  then?: (first: PlanResult, ctl: { setProgress: (text: string) => void }) => Promise<WritePlan | null | undefined>;
 }
 
 /** The message for a refused or failed write — permission first, then how far a plan got. */
@@ -56,7 +64,12 @@ export function usePlanWrite(opts: {
   const mutation = useMutation({
     mutationFn: async (job: PlanJob) => {
       const plan = typeof job.plan === "function" ? await job.plan() : job.plan;
-      return { ...(await executePlan(plan, job.progress)), plan };
+      const first = await executePlan(plan, job.progress);
+      if (!job.then) return { ...first, plan };
+      const next = await job.then(first, { setProgress });
+      if (!next) return { ...first, plan };
+      const second = await executePlan(next, job.progress);
+      return { done: first.done + second.done, createdIds: [...first.createdIds, ...second.createdIds], plan };
     },
     onSettled: () => Promise.all(opts.invalidate.map((queryKey) => qc.invalidateQueries({ queryKey }))),
   });

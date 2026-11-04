@@ -31,6 +31,8 @@ export const ENV_VAR_NAMES = [
   "vsb_ProjectManagementAppID",
   "vsb_VSBCloudInfoCenterUrl",
   "vsb_VSBcloudControllingApprovalGroup",
+  /** `gblPrimarilyApprovalGroupID` (`App.OnStart:687`) — the group `RequestModulePermission` asks (D81). */
+  "vsb_PrimarilyApprovalGroupID",
   /* Added for the Main Project Overview, which is now the landing screen. */
   /** The Analytics app Simulate launches. */
   "vsb_AnalyticsAppID",

@@ -23,9 +23,13 @@
  *    Croatia only). Fired by the move to the next cluster and by Abandon / Inactivate / Activate.
  *  - No plugin step filters on these tables or columns.
  *
- * NOT CALLED (product decision D29 — they send approval mails / Teams cards): `PerformCommonRequestofGateApproval`,
- * `PerformCommonRequestofCheckListApproval`, `PerformRequestofGateApprovalCancellation`,
- * `PerformRequestofCheckListApprovalCancellation`. `power.config.json` has no connection reference for them.
+ * FLOWS (D81, 4 Nov 2026; `ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md`) — called through `data/flows.ts`,
+ * each inside ONE `usePlanWrite` job with the canvas's writes around it (`PlanJob.then`), in the canvas order:
+ *  - Request Approval: the pre-flow patch → `PerformCommonRequestofGateApproval` / `…CheckListApproval` → the
+ *    `runid`-gated write-back (checklist mode) and the audit note;
+ *  - Cancel Approval Request: the tracking patch → `PerformRequestofGateApprovalCancellation` → the note;
+ *  - the row's ✕: `PerformRequestofCheckListApprovalCancellation`, then the refresh.
+ * Before D81 these three controls were visible and disabled (D29: the flows send mails / Teams cards).
  */
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,13 +37,20 @@ import { ES, ES_PROCESS } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
+import { emptyPlan, refusePlan } from "@/data/writePlan";
+import {
+  cancelChecklistApproval as cancelChecklistApprovalFlow, cancelGateApproval as cancelGateApprovalFlow,
+  requestChecklistApproval, requestGateApproval,
+} from "@/data/flows";
 import {
   countClusterChecklistRows, listChecklistApprovalSettings, listChecklistGates, listChecklistProjectStates,
   listChecklistTrackings, listClusterChecklist, listClusterTemplates, listHistory, loadChecklistProject,
   type HistoryEntry,
 } from "@/data/checklist";
 import {
-  MSG, backfillNeeded, checklistHtmlTable, needsTemplates, planChecklistRowPatch, planClusterTransition,
+  MSG, backfillNeeded, checklistCancelSucceeded, checklistHtmlTable, gateCancellationPayload, needsTemplates,
+  planChecklistApprovalRequestFollowUp, planChecklistApprovalRequestPatch, planChecklistRowPatch, planClusterTransition,
+  planGateApprovalRequestNote, planGateApprovalRequestPatch, planGateCancelNote, planGateCancelPatch,
   planPrepareCluster, planReturnToPreviousCluster, planSkippedClusterBackfill, planTerminalStateChange,
   shouldBackfillSkippedClusters, startClusterNo, trackingFor,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
@@ -170,6 +181,44 @@ export interface ReturnRequest {
   previous: SequenceEntry;
 }
 
+/** Request Approval (`pcf_…_Buttons_RequestApproval.OnChange`, D81): the cluster branch and the checklist branch. */
+export type ApprovalRequest =
+  | {
+      kind: "cluster";
+      project: ChecklistProject;
+      state: SequenceEntry;
+      gate: GateSetting | null;
+      comment: string;
+      approvalDueDate: string | null;
+    }
+  | {
+      kind: "checklist";
+      project: ChecklistProject;
+      row: ChecklistRow;
+      /** `LookUp('Check List Default Approvals', template).'Check List Default Approval'` — the first row, active or not. */
+      checkListDefaultApprovalId: string;
+      /** `locRecordSelectedProjectState.'Project State'` — the selected cluster. */
+      currentStateId: string;
+      /** The row's approval-mode icon is People: "Approval requested"; otherwise "Completed and notified about Check List". */
+      approvalRequested: boolean;
+      comment: string;
+      approvalDueDate: string | null;
+    };
+
+/** Cancel Approval Request (`pcf_…_Buttons_CancelApproval.OnChange`, D81). */
+export interface GateCancelRequest {
+  project: ChecklistProject;
+  state: SequenceEntry;
+  gate: GateSetting | null;
+  previous: SequenceEntry | null;
+  next: SequenceEntry | null;
+  comment: string;
+  /** `gblCurrentUser.DisplayName`. */
+  userDisplayName: string;
+  /** `gblProjectManagmentAppID` — the environment variable `vsb_ProjectManagementAppID`. */
+  appId: string;
+}
+
 /** Runs the screen's writes and refreshes the screen, the header and the other project views. */
 export function useChecklistWrites(projectId: string | undefined) {
   const id = projectId ?? "";
@@ -253,9 +302,91 @@ export function useChecklistWrites(projectId: string | undefined) {
     }),
   });
 
+  /**
+   * `pcf_…_Buttons_RequestApproval.OnChange` (Y:5470-5720), D81: the pre-flow patch → the flow → the write-back and
+   * the note, in the canvas order, as one job. Cluster mode: the flow updates the tracking row itself, so only the
+   * note follows; the row's id (an existing tracking, or the one the patch created) is the flow's StateTrackingGUID.
+   */
+  const requestApproval = (req: ApprovalRequest) => {
+    if (req.kind === "checklist") {
+      return w.run({
+        progress: MSG.pleaseWait, errorText: MSG.projectStatusError,
+        plan: planChecklistApprovalRequestPatch({
+          row: req.row, comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
+        }),
+        then: async () => planChecklistApprovalRequestFollowUp({
+          project: req.project, row: req.row, approvalRequested: req.approvalRequested,
+          result: await requestChecklistApproval({
+            projectId: req.project.id, checklistId: req.row.id,
+            checkListDefaultApprovalId: req.checkListDefaultApprovalId, currentProjectStateId: req.currentStateId,
+          }),
+        }),
+      });
+    }
+    let trackingId: string | null = null;
+    return w.run({
+      progress: MSG.pleaseWait, errorText: MSG.projectStatusError,
+      plan: async () => {
+        const tracking = trackingFor(await listChecklistTrackings(id), req.state.id);
+        trackingId = tracking?.id ?? null;
+        return planGateApprovalRequestPatch({
+          project: req.project, state: req.state, tracking, gate: req.gate,
+          comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
+        });
+      },
+      then: async (first) => {
+        const stateTrackingId = trackingId ?? first.createdIds[0] ?? "";
+        await requestGateApproval({
+          projectId: req.project.id, stateId: req.state.id, stateTrackingId, defaultApprovalId: req.state.gateId ?? "",
+        });
+        const rows = await listClusterChecklist(id, req.state.id);
+        return planGateApprovalRequestNote({
+          project: req.project, state: req.state, trackingId: stateTrackingId, comment: req.comment,
+          noteHtml: checklistHtmlTable(rows),
+        });
+      },
+    });
+  };
+
+  /** `pcf_…_Buttons_CancelApproval.OnChange` (Y:1536-1640), D81: the tracking patch → the cancellation flow → the note. */
+  const cancelGateApproval = (req: GateCancelRequest) => {
+    let tracking: TrackingRow | null = null;
+    return w.run({
+      progress: MSG.cancelApprovalSent(req.state.name), errorText: MSG.projectStatusError,
+      plan: async () => {
+        tracking = trackingFor(await listChecklistTrackings(id), req.state.id);
+        if (!tracking) return refusePlan(MSG.noTrackingToCancel);
+        return planGateCancelPatch({ project: req.project, tracking, canEdit: CAN_EDIT_SELECTED_PROJECT });
+      },
+      then: async (_first, ctl) => {
+        ctl.setProgress(MSG.cancelClusterApproval);
+        await cancelGateApprovalFlow({
+          appId: req.appId,
+          project: gateCancellationPayload({
+            project: req.project, state: req.state, tracking: tracking!, gate: req.gate, previous: req.previous, next: req.next,
+          }),
+        });
+        return planGateCancelNote({ project: req.project, tracking: tracking!, comment: req.comment, userDisplayName: req.userDisplayName });
+      },
+    });
+  };
+
+  /** `ico_…_ListRow_CancelApproval.OnSelect` (Y:3689-3703), D81: the flow, then `Refresh('Project Checklists')`. */
+  const cancelChecklistApproval = (row: ChecklistRow) => w.run({
+    progress: MSG.cancelingChecklistApproval,
+    plan: emptyPlan(),
+    then: async () => {
+      const result = await cancelChecklistApprovalFlow(row.id);
+      // DIVERGENCE (rule 3): the canvas keeps `.success` in a context variable and shows nothing for a false.
+      if (!checklistCancelSucceeded(result)) throw new Error(MSG.checklistCancelFailed(row.title));
+      return null;
+    },
+  });
+
   return {
     progress: w.progress, error: w.error, success: w.success, clear: w.clear,
     backfill, prepareCluster, patchRow, saveTransition, returnToPrevious, changeTerminal,
+    requestApproval, cancelGateApproval, cancelChecklistApproval,
     /** The command bar's Refresh (`Navigate` to the same screen) and the history Refresh. */
     refresh: (part?: string) => qc.invalidateQueries({ queryKey: part ? qk.checklist(id, part) : qk.checklistAll(id) }),
   };

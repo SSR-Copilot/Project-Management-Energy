@@ -47,6 +47,12 @@ development sessions and is recorded here because the README doesn't carry it ye
    (preview): `npx @microsoft/power-apps-cli app add dataverse-api --api-name <Action>`
    (`pa` 1.2.0; [Microsoft docs](https://learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/add-dataverse-action-function)).
    It regenerates `dataSourcesInfo.ts` (diff it afterwards; every table must survive) and writes `src/generated/`.
+   **Cloud flows** (4 Nov 2026, D81): a solution-aware instant flow with the Power Apps V2 trigger is added with
+   `pa app add flow --flow-id <id>` (`pa app list-flows` lists them). It writes `src/generated/{models,services}/<Flow>*.ts`,
+   `.power/schemas/logicflows/<Flow>.Schema.json`, a `"Connector"` entry in `dataSourcesInfo.ts` and a `shared_logicflows`
+   connection reference in `power.config.json`. The six PM flows and their ids are in
+   `ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md` §6; `check:power` checks them. Call a flow only through
+   `data/flows.ts` (the one positional mapping), never a generated service from a screen.
    **Keep the `environment_<id>` entry** (corrected 27 Oct 2026, D51 §11.2): for an action
    bound to the abstract `crmbaseentity` (e.g. `CreateMultiple`, `UpdateMultiple`,
    `UpsertMultiple`) it also adds a binding entry to `power.config.json`
@@ -274,14 +280,15 @@ it. Lint warnings do not fail the gate, but do not add new ones.
 Run every step, in order, from `ProjectCosts-CodeApp/`. Stop at the first failure.
 
 1. **Clean install.** `npm ci`, so the build uses exactly the lockfile.
-2. **Data sources present.** `npm run check:power` must report 89 registered and 0 problems
-   (count as of 28 Oct 2026: 81 tables, the `CreateMultiple`, `UpdateMultiple` and
-   `UpsertMultiple` actions (D51), and the 5 Fabric SQL tables (D54); it grows as screens
-   register tables).
+2. **Data sources present.** `npm run check:power` must report 93 registered and 0 problems
+   (count as of 4 Nov 2026: 81 tables, the `CreateMultiple`, `UpdateMultiple` and
+   `UpsertMultiple` actions (D51), the 5 Fabric SQL tables (D54) and the 4 PM cloud flows (D81;
+   95 once the two Generators flows are added); it grows as screens register tables).
    `.power/` is git-ignored, so on a fresh checkout regenerate it first: re-add each table in
    `power.config.json` with `pac code add-data-source -a dataverse -t <logicalName>`, and the
    `CreateMultiple` and `UpdateMultiple` actions (plus `UpsertMultiple` while its generated
-   files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds). Re-add
+   files remain) with the `pa` CLI (rule 9; keep the `environment_<id>` entry it adds), then each
+   flow with `pa app add flow --flow-id <id>` (the ids: `16-PM-FLOWS-IN-THE-CODE-APP.md` §6). Re-add
    the SQL tables with the D54 command, then restore the `datasetOverride` the CLI does not
    write, and re-run the check.
 3. **The full gate.** `npm run verify` must exit 0.

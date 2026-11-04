@@ -12,10 +12,13 @@
  * Checks:
  *   - `.power/schemas/appschemas/dataSourcesInfo.ts` exists;
  *   - every `power.config.json` data source has an entry there and a `<key>.Schema.json`;
+ *   - every cloud flow in `power.config.json` (a `shared_logicflows` connection reference, D81) has an entry there
+ *     and a `.power/schemas/logicflows/<Flow>.Schema.json`;
  *   - every `src/generated/services/*Service.ts` `dataSourceName` has an entry there.
  *
  * Fix: from app/, `pac code add-data-source -a dataverse -t <logicalName>` for each missing
- * table (pac profile on VSBCloud_Dev), diffing `dataSourcesInfo.ts` after each one.
+ * table (pac profile on VSBCloud_Dev), diffing `dataSourcesInfo.ts` after each one; for a flow,
+ * `pa app add flow --flow-id <id>` (the id is printed with the problem).
  *
  * Usage (from app/):  node scripts/check-power-sources.mjs
  *   exit 0 = clean; exit 1 = `.power/` missing or out of step.
@@ -27,6 +30,7 @@ import { fileURLToPath } from "node:url";
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const INFO = path.join(APP, ".power/schemas/appschemas/dataSourcesInfo.ts");
 const SCHEMAS = path.join(APP, ".power/schemas/dataverse");
+const FLOW_SCHEMAS = path.join(APP, ".power/schemas/logicflows");
 const SERVICES = path.join(APP, "src/generated/services");
 
 export function checkPowerSources() {
@@ -47,6 +51,21 @@ export function checkPowerSources() {
     if (entitySetName === "Environment" && key.startsWith("environment_")) continue;
     if (!registered.has(entitySetName)) problems.push(`${logicalName}: not in dataSourcesInfo.ts`);
     if (!fs.existsSync(path.join(SCHEMAS, `${key}.Schema.json`))) problems.push(`${logicalName}: no ${key}.Schema.json`);
+  }
+  // D81: `pa app add flow` registers a cloud flow as a `"Connector"` entry in dataSourcesInfo.ts, writes
+  // `.power/schemas/logicflows/<Flow>.Schema.json` (the display name without spaces) and lists it in
+  // `power.config.json` under a `shared_logicflows` connection reference with its flow id. `.power/` is
+  // git-ignored, so a fresh checkout re-adds each flow with that id.
+  for (const ref of Object.values(config.connectionReferences ?? {})) {
+    if (!String(ref.id ?? "").endsWith("/shared_logicflows")) continue;
+    const fix = `pa app add flow --flow-id ${ref.workflowDetails?.workflowName ?? "<flow id>"}`;
+    const schema = String(ref.workflowDetails?.workflowDisplayName ?? "").replace(/\s+/g, "");
+    for (const name of ref.dataSources ?? []) {
+      if (!registered.has(name)) problems.push(`flow ${name}: not in dataSourcesInfo.ts (${fix})`);
+      if (!schema || !fs.existsSync(path.join(FLOW_SCHEMAS, `${schema}.Schema.json`))) {
+        problems.push(`flow ${name}: no ${schema || name}.Schema.json under .power/schemas/logicflows (${fix})`);
+      }
+    }
   }
   for (const file of fs.readdirSync(SERVICES).filter((f) => f.endsWith("Service.ts"))) {
     const m = /dataSourceName = '([^']+)'/.exec(fs.readFileSync(path.join(SERVICES, file), "utf8"));

@@ -124,11 +124,11 @@ earlier decisions D19, D22 and D24 and are waiting on the product owner (D36 §6
 
 | Screen | Canvas problem found | What the code app does |
 |---|---|---|
-| **General Data / New Project** (D25) | Terrain, local tax tables and shareholder entities were thought to be Fabric SQL | Confirmed they are Dataverse tables and connected them (5 tables). **Creating a new project** added on 20 Oct (PO). Cancellation flow for gate approvals left out; leave guard added in D35 |
+| **General Data / New Project** (D25) | Terrain, local tax tables and shareholder entities were thought to be Fabric SQL | Confirmed they are Dataverse tables and connected them (5 tables). **Creating a new project** added on 20 Oct (PO). Cancellation flow for gate approvals left out until D81 (4 Nov 2026), now called between Patch #2 and the Draft return; leave guard added in D35 |
 | **Milestones** (D26) | Plan said "formally blocked" by a missing flow | Cleared: the flow call sits inside a comment block. 4 SOURCE DEFECTs fixed; the COD guard, FID re-pricing and recalculating notice connected. Default revenue seed stays unconnected (Fabric SQL, D2) |
 | **Generators** (D27) | Module-permission flows send mails and Teams cards; a type Save blocker and a PV supplier write error | Both fixed. 7 SOURCE DEFECTs fixed; 10 tables connected; permission-request controls shown but disabled with an `EXCLUDED.*` tooltip; `CommandBar` gained a tooltip for a disabled command |
 | **Production** (D28) | Seasonality and negative-price values come from Fabric SQL | Shows a clear "not connected" notice instead of silently blank values; save, delete, activate / deactivate, project roll-up and the one-shot standard Land Lease / Other OPEX / O&M contracts are connected |
-| **Checklist** (D29) | Approval buttons start flows (mails, Teams cards) | Everything not tied to a flow is connected: back-fill, tracking, materialisation, Complete / In Progress, comments, ungated moves, Reset, Abandon / Inactivate / Activate. Approval buttons visible but disabled |
+| **Checklist** (D29) | Approval buttons start flows (mails, Teams cards) | Everything not tied to a flow is connected: back-fill, tracking, materialisation, Complete / In Progress, comments, ungated moves, Reset, Abandon / Inactivate / Activate. Approval buttons visible but disabled until D81 (4 Nov 2026), now wired to the four flows (Request Approval in both modes, Cancel Approval Request, the row ✕) |
 | **Checklist, UI parity** (27 Oct, D66, proposed) | Screenshot comparison with the canvas | Mail / People gate icon at 20 px; state text lined up across the stage cards; the clock under the gate; plain refresh icon; 16 px text and a plain ✕ on three action buttons; table capped at 1520 px (a table ignores `max-width`, so it had filled the window); 37 px rows with 80 x 26 toggles; Note comment icon and a 20 px approval icon in the canvas colours |
 | **Team** (D30) | Office 365 Users search | Entra (`aadusers`) people search and pre-selection (D25-Q6); 5 SOURCE DEFECTs fixed; add / edit / delete a member |
 | **Planning** (D31) | Description lookup name guessed wrongly in earlier code; acquisition type caption mismatch | Correct names from generated models; get-or-create of planning and acquisition rows on visit; permit add / edit / delete; Save and Clear & Save; 33 canvas ids verified |
@@ -304,6 +304,26 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
   - **Harness, fixed:** CSS-drawn texts (`::before` / `::after` with a quoted `content`) are read as texts, and a native
     `<select>` value is placed where its text starts (UT-PHREAD-DOM-004…006). Before, 64 of the Land Lease "differences"
     were these two measuring artefacts plus the four code-app differences listed under section H.
+
+## The PM app's cloud flows in the code app (4 Nov 2026, D81) — in progress (not approved for DEV)
+
+- **Connected (Check List, General Data):** the four approval flows the canvas calls are called from the code app through
+  one typed module (`data/flows.ts`), each inside one job with the canvas's writes before and after it, in the canvas
+  order (`PlanJob.then`). The controls D29 / D25 had disabled (Request Approval, Cancel Approval Request, the row ✕, the
+  start-cluster change during a Draft approval) work as the canvas's.
+- **Fixed (rule 3):** a flow the platform refuses, or a checklist cancellation that answers `success: false`, is shown as
+  an error; the canvas stored the result in a context variable and showed nothing. The General Data cancellation keeps
+  the canvas `IfError(…, false)` (the save goes on) but logs the failure with its cause (rule 23).
+- **Fixed (rule 23):** every flow call prints a `[VSB] DATA execute flow <name>` line with its time and outcome; the
+  canvas had no trace.
+- **New gate:** `check:power` verifies each flow's schema and registration and prints the `pa app add flow` command for a
+  missing one.
+- **Reproduced (DIVERGENCE recorded):** the General Data cancellation's gate record is looked up in the project's own
+  country and technology; the canvas `LookUp` ran across all countries and took the first row for that cluster.
+- **Connection references:** nothing to add in the code app — the flows' actions run through the solution's connection
+  references, all bound in DEV to the service account's connections (`16-PM-FLOWS-IN-THE-CODE-APP.md` §3). Found: two
+  Generators flows use *Provided by run-only user* connections, which a code app cannot supply (§3b); they wait for that
+  setting.
 
 ## Troubleshooting aids (29 Oct 2026, D74) — new
 

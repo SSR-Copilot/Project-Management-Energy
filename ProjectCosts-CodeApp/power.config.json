@@ -62,6 +62,54 @@
         }
       },
       "xrmConnectionReferenceLogicalName": "vsb_VSBCloudFabricSQL"
+    },
+    "de404a89-59e6-4058-821f-b175b4b9faf0": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "performcommonrequestofchecklistapproval"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "6ebf62a7-1072-f011-b4cb-000d3a48f1ec",
+        "workflowDisplayName": "Perform Common Request of Check List Approval",
+        "workflowName": "b0b35f43-bb1c-572e-76f1-40ec3c442975"
+      }
+    },
+    "44d78ea5-300c-4397-bc4a-355dda6bf08b": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "performcommonrequestofgateapproval"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "1592dad2-68fa-ef11-bae2-6045bdf29094",
+        "workflowDisplayName": "Perform Common Request of Gate Approval",
+        "workflowName": "7235fad7-ed32-a0f5-8793-7238df8f0f14"
+      }
+    },
+    "c9f19dee-b4b6-490c-b813-c927e48cc262": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "performrequestofgateapprovalcancellation"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "3d26efe9-a687-ef11-ac20-000d3a4c04ca",
+        "workflowDisplayName": "Perform Request of Gate Approval Cancellation",
+        "workflowName": "d68b3a66-6ae8-ce06-68ec-d9af740cc18c"
+      }
+    },
+    "1c58e435-5900-4096-980d-851410b72de3": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "performrequestofchecklistapprovalcancellation"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "c476af9a-2383-f011-b4cc-000d3a48f1ec",
+        "workflowDisplayName": "Perform Request of Check List Approval Cancellation",
+        "workflowName": "67e2929f-a73e-a2b3-039c-569b58bda414"
+      }
     }
   },
   "databaseReferences": {
