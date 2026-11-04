@@ -19,10 +19,28 @@ import {
 } from "@/features/pm/team/rules";
 import { getEntraPeople } from "./adminGatesApprovals";
 import { fetchAll, fetchPage } from "./client";
+import { trace } from "@/platform/telemetry";
 import { guid, lookupEq, numberOf } from "./odata";
 
 type Raw = Record<string, unknown>;
 type People = Awaited<ReturnType<typeof getEntraPeople>>;
+
+/**
+ * The names behind the Project Manager / Deputy / member lookups, one Entra request per person.
+ * A person whose directory entry cannot be read (deleted, guest, a Graph-backed virtual-table
+ * failure) shows with a BLANK name — as the canvas `Member.'Display Name'` does — instead of
+ * failing the whole Team screen with "Team data is unavailable" (E2E-Tests-FIX, 4 Nov 2026). The
+ * failure is kept in the trace buffer as a warning.
+ */
+async function getPeopleTolerant(ids: readonly string[]): Promise<People> {
+  const out: People = new Map();
+  const results = await Promise.allSettled([...new Set(ids)].map((id) => getEntraPeople([id])));
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") r.value.forEach((v, k) => out.set(k, v));
+    else trace("warning", `Team: could not read the directory entry of person ${[...new Set(ids)][i]}`, r.reason);
+  });
+  return out;
+}
 const raw = <T,>(rows: T[]): Raw[] => rows as unknown as Raw[];
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const formatted = (col: string): string => `${col}@OData.Community.Display.V1.FormattedValue`;
@@ -56,7 +74,7 @@ export async function loadTeamProject(projectId: string): Promise<TeamProject | 
   if (!r) return null;
   const ids = [str(r[PROJECT_COL.projectManager]), str(r[PROJECT_COL.deputyProjectManager])]
     .filter((x): x is string => Boolean(x));
-  const people = ids.length > 0 ? await getEntraPeople(ids) : new Map() as People;
+  const people = ids.length > 0 ? await getPeopleTolerant(ids) : new Map() as People;
   return {
     id: String(r[PROJECT_COL.id]),
     projectNumber: str(r[PROJECT_COL.projectNumber]),
@@ -108,7 +126,7 @@ export async function listTeamMembers(projectId: string): Promise<ProjectMemberR
     listMemberDescriptions(),
   ]);
   const ids = rows.map((r) => str(r[MEMBER_COL.member])).filter((x): x is string => Boolean(x));
-  const people = ids.length > 0 ? await getEntraPeople(ids) : new Map() as People;
+  const people = ids.length > 0 ? await getPeopleTolerant(ids) : new Map() as People;
   const byId = new Map(descriptions.map((d) => [d.id, d]));
   return rows.map((r) => {
     const who = person(r, MEMBER_COL.member, people);
