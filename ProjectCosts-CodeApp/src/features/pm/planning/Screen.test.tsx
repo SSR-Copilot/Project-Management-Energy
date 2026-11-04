@@ -102,9 +102,10 @@ describe("UT-PLAN Screen (connected)", () => {
     expect(coop.getAttribute("aria-label")).toBe(`drp_${C}_Cooperation`);
     expect(screen.getByTestId(`txt_${C}_CooperationPartner`).getAttribute("aria-label")).toBe(`txt_${C}_CooperationPartner`);
     expect(screen.getByTestId(`pcf_${C}_ButtonsSave`).getAttribute("aria-label")).toBe(`pcf_${C}_ButtonsSave`);
-    // The permit grid shows dd/mm/yyyy (D31 L3); only the Actual date is in the theme blue.
-    expect(screen.getByText("01/04/2026").className).toBe(screen.getByText("BImSchG").className);
-    expect(screen.getByText("01/02/2027").className).not.toBe(screen.getByText("BImSchG").className);
+    // The permit grid shows the canvas d/mm/yyyy (no leading zero on the day; PO, 4 Nov 2026,
+    // replacing D31 L3's dd/mm/yyyy); only the Actual date is in the theme blue.
+    expect(screen.getByText("1/04/2026").className).toBe(screen.getByText("BImSchG").className);
+    expect(screen.getByText("1/02/2027").className).not.toBe(screen.getByText("BImSchG").className);
   });
 
   it("UT-PLAN-902 the lock banner lists the missing sections and disables the tabs and commands", () => {
