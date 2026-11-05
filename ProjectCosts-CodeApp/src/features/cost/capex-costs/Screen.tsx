@@ -299,7 +299,7 @@ export default function CapexCostsScreen() {
   /** A standard contract's live duplicate check is in flight: a second click meanwhile is ignored (CAPEX-135, D90). */
   const standardChecking = useRef(false);
   /**
-   * What the user TYPED in each month box, keyed `"<year>-<month>"` (D89/D90). A `type="number"` box reports `""` for a
+   * What the user TYPED in each month box, keyed `"<year>-<month>"` (D93/D90). A `type="number"` box reports `""` for a
    * letter and the model keeps a number, so a typed "abc" was swallowed and its message ("Value must be a numeric") could
    * never show. The canvas box is a text input (`FirstMonth_*`); the text is kept here and validated as typed.
    */
@@ -927,7 +927,7 @@ export default function CapexCostsScreen() {
             disabled={busy || !recalculateEnabled({ line: edit, costValue, saveEnabled: valid })}
             onClick={() => {
               if (!edit) return;
-              // The boxes show the rounded figures, not the text that was typed (D89/D90).
+              // The boxes show the rounded figures, not the text that was typed (D93/D90).
               setMonthText({});
               update({ payments: recalculatedPayments(edit.payments, edit.distributionScheme) });
             }} />

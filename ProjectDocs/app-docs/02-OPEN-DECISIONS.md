@@ -39,6 +39,18 @@ greying, so a user without rights learns on click rather than on sight.
 **Needed from you:** which of the three. If it is the Custom API, it should be scoped now,
 because five screens will want it.
 
+**Addendum (5 Nov 2026) — the header's Permissions row.** The PM `cmp_Header` user menu carries a
+`permissions` row, `If(gblCurrentUser.CanEditSelectedProject, "Can edit Project", "Can view
+Project")`, where the flag is the same `DataSourceInfo` / `RecordInfo` pair, set in each screen's
+`OnVisible`. Ported 5 Nov 2026 (`components/headerRules.projectPermissionLabel`, `App.tsx`): the
+text goes through the same `PrivilegeProvider` seam, so under option (a) every selected project
+reads "Can edit Project" — including for a user Dataverse would refuse, who learns on click, as
+with every command today. It reads "Can view Project" with no project selected (the project list,
+New Project, Application Settings), as the canvas does before any project screen sets the flag.
+The row becomes truthful per record the moment this decision picks the role matrix or the Custom
+API; nothing in the header changes then. The Cost app's `cmp_Header` has no such row, so the Cost
+screens do not show it.
+
 ---
 
 ## D2 · The BoP standard-assumption margin: Fabric SQL or Dataverse?
@@ -6754,7 +6766,7 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 
 **E2E parity:** not run for D88; the user chose to skip it (5 Nov 2026). `npm run verify`: 221 files, 5,167 tests, `check:power` 95/0, build OK.
 
-## D89 — Capex panel: Total Costs no longer swallows letters (5 Nov 2026)
+## D93 — Capex panel: Total Costs and month boxes no longer swallow letters (5 Nov 2026)
 
 **Status:** built on `RounakDev1`, not committed, not pushed to DEV, not product-approved.
 
@@ -6799,7 +6811,7 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 **Tests changed or added:** UT-CAPEXR-025, 104, 067b, 190..193; UT-STD-008, 025..027; UT-CAPEXBULK-006, 014, 018; UT-CMTDEL-003, 004; UT-CAPEXLOG-010; UT-BOOK-026, 058;
 UT-CMT-045, 056, 070, 074, 120..123; UT-CLUSTER-090..092; the year-gallery test in `Screen.test.tsx`; UT-CAPEXSTD-001, 002; UT-CAPEXWARN-001; UT-HEADER-010, 011.
 **Still open:** rewriting the 11 ambiguous cases and the wrong ids in the case workbook; the failures that were not decisions (CAPEX-055, 064, 109, 121, 141, 140, 102, 052, 038 ...);
-the month boxes of an Individual contract (D89); no browser check of any of this.
+the month boxes of an Individual contract (D93); no browser check of any of this.
 
 ## D91 — DEVEX/CAPEX: the failures of the run that were not decisions, the month boxes, and the case workbook (5 Nov 2026)
 
@@ -6821,7 +6833,7 @@ the month boxes of an Individual contract (D89); no browser check of any of this
 | CAPEX-064 | new-contract Cost Paid By = `Coalesce(Cost Type, mapping)` (`:12234-12254`) | the sub-account's mapping default (`CostAccount.defaultPayer`) |
 | CAPEX-038 | `ClusterNDate = Date(Coalesce(StartYear, navMinYear, year), Coalesce(StartMonth, 1), 1)` (`:7238-7243`) | six dates always sent (`clusterBandDates`) |
 | CAPEX-140 | refusal "no applicable cost period" | done in D90 (A-02) |
-| D89 month boxes | text inputs | the typed text is kept per month and validated as typed ("Value must be a numeric" shows); Recalculate clears it |
+| D93 month boxes | text inputs | the typed text is kept per month and validated as typed ("Value must be a numeric" shows); Recalculate clears it |
 
 **Case workbook:** `_source/CAPEX.json` corrected for the 11 ambiguous cases and the wrong texts (CAPEX-083, 067, 182, 093/100 pins, 012 and 145 rule names), rebuilt as
 `FT-CAPEX-Capex-Costs-2026-11-05-v2.xlsx` (188 cases, all Not Run, health checks 0). Run 1 stays in `...-run1.xlsx` as evidence. Not yet run against the new build.
@@ -6840,3 +6852,33 @@ Fluent focus ring (`::after`) drawn around the auto-focused ✕ is hidden (the c
 Settings and the other PM panels keep the top-aligned ✕ their skins were tuned against (Team shifts its header by 4 px); say if they should follow.
 The confirmation dialogs already centre theirs (flex, `align-items: center`).
 **Not verified in a browser:** jsdom has no layout. Test: UT-COSTCLOSE-002 reads the stylesheet for the three rules.
+
+## D89 · Generators: say why the WTG type Save is disabled (4 Nov 2026) — PROPOSED
+
+*Recorded as D84 on branch `pm-complete-screens`; renumbered to D89 when it was merged into `master` (5 Nov 2026), whose D84
+is the DEV push of `988e175`.*
+
+**Trigger:** functional testing (Sourabh Kumar, 4 Nov 2026). Add Generator Type with Supplier *Dummy Enercon*, Turbine Type
+*Dummy-Enercon 3-5*, Hub Height 123, Number of Generators 4: every visible field valid, Save disabled, no message. The canvas
+app behaves the same with the same data (confirmed by the tester), so this is not a parity defect.
+
+**Cause (canvas and code alike):** `pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save.DisplayMode` (Y:15169) also needs two
+rows the user cannot see:
+- `Cost`: `Valid: locGeneratorCostsPerWtg > 0` (Y:15072). The cost per WTG is (the count's `'1 WTG price'` … `'5 WTG price'`
+  + `'Additional foundation cost'`) × the FID price-inflation index. It is 0 when the generator has no price for the count, or
+  when Estimation Price Inflations has no index for the FID year (and the year before). The Cost field is hidden
+  (`con_GeneratorData_RightPanel_Form_Fields_Cost.Visible: false`, Y:14300).
+- `RevisedHubheight` for a non-Dummy model whose hub height is 0 m (`cmb_Supplier_2.OnChange`, Y:14693): the box that would
+  explain it shows only for a Dummy supplier.
+
+**Change (DIVERGENCE, UI only):** the panel shows a warning bar under Number of Generators that names the reason: the missing
+`'N WTG price'` on the generator, the missing index for the FID year, an index read that failed, or the 0 m hub height. It
+appears only when no visible field message or the height-limit message already explains the block, and not while the index
+is loading. The Save gate (`canSaveType`) is unchanged.
+
+- Code: `TYPE_SAVE_BLOCKED_TEXT` and `typeSaveBlockedReason()` in `features/pm/generators/rules.ts`; the bar
+  (`data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked"`) in `Screen.tsx`. Texts are NEW, not canvas copy.
+- Tests: UT-GEN-142 … UT-GEN-146.
+- Not covered: the Replace Generator panel uses the same cost rule and still shows no reason.
+
+**Open for the product owner:** approve the warning and its wording; decide whether Replace Generator gets the same.

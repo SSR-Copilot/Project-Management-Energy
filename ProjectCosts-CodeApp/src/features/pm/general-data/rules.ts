@@ -1932,7 +1932,10 @@ export function planGeneralDataSave(ctx: SaveContext): WritePlan {
   return { writes: [...head.writes, ...tail.writes], log: [...head.log, ...tail.log] };
 }
 
-/** Steps 1 and 2 — Patch #1 and Patch #2, what runs BEFORE the cancellation flow. */
+/**
+ * Steps 1 and 2 — Patch #1 and Patch #2, what runs BEFORE the cancellation flow. Patch #2 is left
+ * out when it would change nothing (`internalIdPatchIsNoOp`, save performance, 5 Nov 2026).
+ */
 export function planGeneralDataSaveHead(ctx: SaveContext): WritePlan {
   const { project, form, ref } = ctx;
   const manager = assertManagerSelected(form);
@@ -1943,10 +1946,25 @@ export function planGeneralDataSaveHead(ctx: SaveContext): WritePlan {
         op: "update", entitySet: ES.projects, id: project.id!,
         data: buildProjectPatch(form, ref, project), reason: "save the project data",
       },
-      internalIdPatch(ctx),
+      ...(internalIdPatchIsNoOp(ctx) ? [] : [internalIdPatch(ctx)]),
     ],
     log: [MSG.stepProjectSaved],
   };
+}
+
+/**
+ * Save performance (5 Nov 2026): on an EDIT, Patch #2 (Y:636-648) changes nothing when the
+ * Internal Project ID is already set (it would write the same value back) AND its business unit,
+ * `Coalesce(Country.'Business Unit', project's)`, is the one Patch #1 has just written
+ * (`Countries.'Besitzer'`). The canvas sends it anyway; leaving it out keeps every stored value,
+ * and no flow or plugin filters on these two columns (`hooks.ts` header). In VSBCloud_Dev every
+ * active country has the same unit in both columns (checked 5 Nov 2026), so an edit of a project
+ * with an Internal Project ID saves in one project update instead of two.
+ */
+export function internalIdPatchIsNoOp(ctx: SaveContext): boolean {
+  if (isBlank(ctx.project.internalProjectId)) return false;
+  const { patch1, patch2 } = owningBusinessUnits(ctx.form, ctx.ref, ctx.project);
+  return patch2 === patch1;
 }
 
 /** Steps 3 to 5 — the Draft return and the tracking rebuild, the entities, the Draft tracking: AFTER the flow. */
@@ -1992,7 +2010,18 @@ export const createdProjectSnapshot = (reRead: ProjectSnapshot): ProjectSnapshot
  */
 export function planSaveFollowUps(ctx: SaveContext): WritePlan {
   const rest = planClusterAndEntities(ctx);
-  return { writes: [internalIdPatch(ctx), ...rest.writes], log: rest.log };
+  // Save performance (5 Nov 2026): a new project's child rows — the trackings and the
+  // shareholding entities — only point at the project, so they are sent together (`concurrent`).
+  // Updates of the project row itself stay in order: Patch #2, then (Acquired with a start
+  // cluster) the Draft return, which comes before its trackings as in the canvas. Without a
+  // Draft return, Patch #2 joins the child rows' run: nothing they carry depends on it.
+  const draftReturn = rest.writes.some((w) => w.entitySet === ES.projects);
+  const children = rest.writes.map((w) => (w.entitySet === ES.projects ? w : { ...w, concurrent: true }));
+  const patch2 = internalIdPatch(ctx);
+  return {
+    writes: [draftReturn ? patch2 : { ...patch2, concurrent: true }, ...children],
+    log: rest.log,
+  };
 }
 
 /** Patch #2 (Y:636-648) — `'Internal Project ID'` back-filled from `'Project ID'` when blank, and the owning business unit. */

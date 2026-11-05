@@ -359,7 +359,7 @@ describe("the Add Costs panel — left column", () => {
   });
 
   /*
-   * UT-CAPEXTOTAL-001..003 (D89). The canvas Total Costs box is a plain TextInput (no numeric Format,
+   * UT-CAPEXTOTAL-001..003 (D93). The canvas Total Costs box is a plain TextInput (no numeric Format,
    * `MaxLength: 512`): every typed character reaches `lbl_…_TotalCost_ErrorMessage_1`, which is visible for
    * any non-blank value that is not an integer in range. A browser `type="number"` box swallowed "e" and
    * "abc" (its value reads ""), so the letter showed in the box with no message at all.
@@ -1133,7 +1133,7 @@ describe("the panel footer", () => {
       .toBeInTheDocument();
   });
 
-  it("UT-CAPEXMONTH-001 a letter typed in a month box stays visible and shows the canvas message (D89)", () => {
+  it("UT-CAPEXMONTH-001 a letter typed in a month box stays visible and shows the canvas message (D93)", () => {
     lines = [individualContract({
       payments: [{ year: 2016, month: 6, amount: 500, paid: false }],
     })];

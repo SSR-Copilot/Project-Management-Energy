@@ -12,8 +12,10 @@ import { FluentProvider } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
 import { AppHeader } from "./AppHeader";
 import {
-  environmentInfoColor, pmHeaderTitle, projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
+  environmentInfoColor, pmHeaderTitle, projectPermissionLabel, projectStatusColour, projectStatusIcon, projectStatusLabel,
+  projectStatusVisible, PROJECT_PERMISSION_LABEL,
 } from "./headerRules";
+import { ALLOW_ALL, DENY_ALL, type PrivilegeProvider } from "@/platform/privileges";
 import { palette } from "@/theme/tokens";
 
 const renderHeader = (onAppSettings?: () => void) =>
@@ -42,6 +44,67 @@ describe("AppHeader user menu", () => {
     await user.click(screen.getByTestId("header-user"));
     await screen.findAllByRole("menuitem");
     expect(screen.queryByTestId("header-user-app-settings")).not.toBeInTheDocument();
+  });
+
+  it("UT-HEADER-014 the Permissions row sits between Countries and Version with the supplied text, and is omitted without one", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} userCountries="Germany;"
+          userPermission={PROJECT_PERMISSION_LABEL.canEdit} />
+      </FluentProvider>,
+    );
+    await user.click(screen.getByTestId("header-user"));
+    const items = await screen.findAllByRole("menuitem");
+    // The PM canvas order; Home renders as an empty row when there is no company name.
+    expect(items.map((i) => i.getAttribute("data-testid"))).toEqual([
+      "header-user-business-unit", "header-user-countries", "header-user-permissions", "header-user-version",
+    ]);
+    expect(screen.getByTestId("header-user-business-unit").textContent).toBe("");
+    expect(screen.getByTestId("header-user-permissions")).toHaveTextContent("Can edit Project");
+    expect(screen.getByTestId("header-user-permissions")).toHaveAttribute("aria-label", "Permissions");
+    unmount();
+    renderHeader();
+    await user.click(screen.getByTestId("header-user"));
+    const bare = await screen.findAllByRole("menuitem");
+    expect(screen.queryByTestId("header-user-permissions")).not.toBeInTheDocument();
+    // Home and AddHome have no `ItemVisible`: they stay, empty, with nothing to show.
+    expect(bare.map((i) => i.getAttribute("data-testid"))).toEqual([
+      "header-user-business-unit", "header-user-countries", "header-user-version",
+    ]);
+    expect(screen.getByTestId("header-user-countries").textContent).toBe("");
+  });
+
+  it("UT-HEADER-015 every menu row draws its canvas MDL2 glyph as an inline SVG on the 2048 em, not a Fluent lookalike", async () => {
+    const user = userEvent.setup();
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} onAppSettings={() => undefined}
+          userEmail="a@b.c" userLanguage="en-US, [en]" userBusinessUnit="VSB" userCountries="Germany;"
+          userPermission={PROJECT_PERMISSION_LABEL.canView} userDataScope="Project Data All Countries" />
+      </FluentProvider>,
+    );
+    await user.click(screen.getByTestId("header-user"));
+    const items = await screen.findAllByRole("menuitem");
+    expect(items).toHaveLength(8);
+    for (const item of items) {
+      const svg = item.querySelector("svg");
+      expect(svg?.getAttribute("viewBox"), item.getAttribute("data-testid") ?? "").toBe("-256 -256 2560 2560");
+      expect(svg?.querySelector("path")?.getAttribute("d")?.length ?? 0).toBeGreaterThan(40);
+    }
+  });
+
+  it("UT-HEADER-016 projectPermissionLabel is the canvas If(CanEditSelectedProject, …) through the D1 privilege seam", () => {
+    // No project selected: the flag starts `false` in App.OnStart.
+    expect(projectPermissionLabel(undefined)).toBe("Can view Project");
+    // The shipped provider (D1 option a) allows everything, so a selected project reads editable.
+    expect(projectPermissionLabel("p-1")).toBe("Can edit Project");
+    // A provider denying RecordInfo(EditPermission) flips the text …
+    const noEdit: PrivilegeProvider = { forTable: () => ALLOW_ALL, forRecord: () => DENY_ALL };
+    expect(projectPermissionLabel("p-1", noEdit)).toBe("Can view Project");
+    // … as does one denying DataSourceInfo(CreatePermission).
+    const noCreate: PrivilegeProvider = { forTable: () => DENY_ALL, forRecord: () => ALLOW_ALL };
+    expect(projectPermissionLabel("p-1", noCreate)).toBe("Can view Project");
   });
 });
 

@@ -2047,3 +2047,69 @@ describe("command bar sub-menu (ItemParentKey)", () => {
     }
   });
 });
+
+describe("type Save blocked warning (NEW, D89)", () => {
+  type Model = Pick<R.CatalogModel, "prices" | "additionalFoundationCost" | "displayName" | "name" | "turbineType" | "foundationCostIncluded">;
+  const TEXT = R.TYPE_SAVE_BLOCKED_TEXT;
+  const priced: Model = {
+    displayName: "Vestas V150", name: "V150", turbineType: "V150",
+    prices: [5_000_000, 4_800_000, 4_600_000, 4_400_000, 4_200_000],
+    additionalFoundationCost: 0, foundationCostIncluded: false,
+  };
+  const OK_INDEX = { value: 1.12, loading: false, failed: false };
+  const form = (over: Partial<TypeFormState> = {}): TypeFormState => ({
+    supplier: "Vestas", turbineType: "V150", hubHeight: 148, revisedHubHeight: "",
+    numberOfGenerators: "4", cost: "", dirty: new Set<string>(), ...over,
+  });
+  /** Mirrors the Screen: the derived cost feeds the Cost row, then the gate and the warning read the same errors. */
+  const run = (f: TypeFormState, model: Model | null, index = OK_INDEX, heightBlocked = false) => {
+    const count = Number(f.numberOfGenerators) || 0;
+    const derived = model && count > 0 ? costPerWtg({ model, count, accumulatedIndex: index.value }) : 0;
+    const errors = validateTypeForm(f, { isoCurrencyCode: "EUR", derivedCostPerWtg: derived });
+    return {
+      saveable: model !== null && canSaveType({ errors, heightBlocked }),
+      warning: R.typeSaveBlockedReason({
+        errors, heightBlocked, dummy: isDummySupplier(f.supplier), model, count, index, fid: "2027-03-15",
+      }),
+    };
+  };
+
+  it("UT-GEN-142 no warning when Save is enabled", () => {
+    expect(run(form(), priced)).toEqual({ saveable: true, warning: null });
+  });
+
+  it("UT-GEN-143 a missing band price names the generator and the canvas column; 5 or more reads '5 WTG price'", () => {
+    const noFour: Model = { ...priced, prices: [5_000_000, 4_800_000, 4_600_000, null, 4_200_000] };
+    expect(run(form(), noFour)).toEqual({ saveable: false, warning: TEXT.noPrice("Vestas V150", 4) });
+    expect(TEXT.noPrice("Vestas V150", 4)).toContain("'4 WTG price'");
+    const noFive: Model = { ...priced, prices: [5_000_000, 4_800_000, 4_600_000, 4_400_000, null] };
+    expect(run(form({ numberOfGenerators: "7" }), noFive).warning).toBe(TEXT.noPrice("Vestas V150", 5));
+    // An additional foundation cost alone gives a cost > 0, so Save is enabled and nothing is said.
+    expect(run(form(), { ...noFour, additionalFoundationCost: 250_000 })).toEqual({ saveable: true, warning: null });
+    // The Dummy path (the reported case): typed hub height, no prices at all.
+    const dummy: Model = { ...priced, displayName: "Dummy-Enercon 3-5", prices: [null, null, null, null, null] };
+    const typed = form({ supplier: "Dummy Enercon", turbineType: "Dummy-Enercon 3-5", hubHeight: 0, revisedHubHeight: "123" });
+    expect(run(typed, dummy)).toEqual({ saveable: false, warning: TEXT.noPrice("Dummy-Enercon 3-5", 4) });
+  });
+
+  it("UT-GEN-144 a zero index names the FID year; a failed read says so; a loading read says nothing", () => {
+    expect(run(form(), priced, { value: 0, loading: false, failed: false })).toEqual({ saveable: false, warning: TEXT.noIndex(2027) });
+    expect(TEXT.noIndex(2027)).toContain("the FID year 2027");
+    expect(run(form(), priced, { value: 0, loading: false, failed: true }).warning).toBe(TEXT.indexUnavailable);
+    expect(run(form(), priced, { value: 0, loading: true, failed: false })).toEqual({ saveable: false, warning: null });
+  });
+
+  it("UT-GEN-145 no warning while a visible message explains the block (field errors, height limit)", () => {
+    expect(run(form({ numberOfGenerators: "" }), priced).warning).toBeNull();
+    expect(run(form({ numberOfGenerators: "0" }), priced).warning).toBeNull();
+    expect(run(form({ turbineType: null }), priced).warning).toBeNull();
+    expect(run(form(), priced, OK_INDEX, true)).toEqual({ saveable: false, warning: null });
+    expect(run(form({ supplier: "Dummy Enercon", hubHeight: 0, revisedHubHeight: "" }), priced).warning).toBeNull();
+    expect(run(form(), null).warning).toBeNull();
+  });
+
+  it("UT-GEN-146 a non-Dummy 0 m hub height is named as soon as it is chosen, before the count", () => {
+    expect(run(form({ hubHeight: 0, numberOfGenerators: "" }), priced)).toEqual({ saveable: false, warning: TEXT.hubHeightZero });
+    expect(run(form({ hubHeight: 0 }), priced).warning).toBe(TEXT.hubHeightZero);
+  });
+});

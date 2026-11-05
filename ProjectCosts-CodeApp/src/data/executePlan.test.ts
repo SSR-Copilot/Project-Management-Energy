@@ -418,4 +418,86 @@ describe("executePlan: page-token invalidation", () => {
     expect(err.cause).toBeInstanceOf(CreatedIdMissingError);
     expect(invalidated).toEqual([SET]);
   });
+
+  it("UT-PLAN-032 consecutive concurrent writes are sent together; the next step waits for all of them", async () => {
+    const { client, raw, calls } = stubClient();
+    const releases: Array<() => void> = [];
+    raw.updateRecordAsync.mockImplementation((table: string, id: string) => new Promise((resolve) => {
+      calls.push(`update ${table} ${id}`);
+      releases.push(() => resolve(ok({}) as never));
+    }));
+    const plan = emptyPlan();
+    plan.writes.push(
+      { op: "update", entitySet: "vsb_projects", id: "a", data: {}, reason: "a", concurrent: true },
+      { op: "update", entitySet: "vsb_projects", id: "b", data: {}, reason: "b", concurrent: true },
+      { op: "delete", entitySet: "vsb_capexcosts", id: "c", reason: "c" },
+    );
+    const running = executePlan(plan, "test", client);
+    await vi.waitFor(() => expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b"]));
+    releases.forEach((release) => release());
+    await expect(running).resolves.toEqual({ done: 3, createdIds: [] });
+    expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b", "delete vsb_capexcosts c"]);
+  });
+
+  it("UT-PLAN-033 a run's creates join createdIds in plan order and see only the ids created before the run", async () => {
+    const { client, raw, calls } = stubClient();
+    let n = 0;
+    raw.createRecordAsync.mockImplementation(async (table: string, data: Record<string, unknown>) => {
+      calls.push(`create ${table} ${JSON.stringify(data)}`);
+      n += 1;
+      return ok({ vsb_capexaccountlistid: `new-${n}` }) as never;
+    });
+    const plan = emptyPlan();
+    plan.writes.push(
+      { op: "create", entitySet: "vsb_capexaccountlists", data: { vsb_name: "parent" }, reason: "parent" },
+      { op: "create", entitySet: "vsb_capexaccountlists", data: { vsb_name: createdRowRef(0) }, reason: "c1", concurrent: true },
+      { op: "create", entitySet: "vsb_capexaccountlists", data: { vsb_name: createdRowRef(0) }, reason: "c2", concurrent: true },
+      { op: "update", entitySet: "vsb_capexaccountlists", id: CREATED_ROW_ID, data: {}, reason: "after" },
+    );
+    const result = await executePlan(plan, "test", client);
+    expect(result).toEqual({ done: 4, createdIds: ["new-1", "new-2", "new-3"] });
+    expect(calls.filter((c) => c.includes('"vsb_name":"new-1"'))).toHaveLength(2);
+    // After the run, CREATED_ROW_ID is the run's last create in plan order.
+    expect(calls.at(-1)).toBe("update vsb_capexaccountlists new-3 {}");
+  });
+
+  it("UT-PLAN-034 a failure in a run lets the run finish, reports the writes that landed and sends nothing after it", async () => {
+    const { client, raw, calls } = stubClient();
+    raw.updateRecordAsync.mockImplementation(async (table: string, id: string) => {
+      calls.push(`update ${table} ${id}`);
+      return (id === "b" ? fail("nope") : ok({})) as never;
+    });
+    const plan = emptyPlan();
+    plan.writes.push(
+      { op: "update", entitySet: "vsb_projects", id: "a", data: {}, reason: "first", concurrent: true },
+      { op: "update", entitySet: "vsb_projects", id: "b", data: {}, reason: "second", concurrent: true },
+      { op: "update", entitySet: "vsb_projects", id: "c", data: {}, reason: "third", concurrent: true },
+      { op: "delete", entitySet: "vsb_capexcosts", id: "d", reason: "after" },
+    );
+    const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err).toBeInstanceOf(PlanError);
+    expect([err.done, err.total, err.failedReason]).toEqual([2, 4, "second"]);
+    expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b", "update vsb_projects c"]);
+  });
+
+  it("UT-PLAN-035 a plan that marks nothing still sends one write at a time", async () => {
+    const { client, raw, calls } = stubClient();
+    let release: () => void = () => {};
+    raw.updateRecordAsync.mockImplementationOnce((table: string, id: string) => new Promise((resolve) => {
+      calls.push(`update ${table} ${id}`);
+      release = () => resolve(ok({}) as never);
+    }));
+    const plan = emptyPlan();
+    plan.writes.push(
+      { op: "update", entitySet: "vsb_projects", id: "a", data: {}, reason: "a" },
+      { op: "update", entitySet: "vsb_projects", id: "b", data: {}, reason: "b" },
+    );
+    const running = executePlan(plan, "test", client);
+    await vi.waitFor(() => expect(calls).toEqual(["update vsb_projects a"]));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toEqual(["update vsb_projects a"]);
+    release();
+    await expect(running).resolves.toEqual({ done: 2, createdIds: [] });
+    expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b {}"]);
+  });
 });

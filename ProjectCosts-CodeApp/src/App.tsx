@@ -14,7 +14,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { languageLabel } from "@/data/currentUser";
 import { useCurrentUser } from "@/app/useCurrentUser";
-import { AppShell, LoadingOverlay, EmptyState, pmHeaderTitle } from "@/components";
+import { AppShell, LoadingOverlay, EmptyState, pmHeaderTitle, projectPermissionLabel } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { appTabUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import { AppRoutes } from "@/app/routes";
@@ -121,10 +121,20 @@ export default function App() {
       {...(currentUser.data?.editableCountries.length
         ? { userCountries: `${currentUser.data.editableCountries.join("; ")};` }
         : {})}
-      /* Its World row is a fixed label, shown on `IsProjectDataAllCountries`. */
-      {...(currentUser.data?.isProjectDataAllCountries
+      /*
+       * Its World row is a fixed label, shown on `IsProjectDataAllCountries` — in the Cost app's
+       * `cmp_Header` only. The PM `cmp_Header` has no World row (it has Permissions in its place),
+       * so the project list, PM and Application Settings screens leave it out (5 Nov 2026).
+       */
+      {...(onCostScreen && currentUser.data?.isProjectDataAllCountries
         ? { userDataScope: "Project Data All Countries" }
         : {})}
+      /*
+       * The PM `cmp_Header`'s Permissions row ("Can edit Project" / "Can view Project"), on every
+       * screen that header serves — the project list, the PM screens and Application Settings. The
+       * Cost app's `cmp_Header` has no such row. D1: the answer comes from the privilege seam.
+       */
+      {...(onCostScreen ? {} : { userPermission: projectPermissionLabel(projectId) })}
       {...(envVars.vsb_AppVersion ? { appVersion: envVars.vsb_AppVersion } : {})}
       {...(envVars.vsb_EnvironmentName ? { environmentName: envVars.vsb_EnvironmentName } : {})}
       {...(envVars.vsb_VSBCloudInfoCenterUrl
@@ -135,8 +145,10 @@ export default function App() {
       /*
        * `cmp_Header` user menu, `appSettingsKey` → `Navigate('Admin Project Default Checklists Screen')`,
        * `ItemVisible: Or(IsApplicationAdministrator, IsControllerOwnData)` — see `app/adminAccess.ts`.
+       * PM `cmp_Header` only: the Cost app's `cmp_Header` has no `appSettingsKey` row, so the Cost
+       * screens leave it out (5 Nov 2026).
        */
-      {...(adminVisible ? { onAppSettings: () => navigate("/admin/default-checklists") } : {})}
+      {...(adminVisible && !onCostScreen ? { onAppSettings: () => navigate("/admin/default-checklists") } : {})}
       adminVisible={adminVisible}
     >
       {error ? (
