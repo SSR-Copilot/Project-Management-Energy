@@ -3644,8 +3644,10 @@ export function openTrancheForm(input: {
     bankRate: fmtField(n(INPUT_COL.bankRate), "##0.0#"),
     baseRate: baseRateDefault(n(INPUT_COL.baseRate), std?.baserate ?? null, project.countryName),
     swapRate: fmtField(fieldDefault(n(INPUT_COL.swapRate), std?.swapRate), "##0.0#"),
-    dscrContracted: formatDscr(fieldDefault(n(INPUT_COL.dscrContractedDecimal), std?.dscrContracted)),
-    dscrUncontracted: formatDscr(fieldDefault(n(INPUT_COL.dscrUncontractedDecimal), std?.dscrUncontracted)),
+    // `Text(x, "#.00") & "x"` in the user's language (Y:10232): "1,25x" in German, which `validateDscr` expects.
+    // Without the language the box opened "1.25x" and the tranche Save stayed off (6 Nov 2026).
+    dscrContracted: formatDscr(fieldDefault(n(INPUT_COL.dscrContractedDecimal), std?.dscrContracted), language),
+    dscrUncontracted: formatDscr(fieldDefault(n(INPUT_COL.dscrUncontractedDecimal), std?.dscrUncontracted), language),
     energyYield: energyYieldDefault(n(INPUT_COL.energyYieldDebtSizing), std?.energyYieldDebtSizing ?? null),
     spotCurve: spotCurveDefault(n(INPUT_COL.spotCurveDebtSizing), std?.spotCurveDebtSizing ?? null),
     stepUpEnabled: rawBool(r[INPUT_COL.stepUpBankMargin]),
@@ -3792,29 +3794,34 @@ export function planFinancingOptionOnVisit(
  * Category Edit, Order 1 (Y:2834-2862): the stored Free Equity mode (`Coalesce(…, Percentage)`) and
  * value, and the flags from `'Is Standard Value'` (`locIsEquityStandardAssunption`).
  */
-export function openEquityForm(row: FinancingInputRow | null): EquityForm {
+export function openEquityForm(row: FinancingInputRow | null, language: Lang = "en-US"): EquityForm {
   const r = row?.raw ?? {};
   return {
     mode: rawNum(r[INPUT_COL.freeEquity]) === CHOICE_FINANCE.freeEquity.fixedValue ? "fixed" : "percentage",
-    value: rawNum(r[INPUT_COL.freeEquityValue]) === null ? "" : String(rawNum(r[INPUT_COL.freeEquityValue])),
+    // `locFreeEquity` (Y:7689) shows in the user's language: a stored 12.5 % opens "12,5" in German (6 Nov 2026).
+    value: rawNum(r[INPUT_COL.freeEquityValue]) === null ? "" : forLanguage(String(rawNum(r[INPUT_COL.freeEquityValue])), language),
     flags: parseStandardFlags(rawStr(r[INPUT_COL.isStandardValue]), DEFAULT_EQUITY_FLAGS),
   };
 }
 
 /** Category Edit, Order 2 (Y:2864-2884): the stored values and `locVatFinancingStatndardValues`. */
-export function openVatForm(row: FinancingInputRow | null, country: string | null): VatForm {
+export function openVatForm(row: FinancingInputRow | null, country: string | null, language: Lang = "en-US"): VatForm {
   const r = row?.raw ?? {};
   const flags = parseStandardFlags(rawStr(r[INPUT_COL.isStandardValue]), DEFAULT_VAT_FLAGS);
   const margin = rawNum(r[INPUT_COL.bankMargin]);
   const amount = rawNum(r[INPUT_COL.vatFacilityAmountValue]);
   return {
     baseRate: vatBaseRateDefault(country, flags, rawNum(r[INPUT_COL.baseRate])),
-    bankMargin: margin === null ? "" : String(margin),
+    // `Text(<stored>)` (Y:8341) in the user's language: the seeded 1.5 opens "1,5" in German, which the check accepts.
+    bankMargin: margin === null ? "" : forLanguage(String(margin), language),
     mode: rawNum(r[INPUT_COL.vatFacilityAmount]),
-    amount: amount === null ? "" : String(amount),
+    amount: amount === null ? "" : forLanguage(String(amount), language),
     flags,
   };
 }
+
+/** The VAT Bank Margin reset icon: `Text(Value(1.5), "0.0")` (Y:8390), i.e. "1,5" for a German user. */
+export const vatBankMarginResetText = (language: Lang): string => forLanguage("1.5", language);
 
 /**
  * Category Edit, Order 5 (Y:2898-2934): the stored decommissioning values (`locCostsOfDecommissioning`,

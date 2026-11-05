@@ -8,7 +8,7 @@ import { Vsb_projectmembersesvsb_position } from "@/generated/models/Vsb_project
 import { entraSearchFilter } from "@/data/adminGatesApprovals";
 import {
   pageLock, pageLockCanvasHeightParity, isPageLocked, commandState, managerRows,
-  memberDescription, sortMembers, toggleSelection, canSaveMember, memberPanelErrors,
+  memberDescription, sortMembers, toggleSelection, canSaveMember, memberPanelErrors, duplicateMember,
   normaliseComment, buildMemberPayload, draftFromMember, deleteDialogDescription,
   emptyMemberDraft, POSITIONS, INPUT_BLANK, MSG, commentCounter, commentCounterCanvasParity,
   planSaveMember, planDeleteMember, saveMemberJob, deleteMemberJob, COMMENT_MAX_LENGTH, CANVAS_COUNTER_MAX_LENGTH,
@@ -235,6 +235,29 @@ describe("UT-TEAM the member panel", () => {
 
   it("UT-TEAM-016b panel save enabled with both", () => {
     expect(canSaveMember({ ...emptyMemberDraft, descriptionId: "d-1", person })).toBe(true);
+  });
+
+  it("UT-TEAM-038 adding a person with a description they already hold is caught before Save (D91)", () => {
+    // `Project Members` alternate key ProjectMembers_V2 = Member + Project + Project Member Description.
+    const team = [member({ id: "m-1", memberRowId: "E-1", descriptionId: "D-1", description: "Project Manager" })];
+    const draft = { ...emptyMemberDraft, descriptionId: "d-1", person };
+    expect(duplicateMember(draft, team)?.id).toBe("m-1");
+    const message = "Cara Diaz is already in the team as Project Manager. Choose another name or description.";
+    expect(memberPanelErrors(draft, team)).toEqual({ duplicate: message });
+    expect(canSaveMember(draft, team)).toBe(false);
+    expect(planSaveMember(draft, project(), team).refusedReason).toBe(message);
+    // Another description for the same person is allowed.
+    expect(canSaveMember({ ...draft, descriptionId: "d-2" }, team)).toBe(true);
+  });
+
+  it("UT-TEAM-039 editing a member keeps their own row out of the duplicate check (D91)", () => {
+    const team = [member({ id: "m-1" }), member({ id: "m-2", descriptionId: "d-2", description: "Construction" })];
+    const editOwn = { memberId: "m-1", descriptionId: "d-1", person, comment: "" };
+    expect(duplicateMember(editOwn, team)).toBeNull();
+    expect(canSaveMember(editOwn, team)).toBe(true);
+    // Editing m-1 onto the description m-2 already holds for the same person is the duplicate.
+    expect(duplicateMember({ ...editOwn, descriptionId: "d-2" }, team)?.id).toBe("m-2");
+    expect(canSaveMember({ ...editOwn, descriptionId: "d-2" }, team)).toBe(false);
   });
 
   it("UT-TEAM-017 required-field messages shown only when editing", () => {

@@ -401,29 +401,52 @@ export interface MemberPanelErrors {
   description?: string;
   /** `lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage` */
   person?: string;
+  /** NEW (D91): the person already holds this description in the team — shown in the Principal error label. */
+  duplicate?: string;
+}
+
+const sameId = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  !isBlank(a) && !isBlank(b) && a!.toLowerCase() === b!.toLowerCase();
+
+/**
+ * NEW — no canvas equivalent (D91, 6 Nov 2026): the team row that already pairs the draft's person with its
+ * description, other than the row being edited. `Project Members` has the alternate key `ProjectMembers_V2`
+ * (Member + Project + Project Member Description), so saving that pair again is refused by Dataverse with a raw
+ * `DuplicateRecordEntityKey` error (HTTP 412) — the canvas sends the same `Patch` and fails the same way.
+ */
+export function duplicateMember(
+  draft: MemberDraft,
+  members: readonly ProjectMemberRow[],
+): ProjectMemberRow | null {
+  if (!draft.person?.rowId || isBlank(draft.descriptionId)) return null;
+  return members.find((m) => !sameId(m.id, draft.memberId)
+    && sameId(m.memberRowId, draft.person!.rowId) && sameId(m.descriptionId, draft.descriptionId)) ?? null;
 }
 
 /**
  * The two error labels (Y:1300, Y:1391): ONLY while editing an existing member
  * (`And(Not(IsBlank(locSelectedMember)), IsBlank(<field>))`). A blank ADD shows no message — only
- * a disabled Save.
+ * a disabled Save. NEW (D91): in both modes, a person who already holds the chosen description.
  */
-export function memberPanelErrors(draft: MemberDraft): MemberPanelErrors {
-  if (isBlank(draft.memberId)) return {};
+export function memberPanelErrors(draft: MemberDraft, members: readonly ProjectMemberRow[] = []): MemberPanelErrors {
+  const existing = duplicateMember(draft, members);
+  const duplicate = existing ? { duplicate: MSG.duplicate(existing.displayName, existing.description) } : {};
+  if (isBlank(draft.memberId)) return duplicate;
   return {
     ...(isBlank(draft.descriptionId) ? { description: INPUT_BLANK } : {}),
     ...(!draft.person ? { person: INPUT_BLANK } : {}),
+    ...duplicate,
   };
 }
 
 /**
  * `pcf_btn_Team_RightPanel_Member_Form_Buttons_Save.DisplayMode` (Y:1573): a description, a person,
- * and neither error label visible.
+ * and neither error label visible — and (D91) not a pair the team already has.
  */
-export function canSaveMember(draft: MemberDraft): boolean {
-  const errors = memberPanelErrors(draft);
+export function canSaveMember(draft: MemberDraft, members: readonly ProjectMemberRow[] = []): boolean {
+  const errors = memberPanelErrors(draft, members);
   return !isBlank(draft.descriptionId) && draft.person !== null && !isBlank(draft.person.rowId)
-    && !errors.description && !errors.person;
+    && !errors.description && !errors.person && !errors.duplicate;
 }
 
 /**
@@ -455,8 +478,12 @@ export function buildMemberPayload(
 }
 
 /** The Save: `Patch('Project Members', If(IsBlank(locSelectedMember), Defaults(…), locSelectedMember), …)`. */
-export function planSaveMember(draft: MemberDraft, project: TeamProject | null): WritePlan {
+export function planSaveMember(
+  draft: MemberDraft, project: TeamProject | null, members: readonly ProjectMemberRow[] = [],
+): WritePlan {
   if (!project?.id) return refusePlan(MSG.noProject);
+  const existing = duplicateMember(draft, members);
+  if (existing) return refusePlan(MSG.duplicate(existing.displayName, existing.description));
   if (!canSaveMember(draft)) return refusePlan(MSG.memberRequired);
   const data = buildMemberPayload(draft, project);
   return {
@@ -498,6 +525,9 @@ export const MSG = {
   /** NEW (D30): the plan refusals — unreachable through the UI, which disables Save first. */
   noProject: "No project is selected.",
   memberRequired: "A team member must be selected before saving.",
+  /** NEW (D91): the pair the alternate key `ProjectMembers_V2` would refuse. */
+  duplicate: (name: string, description: string | null): string =>
+    `${name} is already in the team as ${description ?? "this description"}. Choose another name or description.`,
 } as const;
 
 /**
@@ -506,13 +536,15 @@ export const MSG = {
  * SOURCE DEFECT: the canvas writes the success or error text into the saving dialog and then, in
  * the same handler, blanks it and hides the dialog, so neither is ever seen. Both are shown here.
  */
-export function saveMemberJob(draft: MemberDraft, project: TeamProject | null): PlanJob {
+export function saveMemberJob(
+  draft: MemberDraft, project: TeamProject | null, members: readonly ProjectMemberRow[] = [],
+): PlanJob {
   const name = draft.person?.displayName ?? "";
   return {
     progress: draft.memberId ? MSG.updating : MSG.adding(name),
     success: MSG.saved(name),
     errorText: MSG.saveError,
-    plan: planSaveMember(draft, project),
+    plan: planSaveMember(draft, project, members),
   };
 }
 

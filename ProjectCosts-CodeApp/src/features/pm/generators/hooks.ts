@@ -17,10 +17,14 @@
  *  - No plugin step: none filters on the generator, PV or plant tables, nor on the project's plant
  *    columns. `UpdateTeamsandSPOSite` (`vsb_clusterstate`) is not written.
  *
- * NOT CALLED (product decision D27 — approval flows that send mails / Teams cards are left out):
- * `RequestModulePermission` (the out-of-country "Request permission" save) and
- * `Requestpermissioncancellation` (the cards' Cancel button, and the cancellation the canvas runs
- * before deleting a type whose `FlowRunId` is set — that delete is refused, `EXCLUDED`).
+ * FLOWS (D90, 5 Nov 2026; `ProjectDocs/app-docs/16-PM-FLOWS-IN-THE-CODE-APP.md` §5) — called through
+ * `data/flows.ts` by `useModulePermissionFlows`, inside the same `usePlanWrite` job as the writes around them:
+ *  - `RequestModulePermission`: the out-of-country WTG type save and replace, and the inverter / substructure
+ *    save with an Other Supplier — after the row is written (the plan skips the roll-up on that path);
+ *  - `Requestpermissioncancellation`: the cards' Cancel, and before deleting or replacing a type whose
+ *    `FlowRunId` is set.
+ * Both flows write the type row's request fields themselves; the app refreshes, it does not patch them.
+ * Before D90 these controls were visible and disabled (D27: the flows send mails / Teams cards).
  */
 import { useQuery } from "@tanstack/react-query";
 import { ES, ES_PLANT } from "@/data/dataverseNames";
@@ -29,6 +33,7 @@ import type { ScreenData } from "@/data/notConnected";
 import { usePlanWrite } from "@/data/usePlanWrite";
 import { useSession } from "@/app/SessionContext";
 import { loadPriceInflation } from "@/data/milestones";
+import { cancelModulePermission, requestModulePermission, type FlowApprovalResult } from "@/data/flows";
 import {
   listAllWtgLandLeaseCosts, listGeneratorTypes, listGeneratorsByIds, listInverterTypes, listOrderableGenerators,
   listProjectTurbines, listPvModules, listPvTypes, listSimpleTypes, listSubstructureTypes, loadDeviceCosts,
@@ -37,8 +42,9 @@ import {
   type DeviceCosts, type GeneratorsProjectRow,
 } from "@/data/generators";
 import {
-  accumulatedIndex, toReplaceAllocations,
-  type CatalogModel, type GeneratorTypeRow, type LandLeaseCostRow, type PlantFamily, type PlantSupplierOption, type ProjectPlanning,
+  accumulatedIndex, cancellationPayloadFor, needsPermissionCancellation, PERMISSION_MSG, toReplaceAllocations,
+  type CatalogModel, type GeneratorTypeRow, type LandLeaseCostRow, type ModulePermissionPayload, type PermissionFamily,
+  type PlantFamily, type PlantSupplierOption, type ProjectPlanning,
   type PvModuleOption, type ReplaceInputs, type SimpleTypeRow, type TurbineRow,
 } from "./rules";
 
@@ -275,13 +281,59 @@ export const SERVER_DECIDES: GeneratorPermissions = {
   pvEditPermission: true,
 };
 
-/** Runs the screen's writes and refreshes the screen, the session's project header and Milestones' copy. */
+/**
+ * Runs the screen's writes and refreshes the screen, the session's project header and Milestones' copy.
+ * Save performance (6 Nov 2026): the progress dialog closes once the writes have landed and the screen
+ * reloads behind it (`refresh: "background"`); the Screen holds its actions back while `refreshing`.
+ */
 export function useGeneratorWrites(projectId: string | undefined) {
   const id = projectId ?? "";
   return usePlanWrite({
     invalidate: [qk.generatorsAll(id), qk.project(id), qk.milestoneProject(id), qk.generalDataProject(id)],
     action: "change this project's generators",
+    refresh: "background",
   });
+}
+
+/** A row a permission cancellation can be sent for (any of the four families). */
+export type PermissionRow = Pick<SimpleTypeRow, "id" | "flowRunId" | "flowApprovalId">
+  & Partial<Pick<GeneratorTypeRow, "generatorDisplayName">> & Partial<Pick<SimpleTypeRow, "moduleLabel" | "label">>;
+
+/**
+ * The two module-permission flows with the inputs every canvas call passes (D90): `User().Email` (the signed-in
+ * user's principal name), `gblProjectManagmentAppID` (`vsb_ProjectManagementAppID`) and, for the request,
+ * `gblPrimarilyApprovalGroupID` (`vsb_PrimarilyApprovalGroupID`). A blank input throws a clear message
+ * (`PERMISSION_MSG.setupMissing`) instead of sending a blank the flow would reject. Called from a job's `plan` /
+ * `then`, so a failure is the job's error.
+ */
+export function useModulePermissionFlows() {
+  const { session, envVars } = useSession();
+  const need = (value: string | null | undefined, what: string): string => {
+    if (!value || !value.trim()) throw new Error(PERMISSION_MSG.setupMissing(what));
+    return value;
+  };
+  const requesterEmail = () => need(session?.userPrincipalName, "your e-mail address");
+  const appId = () => need(envVars.vsb_ProjectManagementAppID, "the environment variable vsb_ProjectManagementAppID");
+
+  /** `RequestModulePermission.Run(…)` for a type row the plan has just written. */
+  const request = (project: ModulePermissionPayload): Promise<FlowApprovalResult> => requestModulePermission({
+    requesterEmail: requesterEmail(),
+    approvalGroupId: need(envVars.vsb_PrimarilyApprovalGroupID, "the environment variable vsb_PrimarilyApprovalGroupID"),
+    appId: appId(),
+    project,
+  });
+
+  /** `Requestpermissioncancellation.Run(…)` for one row. */
+  const cancel = (family: PermissionFamily, row: PermissionRow): Promise<void> => cancelModulePermission({
+    requesterEmail: requesterEmail(), appId: appId(), module: cancellationPayloadFor(family, row),
+  });
+
+  /** The canvas `If(Not(IsBlank(<row>.FlowRunId)), Requestpermissioncancellation.Run(…))` before a delete / replace. */
+  const cancelIfOpen = async (family: PermissionFamily, row: PermissionRow): Promise<void> => {
+    if (needsPermissionCancellation(row)) await cancel(family, row);
+  };
+
+  return { request, cancel, cancelIfOpen };
 }
 
 /* ═══════════════════════════════════════════ reads a write plan needs when it runs ════ */

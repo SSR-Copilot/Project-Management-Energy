@@ -11,13 +11,28 @@
  *  - `standard`: the canvas standard-assumption pair via `useStandardValueClass` (rule 20);
  *  - `multiselect` (`SelectMultiple: true`): `values` + `onSelectMany`; the text is the chosen
  *    labels joined with ", ".
+ *  - the open list is the canvas one (`canvasList`, single select): one highlighted row, no
+ *    check-mark. A screen's own `listboxClassName` replaces it; a multiselect list keeps Fluent's.
  *
  * Identity (rule 16): `testId` is the canvas control name (`data-testid`); `ariaLabel` is the
  * canvas `AccessibleLabel` where it sets one, the caption otherwise. Both gate scripts know it.
  */
-import { Dropdown, Field, Option, makeStyles, mergeClasses } from "@fluentui/react-components";
+import { Dropdown, Field, Option, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { palette } from "@/theme/tokens";
 import { FIELD_APPEARANCE, displayModeOf, useFieldControlClass, useFieldSkin } from "./fieldSkin";
 import { useStandardValueClass, type StandardProp } from "./standardValue";
+
+/**
+ * The highlighted row of the open list. A canvas `DropDown@0.0.45` opens the browser's own select
+ * list (1-px #767676 frame, the box's grey behind the rows), so the row is the browser's select
+ * highlight whatever the `BasePaletteColor`: #1967d2, sampled under SPV Legal Structure ("GmbH";
+ * General Data Y:1600, none set) and under the shareholder entity ("VSB Holding GmbH"; Y:6352,
+ * `themePrimary`) beside the panel header's #006eb9, and on a plain `<select>` (UI Screenshots,
+ * "Add Cost From Table ... Cost Type"). It is not in the app palette (`App.pa.yaml` Y:12-58).
+ */
+const CANVAS_LIST_HIGHLIGHT = "#1967d2";
+/** A row given back to Fluent's own look (`colorNeutralForeground1` is `palette.neutralPrimary`). */
+const notHighlighted = { backgroundColor: "transparent", color: tokens.colorNeutralForeground1 };
 
 const useStyles = makeStyles({
   /**
@@ -31,6 +46,27 @@ const useStyles = makeStyles({
    * canvas modern dropdown clips it ("Operating company with infrastruc", General Data, 3 Nov 2026).
    */
   valueText: { minWidth: 0, overflowX: "hidden", textOverflow: "clip", whiteSpace: "nowrap", textAlign: "left" },
+  /*
+   * The open list as the canvas draws it, every `DropDown@0.0.45` alike (the modern control has no
+   * Selection / Hover / Chevron properties): no check-mark, and ONE row highlighted, full width and
+   * square, white on CANVAS_LIST_HIGHLIGHT: the selected row, until the pointer or the keyboard is on
+   * another row, which then takes it. Text 12 px in, as there. The chevron and the box (filled, a 2-px
+   * brand underline while focused) stay Fluent's: the canvas draws them so, open, closed or after a pick.
+   */
+  canvasList: {
+    padding: 0, rowGap: 0,
+    "& .fui-Option": { borderRadius: 0, paddingLeft: "12px", paddingRight: "12px" },
+    "& .fui-Option__checkIcon": { display: "none" },
+    "& .fui-Option[aria-selected=\"true\"], & .fui-Option:hover, & .fui-Option[data-activedescendant-focusvisible]": {
+      backgroundColor: CANVAS_LIST_HIGHLIGHT, color: palette.white,
+    },
+    "&:hover .fui-Option[aria-selected=\"true\"]:not(:hover):not([data-activedescendant-focusvisible])": notHighlighted,
+    "&:has([data-activedescendant-focusvisible]) .fui-Option[aria-selected=\"true\"]:not([data-activedescendant-focusvisible]):not(:hover)": notHighlighted,
+    // Keyboard focus: the canvas list has no ring, so Fluent's 2-px ring stays, drawn inside the square row.
+    "& .fui-Option[data-activedescendant-focusvisible]::after": { top: 0, right: 0, bottom: 0, left: 0, borderRadius: 0 },
+    // High contrast drops the fill, so there the selected row gets its check-mark back.
+    "@media (forced-colors: active)": { "& .fui-Option__checkIcon": { display: "block" } },
+  },
 });
 
 export interface ChoiceOption { value: string; label: string }
@@ -63,7 +99,7 @@ export interface ChoiceFieldProps {
   onSelectMany?: (values: string[]) => void;
   /** Extra class on the `Field`. */
   className?: string;
-  /** Opt-in: a class on the open list (a screen's canvas list look). */
+  /** A screen's own canvas list look; it replaces the shared `canvasList` (Planning's lists). */
   listboxClassName?: string;
 }
 
@@ -98,7 +134,7 @@ export function ChoiceField({
         disabled={disabled}
         placeholder={placeholder}
         multiselect={multiselect}
-        {...(listboxClassName ? { listbox: { className: listboxClassName } } : {})}
+        listbox={{ className: listboxClassName ?? (multiselect ? undefined : s.canvasList) }}
         {...(view ? { open: false, expandIcon: null } : {})}
         button={{ children: <span className={s.valueText}>{text || placeholder}</span> }}
         value={text}

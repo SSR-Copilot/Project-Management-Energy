@@ -49,6 +49,7 @@ import {
   type DebtAssumptionRow, type FinanceProject, type FinancingCategory,
   type SeniorDebtFormState, type StepUpRow, type RepaymentRow, type TrancheRow,
   type FinancingInputStatus, type DecommissioningFlags, type VatForm,
+  vatBankMarginResetText,
 } from "./rules";
 import {
   categoryCommandLabel, categoryToggleDialog, trancheActionDialog, dsraToggleDialog,
@@ -2067,5 +2068,40 @@ describe("FINANCE-VALIDATION-AUDIT fixes (21 Oct 2026)", () => {
   it("UT-FIN-241 the panel MaxLength values and placeholders are the canvas ones", () => {
     expect(PANEL_MAX_LENGTH).toEqual({ freeEquity: 9, vatBankMargin: 6, vatFacilityAmount: 20, decommissioningValue: 15, other: 20 });
     expect([FIN_LABEL.findBank, FIN_LABEL.yearPlaceholder, FIN_LABEL.monthPlaceholder]).toEqual(["Find Bank", "Year", "Month"]);
+  });
+});
+
+/* ═══════════════════════════════════════════ German and French numbers (6 Nov 2026) ═══ */
+
+/*
+ * The German number audit: Finance opens every box in the user's language, as the canvas `Text()` does, so the
+ * checks that read it back in that language accept it. The expected values are the canvas results.
+ */
+describe("German and French numbers: Finance opens every box in the user's language", () => {
+  it("UT-FIN-807 DSCR opens as “1,15x” in German, which the tranche check accepts", () => {
+    for (const language of ["de-DE", "fr-FR"]) {
+      const add = openTrancheForm({ existing: null, project: project(), standard: stdAt(2027), banks: [], tranches: [], language });
+      expect(add.dscrContracted).toBe("1,15x");
+      expect(add.dscrUncontracted).toBe("1,35x");
+      expect(validateDscr(add.dscrContracted, language).valid).toBe(true);
+      expect(validateDscr(add.dscrUncontracted, language).valid).toBe(true);
+    }
+    expect(openTrancheForm({ existing: null, project: project(), standard: stdAt(2027), banks: [], tranches: [] }).dscrContracted).toBe("1.15x");
+  });
+
+  it("UT-FIN-808 VAT Bank Margin: the seeded 1.5 opens as “1,5” and the reset writes “1,5”; both pass the German check", () => {
+    const vat = openVatForm(row("vat", 2, { [INPUT_COL.bankMargin]: 1.5 }), "Germany", "de-DE");
+    expect(vat.bankMargin).toBe("1,5");
+    expect(validateVatBankMargin(vat.bankMargin, "de-DE").valid).toBe(true);
+    expect(vatBankMarginResetText("de-DE")).toBe("1,5");
+    expect(vatBankMarginResetText("en-US")).toBe("1.5");
+    expect(openVatForm(row("vat", 2, { [INPUT_COL.bankMargin]: 1.5 }), "Germany").bankMargin).toBe("1.5");
+  });
+
+  it("UT-FIN-809 Free Equity: a stored 12.5 % reopens as “12,5”, which the German check accepts", () => {
+    const equity = openEquityForm(row("eq", 1, { [INPUT_COL.freeEquityValue]: 12.5 }), "fr-FR");
+    expect(equity.value).toBe("12,5");
+    expect(validateFreeEquity(equity.value, "percentage", null, 0, "fr-FR").valid).toBe(true);
+    expect(openEquityForm(row("eq", 1, { [INPUT_COL.freeEquityValue]: 12.5 })).value).toBe("12.5");
   });
 });

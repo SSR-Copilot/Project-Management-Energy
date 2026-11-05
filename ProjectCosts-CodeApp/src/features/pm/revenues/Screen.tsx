@@ -49,7 +49,7 @@ import {
   negativePriceState, hedgeTypeOptions, volumeRowLabel, resetOnHedgeTypeChange,
   validateHedgedVolume, firstPeriodStart, nextPeriodStart, showsShiftOfCod,
   balancingMonthOptions, balancingEndDate, balancingYearOptions, durationYearOptions,
-  durationMonthOptions, germanFitTariff, tariffP90Text, showsP90Block, shownDescription,
+  durationMonthOptions, germanFitTariffText, balancingPriceText, tariffP90Text, showsP90Block, shownDescription,
   validateTariff, validateBiddingPrice, validateSiteQuality, validateCorrectionFactor,
   validateVolumeMwh, validateHedgedVolumePercent, validateInflationProfile,
   validateInflationStartYear, validateDescription, validateBalancingPrice, validateShiftOfCod,
@@ -755,7 +755,7 @@ export default function ProjectRevenuesScreen() {
     writes.clear();
     setSelectedPeriodId(p.id);
     setBalancing({
-      id: p.id, price: p.price === null ? "" : String(p.price),
+      id: p.id, price: balancingPriceText(p.price, lang),
       years: p.durationYears ?? 0, months: p.durationMonths ?? 1,
       shift: p.shiftOfCodMonths === null ? "" : String(p.shiftOfCodMonths),
     });
@@ -1172,7 +1172,7 @@ export default function ProjectRevenuesScreen() {
                       value={form.biddingPrice}
                       error={validateBiddingPrice(form.biddingPrice, lang).message}
                       onChange={(v) => {
-                        const tariff = germanFitTariff(Number(v) || 0, Number(form.correctionFactor) || 0);
+                        const tariff = germanFitTariffText(v, form.correctionFactor, lang);
                         change(editFieldIfValid(form, validateBiddingPrice(v, lang).valid, {
                           biddingPrice: v, tariff, tariffP90: tariffP90For(form, { biddingPrice: v }),
                         }, { biddingPrice: false, price: false, priceP90: false }));
@@ -1203,7 +1203,7 @@ export default function ProjectRevenuesScreen() {
                       error={validateCorrectionFactor(form.correctionFactor, lang).message}
                       onChange={(v) => change(editField(form, {
                         correctionFactor: v,
-                        tariff: germanFitTariff(Number(form.biddingPrice) || 0, Number(v) || 0),
+                        tariff: germanFitTariffText(form.biddingPrice, v, lang),
                       }, { correctionFactor: false }))}
                     />
                     {showsP90Block(form) ? (
@@ -1270,7 +1270,7 @@ export default function ProjectRevenuesScreen() {
                       aria-label="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
                       data-testid="tgl_ProjectRevenues_RightPanel_NewEditCost_BodyContent_CountryInflationProfile_1"
                       checked={form.useCountryInflationProfile}
-                      onChange={(_, d) => change(toggleCountryInflation(form, d.checked, inflationQ.data, project?.countryCode ?? null))}
+                      onChange={(_, d) => change(toggleCountryInflation(form, d.checked, inflationQ.data, project?.countryCode ?? null, lang))}
                     />
                   </div>
                 ) : null}
@@ -1284,7 +1284,7 @@ export default function ProjectRevenuesScreen() {
                       standard={panelStd?.inflationStartYear}
                       value={form.inflationStartYear}
                       error={validateInflationStartYear(form.inflationStartYear).message}
-                      onChange={(v) => change(changeInflationStartYear(form, v, inflationQ.data, project?.countryCode ?? null, region))}
+                      onChange={(v) => change(changeInflationStartYear(form, v, inflationQ.data, project?.countryCode ?? null, region, lang))}
                     />
                     {form.useCountryInflationProfile ? (
                       <TextInputField

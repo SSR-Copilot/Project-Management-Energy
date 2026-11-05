@@ -17,13 +17,22 @@ vi.mock("@/generated/services/PerformRequestofGateApprovalCancellationService", 
 vi.mock("@/generated/services/PerformRequestofCheckListApprovalCancellationService", () => ({
   PerformRequestofCheckListApprovalCancellationService: { Run: vi.fn() },
 }));
+vi.mock("@/generated/services/RequestModulePermissionService", () => ({
+  RequestModulePermissionService: { Run: vi.fn() },
+}));
+vi.mock("@/generated/services/RequestpermissioncancellationService", () => ({
+  RequestpermissioncancellationService: { Run: vi.fn() },
+}));
 
 import { PerformCommonRequestofCheckListApprovalService } from "@/generated/services/PerformCommonRequestofCheckListApprovalService";
 import { PerformCommonRequestofGateApprovalService } from "@/generated/services/PerformCommonRequestofGateApprovalService";
 import { PerformRequestofCheckListApprovalCancellationService } from "@/generated/services/PerformRequestofCheckListApprovalCancellationService";
 import { PerformRequestofGateApprovalCancellationService } from "@/generated/services/PerformRequestofGateApprovalCancellationService";
+import { RequestModulePermissionService } from "@/generated/services/RequestModulePermissionService";
+import { RequestpermissioncancellationService } from "@/generated/services/RequestpermissioncancellationService";
 import {
-  cancelChecklistApproval, cancelGateApproval, requestChecklistApproval, requestGateApproval, type GateCancellationPayload,
+  cancelChecklistApproval, cancelGateApproval, cancelModulePermission, requestChecklistApproval, requestGateApproval,
+  requestModulePermission, type GateCancellationPayload,
 } from "./flows";
 
 const run = {
@@ -31,6 +40,8 @@ const run = {
   gate: PerformCommonRequestofGateApprovalService.Run as unknown as Mock,
   gateCancel: PerformRequestofGateApprovalCancellationService.Run as unknown as Mock,
   checklistCancel: PerformRequestofCheckListApprovalCancellationService.Run as unknown as Mock,
+  modulePermission: RequestModulePermissionService.Run as unknown as Mock,
+  permissionCancel: RequestpermissioncancellationService.Run as unknown as Mock,
 };
 
 describe("data/flows", () => {
@@ -82,5 +93,36 @@ describe("data/flows", () => {
     run.gate.mockResolvedValueOnce({ success: false, error: new Error("The caller lacks the App Opener role") });
     await expect(requestGateApproval({ projectId: "p", stateId: "s", stateTrackingId: "t", defaultApprovalId: "g" }))
       .rejects.toThrow(/flow Perform Common Request of Gate Approval failed/);
+  });
+
+  it("UT-FLOWS-006 Request Module Permission: email, text_1 group, text_4 app id, the varProject record as JSON in text (D90)", async () => {
+    run.modulePermission.mockResolvedValueOnce({ success: true, data: { runid: "run-7", approvalid: "ap-7" } });
+    const project = {
+      ProjectGuid: "p-1", ProjectId: "DE-0001", ProjectName: "Windpark Nord", ShortName: "WPN", ProjectManagerEmail: null,
+      ModuleType: 952850000, GeneratorTypeInProject: "t-1", Generator: "g-1",
+    };
+    const out = await requestModulePermission({ requesterEmail: "ada@vsb.example", approvalGroupId: "grp-1", appId: "app-1", project });
+    const [input] = run.modulePermission.mock.calls[0] as [{ email: string; text_1: string; text_4: string; text: string }];
+    expect(input.email).toBe("ada@vsb.example");
+    expect(input.text_1).toBe("grp-1");
+    expect(input.text_4).toBe("app-1");
+    expect(JSON.parse(input.text)).toEqual(project);
+    expect(out).toEqual({ runid: "run-7", approvalid: "ap-7" });
+  });
+
+  it("UT-FLOWS-007 Request permission cancellation: email, text_2 app id, the varModule record as JSON in text_3 (D90)", async () => {
+    run.permissionCancel.mockResolvedValueOnce({ success: true, data: undefined });
+    const module = { ModuleTypeGuid: "s-1", ModuleType: 952850003, Name: "Tracker A", FlowRunId: "run-1", FlowApprovalId: null };
+    await cancelModulePermission({ requesterEmail: "ada@vsb.example", appId: "app-1", module });
+    const [input] = run.permissionCancel.mock.calls[0] as [{ email: string; text_2: string; text_3: string }];
+    expect(input).toMatchObject({ email: "ada@vsb.example", text_2: "app-1" });
+    expect(JSON.parse(input.text_3)).toEqual(module);
+  });
+
+  it("UT-FLOWS-008 a failed module-permission call throws an error that names the flow", async () => {
+    run.permissionCancel.mockResolvedValueOnce({ success: false, error: new Error("Approval not found") });
+    await expect(cancelModulePermission({
+      requesterEmail: "a@b.c", appId: "app", module: { ModuleTypeGuid: "x", ModuleType: 952850000, Name: null, FlowRunId: "r", FlowApprovalId: "a" },
+    })).rejects.toThrow(/flow Request permission cancellation failed/);
   });
 });

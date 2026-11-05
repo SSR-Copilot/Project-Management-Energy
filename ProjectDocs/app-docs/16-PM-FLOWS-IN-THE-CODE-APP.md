@@ -44,8 +44,8 @@ Trigger and connection references from the export; ids and status from `pa app l
 | Perform Common Request of Gate Approval | `7235fad7-ed32-a0f5-8793-7238df8f0f14` | V2: `text_1` ProjectGUID, `text_2` StateGUID, `text_3` StateTrackingGUID, `text_4` DefaultApprovalGUID | `runid`, `approvalid` | CheckList screen, panel "Request Approval", cluster mode (`:5662`) | **added** |
 | Perform Request of Gate Approval Cancellation | `d68b3a66-6ae8-ce06-68ec-d9af740cc18c` | V2: `text` AppId, `text_1` Project (13-field JSON) | nothing | CheckList "Cancel Approval Request" (`:1602`); General Data Draft reset step 1 (`:297`) | **added** |
 | Perform Request of Check List Approval Cancellation | `67e2929f-a73e-a2b3-039c-569b58bda414` | V2: `text` CheckList Guid | `success` | CheckList row ✕ (`:3696`) | **added** (the flow is NOT in the 1.21.709 export; it exists in DEV) |
-| Request Module Permission | `483a3074-9166-b822-9e47-a891cafbe68e` | V2: `email` RequesterEmail, `text_1` PrimarilyApprovalGroupID, `text_4` AppId, `text` Project (JSON) | `runid`, `approvalid` | Generators, out-of-country WTG save (`:16535`, `:16869`); the PV call is commented out | **added 5 Nov 2026** (registered; the Generators screen does not call it yet) |
-| Request permission cancellation | `1a8b4be8-902b-b90c-dcef-1875f75ba7f3` | V2: `email` RequesterEmail, `text_2` AppId, `text_3` Project (JSON) | nothing | Generators, the cards' Cancel request and the deletes of a type with an open request (`:2652` … `:15676`) | **added 5 Nov 2026** (registered; the Generators screen does not call it yet) |
+| Request Module Permission | `483a3074-9166-b822-9e47-a891cafbe68e` | V2: `email` RequesterEmail, `text_1` PrimarilyApprovalGroupID, `text_4` AppId, `text` Project (JSON) | `runid`, `approvalid` | Generators, out-of-country WTG save (`:15214`, `:16535`, `:16869`), inverter / substructure save with an Other Supplier (`:10259`, `:8995`); the PV call is commented out | **added 5 Nov 2026, wired (D90)** |
+| Request permission cancellation | `1a8b4be8-902b-b90c-dcef-1875f75ba7f3` | V2: `email` RequesterEmail, `text_2` AppId, `text_3` Project (JSON) | nothing | Generators, the cards' Cancel request and the deletes of a type with an open request (`:2652` … `:15676`) | **added 5 Nov 2026, wired (D90)** |
 
 `AppId` is the environment variable `vsb_ProjectManagementAppID` (`App.OnStart:631`), `PrimarilyApprovalGroupID` is
 `vsb_PrimarilyApprovalGroupID` (`App.OnStart:687`); both are read through the environment-variable tables the code app
@@ -172,13 +172,14 @@ does tables; on a fresh checkout the flows are re-added with the commands in sec
 - **Project General Data** — on a Save that changes the start cluster while the Draft tracking's approval is In Progress
   with a FlowRunId: `IfError(PerformRequestofGateApprovalCancellation(AppId, 15-field JSON), false)` before the project is
   forced back to Draft (D25's refusal of that case is lifted by this work).
-- **Project Generators** (after section 3b): out-of-country WTG save → `RequestModulePermission(User().Email,
-  PrimarilyApprovalGroupID, AppId, JSON(varProject))` → Request Permission State Pending + Flow Run Id / Approval Id, no
-  roll-up; the PV call stays commented out as in the canvas. Card "Cancel request" and the deletes / replace of a type
-  with an open request → `Requestpermissioncancellation(User().Email, AppId, JSON(varModule))` then the canvas's state
-  write (Dataverse for WTG; the collection only for PV / inverter / substructure, a canvas difference to record).
+- **Project Generators** (D90, 5 Nov 2026): the out-of-country WTG save and replace, and the inverter / substructure save
+  with an Other Supplier (Y:10243 / 8979 — missed by the first inventory) → the row writes without the roll-up →
+  `RequestModulePermission(User().Email, PrimarilyApprovalGroupID, AppId, JSON(varProject))`; the PV call stays commented
+  out as in the canvas. Card "Cancel" and the deletes / replaces of a type with an open request →
+  `Requestpermissioncancellation(User().Email, AppId, JSON(varModule))`, before any delete write. The flows write the row's
+  request state, run id and approval id themselves; the code app does not (D90).
 
-### Status (4 Nov 2026, evening)
+### Status (4 Nov 2026, evening; Generators row 5 Nov 2026)
 
 | Screen | Flow | Code | Tests |
 |---|---|---|---|
@@ -187,9 +188,10 @@ does tables; on a fresh checkout the flows are re-added with the commands in sec
 | Check List | Cancel Approval Request (`PerformRequestofGateApprovalCancellation`) | `planGateCancelPatch` → flow with `gateCancellationPayload` → `planGateCancelNote` | UT-CHKLST-077, 078, 907 |
 | Check List | the row ✕ (`PerformRequestofCheckListApprovalCancellation`) | `cancelChecklistApproval`: flow → refresh; a `success: false` is reported (rule 3) | UT-CHKLST-913 |
 | General Data | the Draft-reset cancellation (`PerformRequestofGateApprovalCancellation`) | `planGeneralDataSaveHead` → `cancelDraftGateApprovalIfRunning` (`draftGateCancellationPayload`, `IfError` → logged) → `planGeneralDataSaveTail` | UT-GDATA-045, 083, 903 |
-| Generators | `RequestModulePermission`, `Requestpermissioncancellation` | not added (§3b); the D27 `EXCLUDED` states stay until then | — |
+| Generators | `RequestModulePermission` (WTG out of country, inverter / substructure with an Other Supplier) | `planCreateGeneratorType` / `planSaveInverter` / `planSaveSubstructure` without the roll-up → `useModulePermissionFlows().request` in the job's `then` | UT-GEN-118, 133, 150, 904 |
+| Generators | `Requestpermissioncancellation` (cards' Cancel; deletes and replaces with an open request) | Cancel: empty plan → flow → refresh; delete / replace: `cancelIfOpen` → the existing plan | UT-GEN-149, 909, 912, 914, 915 |
 
-The shared pieces: `data/flows.ts` (UT-FLOWS-001…005) and `PlanJob.then` in `data/usePlanWrite.ts` (UT-PLANWRITE-006…008).
+The shared pieces: `data/flows.ts` (UT-FLOWS-001…008) and `PlanJob.then` in `data/usePlanWrite.ts` (UT-PLANWRITE-006…008).
 Deployed to DEV on 4 Nov 2026 (D83, build `b517659`): the four flows are callable from the deployed app, and the first
 open may ask each user to consent to the Power Automate connection. Not yet run live: the first live run is the test
 plan of §7.

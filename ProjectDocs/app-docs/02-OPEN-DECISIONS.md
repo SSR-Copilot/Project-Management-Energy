@@ -6795,3 +6795,54 @@ is loading. The Save gate (`canSaveType`) is unchanged.
 - Not covered: the Replace Generator panel uses the same cost rule and still shows no reason.
 
 **Open for the product owner:** approve the warning and its wording; decide whether Replace Generator gets the same.
+
+## D90 · Generators: the module-permission flows wired (5 Nov 2026)
+
+**Instruction (user, 5 Nov 2026):** "all the flows has been added i want them in working position". The four Check List /
+General Data flows were already wired (D81); this wires the two Generators flows registered in D86, `Request Module
+Permission` and `Request permission cancellation`, and removes D27's `EXCLUDED` disabled states.
+
+**What the flows do themselves** (VSBCloud export, read 5 Nov 2026): Request Module Permission responds with `runid` /
+`approvalid`, then sets the type row's 'Request Permission State' Pending, `FlowRunId` and `FlowApprovalId`
+(`Scope_update_RunId_and_Approval_Id_info`); after the approval it sets Approved and rolls the plant cost / capacity up, or
+deletes the row when declined. Request permission cancellation completes the approval as Canceled and sets the row Canceled
+with both ids blank. **So the code app writes none of those fields** (the canvas only mirrors them into its collections): a
+late Pending patch could overwrite the flow's Approved or hit a row a decline deleted.
+
+**Wired (Screen → `useModulePermissionFlows` in `hooks.ts` → `data/flows.ts`), each inside the same `usePlanWrite` job:**
+- WTG type save and Replace Generator Type **out of country**: the same type / turbine writes without the roll-up, then
+  `RequestModulePermission(User().Email, vsb_PrimarilyApprovalGroupID, vsb_ProjectManagementAppID, JSON(varProject))` for
+  the new type (canvas Y:15214 / 16514). Progress text `Request Permission for "…" has been sent, please wait...`.
+- Inverter / substructure save **with an Other Supplier** (Y:10243 / 8979, which doc 16 had missed): the row, no PV-cost
+  roll-up, then the request for the row. The PV request stays off, as in the canvas (commented out there).
+- The cards' **Cancel** (WTG / PV / inverter / substructure): the cancellation flow, then the canvas success text.
+- **Delete** and **Replace** of a type whose `FlowRunId` is set: the cancellation flow first, then the existing plan.
+
+**DIVERGENCES:** (1) the cancellation runs before any delete write (the WTG canvas runs it after the O&M deletes, so a
+failed cancellation left the type without its costs); (2) the card Cancel does not `Patch` the row — the flow already wrote
+Canceled, and the WTG canvas patched `locSelectedGeneratorEntity`, the selected type rather than the card's (SOURCE DEFECT);
+(3) a blank app id, approval group or user e-mail refuses the call with `PERMISSION_MSG.setupMissing` instead of sending a
+blank; (4) the substructure cancellation sends `ModuleType.Substructure`, not the canvas's `Inverter` (D27 SOURCE DEFECT).
+
+- Tests: UT-FLOWS-006…008; UT-GEN-147…150; UT-GEN-904 rewritten, UT-GEN-914, 915 new, 909 / 912 extended; the refusal
+  assertions of UT-GEN-118, 122, 126, 127, 133, 137 and 139 now assert the plans instead.
+- `typecheck`, lint, `check:power` (95 registered, 0 problems) and both label gates clean; `flows.test.ts`, the Generators
+  `rules.test.ts` and `Screen.test.tsx` pass (3 files, 178 tests). The full suite was not run.
+- **Not run live.** Every call sends real approvals and mails to the `vsb_PrimarilyApprovalGroupID` group; the test plan of
+  doc 16 §7 (which project, which approvers) is still open.
+
+## D91 · Team: a person cannot be added twice with the same description (6 Nov 2026) — NEW
+
+**Trigger:** testing on DEV (6 Nov 2026). Adding Shakti Singh as Project Manager on project `5747f327-…` failed with the raw
+Dataverse error `DuplicateRecordEntityKey` (HTTP 412): `Project Members` has the alternate key `ProjectMembers_V2` (Member +
+Project + Project Member Description), and Shakti already held that description in the team (rows created on DEV on
+5 Nov 2026). The canvas sends the same `Patch(…, Defaults(…))` with no check, so it fails the same way; the merge of
+5 Nov 2026 did not change this path (`executePlan` has no retry).
+
+**Change (DIVERGENCE, NEW text):** the member panel checks the team it already shows. When the chosen person already holds
+the chosen description (the edited row excluded), the Name error label (`lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage`)
+reads "`<name>` is already in the team as `<description>`. Choose another name or description." and Save stays disabled;
+`planSaveMember` refuses the pair as well. The same person with another description is still allowed.
+
+- Code: `duplicateMember`, `memberPanelErrors`, `canSaveMember`, `planSaveMember`, `MSG.duplicate` in `features/pm/team/rules.ts`.
+- Tests: UT-TEAM-038, 039.

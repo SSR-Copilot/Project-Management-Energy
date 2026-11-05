@@ -11,7 +11,7 @@ import { vsbTheme } from "@/theme/fluent";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import type { WritePlan } from "@/data/writePlan";
 import {
-  EXCLUDED, GENERATOR_TYPE_SAVED_BANNER, PV_MSG, REPLACE_MSG, WRITE_MSG,
+  GENERATOR_TYPE_SAVED_BANNER, PERMISSION_MSG, PV_MSG, REPLACE_MSG, TYPE_PANEL_TOOLTIPS, WRITE_MSG,
   type CatalogModel, type GeneratorTypeRow, type SimpleTypeRow, type TurbineRow,
 } from "./rules";
 
@@ -51,18 +51,34 @@ const row = (over: Partial<SimpleTypeRow>): SimpleTypeRow => ({
 const PV = row({ id: "pv1", name: "PVT-0001", moduleLabel: "JA 550", catalogueId: "m1", catalogueSupplier: "JA Solar", capacity: 10, cost: 3000 });
 const BESS = row({ id: "s1", name: "BESS North", supplier: "Tesla", capacity: 5, energyCapacity: 10 });
 
-type Job = { progress: string; success?: string | ((p: WritePlan) => string); plan: WritePlan | (() => Promise<WritePlan>) };
+type Job = {
+  progress: string;
+  success?: string | ((p: WritePlan) => string);
+  errorText?: (detail: string) => string;
+  plan: WritePlan | (() => Promise<WritePlan>);
+  then?: (first: { done: number; createdIds: string[] }) => Promise<WritePlan | null | undefined>;
+};
 
 const state = vi.hoisted(() => ({
   project: null as unknown,
   error: undefined as unknown,
-  // Builds the job's plan, as `usePlanWrite` does before it runs it (a replace reads its inputs there).
+  types: null as unknown,
+  // Builds the job's plan, then runs its `then` step (D90: a cloud flow), as `usePlanWrite` does.
   run: vi.fn(async (job: unknown) => {
+    const created = ["new-type", "nw1", "nw2"];
     const plan = (job as { plan: unknown }).plan;
     if (typeof plan === "function") await (plan as () => Promise<unknown>)();
-    return ["new-type", "nw1", "nw2"] as string[];
+    const then = (job as { then?: (first: unknown) => Promise<unknown> }).then;
+    if (then) await then({ done: 0, createdIds: created });
+    return created as string[];
   }),
   loadNewTypeInputs: vi.fn(async () => ({ typeName: "WTG-0099", hasDeviceType: false })),
+  // D90 — `useModulePermissionFlows`: the two flows, stubbed.
+  flows: {
+    request: vi.fn(async () => ({ runid: "run-1", approvalid: "ap-1" })),
+    cancel: vi.fn(async () => {}),
+    cancelIfOpen: vi.fn(async () => {}),
+  },
 }));
 
 vi.mock("@/app/SessionContext", () => ({
@@ -77,7 +93,8 @@ vi.mock("./hooks", () => ({
   },
   useGeneratorsProject: () => ({ ...ok(state.project), error: state.error }),
   useProjectPlanning: () => ok({ isHeightLimitationForWtg: false, heightLimitation: null }),
-  useGeneratorTypes: () => ok([TYPE]),
+  useGeneratorTypes: () => ok((state.types as GeneratorTypeRow[] | null) ?? [TYPE]),
+  useModulePermissionFlows: () => state.flows,
   useGeneratorModels: () => ok([MODEL]),
   useGeneratorCatalog: () => ok([MODEL]),
   useInflationIndex: () => ok(1),
@@ -118,7 +135,11 @@ afterEach(() => {
   cleanup();
   state.run.mockClear();
   state.loadNewTypeInputs.mockClear();
+  state.flows.request.mockClear();
+  state.flows.cancel.mockClear();
+  state.flows.cancelIfOpen.mockClear();
   state.error = undefined;
+  state.types = null;
 });
 
 const commandBar = () => screen.getByRole("toolbar", { name: "pcf_Generators_DisplayProject_Body_Form_CommandBar" });
@@ -169,7 +190,7 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(screen.getByText("JA Solar")).toBeTruthy();
   });
 
-  it("UT-GEN-903 Add WTG Type saves the type, its turbines and the roll-up, then the follow-up job", async () => {
+  it("UT-GEN-903 Add WTG Type saves the type, then its turbines and the roll-up together, then the follow-up — one job", async () => {
     renderScreen();
     fireEvent.click(command("Add WTG Type"));
     const save = await screen.findByTestId("pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save");
@@ -181,32 +202,77 @@ describe("UT-GEN Screen (connected, D27)", () => {
     fireEvent.change(screen.getByTestId("txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator"), { target: { value: "2" } });
     await waitFor(() => expect((screen.getByTestId("pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId("pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save"));
-    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(2));
-    const first = jobAt(0);
-    expect(first.progress).toBe('Generator "Vestas V150-5.6 - available" will be saved, please wait...');
-    const plan = await planOf(first);
+    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    const job = jobAt(0);
+    expect(job.progress).toBe('Generator "Vestas V150-5.6 - available" will be saved, please wait...');
+    expect(job.success).toBe(GENERATOR_TYPE_SAVED_BANNER);
+    const plan = await planOf(job);
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_generatortypeinprojects", "create:vsb_generatorinprojects", "create:vsb_generatorinprojects",
       "update:vsb_projects",
     ]);
+    // Save performance (6 Nov 2026): the type alone first; the turbines in one parallel run; the roll-up last.
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, true, false]);
     // Names continue from the PROJECT-wide max index (2).
     expect(plan.writes[1]!.data!.vsb_name).toBe("WTG WPN_3");
     expect(plan.writes[0]!.data!.vsb_costperwtg).toBe(950_000);
-    const second = jobAt(1);
-    expect(second.success).toBe(GENERATOR_TYPE_SAVED_BANNER);
-    const follow = await planOf(second);
+    // The follow-up is the same job's `then`, fed the created ids — no second job, no second refresh.
+    const follow = await job.then!({ done: 3, createdIds: ["new-type", "nw1", "nw2"] });
     expect(state.loadNewTypeInputs).toHaveBeenCalledWith("wtg", "new-type");
-    expect(follow.writes[0]!.data!.vsb_name).toBe("WTG-0099");
+    expect(follow!.writes[0]!.data!.vsb_name).toBe("WTG-0099");
+    expect(follow!.writes.every((w) => w.concurrent)).toBe(true);
+    // When the create returned the row (`Prefer: return=representation`), its autonumber is used: no read-back.
+    state.loadNewTypeInputs.mockClear();
+    const fast = await job.then!({
+      done: 3, createdIds: ["new-type", "nw1", "nw2"],
+      createdRows: { "new-type": { vsb_generatortypeinprojectid: "new-type", vsb_name: "WTG-0123" } },
+    } as never);
+    expect(state.loadNewTypeInputs).not.toHaveBeenCalled();
+    expect(fast!.writes[0]!.data!.vsb_name).toBe("WTG-0123");
   });
 
-  it("UT-GEN-904 out of country the Save reads Request permission and stays disabled (excluded flow)", async () => {
+  it("UT-GEN-904 out of country the Save is no longer excluded: it carries the canvas tooltip (D90)", async () => {
     renderScreen();
     fireEvent.click(command("Add WTG Type"));
     fireEvent.click(await screen.findByTestId("tgl_btn_GeneratorData_RightPanel_Form_Filter_Country"));
     await waitFor(() => expect(screen.getByText("Generators not available for Germany")).toBeTruthy());
     const save = screen.getByTestId("pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save") as HTMLButtonElement;
+    // Disabled only because no model is chosen yet — the D27 exclusion reason is gone.
     expect(save.disabled).toBe(true);
-    expect(save.getAttribute("title")).toBe(EXCLUDED.permissionRequest);
+    expect(save.getAttribute("title")).toBe(TYPE_PANEL_TOOLTIPS.save);
+  });
+
+  it("UT-GEN-914 a WTG card with an open request: Cancel runs Request permission cancellation, not a card click (D90)", async () => {
+    const open: GeneratorTypeRow = {
+      ...TYPE, flowRunId: "run-1", flowApprovalId: "ap-1", requestPermissionState: CHOICE_PLANT.requestPermissionState.pending,
+    };
+    state.types = [open];
+    renderScreen();
+    const cancel = await screen.findByTestId("pcf_btn_GeneralData_DisplayProject_Body_Buttons_Reset_1-t1") as HTMLButtonElement;
+    expect(cancel.disabled).toBe(false);
+    expect(cancel.getAttribute("title")).toBe("Cancel Request Permission.");
+    fireEvent.click(cancel);
+    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    const job = jobAt(0);
+    expect(job.progress).toBe(PERMISSION_MSG.canceling("Vestas V150-5.6"));
+    expect(job.success).toBe("Request permisson forg generator Vestas V150-5.6 was canceled !");
+    expect(job.errorText?.("x")).toBe(PERMISSION_MSG.cancelError("x"));
+    expect((await planOf(job)).writes).toHaveLength(0);
+    expect(state.flows.cancel).toHaveBeenCalledWith("wtg", open);
+    // The click stayed on the button: the card was not selected.
+    expect(within(commandBar()).queryByRole("button", { name: "Delete Generator Type" })).toBeNull();
+  });
+
+  it("UT-GEN-915 Delete Generator Type cancels an open request before the deletes (D90)", async () => {
+    renderScreen();
+    fireEvent.click(screen.getByTestId("gal_Generators_DisplayProject_Body_Form_GeneratorTypes-select-t1"));
+    fireEvent.click(await within(commandBar()).findByRole("button", { name: "Delete Generator Type" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(state.run).toHaveBeenCalled());
+    expect(state.flows.cancelIfOpen).toHaveBeenCalledWith("wtg", TYPE);
+    const plan = await planOf(jobAt(0));
+    expect(plan.refusedReason).toBeUndefined();
+    expect(plan.writes.some((w) => w.op === "delete" && w.entitySet === "vsb_generatortypeinprojects")).toBe(true);
   });
 
   it("UT-GEN-905 Add Others does nothing; Delete BESS deletes the row and rolls the capacity up", async () => {
@@ -271,24 +337,31 @@ describe("UT-GEN Screen (connected, D27)", () => {
     await pick("cmb_Supplier_5", "148");
     await waitFor(() => expect(save().disabled).toBe(false));
     fireEvent.click(save());
-    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(2));
-    const first = jobAt(0);
-    expect(first.progress).toBe('Generator "Vestas V150-5.6 - available" will replace "V150", please wait...');
-    const plan = await planOf(first);
+    // Save performance (6 Nov 2026): one job — the follow-up is its `then` step.
+    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    const job = jobAt(0);
+    expect(job.progress).toBe('Generator "Vestas V150-5.6 - available" will replace "V150", please wait...');
+    const plan = await planOf(job);
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "update:vsb_opexprojectcosts", "delete:vsb_generatorinprojects", "delete:vsb_generatorinprojects",
       "delete:vsb_devicetypesinprojects", "delete:vsb_generatortypeinprojects",
       "create:vsb_generatortypeinprojects", "create:vsb_generatorinprojects", "create:vsb_generatorinprojects",
       "update:vsb_projects",
     ]);
+    // Detach + old units together; the device-type row only after that run (so it cannot take the O&M costs);
+    // the old type, the new type, the new turbines together, the roll-up last.
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([true, true, true, false, false, false, true, true, false]);
     // The old turbines are gone, so the new names start again at 1.
     expect(plan.writes[6]!.data!.vsb_name).toBe("WTG WPN_1");
-    const second = jobAt(1);
-    const follow = await planOf(second);
-    expect(follow.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
+    const follow = await job.then!({ done: 9, createdIds: ["new-type", "nw1", "nw2"] });
+    expect(follow!.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_devicetypesinprojects", "update:vsb_opexprojectcosts",
     ]);
-    expect(typeof second.success === "function" ? second.success(follow) : second.success).toBe(REPLACE_MSG.wtgReplaced);
+    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true]);
+    expect(typeof job.success === "function" ? job.success(follow!) : job.success).toBe(REPLACE_MSG.wtgReplaced);
+    // D90 — an open request on the old type is cancelled first; in country nothing is requested.
+    expect(state.flows.cancelIfOpen).toHaveBeenCalledWith("wtg", TYPE);
+    expect(state.flows.request).not.toHaveBeenCalled();
   });
 
   it("UT-GEN-910 Add Inverter / Add Substructure are not offered (canvas `ItemVisible: false`, G9 withdrawn)", async () => {
@@ -311,9 +384,13 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(plan.writes.slice(0, 3).map((w) => `${w.op}:${w.entitySet}:${w.id}`)).toEqual([
       "delete:vsb_opexprojectcosts:o1", "delete:vsb_generatorinprojects:u1", "delete:vsb_pvmoduletypeinprojects:pv1",
     ]);
+    // Save performance (6 Nov 2026): the land-lease / O&M deletes in parallel; the unit, then the type, after them.
+    expect(plan.writes.slice(0, 3).map((w) => Boolean(w.concurrent))).toEqual([true, false, false]);
+    // D90 — the open-request check runs before the deletes.
+    expect(state.flows.cancelIfOpen).toHaveBeenCalledWith("pv", PV);
   });
 
-  it("UT-GEN-913 Replace PV Module Type (G6): the Replace from / to form runs both jobs", async () => {
+  it("UT-GEN-913 Replace PV Module Type (G6): the Replace from / to form runs both steps in one job", async () => {
     renderScreen();
     fireEvent.click(screen.getByTestId("gal_Generators_DisplayProject_Body_Form_PvModule-select-pv1"));
     fireEvent.click(await within(commandBar()).findByRole("button", { name: "Replace PV Module Type" }));
@@ -324,14 +401,17 @@ describe("UT-GEN Screen (connected, D27)", () => {
     await pick("cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_2", "JA Solar 550");
     await waitFor(() => expect(save().disabled).toBe(false));
     fireEvent.click(save());
-    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(2));
-    expect(jobAt(0).progress).toBe("PV Module 'JA 600' will be replaced, please wait...");
-    const plan = await planOf(jobAt(0));
+    await waitFor(() => expect(state.run).toHaveBeenCalledTimes(1));
+    const job = jobAt(0);
+    expect(job.progress).toBe("PV Module 'JA 600' will be replaced, please wait...");
+    const plan = await planOf(job);
     expect(plan.writes.at(-1)).toMatchObject({ op: "create", entitySet: "vsb_pvmoduletypeinprojects" });
-    expect(jobAt(1).success).toBe(REPLACE_MSG.pvReplaced);
-    const follow = await planOf(jobAt(1));
-    expect(follow.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
+    expect(job.success).toBe(REPLACE_MSG.pvReplaced);
+    const follow = await job.then!({ done: plan.writes.length, createdIds: ["new-pv"] });
+    expect(follow!.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_devicetypesinprojects", "create:vsb_generatorinprojects", "update:vsb_projects", "update:vsb_opexprojectcosts",
     ]);
+    // The device-type row, the unit and the PV totals one by one; the O&M re-links as one parallel run.
+    expect(follow!.writes.map((w) => Boolean(w.concurrent))).toEqual([false, false, false, true]);
   });
 });

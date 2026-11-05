@@ -21,15 +21,24 @@
  *                              text AppId · text_1 Project (the 13-field JSON, `GateCancellationPayload`); no response
  *   cancelChecklistApproval    Perform Request of Check List Approval Cancellation
  *                              text CheckList Guid → `success`
+ *   requestModulePermission    Request Module Permission (D90, Project Generators)
+ *                              email RequesterEmail · text_1 PrimarilyApprovalGroupID · text_4 AppId · text Project (JSON) → `runid`, `approvalid`
+ *   cancelModulePermission     Request permission cancellation (D90, Project Generators)
+ *                              email RequesterEmail · text_2 AppId · text_3 Project (the module JSON); no response
  *
- * Registered 5 Nov 2026 (the run-only connections were switched to connection references, D81 §3b), NOT yet wrapped or called: Request Module Permission and Request permission
- * cancellation (Project Generators).
+ * The two module-permission flows were registered on 5 Nov 2026 (D86, after the run-only connections were switched to
+ * connection references, D81 §3b) and wired to the Generators screen in D90. Both write the type row themselves:
+ * Request Module Permission sets 'Request Permission State' Pending, `FlowRunId` and `FlowApprovalId` right after it
+ * responds (`Scope_update_RunId_and_Approval_Id_info`), then Approved + the plant roll-up, or deletes the row when the
+ * approval is declined; the cancellation sets Canceled and blanks both ids. The code app writes none of those fields.
  */
 import type { IOperationResult } from "@microsoft/power-apps/data";
 import { PerformCommonRequestofCheckListApprovalService } from "@/generated/services/PerformCommonRequestofCheckListApprovalService";
 import { PerformCommonRequestofGateApprovalService } from "@/generated/services/PerformCommonRequestofGateApprovalService";
 import { PerformRequestofCheckListApprovalCancellationService } from "@/generated/services/PerformRequestofCheckListApprovalCancellationService";
 import { PerformRequestofGateApprovalCancellationService } from "@/generated/services/PerformRequestofGateApprovalCancellationService";
+import { RequestModulePermissionService } from "@/generated/services/RequestModulePermissionService";
+import { RequestpermissioncancellationService } from "@/generated/services/RequestpermissioncancellationService";
 import { unwrap } from "@/platform/errors";
 import { loggedCall } from "@/platform/requestLog";
 
@@ -39,6 +48,8 @@ export const FLOW = {
   gateApproval: "Perform Common Request of Gate Approval",
   gateCancellation: "Perform Request of Gate Approval Cancellation",
   checklistCancellation: "Perform Request of Check List Approval Cancellation",
+  modulePermission: "Request Module Permission",
+  permissionCancellation: "Request permission cancellation",
 } as const;
 
 /**
@@ -128,4 +139,61 @@ export async function cancelChecklistApproval(checklistId: string): Promise<{ su
     text: checklistId,
   }));
   return { success: data?.success };
+}
+
+/**
+ * The `varProject` record of Request Module Permission (`Parse_Project`): the project header, the `ModuleType`
+ * option value and the module's own key (`GeneratorTypeInProject` + `Generator`, `InverterTypeInProject`, …).
+ * The Generators screen builds it (`features/pm/generators/rules.ts`, `build*PermissionPayload`).
+ */
+export type ModulePermissionRequestPayload = {
+  ProjectGuid: string;
+  ProjectId: string | null;
+  ProjectName: string | null;
+  ShortName: string | null;
+  ProjectManagerEmail: string | null;
+  ModuleType: number;
+} & Record<string, string | number | null>;
+
+/** The `varModule` record of Request permission cancellation (`Parse_ModuleType`). */
+export interface ModuleCancellationPayload {
+  ModuleTypeGuid: string;
+  ModuleType: number;
+  Name: string | null;
+  FlowRunId: string | null;
+  FlowApprovalId: string | null;
+}
+
+/**
+ * `RequestModulePermission.Run(User().Email, gblPrimarilyApprovalGroupID, gblProjectManagmentAppID, JSON(varProject))`
+ * (Generators Y:16535 WTG, Y:10259 inverter, Y:8995 substructure; the PV call is commented out in the canvas).
+ */
+export async function requestModulePermission(args: {
+  requesterEmail: string;
+  approvalGroupId: string;
+  appId: string;
+  project: ModulePermissionRequestPayload;
+}): Promise<FlowApprovalResult> {
+  return approval(await runFlow(FLOW.modulePermission, () => RequestModulePermissionService.Run({
+    email: args.requesterEmail,
+    text_1: args.approvalGroupId,
+    text_4: args.appId,
+    text: JSON.stringify(args.project),
+  })));
+}
+
+/**
+ * `Requestpermissioncancellation.Run(User().Email, gblProjectManagmentAppID, JSON(varModule))` (Generators: the cards'
+ * Cancel, Y:2652 / 3798 / 4466 / 5125; the deletes, Y:15308 / 15397 / 15486 / 15676; the 1.21.753 Replace).
+ */
+export async function cancelModulePermission(args: {
+  requesterEmail: string;
+  appId: string;
+  module: ModuleCancellationPayload;
+}): Promise<void> {
+  await runFlow(FLOW.permissionCancellation, () => RequestpermissioncancellationService.Run({
+    email: args.requesterEmail,
+    text_2: args.appId,
+    text_3: JSON.stringify(args.module),
+  }));
 }
