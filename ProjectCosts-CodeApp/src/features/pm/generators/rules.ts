@@ -1819,6 +1819,61 @@ export function canSaveType(args: {
   return Object.values(args.errors).every((e) => e === null);
 }
 
+/**
+ * NEW — no canvas equivalent (DIVERGENCE, D84, proposed): the warning that says why the type Save is
+ * disabled when no field the user can see explains it. The canvas shows nothing in that case: its
+ * `Cost` row (`Valid: locGeneratorCostsPerWtg > 0`, Y:15072) belongs to a field that is hidden
+ * (`con_GeneratorData_RightPanel_Form_Fields_Cost.Visible: false`, Y:14300), and the `RevisedHubheight`
+ * row of a non-Dummy model with a 0 m hub height (`cmb_Supplier_2.OnChange`, Y:14693) has no label,
+ * because the revised hub height box shows only for a Dummy supplier. The gate itself is unchanged.
+ */
+export const TYPE_SAVE_BLOCKED_TEXT = {
+  hubHeightZero: "The selected hub height is 0 m. Choose another hub height to save this generator type.",
+  indexUnavailable:
+    "The price inflation index could not be loaded, so the cost per WTG cannot be calculated. Reload the page or try again later.",
+  noIndex: (fidYear: number | null): string =>
+    `No price inflation index is set for ${fidYear === null ? "the project's FID year" : `the FID year ${fidYear}`} in Estimation Price Inflations, so the cost per WTG is 0. Save stays disabled until the index is added.`,
+  /** `band` is the canvas column the count reads: `'1 WTG price'` … `'5 WTG price'` (5 or more → 5). */
+  noPrice: (model: string, band: number): string =>
+    `"${model}" has no '${band} WTG price', so the cost per WTG is 0. Save stays disabled until the price is added to the generator.`,
+} as const;
+
+/**
+ * NEW (D84) — the hidden reason `canSaveType` is false, as one `TYPE_SAVE_BLOCKED_TEXT` message, or
+ * `null` when there is nothing to add: Save is enabled, a visible field message already explains it,
+ * the height-limit message is showing, or the price index is still loading. It explains the gate and
+ * never changes it. The cost arm follows `costPerWtg`: (band price + additional foundation cost) × index.
+ */
+export function typeSaveBlockedReason(args: {
+  errors: TypeFormErrors;
+  heightBlocked: boolean;
+  dummy: boolean;
+  model: Pick<CatalogModel, "prices" | "additionalFoundationCost" | "displayName" | "name" | "turbineType"> | null;
+  count: number;
+  index: { value: number; loading: boolean; failed: boolean };
+  fid: string | null | undefined;
+}): string | null {
+  const e = args.errors;
+  if (args.heightBlocked || args.model === null) return null;
+  if (e.Supplier || e.TurbineType || e.Hubheight) return null;
+  // A non-Dummy model with a 0 m hub height: blocked with no label, whatever the count.
+  if (!args.dummy && e.RevisedHubheight) return TYPE_SAVE_BLOCKED_TEXT.hubHeightZero;
+  if (e.RevisedHubheight || e.NumberOfGenerators) return null;
+  if (e.Cost === null) return null;
+  if (args.index.loading) return null;
+  if (args.index.failed) return TYPE_SAVE_BLOCKED_TEXT.indexUnavailable;
+  if (!(args.index.value > 0)) {
+    const year = args.fid ? Number(String(args.fid).slice(0, 4)) : NaN;
+    return TYPE_SAVE_BLOCKED_TEXT.noIndex(Number.isFinite(year) ? year : null);
+  }
+  if (wtgPriceBand(args.model, args.count) + (args.model.additionalFoundationCost ?? 0) <= 0) {
+    const band = args.count >= 1 && args.count <= 4 ? args.count : 5;
+    const label = args.model.displayName ?? args.model.name ?? args.model.turbineType ?? "";
+    return TYPE_SAVE_BLOCKED_TEXT.noPrice(label, band);
+  }
+  return null;
+}
+
 export interface TurbineFormState {
   nameIndex: string;
   effectiveCapacity: string;

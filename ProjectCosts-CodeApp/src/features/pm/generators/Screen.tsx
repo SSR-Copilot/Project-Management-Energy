@@ -69,7 +69,7 @@ import {
   TOTAL_CAPACITY_LABEL, TURBINE_PANEL_LABELS, TURBINE_TABLE_LABELS, TYPE_DETAIL_FIELD_LABELS,
   TYPE_PANEL_LABELS, TYPE_PANEL_TOOLTIPS, WRITE_ERROR, WRITE_MSG, WTG_CARD_LABELS,
   buildTurbineNames, canAddGenerator, canSavePvType, canSaveSimple, canSaveTurbine,
-  canSaveType, cancelRequestVisible, capacityGuardReason, cascadeOptions, changeStatusDialog,
+  canSaveType, typeSaveBlockedReason, cancelRequestVisible, capacityGuardReason, cascadeOptions, changeStatusDialog,
   commandBarOrder, commandBarState, commandParentKey, costPerWtg, currencyCaption, defaultSelection, fmtCapacity, fmtHeight, forLanguage,
   generatorCommandIcon, generatorsTotalRowsText, heightBlocksSave, heightLimitExceeded,
   heightPopupTypeName, inverterCardValues, isBodyVisible, isDummySupplier, isOtherSupplierModule,
@@ -934,6 +934,12 @@ export default function GeneratorsScreen() {
     planning, totalHeight: prospectiveHeight, project, entraObjectId,
   });
   const typeSaveable = resolvedModel !== null && canSaveType({ errors: typeErrors, heightBlocked: typeHeightBlocked });
+  // NEW (D84): why Save is disabled when no visible field says so — the canvas shows nothing here.
+  const typeSaveBlocked = typeSaveable ? null : typeSaveBlockedReason({
+    errors: typeErrors, heightBlocked: typeHeightBlocked, dummy, model: resolvedModel, count,
+    index: { value: indexQ.data, loading: indexQ.isLoading, failed: Boolean(indexQ.error) },
+    fid: project?.fid,
+  });
   const touchType = <K extends keyof TypeFormState>(field: K, value: TypeFormState[K]) =>
     setTypeForm((prev) => {
       const next = { ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) };
@@ -2032,6 +2038,12 @@ export default function GeneratorsScreen() {
             onChange={(v) => touchType("numberOfGenerators", v)}
           />
           {typeHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
+          {/* NEW (D84): the hidden reason Save is disabled (`typeSaveBlockedReason`); no canvas control. */}
+          {typeSaveBlocked ? (
+            <MessageBar intent="warning" className={s.typeField} data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked">
+              <MessageBarBody>{typeSaveBlocked}</MessageBarBody>
+            </MessageBar>
+          ) : null}
         </div>
       </FormPanel>
 

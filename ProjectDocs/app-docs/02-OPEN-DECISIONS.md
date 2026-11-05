@@ -6588,3 +6588,30 @@ master's code comments (municipality search from the first letter with a 5,000-r
 page-lock sections with no project) are now in RounakDev1 and listed in file 13 (section B).
 
 **Result:** see the verify line in the merge commit; `RounakDev1` and `master` point at the same merge commit, pushed.
+
+## D84 · Generators: say why the WTG type Save is disabled (4 Nov 2026) — PROPOSED
+
+**Trigger:** functional testing (Sourabh Kumar, 4 Nov 2026). Add Generator Type with Supplier *Dummy Enercon*, Turbine Type
+*Dummy-Enercon 3-5*, Hub Height 123, Number of Generators 4: every visible field valid, Save disabled, no message. The canvas
+app behaves the same with the same data (confirmed by the tester), so this is not a parity defect.
+
+**Cause (canvas and code alike):** `pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save.DisplayMode` (Y:15169) also needs two
+rows the user cannot see:
+- `Cost`: `Valid: locGeneratorCostsPerWtg > 0` (Y:15072). The cost per WTG is (the count's `'1 WTG price'` … `'5 WTG price'`
+  + `'Additional foundation cost'`) × the FID price-inflation index. It is 0 when the generator has no price for the count, or
+  when Estimation Price Inflations has no index for the FID year (and the year before). The Cost field is hidden
+  (`con_GeneratorData_RightPanel_Form_Fields_Cost.Visible: false`, Y:14300).
+- `RevisedHubheight` for a non-Dummy model whose hub height is 0 m (`cmb_Supplier_2.OnChange`, Y:14693): the box that would
+  explain it shows only for a Dummy supplier.
+
+**Change (DIVERGENCE, UI only):** the panel shows a warning bar under Number of Generators that names the reason: the missing
+`'N WTG price'` on the generator, the missing index for the FID year, an index read that failed, or the 0 m hub height. It
+appears only when no visible field message or the height-limit message already explains the block, and not while the index
+is loading. The Save gate (`canSaveType`) is unchanged.
+
+- Code: `TYPE_SAVE_BLOCKED_TEXT` and `typeSaveBlockedReason()` in `features/pm/generators/rules.ts`; the bar
+  (`data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked"`) in `Screen.tsx`. Texts are NEW, not canvas copy.
+- Tests: UT-GEN-142 … UT-GEN-146.
+- Not covered: the Replace Generator panel uses the same cost rule and still shows no reason.
+
+**Open for the product owner:** approve the warning and its wording; decide whether Replace Generator gets the same.
