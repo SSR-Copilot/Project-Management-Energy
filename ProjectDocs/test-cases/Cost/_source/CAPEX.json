@@ -21,7 +21,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "D1",
-  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1)."
+  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1). | D90: no Cost screen or command reads the role, so the expected result is the same for every role. Run with the real account of the role if one exists; otherwise one run with a no-role account proves the refused write is shown, not silent."
  },
  {
   "case_id": "FT-ACC-097",
@@ -45,7 +45,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "D1",
-  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1)."
+  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1). | D90: no Cost screen or command reads the role, so the expected result is the same for every role. Run with the real account of the role if one exists; otherwise one run with a no-role account proves the refused write is shown, not silent."
  },
  {
   "case_id": "FT-ACC-098",
@@ -69,7 +69,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "D1",
-  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1)."
+  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1). | D90: no Cost screen or command reads the role, so the expected result is the same for every role. Run with the real account of the role if one exists; otherwise one run with a no-role account proves the refused write is shown, not silent."
  },
  {
   "case_id": "FT-ACC-099",
@@ -93,7 +93,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "D1",
-  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1)."
+  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1). | D90: no Cost screen or command reads the role, so the expected result is the same for every role. Run with the real account of the role if one exists; otherwise one run with a no-role account proves the refused write is shown, not silent."
  },
  {
   "case_id": "FT-ACC-100",
@@ -117,7 +117,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "D1",
-  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1)."
+  "comments": "Needs one real account per role (no mock roles). DataSourceInfo Create/Delete permission terms of the hidden command bar (Capex Costs Screen.pa.yaml:3161-3205) have no SDK equivalent (D1). | D90: no Cost screen or command reads the role, so the expected result is the same for every role. Run with the real account of the role if one exists; otherwise one run with a no-role account proves the refused write is shown, not silent."
  },
  {
   "case_id": "FT-BR-CAPEX-001",
@@ -397,7 +397,7 @@
   "acceptance": "Selected year = floor after the first click AND arrow disabled.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "btn_Costs_ProjectCostbtn_ShowPreviousYear.OnSelect (Capex Costs Screen.pa.yaml:2973-2993)",
-  "rule_function": "clusters.ts clampYear()",
+  "rule_function": "clusters.ts previousYearFloor, clampSelectedYear",
   "pinned_by": "UT-CLU-017",
   "server_enforcement": "Not applicable",
   "exec_mode": "Semi-automated",
@@ -897,8 +897,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…).",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Find a contract with a blank Cost Type under a mapped sub-account.\n3. Read its payer tag and filter by that payer.",
-  "expected": "Cost Type when set; else the 'SPVDevCo Mapping Capex Devexes' value for the sub-account.",
-  "acceptance": "Payer tag equals the reference.",
+  "expected": "The grid tag ([payer]) and the Cost Paid By filter use the contract's OWN Cost Type only, as the Canvas does (Capex Costs Screen.pa.yaml:1220-1235): a blank Cost Type shows an empty tag \"[]\" and is listed only under Show All Cost. The NEW-contract panel's Cost Paid By default follows the sub-account's SPV/DevCo mapping (:12234-12254). The code app matches (D90).",
+  "acceptance": "For a contract with a blank Cost Type the grid tag text and the payer-filter membership equal the Canvas; a new contract on a mapped sub-account opens on the mapped payer.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "rad_AddContract_RightPanel_CostPaidBy_1.DefaultSelectedItems (Capex Costs Screen.pa.yaml:12234-12254)",
   "rule_function": "data/costBook.ts payer mapping",
@@ -908,8 +908,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-01): follow the Canvas."
  },
  {
   "case_id": "FT-BR-CAPEX-034",
@@ -1185,8 +1185,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…).",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. For a sub-account, list the 'Devex/Capex Standard Assumptions' rows (admin data).\n3. Open the add menu and compare the offered assumptions.",
-  "expected": "Offered = assumptions for this sub-account, the project's country and technology (case-insensitive), not already created for this project and sub-account, with at least one ticked cluster ≥ the project's start cluster that has usable dates (clusters 1-5 only).",
-  "acceptance": "Offered list equals the reference.",
+  "expected": "The Add Standard Contract menu offers an assumption when: its sub-account is in the category, country and technology match (technology compared in lower case), it is not yet created for the sub-account, and a ticked cluster N (1-5) satisfies Coalesce(start cluster, 0) <= N (:3091-3123). There is NO date test in the menu, and a project at start cluster 6 is offered none. A click on an offered assumption whose clusters have no usable dates creates nothing and shows the Information notice \"Standard cost was not created because no applicable cost period was found for the project's Start Cluster.\" (:18609-18634).",
+  "acceptance": "The offered list equals the Canvas list for the same project, including an empty list at start cluster 6; the refusal notice text is verbatim.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "btn_Capex_Cost_Build_StandardContractOptions_Code.OnSelect (Capex Costs Screen.pa.yaml:452); cmd_…Items varApplicableStandardContracts (Capex Costs Screen.pa.yaml:3091-3150)",
   "rule_function": "standardContracts.ts buildStandardOptions(), eligibleClusters()",
@@ -1196,8 +1196,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-02): follow the Canvas."
  },
  {
   "case_id": "FT-BR-CAPEX-046",
@@ -1706,15 +1706,15 @@
  {
   "case_id": "FT-BR-CAPEX-067",
   "suite": "FT-BR",
-  "title": "Equal mode on reopen: any cluster → By Cluster; else both dates → By Start and End Date; else By Cluster",
+  "title": "Equal mode on reopen: any cluster -> By Cluster; else EITHER stored date -> By Start and End Date; else By Cluster",
   "category": "Edit",
   "role": "All roles (role-independent rule)",
   "priority": "P2",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). The category holds an Equal Distribution contract.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Edit an equal contract with clusters stored.\n3. Edit one with only dates stored.\n4. Edit one with neither.",
-  "expected": "By Cluster / By Start and End Date / By Cluster respectively.",
-  "acceptance": "Selected mode equals the reference for all three.",
+  "expected": "rad_..._DistributionBy_1.DefaultSelectedItems tests Not(IsBlank(StartDate & EndDate)), a concatenation, so one stored date is enough (:10860).",
+  "acceptance": "A contract with only a start date reopens on By Start and End Date in both apps.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "rad_AddContract_RightPanel_DistributionBy_1.DefaultSelectedItems (Capex Costs Screen.pa.yaml:10846)",
   "rule_function": "rules.ts resolveEqualMode()",
@@ -1802,15 +1802,15 @@
  {
   "case_id": "FT-BR-CAPEX-071",
   "suite": "FT-BR",
-  "title": "Panel year accordions span the canvas cost window",
+  "title": "Panel year list runs from Year(start) to Year(end) + 3",
   "category": "Calculation",
   "role": "All roles (role-independent rule)",
   "priority": "P2",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). The category holds an Individual Distribution contract (Absolute Values) with costs in the selected year.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Open Edit on an individual contract.\n3. List the year accordions.",
-  "expected": "Canvas warm-up timer builds years from Year(cost start) − 1 for locProjectDuration = Year(costEnd) − Year(costStart) + 4 years. Code app reuses the grid's navigation window (open question D38 §9 Q6).",
-  "acceptance": "Year list equals the reference, or the difference matches D38 Q6.",
+  "expected": "The Add/Edit panel lists the years Year(start) .. Year(end) + 3, where start = Coalesce(If(start cluster > 0, Acquisition date, Project Start Date), Project Start Date, Acquisition date, Today()) and end = Coalesce(COD, End Date, 5-Construction, Today()) (:19578-19640). A year that already carries a payment is never hidden (the one deliberate extension).",
+  "acceptance": "First and last year equal the Canvas for the test project (record both years in the run).",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "tmr_Load_Contract_Gallery_Warmup (Capex Costs Screen.pa.yaml:19580)",
   "rule_function": "clusters.ts projectPeriods()",
@@ -1820,8 +1820,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "D38 §9 Q6 (gap report B9)",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-07): follow the Canvas."
  },
  {
   "case_id": "FT-BR-CAPEX-072",
@@ -2097,8 +2097,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A CAPEX category tab is selected that has at least one sub-account.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Select Equal, By Start and End Date 01/2026–12/2026, monthly, Total 1000.\n3. Read Average Amount per Payment.",
-  "expected": "Disabled box showing RoundDown(1000/12, 0) = 83 (the base, not the mean); the hint \"Average Amount will be (re)calculated upon saving.\" is never shown (Visible false).",
-  "acceptance": "Value = 83 AND box disabled AND hint absent.",
+  "expected": "The read-only Average Amount per Payment shows Text(total / n, \"########0.0#\"): 1000 over 12 payments shows 83.33 (at least one, at most two decimals), blank without a valid total (:12084-12087, :12136-12139). The STORED vsb_averagepayment is the rounded-down base (83).",
+  "acceptance": "The box text equals the Canvas for 1000/12 (83.33) and for 1000/10 (100.0).",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "txt_AddContract_RightPanel_AverageAmountPerPayment_1.DisplayMode (Capex Costs Screen.pa.yaml:11931); lbl_…Fields_Label_ErrorMessage_15.Visible (Capex Costs Screen.pa.yaml:11918-11920)",
   "rule_function": "rules.ts averagePayment()",
@@ -2162,15 +2162,15 @@
  {
   "case_id": "FT-BR-CAPEX-086",
   "suite": "FT-BR",
-  "title": "Save disabled while Description is blank (no message)",
+  "title": "A Description of only spaces counts as filled (Save enabled); an empty one disables Save",
   "category": "Validation",
   "role": "All roles (role-independent rule)",
   "priority": "P1",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A CAPEX category tab is selected that has at least one sub-account.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Open Add New Cost, fill every field except Description.\n3. Type only spaces into Description.",
-  "expected": "Save disabled (Not(IsBlank(Description))); no error text under the field.",
-  "acceptance": "Save disabled in both states.",
+  "expected": "Save needs Not(IsBlank(Description)) with no Trim (:17513): empty disables Save, three spaces enable it. Same in both apps (D90).",
+  "acceptance": "Save state for \"\" and for \"   \" equals the Canvas.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save.DisplayMode (Capex Costs Screen.pa.yaml:17513)",
   "rule_function": "rules.ts canSaveContract()",
@@ -2180,8 +2180,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-08). Step 3 now expects Save ENABLED."
  },
  {
   "case_id": "FT-BR-CAPEX-087",
@@ -2342,7 +2342,7 @@
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "lbl_AddContract_RightPanel_TotalCost_ErrorMessage_1.Visible (Capex Costs Screen.pa.yaml:10940); Save.DisplayMode (Capex Costs Screen.pa.yaml:17518-17522, 17545)",
   "rule_function": "rules.ts canSaveContract()",
-  "pinned_by": "UT-CAPEXR-028, UT-CAPEXR-038",
+  "pinned_by": "UT-CAPEXR-029",
   "server_enforcement": "Not applicable",
   "exec_mode": "Semi-automated",
   "auto_status": "To automate",
@@ -2517,7 +2517,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "",
-  "comments": ""
+  "comments": "D90: Individual + % Values needs a non-blank Total Costs (canvas :17517-17522); the 100 % sum check is the code app's own earlier rule."
  },
  {
   "case_id": "FT-BR-CAPEX-101",
@@ -2625,8 +2625,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). The category holds an Individual Distribution contract (Absolute Values) with costs in the selected year.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Type 10.5 in an Absolute month and click Save.\n3. Type 500000001 and check Save.",
-  "expected": "Canvas: Save.DisplayMode never reads the month error labels (layout only), so both cases leave Save enabled. Code app: a decimal keeps Save enabled (Recalculate exists to round it); an out-of-range month disables Save.",
-  "acceptance": "Decimal: Save enabled in both apps; out-of-range: compare with the reference and record the difference.",
+  "expected": "A month amount outside its range (Absolute: above 500000000, Poland 2250000000; % Values: above 100) shows the red message under its box and Save stays ENABLED, as in the Canvas (no Save or Recalculate DisplayMode reads the month error labels, :17509-17570). This reproduces a Canvas defect on purpose (D90).",
+  "acceptance": "Out-of-range month: message shown, Save enabled in both apps. Format error: message shown, Save enabled.",
   "expectation_source": "Feature rules.ts / plan.ts",
   "canvas_ref": "Save.DisplayMode (Capex Costs Screen.pa.yaml:17509-17569)",
   "rule_function": "rules.ts hasMonthRangeError()",
@@ -2636,8 +2636,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "SOURCE DEFECT note in Screen.tsx:643 (gap report S8)",
-  "divergence_ref": "",
-  "comments": "Screen.tsx:635-650 says Save is not gated on month errors but then gates on range errors; no D-number records this."
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-03): follow the Canvas. A % above 100 can be saved."
  },
  {
   "case_id": "FT-BR-CAPEX-106",
@@ -2793,8 +2793,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A CAPEX category tab is selected that has at least one sub-account.",
   "test_data": "PW-<runId>-eqj, 12/2026–06/2027",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Create the contract.\n3. Read vsb_bystartenddatejson.",
-  "expected": "[{\"EndDate\":\"06/2027\",\"StartDate\":\"12/2026\"}] — an array of one record with MM/YYYY strings; By Cluster JSON all false.",
-  "acceptance": "Read-back JSON equals the shape and values exactly.",
+  "expected": "By Start and End Date stores the pair as JSON text with EndDate first, as the Canvas rows read: [{\"EndDate\":\"06/2026\",\"StartDate\":\"12/2017\"}] (a Power Fx record serialises alphabetically).",
+  "acceptance": "The stored text equals the Canvas row's text character for character.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "Save.OnSelect 'By Start and End Date JSON' (Capex Costs Screen.pa.yaml:17574)",
   "rule_function": "rules.ts startEndJson(), parseStartEndJson()",
@@ -2804,8 +2804,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-09)."
  },
  {
   "case_id": "FT-BR-CAPEX-113",
@@ -3314,15 +3314,15 @@
  {
   "case_id": "FT-BR-CAPEX-134",
   "suite": "FT-BR",
-  "title": "Relink reset needed only with paid months or payment-date comments",
+  "title": "Relink reset is needed only when the contract has a paid month; payment-date comments neither trigger it nor are deleted",
   "category": "Validation",
   "role": "All roles (role-independent rule)",
   "priority": "P2",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). The category holds an Individual Distribution contract (Absolute Values) with costs in the selected year.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Link a contract that has no paid months and no payment-date comments (costs inside the target cluster), Save.",
-  "expected": "No dialog; save proceeds directly.",
-  "acceptance": "No dialog AND contract saved.",
+  "expected": "Changing Link to Milestone prompts for the reset only when the contract has at least one paid month (locMilestoneRelinkResetNeeded, :11466-11479). Payment-date comments are not part of the trigger and are kept on Confirm (the RemoveIf is inside a block comment, :20061-20065).",
+  "acceptance": "Paid month present: prompt; confirm resets only the Paid markers and the comment count equals the reference. No paid month but a payment-date comment: no prompt.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster locMilestoneRelinkResetNeeded (Capex Costs Screen.pa.yaml:11399-11505)",
   "rule_function": "rules.ts milestoneRelinkResetNeeded()",
@@ -3332,8 +3332,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "",
-  "comments": ""
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-04). Related fix: CAPEX-132."
  },
  {
   "case_id": "FT-BR-CAPEX-135",
@@ -3362,26 +3362,26 @@
  {
   "case_id": "FT-BR-CAPEX-136",
   "suite": "FT-BR",
-  "title": "Add Standard Contract without a resolvable sub-account row is refused with the canvas warning",
+  "title": "Add Standard Contract without a resolvable sub-account is refused with the canvas warning (unit level)",
   "category": "Validation",
   "role": "All roles (role-independent rule)",
   "priority": "P2",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A CAPEX category tab is selected that has at least one sub-account.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Trigger Add Standard Contract when the clicked row cannot be resolved (row removed by a refresh).",
-  "expected": "Warning \"Please select a valid subaccount before adding a standard contract.\"; nothing created.",
-  "acceptance": "Message verbatim AND no write.",
+  "expected": "checkStandardContractClick refuses with \"Please select a valid subaccount before adding a standard contract.\" and the app shows it as a warning toast (Notify Warning, :7371-7377). The screen cannot reproduce a vanished sub-account, so this is a unit-level case.",
+  "acceptance": "UT-STD-022 passes and asserts the verbatim text.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "DevexCapexSummaryPCF.OnChange AddStandardContractTriggered (Capex Costs Screen.pa.yaml:7371-7377)",
   "rule_function": "standardContracts.ts checkStandardContractClick()",
-  "pinned_by": "UT-STD-022, UT-STD-024",
+  "pinned_by": "UT-STD-022",
   "server_enforcement": "Not applicable",
-  "exec_mode": "Manual",
-  "auto_status": "Manual only - reason in Comments",
-  "auto_ref": "",
+  "exec_mode": "Automated",
+  "auto_status": "Automated - passing",
+  "auto_ref": "UT-STD-022",
   "known_defect_ref": "",
   "divergence_ref": "",
-  "comments": "Hard to reach through the UI; covered at rule level."
+  "comments": "D90 (A-10): unit level only; the alert became a toast."
  },
  {
   "case_id": "FT-BR-CAPEX-137",
@@ -3589,7 +3589,7 @@
   "acceptance": "Thread order per setting equals the reference.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "modernDropdown1.Default/Items (Capex Costs Screen.pa.yaml:8352-8355); CheckboxCanvas1 (Capex Costs Screen.pa.yaml:8364-8367); CheckboxCanvas1_1 (Capex Costs Screen.pa.yaml:8379-8382); gal_Capex_Comments.Items (Capex Costs Screen.pa.yaml:8425-8458)",
-  "rule_function": "comments.ts sortThreads(), visibleThreads()",
+  "rule_function": "comments.ts sortComments",
   "pinned_by": "UT-CMT-016, UT-CMT-017, UT-CMT-018, UT-CMT-019, UT-CMT-051, UT-CMT-059, UT-CMT-060",
   "server_enforcement": "Not applicable",
   "exec_mode": "Semi-automated",
@@ -3794,15 +3794,15 @@
  {
   "case_id": "FT-BR-CAPEX-154",
   "suite": "FT-BR",
-  "title": "A payment-date draft without a month blocks Save in the code app (canvas lets it save)",
+  "title": "A payment-date comment without a month can be saved (Required text shows, Save is not blocked)",
   "category": "Validation",
   "role": "All roles (role-independent rule)",
   "priority": "P2",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). The category holds an Individual Distribution contract (Absolute Values) with costs in the selected year.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Add a comment, choose \"Comments to payment date\", type text, pick no month.\n3. Check Save.",
-  "expected": "Canvas: Save is enabled (only blank text is invalid) and the comment saves without a cost. Code app: Save disabled until a month is picked; the Year field shows \"Required\" (code-app text, CA-14).",
-  "acceptance": "Record both apps' Save state; code app disabled.",
+  "expected": "Comment Save is disabled only for blank text (tgl_Root_IsInvalid, :10058-10065). A payment-date comment with no month is saved; the red \"Required\" text under the month still shows. Same in both apps (D90).",
+  "acceptance": "Save state equals the Canvas (enabled) for a payment-date draft with text and no month.",
   "expectation_source": "Feature rules.ts / plan.ts",
   "canvas_ref": "tgl_Root_IsInvalid.Default (Capex Costs Screen.pa.yaml:10061-10067)",
   "rule_function": "comments.ts paymentDateIncomplete(), canSaveComments()",
@@ -3812,8 +3812,8 @@
   "auto_status": "To automate",
   "auto_ref": "",
   "known_defect_ref": "",
-  "divergence_ref": "CA-14 (code-app 'Required' text)",
-  "comments": "No D-number records the stricter gate; suspected divergence."
+  "divergence_ref": "D90",
+  "comments": "Decided in D90 (A-05). CAUTION: this Canvas path produced the cost-less comment of UT-CMT-044."
  },
  {
   "case_id": "FT-BR-CAPEX-155",
@@ -3842,15 +3842,15 @@
  {
   "case_id": "FT-BR-CAPEX-156",
   "suite": "FT-BR",
-  "title": "Mark as Resolved resolves only the chosen thread (canvas resolves every thread, N-5)",
+  "title": "Mark as Resolved resolves the chosen thread and its replies only (live Canvas export)",
   "category": "Edit",
   "role": "All roles (role-independent rule)",
   "priority": "P1",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A contract with at least one saved general comment thread exists in the selected category. The contract has two unresolved threads.",
   "test_data": "PW-<runId> comments on a PW- contract",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Click \"Mark as Resolved.\" on thread 1.\n3. Save.\n4. Re-open with Show resolved comments ticked.",
-  "expected": "Canvas: the UpdateIf condition Not(IsBlank(_CurrentId) And …) is true for every row, so all threads resolve (N-5). Code app: thread 1 and its replies resolve; thread 2 stays open (Resolved By = current user).",
-  "acceptance": "Code app read-back: thread 1 vsb_resolved = Yes AND thread 2 = No.",
+  "expected": "In the Canvas export on disk (solution 1.21.709) the resolve formula is scoped to the thread (:9849-9854); the same for Reset (:10001-10006). Bug N-5 (resolves every thread) was written from an older export. Confirm in the live Canvas app before the run.",
+  "acceptance": "Resolving one of two threads leaves the other unresolved, in both apps. If the live Canvas resolves both, record N-5 as live and keep the code app as an improvement.",
   "expectation_source": "Source defect register",
   "canvas_ref": "img_Read_Comment_Check.OnSelect (Capex Costs Screen.pa.yaml:9832-9868)",
   "rule_function": "comments.ts resolveThread()",
@@ -3861,7 +3861,7 @@
   "auto_ref": "",
   "known_defect_ref": "N-5",
   "divergence_ref": "N-5 (not reproduced)",
-  "comments": ""
+  "comments": "D90 (A-06): no code change. Step 0: resolve one thread in the live Canvas and note the result."
  },
  {
   "case_id": "FT-BR-CAPEX-157",
@@ -4257,8 +4257,8 @@
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…). A CAPEX category tab is selected with at least one sub-account that holds a non-standard contract with monthly costs.",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Inspect a tab and a month cell.",
-  "expected": "Tabs data-testid tab_Costs_ContentAssignableAccountCategories-<index> (canvas AccessibleLabel \" \"); month cells data-testid capex-month-cell-<contractId>-<month> with aria-label \"<value>. Click to set as paid.\" / \"… set as unpaid.\"; comment dots capex-comment-….",
-  "acceptance": "Ids match the patterns in 09-tosca-automation-conventions.md.",
+  "expected": "Tabs carry data-testid tab_Costs_ContentAssignableAccountCategories-<index> with Summary = -1 and the categories 0..4. The Canvas AccessibleLabel is a blank \" \", which counts as no label under CONVENTIONS rule 16, so each tab's aria-label is its visible caption.",
+  "acceptance": "Ids follow the pattern above; every tab has a non-empty accessible name equal to its caption.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "tab_Costs_ContentAssignableAccountCategories.AccessibleLabel (Capex Costs Screen.pa.yaml:2434); DevexCapexSummaryPCF (Capex Costs Screen.pa.yaml:7234)",
   "rule_function": "Screen.tsx tab strip; pcf/ui/GridRenderer.js",
@@ -4269,7 +4269,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "",
-  "comments": "Renderer is outside the label gates; checked by hand."
+  "comments": "D90 (A-11): captions kept; the id pattern is defined here and should be added to 09-tosca-automation-conventions.md."
  },
  {
   "case_id": "FT-BR-CAPEX-174",
@@ -4466,15 +4466,15 @@
  {
   "case_id": "FT-BR-CAPEX-182",
   "suite": "FT-BR",
-  "title": "Header logo / Edit Project opens the PM app in a new tab with the project",
+  "title": "Cost header logo opens the PM app in a new tab",
   "category": "Navigation",
   "role": "All roles (role-independent rule)",
   "priority": "P3",
   "preconditions": "Same account signed in to the canvas Project Costs app and to the code app (pa app run or DEV). Test project (asked at run time) open on DEVEX/CAPEX (/costs/capex?projectId=…).",
   "test_data": "",
   "steps": "1. Run steps 2-n in the Canvas app first and note the result (reference).\n2. Click the header logo (or Edit Project) on CAPEX.",
-  "expected": "A new tab opens the Project Management app for the same project (cmp_Header Launch(gblPMAppURL…)); in dev it uses the local play URL (rule 12).",
-  "acceptance": "New tab URL carries projectId (and pmScreen when applicable).",
+  "expected": "OnLogoClick is Launch(gblPMAppURL) (:2333-2335): the logo opens the PM app in a new tab. The Canvas passes no projectId; the code app opens the project list. There is no Edit Project item in the Cost header.",
+  "acceptance": "Clicking the logo opens the PM app/project list in a new tab; no project is selected.",
   "expectation_source": "Canvas source (.pa.yaml)",
   "canvas_ref": "cmp_Costs_Header (Capex Costs Screen.pa.yaml:2323)",
   "rule_function": "app/deepLinks.ts resolvePlayAppUrl()",
@@ -4485,7 +4485,7 @@
   "auto_ref": "",
   "known_defect_ref": "",
   "divergence_ref": "",
-  "comments": ""
+  "comments": "D90: implemented (AppHeader onLogoClick)."
  },
  {
   "case_id": "FT-BR-CAPEX-183",
