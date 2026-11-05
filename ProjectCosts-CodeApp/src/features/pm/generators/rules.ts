@@ -1329,14 +1329,15 @@ export function replaceWtgSaveable(args: {
   form: ReplaceWtgForm;
   inProgress: boolean;
   heightBlocked: boolean;
-  lang?: Lang;
+  /** The user's language. Required: the Dummy hub height is typed in it (German number audit, 5 Nov 2026). */
+  lang: Lang;
 }): boolean {
   const { form } = args;
   if (args.inProgress || args.heightBlocked) return false;
   if (isBlank(form.supplier) || isBlank(form.turbineType)) return false;
   if (isDummySupplier(form.supplier)) {
     const v = form.revisedHubHeight;
-    return !isBlank(v) && isDecimalWithPlaces(v, 2, args.lang ?? "en-US") && inRange(v, 1, 200, args.lang ?? "en-US");
+    return !isBlank(v) && isDecimalWithPlaces(v, 2, args.lang) && inRange(v, 1, 200, args.lang);
   }
   return form.hubHeight !== null && form.hubHeight !== 0;
 }
@@ -1894,9 +1895,10 @@ export function canSaveTurbine(args: {
   currentIndex?: number | null;
   specificCapacity: number | null | undefined;
   heightBlocked: boolean;
-  lang?: Lang;
+  /** The user's language. Required: the panel's boxes open in it (`turbineFormDefaults`). */
+  lang: Lang;
 }): boolean {
-  const lang = args.lang ?? "en-US";
+  const { lang } = args;
   if (args.heightBlocked) return false;
   const f = args.form;
   if (isBlank(f.nameIndex.trim()) || isBlank(f.effectiveCapacity.trim()) || isBlank(f.effectiveHubHeight.trim())) {
@@ -2025,7 +2027,12 @@ export const buildSubstructurePermissionPayload = (
  */
 export const pvRequestsPermission = (): boolean => false;
 
-/** Rule 15 — the optimistic write on the request path. The roll-up is deliberately skipped. */
+/**
+ * Rule 15 — the fields the request path sets on the type row. The canvas only mirrors them into its
+ * collection (`UpdateIf(colGeneratorTypeInProjects, …)`); `RequestModulePermission` writes them to Dataverse
+ * itself right after it responds (`Scope_update_RunId_and_Approval_Id_info`), so the code app does NOT patch
+ * them (D97): a late Pending write could overwrite the flow's Approved or hit a row a decline deleted.
+ */
 export function pendingPermissionFields(flow: {
   runId: string; approvalId: string;
 }): Record<string, unknown> {
@@ -2067,6 +2074,33 @@ export function buildCancellationPayload(
 export const needsPermissionCancellation = (
   row: Pick<SimpleTypeRow, "flowRunId">,
 ): boolean => !isBlank(row.flowRunId);
+
+/** The families whose rows carry a module-permission request (`showsPermissionChip`). */
+export type PermissionFamily = "wtg" | "pv" | "inverter" | "substructure";
+
+/**
+ * `varModule` for one row (D97): `Name` is what each canvas call site sends — `Generator.DisplayName` for a WTG type
+ * (Y:2641 / 15665), `Label` for a PV type (Y:3787 / 15475), `'Inverter Label'` (Y:4455 / 15386) and `'Substructure
+ * Label'` (Y:5114 / 15297). It also names the type in the cards' Cancel success text.
+ */
+export function permissionModuleName(
+  family: PermissionFamily,
+  row: Partial<Pick<GeneratorTypeRow, "generatorDisplayName">> & Partial<Pick<SimpleTypeRow, "moduleLabel" | "label">>,
+): string | null {
+  if (family === "wtg") return row.generatorDisplayName ?? null;
+  if (family === "pv") return row.moduleLabel ?? null;
+  return row.label ?? null;
+}
+
+export function cancellationPayloadFor(
+  family: PermissionFamily,
+  row: Pick<SimpleTypeRow, "id" | "flowRunId" | "flowApprovalId">
+    & Partial<Pick<GeneratorTypeRow, "generatorDisplayName">> & Partial<Pick<SimpleTypeRow, "moduleLabel" | "label">>,
+): CancellationPayload {
+  return buildCancellationPayload(family, {
+    id: row.id, name: permissionModuleName(family, row), flowRunId: row.flowRunId, flowApprovalId: row.flowApprovalId,
+  });
+}
 
 /* ════════════════════════════════════════════════════════════════════ land lease ══ */
 
@@ -3181,10 +3215,11 @@ export function turbinePanelTotalHeight(args: {
   form: TurbineFormState;
   storedTotalHeight: number | null | undefined;
   rotorDiameter: number | null | undefined;
-  lang?: Lang;
+  /** The user's language. Required: hub height and plinth are typed in it. */
+  lang: Lang;
 }): number | null {
   if (args.form.dirty.size === 0) return args.storedTotalHeight ?? null;
-  const lang = args.lang ?? "en-US";
+  const { lang } = args;
   return editedTotalHeight({
     hubHeight: numericOr(args.form.effectiveHubHeight, 0, lang),
     foundationPlinth: numericOr(args.form.foundationPlinth, 0, lang),
@@ -3317,6 +3352,13 @@ const ins = (entitySet: string, data: Record<string, unknown>, reason: string): 
   ({ op: "create", entitySet, data, reason });
 const del = (entitySet: string, id: string, reason: string): PlannedWrite =>
   ({ op: "delete", entitySet, id, reason });
+/**
+ * Save performance (6 Nov 2026): marks writes that depend on nothing but rows created BEFORE them (a type's
+ * turbines, the roll-up, the land-lease allocations, the apply-to-all patches) so `executePlan` sends them
+ * together, 8 at a time, instead of one round trip each. No server automation orders these rows: the only
+ * project-level trigger (`LoadDevexCapexCostTotalCapacityTrigger`) fires on the roll-up alone.
+ */
+const together = (writes: readonly PlannedWrite[]): PlannedWrite[] => writes.map((w) => ({ ...w, concurrent: true }));
 
 /** `Patch(Projects, …, {'Plant WTG Capacity [MW]', 'Plant WTG Cost [EUR]'})` over the eligible types (rule 14). */
 export function projectWtgRollup(
@@ -3353,10 +3395,13 @@ function allocationCreates(args: {
  *  2. N × `Patch(GeneratorInProjects, Defaults, {Name "WTG <Short>_<max + i>" (max over the whole
  *     project), ModuleTypeInProject, 'Effective Capacity' = 'Specific Capacity', OBU, 'Total Height',
  *     'Hub Height excl. Foundation Plinth [m]'})`;
- *  3. the project roll-up over the eligible types, the new one included.
+ *  3. in country: the project roll-up over the eligible types, the new one included. Out of country
+ *     (`Not(tgl_…_Filter_Country.Checked)`, Y:15214 / Y:16514): no roll-up — the screen runs
+ *     `RequestModulePermission` for the new type instead (D97), and the flow rolls the type up itself
+ *     once it is approved ("For requested generators SUM will be calculated in flow").
  * The queued `Select`s (the `DeviceTypesInProjects` shadow, the AllWTG allocations) are the second
- * job, `planGeneratorTypeFollowUp`: they need the type's autonumber name and the new turbine ids.
- * The out-of-country path (`RequestModulePermission`) is excluded (D27) and refused here.
+ * job, `planGeneratorTypeFollowUp`: they need the type's autonumber name and the new turbine ids. The
+ * canvas runs them on both paths.
  */
 export function planCreateGeneratorType(args: {
   project: PlanProject;
@@ -3371,7 +3416,6 @@ export function planCreateGeneratorType(args: {
   existingTypes: GeneratorTypeRow[];
   projectTurbines: Pick<TurbineRow, "index">[];
 }): WritePlan {
-  if (!args.inCountry) return refusePlan(EXCLUDED.permissionRequest);
   const n = args.numberOfGenerators;
   const cost = pfxRound(args.costPerWtg, 2);
   const totals = generatorTypeTotals({ count: n, costPerWtg: cost, specificCapacity: args.model.specificCapacity });
@@ -3390,20 +3434,24 @@ export function planCreateGeneratorType(args: {
       [GEN_TYPE_COL.generatorsCapacity]: totals.generatorsCapacity,
       ...owner(args.project.owningBusinessUnitId),
     }, "the generator type"),
-    ...names.map((name) => ins(ES_PLANT.generatorInProjects, {
+    // The type is created first (every turbine binds to it); then the turbines go together; the roll-up last.
+    ...together(names.map((name) => ins(ES_PLANT.generatorInProjects, {
       [GEN_INSTANCE_COL.name]: name,
       [PLANT_BIND.moduleTypeWtg]: ref(ES_PLANT.generatorTypeInProjects, createdRowRef(0)),
       [GEN_INSTANCE_COL.effectiveCapacity]: args.model.specificCapacity ?? null,
       ...owner(args.project.owningBusinessUnitId),
       [GEN_INSTANCE_COL.totalHeight]: heights.totalHeight,
       [GEN_INSTANCE_COL.hubHeightExclPlinth]: heights.hubHeightExclPlinth,
-    }, `turbine ${name}`)),
-    projectWtgRollup(args.project.id, [
-      ...args.existingTypes,
-      { requestPermissionState: null, status: CHOICE_PLANT.status.active,
-        generatorsCapacity: totals.generatorsCapacity, generatorsCost: totals.generatorsCost },
-    ]),
+    }, `turbine ${name}`))),
   ];
+  if (requiresPermissionRequest(args.inCountry)) return { writes, log: [`Generator type with ${n} turbines`] };
+  // After every turbine, as in the canvas: `LoadDevexCapexCostTotalCapacityTrigger` fires on these project
+  // columns, and a failed turbine stops the plan before the project totals change.
+  writes.push(projectWtgRollup(args.project.id, [
+    ...args.existingTypes,
+    { requestPermissionState: null, status: CHOICE_PLANT.status.active,
+      generatorsCapacity: totals.generatorsCapacity, generatorsCost: totals.generatorsCost },
+  ]));
   return { writes, log: [`Generator type with ${n} turbines`] };
 }
 
@@ -3450,7 +3498,8 @@ export function planGeneratorTypeFollowUp(args: {
   writes.push(...allocationCreates({
     costs: args.landLeaseCosts, turbines: args.turbines, owningBusinessUnitId: args.project.owningBusinessUnitId,
   }));
-  return { writes, log: [] };
+  // The device-type row and the allocations bind only to rows that already exist: one parallel run.
+  return { writes: together(writes), log: [] };
 }
 
 /**
@@ -3502,9 +3551,10 @@ export function planSaveTurbine(args: {
   /** `Value(txt_…Total_Height.Value)`. */
   totalHeight: number | null;
   landLeaseCosts: LandLeaseCostRow[];
-  lang?: Lang;
+  /** The user's language. Required: every box of the panel is typed in it. */
+  lang: Lang;
 }): WritePlan {
-  const lang = args.lang ?? "en-US";
+  const { lang } = args;
   const name = `WTG ${args.project.shortName ?? ""}_${args.form.nameIndex.trim()}`;
   const capacity = valueOrNull(args.form.effectiveCapacity, lang);
   const hub = valueOrNull(args.form.effectiveHubHeight, lang);
@@ -3522,6 +3572,8 @@ export function planSaveTurbine(args: {
   const writes: PlannedWrite[] = [args.turbine
     ? upd(ES_PLANT.generatorInProjects, args.turbine.id, turbineData, `turbine ${name}`)
     : ins(ES_PLANT.generatorInProjects, turbineData, `turbine ${name}`)];
+  /** Save performance: steps 2 and 5 are independent rows, each sent as one parallel run (`together`). */
+  const applyAll: PlannedWrite[] = [];
 
   // 2. apply-to-all, and the children as they will be after the save.
   const others = args.typeTurbines.filter((t) => t.id !== args.turbine?.id);
@@ -3538,7 +3590,7 @@ export function planSaveTurbine(args: {
       });
     }
     if (Object.keys(patch).length > 0) {
-      writes.push(upd(ES_PLANT.generatorInProjects, s.id, { ...patch, ...obu }, `apply to all: ${s.name ?? s.id}`));
+      applyAll.push(upd(ES_PLANT.generatorInProjects, s.id, { ...patch, ...obu }, `apply to all: ${s.name ?? s.id}`));
     }
     after.push({ effectiveCapacity: args.applyAll.capacity ? capacity : s.effectiveCapacity });
   }
@@ -3551,6 +3603,7 @@ export function planSaveTurbine(args: {
     [GEN_TYPE_COL.generatorsCost]: re.generatorsCost,
     [GEN_TYPE_COL.generatorsCapacity]: re.generatorsCapacity,
   };
+  writes.push(...together(applyAll));
   writes.push(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"));
 
   // 4. the roll-up with the re-derived type.
@@ -3559,11 +3612,13 @@ export function planSaveTurbine(args: {
 
   // 5. a new turbine's AllWTG allocations — bound to the row step 1 created.
   if (!args.turbine) {
-    for (const w of allocationCreates({
+    writes.push(...together(allocationCreates({
       costs: args.landLeaseCosts, turbines: [{ id: createdRowRef(0), name }],
       owningBusinessUnitId: args.project.owningBusinessUnitId,
-    })) writes.push(w);
+    })));
   }
+  // Canvas order between the steps: turbine → apply-to-all (parallel) → type totals → roll-up → allocations
+  // (parallel). Only rows inside one step go together, so the project trigger and a failure stop as before.
   return { writes, log: [name] };
 }
 
@@ -3584,11 +3639,13 @@ export function planDeleteTurbine(args: {
   allocations: { id: string; costId: string }[];
   allocationCountByCost: Record<string, number>;
 }): WritePlan {
-  const writes: PlannedWrite[] = planTurbineDeletion({
+  // Save performance (6 Nov 2026): the land-lease clean-up rows are independent (one parallel run); the
+  // turbine, the type totals and the roll-up follow one by one, in the canvas order.
+  const writes: PlannedWrite[] = together(planTurbineDeletion({
     allocations: args.allocations, siblingCountByCost: args.allocationCountByCost,
   }).map((step) => step.kind === "removeAllocation"
     ? del(ES.landLeaseAllocationWtgs, step.allocationId, "the turbine's land-lease allocation")
-    : del(ES_PLANT.landLeaseProjectCosts, step.costId, "the turbine's land-lease cost"));
+    : del(ES_PLANT.landLeaseProjectCosts, step.costId, "the turbine's land-lease cost")));
   writes.push(del(ES_PLANT.generatorInProjects, args.turbine.id, `turbine ${args.turbine.name ?? ""}`));
   const remaining = args.typeTurbines.filter((t) => t.id !== args.turbine.id);
   const re = recomputeTypeFromChildren({ children: remaining, model: args.model, accumulatedIndex: args.accumulatedIndex });
@@ -3634,8 +3691,9 @@ export function planTypeLandLeaseCleanup(args: {
  * The WTG type delete (`cmp_…ConfirmationDeleteGeneratorType.OnConfirm`, Y:15626): the land-lease
  * clean-up (`planTypeLandLeaseCleanup`), the `'Opex Project Costs'` of the type's first
  * `DeviceTypesInProjects` row, `Remove(GeneratorTypeInProjects)`, the roll-up over the rest. A type
- * with an open permission flow (`FlowRunId`) would first run `Requestpermissioncancellation`, an
- * approval flow (D27: left out) — that delete is refused.
+ * with an open permission flow (`needsPermissionCancellation`) gets `Requestpermissioncancellation`
+ * first — the screen runs it before this plan (D97; the canvas runs it between the O&M deletes and the
+ * `Remove`, so a failed cancellation there left the type without its costs).
  */
 export function planDeleteGeneratorType(args: {
   project: PlanProject;
@@ -3645,11 +3703,14 @@ export function planDeleteGeneratorType(args: {
   allocationCountByCost: Record<string, number>;
   opexCostIds: string[];
 }): WritePlan {
-  if (needsPermissionCancellation(args.type)) return refusePlan(EXCLUDED.deleteWithOpenRequest);
-  const writes: PlannedWrite[] = planTypeLandLeaseCleanup(args).map((step) => step.kind === "removeAllocation"
-    ? del(ES.landLeaseAllocationWtgs, step.allocationId, "a land-lease allocation of the type")
-    : del(ES_PLANT.landLeaseProjectCosts, step.costId, "a land-lease cost of the type"));
-  for (const id of args.opexCostIds) writes.push(del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the type"));
+  // Save performance (6 Nov 2026): the land-lease clean-up and the O&M cost deletes are independent rows (one
+  // parallel run); the type delete and the roll-up follow one by one, in the canvas order.
+  const writes: PlannedWrite[] = together([
+    ...planTypeLandLeaseCleanup(args).map((step) => step.kind === "removeAllocation"
+      ? del(ES.landLeaseAllocationWtgs, step.allocationId, "a land-lease allocation of the type")
+      : del(ES_PLANT.landLeaseProjectCosts, step.costId, "a land-lease cost of the type")),
+    ...args.opexCostIds.map((id) => del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the type")),
+  ]);
   writes.push(del(ES_PLANT.generatorTypeInProjects, args.type.id, "the generator type"));
   writes.push(projectWtgRollup(args.project.id, args.allTypes.filter((t) => t.id !== args.type.id)));
   return { writes, log: [] };
@@ -3691,7 +3752,8 @@ export function planSavePvType(args: {
   form: PvTypeFormState;
   deviceCostModules: number | null | undefined;
   otherSupplierChosen: boolean;
-  lang?: Lang;
+  /** The user's language. Required: capacity and degradations are typed in it. */
+  lang: Lang;
 }): WritePlan {
   const data = {
     [PLANT_BIND.project]: ref(ES.projects, args.project.id),
@@ -3742,12 +3804,13 @@ export function planPvFollowUp(args: {
     args.unitId
       ? upd(ES_PLANT.generatorInProjects, args.unitId, unit, "the PV type's unit")
       : ins(ES_PLANT.generatorInProjects, unit, "the PV type's unit"),
-    // G7 — bound to the unit this plan created (its first create), or the existing one.
+    // G7 — bound to the unit this plan created (its first create), or the existing one. Save performance
+    // (6 Nov 2026): independent rows, sent as one parallel run; the unit before them, the roll-up after.
     ...(args.isNew
-      ? allocationCreates({
+      ? together(allocationCreates({
           costs: args.landLeaseCosts ?? [], turbines: [{ id: args.unitId ?? createdRowRef(0), name: args.pvName }],
           owningBusinessUnitId: args.project.owningBusinessUnitId,
-        })
+        }))
       : []),
     upd(ES.projects, args.project.id, {
       [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
@@ -3765,8 +3828,8 @@ export function planPvFollowUp(args: {
 /**
  * The canvas PV delete, as shipped (`cmp_…ConfirmationDeletePVModuleType.OnConfirm`, Y:15466): `Remove`;
  * `'Plant PV Capacity [MWp]'`; every substructure's cost re-computed against the new capacity (`Fixed` /
- * `Tracker` × capacity, else 0); `'Plant PV Cost [EUR]'`. Refused while a permission flow is open
- * (the cancellation flow is left out, D27). `planDeletePvType` runs this after the children (G2).
+ * `Tracker` × capacity, else 0); `'Plant PV Cost [EUR]'`. An open permission flow is cancelled first,
+ * by the screen (D97). `planDeletePvType` runs this after the children (G2).
  */
 export function planDeletePvTypeCanvasParity(args: {
   project: PlanProject;
@@ -3777,7 +3840,6 @@ export function planDeletePvTypeCanvasParity(args: {
   deviceCostFix: number | null | undefined;
   deviceCostTracker: number | null | undefined;
 }): WritePlan {
-  if (needsPermissionCancellation(args.pv)) return refusePlan(EXCLUDED.deleteWithOpenRequest);
   const rest = args.pvRows.filter((r) => r.id !== args.pv.id);
   const capacity = plantPvCapacity(rest);
   const substructures = args.substructures.map((s) => ({
@@ -3790,7 +3852,8 @@ export function planDeletePvTypeCanvasParity(args: {
   const writes: PlannedWrite[] = [
     del(ES_PLANT.pvModuleTypeInProjects, args.pv.id, "the PV module type"),
     upd(ES.projects, args.project.id, { [PROJECT_PLANT_COL.plantPvCapacity]: capacity }, "the project's Plant PV Capacity"),
-    ...substructures.map((s) => upd(ES_PLANT.substructureTypeInProjects, s.id, { vsb_substructurecost: s.cost }, "a substructure cost")),
+    // Save performance (6 Nov 2026): independent rows, one parallel run between the capacity and the PV cost.
+    ...together(substructures.map((s) => upd(ES_PLANT.substructureTypeInProjects, s.id, { vsb_substructurecost: s.cost }, "a substructure cost"))),
     projectPvCost(args.project.id, rest, args.inverters, substructures),
   ];
   return { writes, log: [] };
@@ -3820,11 +3883,15 @@ export function planDeletePvType(args: Parameters<typeof planDeletePvTypeCanvasP
 }): WritePlan {
   const canvas = planDeletePvTypeCanvasParity(args);
   if (canvas.refusedReason) return canvas;
+  // Save performance (6 Nov 2026): the land-lease clean-up and the O&M deletes are one parallel run; the
+  // unit(s) follow one by one (after them, as before), then the canvas body.
   const children: PlannedWrite[] = [
-    ...planTypeLandLeaseCleanup(args).map((step) => step.kind === "removeAllocation"
-      ? del(ES.landLeaseAllocationWtgs, step.allocationId, "a land-lease allocation of the PV module type")
-      : del(ES_PLANT.landLeaseProjectCosts, step.costId, "a land-lease cost of the PV module type")),
-    ...args.opexCostIds.map((id) => del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the PV module type")),
+    ...together([
+      ...planTypeLandLeaseCleanup(args).map((step) => step.kind === "removeAllocation"
+        ? del(ES.landLeaseAllocationWtgs, step.allocationId, "a land-lease allocation of the PV module type")
+        : del(ES_PLANT.landLeaseProjectCosts, step.costId, "a land-lease cost of the PV module type")),
+      ...args.opexCostIds.map((id) => del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the PV module type")),
+    ]),
     ...args.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "the PV module type's unit")),
   ];
   return { writes: [...children, ...canvas.writes], log: canvas.log };
@@ -3832,9 +3899,9 @@ export function planDeletePvType(args: Parameters<typeof planDeletePvTypeCanvasP
 
 /**
  * Inverter / substructure delete (`…DeleteInverterType.OnConfirm` Y:15377, `…DeleteSubstructureType`
- * Y:15288): `Remove`, then `'Plant PV Cost [EUR]'`. Refused while a permission flow is open.
- * SOURCE DEFECT (D27, reached only through that excluded flow): the substructure cancellation sends
- * `ModuleType.Inverter` — `buildCancellationPayload` maps the family correctly.
+ * Y:15288): `Remove`, then `'Plant PV Cost [EUR]'`. An open permission flow is cancelled first, by the
+ * screen (D97). SOURCE DEFECT (D27): the canvas substructure cancellation sends `ModuleType.Inverter`
+ * (Y:15288) — `buildCancellationPayload` maps the family correctly.
  */
 export function planDeleteInverterOrSubstructure(args: {
   project: PlanProject;
@@ -3844,7 +3911,6 @@ export function planDeleteInverterOrSubstructure(args: {
   inverters: SimpleTypeRow[];
   substructures: SimpleTypeRow[];
 }): WritePlan {
-  if (needsPermissionCancellation(args.row)) return refusePlan(EXCLUDED.deleteWithOpenRequest);
   const inverters = args.family === "inverter" ? args.inverters.filter((r) => r.id !== args.row.id) : args.inverters;
   const substructures = args.family === "substructure" ? args.substructures.filter((r) => r.id !== args.row.id) : args.substructures;
   return {
@@ -3875,9 +3941,10 @@ export function planSaveSimple(args: {
   row: SimpleTypeRow | null;
   rows: SimpleTypeRow[];
   form: SimpleFormState;
-  lang?: Lang;
+  /** The user's language. Required: the capacity boxes open in it ("12,50"). */
+  lang: Lang;
 }): WritePlan {
-  const lang = args.lang ?? "en-US";
+  const { lang } = args;
   const t = SIMPLE_TABLE[args.family];
   const capacity = valueOrNull(args.form.capacity, lang);
   const data: Record<string, unknown> = {
@@ -4023,8 +4090,15 @@ export const INVERTER_MSG = {
 export const inverterLargeRange = (lang: Lang = "en-US"): string =>
   `Please select a value between 0 and ${textFormat(1_000_000, "#,###.0#", lang)}.`;
 
-/** `$"Inverter '{txt_…_Inverter_Fields_Label.Value}' will be saved, please wait..."` (Y:10181) — verbatim. */
-export const inverterSaveProgressText = (label: string): string => `Inverter '${label}' will be saved, please wait...`;
+/**
+ * `If(IsBlank(<Other Supplier>), $"Inverter '{<Label>}' will be saved, please wait...", $"Request Permission for
+ * inverter '{<Other Supplier>}' has been sent, please wait...")` (Y:10178-10182) — verbatim. `otherSupplier` is the
+ * effective Other Supplier text (blank = the save path).
+ */
+export const inverterSaveProgressText = (label: string, otherSupplier = ""): string =>
+  plantRequestsPermission(otherSupplier)
+    ? `Request Permission for inverter '${otherSupplier}' has been sent, please wait...`
+    : `Inverter '${label}' will be saved, please wait...`;
 
 /**
  * The panel opens bound to the selected row, or a new row (`addInverterType`, Y:840-861). Each field's
@@ -4142,7 +4216,8 @@ export function canSaveInverter(
  * [Years]', 'Number of Inverters', 'Nominal Power [kW]', 'Costs per Inverter [EUR/Inverter]' = Inverter
  * device cost × power / 1000 (0 without a device cost), 'Inverter Type Cost' = that × count, OBU})`, then
  * `'Plant PV Cost [EUR]'` over the re-read PV, inverter and substructure rows. A non-blank Other Supplier
- * runs `RequestModulePermission` instead (excluded, D27): refused.
+ * (Y:10243) skips that roll-up: the screen runs `RequestModulePermission` for the row instead (D97), and
+ * the flow adds the inverter cost to the project once the request is approved.
  */
 export function planSaveInverter(args: {
   project: PlanProject;
@@ -4153,11 +4228,11 @@ export function planSaveInverter(args: {
   pv: Pick<SimpleTypeRow, "cost">[];
   inverters: SimpleTypeRow[];
   substructures: Pick<SimpleTypeRow, "cost">[];
-  lang?: Lang;
+  /** The user's language. Required: warranty, count and nominal power are typed in it. */
+  lang: Lang;
 }): WritePlan {
-  const lang = args.lang ?? "en-US";
+  const { lang } = args;
   const other = effectiveOtherSupplier(args.form.otherSupplier, args.otherSupplierChosen);
-  if (plantRequestsPermission(other)) return refusePlan(EXCLUDED.permissionRequest);
   const count = valueOrNull(args.form.numberOfInverters, lang);
   const power = valueOrNull(args.form.nominalPower, lang);
   const costs = inverterCosts({ deviceCostInverter: args.deviceCostInverter, nominalPowerKw: power ?? 0, numberOfInverters: count ?? 0 });
@@ -4175,11 +4250,13 @@ export function planSaveInverter(args: {
     ...owner(args.project.owningBusinessUnitId),
   };
   const inverters = [...args.inverters.filter((r) => r.id !== args.row?.id), { cost: costs.typeCost }];
+  const row = args.row
+    ? upd(ES_PLANT.inverterTypeInProjects, args.row.id, data, "the inverter type")
+    : ins(ES_PLANT.inverterTypeInProjects, data, "the inverter type");
+  if (plantRequestsPermission(other)) return { writes: [row], log: [args.form.label] };
   return {
     writes: [
-      args.row
-        ? upd(ES_PLANT.inverterTypeInProjects, args.row.id, data, "the inverter type")
-        : ins(ES_PLANT.inverterTypeInProjects, data, "the inverter type"),
+      row,
       upd(ES.projects, args.project.id, {
         [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pv, inverters, substructures: args.substructures }),
       }, "the project's Plant PV Cost"),
@@ -4217,8 +4294,14 @@ export const SUBSTRUCTURE_MSG = {
   infoOk: "OK",
 } as const;
 
-/** `$"Substructure '{txt_…_Substructure_Fields_Label.Value}' will be saved, please wait..."` (Y:8924) — verbatim. */
-export const substructureSaveProgressText = (label: string): string => `Substructure '${label}' will be saved, please wait...`;
+/**
+ * `If(IsBlank(<Other Supplier>), $"Substructure '{<Label>}' will be saved, please wait...", $"Request Permission
+ * for substructure '{<Other Supplier>}' has been sent, please wait...")` (Y:8921-8925) — verbatim.
+ */
+export const substructureSaveProgressText = (label: string, otherSupplier = ""): string =>
+  plantRequestsPermission(otherSupplier)
+    ? `Request Permission for substructure '${otherSupplier}' has been sent, please wait...`
+    : `Substructure '${label}' will be saved, please wait...`;
 
 /**
  * `addSubstructureType` (Y:862-893): with `'Plant PV Capacity [MWp]'` blank or 0 the information popup
@@ -4299,7 +4382,8 @@ export function canSaveSubstructureCanvasParity(
  * The substructure save (`pcf_btn_…_Substructure_Buttons_Save.OnChange`, Y:8918): `Patch(SubstructureTypeInProjects,
  * <row or Defaults>, {Project, Substructure, 'Other Supplier', 'Substructure Label', 'Substructure Types',
  * 'Substructure Cost [EUR]' = Fixed / Tracker mounting cost × 'Plant PV Capacity [MWp]' (else 0), OBU})`,
- * then `'Plant PV Cost [EUR]'`. A non-blank Other Supplier is the excluded permission request: refused.
+ * then `'Plant PV Cost [EUR]'`. A non-blank Other Supplier (Y:8979) skips that roll-up: the screen runs
+ * `RequestModulePermission` for the row instead (D97), and the flow adds the cost once it is approved.
  */
 export function planSaveSubstructure(args: {
   project: PlanProject;
@@ -4314,7 +4398,6 @@ export function planSaveSubstructure(args: {
   substructures: SimpleTypeRow[];
 }): WritePlan {
   const other = effectiveOtherSupplier(args.form.otherSupplier, args.otherSupplierChosen);
-  if (plantRequestsPermission(other)) return refusePlan(EXCLUDED.permissionRequest);
   const type = args.form.substructureType;
   const cost = substructureCost({
     mounting: type === null ? null : SUBSTRUCTURE_TYPE_LABELS[type] ?? null,
@@ -4330,11 +4413,13 @@ export function planSaveSubstructure(args: {
     ...owner(args.project.owningBusinessUnitId),
   };
   const substructures = [...args.substructures.filter((r) => r.id !== args.row?.id), { cost }];
+  const row = args.row
+    ? upd(ES_PLANT.substructureTypeInProjects, args.row.id, data, "the substructure type")
+    : ins(ES_PLANT.substructureTypeInProjects, data, "the substructure type");
+  if (plantRequestsPermission(other)) return { writes: [row], log: [args.form.label] };
   return {
     writes: [
-      args.row
-        ? upd(ES_PLANT.substructureTypeInProjects, args.row.id, data, "the substructure type")
-        : ins(ES_PLANT.substructureTypeInProjects, data, "the substructure type"),
+      row,
       upd(ES.projects, args.project.id, {
         [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pv, inverters: args.inverters, substructures }),
       }, "the project's Plant PV Cost"),
@@ -4397,11 +4482,19 @@ const opexLink = (opexId: string, bridge: string | null, reason: string): Planne
     [PLANT_BIND.deviceTypeInProject]: bridge ? ref(ES_PLANT.deviceTypesInProjects, bridge) : null,
   }, reason);
 
-/** T2b Detach and T2c Delete, children first: O&M links cleared, units, device-type rows, the type. */
+/**
+ * T2b Detach and T2c Delete, children first: O&M links cleared, units, device-type rows, the type.
+ *
+ * Save performance (6 Nov 2026): the O&M detach and the unit deletes touch unrelated rows — one parallel run.
+ * The device-type rows are deleted one by one AFTER that run (a sequential write ends it), so every O&M cost
+ * is detached before its device-type row goes and cannot be taken with it; the type last, as before.
+ */
 function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: string): PlannedWrite[] {
   return [
-    ...inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")),
-    ...inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type")),
+    ...together([
+      ...inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")),
+      ...inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type")),
+    ]),
     ...inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row")),
     del(typeSet, typeId, "the replaced type"),
   ];
@@ -4411,7 +4504,10 @@ function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: 
  * Replace Generator Type, job 1 (`pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save_1.OnChange`): Detach,
  * Delete, then the WTG type save body (`planCreateGeneratorType`) for the "Replace to" model with the OLD
  * type's number of generators (`txt_…NumberOfGenerator_1` is disabled and copied). The new names continue
- * after the highest index of the OTHER types' turbines (the old ones are gone by then).
+ * after the highest index of the OTHER types' turbines (the old ones are gone by then). Out of country the
+ * Add skips the roll-up and the screen requests permission for the new type; an old type with an open
+ * request has it cancelled first ("RDel001: Cancel pending permission for replaced generator") — both by the
+ * screen, around this plan (D97).
  */
 export function planReplaceGeneratorType(args: {
   project: PlanProject;
@@ -4428,10 +4524,8 @@ export function planReplaceGeneratorType(args: {
   otherTurbines: Pick<TurbineRow, "index">[];
   inputs: ReplaceInputs;
 }): WritePlan {
-  if (!args.inCountry) return refusePlan(EXCLUDED.permissionRequest);
-  if (needsPermissionCancellation(args.oldType)) return refusePlan(EXCLUDED.replaceWithOpenRequest);
   const add = planCreateGeneratorType({
-    project: args.project, inCountry: true, model: args.model,
+    project: args.project, inCountry: args.inCountry, model: args.model,
     numberOfGenerators: Math.max(0, args.oldType.numberOfGenerators ?? 0), costPerWtg: args.costPerWtg,
     selectedHeight: args.selectedHeight, revisedHubHeight: args.revisedHubHeight,
     existingTypes: args.otherTypes, projectTurbines: args.otherTurbines,
@@ -4466,31 +4560,36 @@ export function planReplaceGeneratorTypeFollowUp(args: {
 }): ReplaceFollowUpPlan {
   const obu = args.project.owningBusinessUnitId;
   const writes: PlannedWrite[] = [];
+  /** Save performance (6 Nov 2026): after the device-type row, every write here is an independent row. */
+  const rows: PlannedWrite[] = [];
   let bridge = args.existingBridgeId;
   if (!bridge) {
     writes.push(deviceTypeShadow({ family: "wtg", typeId: args.newTypeId, typeName: args.newTypeName, owningBusinessUnitId: obu }));
     bridge = createdRowRef(0);
   }
-  writes.push(...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu }));
+  rows.push(...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu }));
   const ll = planReplaceLandLease({ allocations: args.inputs.allocations, newUnitCount: args.newUnits.length });
   for (const r of ll.repoint) {
     const unit = args.newUnits[r.newUnitPosition];
     if (unit) {
-      writes.push(upd(ES.landLeaseAllocationWtgs, r.allocationId, {
+      rows.push(upd(ES.landLeaseAllocationWtgs, r.allocationId, {
         [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit.id),
       }, `move a land-lease allocation to ${unit.name ?? "the new unit"}`));
     }
   }
   for (const id of [...ll.removeSurplus, ...ll.removeAllWtg]) {
-    writes.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced type"));
+    rows.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced type"));
   }
-  for (const id of args.inputs.opexCostIds) writes.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
+  for (const id of args.inputs.opexCostIds) rows.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
+  // One parallel run after the device-type row it may bind to (the moves, removals and creates are disjoint rows).
+  writes.push(...together(rows));
   return { writes, log: [], unmatchedCount: ll.unmatchedCount };
 }
 
 /**
  * Replace PV Module Type, job 1 (`pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_2.OnChange`):
- * Detach, Delete, then the PV save body for the "Replace to" form (`planSavePvType`, a new row).
+ * Detach, Delete, then the PV save body for the "Replace to" form (`planSavePvType`, a new row). An old type
+ * with an open request has it cancelled first, by the screen (D97).
  */
 export function planReplacePvType(args: {
   project: PlanProject;
@@ -4499,9 +4598,9 @@ export function planReplacePvType(args: {
   deviceCostModules: number | null | undefined;
   otherSupplierChosen: boolean;
   inputs: ReplaceInputs;
-  lang?: Lang;
+  /** The user's language. Required: the "Replace to" boxes are typed in it. */
+  lang: Lang;
 }): WritePlan {
-  if (needsPermissionCancellation(args.oldPv)) return refusePlan(EXCLUDED.replaceWithOpenRequest);
   const add = planSavePvType({
     project: args.project, pv: null, form: args.form, deviceCostModules: args.deviceCostModules,
     otherSupplierChosen: args.otherSupplierChosen, lang: args.lang,
@@ -4552,41 +4651,58 @@ export function planReplacePvTypeFollowUp(args: {
     ...owner(obu),
   }, "the new PV type's unit"));
   const unit = createdRowRef(creates);
-  writes.push(...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: [{ id: unit, name: args.newPvName }], owningBusinessUnitId: obu }));
+  // Save performance (6 Nov 2026): after the new unit, its allocation creates, moves and removals are disjoint
+  // rows — one parallel run; the project's PV capacity / cost after them; then the O&M re-links, another run.
+  const landLease: PlannedWrite[] = [
+    ...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: [{ id: unit, name: args.newPvName }], owningBusinessUnitId: obu }),
+  ];
   const ll = planReplacePvLandLease(args.inputs.allocations);
   for (const id of ll.repoint) {
-    writes.push(upd(ES.landLeaseAllocationWtgs, id, {
+    landLease.push(upd(ES.landLeaseAllocationWtgs, id, {
       [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit),
     }, "move a land-lease allocation to the new PV unit"));
   }
-  for (const id of ll.removeAllWtg) writes.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced PV type"));
+  for (const id of ll.removeAllWtg) landLease.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced PV type"));
+  writes.push(...together(landLease));
   writes.push(upd(ES.projects, args.project.id, {
     [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
     [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),
   }, "the project's Plant PV Capacity / Cost"));
-  for (const id of args.inputs.opexCostIds) writes.push(opexLink(id, bridge, "re-link an O&M cost to the new PV type"));
+  writes.push(...together(args.inputs.opexCostIds.map((id) => opexLink(id, bridge, "re-link an O&M cost to the new PV type"))));
   return { writes, log: [] };
 }
 
-/* ═════════════════════════════════════════════ D27 — exclusions and write texts ════ */
+/* ══════════════════════════════════ D97 — the module-permission flows' texts, and the write texts ════ */
 
 /**
- * NEW — no canvas equivalent: why a control the canvas has is visible but disabled here (product
- * decision D27: no approval flow that sends mails or Teams cards is called).
+ * The module-permission flows' texts (D97; D27's `EXCLUDED` reasons are gone with the flows now called).
+ * Verbatim canvas texts keep their typos ("permisson", "forg").
  */
-export const EXCLUDED = {
-  /** The out-of-country "Request permission" save — it runs `RequestModulePermission`. */
-  permissionRequest:
-    "Requesting permission for a generator type that is not available in this country starts an approval flow (emails and Teams cards). It is not available in this app yet.",
-  /** The cards' Cancel request button — it runs `Requestpermissioncancellation`. */
-  permissionCancel:
-    "Cancelling a permission request runs an approval flow (emails and Teams cards). It is not available in this app yet.",
-  /** A delete of a type with an open permission flow — the canvas would cancel the flow first. */
-  deleteWithOpenRequest:
-    "This type has an open permission request. Deleting it would cancel that approval flow (emails and Teams cards), which this app does not run yet.",
-  /** A Replace of a type with an open permission flow — the 1.21.753 canvas would cancel the flow first (G6). */
-  replaceWithOpenRequest:
-    "This type has an open permission request. Replacing it would cancel that approval flow (emails and Teams cards), which this app does not run yet.",
+export const PERMISSION_MSG = {
+  /** The cards' Cancel success `Notify` — WTG Y:2689, PV Y:3835, inverter Y:4503, substructure Y:5162 — verbatim. */
+  canceled: (family: PlantFamily, name: string | null | undefined): string => {
+    const n = name ?? "";
+    switch (family) {
+      case "wtg": return `Request permisson forg generator ${n} was canceled !`;
+      case "pv": return `Request permisson was canceled for PV Module ${n}!`;
+      case "inverter": return `Request permisson was canceled for inverter ${n}!`;
+      default: return `Request permisson was canceled for substructure ${n}!`;
+    }
+  },
+  /**
+   * The cards' Cancel error `Notify` (Y:2694 / 3840 / 4508 / 5167) — verbatim; the flow is named where the canvas
+   * puts `FirstError.Source`, as `writeErrorText` names the table.
+   */
+  cancelError: (detail: string): string =>
+    `Error: Current project cannot be send to controlling for approval. Internal error: originated on Request permission cancellation. Message: ${detail}`,
+  /** NEW — no canvas equivalent: the canvas runs the card's Cancel without a progress dialog. */
+  canceling: (name: string | null | undefined): string => `Request permission for "${name ?? ""}" will be canceled, please wait...`,
+  /**
+   * NEW — no canvas equivalent: a flow input the environment does not provide (`vsb_ProjectManagementAppID`,
+   * `vsb_PrimarilyApprovalGroupID`, the user's e-mail). The canvas would send a blank and the flow would fail.
+   */
+  setupMissing: (what: string): string =>
+    `The approval flow cannot be started: ${what} is not set in this environment. Please contact your administrator.`,
 } as const;
 
 /** The verbatim `Notify` texts of the writes. */
@@ -4645,9 +4761,14 @@ export const WRITE_ERROR = {
   substationDelete: writeErrorText("Substation could not be deleted.", ES_PLANT.substationTypeInProjects),
 } as const;
 
-/** `$"Generator ""{locNewGeneratorEntity.DisplayName}"" will be saved, please wait..."` (Y:15214). */
-export const typeSaveProgressText = (displayName: string | null | undefined): string =>
-  `Generator "${displayName ?? ""}" will be saved, please wait...`;
+/**
+ * `If(tgl_…_Filter_Country.Checked, $"Generator ""{DisplayName}"" will be saved, please wait...",
+ * $"Request Permission for ""{DisplayName}"" has been sent, please wait...")` (Y:15214) — verbatim.
+ */
+export const typeSaveProgressText = (displayName: string | null | undefined, inCountry = true): string =>
+  inCountry
+    ? `Generator "${displayName ?? ""}" will be saved, please wait...`
+    : `Request Permission for "${displayName ?? ""}" has been sent, please wait...`;
 
 /**
  * The turbine save's progress text: `$"WTG '{Short Name}_{n}' will be saved, please wait..."` from the

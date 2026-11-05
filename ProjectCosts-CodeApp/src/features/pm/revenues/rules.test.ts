@@ -61,6 +61,7 @@ import {
   CONTRACT_CARD_CONTROL, type CardField, type ContractCardContext,
   touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode, showsCountryInflationToggle,
   hedgePercentForCheck, engineEndDate, fmtTwoDecimals,
+  germanFitTariffText, balancingPriceText, localizeContractForm,
 } from "./rules";
 
 /* ═══════════════════════════════════════════════════════════════════ fixtures ═══ */
@@ -1835,5 +1836,60 @@ describe("PO validation audit — the contract panel's Power Fx, term for term (
     expect(hedgePercentForCheck("12,5", "de-DE")).toBe(12.5);
     expect(hedgePercentForCheck("12.5")).toBe(12.5);
     expect(hedgePercentForCheck("")).toBe(0);
+  });
+});
+
+/* ═══════════════════════════════════════════ German and French numbers (6 Nov 2026) ═══ */
+
+/*
+ * The German number audit: Revenues writes every box in the user's language, and reads it back in it, as the canvas
+ * `Text()` / `Value()` do. The expected values are the canvas results.
+ */
+describe("German and French numbers: Revenues writes and reads every box in the user's language", () => {
+  const curve = [row("price", "2028", "65", "46")];
+  const engine = (label: string, language: string) => localizeContractForm(applyRevenueEngine({
+    project: project(), rows: curve, region: null, label, productionExists: false,
+    subaccountId: "sub-1", profiles: [], today: d("2026-10-20"), language,
+  }), language);
+
+  it("UT-REV-157 a new contract's Tariff p90 opens as “65,00” (read back as 65, not 6500), also for German FiT (A1)", () => {
+    for (const language of ["de-DE", "fr-FR"]) {
+      const f = engine("PPA", language);
+      expect(f.tariff).toBe("65,00");
+      expect(f.tariffP90).toBe("65,00");
+    }
+    // German FiT: bidding 65 x correction factor p90 1,000 = 65 (was 6,500,000).
+    expect(engine("FiT", "de-DE").tariffP90).toBe("65,00");
+    expect(engine("PPA", "en-US").tariffP90).toBe("65.00");
+  });
+
+  it("UT-REV-158 the German FiT tariff reads both boxes in the user's language: 80 x “1,000” is “80,00”, not 0 (A2)", () => {
+    expect(germanFitTariffText("80", "1,000", "de-DE")).toBe("80,00");
+    expect(germanFitTariffText("80,5", "1,000", "fr-FR")).toBe("80,50");
+    expect(germanFitTariffText("80", "1.000", "en-US")).toBe("80.00");
+    expect(germanFitTariffText("", "1,000", "de-DE")).toBe("0,00");
+    // After an edit, p90 comes back in the language it was read in.
+    expect(tariffP90Text("Germany", "FiT", "80", "0,900", "", "de-DE")).toBe("72,00");
+    expect(tariffP90Text("France", "PPA", "", "", "65", "de-DE")).toBe("65,00");
+    expect(tariffP90Text("France", "PPA", "", "", "65", "en-US")).toBe("65.00");
+  });
+
+  it("UT-REV-159 “Use Country Inflation Profile” fills the hidden box as “1,90”, which the German check accepts", () => {
+    const profiles = [{ countryCode: "DE", year: 2030, inflation: 1.9, area: null }];
+    const f = form({ useInflation: true, inflationStartYear: "2030" });
+    for (const language of ["de-DE", "fr-FR"]) {
+      const on = toggleCountryInflation(f, true, profiles, "DE", language);
+      expect(on.inflationProfile).toBe("1,90");
+      expect(validateInflationProfile(on.inflationProfile, language).valid).toBe(true);
+      expect(changeInflationStartYear(on, "2030", profiles, "DE", null, language).inflationProfile).toBe("1,90");
+    }
+  });
+
+  it("UT-REV-160 editing a balancing period opens the stored -2.5 as “-2,5”, which the German check accepts", () => {
+    expect(balancingPriceText(-2.5, "de-DE")).toBe("-2,5");
+    expect(validateBalancingPrice(balancingPriceText(-2.5, "de-DE"), null, "de-DE").valid).toBe(true);
+    expect(balancingPriceText(7, "fr-FR")).toBe("7");
+    expect(balancingPriceText(-2.5, "en-US")).toBe("-2.5");
+    expect(balancingPriceText(null, "de-DE")).toBe("");
   });
 });

@@ -58,7 +58,7 @@ import {
   categoryCommandLabel, categoryToggleDialog, categoryToggleJob, commitmentFeeFreePeriodLabel,
   currencySuffix, decommissioningDurationLabel, decommissioningSaveJob, defaultEndOfDebtServiceSavings,
   dsraCardToggle, dsraPeriodLabel, dsraSaveJob, dsraToggleDialog, dsraToggleJob, durationOptionName,
-  durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, fmtAmount as fmtAmountIn, fmtCard as fmtCardIn, fmtDateDots,
+  durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, vatBankMarginResetText, fmtAmount as fmtAmountIn, fmtCard as fmtCardIn, fmtDateDots,
   fmtLongDate, formatDscr as formatDscrIn, formatUpfrontFee as formatUpfrontFeeIn, financingOptionJob, freeEquityLabel, isOtherBank,
   isPageLocked, isTrancheFolded, mmyyLabel, openDecommissioningForm, openDsraForm, openEquityForm,
   openTrancheForm, openVatForm, pageLock, planCategoryToggle, planDecommissioningSave, planDsraSave,
@@ -817,8 +817,8 @@ export default function ProjectFinanceScreen() {
   const onCategoryCommand = (order: number, input: FinancingInputRow | null) => (key: string) => {
     writes.clear();
     if (key === "EditFinanceInput") {
-      if (order === CATEGORY_ORDER.equity) { setEquity(openEquityForm(input)); setPanel("equity"); }
-      else if (order === CATEGORY_ORDER.vatFinancing) { setVat(openVatForm(input, country)); setPanel("vat"); }
+      if (order === CATEGORY_ORDER.equity) { setEquity(openEquityForm(input, lang)); setPanel("equity"); }
+      else if (order === CATEGORY_ORDER.vatFinancing) { setVat(openVatForm(input, country, lang)); setPanel("vat"); }
       else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input, lang)); setPanel("decommissioning"); }
     } else {
       setToggleTarget(input);
@@ -1277,7 +1277,7 @@ export default function ProjectFinanceScreen() {
                 tooltip={FIN_LABEL.resetToStandard} disabled={busy}
                 testId="but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_4"
                 // `locStandardBankMarginValue: Text(Value(1.5), "0.0")`
-                onClick={() => setVat({ ...vat, bankMargin: "1.5", flags: { ...vat.flags, locIsStandardBankMargin: true } })}
+                onClick={() => setVat({ ...vat, bankMargin: vatBankMarginResetText(lang), flags: { ...vat.flags, locIsStandardBankMargin: true } })}
               />
             </div>
             <RadioChoice

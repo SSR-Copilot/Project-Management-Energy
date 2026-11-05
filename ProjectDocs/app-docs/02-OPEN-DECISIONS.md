@@ -6932,3 +6932,79 @@ CAPEX-135, 140 (stale option not removed from the menu; no empty-payments guard)
 **Verification:** `npm run verify` exit 0, 222 files, 5,237 tests; two independent retests: 105, 085, 171, 135, 140, 055, 132 PASS; 134 stays Blocked. Workbook `FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx`: 171 Pass, 0 Fail, 6 Blocked (134 and the 5 access cases), 11 Not Run (live).
 **Residuals found by the reviewers, not fixed:** a cleared or unreadable month still stores 0 (Save overwrites that month's stored cost with 0; the Canvas writes no row; the cleared-box part existed before run 2); a negative Absolute total passes the click check and the code sums raw months where the Canvas sums rounded ones; the paid spinner keeps "Please wait..." for the whole write.
 **Not done:** a live Canvas-versus-Code run; the 11 live cases; the 5 access cases need one account per role.
+
+## D97 · Generators: the module-permission flows wired (5 Nov 2026)
+
+*Recorded as D90 on branch `pm-flows`; renumbered to D97 when it was merged into `master` (6 Nov 2026), whose D90 is the
+DEVEX/CAPEX "follow the Canvas" decisions. The code comments that cited D90 for this work now read D97.*
+
+**Instruction (user, 5 Nov 2026):** "all the flows has been added i want them in working position". The four Check List /
+General Data flows were already wired (D81); this wires the two Generators flows registered in D86, `Request Module
+Permission` and `Request permission cancellation`, and removes D27's `EXCLUDED` disabled states.
+
+**What the flows do themselves** (VSBCloud export, read 5 Nov 2026): Request Module Permission responds with `runid` /
+`approvalid`, then sets the type row's 'Request Permission State' Pending, `FlowRunId` and `FlowApprovalId`
+(`Scope_update_RunId_and_Approval_Id_info`); after the approval it sets Approved and rolls the plant cost / capacity up, or
+deletes the row when declined. Request permission cancellation completes the approval as Canceled and sets the row Canceled
+with both ids blank. **So the code app writes none of those fields** (the canvas only mirrors them into its collections): a
+late Pending patch could overwrite the flow's Approved or hit a row a decline deleted.
+
+**Wired (Screen → `useModulePermissionFlows` in `hooks.ts` → `data/flows.ts`), each inside the same `usePlanWrite` job:**
+- WTG type save and Replace Generator Type **out of country**: the same type / turbine writes without the roll-up, then
+  `RequestModulePermission(User().Email, vsb_PrimarilyApprovalGroupID, vsb_ProjectManagementAppID, JSON(varProject))` for
+  the new type (canvas Y:15214 / 16514). Progress text `Request Permission for "…" has been sent, please wait...`.
+- Inverter / substructure save **with an Other Supplier** (Y:10243 / 8979, which doc 16 had missed): the row, no PV-cost
+  roll-up, then the request for the row. The PV request stays off, as in the canvas (commented out there).
+- The cards' **Cancel** (WTG / PV / inverter / substructure): the cancellation flow, then the canvas success text.
+- **Delete** and **Replace** of a type whose `FlowRunId` is set: the cancellation flow first, then the existing plan.
+
+**DIVERGENCES:** (1) the cancellation runs before any delete write (the WTG canvas runs it after the O&M deletes, so a
+failed cancellation left the type without its costs); (2) the card Cancel does not `Patch` the row — the flow already wrote
+Canceled, and the WTG canvas patched `locSelectedGeneratorEntity`, the selected type rather than the card's (SOURCE DEFECT);
+(3) a blank app id, approval group or user e-mail refuses the call with `PERMISSION_MSG.setupMissing` instead of sending a
+blank; (4) the substructure cancellation sends `ModuleType.Substructure`, not the canvas's `Inverter` (D27 SOURCE DEFECT).
+
+- Tests: UT-FLOWS-006…008; UT-GEN-147…150; UT-GEN-904 rewritten, UT-GEN-914, 915 new, 909 / 912 extended; the refusal
+  assertions of UT-GEN-118, 122, 126, 127, 133, 137 and 139 now assert the plans instead.
+- `typecheck`, lint, `check:power` (95 registered, 0 problems) and both label gates clean; `flows.test.ts`, the Generators
+  `rules.test.ts` and `Screen.test.tsx` pass (3 files, 178 tests). The full suite was not run.
+- **Not run live.** Every call sends real approvals and mails to the `vsb_PrimarilyApprovalGroupID` group; the test plan of
+  doc 16 §7 (which project, which approvers) is still open.
+
+## D98 · Team: a person cannot be added twice with the same description (6 Nov 2026) — NEW
+
+*Recorded as D91 on branch `pm-flows`; renumbered to D98 when it was merged into `master` (6 Nov 2026), whose D91 is the
+DEVEX/CAPEX run-1 failures. The code comments that cited D91 for this work now read D98.*
+
+**Trigger:** testing on DEV (6 Nov 2026). Adding Shakti Singh as Project Manager on project `5747f327-…` failed with the raw
+Dataverse error `DuplicateRecordEntityKey` (HTTP 412): `Project Members` has the alternate key `ProjectMembers_V2` (Member +
+Project + Project Member Description), and Shakti already held that description in the team (rows created on DEV on
+5 Nov 2026). The canvas sends the same `Patch(…, Defaults(…))` with no check, so it fails the same way; the merge of
+5 Nov 2026 did not change this path (`executePlan` has no retry).
+
+**Change (DIVERGENCE, NEW text):** the member panel checks the team it already shows. When the chosen person already holds
+the chosen description (the edited row excluded), the Name error label (`lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage`)
+reads "`<name>` is already in the team as `<description>`. Choose another name or description." and Save stays disabled;
+`planSaveMember` refuses the pair as well. The same person with another description is still allowed.
+
+- Code: `duplicateMember`, `memberPanelErrors`, `canSaveMember`, `planSaveMember`, `MSG.duplicate` in `features/pm/team/rules.ts`.
+- Tests: UT-TEAM-038, 039.
+
+## D99 · Generators: save performance — parallel independent writes, one job, background reload (6 Nov 2026)
+
+**Instruction (user, 6 Nov 2026):** a generator save took too long; target under 3 s. Not yet timed live.
+
+**Shared code (affects every screen that uses it):**
+- `data/executePlan.ts`: a run of `concurrent` writes now holds at most `WRITE_CONCURRENCY` (8) requests in flight
+  (`createGate`, `data/concurrency.ts`), under Dataverse's 52-request limit. `PlanResult` gained `createdRows` — each created
+  row as returned, by id (the SDK sends creates with `Prefer: return=representation`, so autonumbers come back). UT-PLAN-036, 037.
+- `data/usePlanWrite.ts`: opt-in `refresh: "background"` — a job ends once its writes land and the reload runs behind it,
+  with `refreshing` true until it ends. The default (`"await"`) is unchanged for every other screen. UT-PLANWRITE-009, 010.
+
+**Generators (`features/pm/generators`):** only rows of ONE canvas step are marked `concurrent` (turbines; apply-to-all
+patches; land-lease clean-up, allocation creates / moves / removals; O&M deletes, detaches and re-links; substructure
+costs); between the steps the canvas order holds, so the roll-up (`LoadDevexCapexCostTotalCapacityTrigger`) fires after the
+rows, a failure stops before it, and a Replace deletes the old device-type row only after the O&M detach has finished. The
+WTG / PV type save and both Replaces run as ONE job (`then`) and take a new type's autonumber name from `createdRows`
+instead of reading it back. The screen uses the background reload and holds its actions (command bar, Add Generator,
+turbine edit / delete, permission Cancel) while `refreshing`. Same rows and values as before; only timing changes.

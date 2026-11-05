@@ -881,6 +881,18 @@ export function germanFitTariff(biddingPrice: number, correctionFactor: number):
   return pfxRound(v, 2).toFixed(2);
 }
 
+/**
+ * The German FiT product as the tariff box shows it (A2, German number audit, 6 Nov 2026):
+ * `Text(Value(<Bidding>.Text) * Value(<CorrectionFactor>.Text), "0.00")` (Y:9446-9449). `Value()` reads both boxes
+ * in the user's language and `Text()` writes the product in it, so a German "80" x "1,000" is "80,00". The screen
+ * read them with `Number()`, which made "1,000" NaN and the tariff 0. A box that is not a number counts as 0.
+ */
+export function germanFitTariffText(biddingText: string, correctionFactorText: string, lang: Lang): string {
+  const b = parseNumber(biddingText, lang);
+  const c = parseNumber(correctionFactorText, lang);
+  return forLanguage(germanFitTariff(Number.isNaN(b) ? 0 : b, Number.isNaN(c) ? 0 : c), lang);
+}
+
 /** `txt_…_TariffPrice_1.Default` — the product for German FiT, the plain price otherwise. */
 export function tariffDisplay(
   showsBlock: boolean, biddingPrice: number, correctionFactor: number, price: number,
@@ -1520,6 +1532,13 @@ export function validateBalancingPrice(
 }
 
 /**
+ * `txt_Revenue_BalancingPrice[EUR/MWh].Default` on Edit: the stored price (Y:4358), which the canvas shows in the
+ * user's language ("-2,5"). `String()` opened "-2.5", which the German check above rejects (6 Nov 2026).
+ */
+export const balancingPriceText = (price: number | null, lang: Lang): string =>
+  price === null ? "" : forLanguage(String(price), lang);
+
+/**
  * SOURCE DEFECT (ambiguity 4) — Shift of COD Date [Months].
  *
  * The canvas message label says `"Value must be between 0 and 24."` and its `.Text` fires
@@ -2070,13 +2089,13 @@ export function tariffP90Text(
   country: string | null, revenueTypeLabel: string | null,
   biddingPrice: string, correctionFactorP90: string, tariff: string, lang: Lang = "en-US",
 ): string {
+  // The text comes back in the language it was read in, as `Text(..., "0.00")` follows `Language()` (A1,
+  // 6 Nov 2026): an English "65.00" in a German form was read back by the save as 6500.
   if (country === "Germany" && revenueTypeLabel === "FiT") {
-    const b = parseNumber(biddingPrice, lang);
-    const c = parseNumber(correctionFactorP90, lang);
-    return germanFitTariff(Number.isNaN(b) ? 0 : b, Number.isNaN(c) ? 0 : c);
+    return germanFitTariffText(biddingPrice, correctionFactorP90, lang);
   }
   const t = parseNumber(tariff, lang);
-  return isBlank(tariff) || Number.isNaN(t) ? "" : pfxRound(t, 2).toFixed(2);
+  return isBlank(tariff) || Number.isNaN(t) ? "" : forLanguage(pfxRound(t, 2).toFixed(2), lang);
 }
 
 /**
@@ -3202,7 +3221,9 @@ export function applyRevenueEngine(input: {
     }),
     currencyCode: revenueCurrencyCode(project.countryName),
     tariff,
-    tariffP90: tariffP90Text(project.countryName, label, biddingPrice, cfText, tariff, lang),
+    // The engine's texts are en-US until `localizeContractForm` converts the whole form, so p90 is read and written
+    // in en-US too. Read with the user's language, "65.00" was 6500 and a German FiT 65 x "1.000" 6,500,000 (A1).
+    tariffP90: tariffP90Text(project.countryName, label, biddingPrice, cfText, tariff, "en-US"),
     biddingPrice,
     siteQuality: "", siteQualityP90: "",
     correctionFactor: cfText,
@@ -3334,6 +3355,8 @@ export function editContractForm(input: {
 export function toggleCountryInflation(
   form: RevenueFormState, checked: boolean,
   profiles: readonly CountryInflationProfileRow[], countryCode: string | null,
+  /** The user's language: `Text(rec, "0.00")` writes the value in it, and the hidden box is checked in it. */
+  lang: Lang = "en-US",
 ): RevenueFormState {
   const year = Number(form.inflationStartYear);
   const value = checked ? countryInflationValue(profiles, countryCode, year, null, false) : null;
@@ -3342,7 +3365,7 @@ export function toggleCountryInflation(
   const off = form.mode === "Edit" ? (form.storedInflationProfile ?? "") : "";
   return editField(form, {
     useCountryInflationProfile: checked,
-    inflationProfile: value === null ? off : fmtTwoDecimals(value),
+    inflationProfile: value === null ? off : forLanguage(fmtTwoDecimals(value), lang),
   }, { useCountryInflation: false, inflationValue: false });
 }
 
@@ -3353,6 +3376,8 @@ export function toggleCountryInflation(
 export function changeInflationStartYear(
   form: RevenueFormState, text: string,
   profiles: readonly CountryInflationProfileRow[], countryCode: string | null, region: string | null,
+  /** The user's language: the looked-up value is written in it, as `Text(..., "0.00")` does. */
+  lang: Lang = "en-US",
 ): RevenueFormState {
   /*
    * Audit 20 Oct 2026 (FIXED):
@@ -3366,5 +3391,5 @@ export function changeInflationStartYear(
   const base = editFieldIfValid(form, valid, { inflationStartYear: text }, { inflationStartYear: false });
   if (!form.useCountryInflationProfile) return base;
   const value = countryInflationValue(profiles, countryCode, Number(text), form.country === "Italy" ? region : null);
-  return { ...base, inflationProfile: fmtTwoDecimals(value), std: { ...base.std, inflationValue: false } };
+  return { ...base, inflationProfile: forLanguage(fmtTwoDecimals(value), lang), std: { ...base.std, inflationValue: false } };
 }

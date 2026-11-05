@@ -323,6 +323,11 @@
 /* A `TextInput@0.0.54` in `DisplayMode.Disabled` (not `View`): white, a light outline, the
    control's DisabledColor RGBA(161, 159, 157) — e.g. the Add Generator panel's Total Height. */
 .canvas-field[data-display="disabled"] > input:disabled { background: #ffffff; border: 1px solid #e3e3e3; color: #a19f9d; -webkit-text-fill-color: #a19f9d; }
+/* The same `DisplayMode.Disabled` look on a `ComboBox@0.0.51` — the Add Generator Type panel's Turbine Type and
+   Hub Height before the field above is chosen, and the Replace panels' "Replace from" boxes. More specific than the
+   panels' filled `.canvas-panel .fui-Dropdown` rule above, which kept them grey (screenshot, 6 Nov 2026). */
+.canvas-field[data-display="disabled"] > .fui-Dropdown { background: #ffffff; border: 1px solid #e3e3e3; }
+.canvas-field[data-display="disabled"] > .fui-Dropdown :is(button, svg) { color: #a19f9d; }
 .canvas-field[data-invalid] > input, .canvas-field[data-invalid] > select,
 .canvas-field[data-invalid] > :is(.fui-Input, .fui-Dropdown, .fui-DatePicker) { outline: 1px solid #d20532; outline-offset: -1px; }
 

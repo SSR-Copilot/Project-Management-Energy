@@ -26,7 +26,9 @@
  * for independent rows (no server automation depends on their relative order); a write in a run
  * sees the ids created before the run, never one created inside it. A failure in a run lets its
  * other writes finish, then stops the plan with `PlanError` (`done` = the writes that landed).
- * Plans that mark nothing run exactly as before. Pinned by UT-PLAN-032..035.
+ * Plans that mark nothing run exactly as before. Pinned by UT-PLAN-032..035. A run holds at most
+ * `WRITE_CONCURRENCY` (8) requests in flight (6 Nov 2026): a WTG type's turbines can number 200, and
+ * Dataverse cuts a user off at 52 concurrent requests with no retry on the write path (`concurrency.ts`).
  *
  * DIVERGENCE (no canvas equivalent; P-1 stale skip tokens): every write Dataverse ACCEPTS drops
  * the cached `countedPage` walks for its table via `invalidatePageTokens(write.entitySet)`. A
@@ -48,6 +50,7 @@ import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo
 import { isRecordGone, unwrap, unwrapDelete } from "@/platform/errors";
 import { logData } from "@/platform/requestLog";
 import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
+import { createGate, WRITE_CONCURRENCY } from "./concurrency";
 import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
 
 /** The three SDK calls a plan needs — the `getClient` shape, narrowed so tests can stub it. */
@@ -68,6 +71,12 @@ export interface PlanResult {
   done: number;
   /** The ids returned by the plan's creates, in order. */
   createdIds: string[];
+  /**
+   * Each created row as Dataverse returned it, by id (6 Nov 2026). The SDK sends every create with
+   * `Prefer: return=representation` (`runtimeDataClient._mergePreferHeaders`, `@microsoft/power-apps` 1.3.1),
+   * so server-generated columns — an autonumber `vsb_name` — arrive with the create and need no read-back.
+   */
+  createdRows: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 /** A plan that stopped part-way. `done` writes were sent before `failedReason` failed. */
@@ -160,6 +169,8 @@ async function sendWrite(
   operation: string,
   client: PlanClient & Partial<GuardedPlanClient>,
   createdIds: readonly string[],
+  /** Collects each created row (as returned) by its id — `PlanResult.createdRows`. */
+  createdRows?: Record<string, Readonly<Record<string, unknown>>>,
 ): Promise<string | undefined> {
   if (write.guarded && write.op !== "update") {
     throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
@@ -187,6 +198,7 @@ async function sendWrite(
     invalidatePageTokens(write.entitySet);
     const newId = row?.[key];
     if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
+    if (createdRows && row) createdRows[newId] = row;
     logged();
     return newId;
   }
@@ -235,12 +247,13 @@ export async function executePlan(
 
   const writes = plan.writes;
   const createdIds: string[] = [];
+  const createdRows: Record<string, Readonly<Record<string, unknown>>> = {};
   let done = 0;
   for (let i = 0; i < writes.length;) {
     const write = writes[i]!;
     if (!write.concurrent) {
       try {
-        const newId = await sendWrite(write, operation, client, createdIds);
+        const newId = await sendWrite(write, operation, client, createdIds, createdRows);
         if (newId !== undefined) createdIds.push(newId);
         done += 1;
       } catch (cause) {
@@ -255,7 +268,8 @@ export async function executePlan(
     while (end < writes.length && writes[end]!.concurrent) end += 1;
     const run = writes.slice(i, end);
     const before = [...createdIds];
-    const settled = await Promise.allSettled(run.map((w) => sendWrite(w, operation, client, before)));
+    const gate = createGate(WRITE_CONCURRENCY);
+    const settled = await Promise.allSettled(run.map((w) => gate(() => sendWrite(w, operation, client, before, createdRows))));
     let failure: { reason: string; cause: unknown } | undefined;
     settled.forEach((s, k) => {
       if (s.status === "fulfilled") {
@@ -270,5 +284,5 @@ export async function executePlan(
     if (failure) throw new PlanError(done, writes.length, failure.reason, failure.cause, [...createdIds]);
     i = end;
   }
-  return { done, createdIds };
+  return { done, createdIds, createdRows };
 }

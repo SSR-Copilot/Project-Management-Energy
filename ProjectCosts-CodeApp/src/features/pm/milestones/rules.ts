@@ -1492,6 +1492,16 @@ export function isMilestoneFieldVisible(
 }
 
 /**
+ * `con_Milestones_DisplayProject_Body_General_Content_Clusters_Date_1Column.Visible` (Y:1502) —
+ * `Or(Cluster1.Visible, StartDate.Visible, Cluster2.Visible, Cluster3.Visible)`. When none of the first column's
+ * dates shows (a project that starts at Cluster 4 or later), the column itself is hidden, so the second column
+ * (Cluster 4, FID, Cluster 5, Cluster 6) moves to the left instead of leaving an empty 380-px gap.
+ */
+export const isFirstDateColumnVisible = (startCluster: number | null | undefined): boolean =>
+  (["StartDate", "FeasibilityStudies", "ProjectDevelopmentStarted", "ApplicationSubmitted"] as const)
+    .some((key) => isMilestoneFieldVisible(key, startCluster));
+
+/**
  * `but_Milestones_DisplayProject_Body_General_Content_<Cluster2…6|FiD|EndDate>.Visible` —
  * `Or(Technology = gblAppConstants.Texnology.Wind, Technology = gblAppConstants.Texnology.PV)`.
  * The two sales recalculate buttons carry no `Visible` and always render.

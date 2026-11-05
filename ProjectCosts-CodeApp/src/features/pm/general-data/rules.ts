@@ -24,6 +24,7 @@ import {
   isBlank, decimalSeparator, formatInteger, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addMonths } from "@/domain/dates";
+import { localeInfo } from "@/domain/locale";
 import { dateOnly } from "@/data/odata";
 import { ES, CHOICE, TERRAIN_SIZE_COUNTRY_KEY } from "@/data/dataverseNames";
 import type { PlannedWrite, WritePlan } from "@/data/writePlan";
@@ -1297,8 +1298,8 @@ export function fieldErrors(ctx: ValidationContext): Partial<Record<FieldKey, st
     if (isBlank(form.acquisitionPrice.trim())) {
       out.acquisitionPrice = MSG.acquisitionPriceBlank;
     } else if (
-      !isInteger(form.acquisitionPrice.trim().split(groupSeparatorOf(lang)).join(""), lang)
-      || !inRange(form.acquisitionPrice, 0, 1_000_000_000, lang)
+      !isInteger(withoutGrouping(form.acquisitionPrice, lang), lang)
+      || !inRange(withoutGrouping(form.acquisitionPrice, lang), 0, 1_000_000_000, lang)
     ) {
       out.acquisitionPrice = acquisitionPriceShapeMessage(lang);
     }
@@ -1310,6 +1311,19 @@ export function fieldErrors(ctx: ValidationContext): Partial<Record<FieldKey, st
 
 /** The group separator the price field is formatted with (`Text(price, "###,###", Language())`). */
 const groupSeparatorOf = (lang: Lang): string => (decimalSeparator(lang) === "." ? "," : ".");
+
+/**
+ * The Acquisition Price text without its thousands grouping, the way `Value()` reads `Text(p, "###,###,###",
+ * Language())` (Y:2967) back in every language: "." in German, "," in English, a narrow no-break space in French, a
+ * no-break space in Polish and Finnish, an apostrophe in Swiss German. Only the dot or comma was stripped before, so
+ * a French "1 500 000" failed the check and saved nothing (German number audit, 6 Nov 2026).
+ */
+const withoutGrouping = (text: string, lang: Lang): string => {
+  let t = text.trim();
+  const group = localeInfo(lang).groupSeparator;
+  if (group) t = t.split(group).join("");
+  return t.replace(/[\s  '’]/g, "").split(groupSeparatorOf(lang)).join("");
+};
 
 /** Every visible error label's text, in the canvas `ibtn` order. */
 export function validationMessages(ctx: ValidationContext): string[] {
@@ -1875,7 +1889,7 @@ export function buildProjectPatch(
     [PROJECT_COL.startCluster]: acquired ? form.startCluster : CHOICE.clusterState.greenfield,
     [PROJECT_COL.acquisitionDate]: acquired ? form.acquisitionDate : null,
     // fn_Numeric_With_Separtors.toNumber(text) — the grouped text back to a number.
-    [PROJECT_COL.acquisitionPrice]: acquired ? numericOf(form.acquisitionPrice, lang) : null,
+    [PROJECT_COL.acquisitionPrice]: acquired ? numericOf(withoutGrouping(form.acquisitionPrice, lang), lang) : null,
   };
 }
 

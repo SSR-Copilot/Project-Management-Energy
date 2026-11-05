@@ -48,7 +48,7 @@ import {
   MILESTONES_MSG, MILESTONES_SCREEN_TEXT, MILESTONE_FIELD_ERROR, cancelMilestones,
   canSaveMilestones, classifyDerivedMilestones, codChangeBlocksSave, editMilestone,
   emptyMilestoneDates, farmdownError, formatFarmdown, formatShortDateTime24, initialForm, invalidMessages,
-  isMilestoneFieldErrorVisible, isMilestoneFieldVisible, isPageLocked, isRecalculateEnabled,
+  isFirstDateColumnVisible, isMilestoneFieldErrorVisible, isMilestoneFieldVisible, isPageLocked, isRecalculateEnabled,
   isRecalculateVisible, milestoneMeta, needsPlantCostRecalculation, nextDirtyKeys,
   operationalLifetime, planSaveMilestones, recalculateMilestone, repriceGenerators,
   requiredFieldsContent, resetShareOfFarmdown, sameDate, validateMilestones,
@@ -569,7 +569,11 @@ export default function MilestonesScreen() {
 
         <div className={s.card}>
           <div className={s.columns}>
-            <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_1.map(dateField)}</div>
+            {/* `…_Clusters_Date_1Column.Visible`: hidden when none of its dates shows (start at Cluster 4+), so
+                Cluster 4 / FID / 5 / 6 move into the first column, as in the canvas. */}
+            {isFirstDateColumnVisible(project?.startCluster) ? (
+              <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_1.map(dateField)}</div>
+            ) : null}
             <div className={mergeClasses(s.column, s.chainColumn)}>{COLUMN_2.map(dateField)}</div>
           </div>
 
