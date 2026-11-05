@@ -10,9 +10,7 @@
  */
 import { Button, makeStyles, mergeClasses, tokens, Tooltip } from "@fluentui/react-components";
 import {
-  BookOpenFilled, DocumentPersonRegular, MoneyRegular,
   TableSimpleRegular, ChevronDownRegular, ChevronUpRegular, NavigationRegular,
-  AlertBadgeRegular, PersonAccountsRegular, CalendarClockRegular,
 } from "@fluentui/react-icons";
 import { useMemo, useState, type ReactElement } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -37,6 +35,27 @@ import { layout, palette, space } from "@/theme/tokens";
 const MDL2_PATH = {
   // PageEdit — U+EFB6, fabric-icons-8.
   pageEdit: "M1848 896Q1890 896 1926.5 911Q1963 926 1990 953Q2017 980 2032.5 1016Q2048 1052 2048 1094Q2048 1133 2033 1170Q2018 1207 1990 1235L1273 1954L896 2048L990 1671L1707 953Q1735 925 1772 910.5Q1809 896 1848 896ZM1207 1838L1899 1145Q1920 1124 1920 1094Q1920 1063 1899.5 1043.5Q1879 1024 1848 1024Q1834 1024 1821 1028.5Q1808 1033 1798 1043L1106 1737L1072 1872L1207 1838ZM256 128L256 1920L763 1920L731 2048L128 2048L128 0L1243 0L1792 549L1792 743Q1725 753 1664 787L1664 640L1152 640L1152 128L256 128ZM1280 219L1280 512L1573 512L1280 219Z",
+  /*
+   * ReadingModeSolid (DEVEX/CAPEX) and TextDocumentShared (Contracts): the canvas Cost rail's
+   * `data-icon-name` glyphs, from `ReadingModeSolidIcon` / `TextDocumentSharedIcon` in
+   * `@fluentui/react-icons-mdl2` 1.3.83 — the SVG build of the same MDL2 font (its `PageEditIcon`
+   * is the PageEdit outline above). They replace the Fluent v9 lookalikes `BookOpenFilled` and
+   * `DocumentPersonRegular` (5 Nov 2026).
+   */
+  readingModeSolid: "M640 1664q43 0 75 9t60 26 53 41 54 52H0V256h128v1408h512zm0-1536q67 0 132 16t124 50v1435q-54-45-120-69t-136-24H256V128h384zm1280 128v1536h-882q28-28 53-52t53-40 60-26 76-10h512V256h128zm-640 1280q-70 0-136 24t-120 69V194q59-33 124-49t132-17h384v1408h-384z",
+  textDocumentShared: "M1408 1024H512V896h896v128zm-896 128h896v56q-41 32-72 72H512v-128zm0 256h756q-20 63-20 128H512v-128zm-256 512h880q-16 61-16 128H128V0h1115l549 549v591q-63-20-128-20V640h-512V128H256v1792zM1280 512h293l-293-293v293zm568 1201q46 25 83 61t63 79 40 93 14 102h-128q0-53-20-99t-55-82-81-55-100-20q-53 0-99 20t-82 55-55 81-20 100h-128q0-52 14-101t40-93 63-80 83-61q-34-35-53-81t-19-96q0-53 20-99t55-82 81-55 100-20q53 0 99 20t82 55 55 81 20 100q0 50-19 96t-53 81zm-184-49q27 0 50-10t40-27 28-41 10-50q0-27-10-50t-27-40-41-28-50-10q-27 0-50 10t-40 27-28 41-10 50q0 27 10 50t27 40 41 28 50 10z",
+  /*
+   * The Application Settings rail (`LeftAdminNavigationMenu`), from the same package:
+   * ReminderGroup (Project Gates), AccountManagement (CAPEX Accounts), DateTime (Milestones) and
+   * AllCurrency (Costs; also the hidden Total Summary row of the Cost rail). They replace the
+   * Fluent v9 lookalikes `AlertBadgeRegular`, `PersonAccountsRegular`, `CalendarClockRegular` and
+   * `MoneyRegular` (5 Nov 2026). Check List Settings already drew `checkList` below, and Contracts
+   * shares the Cost rail's TextDocumentShared.
+   */
+  reminderGroup: "M2029 1453l-557 558-269-270 90-90 179 178 467-466 90 90zm-1293 9q66 33 119 81t90 107 58 128 21 142H896q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149H0q0-73 20-142t58-128 91-107 119-81q-75-54-117-135t-43-175q0-79 30-149t82-122 122-83 150-30q94 0 175 42t135 118q38-76 98-136t136-98q-75-54-117-135t-43-175q0-79 30-149t82-122 122-83 150-30q79 0 149 30t122 82 83 123 30 149q0 94-42 175t-118 135q66 33 119 81t90 107 58 128 21 142h-128q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149q0 94-42 175t-118 135zm288-1078q0 53 20 99t55 82 81 55 100 20q53 0 99-20t82-55 55-81 20-100q0-53-20-99t-55-82-81-55-100-20q-53 0-99 20t-82 55-55 81-20 100zm-768 768q0 53 20 99t55 82 81 55 100 20q53 0 99-20t82-55 55-81 20-100q0-53-20-99t-55-82-81-55-100-20q-53 0-99 20t-82 55-55 81-20 100z",
+  accountManagement: "M1148 1152q-83-62-179-95t-201-33q-88 0-170 23t-153 64-129 100-100 130-65 153-23 170H0q0-120 35-231t101-205 156-167 204-115q-56-35-100-82t-76-104-47-119-17-129q0-106 40-199t110-162T569 41 768 0q106 0 199 40t162 110 110 163 41 199q0 66-16 129t-48 119-76 103-101 83q60 23 113 54v152h-4zM384 512q0 80 30 149t82 122 122 83 150 30q79 0 149-30t122-82 83-122 30-150q0-79-30-149t-82-122-123-83-149-30q-80 0-149 30t-122 82-83 123-30 149zm1664 768v768H1024v-768h256v-256h512v256h256zm-640 0h256v-128h-256v128zm512 384h-128v128h-128v-128h-256v128h-128v-128h-128v256h768v-256zm0-256h-768v128h768v-128z",
+  dateTime: "M1792 993q60 41 107 93t81 114 50 131 18 141q0 119-45 224t-124 183-183 123-224 46q-91 0-176-27t-156-78-126-122-85-157H128V128h256V0h128v128h896V0h128v128h256v865zM256 256v256h1408V256h-128v128h-128V256H512v128H384V256H256zm643 1280q-3-31-3-64 0-86 24-167t73-153h-97v-128h128v86q41-51 91-90t108-67 121-42 128-15q100 0 192 33V640H256v896h643zm573 384q93 0 174-35t142-96 96-142 36-175q0-93-35-174t-96-142-142-96-175-36q-93 0-174 35t-142 96-96 142-36 175q0 93 35 174t96 142 142 96 175 36zm64-512h192v128h-320v-384h128v256zM384 1024h128v128H384v-128zm256 0h128v128H640v-128zm0-256h128v128H640V768zm-256 512h128v128H384v-128zm256 0h128v128H640v-128zm384-384H896V768h128v128zm256 0h-128V768h128v128zm256 0h-128V768h128v128z",
+  allCurrency: "M959 1026q-48-2-99-12t-94-31q-17-8-27-23t-10-35q0-26 19-45t45-19q13 0 27 6 66 29 138 30V678q-37-13-71-32t-61-45-43-61-16-77q0-41 16-74t43-57 61-41 71-25q0-29 16-50t48-22q27 0 45 18t19 46q35 2 66 9t65 17l-44 120q-21-8-43-12t-44-6v200q34 12 68 32t62 47 45 61 17 74q0 44-15 80t-40 63-61 45-76 28q0 28-17 48t-47 20q-25 0-43-17t-20-41zm127-143q28-11 46-30t18-52q0-12-6-23t-16-20-21-17-21-14v156zM895 463q0 28 20 46t43 30V400q-3 1-13 5t-12 7q-14 5-26 20t-12 31zm745 351q92 36 167 96t128 137 83 169 30 191q0 88-23 170t-64 153-100 129-130 101-153 65-170 23q-104 0-202-33t-181-96q-84 63-182 96t-203 33q-89 0-170-23t-153-64-129-100-100-130-65-153-23-171q0-99 29-190t83-169 129-138 167-96q-24-84-24-173 0-88 23-170t64-153 100-129T701 88t153-65 170-23q88 0 170 23t153 65 129 100 100 130 65 153 23 170q0 89-24 173zm-616-686q-106 0-199 40T662 279 552 442t-40 199q0 106 40 199t109 163 163 110 200 41q106 0 199-40t163-110 110-163 40-200q0-106-40-199t-109-163-163-110-200-41zM640 1920q106 0 199-40t163-110 110-163 40-200q0-68-20-134-54 9-108 9-105 0-203-33t-183-97q-7 4-13 5-88 26-133 91t-46 157v2h126q26 0 45 19t19 45q0 31-17 44t-41 18-51 4-46-2q35 59 93 92t128 34q29 0 54-6t52-17q13-5 26-5 26 0 45 18t19 45q0 29-22 47t-54 28-65 14-55 4q-61 0-117-18t-104-52-84-80-57-104q-16 0-31-3t-26-10-19-19-7-32q0-26 17-44t44-20q0-56 14-109t41-100 67-84 94-60q-23-29-43-60t-38-64q-74 29-133 77t-103 111-66 136-23 153q0 106 40 199t109 163 163 110 200 41zm768 0q106 0 199-40t163-110 110-163 40-200q0-79-23-152t-66-136-103-110-133-78q-38 74-93 136t-124 108l93 126 140-187q19-26 51-26 27 0 46 19t19 46q0 20-13 38l-180 239v105h41q22 0 42 4t33 18 14 42q0 28-13 41t-33 19-42 5-42-1v41q0 22-4 42t-18 33-42 14q-28 0-41-13t-19-33-5-42 1-42h-41q-22 0-41-4t-33-18-13-42q0-28 13-41t32-19 42-5 41 1v-105l-142-194-6 2q12 41 17 84t5 85q0 118-40 226t-119 197q64 44 136 67t151 23z",
   // Flag — U+E7C1, the core fabric-icons set.
   flag: "M1152 256L1920 256L1920 1280L1024 1280L1024 1024L384 1024L384 2048L256 2048L256 0L1152 0L1152 256ZM384 896L1024 896L1024 128L384 128L384 896ZM1792 1152L1792 384L1152 384L1152 1152L1792 1152Z",
   // TriggerApproval — U+F3B2, fabric-icons-12.
@@ -68,12 +87,12 @@ const Mdl2Icon = ({ path }: { path: string }) => (
 const ICONS: Record<NavItem["icon"], ReactElement> = {
   projects: <TableSimpleRegular />,
   // ReadingModeSolid — an open book, and the only FILLED glyph in the rail.
-  capex: <BookOpenFilled />,
+  capex: <Mdl2Icon path={MDL2_PATH.readingModeSolid} />,      // ReadingModeSolid
   opex: <Mdl2Icon path={MDL2_PATH.pageEdit} />,      // PageEdit
   document: <Mdl2Icon path={MDL2_PATH.pageEdit} />,  // PageEdit
   // TextDocumentShared — a document with a person, not a plain sheet of lines.
-  contract: <DocumentPersonRegular />,
-  currency: <MoneyRegular />,         // AllCurrency
+  contract: <Mdl2Icon path={MDL2_PATH.textDocumentShared} />,  // TextDocumentShared
+  currency: <Mdl2Icon path={MDL2_PATH.allCurrency} />,         // AllCurrency
   // Project Management rails (`ItemIconName` in `LeftNavigationMenu` / `LeftAdminNavigationMenu`):
   flag: <Mdl2Icon path={MDL2_PATH.flag} />,                     // Flag
   generator: <Mdl2Icon path={MDL2_PATH.triggerApproval} />,     // TriggerApproval
@@ -84,9 +103,9 @@ const ICONS: Record<NavItem["icon"], ReactElement> = {
   gridOperator: <Mdl2Icon path={MDL2_PATH.followUser} />,       // FollowUser
   money: <Mdl2Icon path={MDL2_PATH.money} />,                   // Money
   financial: <Mdl2Icon path={MDL2_PATH.financial} />,           // Financial
-  gates: <AlertBadgeRegular />,                // ReminderGroup
-  accounts: <PersonAccountsRegular />,         // AccountManagement
-  dateTime: <CalendarClockRegular />,          // DateTime
+  gates: <Mdl2Icon path={MDL2_PATH.reminderGroup} />,           // ReminderGroup
+  accounts: <Mdl2Icon path={MDL2_PATH.accountManagement} />,    // AccountManagement
+  dateTime: <Mdl2Icon path={MDL2_PATH.dateTime} />,             // DateTime
 };
 
 /*

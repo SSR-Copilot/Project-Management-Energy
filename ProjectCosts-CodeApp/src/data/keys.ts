@@ -111,6 +111,8 @@ export const qk = {
     ["milestoneAssumptions", countryId, "row", technology] as const,
   individualVolumeContracts: (projectId: string) => ["individualVolumeContracts", projectId] as const,
   projectRevenueCount: (projectId: string) => ["projectRevenueCount", projectId] as const,
+  /** PM Milestones: the default revenue seed's inputs (Fabric assumptions, EUR, first subaccount), read ahead. */
+  milestoneRevenueSeedInputs: (countryName: string) => ["milestoneRevenueSeedInputs", countryName] as const,
   milestoneRecalculationRunning: (projectId: string) => ["milestoneRecalculationRunning", projectId] as const,
   /** PM Generators (D27). Everything project-scoped sits under `generatorsAll(projectId)`, so one invalidation refreshes the screen. */
   generatorsAll: (projectId: string) => ["generators", projectId] as const,

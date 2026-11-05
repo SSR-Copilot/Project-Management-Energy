@@ -56,7 +56,7 @@ import {
   type MilestoneKey, type MilestonesForm, type RecalcKey,
 } from "./rules";
 import {
-  loadRepricing, loadRevenueSeed, useIndividualVolumeContractCount, useMilestoneAssumption,
+  loadRepricing, loadRevenueSeed, useIndividualVolumeContractCount, useMilestoneAssumption, useRevenueSeedInputsLoader,
   useMilestoneLabels, useMilestoneProject, useMilestoneWrites, useRecalculationRunning,
 } from "./hooks";
 
@@ -383,6 +383,8 @@ export default function MilestonesScreen() {
 
   const recalculating = useRecalculationRunning(projectId);
   const writes = useMilestoneWrites(projectId);
+  // The seed's Fabric / EUR / subaccount reads, done when the screen opens (only while the seed would run).
+  const seedInputs = useRevenueSeedInputsLoader(project);
 
   const persisted = useMemo(() => (project ? initialForm(project, locale) : emptyForm(locale)), [project, locale]);
   const [edited, setEdited] = useState<MilestonesForm | null>(null);
@@ -434,10 +436,14 @@ export default function MilestonesScreen() {
       // `Notify(Concat(colProcessingSteps, $"{Value} {Char(10)}"), Success)` (Y:501-508).
       success: (plan) => stepLogText(plan.log),
       plan: async () => {
-        const repricing = fid && needsPlantCostRecalculation(p.dates.FinalInvestmentDecision, fid)
-          ? await loadRepricing(p.id!, fid) : null;
-        // The canvas seeds from the record it has just patched, so the saved dates.
-        const seed = await loadRevenueSeed(p, f.dates);
+        // The re-pricing and the seed read independent data, so they run at the same time
+        // (save performance, 5 Nov 2026); the writes that follow keep the canvas order.
+        const [repricing, seed] = await Promise.all([
+          fid && needsPlantCostRecalculation(p.dates.FinalInvestmentDecision, fid)
+            ? loadRepricing(p.id!, fid) : Promise.resolve(null),
+          // The canvas seeds from the record it has just patched, so the saved dates.
+          loadRevenueSeed(p, f.dates, seedInputs),
+        ]);
         fabricFailed = seed.fabricFailed;
         return planSaveMilestones({
           project: p, form: f, language: locale, revenueDraft: seed.draft,

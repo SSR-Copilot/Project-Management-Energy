@@ -37,6 +37,7 @@ const state = vi.hoisted(() => ({
   individualVolumes: 0,
   run: vi.fn(async (_job: unknown) => [] as string[]),
   loadRevenueSeed: vi.fn(async () => ({ draft: null as unknown, fabricFailed: false })),
+  loadSeedInputs: vi.fn(async () => ({ assumptions: [], currencyId: null, subaccountId: null })),
   loadRepricing: vi.fn(async () => ({
     generators: [{ id: "g-1", count: 2, wtgPrices: [10, 9, 8, 7, 6], additionalFoundationCost: 1,
       foundationCostIncluded: false, generatorsCost: 0 }],
@@ -59,6 +60,7 @@ vi.mock("./hooks", () => ({
   useMilestoneWrites: () => ({ run: state.run, progress: null, error: null, success: null, clear: () => {} }),
   loadRepricing: state.loadRepricing,
   loadRevenueSeed: state.loadRevenueSeed,
+  useRevenueSeedInputsLoader: () => state.loadSeedInputs,
 }));
 
 import MilestonesScreen from "./Screen";
@@ -210,7 +212,8 @@ describe("UT-MSTONE Screen (connected, D26)", () => {
     fireEvent.click(screen.getByRole("button", { name: SAVE }));
     await waitFor(() => expect(state.run).toHaveBeenCalled());
     const plan = await lastJob().plan();
-    expect(state.loadRevenueSeed).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ EndDate: "2060-06-30" }));
+    // The seed gets the screen's cached loader (its inputs were read when the screen opened).
+    expect(state.loadRevenueSeed).toHaveBeenCalledWith(PROJECT, expect.objectContaining({ EndDate: "2060-06-30" }), state.loadSeedInputs);
     expect(plan.writes.map((w) => [w.op, w.entitySet])).toEqual([["update", ES.projects], ["create", ES.projectRevenues]]);
     expect(screen.queryByTestId("milestones-revenue-seed-fabric-failed")).toBeNull();
   });

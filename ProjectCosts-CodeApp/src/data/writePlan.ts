@@ -27,6 +27,12 @@ export interface PlannedWrite extends WriteOp {
    * whose error texts are pinned (e.g. "update gate active") sets it so they stay word for word.
    */
   label?: string;
+  /**
+   * Opt-in (save performance, 5 Nov 2026): consecutive `concurrent` writes are sent together and
+   * awaited as one step (`data/executePlan.ts`). Only for independent rows whose relative order no
+   * server automation depends on; such a write sees the ids created BEFORE its run, never inside it.
+   */
+  concurrent?: boolean;
 }
 
 /** An `update` that never upserts: see `WriteOp.guarded`. */

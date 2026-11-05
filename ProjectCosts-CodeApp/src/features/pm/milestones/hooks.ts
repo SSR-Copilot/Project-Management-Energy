@@ -25,7 +25,8 @@
  * save formula. A failed Fabric read does not stop the milestone save; the seed is skipped and
  * the screen says so.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ES, ES_ADMIN, ES_PLANT } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
@@ -139,35 +140,115 @@ export interface RevenueSeed {
   fabricFailed: boolean;
 }
 
+/** The three reads behind the seed: the country's assumptions (Fabric SQL), EUR and the first subaccount. */
+export interface RevenueSeedInputs {
+  assumptions: RevenueAssumptionRow[];
+  currencyId: string | null;
+  subaccountId: string | null;
+}
+
+/** The Fabric read failed: the seed is skipped and the screen says so; the milestone save goes on. */
+export class FabricReadError extends Error {
+  readonly reason: unknown;
+  constructor(reason: unknown) {
+    super("the revenue assumptions could not be read from Fabric SQL");
+    this.name = "FabricReadError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * The seed's three reads at once instead of one after the other (save performance, 5 Nov 2026).
+ * Same reads, same outcome: a failed Fabric read is a `FabricReadError` (→ `fabricFailed`) and is
+ * checked first, so it still wins over a currency or subaccount failure (those used to be skipped
+ * after a Fabric failure); a currency or subaccount failure still fails the save.
+ */
+export async function loadRevenueSeedInputs(countryName: string): Promise<RevenueSeedInputs> {
+  const [fabric, currency, subaccount] = await Promise.allSettled([
+    listRevenueAssumptions(countryName), findCurrency("EUR"), loadFirstRevenueSubaccount(),
+  ]);
+  if (fabric.status === "rejected") throw new FabricReadError(fabric.reason);
+  if (currency.status === "rejected") throw currency.reason;
+  if (subaccount.status === "rejected") throw subaccount.reason;
+  return {
+    assumptions: fabric.value,
+    currencyId: currency.value?.id ?? null,
+    subaccountId: subaccount.value?.id ?? null,
+  };
+}
+
 /**
  * The default revenue contract (rules 20-28, Y:509-1129), read when the save starts. The gate is
  * checked first with a fresh `Project Revenues` count, so nothing is read from Fabric for a
  * project that already has a contract. `Currency: LookUp(Currencies, 'Currency Code' = "EUR")`
  * (Y:771-774) and `Subaccount: First(colRevenueSubaccounts)` (Y:1022).
+ *
+ * `loadInputs` defaults to the parallel reads above; the screen passes the cached loader of
+ * `useRevenueSeedInputsLoader`, which answers from the inputs read when the screen opened.
  */
-export async function loadRevenueSeed(project: MilestoneProject, dates: MilestoneDates): Promise<RevenueSeed> {
+export async function loadRevenueSeed(
+  project: MilestoneProject,
+  dates: MilestoneDates,
+  loadInputs: (countryName: string) => Promise<RevenueSeedInputs> = loadRevenueSeedInputs,
+): Promise<RevenueSeed> {
   const none: RevenueSeed = { draft: null, fabricFailed: false };
   if (!project.id || !project.countryName || !revenueSeedWouldRun(project, 0)) return none;
   const existingRevenueCount = await countProjectRevenues(project.id);
   if (existingRevenueCount !== 0) return none;
-  let assumptions: RevenueAssumptionRow[];
+  let inputs: RevenueSeedInputs;
   try {
-    assumptions = await listRevenueAssumptions(project.countryName);
-  } catch {
-    return { draft: null, fabricFailed: true };
+    inputs = await loadInputs(project.countryName);
+  } catch (error) {
+    if (error instanceof FabricReadError) return { draft: null, fabricFailed: true };
+    throw error;
   }
-  const [currency, subaccount] = await Promise.all([findCurrency("EUR"), loadFirstRevenueSubaccount()]);
   return {
     draft: buildDefaultRevenue({
-      project, dates, assumptions, existingRevenueCount,
-      currencyId: currency?.id ?? null,
-      subaccountId: subaccount?.id ?? null,
+      project, dates, assumptions: inputs.assumptions, existingRevenueCount,
+      currencyId: inputs.currencyId,
+      subaccountId: inputs.subaccountId,
       // `gblRecordSelectedProject.'Besitzer (Unternehmenseinheit)'` (Y:1089), which the save has
       // just set to the country's business unit (rule 18).
       owningBusinessUnitId: project.countryBusinessUnitId,
     }),
     fabricFailed: false,
   };
+}
+
+/**
+ * Reads the seed's inputs when the screen opens, so the save finds them in the cache instead of
+ * waiting for Fabric SQL (save performance, 5 Nov 2026). Only while the canvas seed would run:
+ * Draft / Cluster 1 AND no contract yet (one cheap count, the gate the save re-checks fresh), so a
+ * project that already has a contract never reads Fabric. The inputs are reference data, kept as
+ * long as the assumption row (`REFERENCE_STALE`); a failed or expired read is simply done again at
+ * save time. Returns the loader `loadRevenueSeed` takes.
+ */
+export function useRevenueSeedInputsLoader(project: MilestoneProject | null | undefined) {
+  const qc = useQueryClient();
+  const projectId = project?.id ?? "";
+  const country = project?.countryName ?? "";
+  const wouldRun = Boolean(project && projectId && country && revenueSeedWouldRun(project, 0));
+  const count = useQuery({
+    queryKey: qk.projectRevenueCount(projectId),
+    queryFn: () => countProjectRevenues(projectId),
+    enabled: wouldRun,
+  });
+  useQuery({
+    queryKey: qk.milestoneRevenueSeedInputs(country),
+    queryFn: () => loadRevenueSeedInputs(country),
+    enabled: wouldRun && count.data === 0,
+    staleTime: REFERENCE_STALE,
+    retry: false,
+  });
+  return useCallback(
+    (countryName: string) => qc.fetchQuery({
+      queryKey: qk.milestoneRevenueSeedInputs(countryName),
+      queryFn: () => loadRevenueSeedInputs(countryName),
+      staleTime: REFERENCE_STALE,
+      retry: false,
+    }),
+    [qc],
+  );
 }
 
 /**

@@ -39,6 +39,18 @@ greying, so a user without rights learns on click rather than on sight.
 **Needed from you:** which of the three. If it is the Custom API, it should be scoped now,
 because five screens will want it.
 
+**Addendum (5 Nov 2026) — the header's Permissions row.** The PM `cmp_Header` user menu carries a
+`permissions` row, `If(gblCurrentUser.CanEditSelectedProject, "Can edit Project", "Can view
+Project")`, where the flag is the same `DataSourceInfo` / `RecordInfo` pair, set in each screen's
+`OnVisible`. Ported 5 Nov 2026 (`components/headerRules.projectPermissionLabel`, `App.tsx`): the
+text goes through the same `PrivilegeProvider` seam, so under option (a) every selected project
+reads "Can edit Project" — including for a user Dataverse would refuse, who learns on click, as
+with every command today. It reads "Can view Project" with no project selected (the project list,
+New Project, Application Settings), as the canvas does before any project screen sets the flag.
+The row becomes truthful per record the moment this decision picks the role matrix or the Custom
+API; nothing in the header changes then. The Cost app's `cmp_Header` has no such row, so the Cost
+screens do not show it.
+
 ---
 
 ## D2 · The BoP standard-assumption margin: Fabric SQL or Dataverse?
@@ -6753,3 +6765,33 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 **Tests:** UT-WSTATUS-005, UT-SETPANEL-024, UT-COSTCLOSE-001…004. **Improvements log:** file 13, Part 2 A.
 
 **E2E parity:** not run for D88; the user chose to skip it (5 Nov 2026). `npm run verify`: 221 files, 5,167 tests, `check:power` 95/0, build OK.
+
+## D89 · Generators: say why the WTG type Save is disabled (4 Nov 2026) — PROPOSED
+
+*Recorded as D84 on branch `pm-complete-screens`; renumbered to D89 when it was merged into `master` (5 Nov 2026), whose D84
+is the DEV push of `988e175`.*
+
+**Trigger:** functional testing (Sourabh Kumar, 4 Nov 2026). Add Generator Type with Supplier *Dummy Enercon*, Turbine Type
+*Dummy-Enercon 3-5*, Hub Height 123, Number of Generators 4: every visible field valid, Save disabled, no message. The canvas
+app behaves the same with the same data (confirmed by the tester), so this is not a parity defect.
+
+**Cause (canvas and code alike):** `pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save.DisplayMode` (Y:15169) also needs two
+rows the user cannot see:
+- `Cost`: `Valid: locGeneratorCostsPerWtg > 0` (Y:15072). The cost per WTG is (the count's `'1 WTG price'` … `'5 WTG price'`
+  + `'Additional foundation cost'`) × the FID price-inflation index. It is 0 when the generator has no price for the count, or
+  when Estimation Price Inflations has no index for the FID year (and the year before). The Cost field is hidden
+  (`con_GeneratorData_RightPanel_Form_Fields_Cost.Visible: false`, Y:14300).
+- `RevisedHubheight` for a non-Dummy model whose hub height is 0 m (`cmb_Supplier_2.OnChange`, Y:14693): the box that would
+  explain it shows only for a Dummy supplier.
+
+**Change (DIVERGENCE, UI only):** the panel shows a warning bar under Number of Generators that names the reason: the missing
+`'N WTG price'` on the generator, the missing index for the FID year, an index read that failed, or the 0 m hub height. It
+appears only when no visible field message or the height-limit message already explains the block, and not while the index
+is loading. The Save gate (`canSaveType`) is unchanged.
+
+- Code: `TYPE_SAVE_BLOCKED_TEXT` and `typeSaveBlockedReason()` in `features/pm/generators/rules.ts`; the bar
+  (`data-testid="msg_GeneratorData_RightPanel_Form_SaveBlocked"`) in `Screen.tsx`. Texts are NEW, not canvas copy.
+- Tests: UT-GEN-142 … UT-GEN-146.
+- Not covered: the Replace Generator panel uses the same cost rule and still shows no reason.
+
+**Open for the product owner:** approve the warning and its wording; decide whether Replace Generator gets the same.
