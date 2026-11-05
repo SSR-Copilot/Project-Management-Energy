@@ -151,8 +151,14 @@
 /* Cost panels (`FormPanel centerClose`, D88): the canvas ✕ is centred in the bar (`Y: =Parent.Height/2-Self.Height/2`).
    Fluent's header is a column flex box that pins the title row to the top, so the row fills the bar and the
    ✕ is centred in it, whatever height or padding a screen's skin gives the bar. */
-.canvas-panel.canvas-panel-close-centered .canvas-panel-header { padding-top: 0; padding-bottom: 0; }
-.canvas-panel.canvas-panel-close-centered .canvas-panel-header .fui-DrawerHeaderTitle { flex: 1 1 auto; min-height: 0; }
+.canvas-panel.canvas-panel-close-centered.canvas-panel-close-centered .canvas-panel-header { padding-top: 0; padding-bottom: 0; }
+.canvas-panel.canvas-panel-close-centered .canvas-panel-header .fui-DrawerHeaderTitle { flex: 1 1 auto; min-height: 0; align-items: center; }
+/* ROOT CAUSE of the lifted ✕ (D92): Fluent's `DialogTitle__action` is `align-self: start`, so the ✕ sat at the TOP of the title row
+   (about 8-10 px above the middle of the bar) however the row was sized. Centred on the cross axis here, with no stray margin. The
+   Fluent focus ring drawn by `::after` on the auto-focused ✕ is hidden too (a keyboard focus still gets the white outline above):
+   the canvas icon draws none. */
+.canvas-panel.canvas-panel-close-centered .canvas-panel-header .fui-DrawerHeaderTitle__action { align-self: center; margin-top: 0; margin-bottom: 0; }
+.canvas-panel.canvas-panel-close-centered .canvas-panel-header .fui-DrawerHeaderTitle__action button::after { display: none; }
 .canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; container-type: inline-size; }
 /* A panel scrolls VERTICALLY. Anything wide enough to scroll it sideways is a layout bug in the
    field that is too wide, not something the reader should have to drag — the comments card is

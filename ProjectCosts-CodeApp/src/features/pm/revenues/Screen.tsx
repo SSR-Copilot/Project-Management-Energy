@@ -1054,7 +1054,7 @@ export default function ProjectRevenuesScreen() {
       )}
 
       {/* ───────────────────────────────────────────────── contract panel ── */}
-      <FormPanel
+      <FormPanel centerClose
         open={panel === "contract" && form !== null}
         title={contractPanelTitle(form?.mode !== "Edit")}
         // `con_…_RightPanel_NewEditCost_Body_1.Width: Min(760, Parent.Width)`, two independently
@@ -1416,7 +1416,7 @@ export default function ProjectRevenuesScreen() {
       </FormPanel>
 
       {/* ──────────────────────────────────────────────── balancing panel ── */}
-      <FormPanel
+      <FormPanel centerClose
         open={panel === "balancing" && balancing !== null}
         title={balancingPanelTitle(balancing?.id === null)}
         // `con_…_RightPanel_NewEditCost_Body_2`: 360 wide on the live canvas (29 Oct 2026).

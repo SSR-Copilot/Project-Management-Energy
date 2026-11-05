@@ -25,8 +25,10 @@ describe("Cost side-panel ✕ (D88)", () => {
   });
 
   it("UT-COSTCLOSE-002 the canvas centring rule exists and fills the bar for the title row", () => {
-    expect(css).toMatch(/\.canvas-panel\.canvas-panel-close-centered \.canvas-panel-header\s*\{[^}]*padding-top: 0;[^}]*padding-bottom: 0;/);
-    expect(css).toMatch(/\.canvas-panel-close-centered \.canvas-panel-header \.fui-DrawerHeaderTitle\s*\{[^}]*flex: 1 1 auto;/);
+    expect(css).toMatch(/\.canvas-panel-close-centered \.canvas-panel-header\s*\{[^}]*padding-top: 0;[^}]*padding-bottom: 0;/);
+    expect(css).toMatch(/\.canvas-panel-close-centered \.canvas-panel-header \.fui-DrawerHeaderTitle\s*\{[^}]*flex: 1 1 auto;[^}]*align-items: center;/);
+    // D92: Fluent's `DialogTitle__action` is `align-self: start`; without this the ✕ sits at the TOP of the bar.
+    expect(css).toMatch(/\.canvas-panel-close-centered \.canvas-panel-header \.fui-DrawerHeaderTitle__action\s*\{[^}]*align-self: center;/);
   });
 
   it("UT-COSTCLOSE-003 every Cost FormPanel opts in to centerClose", () => {
