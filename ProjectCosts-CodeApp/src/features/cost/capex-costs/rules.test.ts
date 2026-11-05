@@ -19,7 +19,8 @@ import {
   resolveCategory, resolveEqualMode, resolvePaidTarget, startEndJson,
   totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
   validateTotalCost,
-  validateMonthAmount, monthAmountErrors, hasMonthRangeError,
+  validateMonthAmount, monthAmountErrors, hasMonthRangeError, gridPayer,
+  EDITED_FROM_SPREADSHEET_WARNING, showEditedFromSpreadsheetWarning, averagePaymentText, contractTotalToStore,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
 import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
@@ -239,8 +240,10 @@ describe("canSaveContract", () => {
     expect(canSaveContract(null, "100", proposed)).toBe(false);
   });
 
-  it("UT-CAPEXR-025 requires a non-blank description", () => {
-    expect(canSaveContract(line({ description: "   " }), "100", proposed)).toBe(false);
+  it("UT-CAPEXR-025 requires a non-empty description; spaces only count as filled, as in the canvas (D90)", () => {
+    // `Not(IsBlank(txt_AddContract_RightPanel_Description_1.Value))` has no Trim (`:17513`).
+    expect(canSaveContract(line({ description: "" }), "100", proposed)).toBe(false);
+    expect(canSaveContract(line({ description: "   " }), "100", proposed)).toBe(true);
     expect(canSaveContract(line({ description: "Studies" }), "100", proposed)).toBe(true);
   });
 
@@ -262,10 +265,15 @@ describe("canSaveContract", () => {
     expect(canSaveContract(l, "0", proposed)).toBe(true);
   });
 
-  it("UT-CAPEXR-029 does not require a total for an individual distribution", () => {
-    // Individual money is typed into the months; the Total box is not even shown.
-    const l = line({ description: "x", distribution: "individual" });
-    expect(canSaveContract(l, "", proposed)).toBe(true);
+  it("UT-CAPEXR-029 Individual: Absolute needs no total, % Values needs one (D90, canvas :17517-17522)", () => {
+    // Absolute: the money is typed into the months and there is no Total box.
+    const abs = line({ description: "x", distribution: "individual", distributionScheme: "absolute" });
+    expect(canSaveContract(abs, "", proposed)).toBe(true);
+    // % Values: `Not(IsBlank(txt_AddContract_RightPanel_TotalCost_1.Value))` is part of the Save gate.
+    const pct = line({ description: "x", distribution: "individual", distributionScheme: "percent" });
+    const hundred = [pay(2026, 1, 100)];
+    expect(canSaveContract(pct, "", hundred)).toBe(false);
+    expect(canSaveContract(pct, "1000", hundred)).toBe(true);
   });
 });
 
@@ -509,6 +517,10 @@ describe("startEndJson / parseStartEndJson", () => {
       .toEqual([{ StartDate: "04/2025", EndDate: "07/2027" }]);
   });
 
+  it("UT-CAPEXR-067b the stored text is byte-identical to the canvas: EndDate first, then StartDate (D90)", () => {
+    expect(startEndJson("2017-12-01", "2026-06-01")).toBe('[{"EndDate":"06/2026","StartDate":"12/2017"}]');
+  });
+
   it("UT-CAPEXR-068 round trips a pair back to the first of each month", () => {
     const json = startEndJson("2025-04-01", "2027-07-31");
     // The column carries no day; every consumer works in whole months.
@@ -554,8 +566,9 @@ describe("resolveEqualMode", () => {
   it("UT-CAPEXR-075 neither stored falls back to By Cluster, not to dates", () => {
     // `rad_AddContract_RightPanel_DistributionBy_1.DefaultSelectedItems` ends `["By Cluster"]`.
     expect(resolveEqualMode([], "", "")).toBe("cluster");
-    // One date alone is not a range.
-    expect(resolveEqualMode([], "2025-01-01", "")).toBe("cluster");
+    // EITHER date opens on dates: the canvas tests `Not(IsBlank(StartDate & EndDate))`, a concatenation (D90, CAPEX-067).
+    expect(resolveEqualMode([], "2025-01-01", "")).toBe("dates");
+    expect(resolveEqualMode([], "", "2026-01-01")).toBe("dates");
   });
 });
 
@@ -856,27 +869,14 @@ describe("the Link to Milestone dropdown", () => {
     expect(clusterLinkageChanged(NO_MILESTONE, undefined)).toBe(false);
   });
 
-  it("UT-CAPEXR-104 needs a relink reset only for paid months or payment-date comments", () => {
-    // `locMilestoneRelinkResetNeeded` (`:11301-11324`).
+  it("UT-CAPEXR-104 needs a relink reset only for PAID months; payment-date comments never trigger it (D90, canvas :11466-11479)", () => {
+    // `locMilestoneRelinkResetNeeded` in the live YAML tests paid months only; the older `CapexScreenCode.txt` second arm is gone.
     const paid = [{ paid: true }, { paid: false }];
     const unpaid = [{ paid: false }];
-    expect(milestoneRelinkResetNeeded({
-      selectedName: "Cluster 3", storedName: "Cluster 2",
-      payments: paid, paymentDateCommentCount: 0,
-    })).toBe(true);
-    expect(milestoneRelinkResetNeeded({
-      selectedName: "Cluster 3", storedName: "Cluster 2",
-      payments: unpaid, paymentDateCommentCount: 1,
-    })).toBe(true);
-    expect(milestoneRelinkResetNeeded({
-      selectedName: "Cluster 3", storedName: "Cluster 2",
-      payments: unpaid, paymentDateCommentCount: 0,
-    })).toBe(false);
-    // No linkage change at all — nothing to reset, however much is paid.
-    expect(milestoneRelinkResetNeeded({
-      selectedName: "Cluster 2", storedName: "Cluster 2",
-      payments: paid, paymentDateCommentCount: 3,
-    })).toBe(false);
+    expect(milestoneRelinkResetNeeded({ selectedName: "Cluster 3", storedName: "Cluster 2", payments: paid })).toBe(true);
+    expect(milestoneRelinkResetNeeded({ selectedName: "Cluster 3", storedName: "Cluster 2", payments: unpaid })).toBe(false);
+    // No linkage change at all: nothing to reset, however much is paid.
+    expect(milestoneRelinkResetNeeded({ selectedName: "Cluster 2", storedName: "Cluster 2", payments: paid })).toBe(false);
   });
 });
 
@@ -1132,15 +1132,15 @@ describe("validateMonthAmount", () => {
       .toBe("Value must be a numeric");
   });
 
-  it("UT-CAPEXR-062 bounds Absolute Values by the country ceiling, WITH a full stop", () => {
+  it("UT-CAPEXR-062 bounds Absolute Values by the country ceiling, WITH a full stop and NO thousands separator (D90)", () => {
     // `InRange(v, 0, If(Country.Name = "Poland", 2250000000, 500000000))`. Unlike
-    // `validateTotalCost`, this sentence ends in a full stop in the canvas.
+    // `validateTotalCost`, this sentence ends in a full stop in the canvas, and prints the raw number (`:13364-13368`).
     expect(validateMonthAmount("500000001", "absolute", "Germany").message)
-      .toBe("Value must be between 0 and 500,000,000.");
+      .toBe("Value must be between 0 and 500000000.");
     expect(validateMonthAmount("500000001", "absolute", "Poland"))
       .toEqual({ valid: true, message: null, kind: "ok" });
     expect(validateMonthAmount("2250000001", "absolute", "Poland").message)
-      .toBe("Value must be between 0 and 2,250,000,000.");
+      .toBe("Value must be between 0 and 2250000000.");
   });
 
   it("UT-CAPEXR-063 allows ONE decimal for % Values, not two", () => {
@@ -1208,5 +1208,72 @@ describe("hasMonthRangeError", () => {
     expect(hasMonthRangeError(
       [{ year: 2026, month: 1, amount: 600_000_000 }], "absolute", "Poland",
     )).toBe(false);
+  });
+});
+
+describe("gridPayer: the grid tag comes from the contract's own Cost Type (D90)", () => {
+  // Canvas `CostPaidBy` / `SubLabel` are built from `CPC.'Cost Type'` alone (`Capex Costs Screen.pa.yaml:1220-1235`).
+  const base = { payer: "SPV" as const, distribution: "individual" as const, clusters: [], startDate: "", endDate: "", linkedClusterOrder: undefined };
+  it("UT-CAPEXR-190 a blank Cost Type shows no payer, even though the panel default is SPV from the mapping", () => {
+    expect(gridPayer({ payer: "SPV", costTypePayer: null })).toBe("");
+    expect(contractSubLabel({ ...base, costTypePayer: null })).toBe("[]");
+  });
+
+  it("UT-CAPEXR-191 a stored Cost Type shows as stored; a line not read from Dataverse falls back to payer", () => {
+    expect(gridPayer({ payer: "SPV", costTypePayer: "DevCo" })).toBe("DevCo");
+    expect(gridPayer({ payer: "DevCo" })).toBe("DevCo");
+    expect(contractSubLabel({ ...base, payer: "DevCo" })).toBe("[DevCo]");
+  });
+});
+
+describe("the edited-from-spreadsheet warning (D90, canvas :12426-12500)", () => {
+  it("UT-CAPEXR-192 is verbatim, a bold label then the sentence", () => {
+    expect(EDITED_FROM_SPREADSHEET_WARNING.label + EDITED_FROM_SPREADSHEET_WARNING.text)
+      .toBe("Warning: Distribution scheme changed to absolute values due to edits in the spreadsheet component.");
+  });
+
+  it("UT-CAPEXR-193 shows only for a STORED contract flagged as edited from the spreadsheet", () => {
+    expect(showEditedFromSpreadsheetWarning({ editedFromSpreadsheet: true }, true)).toBe(true);
+    expect(showEditedFromSpreadsheetWarning({ editedFromSpreadsheet: true }, false)).toBe(false); // an Add panel
+    expect(showEditedFromSpreadsheetWarning({ editedFromSpreadsheet: false }, true)).toBe(false);
+    expect(showEditedFromSpreadsheetWarning(undefined, true)).toBe(false);
+  });
+});
+
+describe("averagePaymentText: what the Average Amount per Payment box shows (D90, CAPEX-083)", () => {
+  it("UT-CAPEXR-194 is Text(total / n) with the format 0.0#: the mean to at most two decimals and at least one", () => {
+    expect(averagePaymentText("1000", 12, "en-GB")).toBe("83.33");
+    expect(averagePaymentText("1000", 10, "en-GB")).toBe("100.0");
+    expect(averagePaymentText("1000", 8, "en-GB")).toBe("125.0");
+    expect(averagePaymentText("1000", 3, "en-GB")).toBe("333.33");
+  });
+
+  it("UT-CAPEXR-195 is blank without a valid total or without payments, and never grouped", () => {
+    expect(averagePaymentText("", 12)).toBe("");
+    expect(averagePaymentText("abc", 12)).toBe("");
+    expect(averagePaymentText("1000", 0)).toBe("");
+    expect(averagePaymentText("1200000", 12, "en-GB")).toBe("100000.0");
+  });
+});
+
+describe("contractTotalToStore: the Total Cost a contract keeps (D90, CAPEX-121)", () => {
+  it("UT-CAPEXR-196 a typed total wins; an individual contract without one stores the rounded sum of its months", () => {
+    const months = [{ amount: 100 }, { amount: 250 }, { amount: 0 }];
+    expect(contractTotalToStore("individual", "", months)).toBe(350);
+    expect(contractTotalToStore("individual", "500", months)).toBe(500);
+    expect(contractTotalToStore("individual", "", [{ amount: 0.04 }, { amount: 0.04 }])).toBe(0.1);
+  });
+
+  it("UT-CAPEXR-197 an equal contract without a total stores nothing", () => {
+    expect(contractTotalToStore("equal", "", [{ amount: 100 }])).toBeUndefined();
+    expect(contractTotalToStore("equal", "1000", [])).toBe(1000);
+  });
+});
+
+describe("newCostLine: the payer a new contract opens on (D90, CAPEX-064)", () => {
+  it("UT-CAPEXR-198 follows the sub-account's SPV/DevCo mapping, and falls back to SPV", () => {
+    expect(newCostLine("sub-1", "id-1", "DevCo").payer).toBe("DevCo");
+    expect(newCostLine("sub-1", "id-1", "SPV").payer).toBe("SPV");
+    expect(newCostLine("sub-1", "id-1").payer).toBe("SPV");
   });
 });

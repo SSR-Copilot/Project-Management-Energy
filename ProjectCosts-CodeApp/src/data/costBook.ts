@@ -81,6 +81,7 @@ import type {
 import { loadLeaseBook } from "./landLease";
 import { fetchAll } from "./client";
 import { ACTIVE, and, chunk, eq, idIn, lookupEq, lookupIn, money, numberOf } from "./odata";
+import { CHOICE_COST } from "./dataverseNames";
 import {
   NO_PENDING_DELETES, isPendingContract, isPendingCost, type PendingDeleteIds,
 } from "./pendingDeletes";
@@ -1035,6 +1036,8 @@ export async function loadCostLines(
             // The "Link to Milestone" selection. Only the id comes back on the contract row;
             // `loadProjectStates` below resolves it to the Name and Order the screen shows.
             "_vsb_linkedcluster_value",
+            // The "edited from spreadsheet" warning (D90): `Is Edited from PCF?` and `Initial Contract Source`.
+            "vsb_iseditedfrompcf", "vsb_initialcontractsource",
           ],
           filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_account", ids), ACTIVE),
         },
@@ -1092,6 +1095,8 @@ export async function loadCostLines(
       // Coalesce(contract.'Cost Type', mapping.'DevCo/SPV') — the canvas rule. A blank
       // Cost Type is NOT SPV; it means "ask the sub-account mapping".
       payer: resolvePayer(numberOf(c.vsb_costtype), payerDefaults.get(c._vsb_account_value ?? "")),
+      // The grid tag ignores the mapping (D90): blank Cost Type stays blank, as the canvas `CostPaidBy` does.
+      costTypePayer: storedPayer(numberOf(c.vsb_costtype)),
       depreciation: c.vsb_depreciation === true,
       vat: c.vsb_applyvat === true,
       standard: c.vsb_isstandardcontract === true,
@@ -1110,11 +1115,21 @@ export async function loadCostLines(
       payments: payments.get(c.vsb_capexprojectcontractid) ?? [],
       comments: [],
       totalCost: c.vsb_totalcost ?? undefined,
+      // `'Is Edited from PCF?' = Yes && 'Initial Contract Source' = Powerapps` (`:12444-12451`).
+      editedFromSpreadsheet: c.vsb_iseditedfrompcf === true
+        && numberOf(c.vsb_initialcontractsource) === CHOICE_COST.initialContractSource.powerapps,
       linkedClusterId: linked ? linked.id : undefined,
       linkedClusterName: linked ? linked.name : undefined,
       linkedClusterOrder: linked ? linked.order : undefined,
     };
   });
+}
+
+/** The contract's own Cost Type as a payer, or `null` when it is blank / not DevCo or SPV (the grid tag, D90). */
+export function storedPayer(costType: number | undefined): "DevCo" | "SPV" | null {
+  if (costType === COST_TYPE_DEVCO) return "DevCo";
+  if (costType !== undefined && costType in PAYER_BY_OPTION) return PAYER_BY_OPTION[costType] as "DevCo" | "SPV";
+  return null;
 }
 
 /** `Coalesce('Cost Type', mapping.'DevCo/SPV')`, defaulting to SPV only when neither is set. */
@@ -1181,6 +1196,29 @@ async function loadPayments(contractIds: string[]): Promise<Map<string, Payment[
  * The Summary tab does NOT come through here: it needs one figure per category and none of the
  * contract detail, which is `loadCapexTotals` — two narrow queries instead of the whole book.
  */
+/**
+ * `LookUp('CAPEX Project Contracts', Project = ..., Account = ..., 'Capex Standard Assumption Contract' = varSelectedStandard...)`
+ * (`Capex Costs Screen.pa.yaml:7378-7393`): is this standard contract ALREADY created for the project and sub-account, as the
+ * database sees it NOW (D90, CAPEX-135). The menu and the loaded lines can be stale (another tab, another user).
+ */
+export async function standardContractExists(
+  projectId: string, accountId: string, assumptionId: string,
+): Promise<boolean> {
+  const rows = await fetchAll(
+    "look up an existing standard contract",
+    (o) => Vsb_capexprojectcontractsService.getAll(o),
+    {
+      select: ["vsb_capexprojectcontractid"],
+      filter: and(
+        lookupEq("vsb_project", projectId), lookupEq("vsb_account", accountId),
+        lookupEq("vsb_capexstandardassumptioncontract", assumptionId), ACTIVE,
+      ),
+      top: 1,
+    },
+  );
+  return rows.length > 0;
+}
+
 export async function loadCostBook(projectId: string, category?: number): Promise<CostBook> {
   const accounts = await loadCostAccounts();
   const scoped =
@@ -1194,7 +1232,11 @@ export async function loadCostBook(projectId: string, category?: number): Promis
     category === undefined
       ? await loadPeriods(projectId)
       : { periods: [], extraGroups: { om: [], land: [], other: [] } };
-  return { accounts, lines, periods, extraGroups };
+  // The mapping default rides on the sub-account, for a NEW contract's Cost Paid By (CAPEX-064).
+  const withDefaults = payerDefaults.size === 0
+    ? accounts
+    : accounts.map((a) => (payerDefaults.has(a.id) ? { ...a, defaultPayer: payerDefaults.get(a.id) as "SPV" | "DevCo" } : a));
+  return { accounts: withDefaults, lines, periods, extraGroups };
 }
 
 /* ══════════════════════════════════════════════════════ the Summary tab ══ */

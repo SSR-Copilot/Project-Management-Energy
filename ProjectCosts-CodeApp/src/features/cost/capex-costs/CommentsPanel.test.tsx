@@ -31,6 +31,11 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
   useCapexComments: () => ({ data, isLoading }),
   useCommentWrites: () => ({ save: saveMutation, remove: removeMutation, invalidate }),
 }));
+/** The signed-in systemuser id; `undefined` = unknown, which gates nothing (D90). */
+let viewerId: string | undefined;
+vi.mock("@/app/useCurrentUser", () => ({
+  useCurrentUser: () => ({ data: viewerId === undefined ? undefined : { systemUserId: viewerId } }),
+}));
 vi.mock("@/app/SessionContext", () => ({
   useSession: () => ({
     session: { fullName: "Shakti Singh Rajput", entraObjectId: "entra-1" },
@@ -75,6 +80,7 @@ describe("CommentsPanel", () => {
     saveMutation.mutateAsync = vi.fn(async () => "new-id");
     removeMutation.mutateAsync = vi.fn(async () => undefined);
     isLoading = false;
+    viewerId = undefined;
     data = [comment()];
   });
 
@@ -145,10 +151,9 @@ describe("CommentsPanel", () => {
     expect(screen.getAllByText("Type")).toHaveLength(1);
   });
 
-  it("UT-CMT-056 an existing payment-date comment with no cost blocks Save until a month is picked", () => {
+  it("UT-CMT-056 an existing payment-date comment with no cost shows Required but Save is NOT blocked (D90, canvas)", () => {
     // The live row e2ec8083-12b0-f111-aaac-7ced8d975a55: type "Comments to payment date",
-    // `vsb_capexcost` NULL. It renders no red dot anywhere, so the panel must not let it be
-    // saved back in that state.
+    // `vsb_capexcost` NULL. The canvas Save reads blank text only (`:10058-10065`); the "Required" text is display only.
     data = [comment({ commentType: COMMENT_TYPE.paymentDate, costId: null, text: "New Test" })];
     mount();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
@@ -156,7 +161,7 @@ describe("CommentsPanel", () => {
       target: { value: "New Test edited" },
     });
     expect(screen.getByText("Required")).toBeTruthy();
-    expect(saveButton()).toBeDisabled();
+    expect(saveButton()).not.toBeDisabled();
   });
 
   it("UT-CMT-057 the Type dropdown cannot offer payment date when the contract has no costs", () => {
@@ -247,6 +252,7 @@ describe("CommentsPanel", () => {
     expect(loading.querySelector(".fui-Spinner")).not.toBeNull();
     expect(loading).toHaveTextContent("Loading comments...");
     isLoading = false;
+    viewerId = undefined;
     data = [comment()];
   });
 
@@ -318,7 +324,7 @@ describe("CommentsPanel", () => {
     expect(screen.getByText("Comments to payment date : January , 2026")).toBeTruthy();
   });
 
-  it("UT-CMT-074 choosing the payment-date type opens an EMPTY Year and Month, and blocks Save", () => {
+  it("UT-CMT-074 choosing the payment-date type opens an EMPTY Year and Month, shows Required, and does not block Save (D90)", () => {
     // `drp_Draft_Edit_Type_Value.OnChange` patches `{SelectedMonth: Blank(), SelectedYear:
     // Blank()}` (:8995-9009); only `drp_Draft_Edit_Month_Value.OnChange` resolves a CAPEX Cost
     // row (:9229-9252). Auto-selecting the contract's first cost instead silently bound the
@@ -337,16 +343,76 @@ describe("CommentsPanel", () => {
     expect(screen.getByRole("combobox", { name: "Year" }).textContent).toBe("");
     expect(screen.getByRole("combobox", { name: "Month" })).toBeDisabled();
     expect(screen.getByText("Required")).toBeTruthy();
-    expect(saveButton()).toBeDisabled();
+    expect(saveButton()).toBeEnabled();
 
     // The Year list is the contract's own years, newest first (:9097-9105); picking one opens
     // the Month list but leaves the cost unbound until a month is chosen (:9113).
     fireEvent.click(screen.getByRole("combobox", { name: "Year" }));
     fireEvent.click(screen.getByRole("option", { name: "2026" }));
-    expect(saveButton()).toBeDisabled();
+    expect(saveButton()).toBeEnabled(); // the canvas Save reads blank text only (D90)
     fireEvent.click(screen.getByRole("combobox", { name: "Month" }));
     fireEvent.click(screen.getByRole("option", { name: "March" }));
     expect(saveButton()).toBeEnabled();
+  });
+
+  it("UT-CMT-124 the icons carry the canvas hover texts and the header shows the full contract name on hover (D90)", () => {
+    // `Tooltip` on btn_Read_Comment_Reply / _Check / _Edit / _Delete (`:9926`, `:9864`, `:9809`, `:9752`) and the header label
+    // `="Comments : " & locSelectedProjectContract.Name` (`:8224`).
+    mount();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute("title", "Reply");
+    expect(screen.getByRole("button", { name: "Mark as Resolved" })).toHaveAttribute("title", "Mark as Resolved.");
+    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("title", "Edit");
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveAttribute("title", "Delete");
+    expect(document.querySelector("h2[title]")).toHaveAttribute(
+      "title", "Comments : Gesamt (CAPEX_after_FID) (59018_0_47110101)");
+  });
+
+  it("UT-CMT-125 Reset carries its hover text", () => {
+    data = [comment({ resolved: true })];
+    mount();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show resolved comments" }));
+    expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("title", "Reset");
+  });
+
+  describe("the canvas author gate (D90)", () => {
+    // `DisplayMode: If('Created By'.'Primary Email' = User().Email, Edit, Disabled)` on Edit and Delete (:9761-9766, :9818-9823).
+    it("UT-CMT-120 Edit and Delete are disabled for a comment someone else wrote; Reply and Resolve are not", () => {
+      viewerId = "user-me";
+      data = [comment({ createdById: "user-other" })];
+      mount();
+      expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Mark as Resolved" })).toBeEnabled();
+    });
+
+    it("UT-CMT-121 the author keeps Edit and Delete", () => {
+      viewerId = "USER-ME";
+      data = [comment({ createdById: "user-me" })];
+      mount();
+      expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    });
+
+    it("UT-CMT-122 an unknown viewer gates nothing", () => {
+      viewerId = undefined;
+      data = [comment({ createdById: "user-other" })];
+      mount();
+      expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+    });
+
+    it("UT-CMT-123 Reset is enabled for the resolver (Entra id) or the author, and disabled for anyone else", () => {
+      viewerId = "user-me";
+      data = [comment({ resolved: true, createdById: "user-other", resolvedById: "someone-else" })];
+      const { unmount } = mount();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Show resolved comments" }));
+      expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+      unmount();
+      data = [comment({ resolved: true, createdById: "user-other", resolvedById: "entra-1" })];
+      mount();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Show resolved comments" }));
+      expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+    });
   });
 
   it("UT-CMT-075 an equal-distributed contract freezes Type and explains why", () => {

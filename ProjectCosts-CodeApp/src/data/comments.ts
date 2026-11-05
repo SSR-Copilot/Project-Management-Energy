@@ -92,6 +92,7 @@ export async function loadComments(contractIds: readonly string[]): Promise<Cape
     resolvedById: r._vsb_resolvedby_value ?? null,
     createdOn: r.createdon ?? new Date(0).toISOString(),
     createdByName: authorName(r),
+    createdById: r._createdby_value ?? null,
   }));
 }
 

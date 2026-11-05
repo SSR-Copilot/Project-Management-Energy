@@ -65,12 +65,26 @@ export function activeWtgCount(rows: readonly { count: number; active: boolean }
 }
 
 /**
- * `locProjectStartClusterNo`, floored at 5 — a project that started construction or later
- * (cluster 5/6) can still apply an assumption ticked for cluster 5, but nothing earlier.
+ * `Coalesce(locProjectStartClusterNo, 0)`, as is (D90). The canvas menu and creation both test
+ * `Coalesce(locProjectStartClusterNo,0) <= N` for N = 1..5 (`Capex Costs Screen.pa.yaml:3091-3123`), so a project whose
+ * start cluster is 6 is offered NO standard contract. This was floored at 5 here, which offered the cluster-5
+ * assumptions to a cluster-6 project.
  */
 export function applicableStartCluster(startClusterNo: number | undefined): number {
-  const n = startClusterNo ?? 0;
-  return n >= 5 ? 5 : n;
+  return startClusterNo ?? 0;
+}
+
+/**
+ * The canvas MENU rule, nothing more: the assumption ticks at least one cluster N (1..5) with
+ * `Coalesce(start cluster, 0) <= N`. There is no date test here; a cluster with no usable dates is only discovered
+ * when the contract is created, and refused then (`standardContractRefusal`).
+ */
+export function isOfferedByStartCluster(
+  assumption: Pick<DevexCapexAssumption, "clusters">,
+  startClusterNo: number | undefined,
+): boolean {
+  const floor = applicableStartCluster(startClusterNo);
+  return [1, 2, 3, 4, 5].some((n) => assumption.clusters[n - 1] === true && floor <= n);
 }
 
 /**
@@ -123,8 +137,10 @@ export function buildStandardOptions(args: {
     .filter((a) => a.countryId === args.project.countryId)
     .filter((a) => a.technology === args.project.technology)
     .filter((a) => !used.has(`${a.subaccountId}|${a.id}`))
-    .map((a) => ({ assumption: a, eligible: eligibleClusters(a, args.clusters, args.project.startClusterNo) }))
-    .filter((o) => o.eligible.length > 0);
+    // Offered by the canvas rule (start cluster only). `eligible` (usable dates) may still be empty: the click then
+    // refuses with `standardContractRefusal`, as the canvas does at `:18609-18634`.
+    .filter((a) => isOfferedByStartCluster(a, args.project.startClusterNo))
+    .map((a) => ({ assumption: a, eligible: eligibleClusters(a, args.clusters, args.project.startClusterNo) }));
 }
 
 /** The submenu only renders above one option — `ItemVisible: CountRows(...) > 1`. */

@@ -177,7 +177,7 @@ vi.mock("@/generated/services/TransactioncurrenciesService", () => ({
 }));
 
 const {
-  contractLabel, loadCapexTotals, loadCapexCategories, loadCostAccounts, loadCostBook,
+  contractLabel, loadCapexTotals, loadCapexCategories, loadCostAccounts, loadCostBook, standardContractExists,
   loadCostLines, loadCountryInflationAreas, loadLandLeaseContracts,
   loadMilestoneDurations, loadProjectStates, resolvePayer,
   loadLandLeaseCostFlags, linkOpexChains, mapOpexRow, mapLandLeasePeriodRow, groupAllocations,
@@ -1062,8 +1062,9 @@ describe("Add/Edit Costs panel round trip", () => {
       payments: [{ year: 2025, month: 4, amount: 1_000 }],
     });
 
+    // `EndDate` first, as the canvas rows read (D90): a Power Fx record serialises alphabetically.
     expect(saved.vsb_bystartenddatejson)
-      .toBe('[{"StartDate":"04/2025","EndDate":"07/2027"}]');
+      .toBe('[{"EndDate":"07/2027","StartDate":"04/2025"}]');
 
     const line = await reload(saved);
     // The stored pair carries no day, so it reloads on the first of each month.
@@ -1071,6 +1072,23 @@ describe("Add/Edit Costs panel round trip", () => {
     expect(line.endDate).toBe("2027-07-01");
     expect(line.equalMode).toBe("dates");
     expect(line.clusters).toEqual([]);
+  });
+
+  it("UT-BOOK-027c standardContractExists asks Dataverse NOW, not the loaded list (D90, CAPEX-135)", async () => {
+    rowsByLabel = { "look up an existing standard contract": [{ vsb_capexprojectcontractid: "already-there" }] };
+    expect(await standardContractExists(PROJECT_ID, SUBACCOUNT_ID, PROJECT_ID)).toBe(true);
+    rowsByLabel = { "look up an existing standard contract": [] };
+    expect(await standardContractExists(PROJECT_ID, SUBACCOUNT_ID, PROJECT_ID)).toBe(false);
+  });
+
+  it("UT-BOOK-027b a created contract is a Powerapps one: Initial Contract Source = 95289 (D90, CAPEX-109)", async () => {
+    await saveCostLine({
+      line: { ...CLUSTER_LINE },
+      accountId: SUBACCOUNT_ID, projectId: PROJECT_ID, isNew: true,
+      payments: [{ year: 2026, month: 1, amount: 1_000 }],
+    });
+    // `'Initial Contract Source': Coalesce(existing, Powerapps)` (`Capex Costs Screen.pa.yaml:17574`); option value 95289.
+    expect(saved.vsb_initialcontractsource).toBe(95289);
   });
 
   it("UT-BOOK-027 the distribution scheme survives save and reload", async () => {
@@ -1222,12 +1240,12 @@ describe("Add/Edit Costs panel round trip", () => {
     expect((await reload(saved)).linkedClusterOrder).toBe(3);
   });
 
-  it("UT-BOOK-058 clears paid months and payment-date comments on an accepted relink", async () => {
+  it("UT-BOOK-058 clears paid months on an accepted relink and leaves payment-date comments alone (D90)", async () => {
     /*
-     * The canvas' `OnConfirm` (`CapexScreenCode.txt:19906-19925`) — `UpdateIf('CAPEX Costs',
-     * … && 'Cost Paid' = true, {'Cost Paid': false})` then `RemoveIf('Capex Comments', … &&
-     * 'Comment Type' = 'Comments to payment date')`. It is what the dialog's third bullet
-     * promises, so the save has to carry it out.
+     * The canvas' `OnConfirm` in the live YAML (`Capex Costs Screen.pa.yaml:20052-20068`) —
+     * `UpdateIf('CAPEX Costs', … && 'Cost Paid' = true, {'Cost Paid': false})`. The `RemoveIf('Capex
+     * Comments', … 'Comments to payment date')` that followed it in the older `CapexScreenCode.txt`
+     * is inside a block comment there, so no comment is deleted.
      */
     rowsByLabel = {
       "list CAPEX comments": [
@@ -1252,9 +1270,9 @@ describe("Add/Edit Costs panel round trip", () => {
       resetPaidAndPaymentDateComments: true,
     });
 
-    // Only the PAID month is patched, and only the payment-date comment is removed.
+    // Only the PAID month is patched, and no comment is removed.
     expect(costPaidUpdates).toEqual([{ id: "cost-paid", paid: false }]);
-    expect(deleted).toEqual(["comment:cmt-payment"]);
+    expect(deleted).toEqual([]);
   });
 
   it("UT-BOOK-059 touches nothing when the relink was not confirmed", async () => {

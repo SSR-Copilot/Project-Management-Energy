@@ -6,7 +6,14 @@ export const CATEGORIES = [
 ] as const;
 export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const CLUSTERS = ["Feasibility Studies", "Pre-Permitting", "Permitting", "Pre-Construction", "Construction"];
-export interface CostAccount { id: string; number: string; name: string; parentId?: string; category: number }
+export interface CostAccount {
+  id: string; number: string; name: string; parentId?: string; category: number;
+  /**
+   * The sub-account's `SPVDevCo Mapping Capex Devexes` default (D90, CAPEX-064): what a NEW contract's Cost Paid By opens on
+   * (`rad_AddContract_RightPanel_CostPaidBy_1.DefaultSelectedItems = Coalesce(contract Cost Type, mapping)`, `:12234-12254`).
+   */
+  defaultPayer?: "SPV" | "DevCo";
+}
 /**
  * One month's money on a contract.
  *
@@ -17,6 +24,14 @@ export interface CostAccount { id: string; number: string; name: string; parentI
 export interface Payment { id?: string; year: number; month: number; amount: number; paid: boolean }
 export interface CostLine {
   id: string; accountId: string; description: string; payer: "SPV" | "DevCo";
+  /**
+   * The payer the GRID shows, from the contract's own `Cost Type` only (D90): `"SPV"` / `"DevCo"`, or `null` when
+   * the Cost Type is blank. The canvas builds `CostPaidBy` and the `[SPV]` sub-label from `CPC.'Cost Type'` alone
+   * (`Capex Costs Screen.pa.yaml:1220-1235`); the SPV/DevCo sub-account mapping is only the PANEL's default
+   * (`locInitialCostPaidBy`, `payer` above). Absent (`undefined`) on a line not read from Dataverse (tests, the
+   * demo book): the grid then shows `payer`.
+   */
+  costTypePayer?: "SPV" | "DevCo" | null;
   depreciation: boolean; vat: boolean; standard: boolean;
   distribution: "equal" | "individual"; equalMode: "cluster" | "dates";
   /**
@@ -35,6 +50,11 @@ export interface CostLine {
    * The two can legitimately differ, so the stored figure has to be carried.
    */
   totalCost?: number;
+  /**
+   * `'Is Edited from PCF?' = Yes` on a contract whose `'Initial Contract Source'` is Powerapps (`Capex Costs Screen.pa.yaml:12444-12451`):
+   * Add Costs from Table changed its distribution scheme to absolute. Only a stored contract can carry it (D90).
+   */
+  editedFromSpreadsheet?: boolean;
   /** `_vsb_capexstandardassumptioncontract_value` — which assumption a standard contract came from. */
   standardAssumptionId?: string;
   /**

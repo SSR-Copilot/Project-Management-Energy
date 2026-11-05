@@ -32,6 +32,11 @@ export interface CurrentUser {
   fullName?: string;
   /** `systemuser.internalemailaddress` — `gblCurrentUser.Mail`. */
   mail?: string;
+  /**
+   * `systemuser.systemuserid` of the signed-in user. The comment author gate compares it with a comment's
+   * `_createdby_value` (the canvas compares `'Created By'.'Primary Email'` with `User().Email`, D90).
+   */
+  systemUserId?: string;
   /** `aaduser.companyname` — `gblCurrentUser.CompanyName`, the badge's Home row. */
   companyName?: string;
   /**
@@ -183,6 +188,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
   return {
     fullName: row?.fullname ?? undefined,
     mail: row?.internalemailaddress ?? undefined,
+    ...(userId ? { systemUserId: userId } : {}),
     companyName: aad[0]?.companyname ?? undefined,
     ...(row?.entityimage ? { photo: `data:image/png;base64,${row.entityimage}` } : {}),
     editableCountries: scope?.editableCountries ?? [],

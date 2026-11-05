@@ -99,6 +99,20 @@ export function clusterBoundaries(
 }
 
 /**
+ * The six cluster START dates the grid's timeline header is given (D90, CAPEX-038). The canvas never sends a blank:
+ * `ClusterNDate = Date(Coalesce(LookUp(gblClusterDurations, Order = N, StartYear), locNavigationMinYear, gblSelectedProjectYear),
+ * Coalesce(StartMonth, 1), 1)` (`Capex Costs Screen.pa.yaml:7238-7243`), so a cluster with no milestone dates still gets a
+ * band, at January of the navigation window's first year. `boundaries` is `clusterBoundaries` (seven entries; the last is
+ * the end of cluster 6 and is not a start).
+ */
+export function clusterBandDates(
+  boundaries: readonly (string | undefined)[], navigationMinYear: number,
+): string[] {
+  const fallback = `${navigationMinYear}-01-01`;
+  return Array.from({ length: 6 }, (_, i) => boundaries[i] ?? fallback);
+}
+
+/**
  * `locCostAllowedStartYear` — the first year a cost may be booked in.
  *
  * January of the acquisition date when the project started at a cluster beyond Greenfield,
@@ -313,6 +327,33 @@ export const clampSelectedYear = (year: number, min: number, max: number): numbe
 
 export const canGoPreviousYear = (selected: number, min: number): boolean => selected > min;
 export const canGoNextYear = (selected: number, max: number): boolean => selected < max;
+
+/**
+ * The years the Add / Edit panel's right-hand gallery lists (D90, "follow the Canvas"): `Year(start)` to `Year(end) + 3`.
+ *
+ * `tmr_Load_Contract_Gallery_Warmup` (`Capex Costs Screen.pa.yaml:19600-19640`) builds `colNewEditPanelCost` from
+ * `Sequence(locProjectDuration)`, `Year: locProjectStartyear + Y.Value`, with `locProjectStartyear = Year(start) - 1`,
+ * `locProjectDuration = Year(end) - Year(start) + 4`. `Sequence` starts at 1, so the first year is `Year(start)`
+ * (= `locCostAllowedStartYear`, `costAllowedStart` above) and the last is `Year(end) + 3`, where
+ * `varCostEndDate = Coalesce(COD, End Date, 5-Construction, Today())`.
+ *
+ * This replaces the grid's navigation window, which also reached back to the acquisition date and the cluster starts.
+ * `dataYears` is the one deliberate extension: a year that already carries a payment is never hidden (the canvas window
+ * is built so that cannot happen; here it could, with data the canvas would not list). Contiguous, ascending.
+ */
+export function panelYears(
+  project: Pick<ProjectContext, "endDate" | "milestones">,
+  allowedStartYear: number,
+  dataYears: readonly number[] = [],
+  today: Date = new Date(),
+): number[] {
+  const end = [project.milestones?.operationsStartCod, project.endDate, project.milestones?.construction].find(live) ?? today;
+  const endYear = end.getFullYear() > SENTINEL_YEAR ? end.getFullYear() : today.getFullYear();
+  const known = dataYears.filter((y) => Number.isFinite(y) && y > SENTINEL_YEAR);
+  const min = Math.min(allowedStartYear, ...known);
+  const max = Math.max(endYear + 3, ...known);
+  return projectPeriods(min, Math.max(min, max));
+}
 
 /** Every year in the window, for the stepper's dropdown. */
 export function projectPeriods(min: number, max: number): number[] {

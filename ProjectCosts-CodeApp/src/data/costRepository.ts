@@ -33,7 +33,7 @@ import {
   loadLandLeaseCostFlags,
   type CapexCategoryTotal, type LandLeaseContract, type LandLeaseCostFlags,
 } from "./costBook";
-import { deleteCostLine, saveCostLine, setCostPaid, type SaveCostLineArgs } from "./capexWrites";
+import { clearLinkedCluster, deleteCostLine, saveCostLine, setCostPaid, type SaveCostLineArgs } from "./capexWrites";
 import {
   loadAddCostSheetData, saveAddCostSheet,
   type AddCostSheetData, type SaveAddCostSheetArgs, type SaveAddCostSheetResult,
@@ -233,6 +233,8 @@ export interface CostRepository {
   /** Mark one month of one cost line paid or unpaid. */
   setCostPaid(projectId: string, args: {
     lineId: string; year: number; month: number; paid: boolean; costId?: string;
+    /** The cluster-linked paid dialog was confirmed: clear the contract's Linked Cluster first (CAPEX-055, D90). */
+    clearLinkedCluster?: boolean;
   }): Promise<void>;
 
   /** Create or update a cost line and reconcile its monthly rows. */
@@ -323,6 +325,7 @@ export const dataverseCostRepository: CostRepository = {
     if (!args.costId) {
       throw new Error("That month has no cost row, so it cannot be marked paid.");
     }
+    if (args.clearLinkedCluster) await clearLinkedCluster(args.lineId);
     await setCostPaid(args.costId, args.paid);
   },
   saveCostLine,

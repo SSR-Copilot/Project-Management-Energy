@@ -24,6 +24,8 @@ export interface CapexComment {
   resolvedById: string | null;
   createdOn: string;
   createdByName: string | null;
+  /** `_createdby_value` (a systemuser id): who wrote it. Optional so fixtures need not carry it. */
+  createdById?: string | null;
 }
 
 export interface CommentThread {
@@ -492,6 +494,11 @@ export const paymentDateCommentsAllowed = (
  *   If(_hasLiveInvalids, Disabled, _hasLiveValidChanges Or _hasDeletions Or _hasModifiedRecords,
  *      Edit, Disabled)
  *
+ * SAVE IS NOT GATED ON A MISSING PAYMENT MONTH (D90, "follow the Canvas"). `tgl_Root_IsInvalid` is
+ * `(IsNew Or IsEdit) And IsBlank(Trim(text))` only (`Capex Costs Screen.pa.yaml:10058-10065`); the red "Required" text under
+ * the month still shows (`missingPaymentDate`), but nothing in Save reads it. An earlier build also blocked Save on it
+ * (CA-14 follow-up). CAUTION: that canvas path is how the cost-less payment-date comment of UT-CMT-044 came to exist.
+ *
  * `isOpen` is the `(IsNew Or IsEdit)` half of `tgl_Root_IsInvalid` (`:9885`). Without it, a row
  * that was merely RESOLVED could block Save with no editor on screen to explain why — and for a
  * cost-less payment-date comment (live row `e2ec8083`) it did exactly that: resolving it set
@@ -503,9 +510,36 @@ export function canSaveComments(
   deletedIds: readonly string[],
 ): boolean {
   const invalid = drafts.some((d) =>
-    d.isOpen !== false && (!d.text.trim() || d.missingPaymentDate === true));
+    d.isOpen !== false && !d.text.trim());
   if (invalid) return false;
   return drafts.some((d) => d.isDirty || d.isModified) || deletedIds.length > 0;
+}
+
+/**
+ * The signed-in user, as far as the comment gates can tell. `undefined` fields mean "not known" (a local run, the user
+ * row not loaded yet), and an unknown identity gates NOTHING, so nobody is locked out of their own comments.
+ */
+export interface CommentViewer { systemUserId?: string | undefined; entraObjectId?: string | undefined }
+
+const sameId = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  Boolean(a) && Boolean(b) && String(a).toLowerCase() === String(b).toLowerCase();
+
+/**
+ * `btn_Read_Comment_Edit` / `btn_Read_Comment_Delete` / the reply twins: `DisplayMode: If(ThisItem.'Created By'.'Primary Email'
+ * = User().Email, Edit, Disabled)` (`Capex Costs Screen.pa.yaml:9761-9766`, `:9818-9823`, reply edit `:8567-8578`), D90. The
+ * author is matched by systemuser id instead of the e-mail text (no `$expand` on the comment read), which is the same person.
+ */
+export function canEditOrDeleteComment(comment: Pick<CapexComment, "createdById">, viewer: CommentViewer): boolean {
+  if (!viewer.systemUserId || !comment.createdById) return true;
+  return sameId(comment.createdById, viewer.systemUserId);
+}
+
+/** `Reset`: `Or(author, Resolver.Id = User().EntraObjectId)` (`:10023`, `:9846-9855`), D90. */
+export function canResetComment(
+  comment: Pick<CapexComment, "createdById" | "resolvedById">, viewer: CommentViewer,
+): boolean {
+  if (sameId(comment.resolvedById, viewer.entraObjectId)) return true;
+  return canEditOrDeleteComment(comment, viewer);
 }
 
 /**

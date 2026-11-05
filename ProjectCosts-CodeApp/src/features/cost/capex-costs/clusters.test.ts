@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SENTINEL_YEAR, canGoNextYear, canGoPreviousYear, clampSelectedYear, clusterBoundaries,
-  clusterDurations, costAllowedStart, navigationWindow, projectPeriods, synthesiseClusterDates,
+  clusterBandDates, clusterDurations, costAllowedStart, navigationWindow, panelYears, projectPeriods, synthesiseClusterDates,
   type MilestoneDurations,
 } from "./clusters";
 import type { ProjectMilestones } from "../contracts/rules";
@@ -359,5 +359,45 @@ describe("synthesiseClusterDates", () => {
     });
     // And the boundary array the Add/Edit panel distributes across gains its first entry.
     expect(clusterBoundaries(synthesised)[0]).toBe("2024-12-01");
+  });
+});
+
+describe("panelYears: the Add / Edit panel's year list (D90, canvas :19600-19640)", () => {
+  const d = (y: number, m = 1) => new Date(y, m - 1, 1);
+  const now = new Date(2026, 10, 5);
+
+  it("UT-CLUSTER-090 runs from the allowed start year to Year(end) + 3, starting at Year(start), not start - 1", () => {
+    // `Sequence(Year(end) - Year(start) + 4)` from `Year(start) - 1`: first = Year(start), last = Year(end) + 3.
+    const years = panelYears({ endDate: d(2030), milestones: undefined }, 2024, [], now);
+    expect(years[0]).toBe(2024);
+    expect(years.at(-1)).toBe(2033);
+    expect(years).toHaveLength(10);
+  });
+
+  it("UT-CLUSTER-091 the end is Coalesce(COD, End Date, Construction, Today)", () => {
+    const m = (cod?: Date, construction?: Date) => ({ operationsStartCod: cod, construction }) as never;
+    expect(panelYears({ endDate: d(2040), milestones: m(d(2030)) }, 2024, [], now).at(-1)).toBe(2033);
+    expect(panelYears({ endDate: d(2040), milestones: m(undefined, d(2028)) }, 2024, [], now).at(-1)).toBe(2043);
+    expect(panelYears({ endDate: undefined, milestones: m(undefined, d(2028)) }, 2024, [], now).at(-1)).toBe(2031);
+    expect(panelYears({ endDate: undefined, milestones: undefined }, 2024, [], now).at(-1)).toBe(2029);
+  });
+
+  it("UT-CLUSTER-092 never hides a year that already carries a payment (the one extension of the canvas window)", () => {
+    const years = panelYears({ endDate: d(2030), milestones: undefined }, 2024, [2021, 2040], now);
+    expect(years[0]).toBe(2021);
+    expect(years.at(-1)).toBe(2040);
+  });
+});
+
+describe("clusterBandDates: the timeline header never loses a band (D90, CAPEX-038)", () => {
+  it("UT-CLUSTER-093 a cluster with no start date falls back to January of the navigation minimum year", () => {
+    const dates = clusterBandDates(["2020-03-01", undefined, "2022-05-01", undefined, undefined, undefined, undefined], 2018);
+    expect(dates).toEqual(["2020-03-01", "2018-01-01", "2022-05-01", "2018-01-01", "2018-01-01", "2018-01-01"]);
+  });
+
+  it("UT-CLUSTER-094 always six dates, whatever the boundaries hold", () => {
+    expect(clusterBandDates([], 2024)).toHaveLength(6);
+    expect(clusterBandDates(["2021-01-01", "2022-01-01", "2023-01-01", "2024-01-01", "2025-01-01", "2026-01-01", "2027-01-01"], 2000))
+      .toEqual(["2021-01-01", "2022-01-01", "2023-01-01", "2024-01-01", "2025-01-01", "2026-01-01"]);
   });
 });

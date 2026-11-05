@@ -20,7 +20,7 @@
  * subaccounts, sorted by description.
  */
 import { type CostAccount, type CostLine } from "../costing/model";
-import { contractSubLabel } from "./rules";
+import { contractSubLabel, gridPayer } from "./rules";
 
 export type FlatRow = Record<string, string | number | boolean>;
 
@@ -205,7 +205,7 @@ export function gridRows(
         // `contractSubLabel` in `rules.ts`, which is where the canvas' branching and its
         // conditional separator are spelled out.
         SubLabel: contractSubLabel(line),
-        CostPaidBy: line.payer,
+        CostPaidBy: gridPayer(line),
         IsStandardContract: line.standard,
         DistributionType:
           line.distribution === "individual" ? "Individual Distribution" : "Equal Distribution",

@@ -316,7 +316,7 @@ describe("saveCostLineBulk", () => {
     expect(sent("delete:")).toEqual([]);
   });
 
-  it("UT-CAPEXBULK-006 the relink reset rides in the month update; payment-date comments go before any month delete", async () => {
+  it("UT-CAPEXBULK-006 the relink reset rides in the month update; payment-date comments are left alone (D90, canvas :20061-20065)", async () => {
     const stored = [cost("c1", 1, 100, true), cost("c2", 2, 100, false), cost("c3", 3, 100, true)];
     seed(stored);
     comments.set("k-general", { contract: CONTRACT, type: COMMENT_TYPE.general });
@@ -329,8 +329,10 @@ describe("saveCostLineBulk", () => {
     expect(sent("bulk:")).toEqual(["start:bulk:update:1"]);
     expect(costs.get("c1")).toMatchObject({ cost: 100, paid: false });
     expect(costs.has("c3")).toBe(false);
-    expect([...comments.keys()]).toEqual(["k-general"]);
-    expect(at("end:delete:comment:k-payment")).toBeLessThan(at("start:delete:vsb_capexcosts:c3"));
+    // The live canvas `OnConfirm` has its `RemoveIf('Capex Comments', …)` commented out: both comments stay.
+    expect([...comments.keys()]).toEqual(["k-general", "k-payment"]);
+    expect(sent("delete:comment:")).toEqual([]);
+    expect(sent("read:")).toEqual([]);
   });
 
   it("UT-CAPEXBULK-007 skips unchanged months; the contract is still written", async () => {
@@ -433,14 +435,14 @@ describe("saveCostLineBulk, review follow-ups", () => {
     expect(sent("read:")).toEqual([]);
   });
 
-  it("UT-CAPEXBULK-014 a relink save sends its months and the comment read only after the contract answered", async () => {
+  it("UT-CAPEXBULK-014 a relink save sends its months only after the contract answered, and reads no comments", async () => {
     const stored = relinkStored();
     seed(stored);
     relinkComments();
     await saveCostLineBulk({ ...args(stored, months(2, () => 150)), resetPaidAndPaymentDateComments: true }, true);
     const contractEnd = at("end:contract:update");
     expect(at("start:bulk:update:2")).toBeGreaterThan(contractEnd);
-    expect(at("start:read:list CAPEX comments")).toBeGreaterThan(contractEnd);
+    expect(sent("read:")).toEqual([]);
     expect(costs.get("c1")).toMatchObject({ cost: 150, paid: false });
   });
 
@@ -483,14 +485,15 @@ describe("saveCostLineBulk, review follow-ups", () => {
     expect(sent("bulk:")).toEqual(["start:bulk:create:1"]);
   });
 
-  it("UT-CAPEXBULK-018 a failed comments read fails the save and sends no month delete", async () => {
+  it("UT-CAPEXBULK-018 a relink save never reads comments, so a failing comments read cannot fail it (D90)", async () => {
     const stored = [...relinkStored(), cost("c3", 3, 100)];
     seed(stored);
     refuse.add("read");
-    await expect(saveCostLineBulk({
+    await saveCostLineBulk({
       ...args(stored, months(2, () => 100)), resetPaidAndPaymentDateComments: true,
-    }, true)).rejects.toThrow(/comments read failed/);
-    expect(sent("delete:")).toEqual([]);
+    }, true);
+    expect(sent("read:")).toEqual([]);
+    expect(costs.has("c3")).toBe(false); // the dropped month is still deleted
   });
 
   it("UT-CAPEXBULK-019 a 0 typed on a month the book shows as 0 is written (the stored value may be null)", async () => {
@@ -616,39 +619,32 @@ describe("a refused comment delete stops the next phase (CA-18, rule 14)", () =>
     expect(infoLines()).toContain("Steps failed: comment deletes");
   });
 
-  it("UT-CMTDEL-003 bulk relink Save: a refused payment-date comment delete fails the save and sends no month delete", async () => {
+  it("UT-CMTDEL-003 bulk relink Save sends no comment delete at all, so a refused one cannot fail it (D90)", async () => {
     const stored = [cost("c1", 1, 100, true), cost("c2", 2, 100), cost("c3", 3, 100)];
     seed(stored);
     seedComments();
     refuse.add("delete:k2");
-    await expect(saveCostLineBulk({
+    await saveCostLineBulk({
       ...args(stored, months(2, () => 100)), resetPaidAndPaymentDateComments: true,
-    }, true)).rejects.toThrow(/1 delete\(s\) on vsb_capexcommentses failed/);
-    expect(sent("delete:comment:")).toEqual(["start:delete:comment:k2"]);
-    expect(sent("delete:vsb_capexcosts:")).toEqual([]);
-    expect(costs.has("c3")).toBe(true);
+    }, true);
+    expect(sent("delete:comment:")).toEqual([]);
     expect(comments.has("k2")).toBe(true);
-    expect(infoLines()).toEqual(expect.arrayContaining([
-      "Steps failed: payment-date comments",
-      "Not sent: cost deletes",
-    ]));
+    expect(costs.has("c3")).toBe(false); // the month delete still runs
+    expect(costs.get("c1")).toMatchObject({ paid: false });
   });
 
-  it("UT-CMTDEL-004 per-row relink Save: a refused payment-date comment delete stops before the month writes", async () => {
+  it("UT-CMTDEL-004 per-row relink Save resets Paid only and sends no comment delete (D90)", async () => {
     const stored = [cost("c1", 1, 100, true), cost("c2", 2, 100), cost("c3", 3, 100)];
     seed(stored);
     seedComments();
     refuse.add("delete:k2");
-    await expect(saveCostLineLegacy({
+    await saveCostLineLegacy({
       ...args(stored, months(2, () => 100)), resetPaidAndPaymentDateComments: true,
-    })).rejects.toThrow(/delete k2 denied/);
-    expect(sent("cost:")).toEqual(["start:cost:update:c1"]); // the paid reset only
-    expect(sent("delete:vsb_capexcosts:")).toEqual([]);
-    expect(costs.has("c3")).toBe(true);
-    expect(infoLines()).toEqual(expect.arrayContaining([
-      "Steps failed: payment-date comments",
-      "Not sent: costs; cost deletes",
-    ]));
+    });
+    expect(sent("delete:comment:")).toEqual([]);
+    expect(comments.has("k2")).toBe(true);
+    expect(costs.get("c1")).toMatchObject({ paid: false });
+    expect(costs.has("c3")).toBe(false);
   });
 });
 
@@ -821,13 +817,14 @@ describe("the readable panel log (D59)", () => {
     seed(twelve());
     await saveCostLineBulk(args(twelve(), months(6, () => 200)), true);
     expect(lastSummary()).toMatch(/, 8 requests; .*cost deletes 6 req /);
-    // Relink reset, 2 paid months, 1 payment-date comment: contract, then months ∥ (1 read + 1 delete).
+    // Relink reset, 2 paid months, 1 payment-date comment: contract, then months. The comment is untouched (D90).
     costs = new Map();
     const relink = [cost("c1", 1, 100, true), cost("c2", 2, 100, true)];
     seed(relink);
     comments.set("k-payment", { contract: CONTRACT, type: COMMENT_TYPE.paymentDate });
     await saveCostLineBulk({ ...args(relink, months(2, () => 100)), resetPaidAndPaymentDateComments: true }, true);
-    expect(lastSummary()).toMatch(/, 4 requests; contract update 1 req [\d,]+ ms; .*payment-date comments 2 req [\d,]+ ms \(1 read, 1 deleted\)/);
+    expect(lastSummary()).toMatch(/, 2 requests; contract update 1 req [\d,]+ ms/);
+    expect(lastSummary()).not.toMatch(/payment-date comments/);
     expect(lastSummary()).toMatch(/costs 1 req [\d,]+ ms \(update 1 req bulk \[[\d,]+ ms\], 2 paid reset\)/);
     // Delete with 1 comment and 3 cost rows: 1 read + 1 + 3 + 1 (UT-CAPEXLOG-006).
   });

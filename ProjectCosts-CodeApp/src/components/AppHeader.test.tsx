@@ -226,3 +226,28 @@ describe("AppHeader Project Management shell (cmp_Header, 20 Oct 2026)", () => {
     expect(pm.textContent).toBe(cost.textContent);
   });
 });
+
+describe("AppHeader logo click (Cost screens, D90)", () => {
+  // Cost `cmp_Header.OnLogoClick` = `Launch(gblPMAppURL)` (`Capex Costs Screen.pa.yaml:2333-2335`).
+  it("UT-HEADER-010 onLogoClick makes the logo a button that runs it, without the PM header chrome", async () => {
+    const user = userEvent.setup();
+    const onLogoClick = vi.fn();
+    const { container } = render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} onLogoClick={onLogoClick} />
+      </FluentProvider>,
+    );
+    await user.click(screen.getByTestId("img_cmp_Header_Button"));
+    expect(onLogoClick).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("header")?.className).not.toContain("canvas-pm-header");
+  });
+
+  it("UT-HEADER-011 without a handler the logo is not a button", () => {
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} />
+      </FluentProvider>,
+    );
+    expect(screen.queryByTestId("img_cmp_Header_Button")).toBeNull();
+  });
+});

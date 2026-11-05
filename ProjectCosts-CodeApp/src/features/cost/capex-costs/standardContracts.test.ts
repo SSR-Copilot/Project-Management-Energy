@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COST_UNIT, activeWtgCount, applicableStartCluster, buildStandardOptions,
   checkStandardContractClick, eligibleClusters, showStandardSubMenu,
-  standardAssumptionAmount, standardContractRefusal, type DevexCapexAssumption,
+  isOfferedByStartCluster, standardAssumptionAmount, standardContractRefusal, type DevexCapexAssumption,
 } from "./standardContracts";
 import type { ClusterDuration } from "./clusters";
 
@@ -57,9 +57,9 @@ describe("applicableStartCluster", () => {
     expect(applicableStartCluster(3)).toBe(3);
   });
 
-  it("UT-STD-008 floors anything 5 or above at 5", () => {
+  it("UT-STD-008 passes the start cluster through; 6 is NOT floored to 5 (D90, canvas :3091-3123)", () => {
     expect(applicableStartCluster(5)).toBe(5);
-    expect(applicableStartCluster(6)).toBe(5);
+    expect(applicableStartCluster(6)).toBe(6);
   });
 
   it("UT-STD-009 treats a missing value as Greenfield", () => {
@@ -195,5 +195,34 @@ describe("showStandardSubMenu / checkStandardContractClick", () => {
   it("UT-STD-024 allows a fresh, valid click", () => {
     expect(checkStandardContractClick({ subaccountSelected: true, alreadyExists: false }))
       .toEqual({ ok: true });
+  });
+});
+
+describe("the canvas menu rule (D90, Capex Costs Screen.pa.yaml:3091-3123)", () => {
+  it("UT-STD-025 offers an assumption when a ticked cluster is at or after the start cluster", () => {
+    const a = assumption({ clusters: [false, false, false, false, true] });
+    expect(isOfferedByStartCluster(a, 3)).toBe(true);
+    expect(isOfferedByStartCluster(a, 5)).toBe(true);
+    expect(isOfferedByStartCluster(assumption({ clusters: [true, false, false, false, false] }), 3)).toBe(false);
+  });
+
+  it("UT-STD-026 a project at start cluster 6 is offered nothing, even with cluster 5 ticked", () => {
+    expect(isOfferedByStartCluster(assumption({ clusters: [true, true, true, true, true] }), 6)).toBe(false);
+    expect(isOfferedByStartCluster(assumption(), undefined)).toBe(true);
+  });
+
+  it("UT-STD-027 the menu does not test dates: an inverted cluster is still offered, with nothing eligible", () => {
+    const inverted = [{ order: 1, name: "Cluster 1", startYear: 2022, startMonth: 1, endYear: 2020, endMonth: 1 }];
+    const options = buildStandardOptions({
+      assumptions: [assumption({ clusters: [true, false, false, false, false] })],
+      subaccountIdsInCategory: ["sub-1"],
+      project: { countryId: "Germany", technology: 952850000, startClusterNo: 0 },
+      existingContracts: [],
+      clusters: inverted,
+    });
+    expect(options).toHaveLength(1);
+    expect(options[0]?.eligible).toHaveLength(0);
+    // ... and the click is then refused with the canvas notice (`:18609-18634`).
+    expect(standardContractRefusal(options[0]?.eligible ?? [])).toContain("no applicable cost period");
   });
 });

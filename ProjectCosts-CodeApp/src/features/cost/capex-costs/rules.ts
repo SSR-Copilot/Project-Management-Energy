@@ -108,9 +108,10 @@ export const formatSummaryAmount = (value: number | undefined): string =>
 /* ══════════════════════════════════════════════════════════════ the panel ══ */
 
 /** A brand-new cost line, with the canvas' defaults. */
-export function newCostLine(accountId: string, id: string): CostLine {
+export function newCostLine(accountId: string, id: string, defaultPayer?: CostLine["payer"]): CostLine {
   return {
-    id, accountId, description: "", payer: "SPV",
+    // The sub-account's mapping default, else SPV (D90, CAPEX-064): the canvas Cost Paid By opens on `Coalesce(Cost Type, mapping)`.
+  id, accountId, description: "", payer: defaultPayer ?? "SPV",
     depreciation: true, vat: true, standard: false,
     distribution: "equal", equalMode: "cluster", distributionScheme: "absolute",
     startDate: "2025-04-01", endDate: "2027-07-31",
@@ -238,7 +239,20 @@ export function proposedPayments(
     : equalPayments(amount, line.startDate, line.endDate, line.frequency);
 }
 
-/** `RoundDown(total / n, 0)` — the canvas shows the base, not the mean. */
+/**
+ * What the read-only Average Amount per Payment box SHOWS (D90, CAPEX-083): `Text(Total / n, "########0.0#")`
+ * (`Capex Costs Screen.pa.yaml:12084-12087`, `:12136-12139`), i.e. the mean to at most two decimals and at least one
+ * (1000 / 12 = 83.33, 1000 / 10 = 100.0), blank without a valid total or without payments. The STORED figure is the
+ * rounded-down base (`averagePayment`, `vsb_averagepayment`), which is a different number.
+ */
+export function averagePaymentText(costValue: string, count: number, locale?: string): string {
+  const total = Number(costValue);
+  if (costValue.trim() === "" || !Number.isFinite(total) || count <= 0) return "";
+  return numberFormat(locale ?? "en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 2, useGrouping: false })
+    .format(total / count);
+}
+
+/** `RoundDown(total / n, 0)` — the figure the canvas STORES in `vsb_averagepayment` (not what its box shows, see above). */
 export function averagePayment(costValue: string, count: number): number | undefined {
   if (count <= 0) return undefined;
   return equalDistributionAmounts(Number(costValue) || 0, count).averagePayment;
@@ -263,10 +277,16 @@ export function canSaveContract(
   proposed: readonly Payment[],
 ): boolean {
   if (!line) return false;
-  if (!line.description.trim()) return false;
+  // `Not(IsBlank(txt_AddContract_RightPanel_Description_1.Value))` (`:17513`): no `Trim`, so a Description of
+  // only spaces counts as filled and Save stays enabled (D90, "follow the Canvas"). It was `.trim()` here.
+  if (line.description === "") return false;
   if (proposed.length === 0) return false;
   if (!proposed.every((p) => Number.isFinite(p.amount) && p.amount >= 0)) return false;
   if (line.distribution === "individual") {
+    // Individual + % Values needs a non-blank Total Costs (D90, CAPEX-093/100): the canvas Save is
+    // `And(Not(IsBlank(txt_AddContract_RightPanel_TotalCost_1.Value)), Not(IsBlank(scheme)))` (`:17517-17522`).
+    // Absolute Values has no Total box and stays exempt.
+    if (line.distributionScheme === "percent" && costValue.trim() === "") return false;
     // For a PERCENT scheme, proposed carries raw percentages that must sum to 100; for
     // ABSOLUTE, it carries money and just needs a positive sum. Money conversion happens
     // separately, in `resolvedPayments` — this gate checks the shape the user typed.
@@ -375,6 +395,54 @@ export function reconcilePayments(
   return writes;
 }
 
+/**
+ * The `Total Cost` the contract stores (D90, CAPEX-121): `Coalesce(Value(txt_AddContract_RightPanel_TotalCost_1.Value), locAllYearsCost)`
+ * (`Capex Costs Screen.pa.yaml:17574`, `:17687`), where `locAllYearsCost = Round(Sum(colNewEditPanelCost, TotalSave), 1)`.
+ * A typed total wins; an INDIVIDUAL contract without one (Absolute Values has no total box) stores the sum of its months;
+ * an equal one without one stores nothing.
+ */
+export function contractTotalToStore(
+  distribution: CostLine["distribution"],
+  costValue: string,
+  proposedMoney: readonly { amount: number }[],
+): number | undefined {
+  if (costValue.trim() !== "") {
+    const typed = Number(costValue);
+    return Number.isFinite(typed) ? typed : undefined;
+  }
+  if (distribution !== "individual") return undefined;
+  const sum = proposedMoney.reduce((a, p) => a + (Number.isFinite(p.amount) ? p.amount : 0), 0);
+  return Math.round(sum * 10) / 10;
+}
+
+/**
+ * `html_Warning_OnEditFromPCF.HtmlText` (`Capex Costs Screen.pa.yaml:12492`), verbatim: a bold "Warning:" and the sentence.
+ * (`txt_Warning_OnEditFromPCF.Text` carries the same sentence but is `Visible: =false`.)
+ */
+export const EDITED_FROM_SPREADSHEET_WARNING = {
+  label: "Warning:",
+  text: " Distribution scheme changed to absolute values due to edits in the spreadsheet component.",
+} as const;
+
+/**
+ * `con_Warning_OnEditFromPCF.Visible` (`:12444-12451`): the stored contract was edited from the spreadsheet and came from
+ * Powerapps, and the panel is on a stored contract (`Not(IsBlank(locSelectedProjectContract))`, i.e. an Edit, not an Add).
+ */
+export function showEditedFromSpreadsheetWarning(
+  stored: Pick<CostLine, "editedFromSpreadsheet"> | undefined, isEdit: boolean,
+): boolean {
+  return isEdit && stored?.editedFromSpreadsheet === true;
+}
+
+/**
+ * The payer the grid shows (`CostPaidBy` and the `[…]` sub-label): the contract's own Cost Type, blank when it is
+ * blank (D90, `Capex Costs Screen.pa.yaml:1220-1235`). A line with no `costTypePayer` (not read from Dataverse)
+ * shows its `payer`.
+ */
+export function gridPayer(line: Pick<CostLine, "payer" | "costTypePayer">): string {
+  return line.costTypePayer === undefined ? line.payer : line.costTypePayer ?? "";
+}
+
 /* ═══════════════════════════════════════════════════════ panel validation ══ */
 
 /** `totalCostMax` — Poland's ceiling is 2.25bn; everywhere else 500m. */
@@ -439,10 +507,6 @@ export function validateMonthAmount(
 ): { valid: boolean; message: string | null; kind: "ok" | "format" | "range" } {
   if (value.trim() === "") return { valid: true, message: null, kind: "ok" };
 
-  const grouped = (n: number) => numberFormat(
-    (locale ?? "en-GB").toLowerCase().startsWith("en") ? "en-GB" : "de-DE",
-  ).format(n);
-
   if (scheme === "percent") {
     if (!isOneDecimalCanvasParity(value, locale)) {
       return { valid: false, message: "Value must be numeric upto one decimal", kind: "format" };
@@ -458,7 +522,10 @@ export function validateMonthAmount(
   }
   const max = totalCostMax(countryName);
   if (!inRange(value, 0, max, locale)) {
-    return { valid: false, message: `Value must be between 0 and ${grouped(max)}.`, kind: "range" };
+    // The raw number, NO thousands separator (D90, CAPEX-102): the canvas interpolates
+    // `{If(Country.Name="Poland",2250000000,500000000)}` (`Capex Costs Screen.pa.yaml:13364-13368`). The Total Costs
+    // message, a different control, does group it (`validateTotalCost`).
+    return { valid: false, message: `Value must be between 0 and ${max}.`, kind: "range" };
   }
   return { valid: true, message: null, kind: "ok" };
 }
@@ -666,9 +733,11 @@ function isoToMonthYear(iso: string): string {
  * that is the value the "By Cluster / By Start and End Date" radio tests for on reopen.
  */
 export function startEndJson(startDate: string, endDate: string): string {
+  // `EndDate` BEFORE `StartDate` (D90): a Power Fx record serialises its fields alphabetically, so the canvas rows
+  // read `[{"EndDate":"06/2026","StartDate":"12/2017"}]` (above). The stored text is now identical, not just equal as data.
   return JSON.stringify([{
-    StartDate: isoToMonthYear(startDate),
     EndDate: isoToMonthYear(endDate),
+    StartDate: isoToMonthYear(startDate),
   }]);
 }
 
@@ -706,9 +775,10 @@ export function parseStartEndJson(
  * Which of the two equal-distribution modes a stored contract opens in.
  *
  * `rad_AddContract_RightPanel_DistributionBy_1.DefaultSelectedItems`
- * (`CapexScreenCode.txt:10683`): any cluster ticked -> By Cluster; otherwise a non-blank
- * start AND end -> By Start and End Date; otherwise **By Cluster**. That last fallback is the
- * one worth stating — a contract with neither stored opens on By Cluster, not on dates.
+ * (`Capex Costs Screen.pa.yaml:10860`): any cluster ticked -> By Cluster; otherwise a non-blank
+ * `StartDate & EndDate` (EITHER date: the canvas concatenates them, D90, CAPEX-067) -> By Start and
+ * End Date; otherwise **By Cluster**. That last fallback is the one worth stating — a contract
+ * with neither stored opens on By Cluster, not on dates.
  */
 export function resolveEqualMode(
   clusters: readonly number[],
@@ -716,7 +786,7 @@ export function resolveEqualMode(
   endDate: string,
 ): "cluster" | "dates" {
   if (clusters.length > 0) return "cluster";
-  return startDate && endDate ? "dates" : "cluster";
+  return startDate || endDate ? "dates" : "cluster";
 }
 
 /* ══════════════════════════════════════════════════ the grid's sub-label ══ */
@@ -764,11 +834,11 @@ export function resolveEqualMode(
 export function contractSubLabel(
   contract: Pick<
     CostLine,
-    "payer" | "distribution" | "clusters" | "startDate" | "endDate" | "linkedClusterOrder"
+    "payer" | "costTypePayer" | "distribution" | "clusters" | "startDate" | "endDate" | "linkedClusterOrder"
   >,
 ): string {
   const linked = contract.linkedClusterOrder;
-  const base = `[${contract.payer}]`
+  const base = `[${gridPayer(contract)}]`
     + (linked === undefined ? "" : ` Link to Cluster ${linked}`);
   // `If(Not(IsBlank(CPC.'Linked Cluster')), ", ", "")`, prepended inside each branch below.
   const lead = linked === undefined ? "" : ", ";
@@ -851,7 +921,7 @@ export function resolvePaidTarget(
   const hit = payments.find((p) => p.year === year && p.month === month);
   return hit?.id
     ? { costId: hit.id }
-    : { error: "No monthly cost row found for the selected contract/month/year." };
+    : { error: "No monthly cost row found for selected contract/month/year." };
 }
 
 /* ═══════════════════════════════════════════════════════ link to milestone ══ */
@@ -952,29 +1022,27 @@ export function clusterLinkageChanged(
 }
 
 /**
- * `locMilestoneRelinkResetNeeded` (`:11301-11324`).
+ * `locMilestoneRelinkResetNeeded` (`Capex Costs Screen.pa.yaml:11466-11479`, solution 1.21.709).
  *
- * The linkage change above, AND the contract carries something a milestone-linked cost may not
- * have: a month marked Paid, or a "Comments to payment date" comment.
+ * The linkage change above, AND the contract has a month marked Paid:
  *
  *     And(Self.Selected.Name <> "None",
  *         Self.Selected.Name <> locSelectedProjectContract.'Linked Cluster'.Name,
- *         Or(CountRows(Filter('CAPEX Costs', Contract = … && 'Cost Paid' = true)) > 0,
- *            CountRows(Filter('Capex Comments',
- *                             'Capex Contract' = … && 'Comment Type' = 'Comments to payment date'
- *                            )) > 0))
+ *         Or(CountRows(Filter('CAPEX Costs', Contract = … && 'Cost Paid' = true)) > 0))
  *
- * Accepting the dialog is what clears both — see `saveCostLine`'s
- * `resetPaidAndPaymentDateComments`.
+ * PAID MONTHS ONLY (D90, "follow the Canvas"). The older `CapexScreenCode.txt` formula also had a second `Or` arm for
+ * a "Comments to payment date" comment, and its `OnConfirm` deleted those comments. In the live YAML the second arm
+ * is gone and the `RemoveIf('Capex Comments', …)` sits inside a block comment (`:20061-20065`), so the canvas never
+ * asks about, and never deletes, payment-date comments. Accepting the dialog resets the Paid markers only (see
+ * `saveCostLine`'s `resetPaidAndPaymentDateComments`, a name kept for its pins; it no longer touches comments).
  */
 export function milestoneRelinkResetNeeded(args: {
   selectedName: string;
   storedName: string | undefined;
   payments: readonly Pick<Payment, "paid">[];
-  paymentDateCommentCount: number;
 }): boolean {
   if (!clusterLinkageChanged(args.selectedName, args.storedName)) return false;
-  return args.payments.some((p) => p.paid) || args.paymentDateCommentCount > 0;
+  return args.payments.some((p) => p.paid);
 }
 
 /**

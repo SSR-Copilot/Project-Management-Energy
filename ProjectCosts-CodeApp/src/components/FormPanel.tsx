@@ -98,12 +98,14 @@ export interface FormPanelProps {
    * sat 2 px low in a 48 px bar and about 7 px high where a screen zeroed the header padding (Land Lease).
    */
   centerClose?: boolean;
+  /** Hover text on the panel title (the canvas title label's `Tooltip`, e.g. the full "Comments : <contract>"). Default none. */
+  titleTooltip?: string;
 }
 
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, centerClose = false,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, centerClose = false, titleTooltip,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -139,7 +141,7 @@ export function FormPanel({
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}
         style={style}>
         <DrawerHeader className="canvas-panel-header">
-          <DrawerHeaderTitle action={closeTooltipBox ? (
+          <DrawerHeaderTitle {...(titleTooltip !== undefined ? { heading: { title: titleTooltip } } : {})} action={closeTooltipBox ? (
             <Tooltip content={closeTooltip ?? HINTS.cancel} relationship="description" positioning="below">
               <Button appearance="transparent" aria-label={closeLabel ?? "Close panel"}
                 data-testid={closeTestId ?? "panel-close"} icon={<DismissRegular />}

@@ -16,6 +16,7 @@ import { languageLabel } from "@/data/currentUser";
 import { useCurrentUser } from "@/app/useCurrentUser";
 import { AppShell, LoadingOverlay, EmptyState, pmHeaderTitle } from "@/components";
 import { useSession } from "@/app/SessionContext";
+import { appTabUrl, resolvePlayAppUrl } from "@/app/deepLinks";
 import { AppRoutes } from "@/app/routes";
 import { adminEntriesVisible } from "@/app/adminAccess";
 import { adminPageTitle } from "@/app/adminTitles";
@@ -35,6 +36,26 @@ export default function App() {
   const currentUser = useCurrentUser();
 
   const onCostScreen = pathname.startsWith("/costs/");
+  /*
+   * `cmp_Header.OnLogoClick` on the Cost screens = `Launch(gblPMAppURL)` (`Capex Costs Screen.pa.yaml:2333-2335`): the logo
+   * opens the Project Management app in a new tab, with no project. This app IS that app, so it is the project list
+   * (`/projects`), built with the same environment-aware URL as every other new-tab link (CONVENTIONS rule 12, D90).
+   */
+  const openPmApp = () => {
+    try {
+      const appUrl = resolvePlayAppUrl({
+        sessionAppUrl: session?.appUrl,
+        environmentId: session?.environmentId,
+        appOrigin: window.location.origin,
+      });
+      window.open(
+        appTabUrl({ currentUrl: window.location.href, ...(appUrl === undefined ? {} : { appUrl }), path: "/projects" }),
+        "_blank", "noopener,noreferrer",
+      );
+    } catch {
+      /* the link could not be built; the logo does nothing, as before */
+    }
+  };
   /*
    * No canvas control; code-app shell spinner. On the Cost routes the shell renders while the
    * session loads (D58) and `CostProjectGate` (`app/routes.tsx`) shows its own inline "Loading
@@ -81,6 +102,7 @@ export default function App() {
       {...(pageTitle ? { pageTitle } : {})}
       {...(onProjectScreen && project?.clusterStateName ? { projectStatus: project.clusterStateName } : {})}
       {...(onProjectScreen || onAdminScreen ? { onBack: () => navigate("/projects") } : {})}
+      {...(onCostScreen ? { onLogoClick: openPmApp } : {})}
       {...(showsProject && project?.approvalState
         ? { approvalState: project.approvalState }
         : {})}

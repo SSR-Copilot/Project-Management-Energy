@@ -201,6 +201,12 @@ export interface AppHeaderProps {
    */
   onBack?: () => void;
   /**
+   * The Cost app's `cmp_Header.OnLogoClick` = `Launch(gblPMAppURL)` (`Capex Costs Screen.pa.yaml:2333-2335`): the logo is
+   * a click target that opens the PM app, with no back arrow and none of the PM header chrome that `onBack` brings
+   * (D90). Ignored when `onBack` is given (the PM and admin screens' logo already runs `onBack`).
+   */
+  onLogoClick?: () => void;
+  /**
    * `cmp_Header.Project.Status` — the project's Cluster State name, on Project Management
    * screens only. Drives the second header line (`con_cmp_Header_ProjectStatus`).
    */
@@ -213,7 +219,7 @@ export function AppHeader({
   pageTitle, approvalState, userName, userEmail, userPhoto,
   userLanguage, userBusinessUnit, userCountries, userDataScope,
   appVersion, environmentName, infoCenterUrl, hasError, onReportProblem, onAppSettings, commandSlotRef,
-  onBack, projectStatus,
+  onBack, onLogoClick, projectStatus,
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
@@ -226,11 +232,11 @@ export function AppHeader({
           same `cmp_Header.OnLogoClick` as the back arrow, so on PM screens the logo also returns
           to the project list (through the router, so the unsaved-changes guard still applies).
         */}
-        {onBack ? (
+        {onBack ?? onLogoClick ? (
           <Button
             appearance="transparent"
             className={styles.logoButton}
-            onClick={onBack}
+            onClick={onBack ?? onLogoClick}
             title="VSB Cloud"
             aria-label="VSB Cloud"
             data-testid="img_cmp_Header_Button"

@@ -113,7 +113,7 @@ const useStyles = makeStyles({
  * `Y: =8`, i.e. beside the caption, not under the box. Same for the contract panel's
  * `Comment  0/255`.
  */
-export function CostField({ label, name, required, value, onChange, onBlur, type = "text", disabled = false, error, maxLength, placeholder, counter, standard, children }: {
+export function CostField({ label, name, required, value, onChange, onBlur, type = "text", inputMode, disabled = false, error, maxLength, placeholder, counter, standard, children }: {
   label: string;
   /**
    * The original canvas control's own name (`txt_Screen_Panel_Field_1`), when known — Tosca's
@@ -140,7 +140,10 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
    * the Contracts panel uses it to show a required field's error once the user has visited it.
    */
   onBlur?: () => void;
-  type?: string; disabled?: boolean; error?: string; maxLength?: number; placeholder?: string;
+  type?: string;
+  /** Virtual-keyboard hint only (`"numeric"`, `"decimal"`); it does NOT restrict what can be typed, unlike `type="number"`. */
+  inputMode?: "numeric" | "decimal" | "text";
+  disabled?: boolean; error?: string; maxLength?: number; placeholder?: string;
   counter?: string;
   /**
    * The canvas standard-assumption pair on the INPUT (not the caption) — CONVENTIONS rule 20;
@@ -153,7 +156,7 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required} data-counter={counter ? true : undefined}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
-    {children ?? <input className={standardClass(standard)} type={type} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
+    {children ?? <input className={standardClass(standard)} type={type} inputMode={inputMode} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </label>;
 }
@@ -192,7 +195,7 @@ export function CostSelect({ label, value, options, onChange, required, error, t
  * `label` renders the group with no caption at all, which is the Margin Type radio: the
  * canvas gives it no `lbl_` of its own, it simply follows the Yes/No group.
  */
-export function Choices({ label, name, value, options, onChange, required, disabled, action, ariaLabel, horizontal }: {
+export function Choices({ label, name, value, options, onChange, required, disabled, action, ariaLabel, horizontal, standard }: {
   label: string;
   /** The canvas radio GROUP's own name (`rad_Screen_Panel_Field_1`), when known — see `CostField`'s `name`. */
   name?: string;
@@ -202,8 +205,11 @@ export function Choices({ label, name, value, options, onChange, required, disab
   ariaLabel?: string;
   /** `Layout: ='RadioGroupCanvas.Layout'.Horizontal` — the options side by side. */
   horizontal?: boolean;
+  /** The canvas standard-assumption pair on the OPTION captions (CONVENTIONS rule 20; `rad_…` `FontColor` / `FontItalic`). */
+  standard?: StandardProp;
 }) {
   const styles = useStyles();
+  const standardClass = useStandardValueClass();
   return <fieldset className={mergeClasses("canvas-radio-group", horizontal && "canvas-radio-horizontal", disabled && styles.choicesDisabled)}
     disabled={disabled} aria-disabled={disabled || undefined}
     /*
@@ -213,7 +219,7 @@ export function Choices({ label, name, value, options, onChange, required, disab
      */
     aria-label={ariaLabel ?? name ?? (label || undefined)} data-testid={name}>
     {label || action ? <legend><span data-required={required}>{label}</span>{action}</legend> : null}
-    {options.map(option => <label key={option}>
+    {options.map(option => <label key={option} className={standardClass(standard)}>
       <input type="radio" value={option} checked={value === option} onChange={() => onChange(option)} aria-label={option}
         data-testid={name ? `${name}-${testIdPart(option)}` : undefined} />{option}</label>)}
   </fieldset>;

@@ -418,12 +418,14 @@ describe("paymentDateComplete", () => {
     expect(flags?.months.some(Boolean)).toBe(false);
   });
 
-  it("UT-CMT-045 canSaveComments refuses a draft that is still missing its payment date", () => {
+  it("UT-CMT-045 canSaveComments does NOT refuse a draft missing its payment date, as in the canvas (D90)", () => {
+    // `tgl_Root_IsInvalid` is blank-text only (`:10058-10065`); the "Required" text is display only.
     const base = { id: "d1", text: "New Test", isDirty: true, isModified: true };
-    expect(canSaveComments([{ ...base, missingPaymentDate: true }], [])).toBe(false);
+    expect(canSaveComments([{ ...base, missingPaymentDate: true }], [])).toBe(true);
     expect(canSaveComments([{ ...base, missingPaymentDate: false }], [])).toBe(true);
-    // A pending delete cannot save past an incomplete draft either.
-    expect(canSaveComments([{ ...base, missingPaymentDate: true }], ["comment-1"])).toBe(false);
+    expect(canSaveComments([{ ...base, missingPaymentDate: true }], ["comment-1"])).toBe(true);
+    // Blank text still blocks Save.
+    expect(canSaveComments([{ ...base, text: "   ", missingPaymentDate: false }], [])).toBe(false);
   });
 });
 
@@ -598,8 +600,11 @@ describe("canSaveComments and the open-card gate", () => {
       missingPaymentDate: true, isOpen: false,
     };
     expect(canSaveComments([resolvedOnly], [])).toBe(true);
-    expect(canSaveComments([{ ...resolvedOnly, isOpen: true }], [])).toBe(false);
-    // Same for blank text.
+    // An OPEN card missing its month is no longer invalid (D90): only blank text is.
+    expect(canSaveComments([{ ...resolvedOnly, isOpen: true }], [])).toBe(true);
+    expect(canSaveComments([{ ...resolvedOnly, isOpen: true, text: "  ", missingPaymentDate: false }], []))
+      .toBe(false);
+    // Blank text on a card that is not open cannot block Save either.
     expect(canSaveComments([{ ...resolvedOnly, text: "  ", missingPaymentDate: false }], []))
       .toBe(true);
   });

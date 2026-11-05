@@ -5,7 +5,7 @@ import { costRepository } from "@/data/costRepository";
 import { NO_FOCUS_REFETCH } from "@/data/adminQueryPresets";
 import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardContracts";
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
-import { loadCapexCategories, loadMilestoneDurations, loadProjectStates } from "@/data/costBook";
+import { loadCapexCategories, loadMilestoneDurations, loadProjectStates, standardContractExists } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
 import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
@@ -445,8 +445,9 @@ export function useCapexWrites(
   const setPaid = useMutation({
     mutationKey,
     onMutate: writtenOn,
-    mutationFn: (args: { lineId: string; year: number; month: number; paid: boolean; costId?: string }) =>
-      costRepository().setCostPaid(projectId as string, args),
+    mutationFn: (args: {
+      lineId: string; year: number; month: number; paid: boolean; costId?: string; clearLinkedCluster?: boolean;
+    }) => costRepository().setCostPaid(projectId as string, args),
     onSuccess: (_data, _args, context) => invalidate(context.category),
     onError: (error) => reportError(error),
   });
@@ -504,7 +505,11 @@ export function useCapexWrites(
     onError: (error) => reportError(error),
   });
 
-  return { setPaid, saveLine, deleteLine };
+  /** The live duplicate check of a standard contract, before it is created (CAPEX-135, D90). */
+  const standardExists = (accountId: string, assumptionId: string) =>
+    standardContractExists(projectId as string, accountId, assumptionId);
+
+  return { setPaid, saveLine, deleteLine, standardExists };
 }
 
 /**

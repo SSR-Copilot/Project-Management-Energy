@@ -13,6 +13,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { appliedRules } from "@/test/appliedRules";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -82,6 +83,8 @@ const deleteLine = { mutate: vi.fn(), isPending: false, error: null };
 let savePending = false;
 /** `setPaid.isPending` / `deleteLine.isPending`, likewise — the two no-panel writes. */
 let paidPending = false;
+/** What the live "is this standard contract already created" lookup answers. */
+let standardExistsResult = false;
 let deletePending = false;
 /** `setPaid.error` — a failed Paid write, for the error banner. */
 let paidError: Error | null = null;
@@ -109,6 +112,8 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
       setPaid: { ...setPaid, isPending: paidPending, error: paidError },
       deleteLine: { ...deleteLine, isPending: deletePending },
       saveLine: { ...saveLine, isPending: savePending },
+      /** The live duplicate lookup (CAPEX-135, D90): resolves `standardExistsResult`. */
+      standardExists: async () => standardExistsResult,
     };
   },
   useStandardAssumptions: () => ({
@@ -214,6 +219,14 @@ function mountAndDelete(lineId: string) {
   return view;
 }
 
+/**
+ * Changes something in the open panel. The canvas Save is disabled until a control's `OnChange` has run
+ * (`locEditSaveButtonEnabled`, `:17548`; D90, CAPEX-101), so a test that saves an opened contract touches it first.
+ */
+const touchPanel = () => {
+  const box = screen.getByLabelText("txt_AddContract_RightPanel_Description_1") as HTMLInputElement;
+  fireEvent.change(box, { target: { value: `${box.value}!` } });
+};
 /** The `line` the last save was asked to write. */
 const savedLine = () => saveLine.mutateAsync.mock.calls[0]?.[0]?.line;
 
@@ -306,8 +319,8 @@ describe("the Add Costs panel — left column", () => {
   it("offers the five clusters, all enabled for a greenfield project", () => {
     mountAndOpen();
     for (const name of [
-      "Cluster 1: Feasibility Studies", "Cluster 2: Pre-Permitting", "Cluster 3: Permitting",
-      "Cluster 4: Pre-Construction", "Cluster 5: Construction",
+      "chk_AddContract_RightPanel_SelectCluster1_1", "chk_AddContract_RightPanel_SelectCluster2_1", "chk_AddContract_RightPanel_SelectCluster3_1",
+      "chk_AddContract_RightPanel_SelectCluster4_1", "chk_AddContract_RightPanel_SelectCluster5_1",
     ]) {
       expect(screen.getByRole("checkbox", { name })).toBeEnabled();
     }
@@ -316,10 +329,10 @@ describe("the Add Costs panel — left column", () => {
   it("disables the clusters a project acquired at cluster 3 has already passed", () => {
     startClusterNo = 3;
     mountAndOpen();
-    expect(screen.getByRole("checkbox", { name: "Cluster 1: Feasibility Studies" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "Cluster 2: Pre-Permitting" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "Cluster 3: Permitting" })).toBeEnabled();
-    expect(screen.getByRole("checkbox", { name: "Cluster 5: Construction" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster1_1" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster2_1" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster3_1" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster5_1" })).toBeEnabled();
   });
 
   it("uses an MM/YYYY text box for the dates, not a day-precision picker", () => {
@@ -345,6 +358,84 @@ describe("the Add Costs panel — left column", () => {
     expect(screen.getByText("Value must be between 0 and 500,000,000")).toBeInTheDocument();
   });
 
+  /*
+   * UT-CAPEXTOTAL-001..003 (D89). The canvas Total Costs box is a plain TextInput (no numeric Format,
+   * `MaxLength: 512`): every typed character reaches `lbl_…_TotalCost_ErrorMessage_1`, which is visible for
+   * any non-blank value that is not an integer in range. A browser `type="number"` box swallowed "e" and
+   * "abc" (its value reads ""), so the letter showed in the box with no message at all.
+   */
+  it("UT-CAPEXTOTAL-001 Total Costs is a text box, so what is typed always reaches the validation", () => {
+    mountAndOpen();
+    const box = screen.getByLabelText(/Total Costs/) as HTMLInputElement;
+    expect(box.type).toBe("text");
+    expect(box.getAttribute("inputmode")).toBe("numeric");
+    expect(box.maxLength).toBe(512);
+  });
+
+  it.each(["e", "abc", "1e5", "12.5", "-5"])(
+    "UT-CAPEXTOTAL-002 %j in Total Costs shows the canvas range message and keeps Save disabled", (typed) => {
+      mountAndOpen();
+      fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "Gesamt neu" } });
+      fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: typed } });
+      expect((screen.getByLabelText(/Total Costs/) as HTMLInputElement).value).toBe(typed);
+      expect(screen.getByText("Value must be between 0 and 500,000,000")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    });
+
+  it("UT-CAPEXTOTAL-003 a whole number in range shows no message", () => {
+    mountAndOpen();
+    fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "1200" } });
+    expect(screen.queryByText(/Value must be between 0 and/)).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEXSTD-001 a standard contract's panel shows the blue italic pair on every canvas-listed control (D90, rule 20)", () => {
+    // `FontColor: If(locSelectedCostRow.IsStandardContract, themePrimary)` + `FontItalic` on Description, DistributionBy,
+    // Total Costs, the five cluster checkboxes, Cost Paid By, Apply VAT and Depreciation (`:10475`-`:12394`).
+    lines = [{
+      id: "std1", accountId: "sub-1", description: "Standard O&M", payer: "SPV",
+      depreciation: true, vat: true, standard: true, distribution: "equal",
+      equalMode: "cluster", distributionScheme: "absolute", startDate: "", endDate: "",
+      frequency: 1, clusters: [1, 2], payments: [], comments: [], totalCost: 1000,
+    }];
+    mountAndOpenEdit("std1");
+    const styled = (el: Element | null | undefined) => {
+      const css = appliedRules(el as Element);
+      return css["color"] === "rgb(0, 110, 185)" && css["font-style"] === "italic";
+    };
+    expect(styled(screen.getByLabelText("txt_AddContract_RightPanel_Description_1"))).toBe(true);
+    expect(styled(screen.getByLabelText("txt_AddContract_RightPanel_TotalCost_1"))).toBe(true);
+    expect(styled(screen.getByRole("radio", { name: "By Cluster" }).closest("label"))).toBe(true);
+    expect(styled(screen.getByRole("radio", { name: "SPV" }).closest("label"))).toBe(true);
+    expect(styled(screen.getByText("Apply VAT"))).toBe(true);
+    expect(styled(screen.getByText("Depreciation"))).toBe(true);
+  });
+
+  it("UT-CAPEXWARN-001 the edited-from-spreadsheet strip shows on Edit of a flagged contract, and not on Add (D90)", () => {
+    lines = [{
+      id: "pcf1", accountId: "sub-1", description: "From sheet", payer: "SPV",
+      depreciation: true, vat: true, standard: false, distribution: "individual",
+      equalMode: "cluster", distributionScheme: "absolute", startDate: "", endDate: "",
+      frequency: 1, clusters: [], payments: [], comments: [], editedFromSpreadsheet: true,
+    }];
+    const { unmount } = mountAndOpenEdit("pcf1");
+    expect(screen.getByTestId("con_Warning_OnEditFromPCF")).toHaveTextContent(
+      "Warning: Distribution scheme changed to absolute values due to edits in the spreadsheet component.");
+    unmount();
+    document.querySelectorAll('[data-testid="open-add"]').forEach(b => b.remove());
+    mountAndOpen();
+    expect(screen.queryByTestId("con_Warning_OnEditFromPCF")).not.toBeInTheDocument();
+  });
+  it("UT-CAPEXSTD-002 a contract that is not standard keeps the normal colour on those controls", () => {
+    lines = [{
+      id: "plain1", accountId: "sub-1", description: "Gesamt", payer: "SPV",
+      depreciation: true, vat: true, standard: false, distribution: "equal",
+      equalMode: "cluster", distributionScheme: "absolute", startDate: "", endDate: "",
+      frequency: 1, clusters: [1], payments: [], comments: [], totalCost: 1000,
+    }];
+    mountAndOpenEdit("plain1");
+    expect(appliedRules(screen.getByLabelText("txt_AddContract_RightPanel_Description_1"))["font-style"]).not.toBe("italic");
+    expect(appliedRules(screen.getByText("Apply VAT"))["font-style"]).not.toBe("italic");
+  });
   it("refuses the reserved word Standard in a description", () => {
     mountAndOpen();
     fireEvent.change(screen.getByLabelText(/Description/), {
@@ -373,11 +464,14 @@ describe("the Add Costs panel — left column", () => {
 describe("the Add Costs panel — year gallery", () => {
   it("renders one collapsed row per project year", () => {
     mountAndOpen();
-    // 2015 (feasibility) through 2030 (end date).
+    // The canvas panel window (D90, `:19600-19640`): Year(start) 2015 through Year(end) + 3, where the end is
+    // Coalesce(COD 2020, End Date 2030, ...) = 2020, so 2023. It is no longer the grid's navigation window (to 2030).
     expect(screen.getByRole("button", { name: /^2015 Allocated Cost: 0 EUR$/ }))
       .toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("button", { name: /^2030 Allocated Cost: 0 EUR$/ }))
+    expect(screen.getByRole("button", { name: /^2023 Allocated Cost: 0 EUR$/ }))
       .toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^2024 Allocated Cost/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^2030 Allocated Cost/ })).not.toBeInTheDocument();
     // Nothing is expanded, so no month box is on screen.
     expect(screen.queryByLabelText("January 2020")).not.toBeInTheDocument();
   });
@@ -413,7 +507,7 @@ describe("the Add Costs panel — year gallery", () => {
   it("totals the equal distribution into the year it falls in", () => {
     mountAndOpen();
     fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "1200" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Cluster 1: Feasibility Studies" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster1_1" }));
     // Cluster 1 is 2015-01 → 2015-12, so every cent lands in 2015 and nowhere else.
     expect(screen.getByRole("button", { name: "2015 Allocated Cost: 1200 EUR" }))
       .toBeInTheDocument();
@@ -681,6 +775,7 @@ describe("the save status line", () => {
     lines = [individualContract()];
     mountAndOpenEdit("l1");
     expect(screen.getByText("Edit Costs - Turbine / PV Supply Agreement")).toBeInTheDocument();
+    touchPanel();
 
     saveLine.mutateAsync.mockImplementationOnce(() => {
       savePending = true;
@@ -699,7 +794,7 @@ describe("the save status line", () => {
     mountAndOpen();
     fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "New Contract" } });
     fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "1200" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Cluster 1: Feasibility Studies" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster1_1" }));
 
     saveLine.mutateAsync.mockImplementationOnce(() => {
       savePending = true;
@@ -931,6 +1026,7 @@ describe("the busy indicators (D60)", () => {
       });
     });
     mountAndOpenEdit("l1");
+    touchPanel();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     return { settle: () => settle };
   };
@@ -1029,12 +1125,31 @@ describe("the panel footer", () => {
     fireEvent.click(screen.getByRole("button", { name: /^2016 Allocated Cost/ }));
     fireEvent.change(screen.getByLabelText("June 2016"), { target: { value: "1250.6" } });
     // The box keeps what was typed; the gallery's own label already rounds for display.
-    expect(screen.getByLabelText("June 2016")).toHaveValue(1250.6);
+    expect(screen.getByLabelText("June 2016")).toHaveValue("1250.6");
 
     fireEvent.click(screen.getByRole("button", { name: "Recalculate Allocated Cost" }));
-    expect(screen.getByLabelText("June 2016")).toHaveValue(1251);
+    expect(screen.getByLabelText("June 2016")).toHaveValue("1251");
     expect(screen.getByRole("button", { name: "2016 Allocated Cost: 1251 EUR" }))
       .toBeInTheDocument();
+  });
+
+  it("UT-CAPEXMONTH-001 a letter typed in a month box stays visible and shows the canvas message (D89)", () => {
+    lines = [individualContract({
+      payments: [{ year: 2016, month: 6, amount: 500, paid: false }],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.click(screen.getByRole("button", { name: /^2016 Allocated Cost/ }));
+    const june = screen.getByLabelText("June 2016") as HTMLInputElement;
+    expect(june.type).toBe("text");
+    fireEvent.change(june, { target: { value: "abc" } });
+    expect(june.value).toBe("abc");
+    expect(screen.getByText("Value must be a numeric")).toBeInTheDocument();
+    // Same for the other characters a number field hides.
+    fireEvent.change(june, { target: { value: "1e5" } });
+    expect(june.value).toBe("1e5");
+    expect(screen.getByText("Value must be a numeric")).toBeInTheDocument();
+    fireEvent.change(june, { target: { value: "700" } });
+    expect(screen.queryByText("Value must be a numeric")).not.toBeInTheDocument();
   });
 
   /** `DisplayMode` (`:17541-17555`) — the save gate is its last clause. */
@@ -1218,6 +1333,41 @@ describe("confirmation dialog dimensions", () => {
     expect(screen.getByText("Confirm Changes")).toBeInTheDocument();
     expect(surface()).toHaveStyle({ height: "250px" });
     expect(band()).toHaveStyle({ height: "120px" });
+  });
+
+  /**
+   * UT-CAPEXLINK-001 (D90, CAPEX-055) — `OnConfirm` of the cluster-linked paid dialog is
+   * `Patch('CAPEX Project Contracts', varGetContract, {'Linked Cluster': Blank()})` THEN the paid write
+   * (`Capex Costs Screen.pa.yaml:19875`). The dialog says the link is removed, so Confirm asks the
+   * write to clear it; Cancel writes nothing.
+   */
+  it("UT-CAPEXTOUCH-001 Save stays disabled on an opened contract until a control changes (D90, canvas :17548)", () => {
+    lines = [individualContract({ payments: [{ id: "c1", year: 2016, month: 6, amount: 500, paid: false }] })];
+    mountAndOpenEdit("l1");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    touchPanel();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("UT-CAPEXLINK-001 confirming the cluster-linked paid dialog clears the Linked Cluster, then marks it paid", () => {
+    lines = [linkedCost({
+      payments: [{ id: "c1", year: 2016, month: 6, amount: 500, paid: false }],
+      linkedClusterId: "ps-2", linkedClusterName: "Cluster 2", linkedClusterOrder: 2,
+    })];
+    mount();
+    const button = document.createElement("button");
+    button.setAttribute("data-testid", "open-add");
+    button.addEventListener("click", () => onAction(
+      "SetCostPaidUnpaid", "l1", undefined, { year: 2016, month: 6, paid: true },
+    ));
+    document.body.appendChild(button);
+    openAddPanel();
+
+    expect(setPaid.mutate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(setPaid.mutate).toHaveBeenCalledWith(expect.objectContaining({
+      lineId: "l1", costId: "c1", paid: true, clearLinkedCluster: true,
+    }));
   });
 
   /**

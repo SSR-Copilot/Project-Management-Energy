@@ -29,6 +29,7 @@ import {
 import { FormPanel, LoadingOverlay, PanelButtons, WriteStatus } from "@/components";
 import { space } from "@/theme/tokens";
 import { useSession } from "@/app/SessionContext";
+import { useCurrentUser } from "@/app/useCurrentUser";
 import { writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCapexComments, useCommentWrites } from "../costing/useCostBook";
 import { useCostWriteInFlight, useWriteFailureReport } from "../costing/useCostWriteFlight";
@@ -39,7 +40,8 @@ import {
   commentThreads, commentTypeLabel, commentTypeValue, commentYearOptions,
   paymentDateCommentsAllowed, paymentDateComplete,
   reopenThread, resolveThread, sortComments, truncateComment,
-  type CapexComment, type CommentThread,
+  canEditOrDeleteComment, canResetComment,
+  type CapexComment, type CommentThread, type CommentViewer,
 } from "./comments";
 
 interface Working extends CapexComment { isNew: boolean }
@@ -249,6 +251,11 @@ export function CommentsPanel(props: CommentsPanelProps) {
   } = props;
   const styles = useStyles();
   const { session, projectId } = useSession();
+  /**
+   * Who is looking, for the canvas author gate (D90): Edit and Delete are enabled for the comment's author only, and
+   * Reset for the author or the resolver (`:9761-9766`, `:9818-9823`, `:10023`). An unknown identity gates nothing.
+   */
+  const viewer: CommentViewer = { systemUserId: useCurrentUser().data?.systemUserId, entraObjectId: session?.entraObjectId };
   const query = useCapexComments(contractId ? [contractId] : []);
   const writes = useCommentWrites();
   /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
@@ -575,6 +582,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
   return (
     <>
       <FormPanel centerClose open={open} width="comments" title={commentPanelTitle(contractDescription)}
+        titleTooltip={`Comments : ${contractDescription}`}
         onDismiss={onDismiss}
         footer={<PanelButtons onSave={() => { void commit(); }} onCancel={onDismiss}
           disabled={!valid || writesDisabled}
@@ -640,7 +648,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
                   onEdit={() => startEdit(thread.root.id)}
                   onDelete={() => deleteWorking(thread.root.id)}
                   onResolve={() => resolve(thread.root.id)} onReopen={() => reopen(thread.root.id)}
-                  onReply={() => addReply(thread)} disabled={writesDisabled} />
+                  onReply={() => addReply(thread)} disabled={writesDisabled} viewer={viewer} />
               )}
               {thread.replies.map((reply) => (
                 <div key={reply.id} className={styles.reply}>
@@ -656,7 +664,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
                     <ReadCard comment={reply} sequenceNumber={null} cost={undefined}
                       onEdit={() => startEdit(reply.id)} onDelete={() => deleteWorking(reply.id)}
                       onResolve={() => {}} onReopen={() => {}} onReply={() => {}}
-                      disabled={writesDisabled} />
+                      disabled={writesDisabled} viewer={viewer} />
                   )}
                 </div>
               ))}
@@ -726,10 +734,14 @@ function ReadCard(props: {
   onReply: () => void;
   /** `writeCommandsDisabled` — every action on the card is a write or opens an editor (D58). */
   disabled: boolean;
+  /** The signed-in user, for the author / resolver gates (D90). */
+  viewer: CommentViewer;
 }) {
   const {
-    comment, sequenceNumber, cost, onEdit, onDelete, onResolve, onReopen, onReply, disabled,
+    comment, sequenceNumber, cost, onEdit, onDelete, onResolve, onReopen, onReply, disabled, viewer,
   } = props;
+  const notAuthor = !canEditOrDeleteComment(comment, viewer);
+  const cannotReset = !canResetComment(comment, viewer);
   const styles = useStyles();
   const isReply = sequenceNumber === null;
   const editable = commentEditable({ resolved: comment.resolved });
@@ -741,19 +753,19 @@ function ReadCard(props: {
           <div className={styles.actions}>
             {!isReply ? (
               <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
-                icon={<ArrowReplyRegular />} onClick={onReply} aria-label="Reply"
+                icon={<ArrowReplyRegular />} onClick={onReply} aria-label="Reply" title="Reply"
                 data-testid={`btn_Read_Comment_Reply-${comment.id}`} />
             ) : null}
             {!isReply ? (
               <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
                 icon={<CheckmarkCircleRegular />} onClick={onResolve}
-                aria-label="Mark as Resolved" data-testid={`btn_Read_Comment_Check-${comment.id}`} />
+                aria-label="Mark as Resolved" title="Mark as Resolved." data-testid={`btn_Read_Comment_Check-${comment.id}`} />
             ) : null}
-            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
-              icon={<EditRegular />} onClick={onEdit} aria-label="Edit"
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled || notAuthor}
+              icon={<EditRegular />} onClick={onEdit} aria-label="Edit" title="Edit"
               data-testid={`${isReply ? "btn_Read_Comment_Edit_Reply" : "btn_Read_Comment_Edit"}-${comment.id}`} />
-            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
-              icon={<DeleteRegular />} onClick={onDelete} aria-label="Delete"
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled || notAuthor}
+              icon={<DeleteRegular />} onClick={onDelete} aria-label="Delete" title="Delete"
               data-testid={`${isReply ? "btn_Read_Comment_Delete_Reply" : "btn_Read_Comment_Delete"}-${comment.id}`} />
           </div>
         ) : isReply ? null : (
@@ -765,8 +777,8 @@ function ReadCard(props: {
            */
           <div className={styles.actions}>
             <Text className={styles.resolvedPill}>Resolved</Text>
-            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled}
-              icon={<ArrowUndoRegular />} onClick={onReopen} aria-label="Reset"
+            <Button appearance="transparent" size="small" className={styles.actionButton} disabled={disabled || cannotReset}
+              icon={<ArrowUndoRegular />} onClick={onReopen} aria-label="Reset" title="Reset"
               data-testid={`btn_Read_Comment_Reset-${comment.id}`} />
           </div>
         )}
@@ -834,7 +846,7 @@ function DraftCard(props: {
         </Text>
         <div className={styles.actions}>
           <Button appearance="transparent" size="small" className={styles.actionButton}
-            icon={<DeleteRegular />} onClick={onDelete} aria-label="Delete"
+            icon={<DeleteRegular />} onClick={onDelete} aria-label="Delete" title="Delete"
             data-testid={`${isRoot ? "btn_Draft_Edit_Delete" : "btn_Draft_Edit_Delete_Reply"}-${comment.id}`} />
         </div>
       </div>

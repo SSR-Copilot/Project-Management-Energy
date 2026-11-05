@@ -29,14 +29,14 @@ import { unwrap } from "@/platform/errors";
 import { capexWriteSet, type CostRowInput } from "@/features/cost/capex-costs/writeSet";
 import { byClusterJson, planDeleteContract, startEndJson } from "@/features/cost/capex-costs/rules";
 import {
-  paidIdsToReset, paymentDateCommentIds, planPanelCostWrites,
+  paidIdsToReset, planPanelCostWrites,
 } from "@/features/cost/capex-costs/savePlan";
 import { deleteComment, loadComments } from "./comments";
 import { deleteRecord } from "./client";
-import { COMMENT_TYPE } from "@/features/cost/capex-costs/comments";
 import { equalDistributionAmounts } from "@/features/cost/capex-costs/distribution";
 import type { CostLine, Payment } from "@/features/cost/costing/model";
 import { bind } from "./odata";
+import { CHOICE_COST } from "./dataverseNames";
 import { deleteMany } from "./bulkWrites";
 import type { BulkTableInfo, UpsertTarget } from "./bulkTypes";
 import { CAPEX_COSTS } from "./addCostSheetBulk";
@@ -76,6 +76,19 @@ export async function setCostPaid(costId: string, paid: boolean): Promise<void> 
   unwrap(
     await Vsb_capexcostsService.update(costId, { vsb_costpaid: paid }),
     "set cost paid",
+  );
+}
+
+/**
+ * The cluster-linked paid dialog's `OnConfirm`, first half (D90, CAPEX-055): `Patch('CAPEX Project Contracts', varGetContract,
+ * {'Linked Cluster': Blank()})` (`Capex Costs Screen.pa.yaml:19875`), BEFORE the month is marked paid. The dialog promises that
+ * the milestone link is removed; without this the contract stayed linked to its cluster with a paid month, the combination
+ * the canvas forbids. `@odata.bind: null` is the only way to disassociate a lookup (see `contractPayload`).
+ */
+export async function clearLinkedCluster(contractId: string): Promise<void> {
+  unwrap(
+    await Vsb_capexprojectcontractsService.update(contractId, { "vsb_LinkedCluster@odata.bind": null } as never),
+    "clear the contract's Linked Cluster",
   );
 }
 
@@ -429,6 +442,9 @@ function contractPayload(args: SaveCostLineArgs): {
       }
       : {}),
     vsb_isstandardcontract: line.standard,
+    // `'Initial Contract Source': Coalesce(existing, Powerapps)` (`:17574`, `:17687`, `:18668`): a contract created here is a Powerapps
+    // one. Written on create only; an existing contract keeps what it has (D90, CAPEX-109/121/141).
+    ...(isNew ? { vsb_initialcontractsource: CHOICE_COST.initialContractSource.powerapps } : {}),
     // Bound only on create — a standard contract's link to its assumption is set once, at
     // creation, exactly as `checkStandardContractClick` in `standardContracts.ts` assumes when
     // it treats "already has this assumption" as permanent.
@@ -501,12 +517,18 @@ async function createContract(args: SaveCostLineArgs): Promise<string> {
 function newCostFields(
   contractId: string, owningBusinessUnitId: string | undefined,
   cost: { year: number; month: number; cost: number },
+  standardAssumptionId?: string,
 ): Record<string, unknown> {
   return {
     vsb_cost: cost.cost,
     vsb_year: cost.year,
     vsb_month: cost.month,
     "vsb_Contract@odata.bind": bind("vsb_capexprojectcontracts", contractId),
+    // Every cost row of a standard contract carries its assumption (`'Capex Contract Standard Assumption'`,
+    // `Capex Costs Screen.pa.yaml:18849-18887`; D90, CAPEX-141).
+    ...(standardAssumptionId
+      ? { "vsb_CapexContractStandardAssumption@odata.bind": bind("vsb_devexcapexstandardassumptionses", standardAssumptionId) }
+      : {}),
     ...owningBu(owningBusinessUnitId),
   };
 }
@@ -531,7 +553,7 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
   const { line, owningBusinessUnitId, payments, isNew } = args;
   const log = new SaveLog("per-row", "CAPEX panel save");
   const reset = Boolean(args.resetPaidAndPaymentDateComments) && !isNew;
-  log.expect(isNew ? "contract create" : "contract update", ...(reset ? ["paid reset", "payment-date comments"] : []),
+  log.expect(isNew ? "contract create" : "contract update", ...(reset ? ["paid reset"] : []),
     "costs", "cost deletes");
   return logged(log, async () => {
     let contractId = line.id;
@@ -551,15 +573,8 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
           if (payment.paid && payment.id) { paid += 1; await setCostPaid(payment.id, false); }
         }
       }, { count: () => paid });
-      let read = 0;
-      let removed = 0;
-      await log.step("payment-date comments", async () => {
-        read = 1;
-        const existing = await loadComments([contractId]);
-        for (const comment of existing) {
-          if (comment.commentType === COMMENT_TYPE.paymentDate) { removed += 1; await deleteComment(comment.id); }
-        }
-      }, { count: () => read + removed, detail: () => `1 read, ${removed} deleted`, how: () => `1 read, ${plural(removed, "comment")} deleted` });
+      // No payment-date comment deletion (D90): the live canvas `OnConfirm` has its `RemoveIf('Capex Comments', …)`
+      // inside a block comment (`:20061-20065`), so a relink resets the Paid markers only.
     }
 
     const rows: CostRowInput[] = payments.map((p) => ({
@@ -585,7 +600,7 @@ export async function saveCostLineLegacy(args: SaveCostLineArgs): Promise<string
           updated += 1;
         } else {
           unwrap(
-            await Vsb_capexcostsService.create(newCostFields(contractId, owningBusinessUnitId, upsert) as never),
+            await Vsb_capexcostsService.create(newCostFields(contractId, owningBusinessUnitId, upsert, line.standardAssumptionId) as never),
             "create CAPEX cost",
           );
           created += 1;
@@ -690,13 +705,13 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
   // The bulk SAVE is the only panel log with a gate tail: its writes pass the shared `saveGate`,
   // each counted on this save's own meter (D59).
   const log = new SaveLog("bulk", "CAPEX panel save", true);
-  log.expect(isNew ? "contract create" : "contract update", "costs", ...(reset ? ["payment-date comments"] : []), "cost deletes");
+  log.expect(isNew ? "contract create" : "contract update", "costs", "cost deletes");
   const meter = log.meter;
 
   return logged(log, async () => {
     const costs = async (contractId: string) => {
       const targets: UpsertTarget[] = [
-        ...plan.creates.map((c) => ({ id: c.id, isNew: true, fields: newCostFields(contractId, owningBusinessUnitId, c) })),
+        ...plan.creates.map((c) => ({ id: c.id, isNew: true, fields: newCostFields(contractId, owningBusinessUnitId, c, line.standardAssumptionId) })),
         ...plan.updates.map((u) => ({
           id: u.id,
           isNew: false,
@@ -730,8 +745,9 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
       const contract = () => log.step("contract update", () => gatedWrite(() => updateContract(args), meter), { count: () => 1, gated: true });
       const steps: (() => Promise<unknown>)[] = [() => costs(contractId)];
       if (reset) {
+        // The contract (the relink) lands first, then the Paid reset rides in the costs upsert. Payment-date
+        // comments are NOT deleted any more (D90, canvas `:20061-20065`).
         await contract();
-        steps.push(() => resetPaymentDateComments(contractId, log));
       } else {
         steps.unshift(contract);
       }
@@ -752,23 +768,6 @@ export async function saveCostLineBulk(args: SaveCostLineArgs, skipUnchanged: bo
 /** A delete step's readable "How" cell. */
 function deletesHow(n: number): string {
   return n === 0 ? "nothing to delete" : `${plural(n, "row")}, ${PANEL_DELETE_LIMIT} at a time`;
-}
-
-/** The relink's `RemoveIf('Capex Comments', … 'Comments to payment date')`, 4 deletes at a time. */
-async function resetPaymentDateComments(contractId: string, log: SaveLog): Promise<void> {
-  let read = 0;
-  const deleter = counting(gatedCommentDelete);
-  await log.step("payment-date comments", async () => {
-    read = 1;
-    const ids = paymentDateCommentIds(await loadComments([contractId]));
-    await deleteMany(CAPEX_COMMENTS, ids, deleter.run, {
-      limit: PANEL_DELETE_LIMIT, label: "delete CAPEX comment",
-    });
-  }, {
-    count: () => read + deleter.sent(),
-    detail: () => `1 read, ${deleter.sent()} deleted`,
-    how: () => `1 read, ${plural(deleter.sent(), "comment")} deleted`,
-  });
 }
 
 /* ═══════════════════════════════════════════════════════════ delete line ══ */
