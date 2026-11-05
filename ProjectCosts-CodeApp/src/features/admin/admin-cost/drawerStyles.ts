@@ -25,6 +25,11 @@ export const useDrawerStyles = makeStyles({
   column: { display: "flex", flexDirection: "column", rowGap: "14px", minWidth: "0" },
   error: { color: palette.Error, fontWeight: tokens.fontWeightSemibold, fontSize: "12px" },
   inline: { display: "flex", columnGap: "12px", alignItems: "flex-end", flexWrap: "wrap" },
+  /**
+   * `chk_AdminCost_RightPanel_SelectCluster1…5`: one cluster per line, as the canvas lists them. Fluent's
+   * Checkbox is inline-flex, so left in a plain div the short labels ran on (Cluster 2 and 3 shared a line).
+   */
+  checkList: { display: "flex", flexDirection: "column", alignItems: "flex-start" },
   commentBlock: { position: "relative" },
   counter: { position: "absolute", top: "0", right: "0", fontSize: "12px", color: palette.black },
   readOnlyNote: { color: tokens.colorNeutralForeground3, fontSize: "12px" },

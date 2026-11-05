@@ -520,7 +520,7 @@ export default function ContractsSettingsScreen() {
       />
 
       {/* `cmp_PopUp_Loading_AdminBoPContracts` while the delete runs. */}
-      {deleteMutation.isPending ? <LoadingOverlay mode="blocking" label={CARD_TEXT.deleting} /> : null}
+      {deleteMutation.isPending ? <LoadingOverlay mode="blocking" label={CARD_TEXT.deleting} portal /> : null}
     </div>
   );
 }

@@ -95,7 +95,7 @@ export function DevexCostDrawer(props: DevexCostDrawerProps) {
 
         {/* `lbl_AdminCost_RightPanel_Form_AddCost_Fields_SelectCluster.Text` — "Select Cluster". */}
         <Field label="Select Cluster" required>
-          <div role="group" aria-label="Select Cluster" data-testid="chk_AdminCost_RightPanel_SelectClusters">
+          <div role="group" aria-label="Select Cluster" className={styles.checkList} data-testid="chk_AdminCost_RightPanel_SelectClusters">
             {CLUSTER_LABELS.map((label, i) => (
               <Checkbox
                 key={label}

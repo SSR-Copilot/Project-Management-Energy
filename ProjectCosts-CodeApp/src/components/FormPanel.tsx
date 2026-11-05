@@ -151,9 +151,15 @@ export function FormPanel({
           {children}
         </DrawerBody>
         {footerNode ? <div className="canvas-panel-footer">{footerNode}</div> : null}
+        {/*
+          `portal`: the spinner is a child of the drawer in React but lives under `document.body` in the DOM.
+          The drawer slides in with a `translate3d` transform, which makes it the containing block of any
+          `position: fixed` descendant, so an in-drawer scrim was only as wide and tall as the panel. In the
+          body it covers the whole screen, whatever the panel's width or height (D85).
+        */}
         {busyLabel !== undefined
-          ? <LoadingOverlay mode="blocking" label={busyLabel} />
-          : coverLabel !== undefined ? <LoadingOverlay mode="blocking" label={coverLabel} /> : null}
+          ? <LoadingOverlay mode="blocking" label={busyLabel} portal />
+          : coverLabel !== undefined ? <LoadingOverlay mode="blocking" label={coverLabel} portal /> : null}
       </Drawer>
       {guard.dialog}
     </FormPanelContext.Provider>

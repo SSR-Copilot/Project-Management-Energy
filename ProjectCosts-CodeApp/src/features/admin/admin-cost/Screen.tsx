@@ -515,7 +515,7 @@ export default function CostsSettingsScreen() {
         onCancel={dialog.cancel}
       />
 
-      {deleting ? <LoadingOverlay label={MSG.deleting} /> : null}
+      {deleting ? <LoadingOverlay portal label={MSG.deleting} /> : null}
     </div>
   );
 }

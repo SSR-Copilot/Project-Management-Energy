@@ -115,6 +115,10 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
   them permanently disabled with the sync call commented out, so they never did anything; the code app no longer draws them. Tests assert
   they are absent (UT-ADCONTR-936, UT-ADCOST-910).
 - **"…" overflow menu for the country / technology tabs** instead of a scrollbar, in the shared tab strip (CAPEX Accounts too).
+- **Application Settings panel UX fixes (5 Nov 2026, D85, fixed, awaiting approval).** Reported by the product owner on DEV:
+  - **The save spinner covers the whole screen, not just the panel.** The shared `FormPanel` drew its blocking spinner inside the drawer; the drawer slides in with a `translate3d` transform, which makes it the containing block of a `position: fixed` child, so the scrim was only as large as the panel. The spinner is now portalled to the page body for every panel (`busyLabel` and `coverLabel`), and the two screen-level delete spinners of Admin Contract and Admin Cost are portalled too. The canvas spinner is a full-screen component (`cmp_PopUp_Loading`). Tests: UT-SETPANEL-007, 018.
+  - **Admin Cost, DEVEX/CAPEX Add / Edit panel: the five clusters list one per line** (Cluster 2 and 3 had run onto one line). Test: UT-ADCOST-937.
+  - **The panel's Save and Cancel have the canvas hover again** (`hoverButton` fill, `themePrimary` text and icon; Save, `pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save` L10865-10867, and Cancel L10959-10962). The port had left it to Fluent. Applies to every panel that uses the shared footer, so also the Costs and Gates panels. Tests: UT-PANELFTR-011.
 
 **Net on 22 Oct (D36):** a collapsed-rail defect (CA-1) was fixed to follow the live
 `pcf_Left_Navigation_Menu.Items` formula (test `UT-RAIL-003`). Five behaviours still contradict

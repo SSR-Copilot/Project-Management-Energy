@@ -10,7 +10,7 @@
 import type { ReactNode } from "react";
 import { Button, Dropdown, Option, Text, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { CheckmarkRegular, DismissRegular } from "@fluentui/react-icons";
-import { useBrandButtonStyles } from "@/theme/buttonStyles";
+import { useBrandButtonStyles, usePanelFooterHoverStyles } from "@/theme/buttonStyles";
 import { palette } from "@/theme/tokens";
 import { useFormPanel } from "./formPanelContext";
 import { useStandardValueClass, type StandardProp } from "./standardValue";
@@ -252,7 +252,7 @@ export interface PanelButtonsProps {
   /**
    * `"canvas"` (default): the cost / PM panel pair (32 px, 15 px text, the caption is always "Save").
    * `"brand"`: the Application Settings pair — primary Save whose caption is `saveLabel`, and Cancel as the
-   * canvas brand outline (white fill, `themePrimary` text and border; hover is Fluent's own outline hover).
+   * canvas brand outline (white fill, `themePrimary` text and border). Both buttons take the canvas `hoverButton` hover (`usePanelFooterHoverStyles`).
    */
   look?: "canvas" | "brand";
   /** A save is running: disables Save and Cancel. Default false. */
@@ -271,6 +271,7 @@ export function PanelButtons({
 }: PanelButtonsProps) {
   const styles = useStyles();
   const brand = useBrandButtonStyles();
+  const footerHover = usePanelFooterHoverStyles();
   const { requestClose } = useFormPanel();
   const isBrand = look === "brand";
   const subtle = Boolean(!isBrand && subtleWhenDisabled && disabled);
@@ -278,12 +279,12 @@ export function PanelButtons({
   const cancel = onCancel ?? (() => requestClose("cancel"));
   return <>
     {hint ? <Text className={styles.hint} aria-live="polite">{hint}</Text> : null}
-    <Button className={isBrand ? styles.brandButton : mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
+    <Button className={isBrand ? mergeClasses(styles.brandButton, footerHover.hover) : mergeClasses(styles.save, subtle && styles.saveSubtleDisabled)}
       appearance={subtle ? "subtle" : "primary"} icon={<CheckmarkRegular />}
       onClick={onSave} disabled={saving ? true : disabled} title={saveTooltip} aria-label={saveLabel} data-testid={saveTestId}>{saveCaption}</Button>
     {extra}
     {isBrand
-      ? <Button appearance="outline" className={mergeClasses(styles.brandButton, brand.brandOutline, gap === 20 && styles.wideGap)}
+      ? <Button appearance="outline" className={mergeClasses(styles.brandButton, brand.brandOutline, footerHover.hover, gap === 20 && styles.wideGap)}
         icon={<DismissRegular />} disabled={saving} onClick={() => cancel()} aria-label={cancelLabel} data-testid={cancelTestId}>{cancelLabel}</Button>
       : <PanelCancelButton onCancel={cancel} testId={cancelTestId} label={cancelLabel} {...(saving ? { disabled: true } : {})} />}
   </>;

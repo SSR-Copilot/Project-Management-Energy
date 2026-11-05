@@ -516,6 +516,19 @@ describe("CostsSettingsScreen", () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it("UT-ADCOST-937 the DEVEX panel lists the five clusters one per line (D85)", async () => {
+    render(<Harness><CostsSettingsScreen /></Harness>);
+    openSection("DEVEX/CAPEX");
+    fireEvent.click(screen.getByRole("button", { name: "Add Cost" }));
+    const dialog = await screen.findByRole("dialog", { name: /Add Cost/ });
+    const list = within(dialog).getByRole("group", { name: "Select Cluster" });
+    // Fluent's Checkbox is inline-flex: in a plain block the short labels ran on (Cluster 2 and 3 on one line).
+    const css = appliedRules(list);
+    expect(css["display"]).toBe("flex");
+    expect(css["flex-direction"]).toBe("column");
+    expect(within(list).getAllByRole("checkbox")).toHaveLength(5);
+  });
+
   it("UT-ADCOST-932 shows the empty state when no countries load (real data path)", async () => {
     useFixtures.on = false;
     render(<Harness><CostsSettingsScreen /></Harness>);

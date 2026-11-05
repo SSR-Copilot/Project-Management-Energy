@@ -6682,3 +6682,35 @@ covered by `npm run verify` only; no parity run of Team, Planning or Grid Operat
 `29972fa` Team directory entry; merged as `bf472ea`). They are **not in the DEV build** of `988e175`. `RounakDev1` was
 fast-forwarded onto `bf472ea` and `npm run verify` passed on it (220 files, 5,159 tests, `check:power` 93/0, build OK). DEV
 still runs `988e175` until the next push.
+
+## D85 — Application Settings panel UX fixes: full-screen spinner, cluster list, Save / Cancel hover (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV, not product-approved.
+
+**Root causes**
+1. **Spinner sized to the panel.** `FormPanel` rendered its blocking `LoadingOverlay` (`position: fixed`) inside the Fluent
+   `Drawer`. The drawer's slide-in motion ends on `translate3d(0, 0, 0)` (`drawerMotions.js`), and any transform makes the element
+   the containing block of fixed descendants. The scrim therefore took the panel's width and height. Fix: `portal` on both overlays
+   in `FormPanel` (`busyLabel`, `coverLabel`) and on the delete spinners of Admin Contract and Admin Cost. Every Application
+   Settings panel uses `FormPanel`, so all of them are covered; the Costs and PM panels share it and get the same behaviour.
+2. **Clusters not a list.** The `Select Cluster` group in `DevexCostDrawer` was a plain `div`; Fluent's Checkbox is inline-flex, so the
+   short labels ran on. Fix: a flex column (`checkList` in `admin-cost/drawerStyles.ts`).
+3. **Hover lost.** The canvas Save and Cancel of every panel set `HoverFillColor` = `hoverButton` and `HoverFontColor` = `themePrimary`.
+   `PanelButtons look="brand"` (the Application Settings footer) left hover to Fluent on purpose (`buttonStyles.ts` said so). Fix:
+   `usePanelFooterHoverStyles` on both buttons, enabled state only. `brandOutline` itself is unchanged, because the Contracts card buttons share it.
+
+**Interpretation to confirm:** "the hover effect of the popup" was read as the footer Save / Cancel hover. If the owner meant another
+hover (a row, an option list, the ✕), say which and it is a follow-up.
+
+**Tests:** UT-SETPANEL-007 and 018 (rewritten: the spinner is outside the drawer), UT-PANELFTR-011, UT-ADCOST-937.
+**Improvements log:** `13-CODE-APP-IMPROVEMENTS-OVER-CANVAS.md`, Part 2 A.
+
+## D86 — Request Module Permission and Request permission cancellation registered (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not pushed to DEV, not called from any screen.
+
+After the flow owner switched both DEV flows from "Provided by run-only user" to the solution connection references (D81 §3b), `app add flow` succeeded as the `ServiceAccount_DEV` profile (VSBCloud_Dev):
+`483a3074-9166-b822-9e47-a891cafbe68e` (Request Module Permission) and `1a8b4be8-902b-b90c-dcef-1875f75ba7f3` (Request permission cancellation).
+`dataSourcesInfo.ts` lost no entry, each flow has its `shared_logicflows` reference in `power.config.json`, and `check:power` reports 95 registered, 0 problems.
+**Still open:** the Generators screen does not call them (no wrapper in `data/flows.ts`); no live run, because the flows send mail and approvals.
+**E2E parity:** not run for D85 or D86; the user chose to skip it (5 Nov 2026).

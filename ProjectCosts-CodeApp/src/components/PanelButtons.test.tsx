@@ -8,6 +8,7 @@ import { FluentProvider } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
 import { FormPanel } from "./FormPanel";
 import { PanelButtons, type PanelButtonsProps } from "./CanvasFields";
+import { appliedPseudoRules } from "@/test/appliedRules";
 
 function InPanel(props: Partial<PanelButtonsProps> & { dirty?: boolean; onDismiss?: () => void }) {
   const { dirty = false, onDismiss, ...footer } = props;
@@ -159,5 +160,19 @@ describe("PanelButtons look=canvas (the cost / PM panels, unchanged by the Setti
     expect(screen.getByTestId("panel-save")).toBeDisabled();
     expect(screen.getByTestId("panel-save")).toHaveTextContent(/^Save$/);
     expect(screen.getByTestId("panel-cancel")).toBeDisabled();
+  });
+});
+
+describe("PanelButtons look=brand hover (D85)", () => {
+  // Canvas `pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save` / `_Cancel`:
+  // HoverFillColor = hoverButton (#CCE2F1), HoverFontColor = themePrimary (#006eb9).
+  it("UT-PANELFTR-011 Save and Cancel take the canvas hoverButton fill and themePrimary text on hover", () => {
+    render(<InPanel />);
+    for (const name of ["Save", "Cancel"]) {
+      const hover = appliedPseudoRules(button(name), ":hover:enabled");
+      expect(hover["background-color"]).toBe("rgb(204, 226, 241)");
+      expect(hover["color"]).toBe("rgb(0, 110, 185)");
+      expect(hover["border-top-color"]).toBe("rgb(204, 226, 241)");
+    }
   });
 });

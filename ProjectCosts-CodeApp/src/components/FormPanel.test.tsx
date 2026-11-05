@@ -156,10 +156,13 @@ describe("FormPanel", () => {
     expect(screen.queryByText("Discard changes?")).not.toBeInTheDocument();
   });
 
-  it("UT-SETPANEL-007 BusyLabel: the blocking spinner renders inside the drawer surface", () => {
+  it("UT-SETPANEL-007 BusyLabel: the blocking spinner is portalled out of the drawer, so it covers the whole screen (D85)", () => {
     render(<Harness busyLabel="Please wait, saving..." />);
     const surface = screen.getByRole("dialog", { name: "Edit thing" });
-    expect(surface).toHaveTextContent("Please wait, saving...");
+    // A `position: fixed` child of the transformed drawer would be sized to the panel; in the body it is not.
+    const label = screen.getByText("Please wait, saving...", { exact: false });
+    expect(surface.contains(label)).toBe(false);
+    expect(document.body.contains(label)).toBe(true);
     expect(screen.getByRole("button", { name: "Close panel", hidden: true })).toBeDisabled();
   });
 
@@ -305,7 +308,8 @@ describe("FormPanel", () => {
     it("UT-SETPANEL-018 E1d coverLabel shows the blocking cover but ✕ still closes", async () => {
       const onDismiss = vi.fn();
       render(<Plain coverLabel="Loading contract..." onDismiss={onDismiss} />);
-      expect(screen.getByRole("dialog", { name: "Edit thing" })).toHaveTextContent("Loading contract...");
+      const cover = screen.getByText("Loading contract...", { exact: false });
+      expect(screen.getByRole("dialog", { name: "Edit thing" }).contains(cover)).toBe(false);
       const close = screen.getByRole("button", { name: "Close panel", hidden: true });
       expect(close).not.toBeDisabled();
       await userEvent.click(close);
