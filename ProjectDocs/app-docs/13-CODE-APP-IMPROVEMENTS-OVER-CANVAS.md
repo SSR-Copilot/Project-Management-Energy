@@ -181,6 +181,8 @@ earlier decisions D19, D22 and D24 and are waiting on the product owner (D36 §6
 
 - **Side-panel close icon centred in the bar, root cause fixed (5 Nov 2026, D92, fixed, awaiting approval).** Fluent pins the ✕ to the top of its row (`align-self: start`), which left it 8-10 px above the middle on every Cost panel and the Revenues panels; the first fix (D88) made it worse by stretching the row. The ✕ is now centred as the canvas icon is (`Y: =Parent.Height/2-Self.Height/2`), and the stray Fluent focus box around it is hidden.
 
+- **Capex panel, six more Canvas parities from test run 2 (5 Nov 2026, D96, fixed, awaiting approval).** An Individual contract's months are checked when Save is clicked, with the Canvas strip texts, instead of silently disabling Save; an unreadable or cleared month box is blank after Recalculate; the Link to Milestone and Distribution Frequency dropdowns carry the Canvas control names (and the identity gate now covers `CostSelect`); a duplicate standard contract is an Information notice and leaves the menu; a standard contract whose payments come out empty is refused; the paid write shows the Canvas spinner texts.
+
 ### E. Cost — Add Cost from Table
 
 | Canvas challenge | Code app |
