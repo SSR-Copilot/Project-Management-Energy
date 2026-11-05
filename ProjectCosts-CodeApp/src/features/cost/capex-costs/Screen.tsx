@@ -56,7 +56,7 @@ import {
   buildStandardOptions, checkStandardContractClick, standardAssumptionAmount, standardContractRefusal,
 } from "./standardContracts";
 import {
-  clusterPayments as clusterMoneyPayments, contractTotalToStore, EDITED_FROM_SPREADSHEET_WARNING, showEditedFromSpreadsheetWarning,
+  clusterPayments as clusterMoneyPayments, contractTotalToStore, EDITED_FROM_SPREADSHEET_WARNING, individualSaveError, showEditedFromSpreadsheetWarning,
 } from "./rules";
 import type { GridCallback } from "./pcf/ui/GridRenderer";
 import {
@@ -81,7 +81,7 @@ import {
   PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
   PAID_CONFIRM_TITLE,
   RECALCULATE_ALLOCATED_COST,
-  allocatedCostLabel, capexWriteStatusLabel, clusterCheckboxState, confirmButtonWidth,
+  allocatedCostLabel, capexWriteStatusLabel, PAID_SAVING, PAID_CONFIRMED_SAVING, clusterCheckboxState, confirmButtonWidth,
   defaultSelectedYear, deleteContractDescription,
   LOADING_COST, LOADING_DATA,
   distributionLocked, enabledClusters, gridActionAllowed, isoToMonthYear, monthYearLabel,
@@ -298,6 +298,14 @@ export default function CapexCostsScreen() {
   const [touched, setTouched] = useState(false);
   /** A standard contract's live duplicate check is in flight: a second click meanwhile is ignored (CAPEX-135, D90). */
   const standardChecking = useRef(false);
+  /** The Canvas error strip shown when Save is clicked on an Individual contract whose months do not add up (CAPEX-105, D91). */
+  const [contractError, setContractError] = useState<string | null>(null);
+  /** The spinner text of the Paid write in flight (CAPEX-055, D91). */
+  const [paidLabel, setPaidLabel] = useState<string | null>(null);
+  /** Standard options the live lookup found already created: removed from the menu, as the Canvas `RemoveIf` does (CAPEX-135, D91). */
+  // Tied to the lines it was learnt from: once the book reloads (a new `lines` array) the list is forgotten, so an option whose
+  // contract was deleted meanwhile comes back (retest of CAPEX-135).
+  const [staleStandard, setStaleStandard] = useState<{ lines: unknown; keys: ReadonlySet<string> }>({ lines: undefined, keys: new Set() });
   /**
    * What the user TYPED in each month box, keyed `"<year>-<month>"` (D93/D90). A `type="number"` box reports `""` for a
    * letter and the model keeps a number, so a typed "abc" was swallowed and its message ("Value must be a numeric") could
@@ -433,7 +441,10 @@ export default function CapexCostsScreen() {
   const writeFeedback = <>
     {/* CA-15: a write still running from another screen (or an earlier visit) says so. */}
     <WriteStatus testId="capex-write-status" label={costWriteStatusLabel({
-      ownLabel: capexWriteStatusLabel({ pending: busy, standardName, savingLabel, commentsSaving }),
+      ownLabel: capexWriteStatusLabel({
+        pending: busy, standardName, savingLabel, commentsSaving,
+        paidLabel: writes.setPaid.isPending ? paidLabel : null,
+      }),
       ownPending: busy || commentsSaving, writeInFlight,
     })} />
     {actionError ? <div className="canvas-error" role="alert">{actionError}</div> : null}
@@ -467,6 +478,7 @@ export default function CapexCostsScreen() {
 
   const update = (patch: Partial<CostLine>) => {
     setTouched(true);
+    setContractError(null);
     setEdit(current => current ? { ...current, ...patch } : null);
   };
 
@@ -490,6 +502,7 @@ export default function CapexCostsScreen() {
       : newCostLine(accountId, crypto.randomUUID(), book.accounts.find(a => a.id === accountId)?.defaultPayer);
     setEdit(next);
     setTouched(false);
+    setContractError(null);
     setMonthText({});
     setStartText(isoToMonthYear(next.startDate));
     setEndText(isoToMonthYear(next.endDate));
@@ -501,7 +514,7 @@ export default function CapexCostsScreen() {
     setLinkConfirmOpen(false);
   };
 
-  const closePanel = () => { setEdit(null); setOpenYear(null); setLinkConfirmOpen(false); };
+  const closePanel = () => { setEdit(null); setOpenYear(null); setLinkConfirmOpen(false); setContractError(null); };
 
   /*
    * ── the standard-contract cluster timeline ───────────────────────────────────────────────
@@ -540,7 +553,9 @@ export default function CapexCostsScreen() {
       .map(l => ({ subaccountId: l.accountId, standardAssumptionId: l.standardAssumptionId })),
     clusters: standardClusters,
   });
-  const pcfStandardOptions = standardOptions.map(o => ({
+  const pcfStandardOptions = standardOptions
+    .filter(o => !(staleStandard.lines === book.lines && staleStandard.keys.has(`${o.assumption.subaccountId}|${o.assumption.id}`)))
+    .map(o => ({
     id: o.assumption.id, subaccountId: o.assumption.subaccountId, name: o.assumption.description,
   }));
 
@@ -551,7 +566,11 @@ export default function CapexCostsScreen() {
       alreadyExists: !option,
     });
     // The canvas `Notify(…, Warning)` (`:7371-7393`), as the app's toast rather than a browser alert (D90).
-    if (!check.ok) { if (check.message) notify.warning(check.message); return; }
+    // "Select a valid sub-account" is a Warning; "already created" is an Information notice (`:7371-7393`).
+    if (!check.ok) {
+      if (check.message) (subaccountId ? notify.info : notify.warning)(check.message);
+      return;
+    }
     const { assumption, eligible } = option!;
     // No cluster with usable dates: the canvas refuses here with an Information notice and creates nothing
     // (`:18609-18634`). The menu offers the assumption by start cluster only (`isOfferedByStartCluster`).
@@ -566,6 +585,9 @@ export default function CapexCostsScreen() {
     const payments = clusterMoneyPayments(
       amt, eligible.map(c => c.order), assumption.distributionFrequency, standardBoundaries,
     );
+    // The Canvas' second guard (`:18758-18795`): the eligible clusters gave no payment at all, so nothing is created and the
+    // same Information notice is shown (it created the contract first and removed it again; the end state is the same).
+    if (payments.length === 0) { notify.info(standardContractRefusal([]) ?? ""); return; }
     const newLine: CostLine = {
       id: crypto.randomUUID(), accountId: subaccountId, description: assumption.description,
       payer: assumption.costPaidBy === 952850001 ? "DevCo" : "SPV",
@@ -594,8 +616,14 @@ export default function CapexCostsScreen() {
     void writes.standardExists(subaccountId, assumption.id).then(
       exists => {
         standardChecking.current = false;
-        if (exists) notify.warning(checkStandardContractClick({ subaccountSelected: true, alreadyExists: true }).message ?? "");
-        else create();
+        if (exists) {
+          // Information, and the option leaves the menu (`RemoveIf(colStandardContractOptionsForPCF, …)`, `:7383-7393`).
+          notify.info(checkStandardContractClick({ subaccountSelected: true, alreadyExists: true }).message ?? "");
+          setStaleStandard(prev => ({
+            lines: book.lines,
+            keys: new Set(prev.lines === book.lines ? prev.keys : []).add(`${subaccountId}|${assumption.id}`),
+          }));
+        } else create();
       },
       () => { standardChecking.current = false; create(); },
     );
@@ -634,7 +662,7 @@ export default function CapexCostsScreen() {
       // Marking a cluster-linked, individually-distributed cost paid also clears the cluster
       // link for the WHOLE contract, so the canvas asks first (`:19833`).
       if (line && paidToggleNeedsConfirmation(line)) setPaidRequest(request);
-      else writes.setPaid.mutate(request);
+      else { setPaidLabel(PAID_SAVING); writes.setPaid.mutate(request); }
     }
   };
 
@@ -768,6 +796,7 @@ export default function CapexCostsScreen() {
   const linkToMilestoneField = edit && linkToMilestoneVisible(edit) ? (
     <CostSelect label={LINK_TO_MILESTONE_LABEL} required value={selectedMilestone}
       testId="drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster"
+      ariaLabel="drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster"
       options={[NO_MILESTONE, ...milestones.map(m => m.name)]}
       onChange={v => {
         const hit = milestones.find(m => m.name === v);
@@ -861,6 +890,9 @@ export default function CapexCostsScreen() {
    */
   const commit = async () => {
     if (!edit || !valid) return;
+    // The Canvas checks the months when Save is clicked, and shows its error strip instead of saving (`locShowErrorInContractCost`).
+    const refusal = individualSaveError(edit.distribution, edit.distributionScheme, rawProposed);
+    if (refusal) { setContractError(refusal); return; }
     if (needsLinkConfirmation) { setLinkConfirmOpen(true); return; }
     await persist();
   };
@@ -911,6 +943,7 @@ export default function CapexCostsScreen() {
     </>}
 
     <FormPanel centerClose open={!!edit} width="cost" onDismiss={closePanel}
+      {...(contractError ? { messages: { error: contractError } } : {})}
       title={panelTitle(isEdit, book.accounts.find(a => a.id === edit?.accountId)?.name ?? "")}
       footer={<PanelButtons onSave={() => { void commit(); }} onCancel={closePanel}
         disabled={!valid || writesDisabled}
@@ -927,8 +960,14 @@ export default function CapexCostsScreen() {
             disabled={busy || !recalculateEnabled({ line: edit, costValue, saveEnabled: valid })}
             onClick={() => {
               if (!edit) return;
-              // The boxes show the rounded figures, not the text that was typed (D93/D90).
-              setMonthText({});
+              // The boxes show the rounded figures, not the text that was typed (D93/D90). Text that could not be read
+              // as a number ("abc") leaves its box BLANK, as the Canvas does (`Value()` of it is blank), not "0" (CAPEX-085, D91).
+              // The model keeps 0 for it, so nothing stored is deleted by typing a letter.
+              setMonthText(Object.fromEntries(
+                Object.entries(monthText)
+                  .filter(([, text]) => parseNumber(text, locale) === undefined)
+                  .map(([key]) => [key, ""]),
+              ));
               update({ payments: recalculatedPayments(edit.payments, edit.distributionScheme) });
             }} />
         ) : undefined} />}>
@@ -982,7 +1021,7 @@ export default function CapexCostsScreen() {
               <CostField label={costLabel("Total Costs", { isoCurrencyCode })}
                 name="txt_AddContract_RightPanel_TotalCost_1" required
                 value={costValue} type="text" inputMode="numeric" maxLength={512} standard={edit.standard} error={totalCostError ?? undefined}
-                onChange={v => { setTouched(true); setCostValue(v); }} />
+                onChange={v => { setTouched(true); setContractError(null); setCostValue(v); }} />
             ) : null}
             {/* `con_…_Form_Link_to_Cluster` sits above the Cost Paid By radio (`:11178` vs
               * `:12100`), and an individual distribution has no cluster or date fields between
@@ -999,7 +1038,7 @@ export default function CapexCostsScreen() {
             <CostField label={costLabel("Total Costs", { isoCurrencyCode })}
               name="txt_AddContract_RightPanel_TotalCost_1" required
               value={costValue} type="text" inputMode="numeric" maxLength={512} standard={edit.standard} error={totalCostError ?? undefined}
-              onChange={v => { setTouched(true); setCostValue(v); }} />
+              onChange={v => { setTouched(true); setContractError(null); setCostValue(v); }} />
             {edit.equalMode === "cluster" ? (
               // `.canvas-field` so the label matches every other field's, star and all.
               <div className="canvas-field">
@@ -1052,6 +1091,7 @@ export default function CapexCostsScreen() {
             </>}
             <CostSelect label="Distribution Frequency" required
               testId="drp_AddContract_RightPanel_PaymentFrequency_1"
+              ariaLabel="drp_AddContract_RightPanel_PaymentFrequency_1"
               value={frequencyLabel(edit.frequency)}
               options={FREQUENCY_OPTIONS.map(frequencyLabel)}
               onChange={v => update({ frequency: parseInt(v, 10) })} />
@@ -1220,7 +1260,7 @@ export default function CapexCostsScreen() {
       onCancel={() => setPaidRequest(null)}
       onConfirm={() => {
         // `OnConfirm` clears the contract's Linked Cluster, THEN marks the month paid (`:19875`, D90).
-        if (paidRequest) writes.setPaid.mutate({ ...paidRequest, clearLinkedCluster: true });
+        if (paidRequest) { setPaidLabel(PAID_CONFIRMED_SAVING); writes.setPaid.mutate({ ...paidRequest, clearLinkedCluster: true }); }
         setPaidRequest(null);
       }} />
 

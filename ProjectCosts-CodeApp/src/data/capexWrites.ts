@@ -121,14 +121,12 @@ export interface SaveCostLineArgs extends CapexWriteContext {
    *
    *     UpdateIf('CAPEX Costs', Contract = <this contract> && 'Cost Paid' = true,
    *              {'Cost Paid': false});
-   *     RemoveIf('Capex Comments',
-   *              'Capex Contract' = <this contract>
-   *              && 'Comment Type' = 'Capex Comment Type'.'Comments to payment date')
    *
-   * because "Paid" markers and payment-date comments are not supported on a milestone-linked
-   * cost — which is exactly what the dialog's third bullet promises the user. Folding it into
-   * the save keeps the promise and the write in one place; `needsClusterLinkageConfirmation`
-   * (`features/capex-costs/rules.ts`) decides whether the dialog is shown at all.
+   * because "Paid" markers are not supported on a milestone-linked cost. (An older export also ran a `RemoveIf('Capex
+   * Comments', … 'Comments to payment date')` here; in the live YAML it is inside a block comment, `:20061-20065`, so
+   * payment-date comments are KEPT, D90.) Folding it into the save keeps the promise and the write in one place;
+   * `needsClusterLinkageConfirmation` (`features/capex-costs/rules.ts`) decides whether the dialog is shown at all. The flag's
+   * name is kept for its pins; it resets Paid markers only.
    */
   resetPaidAndPaymentDateComments?: boolean;
   /**

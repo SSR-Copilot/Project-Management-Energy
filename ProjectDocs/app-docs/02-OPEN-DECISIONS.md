@@ -6779,8 +6779,8 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 
 ## D90 — DEVEX/CAPEX: the open decisions settled "follow the Canvas" (5 Nov 2026)
 
-**Status:** built on `RounakDev1`, not committed, not pushed to DEV. **Decision rule given by the product owner:** where the test run (`CAPEX-RUN-REPORT-2026-11-05.md`,
-`CAPEX-PO-DECISIONS-2026-11-05.md`) left a choice between the Canvas and the code app, take the Canvas. Each answer below was cross-checked against the live YAML
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV. **Decision rule given by the product owner:** where the test run 1 (its report and the product-owner decision paper were later deleted; their findings are in this entry and in the Run 2 workbook,
+`FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx`) left a choice between the Canvas and the code app, take the Canvas. Each answer below was cross-checked against the live YAML
 (`Capex Costs Screen.pa.yaml`, solution 1.21.709) before the code changed. Nothing is approved by a product owner beyond that instruction.
 
 | Case | Canvas (verified) | Change |
@@ -6836,7 +6836,7 @@ the month boxes of an Individual contract (D93); no browser check of any of this
 | D93 month boxes | text inputs | the typed text is kept per month and validated as typed ("Value must be a numeric" shows); Recalculate clears it |
 
 **Case workbook:** `_source/CAPEX.json` corrected for the 11 ambiguous cases and the wrong texts (CAPEX-083, 067, 182, 093/100 pins, 012 and 145 rule names), rebuilt as
-`FT-CAPEX-Capex-Costs-2026-11-05-v2.xlsx` (188 cases, all Not Run, health checks 0). Run 1 stays in `...-run1.xlsx` as evidence. Not yet run against the new build.
+a v2 catalogue, since replaced by `FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx` (run 2, below, D95). The run-1 files were deleted.
 **Not done:** the live Canvas-versus-Code run; the 9 live-run cases; the FT-ACC accounts; a data-layer test for `clearLinkedCluster` (the Screen test pins the call, the write itself is typechecked only);
 an updated-contract's blank `Initial Contract Source` (the Canvas writes Powerapps on any save; the code writes it on create only).
 
@@ -6882,3 +6882,53 @@ is loading. The Save gate (`canSaveType`) is unchanged.
 - Not covered: the Replace Generator panel uses the same cost rule and still shows no reason.
 
 **Open for the product owner:** approve the warning and its wording; decide whether Replace Generator gets the same.
+
+## D94 — DEV push of 56c9e55 (5 Nov 2026)
+
+**What went to VSBCloud_Dev** (app `807a2fba-665c-40f3-b158-ffe822aa7da4`): `master` = `RounakDev1` = `56c9e55`. On top of the D87 build (`a3056b1`) it adds the Cost side-panel work
+(D88: full-screen write spinner, ✕ opt-in), the Capex decisions and failure fixes (D90, D91, D93), the ✕ root-cause fix (D92), and Sourabh's PM navigation shell and
+Project Management screens (merged from `master`, with his D89 Generators Save warning).
+
+**Checklist**
+1. `npm ci`: passed (nothing was running on ports 3000 or 8080).
+2. `check:power`: 95 registered, 0 problems.
+3. `npm run verify`: exit 0, 222 files, 5,227 tests, build OK. The FIRST full run failed on UT-ADGATE-915 (`admin-gates-approvals`, a file not touched here; jsdom timing
+   under full-suite load, 9.8 s), which passes alone (33/33); the re-run was clean. This is the second time in four full runs that this test failed, so it is worth stabilising.
+4. Hygiene: knip lists 40 unused files, the D87 count (36 baseline plus the four generated files of the two flows no screen calls yet). The only byte-identical files are the
+   three generated `*MultipleModel.ts` stubs (waived, D51).
+5. Local smoke test: waived for the agent. **Owed by the user** on the deployed app.
+6. Environment: `pac auth list` and `pac org who` show VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`), profile `ServiceAccount_DEV`.
+7. Push accepted (`app push --non-interactive`, CLI 1.3.0). It rewrote only the line endings of `power.config.json`; restored with `git checkout`.
+
+**To check on the deployed app:** the ✕ centred in the blue bar on every Cost panel and the two Revenues panels; Save and Cancel hover; a save dims the whole page; Capex: a letter in
+Total Costs and in a month box shows its message; Save disabled on an opened contract until something changes; the cluster-linked paid dialog clears the link; the new PM navigation.
+**E2E parity:** not run (skipped by the user). **Flows:** the two registered flows are not called; no flow was run.
+
+## D95 — DEVEX/CAPEX test run 2 (5 Nov 2026)
+
+**Build:** `RounakDev1` = `master` = `56c9e55` (on DEV since D94). **Workbook:** `ProjectDocs/test-cases/Cost/FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx` (fresh from the template, all 188 cases recorded, sheet "Run 2 Report" holds the detail).
+The run-1 workbooks, the run-1 report and the product-owner decision paper for this screen were deleted at the product owner's request (recoverable from git history).
+
+**Result:** 164 Pass, 6 Fail, 7 Blocked (2 ambiguous + 5 access cases needing one account per role), 11 Not Run (live run). Unit suite on this build: 5,227 passed, 0 failed; all 130 cases that cite a unit test have every cited test passing.
+**Method and limit:** NOT a live Canvas-versus-Code run (no sessions, URLs, test project or role accounts). 76 cases were independently re-reviewed against the live YAML and the current code by four reviewers (every run-1 failure and ambiguity, plus every
+run-1 pass with no unit test); 98 pinned run-1 passes were carried with their pins re-run.
+**Open failures:** CAPEX-105 (the code's "months sum to 100 %" gate still blocks Save for a % month above 100, so D90 A-03 was half done), CAPEX-085 (a letter in a month box becomes 0 after Recalculate: a D93 regression), CAPEX-171 (two dropdowns' `aria-label`),
+CAPEX-135, 140 (stale option not removed from the menu; no empty-payments guard), CAPEX-055 (status text wording). Nothing is fixed yet; this entry only records the run.
+
+## D96 — The six failures of test run 2 fixed and retested (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV. Same rule as D90: follow the Canvas; each point checked against the live YAML.
+
+| Case | Canvas | Change |
+|---|---|---|
+| CAPEX-105 (Medium) | `locValidCostInContract` (the % sum of 100, or "No cost is allocated.") is evaluated in the Save `OnSelect` (`:17574`), not in its `DisplayMode`; the strip texts are `cmp_ShowErrorInContract.ErrorTitle` (`:19760-19790`) | Save is enabled for an Individual contract (a total is still needed for % Values); a click that does not add up shows "Total percentage is over/below 100%" or "No cost is allocated." and saves nothing (`individualSaveError`). A negative month and a contract with no month no longer disable Save either |
+| CAPEX-085 (Medium) | `Value()` of unreadable text is blank | after Recalculate a box with unreadable or emptied text stays blank, not "0" |
+| CAPEX-171 (Medium) | `AccessibleLabel` of `drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster` and `drp_AddContract_RightPanel_PaymentFrequency_1` | `CostSelect ariaLabel`; the identity gate now checks `CostSelect` |
+| CAPEX-135 (Low) | a duplicate is an Information notice AND `RemoveIf` takes the option out of the menu (`:7383-7393`) | Information notice; the option leaves the menu until the book reloads |
+| CAPEX-140 (Low) | second guard: the payments come out empty, nothing stays created, same notice (`:18758-18795`) | refused before creating, same notice |
+| CAPEX-055 (Low) | paid toggle "Please wait, saving..." (`:7656`); cluster-linked confirm "Please wait..." (`:19875`) | the paid write shows those texts |
+
+**Case file:** CAPEX-132 (Expected said the code deletes comments), 134 (steps now name where the costs sit; still judged ambiguous before that last wording change, not re-judged) and 182 (pinned_by) corrected in `_source/CAPEX.json` and the workbook.
+**Verification:** `npm run verify` exit 0, 222 files, 5,237 tests; two independent retests: 105, 085, 171, 135, 140, 055, 132 PASS; 134 stays Blocked. Workbook `FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx`: 171 Pass, 0 Fail, 6 Blocked (134 and the 5 access cases), 11 Not Run (live).
+**Residuals found by the reviewers, not fixed:** a cleared or unreadable month still stores 0 (Save overwrites that month's stored cost with 0; the Canvas writes no row; the cleared-box part existed before run 2); a negative Absolute total passes the click check and the code sums raw months where the Canvas sums rounded ones; the paid spinner keeps "Please wait..." for the whole write.
+**Not done:** a live Canvas-versus-Code run; the 11 live cases; the 5 access cases need one account per role.

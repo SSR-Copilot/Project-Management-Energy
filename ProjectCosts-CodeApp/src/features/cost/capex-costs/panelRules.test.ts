@@ -4,7 +4,7 @@ import {
   PAID_CONFIRM_BOX_HEIGHT, PAID_CONFIRM_DESCRIPTION, PAID_CONFIRM_TEXT_HEIGHT,
   PAID_CONFIRM_TITLE,
   RECALCULATE_ALLOCATED_COST, SAVING_COST, SAVING_COSTS,
-  allocatedCostLabel, capexWriteStatusLabel, clusterCheckboxState, confirmButtonWidth,
+  allocatedCostLabel, capexWriteStatusLabel, PAID_SAVING, PAID_CONFIRMED_SAVING, clusterCheckboxState, confirmButtonWidth,
   defaultSelectedYear,
   distributionLocked, enabledClusters, gridActionAllowed, isoToMonthYear, monthYearLabel,
   monthYearToIso,
@@ -432,5 +432,19 @@ describe("Recalculate Allocated Cost", () => {
       recalculatedPayments(payments, "absolute");
       expect(payments).toEqual([{ year: 2020, month: 1, amount: 1.4, paid: false }]);
     });
+  });
+});
+
+describe("the Paid write's spinner text (D91, CAPEX-055)", () => {
+  // `Btn_CodeforSettingCostPaidUnpaid` (:7656) "Please wait, saving..."; the cluster-linked OnConfirm (:19875) "Please wait...".
+  it("UT-CAPEXPAID-001 the Paid toggle and its cluster-linked confirm carry the Canvas texts, not the generic costs text", () => {
+    const base = { pending: true, standardName: null, savingLabel: null };
+    expect(PAID_SAVING).toBe("Please wait, saving...");
+    expect(PAID_CONFIRMED_SAVING).toBe("Please wait...");
+    expect(capexWriteStatusLabel({ ...base, paidLabel: PAID_SAVING })).toBe("Please wait, saving...");
+    expect(capexWriteStatusLabel({ ...base, paidLabel: PAID_CONFIRMED_SAVING })).toBe("Please wait...");
+    // Without a Paid write the panel save keeps its own text; a standard contract keeps naming its assumption.
+    expect(capexWriteStatusLabel({ ...base, paidLabel: null })).toBe("Please wait, saving costs...");
+    expect(capexWriteStatusLabel({ ...base, standardName: "Standard O&M", paidLabel: PAID_SAVING })).toContain("Standard O&M");
   });
 });
