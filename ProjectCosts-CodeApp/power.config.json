@@ -110,6 +110,30 @@
         "workflowDisplayName": "Perform Request of Check List Approval Cancellation",
         "workflowName": "67e2929f-a73e-a2b3-039c-569b58bda414"
       }
+    },
+    "30eacfd7-b2fc-4386-9028-5db0054b780e": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "requestmodulepermission"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "012da197-8af6-ee11-a1fd-000d3aad43e7",
+        "workflowDisplayName": "Request Module Permission",
+        "workflowName": "483a3074-9166-b822-9e47-a891cafbe68e"
+      }
+    },
+    "3145e624-c21c-4aff-9056-48ffb2a0bedb": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "requestpermissioncancellation"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "9bf89932-f4ea-ee11-a203-000d3aad43e7",
+        "workflowDisplayName": "Request permission cancellation",
+        "workflowName": "1a8b4be8-902b-b90c-dcef-1875f75ba7f3"
+      }
     }
   },
   "databaseReferences": {

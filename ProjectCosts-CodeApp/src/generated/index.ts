@@ -19,6 +19,8 @@ export * as PerformCommonRequestofCheckListApprovalModel from './models/PerformC
 export * as PerformCommonRequestofGateApprovalModel from './models/PerformCommonRequestofGateApprovalModel';
 export * as PerformRequestofCheckListApprovalCancellationModel from './models/PerformRequestofCheckListApprovalCancellationModel';
 export * as PerformRequestofGateApprovalCancellationModel from './models/PerformRequestofGateApprovalCancellationModel';
+export * as RequestModulePermissionModel from './models/RequestModulePermissionModel';
+export * as RequestpermissioncancellationModel from './models/RequestpermissioncancellationModel';
 export * as RolesModel from './models/RolesModel';
 export * as SystemusersModel from './models/SystemusersModel';
 export * as TeamsModel from './models/TeamsModel';
@@ -114,6 +116,8 @@ export * from './services/PerformCommonRequestofCheckListApprovalService';
 export * from './services/PerformCommonRequestofGateApprovalService';
 export * from './services/PerformRequestofCheckListApprovalCancellationService';
 export * from './services/PerformRequestofGateApprovalCancellationService';
+export * from './services/RequestModulePermissionService';
+export * from './services/RequestpermissioncancellationService';
 export * from './services/RolesService';
 export * from './services/SystemusersService';
 export * from './services/TeamsService';

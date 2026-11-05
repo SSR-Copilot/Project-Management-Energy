@@ -22,7 +22,7 @@
  *   cancelChecklistApproval    Perform Request of Check List Approval Cancellation
  *                              text CheckList Guid → `success`
  *
- * Still to add (blocked on the flows' run-only connections, D81 §3b): Request Module Permission and Request permission
+ * Registered 5 Nov 2026 (the run-only connections were switched to connection references, D81 §3b), NOT yet wrapped or called: Request Module Permission and Request permission
  * cancellation (Project Generators).
  */
 import type { IOperationResult } from "@microsoft/power-apps/data";
