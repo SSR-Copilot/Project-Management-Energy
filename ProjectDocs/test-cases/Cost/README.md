@@ -15,13 +15,13 @@ decide where the expected result follows the code app instead (columns W and X).
 | File | Screen | Cases | FT-ACC | FT-BR | P1 | FT-BR with a UT pin | Automated now |
 |---|---|---|---|---|---|---|---|
 | `FT-CONTR-Contracts-2026-11-04.xlsx` | Contracts | 108 | 091–095 | 103 | 49 | 70 | 0 |
-| `FT-CAPEX-Capex-Costs-2026-11-04.xlsx` | Capex Costs (DEVEX/CAPEX) | 188 | 096–100 | 183 | 80 | 145 | 0 |
+| `FT-CAPEX-Capex-Costs-Run2-2026-11-05.xlsx` (run 2 recorded; has a "Run 2 Report" sheet) | Capex Costs (DEVEX/CAPEX) | 188 | 096–100 | 183 | 80 | 145 | 0 |
 | `FT-OPEX-Opex-Costs-2026-11-04.xlsx` | Opex Costs (both tabs) | 105 | 101–105 | 100 | 38 | 89 | 0 |
 | `FT-LEASE-Land-Lease-Costs-2026-11-04.xlsx` | Land Lease Costs | 110 | 106–110 | 105 | 25 | 89 | 68 |
 | `FT-ADDCOST-Add-Costs-from-Table-2026-11-04.xlsx` | Add Costs from Table | 87 | 111–115 | 82 | 45 | 66 | 0 |
 | **Total** | | **598** | **25** | **573** | **237** | **459** | **68** |
 
-- **All cases are Not Run.** Execution columns Y–AG and the Execution Log are empty until a run.
+- **Every workbook is all Not Run except Capex, which was run on 5 Nov 2026 (run 2 then a retest of the fixes: 171 Pass, 0 Fail, 6 Blocked, 11 Not Run; see its Run 2 Report sheet).** Execution columns Y–AG and the Execution Log are empty until a run.
 - **Excel recalculated each file on 4 Nov 2026.** Every Summary health check reads 0, and every
   row resolves its Phase and Screen Code.
 - **FT-ACC ids follow the template's migration order.** Admin takes 001–030, Project Management
