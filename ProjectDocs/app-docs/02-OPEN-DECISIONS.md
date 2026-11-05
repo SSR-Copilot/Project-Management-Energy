@@ -6655,3 +6655,30 @@ with plumbing and no working tree (a temporary `GIT_INDEX_FILE`, `read-tree mast
 the parent is `azure/develop`. Result: 217 files changed, +33,524 / −798 against the D78 snapshot, 956 files, the
 fast-forward confirmed by a fetch. Credentials came from Git Credential Manager; no PAT was typed or stored. The
 procedure is now in CONVENTIONS, "The Azure DevOps mirror".
+
+
+## D84 · DEV push of `master` `988e175` (4 Nov 2026)
+
+**What was done.** The build of `988e175` (`RounakDev1` = `master` = GitHub) was pushed to VSBCloud_Dev, app
+`807a2fba-665c-40f3-b158-ffe822aa7da4`, with `npx -y @microsoft/power-apps-cli@1.3.0 app push --non-interactive`. Against
+D83 (`b517659`) it adds the four Project Management parity commits from the team (Team, Planning, Grid Operator and the
+shared `FormPanel`, merged by Sourabh Kumar) and the Cost-module functional test-case workbooks (docs only).
+
+**Checklist** (CONVENTIONS, "Before pushing to DEV"):
+1. `npm ci`: passed, with the dev servers stopped.
+2. `check:power`: 93 registered, 0 problems.
+3. `npm run verify`: exit 0, 220 files, 5,159 tests (3 todo), build OK.
+4. Hygiene: knip lists 36 unused files, the D83 baseline. The only byte-identical files are the three generated
+   `*MultipleModel.ts` stubs (waived, D51).
+5. Local smoke test: waived for the agent, as in D83. Owed by the user on the deployed app.
+6. Environment: `pac auth list` and `pac org who` show VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`), the
+   profile `ServiceAccount_DEV`.
+7. Push accepted. The CLI rewrote only the line endings of `power.config.json`; restored with `git checkout`.
+
+**E2E parity:** not run for this push. The user chose to skip it for the docs-only commit. The four PM commits were
+covered by `npm run verify` only; no parity run of Team, Planning or Grid Operator was made here.
+
+**After the push (5 Nov 2026):** two more PM commits reached GitHub `master` (`148500d` project list and app header parity,
+`29972fa` Team directory entry; merged as `bf472ea`). They are **not in the DEV build** of `988e175`. `RounakDev1` was
+fast-forwarded onto `bf472ea` and `npm run verify` passed on it (220 files, 5,159 tests, `check:power` 93/0, build OK). DEV
+still runs `988e175` until the next push.
