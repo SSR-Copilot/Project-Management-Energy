@@ -52,4 +52,11 @@ describe("WriteStatus", () => {
     expect(scrim.querySelector('[aria-label="Waiting"]')).not.toBeNull();
     expect(window.getComputedStyle(scrim).position).toBe("fixed");
   });
+
+  it("UT-WSTATUS-005 the overlay is portalled to the body, so a write started inside a side panel covers the whole screen (D88)", () => {
+    render(withTheme(<div data-testid="panel"><WriteStatus label="Saving..." testId="p-write-status" /></div>));
+    const overlay = screen.getByTestId("p-write-status");
+    expect(screen.getByTestId("panel").contains(overlay)).toBe(false);
+    expect(document.body.contains(overlay)).toBe(true);
+  });
 });

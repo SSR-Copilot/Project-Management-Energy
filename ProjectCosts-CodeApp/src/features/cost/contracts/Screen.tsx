@@ -813,7 +813,7 @@ export default function ContractsScreen() {
       )}
 
       {/* ── the Development / Construction contract panel ───────────────── */}
-      <FormPanel
+      <FormPanel centerClose
         open={panel === "contract"}
         title={panelTitle(editing, form.contractType)}
         onDismiss={() => setPanel("none")}
@@ -1031,7 +1031,7 @@ export default function ContractsScreen() {
       </FormPanel>
 
       {/* ── the Project Rights contract panel ───────────────────────────── */}
-      <FormPanel
+      <FormPanel centerClose
         open={panel === "rights"}
         title={panelTitle(editing, CONTRACT_TYPE.ProjectRights)}
         width="narrow"
@@ -1079,7 +1079,7 @@ export default function ContractsScreen() {
       </FormPanel>
 
       {/* ── the payment-target panel ────────────────────────────────────── */}
-      <FormPanel
+      <FormPanel centerClose
         open={panel === "target"}
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"

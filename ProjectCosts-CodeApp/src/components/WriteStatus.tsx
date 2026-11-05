@@ -34,7 +34,10 @@ interface WriteStatusProps {
 export function WriteStatus({ label, testId }: WriteStatusProps) {
   const styles = useStyles();
   const text = label || "";
-  if (text) return <LoadingOverlay mode="blocking" label={text} testId={testId} />;
+  // `portal` (D88): Add Costs from Table and the Capex comments panel render this INSIDE a side panel. A drawer's
+  // slide-in transform makes it the containing block of `position: fixed`, so an in-panel scrim was only
+  // panel-sized. In the page body it covers the whole screen, whatever the panel's size.
+  if (text) return <LoadingOverlay mode="blocking" label={text} testId={testId} portal />;
   // An empty, always-present live region for the idle state (screen readers like a region that
   // already exists before it gets content).
   return <span className={styles.idle} role="status" aria-live="polite" data-testid={testId} />;

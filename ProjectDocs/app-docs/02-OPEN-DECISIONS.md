@@ -6714,3 +6714,42 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 `dataSourcesInfo.ts` lost no entry, each flow has its `shared_logicflows` reference in `power.config.json`, and `check:power` reports 95 registered, 0 problems.
 **Still open:** the Generators screen does not call them (no wrapper in `data/flows.ts`); no live run, because the flows send mail and approvals.
 **E2E parity:** not run for D85 or D86; the user chose to skip it (5 Nov 2026).
+
+## D87 — DEV push of a3056b1 (5 Nov 2026)
+
+**What went to VSBCloud_Dev** (app `807a2fba-665c-40f3-b158-ffe822aa7da4`): `master` = `RounakDev1` = `a3056b1`, with the 4 PM commits of the colleagues
+(`148500d`, `29972fa`, merged `bf472ea`), the D85 panel fixes and the D86 flow registration, on top of the D84 build (`988e175`).
+
+**Checklist**
+1. `npm ci`: passed (nothing was running on ports 3000 or 8080).
+2. `check:power`: 95 registered, 0 problems.
+3. `npm run verify`: exit 0, 220 files, 5,161 tests, build OK.
+4. Hygiene: knip lists 40 unused files, baseline 36. The four extra are the generated models and services of the two D86 flows, which no screen calls yet.
+   The only byte-identical files are the three generated `*MultipleModel.ts` stubs (waived, D51).
+5. Local smoke test: waived for the agent. **Owed by the user** on the deployed app, including the D85 checks: a side-panel save spinner covers the whole screen, the
+   five clusters of the DEVEX/CAPEX panel list one per line, and Save / Cancel turn light blue on hover.
+6. Environment: `pac auth list` and `pac org who` show VSBCloud_Dev (`be41add6-6f60-ebb0-9c73-2480d6bc615d`), profile `ServiceAccount_DEV`.
+7. Push accepted (`app push --non-interactive`, CLI 1.3.0). It rewrote only the line endings of `power.config.json`; restored with `git checkout`.
+
+**E2E parity:** not run (skipped by the user). **Flows:** the two new flows are registered and not called; no flow was run.
+
+## D88 — Cost module side panels: full-screen spinner, centred ✕, shared ✕ hover (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV, not product-approved. Follows D85 (Application Settings).
+
+1. **Spinner.** `D85` portalled the spinner `FormPanel` draws itself (`busyLabel`, `coverLabel`). The Cost screens use `WriteStatus`, which rendered
+   `LoadingOverlay` in the tree; inside Add Costs from Table's panel and the Capex comments panel that was again panel-sized (the drawer's `translate3d` is the
+   containing block of `position: fixed`). `WriteStatus` now passes `portal`, so every Cost save, delete and load spinner is a full-screen scrim in the body.
+2. **✕ position.** Fluent's drawer header is a column flex box that puts the title row at the top. The ✕ therefore sat ~2 px below the bar's centre, and ~7 px above it on
+   Land Lease (its skin sets the header padding to 0). The canvas icon is centred (`Y: =Parent.Height/2-Self.Height/2`, all Cost panels: Contracts
+   `ico_Contracts_RightPanel_NewEdit_HeaderCancel`, Capex `ico_GeneratorData_RightPanel_Form_PvModuleType_Header_Cancel_2`, Add Costs `ico_PopUpConfirmation_BodyHeader_2`).
+   New opt-in `FormPanel centerClose` (class `canvas-panel-close-centered`, canvas.css) on all eight Cost panels. Application Settings and PM panels are unchanged on purpose:
+   several PM skins are tuned against the current position (Team shifts its header by 4 px).
+3. **✕ hover.** One global rule (`.canvas-panel-header button:hover`, translucent white, icon stays white) already applies to every `FormPanel`. No Cost screen overrides it, and
+   UT-COSTCLOSE-004 keeps it that way. **Not changed:** the canvas ✕ itself has no hover change (`HoverColor: =Self.Color`); the highlight is the product owner's 20 Oct 2026 addition.
+4. **Size.** Unchanged: Fluent's 32 px button with a 20 px icon, as in Application Settings. The canvas icon is 20 px (Capex 24 px); it was not resized.
+
+**Not verified visually:** jsdom has no layout. Please check one Cost panel of each screen in the browser: the ✕ centred in the blue bar, the highlight on hover, and a save spinner dimming the whole page.
+**Tests:** UT-WSTATUS-005, UT-SETPANEL-024, UT-COSTCLOSE-001…004. **Improvements log:** file 13, Part 2 A.
+
+**E2E parity:** not run for D88; the user chose to skip it (5 Nov 2026). `npm run verify`: 221 files, 5,167 tests, `check:power` 95/0, build OK.

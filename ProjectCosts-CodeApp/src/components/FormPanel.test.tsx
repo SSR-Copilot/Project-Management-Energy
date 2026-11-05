@@ -324,6 +324,14 @@ describe("FormPanel", () => {
       expect(screen.getByRole("dialog", { name: "Edit Milestones for Germany" })).toBeInTheDocument();
     });
 
+    it("UT-SETPANEL-024 centerClose puts the canvas-centred ✕ class on the drawer; off by default (D88)", () => {
+      const { unmount } = render(<Plain centerClose />);
+      expect(screen.getByRole("dialog", { name: "Edit thing" })).toHaveClass("canvas-panel-close-centered");
+      unmount();
+      render(<Plain />);
+      expect(screen.getByRole("dialog", { name: "Edit thing" })).not.toHaveClass("canvas-panel-close-centered");
+    });
+
     it("UT-SETPANEL-020 E1 props keep one beforeunload listener", () => {
       const add = vi.spyOn(window, "addEventListener");
       const { unmount } = render(<Plain dirty closePrompt={() => null} messages={{ error: "x" }} coverLabel="c" />);

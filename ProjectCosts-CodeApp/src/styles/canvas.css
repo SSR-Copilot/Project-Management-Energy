@@ -148,6 +148,11 @@
 .canvas-panel-header button:hover:active .fui-Button__icon,
 .canvas-panel-header button:focus-visible .fui-Button__icon { color: white; }
 .canvas-panel-header button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+/* Cost panels (`FormPanel centerClose`, D88): the canvas ✕ is centred in the bar (`Y: =Parent.Height/2-Self.Height/2`).
+   Fluent's header is a column flex box that pins the title row to the top, so the row fills the bar and the
+   ✕ is centred in it, whatever height or padding a screen's skin gives the bar. */
+.canvas-panel.canvas-panel-close-centered .canvas-panel-header { padding-top: 0; padding-bottom: 0; }
+.canvas-panel.canvas-panel-close-centered .canvas-panel-header .fui-DrawerHeaderTitle { flex: 1 1 auto; min-height: 0; }
 .canvas-panel .canvas-panel-body { padding: 20px; overflow: auto; flex: 1; container-type: inline-size; }
 /* A panel scrolls VERTICALLY. Anything wide enough to scroll it sideways is a layout bug in the
    field that is too wide, not something the reader should have to drag — the comments card is

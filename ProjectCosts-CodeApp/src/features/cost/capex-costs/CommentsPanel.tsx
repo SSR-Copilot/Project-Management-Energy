@@ -574,7 +574,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
 
   return (
     <>
-      <FormPanel open={open} width="comments" title={commentPanelTitle(contractDescription)}
+      <FormPanel centerClose open={open} width="comments" title={commentPanelTitle(contractDescription)}
         onDismiss={onDismiss}
         footer={<PanelButtons onSave={() => { void commit(); }} onCancel={onDismiss}
           disabled={!valid || writesDisabled}

@@ -459,7 +459,7 @@ export default function AddCostsFromTableScreen() {
    * panel from closing and the sheet is `inert`. Save stays guarded by `saveButtonDisabled`.
    */
   return (
-    <FormPanel
+    <FormPanel centerClose
       open
       title={title}
       width="grid"

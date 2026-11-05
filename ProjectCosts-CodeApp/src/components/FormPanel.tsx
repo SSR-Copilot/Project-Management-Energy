@@ -91,12 +91,19 @@ export interface FormPanelProps {
    * only through its ✕ or Cancel. Escape still closes. Off by default (the backdrop dismisses).
    */
   keepOpenOnOutsideClick?: boolean;
+  /**
+   * Opt-in (the Cost panels, D88): centre the ✕ vertically in the header bar, as the canvas icon does
+   * (`ico_…_Cancel`: `Y: =Parent.Height/2-Self.Height/2`, white, `Tooltip: "Cancel"`). Left off, the header keeps
+   * Fluent's top-aligned row, which the Application Settings and PM panels were tuned against. Without it the ✕
+   * sat 2 px low in a 48 px bar and about 7 px high where a screen zeroed the header padding (Land Lease).
+   */
+  centerClose?: boolean;
 }
 
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, centerClose = false,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -123,7 +130,7 @@ export function FormPanel({
   return (
     <FormPanelContext.Provider value={api}>
       <Drawer type="overlay" position="end" open={open}
-        className={`canvas-panel canvas-panel-${typeof width === "number" ? "custom" : width}${panelClassName ? ` ${panelClassName}` : ""}`}
+        className={`canvas-panel canvas-panel-${typeof width === "number" ? "custom" : width}${centerClose ? " canvas-panel-close-centered" : ""}${panelClassName ? ` ${panelClassName}` : ""}`}
         onOpenChange={(_, data) => {
           if (data.open) return;
           if (keepOpenOnOutsideClick && data.type === "backdropClick") return;

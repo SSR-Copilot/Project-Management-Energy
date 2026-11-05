@@ -1149,7 +1149,7 @@ export default function LandLeaseScreen() {
         ))}
       </div>
 
-      <FormPanel
+      <FormPanel centerClose
         open={panel !== null}
         title={leasePanelTitle({
           selectedCost: panel?.cost ?? null,

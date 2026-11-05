@@ -1583,7 +1583,7 @@ function OpexPanel({
   );
 
   return (
-    <FormPanel
+    <FormPanel centerClose
       open
       title={panelTitle(ctx)}
       // `con_…_Body.Width: =Min(660, Parent.Width)`; `opex-canvas-panel` carries the canvas

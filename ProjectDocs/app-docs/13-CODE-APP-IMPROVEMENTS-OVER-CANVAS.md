@@ -120,6 +120,11 @@ All six: connected, no Apply / Apply All (D20; the disabled bars on Contract and
   - **Admin Cost, DEVEX/CAPEX Add / Edit panel: the five clusters list one per line** (Cluster 2 and 3 had run onto one line). Test: UT-ADCOST-937.
   - **The panel's Save and Cancel have the canvas hover again** (`hoverButton` fill, `themePrimary` text and icon; Save, `pcf_btn_AdminCost_RightPanel_Form_AddStandardCost_Button_Save` L10865-10867, and Cancel L10959-10962). The port had left it to Fluent. Applies to every panel that uses the shared footer, so also the Costs and Gates panels. Tests: UT-PANELFTR-011.
 
+- **Cost module side panels, same fixes as Application Settings (5 Nov 2026, D88, fixed, awaiting approval).** All eight Cost panels (Contracts x3, Capex Costs, Capex comments, OPEX, Land Lease, Add Costs from Table):
+  - **The write spinner covers the whole screen.** `WriteStatus` now portals its overlay to the page body. Add Costs from Table and the Capex comments panel rendered it inside the panel, so the dimmed layer was panel-sized (same cause as D85). Test: UT-WSTATUS-005.
+  - **The ✕ is centred in the header bar, as the canvas icon is** (`ico_…_Cancel`: `Y: =Parent.Height/2-Self.Height/2`). It sat about 2 px low in the 48 px bar and about 7 px high on Land Lease, whose skin zeroes the header padding. `FormPanel centerClose` (opt-in, the Application Settings and PM panels are untouched). Tests: UT-SETPANEL-024, UT-COSTCLOSE-002, 003.
+  - **The ✕ hover is the shared one** (translucent white fill, icon stays white). Every Cost panel already inherited it; UT-COSTCLOSE-001 and 004 stop a screen skin from restyling the ✕.
+
 **Net on 22 Oct (D36):** a collapsed-rail defect (CA-1) was fixed to follow the live
 `pcf_Left_Navigation_Menu.Items` formula (test `UT-RAIL-003`). Five behaviours still contradict
 earlier decisions D19, D22 and D24 and are waiting on the product owner (D36 §6).

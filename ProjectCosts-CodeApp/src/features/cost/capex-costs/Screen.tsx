@@ -854,7 +854,7 @@ export default function CapexCostsScreen() {
         writeActionsDisabled={writesDisabled} />
     </>}
 
-    <FormPanel open={!!edit} width="cost" onDismiss={closePanel}
+    <FormPanel centerClose open={!!edit} width="cost" onDismiss={closePanel}
       title={panelTitle(isEdit, book.accounts.find(a => a.id === edit?.accountId)?.name ?? "")}
       footer={<PanelButtons onSave={() => { void commit(); }} onCancel={closePanel}
         disabled={!valid || writesDisabled}
