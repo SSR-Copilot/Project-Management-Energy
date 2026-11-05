@@ -96,7 +96,9 @@ const useStyles = makeStyles({
      * 28 px past the pill) ran out of the header (PO, 21 Oct 2026). 30 px clears it with the
      * canvas's 2 px to spare.
      */
-    marginLeft: "60px", marginRight: "30px", flexShrink: 0,
+    // Canvas pair (4 Nov 2026): Help sits ~25 px closer to the pill and the avatar ends ~12 px nearer
+    // the right edge than the 60 / 30 had it; 18 still clears the 28 px the avatar hangs out.
+    marginLeft: "35px", marginRight: "18px", flexShrink: 0,
     fontSize: "14.67px", fontWeight: tokens.fontWeightSemibold,
     boxShadow: "rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px",
     [media.belowMd]: { marginLeft: "10px" },
