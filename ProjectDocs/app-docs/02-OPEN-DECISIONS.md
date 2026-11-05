@@ -6753,3 +6753,90 @@ After the flow owner switched both DEV flows from "Provided by run-only user" to
 **Tests:** UT-WSTATUS-005, UT-SETPANEL-024, UT-COSTCLOSE-001…004. **Improvements log:** file 13, Part 2 A.
 
 **E2E parity:** not run for D88; the user chose to skip it (5 Nov 2026). `npm run verify`: 221 files, 5,167 tests, `check:power` 95/0, build OK.
+
+## D89 — Capex panel: Total Costs no longer swallows letters (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV, not product-approved.
+
+**Report (product owner, screenshot):** in the DEVEX/CAPEX Add Costs panel the Total Costs box showed a typed `e` with no message.
+**Canvas behaviour (from source, not observed live):** `txt_AddContract_RightPanel_TotalCost_1` is a `TextInput@0.0.54` with no numeric format and `MaxLength: 512`, so letters can be typed. Its error label `lbl_AddContract_RightPanel_TotalCost_ErrorMessage_1` is visible when the value is not blank and `fn_Numeric_CC.IsInteger` or `InRange(1, 500m / 2.25bn Poland)` fails, so the user sees "Value must be between 0 and 500,000,000" (red). The Canvas app was not run to confirm.
+**Root cause:** `CostField type="number"`. A browser number field reports `""` for `e`, `abc` or a lone `-`, so the code's "non-blank and invalid" check never fired.
+**Fix:** `type="text" inputMode="numeric" maxLength={512}` on both Total Costs boxes (Equal, and Individual with % Values), plus an optional `inputMode` prop on `CostField` (a keyboard hint, it restricts nothing). The existing `validateTotalCost` and the Save gate do the rest. Tests: UT-CAPEXTOTAL-001..003 (`e`, `abc`, `1e5`, `12.5`, `-5` show the message and keep Save disabled).
+**Not changed, same defect class:** the twelve month boxes of an Individual contract are also `type="number"` (`Screen.tsx`), so a letter there is swallowed and "Value must be a numeric" cannot show. They store a parsed number per month, so a fix needs the raw text kept per box; it is a larger change and waits for a go-ahead.
+**Run report:** this defect was not in the 188 Capex cases; a case should be added (validation of letters in Total Costs and in the month boxes).
+
+## D90 — DEVEX/CAPEX: the open decisions settled "follow the Canvas" (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV. **Decision rule given by the product owner:** where the test run (`CAPEX-RUN-REPORT-2026-11-05.md`,
+`CAPEX-PO-DECISIONS-2026-11-05.md`) left a choice between the Canvas and the code app, take the Canvas. Each answer below was cross-checked against the live YAML
+(`Capex Costs Screen.pa.yaml`, solution 1.21.709) before the code changed. Nothing is approved by a product owner beyond that instruction.
+
+| Case | Canvas (verified) | Change |
+|---|---|---|
+| A-01 CAPEX-033 payer tag | grid `CostPaidBy` / `[…]` from `Cost Type` only (`:1220-1235`); the mapping fallback is the panel default only | grid shows a blank tag for a blank Cost Type (`CostLine.costTypePayer`, `gridPayer`); the panel default is unchanged |
+| A-02 CAPEX-045 menu | lists when a ticked cluster N (1..5) has start cluster <= N, no date test (`:3091-3123`); refuses at creation with an Information notice (`:18609-18634`) | `isOfferedByStartCluster`; start cluster 6 offers none (was floored at 5); an assumption with no usable dates is offered and refused on click (`standardContractRefusal`, toast) |
+| A-03 CAPEX-105 month range | no Save/Recalculate reads the month error labels (`:17509-17570`) | Save no longer blocked by `hasMonthRangeError` (it stays in `rules.ts`) |
+| A-04 CAPEX-134, 132 relink | reset trigger = paid months only (`:11466-11479`); `RemoveIf('Capex Comments')` is in a block comment (`:20061-20065`) | trigger paid-only; both save paths stop deleting payment-date comments |
+| A-05 CAPEX-154 payment-date comment | `tgl_Root_IsInvalid` = open card with blank text only (`:10058-10065`) | Save no longer needs a month; "Required" still shows |
+| A-06 CAPEX-156 resolve | the YAML resolves the chosen thread and its replies only (`:9849-9854`) | **no code**: the code already matches. Bug N-5 was written from an older export; its case is to be reworded |
+| A-07 CAPEX-071 year list | `Year(start)` to `Year(end)+3`, end = `Coalesce(COD, End Date, 5-Construction, Today())` (`:19600-19640`) | `panelYears`; extension: a year that already carries a payment is never hidden |
+| A-08 CAPEX-086 spaces | `Not(IsBlank(Description.Value))`, no `Trim` (`:17513`) | spaces-only counts as filled |
+| A-09 CAPEX-112 JSON | a Power Fx record serialises alphabetically: `EndDate` first | `startEndJson` emits `EndDate` then `StartDate` |
+| A-10 CAPEX-136, 135 notices | `Notify(…, Warning)` | the browser `alert` became the app toast (`notify.warning` / `notify.info`) |
+| A-11 CAPEX-173 tab labels | `AccessibleLabel: " "` (blank) | **no code**: a blank label is "none" under CONVENTIONS rule 16, so the caption stays; ids to be written down (Summary -1, categories 0..4) |
+| FT-ACC-096..100 | no Cost screen or command reads `gblCurrentUser` roles | **no code**: roles do not change the Cost screens; the five cases become one role-independent case with a refused write |
+| CAPEX-159 | Edit and Delete only for the author, Reset for the author or the resolver (`:9761`, `:9818`, `:10023`) | gate added (`canEditOrDeleteComment`, `canResetComment`); an unknown viewer gates nothing |
+| CAPEX-182 | `OnLogoClick` = `Launch(gblPMAppURL)` (`:2333-2335`) | the Cost header logo opens the project list in a new tab (`AppHeader onLogoClick`, `resolvePlayAppUrl`) |
+| CAPEX-073 | blue + italic on Description, DistributionBy, Total Costs, clusters, Cost Paid By, VAT, Depreciation (`:10475`-`:12394`) | applied to all (`Choices standard`, Switch label class) |
+| CAPEX-070 | warning strip when `Is Edited from PCF? = Yes` and source = Powerapps (`:12444-12492`) | strip added on Edit; placed at the top of the form column (position not verified against a screenshot) |
+
+**Known downsides of following the Canvas (decide whether to keep any):**
+1. A-03: a month above 100 % (or out of range) can be saved again, as in the Canvas (a SOURCE DEFECT reproduced).
+2. A-05: a payment-date comment with no month can be saved again. That Canvas path produced the live row of UT-CMT-044 (a comment with no red dot).
+3. A-08: a Description of three spaces can be saved.
+4. A-02: a project at start cluster 6 is offered no standard contract.
+
+**Tests changed or added:** UT-CAPEXR-025, 104, 067b, 190..193; UT-STD-008, 025..027; UT-CAPEXBULK-006, 014, 018; UT-CMTDEL-003, 004; UT-CAPEXLOG-010; UT-BOOK-026, 058;
+UT-CMT-045, 056, 070, 074, 120..123; UT-CLUSTER-090..092; the year-gallery test in `Screen.test.tsx`; UT-CAPEXSTD-001, 002; UT-CAPEXWARN-001; UT-HEADER-010, 011.
+**Still open:** rewriting the 11 ambiguous cases and the wrong ids in the case workbook; the failures that were not decisions (CAPEX-055, 064, 109, 121, 141, 140, 102, 052, 038 ...);
+the month boxes of an Individual contract (D89); no browser check of any of this.
+
+## D91 — DEVEX/CAPEX: the failures of the run that were not decisions, the month boxes, and the case workbook (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV. Same rule as D90: follow the Canvas, each point cross-checked against the live YAML (`Capex Costs Screen.pa.yaml`).
+
+| Run id | Canvas | Change |
+|---|---|---|
+| CAPEX-055 (High) | paid-confirm `OnConfirm` patches `'Linked Cluster': Blank()` then marks paid (`:19875`) | confirm clears the contract's Linked Cluster first (`clearLinkedCluster`, `setCostPaid ... clearLinkedCluster`) |
+| CAPEX-052 | "No monthly cost row found for selected contract/month/year." (`:7741`) | the extra "the" removed |
+| CAPEX-102 | the month range message prints the raw number (`:13364-13368`) | no thousands separator |
+| CAPEX-067 | `Not(IsBlank(StartDate & EndDate))` (`:10860`) | either stored date opens on dates |
+| CAPEX-093, 100 | Individual + % Values: Save needs a non-blank Total (`:17517-17522`) | gate added; Absolute stays exempt |
+| CAPEX-101 | `locEditSaveButtonEnabled` set by every control's `OnChange`, cleared on open (`:17548`) | Save disabled on an opened contract until a control changes |
+| CAPEX-083 | `Text(total / n, "########0.0#")` (`:12084-12139`) | the box shows 83.33; the stored value stays the rounded-down base |
+| CAPEX-171 | `AccessibleLabel: "chk_AddContract_RightPanel_SelectClusterN_1"` (`:11100`) | `aria-label` is that name |
+| CAPEX-144, 168 | `Tooltip` on the five comment icons and `"Comments : " & name` on the header (`:9752-10014`, `:8224`) | `title` added (`FormPanel titleTooltip`) |
+| CAPEX-109, 121, 141 | `'Initial Contract Source': Coalesce(existing, Powerapps)`, `'Total Cost': Coalesce(typed, Round(Sum(months), 1))`, a standard assumption on every cost row (`:17574`, `:18849`) | written on create; the Total Cost stored for an Individual contract; the assumption bound on each cost row |
+| CAPEX-135 | `LookUp('CAPEX Project Contracts', …)` at the click (`:7378-7393`) | a live lookup before creating (`standardContractExists`); a second click meanwhile is ignored |
+| CAPEX-064 | new-contract Cost Paid By = `Coalesce(Cost Type, mapping)` (`:12234-12254`) | the sub-account's mapping default (`CostAccount.defaultPayer`) |
+| CAPEX-038 | `ClusterNDate = Date(Coalesce(StartYear, navMinYear, year), Coalesce(StartMonth, 1), 1)` (`:7238-7243`) | six dates always sent (`clusterBandDates`) |
+| CAPEX-140 | refusal "no applicable cost period" | done in D90 (A-02) |
+| D89 month boxes | text inputs | the typed text is kept per month and validated as typed ("Value must be a numeric" shows); Recalculate clears it |
+
+**Case workbook:** `_source/CAPEX.json` corrected for the 11 ambiguous cases and the wrong texts (CAPEX-083, 067, 182, 093/100 pins, 012 and 145 rule names), rebuilt as
+`FT-CAPEX-Capex-Costs-2026-11-05-v2.xlsx` (188 cases, all Not Run, health checks 0). Run 1 stays in `...-run1.xlsx` as evidence. Not yet run against the new build.
+**Not done:** the live Canvas-versus-Code run; the 9 live-run cases; the FT-ACC accounts; a data-layer test for `clearLinkedCluster` (the Screen test pins the call, the write itself is typechecked only);
+an updated-contract's blank `Initial Contract Source` (the Canvas writes Powerapps on any save; the code writes it on create only).
+
+## D92 — The panel ✕ sat above the middle of the bar; root cause fixed (5 Nov 2026)
+
+**Status:** built on `RounakDev1`, not committed, not pushed to DEV. Reported by the product owner with three screenshots (Add Costs, Comments, Revenues): the ✕ is about 8-10 px above the middle of the blue bar.
+
+**Root cause.** Fluent's `DialogTitle__action` (used by `DrawerHeaderTitle`) is `align-self: start`, so the ✕ is pinned to the TOP of its row. D88 (`centerClose`) made the
+row fill the bar and removed the padding, which moved the ✕ to the very top of the bar instead of centring it, so the fix did not take. **Fix** (`canvas.css`): the action is
+`align-self: center` with no margin, the row is `align-items: center`, the padding rule is raised to beat per-screen skins (`.canvas-panel-close-centered` doubled), and the
+Fluent focus ring (`::after`) drawn around the auto-focused ✕ is hidden (the canvas icon draws none; a keyboard focus still gets the white outline of the shared rule).
+**Scope:** every Cost panel (Contracts x3, Capex, Capex comments, OPEX, Land Lease, Add Costs from Table) plus the two PM Revenues panels of the third screenshot. The Application
+Settings and the other PM panels keep the top-aligned ✕ their skins were tuned against (Team shifts its header by 4 px); say if they should follow.
+The confirmation dialogs already centre theirs (flex, `align-items: center`).
+**Not verified in a browser:** jsdom has no layout. Test: UT-COSTCLOSE-002 reads the stylesheet for the three rules.
