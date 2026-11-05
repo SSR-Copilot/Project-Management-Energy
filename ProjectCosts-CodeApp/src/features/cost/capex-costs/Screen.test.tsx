@@ -85,6 +85,10 @@ let savePending = false;
 let paidPending = false;
 /** What the live "is this standard contract already created" lookup answers. */
 let standardExistsResult = false;
+/** The `Devex/Capex Standard Assumptions` the menu is built from; empty by default (no menu). */
+let stdAssumptions: Record<string, unknown>[] = [];
+/** The `standardOptions` the grid was last given (the Add Standard Contract menu). */
+let gridStandardOptions: { id: string; subaccountId: string }[] = [];
 let deletePending = false;
 /** `setPaid.error` — a failed Paid write, for the error banner. */
 let paidError: Error | null = null;
@@ -117,8 +121,8 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
     };
   },
   useStandardAssumptions: () => ({
-    assumptions: [], activeWtgCount: 0, totalCapacity: 0,
-    countryId: undefined, technology: undefined, isLoading: false,
+    assumptions: stdAssumptions, activeWtgCount: 0, totalCapacity: 0,
+    countryId: stdAssumptions.length ? "country-1" : undefined, technology: stdAssumptions.length ? 952850000 : undefined, isLoading: false,
   }),
   useCapexComments: () => ({ data: [] }),
   /** `Project States` — 1..6 are the clusters; Draft/Abandoned/On-hold are not. */
@@ -152,8 +156,9 @@ let onAction: GridCallback = () => {};
 /** CA-16 — the `writeActionsDisabled` the grid was last rendered with. */
 let gridWriteActionsDisabled: boolean | undefined;
 vi.mock("./PcfGrid", () => ({
-  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean }) => {
+  PcfGrid: (props: { onAction: GridCallback; writeActionsDisabled?: boolean; standardOptions?: { id: string; subaccountId: string }[] }) => {
     onAction = props.onAction;
+    gridStandardOptions = props.standardOptions ?? [];
     gridWriteActionsDisabled = props.writeActionsDisabled;
     return <div data-testid="pcf-grid" />;
   },
@@ -232,6 +237,9 @@ const savedLine = () => saveLine.mutateAsync.mock.calls[0]?.[0]?.line;
 
 beforeEach(() => {
   lines = [];
+  stdAssumptions = [];
+  standardExistsResult = false;
+  gridStandardOptions = [];
   startClusterNo = 0;
   clusterStateOrder = undefined;
   capexCategories = [...CATEGORY_LABELS];
@@ -518,7 +526,7 @@ describe("the Add Costs panel — year gallery", () => {
 
 describe("the Link to Milestone dropdown", () => {
   /** `con_…_Form_Link_to_Cluster.Visible` (`CapexScreenCode.txt:11192-11199`). */
-  const dropdown = () => screen.queryByRole("combobox", { name: "Link to Milestone" });
+  const dropdown = () => screen.queryByRole("combobox", { name: "drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster" });
 
   it("is hidden for Equal Distribution By Cluster, which is the panel's default", () => {
     mountAndOpen();
@@ -1152,6 +1160,21 @@ describe("the panel footer", () => {
     expect(screen.queryByText("Value must be a numeric")).not.toBeInTheDocument();
   });
 
+  it("UT-CAPEXMONTH-002 Recalculate leaves a box blank when its text was unreadable, and rounds a readable one (D91, CAPEX-085)", () => {
+    lines = [individualContract({
+      payments: [
+        { year: 2016, month: 6, amount: 500, paid: false }, { year: 2016, month: 7, amount: 500, paid: false },
+      ],
+    })];
+    mountAndOpenEdit("l1");
+    fireEvent.click(screen.getByRole("button", { name: /^2016 Allocated Cost/ }));
+    fireEvent.change(screen.getByLabelText("June 2016"), { target: { value: "abc" } });
+    fireEvent.change(screen.getByLabelText("July 2016"), { target: { value: "1250.6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Recalculate Allocated Cost" }));
+    expect(screen.getByLabelText("June 2016")).toHaveValue("");
+    expect(screen.getByLabelText("July 2016")).toHaveValue("1251");
+  });
+
   /** `DisplayMode` (`:17541-17555`) — the save gate is its last clause. */
   it("disables Recalculate Allocated Cost while the form is invalid", () => {
     lines = [individualContract()];
@@ -1174,7 +1197,7 @@ describe("Distribution and Distribution Scheme on an existing contract", () => {
     expect(screen.getByRole("radio", { name: "Absolute Values" })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "% Values" })).toBeDisabled();
     // The four the screenshot shows still live.
-    expect(screen.getByRole("combobox", { name: "Link to Milestone" })).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster" })).toBeEnabled();
     expect(screen.getByRole("radio", { name: "DevCo" })).toBeEnabled();
     expect(screen.getByRole("switch", { name: "Apply VAT" })).toBeEnabled();
     expect(screen.getByRole("switch", { name: "Depreciation" })).toBeEnabled();
@@ -1292,7 +1315,7 @@ describe("confirmation dialog dimensions", () => {
   const band = () => surface().children[1] as HTMLElement;
   /** Local copy — the one in the Link to Milestone suite is scoped to that `describe`. */
   const milestonePicker = () =>
-    screen.queryByRole("combobox", { name: "Link to Milestone" }) as HTMLElement;
+    screen.queryByRole("combobox", { name: "drp_Add_Edit_Cost_Data_RightPanel_Form_Link_to_Cluster" }) as HTMLElement;
 
   /** An individually-distributed contract with one month of money, as the other tests use. */
   const linkedCost = (patch: Partial<CostLine> = {}): CostLine => ({
@@ -1347,6 +1370,69 @@ describe("confirmation dialog dimensions", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     touchPanel();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("UT-CAPEXPCT-001 clicking Save on an Individual % contract that does not add up shows the Canvas strip and saves nothing (D91)", () => {
+    lines = [individualContract({
+      distributionScheme: "percent", totalCost: 1000,
+      payments: [{ year: 2016, month: 6, amount: 101, paid: false }],
+    })];
+    mountAndOpenEdit("l1");
+    touchPanel();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Total percentage is over 100%")).toBeInTheDocument();
+    expect(saveLine.mutateAsync).not.toHaveBeenCalled();
+    // The next change clears the strip.
+    touchPanel();
+    expect(screen.queryByText("Total percentage is over 100%")).not.toBeInTheDocument();
+  });
+
+  it("UT-CAPEXSTD-010 a standard contract the live lookup finds already created is refused and leaves the menu (D91, CAPEX-135)", async () => {
+    // `RemoveIf(colStandardContractOptionsForPCF, …)` after `Notify(…, Information)` (`:7378-7393`).
+    stdAssumptions = [{
+      id: "a1", description: "Standard O&M", subaccountId: "sub-1", countryId: "country-1", technology: 952850000,
+      costAmount: 100, unit: 952850000, costPaidBy: 952850001, distributionFrequency: 1, applyVat: true, depreciation: true,
+      clusters: [true, true, true, true, true],
+    }];
+    standardExistsResult = true;
+    mount();
+    expect(gridStandardOptions.map(o => o.id)).toEqual(["a1"]);
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(saveLine.mutate).not.toHaveBeenCalled();
+    expect(gridStandardOptions).toEqual([]);
+  });
+
+  it("UT-CAPEXSTD-012 a hidden stale option comes back when the book reloads (its contract was deleted meanwhile)", async () => {
+    stdAssumptions = [{
+      id: "a1", description: "Standard O&M", subaccountId: "sub-1", countryId: "country-1", technology: 952850000,
+      costAmount: 100, unit: 952850000, costPaidBy: 952850001, distributionFrequency: 1, applyVat: true, depreciation: true,
+      clusters: [true, true, true, true, true],
+    }];
+    standardExistsResult = true;
+    const view = mount();
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(gridStandardOptions).toEqual([]);
+    lines = [...lines]; // a reload: a new lines array
+    view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter initialEntries={["/costs/capex?category=0"]}><CapexCostsScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    expect(gridStandardOptions.map(o => o.id)).toEqual(["a1"]);
+  });
+
+  it("UT-CAPEXSTD-011 a standard contract that is not there yet is created after the live lookup", async () => {
+    stdAssumptions = [{
+      id: "a1", description: "Standard O&M", subaccountId: "sub-1", countryId: "country-1", technology: 952850000,
+      costAmount: 100, unit: 952850000, costPaidBy: 952850001, distributionFrequency: 1, applyVat: true, depreciation: true,
+      clusters: [true, true, true, true, true],
+    }];
+    standardExistsResult = false;
+    mount();
+    await act(async () => { onAction("AddStandardContract", "sub-1", "a1"); });
+    expect(saveLine.mutate).toHaveBeenCalledTimes(1);
+    expect(gridStandardOptions.map(o => o.id)).toEqual(["a1"]);
   });
 
   it("UT-CAPEXLINK-001 confirming the cluster-linked paid dialog clears the Linked Cluster, then marks it paid", () => {

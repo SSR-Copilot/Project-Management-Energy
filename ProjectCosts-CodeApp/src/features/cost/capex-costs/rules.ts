@@ -280,22 +280,20 @@ export function canSaveContract(
   // `Not(IsBlank(txt_AddContract_RightPanel_Description_1.Value))` (`:17513`): no `Trim`, so a Description of
   // only spaces counts as filled and Save stays enabled (D90, "follow the Canvas"). It was `.trim()` here.
   if (line.description === "") return false;
-  if (proposed.length === 0) return false;
-  if (!proposed.every((p) => Number.isFinite(p.amount) && p.amount >= 0)) return false;
   if (line.distribution === "individual") {
     // Individual + % Values needs a non-blank Total Costs (D90, CAPEX-093/100): the canvas Save is
     // `And(Not(IsBlank(txt_AddContract_RightPanel_TotalCost_1.Value)), Not(IsBlank(scheme)))` (`:17517-17522`).
     // Absolute Values has no Total box and stays exempt.
     if (line.distributionScheme === "percent" && costValue.trim() === "") return false;
-    // For a PERCENT scheme, proposed carries raw percentages that must sum to 100; for
-    // ABSOLUTE, it carries money and just needs a positive sum. Money conversion happens
-    // separately, in `resolvedPayments` — this gate checks the shape the user typed.
-    return canPersistIndividual(
-      proposed.map((p) => ({ year: p.year, month: p.month, value: p.amount })),
-      line.distributionScheme,
-    );
+    // Nothing else about the months gates Save (D91, CAPEX-105): the canvas `locValidCostInContract` (the % sum of 100, or
+    // "No cost is allocated.") is evaluated in the Save `OnSelect` (`:17574`), not in its `DisplayMode`, and no month error
+    // label is read there either (D90). `individualSaveError` does the click-time check. The earlier code blocked Save here on a
+    // sum other than 100, on no months, on a zero total and on a negative month.
+    return true;
   }
-  const typed = costValue.trim();
+  // EQUAL: the distribution must produce months, none negative, and a total is needed.
+  if (proposed.length === 0) return false;
+  if (!proposed.every((p) => Number.isFinite(p.amount) && p.amount >= 0)) return false;  const typed = costValue.trim();
   return typed !== "" && Number.isFinite(Number(typed)) && Number(typed) >= 0;
 }
 
@@ -393,6 +391,34 @@ export function reconcilePayments(
     writes.push({ id: p.id, year: p.year, month: p.month, amount: null });
   }
   return writes;
+}
+
+/**
+ * The error strip the Canvas shows when Save is clicked on an Individual contract that fails `locValidCostInContract`
+ * (`cmp_ShowErrorInContract.ErrorTitle`, `Capex Costs Screen.pa.yaml:19760-19790`), verbatim:
+ * % Values: "Total percentage is over 100%" / "Total percentage is below 100%" (`Round(Sum(TotalUI), 1) = 100`);
+ * Absolute Values: "No cost is allocated." when the months total 0. `null` = nothing to refuse.
+ */
+export const INDIVIDUAL_SAVE_ERROR = {
+  over: "Total percentage is over 100%",
+  below: "Total percentage is below 100%",
+  none: "No cost is allocated.",
+} as const;
+
+export function individualSaveError(
+  distribution: CostLine["distribution"],
+  scheme: CostLine["distributionScheme"],
+  rawProposed: readonly { amount: number }[],
+): string | null {
+  if (distribution !== "individual") return null;
+  const sum = rawProposed.reduce((a, p) => a + (Number.isFinite(p.amount) ? p.amount : 0), 0);
+  if (scheme === "percent") {
+    const rounded = Math.round(sum * 10) / 10;
+    if (rounded > 100) return INDIVIDUAL_SAVE_ERROR.over;
+    if (rounded < 100) return INDIVIDUAL_SAVE_ERROR.below;
+    return null;
+  }
+  return sum === 0 ? INDIVIDUAL_SAVE_ERROR.none : null;
 }
 
 /**

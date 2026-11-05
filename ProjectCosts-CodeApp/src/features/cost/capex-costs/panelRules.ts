@@ -244,6 +244,14 @@ export const gridActionAllowed = (action: string, disabled: boolean): boolean =>
   !(disabled && WRITE_STARTING_GRID_ACTIONS.has(action));
 
 /**
+ * The paid toggle's own spinner texts (D91, CAPEX-055): the plain toggle (`Btn_CodeforSettingCostPaidUnpaid`,
+ * `Capex Costs Screen.pa.yaml:7656`) says "Please wait, saving..."; the cluster-linked dialog's `OnConfirm` (`:19875`) says
+ * "Please wait...".
+ */
+export const PAID_SAVING = "Please wait, saving...";
+export const PAID_CONFIRMED_SAVING = "Please wait...";
+
+/**
  * The `WriteStatus` line — `cmp_Costs_PopUpLoading.InformationText` for the write in flight, or
  * null when nothing is pending. Same precedence as the overlay it replaces: the standard-contract
  * path names the assumption it is creating, the panel save says "the cost" / "costs", and
@@ -258,9 +266,12 @@ export const capexWriteStatusLabel = (args: {
   standardName: string | null;
   savingLabel: string | null;
   commentsSaving?: boolean;
+  /** The text of a Paid write that is running (`PAID_SAVING` or `PAID_CONFIRMED_SAVING`); null when none is. */
+  paidLabel?: string | null;
 }): string | null => {
   if (!args.pending) return args.commentsSaving ? COMMENTS_SAVING : null;
   if (args.standardName) return standardContractLoadingLabel(args.standardName);
+  if (args.paidLabel) return args.paidLabel;
   return args.savingLabel ?? SAVING_COSTS;
 };
 

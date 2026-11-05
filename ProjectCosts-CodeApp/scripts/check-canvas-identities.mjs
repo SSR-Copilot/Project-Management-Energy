@@ -148,7 +148,7 @@ const NAME_PRIMITIVES = ["CostField", "Choices", "TaggedDateField", "DateField",
  * `aria-label`), so the C4 check reads that prop when no `aria-label` attribute is written.
  * A NAME_PRIMITIVE given `ariaLabel` is checked against it instead of its name.
  */
-const ARIA_PROP_PRIMITIVES = ["DateField", "DateInput", "ChoiceField"];
+const ARIA_PROP_PRIMITIVES = ["DateField", "DateInput", "ChoiceField", "CostSelect"];
 
 function staticPrefix(init, sf) {
   if (!init) return undefined;

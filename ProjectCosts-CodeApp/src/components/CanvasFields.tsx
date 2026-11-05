@@ -168,19 +168,21 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
  * label swallows the click that should open the listbox. The label is a sibling `<span>` with
  * the same `.canvas-field` styling and an `aria-label` on the control instead.
  */
-export function CostSelect({ label, value, options, onChange, required, error, testId, standard }: {
+export function CostSelect({ label, value, options, onChange, required, error, testId, standard, ariaLabel }: {
   label: string; value: string | number; options: readonly (string | number)[];
   onChange: (value: string) => void; required?: boolean; error?: string;
   /** Tosca identity (`data-testid`) — the canvas control name (`drp_…`) where known. */
   testId?: string;
   /** The canvas standard-assumption pair on the selected value (CONVENTIONS rule 20). */
   standard?: StandardProp;
+  /** The control's canvas `AccessibleLabel` when it sets one (CONVENTIONS rule 16); the caption otherwise (CAPEX-171, D91). */
+  ariaLabel?: string;
 }) {
   const styles = useStyles();
   const standardClass = useStandardValueClass();
   return <div className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required}>{label}</span>
-    <Dropdown className={mergeClasses(styles.dropdown, standardClass(standard))} aria-label={label} data-testid={testId} value={String(value)}
+    <Dropdown className={mergeClasses(styles.dropdown, standardClass(standard))} aria-label={ariaLabel ?? label} data-testid={testId} value={String(value)}
       selectedOptions={[String(value)]} appearance="filled-lighter"
       onOptionSelect={(_, d) => { if (d.optionValue !== undefined) onChange(d.optionValue); }}>
       {options.map(option => <Option key={option} value={String(option)}>{String(option)}</Option>)}

@@ -430,8 +430,8 @@ export function useCapexWrites(
       client.invalidateQueries({ queryKey: ["capex-totals", projectId] }),
       client.invalidateQueries({ queryKey: qk.devCoCapexContracts(projectId ?? "none") }),
       client.invalidateQueries({ queryKey: qk.devCoCapexCosts(projectId ?? "none") }),
-      // A milestone relink deletes the contract's payment-date comments (`saveCostLine`'s
-      // `resetPaidAndPaymentDateComments`), which moves the grid's red dots.
+      // Comments are refreshed after every Capex write: a contract delete removes its comments, which moves the grid's red dots.
+      // (A milestone relink no longer deletes payment-date comments, D90.)
       client.invalidateQueries({ queryKey: ["capex-comments"] }),
     ]);
   };

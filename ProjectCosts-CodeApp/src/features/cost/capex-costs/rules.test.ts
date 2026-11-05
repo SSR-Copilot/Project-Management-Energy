@@ -20,7 +20,7 @@ import {
   totalCostForPercent, totalCostMax, validateEndMonthYear, validateStartMonthYear,
   validateTotalCost,
   validateMonthAmount, monthAmountErrors, hasMonthRangeError, gridPayer,
-  EDITED_FROM_SPREADSHEET_WARNING, showEditedFromSpreadsheetWarning, averagePaymentText, contractTotalToStore,
+  EDITED_FROM_SPREADSHEET_WARNING, showEditedFromSpreadsheetWarning, averagePaymentText, contractTotalToStore, individualSaveError, INDIVIDUAL_SAVE_ERROR,
 } from "./rules";
 import { CATEGORIES, type CostAccount, type CostLine, type Payment } from "../costing/model";
 import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
@@ -1275,5 +1275,46 @@ describe("newCostLine: the payer a new contract opens on (D90, CAPEX-064)", () =
     expect(newCostLine("sub-1", "id-1", "DevCo").payer).toBe("DevCo");
     expect(newCostLine("sub-1", "id-1", "SPV").payer).toBe("SPV");
     expect(newCostLine("sub-1", "id-1").payer).toBe("SPV");
+  });
+});
+
+describe("the Individual contract check moved from Save-enabled to Save-clicked (D91, CAPEX-105)", () => {
+  // Canvas `locValidCostInContract` is read in the Save OnSelect (:17574); the strip texts are cmp_ShowErrorInContract.ErrorTitle (:19760-19790).
+  it("UT-CAPEXR-199 Save stays ENABLED for Individual % Values with a total, whatever the months add up to", () => {
+    const pct = line({ description: "x", distribution: "individual", distributionScheme: "percent" });
+    expect(canSaveContract(pct, "1000", [pay(2026, 1, 101)])).toBe(true);
+    expect(canSaveContract(pct, "1000", [pay(2026, 1, 40)])).toBe(true);
+    expect(canSaveContract(pct, "", [pay(2026, 1, 100)])).toBe(false); // the total is still needed
+  });
+
+  it("UT-CAPEXR-200 the months are checked when Save is clicked, with the Canvas texts", () => {
+    expect(individualSaveError("individual", "percent", [{ amount: 60 }, { amount: 41 }])).toBe(INDIVIDUAL_SAVE_ERROR.over);
+    expect(individualSaveError("individual", "percent", [{ amount: 60 }, { amount: 39 }])).toBe(INDIVIDUAL_SAVE_ERROR.below);
+    expect(individualSaveError("individual", "percent", [{ amount: 60 }, { amount: 40 }])).toBeNull();
+    expect(individualSaveError("individual", "percent", [{ amount: 33.3 }, { amount: 33.3 }, { amount: 33.4 }])).toBeNull();
+    expect(individualSaveError("individual", "absolute", [{ amount: 0 }])).toBe("No cost is allocated.");
+    expect(individualSaveError("individual", "absolute", [{ amount: 500 }])).toBeNull();
+    expect(individualSaveError("equal", "percent", [{ amount: 7 }])).toBeNull();
+    expect(INDIVIDUAL_SAVE_ERROR.over).toBe("Total percentage is over 100%");
+    expect(INDIVIDUAL_SAVE_ERROR.below).toBe("Total percentage is below 100%");
+  });
+});
+
+describe("Save for an Individual contract only needs what the Canvas needs (D91, CAPEX-105 retest)", () => {
+  it("UT-CAPEXR-201 no month, a zero total or a negative month do not disable Save; the click-time check refuses them", () => {
+    const abs = line({ description: "x", distribution: "individual", distributionScheme: "absolute" });
+    expect(canSaveContract(abs, "", [])).toBe(true);
+    expect(canSaveContract(abs, "", [pay(2026, 1, 0)])).toBe(true);
+    expect(canSaveContract(abs, "", [pay(2026, 1, -5)])).toBe(true);
+    expect(individualSaveError("individual", "absolute", [])).toBe("No cost is allocated.");
+    expect(individualSaveError("individual", "absolute", [{ amount: 0 }])).toBe("No cost is allocated.");
+  });
+
+  it("UT-CAPEXR-202 an EQUAL contract still needs months, none negative, and a total", () => {
+    const eq = line({ description: "x", distribution: "equal" });
+    expect(canSaveContract(eq, "1000", [])).toBe(false);
+    expect(canSaveContract(eq, "1000", [pay(2026, 1, -1)])).toBe(false);
+    expect(canSaveContract(eq, "", [pay(2026, 1, 10)])).toBe(false);
+    expect(canSaveContract(eq, "1000", [pay(2026, 1, 10)])).toBe(true);
   });
 });
