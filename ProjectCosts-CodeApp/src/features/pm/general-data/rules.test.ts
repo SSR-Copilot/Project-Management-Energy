@@ -37,7 +37,7 @@ import {
   PROJECT_TYPE_LABEL, SPV_LEGAL_STRUCTURE_LABEL, CLUSTER_STATE_LABEL, START_CLUSTER_OPTIONS,
   SHAREHOLDER_ENTITY_TYPE_LABEL, DEVELOPMENT_TYPE_LABEL,
   taxFactorFallbackMunicipality, taxFactorFallbackMunicipalityCanvasParity,
-  planProjectCreate, planSaveFollowUps, createdProjectSnapshot,
+  planProjectCreate, planSaveFollowUps, createdProjectSnapshot, internalIdPatchIsNoOp,
   type GeneralDataForm, type GeneralDataRefData, type ProjectSnapshot, type ProjectRow,
   type ShareholdingEntity, type ProjectStateRef, type TrackingRow,
 } from "./rules";
@@ -901,5 +901,51 @@ describe("UT-GDATA creating a project (PO 20 Oct 2026, D25)", () => {
     const p = planSaveFollowUps({ project: reRead, form: f, ref: ref(), trackings: [], shareholdersDirty: false, entities: [] });
     expect(p.writes.filter((w) => w.entitySet === ES.projectStateTrackings && w.op === "create")).toHaveLength(7);
     expect(p.log).toEqual([MSG.stepTrackingRefreshed]);
+  });
+
+  it("UT-GDATA-084 an edit leaves out Patch #2 when it would change nothing (save performance, 5 Nov 2026)", () => {
+    const sameBu = ref({ countries: [...COUNTRIES, { id: "c-ro", name: "Romania", key: "40", besitzerBusinessUnitId: "bu-ro", businessUnitId: "bu-ro" }] });
+    const ctx = (o: Partial<Parameters<typeof planGeneralDataSave>[0]> = {}) => ({
+      project: project({ internalProjectId: "INT-7" }), form: form({ countryId: "c-ro" }), ref: sameBu,
+      trackings: [{ id: "t-draft", clusterStateId: "s-draft", approvalClusterState: 952850001, flowRunId: null }],
+      shareholdersDirty: false, entities: [], ...o,
+    });
+    // Internal Project ID set and the same unit in both country columns: Patch #2 is a no-op.
+    expect(internalIdPatchIsNoOp(ctx())).toBe(true);
+    const p = planGeneralDataSave(ctx());
+    expect(p.writes.map((w) => w.reason)).toEqual(["save the project data"]);
+    expect(p.writes[0]!.data!["owningbusinessunit@odata.bind"]).toBe("/businessunits(bu-ro)");
+    expect(p.log).toEqual([MSG.stepProjectSaved]);
+    // A blank Internal Project ID still needs its back-fill.
+    expect(internalIdPatchIsNoOp(ctx({ project: project({ internalProjectId: null }) }))).toBe(false);
+    // Two different units (Poland in the fixture): Patch #2 still moves the owner.
+    expect(internalIdPatchIsNoOp(ctx({ form: form({ countryId: "c-pl" }), ref: ref() }))).toBe(false);
+    expect(planGeneralDataSave(ctx({ form: form({ countryId: "c-pl" }), ref: ref() })).writes).toHaveLength(2);
+    // An edit stays strictly one write at a time.
+    const entities = [entity({ key: "n1", recordId: null, ownership: 1 })];
+    expect(planGeneralDataSave(ctx({ shareholdersDirty: true, entities })).writes.some((w) => w.concurrent)).toBe(false);
+  });
+
+  it("UT-GDATA-085 a new project's follow-ups: Patch #2 and the child rows in one run; an Acquired create keeps the project updates in order", () => {
+    const entities = [entity({ key: "n1", recordId: null, ownership: 0.6 }), entity({ key: "n2", recordId: null, ownership: 0.4 })];
+    const reRead = createdProjectSnapshot(project({ id: "p-new", projectNumber: "PL-2001", internalProjectId: null, besitzerBusinessUnitId: "bu-pl", startCluster: 0 }));
+    const simple = planSaveFollowUps({ project: reRead, form: form(), ref: ref(), trackings: [], shareholdersDirty: true, entities });
+    expect(simple.writes.map((w) => [w.entitySet, w.concurrent === true])).toEqual([
+      [ES.projects, true], [ES.shareholderEntityInProjects, true], [ES.shareholderEntityInProjects, true], [ES.projectStateTrackings, true],
+    ]);
+
+    const f = form({ developmentType: CHOICE.developmentType.acquiredProject, startCluster: 3, acquisitionDate: "2026-01-01", acquisitionPrice: "1" });
+    const acquired = planSaveFollowUps({
+      project: createdProjectSnapshot(project({ id: "p-new", startCluster: 3 })), form: f, ref: ref(), trackings: [], shareholdersDirty: true, entities,
+    });
+    // Patch #2, then the Draft return, one after the other; then every tracking and entity in one run.
+    expect(acquired.writes.slice(0, 2).map((w) => [w.reason, w.concurrent === true])).toEqual([
+      ["set the internal project id and the owning business unit", false],
+      ["set the project's cluster state back to Draft", false],
+    ]);
+    const run = acquired.writes.slice(2);
+    expect(run.every((w) => w.concurrent === true && w.entitySet !== ES.projects)).toBe(true);
+    expect(run.filter((w) => w.entitySet === ES.projectStateTrackings)).toHaveLength(7);
+    expect(run.filter((w) => w.entitySet === ES.shareholderEntityInProjects)).toHaveLength(2);
   });
 });

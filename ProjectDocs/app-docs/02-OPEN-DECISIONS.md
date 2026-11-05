@@ -39,6 +39,18 @@ greying, so a user without rights learns on click rather than on sight.
 **Needed from you:** which of the three. If it is the Custom API, it should be scoped now,
 because five screens will want it.
 
+**Addendum (5 Nov 2026) — the header's Permissions row.** The PM `cmp_Header` user menu carries a
+`permissions` row, `If(gblCurrentUser.CanEditSelectedProject, "Can edit Project", "Can view
+Project")`, where the flag is the same `DataSourceInfo` / `RecordInfo` pair, set in each screen's
+`OnVisible`. Ported 5 Nov 2026 (`components/headerRules.projectPermissionLabel`, `App.tsx`): the
+text goes through the same `PrivilegeProvider` seam, so under option (a) every selected project
+reads "Can edit Project" — including for a user Dataverse would refuse, who learns on click, as
+with every command today. It reads "Can view Project" with no project selected (the project list,
+New Project, Application Settings), as the canvas does before any project screen sets the flag.
+The row becomes truthful per record the moment this decision picks the role matrix or the Custom
+API; nothing in the header changes then. The Cost app's `cmp_Header` has no such row, so the Cost
+screens do not show it.
+
 ---
 
 ## D2 · The BoP standard-assumption margin: Fabric SQL or Dataverse?

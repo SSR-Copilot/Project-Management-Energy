@@ -1,6 +1,9 @@
 /**
  * Pure rules for `AppHeader`. Kept out of the component file so it exports components only.
  */
+import { ES } from "@/data/dataverseNames";
+import { canEditSelectedProject } from "@/domain/session";
+import { serverEnforcedProvider, type PrivilegeProvider } from "@/platform/privileges";
 import { palette } from "@/theme/tokens";
 
 /**
@@ -73,4 +76,33 @@ export function projectStatusVisible(status: string | undefined, environmentName
 export function pmHeaderTitle(projectId: string | undefined, projectName: string | undefined): string | undefined {
   if (!projectId) return "New Project";
   return projectName || undefined;
+}
+
+/** The PM `cmp_Header` user menu's `permissions` row — its two texts, verbatim. */
+export const PROJECT_PERMISSION_LABEL = {
+  canEdit: "Can edit Project",
+  canView: "Can view Project",
+} as const;
+
+/**
+ * `ItemDisplayName: If(gblCurrentUser.CanEditSelectedProject, "Can edit Project", "Can view
+ * Project")`. The canvas sets the flag per screen in `OnVisible`:
+ * `And(DataSourceInfo(Projects, CreatePermission), Coalesce(RecordInfo(gblRecordSelectedProject,
+ * EditPermission), false))`, and `App.OnStart` starts it at `false`, so the row reads "Can view
+ * Project" on the Project Main Screen and wherever no project is selected.
+ *
+ * The same formula through the D1 seam (`domain/session.canEditSelectedProject` over a
+ * `PrivilegeProvider`). With the shipped `serverEnforcedProvider` (D1 option a) every selected
+ * project reads "Can edit Project", because the app offers every command and Dataverse decides —
+ * the text gets a real per-record answer the day D1 picks the role matrix or the Custom API, and
+ * nothing here changes.
+ */
+export function projectPermissionLabel(
+  projectId: string | undefined, provider: PrivilegeProvider = serverEnforcedProvider,
+): string {
+  if (!projectId) return PROJECT_PERMISSION_LABEL.canView;
+  const canEdit = canEditSelectedProject(
+    provider.forTable(ES.projects).canCreate, provider.forRecord(ES.projects, projectId).canWrite,
+  );
+  return canEdit ? PROJECT_PERMISSION_LABEL.canEdit : PROJECT_PERMISSION_LABEL.canView;
 }

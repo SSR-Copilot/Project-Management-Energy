@@ -21,6 +21,13 @@
  * this read is what stops it recreating a row another user deleted. The guard is
  * `updateRecordIfExists` (`data/client.ts`), not a second copy. No PM plan sets `guarded`.
  *
+ * OPT-IN PARALLEL RUNS (save performance, 5 Nov 2026): consecutive writes marked `concurrent` are
+ * sent together and awaited as one step; the plan's order holds between steps. A plan uses it only
+ * for independent rows (no server automation depends on their relative order); a write in a run
+ * sees the ids created before the run, never one created inside it. A failure in a run lets its
+ * other writes finish, then stops the plan with `PlanError` (`done` = the writes that landed).
+ * Plans that mark nothing run exactly as before. Pinned by UT-PLAN-032..035.
+ *
  * DIVERGENCE (no canvas equivalent; P-1 stale skip tokens): every write Dataverse ACCEPTS drops
  * the cached `countedPage` walks for its table via `invalidatePageTokens(write.entitySet)`. A
  * paging cookie encodes the last row's sort key and primary key, so once a create, an update of a
@@ -144,6 +151,81 @@ const primaryKeyOf = (entitySet: string): string => {
   return info.primaryKey;
 };
 
+/**
+ * Sends one write and resolves to the id it created (a create) or `undefined`. `createdIds` are the
+ * ids created by the plan's EARLIER steps, for `CREATED_ROW_ID` and `createdRowRef(n)`.
+ */
+async function sendWrite(
+  write: WritePlan["writes"][number],
+  operation: string,
+  client: PlanClient & Partial<GuardedPlanClient>,
+  createdIds: readonly string[],
+): Promise<string | undefined> {
+  if (write.guarded && write.op !== "update") {
+    throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
+  }
+  const id = write.id === CREATED_ROW_ID
+    ? createdIds[createdIds.length - 1]
+    : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
+  if (write.id === CREATED_ROW_ID && !id) {
+    throw new Error("a write refers to a created row, but no create preceded it");
+  }
+  const data = resolveData(write.data, createdIds);
+  const label = write.label ?? `${operation}: ${write.reason}`;
+  const t0 = performance.now();
+  /** One DATA line per write (a guarded update logs itself inside `updateRecordIfExists`). */
+  const logged = () => logData({ kind: write.op, target: write.entitySet, rows: 1, ms: performance.now() - t0, ok: true });
+  if (write.op === "create") {
+    const key = primaryKeyOf(write.entitySet);
+    const row = unwrap(
+      await client.createRecordAsync<Record<string, unknown>, Record<string, unknown>>(
+        write.entitySet, data,
+      ),
+      label,
+    );
+    // The row exists from here on, even if the id check below fails the step.
+    invalidatePageTokens(write.entitySet);
+    const newId = row?.[key];
+    if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
+    logged();
+    return newId;
+  }
+  if (write.op === "update" && write.guarded === true) {
+    const primaryKey = primaryKeyOf(write.entitySet);
+    if (typeof client.retrieveMultipleRecordsAsync !== "function") {
+      throw new Error(`${label}: this client cannot read rows, so a guarded update is refused rather than sent unguarded`);
+    }
+    const guardClient = client as GuardedPlanClient;
+    await updateRecordIfExists(label, write.entitySet, id!, data, {
+      primaryKey,
+      client: () => guardClient as unknown as GuardedUpdateClient,
+    });
+    // Reached only when the PATCH was accepted. A gone row (RecordGoneError, from the read
+    // or a 404 PATCH) throws above with nothing sent, so it is NOT this plan's mutation and
+    // the cache is left alone; another user's delete is outside what this cache can track.
+    invalidatePageTokens(write.entitySet);
+    return undefined;
+  }
+  if (write.op === "update") {
+    primaryKeyOf(write.entitySet);
+    unwrap(
+      await client.updateRecordAsync<Record<string, unknown>, Record<string, unknown>>(
+        write.entitySet, id!, data,
+      ),
+      label,
+    );
+    logged();
+    invalidatePageTokens(write.entitySet);
+    return undefined;
+  }
+  primaryKeyOf(write.entitySet);
+  // Already gone counts as deleted (`unwrapDelete`).
+  unwrapDelete(await client.deleteRecordAsync(write.entitySet, id!), label);
+  logged();
+  invalidatePageTokens(write.entitySet);
+  return undefined;
+}
+
 export async function executePlan(
   plan: WritePlan,
   operation: string,
@@ -151,73 +233,42 @@ export async function executePlan(
 ): Promise<PlanResult> {
   if (plan.refusedReason) throw new PlanRefusedError(plan.refusedReason);
 
+  const writes = plan.writes;
   const createdIds: string[] = [];
   let done = 0;
-  for (const write of plan.writes) {
-    try {
-      if (write.guarded && write.op !== "update") {
-        throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
+  for (let i = 0; i < writes.length;) {
+    const write = writes[i]!;
+    if (!write.concurrent) {
+      try {
+        const newId = await sendWrite(write, operation, client, createdIds);
+        if (newId !== undefined) createdIds.push(newId);
+        done += 1;
+      } catch (cause) {
+        throw new PlanError(done, writes.length, write.reason, cause, [...createdIds]);
       }
-      const id = write.id === CREATED_ROW_ID
-        ? createdIds[createdIds.length - 1]
-        : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
-      if (write.id === CREATED_ROW_ID && !id) {
-        throw new Error("a write refers to a created row, but no create preceded it");
-      }
-      const data = resolveData(write.data, createdIds);
-      const label = write.label ?? `${operation}: ${write.reason}`;
-      const t0 = performance.now();
-      /** One DATA line per write (a guarded update logs itself inside `updateRecordIfExists`). */
-      const logged = () => logData({ kind: write.op, target: write.entitySet, rows: 1, ms: performance.now() - t0, ok: true });
-      if (write.op === "create") {
-        const key = primaryKeyOf(write.entitySet);
-        const row = unwrap(
-          await client.createRecordAsync<Record<string, unknown>, Record<string, unknown>>(
-            write.entitySet, data,
-          ),
-          label,
-        );
-        // The row exists from here on, even if the id check below fails the step.
-        invalidatePageTokens(write.entitySet);
-        const newId = row?.[key];
-        if (typeof newId !== "string" || !newId) throw new CreatedIdMissingError(label);
-        createdIds.push(newId);
-        logged();
-      } else if (write.op === "update" && write.guarded === true) {
-        const primaryKey = primaryKeyOf(write.entitySet);
-        if (typeof client.retrieveMultipleRecordsAsync !== "function") {
-          throw new Error(`${label}: this client cannot read rows, so a guarded update is refused rather than sent unguarded`);
-        }
-        const guardClient = client as GuardedPlanClient;
-        await updateRecordIfExists(label, write.entitySet, id!, data, {
-          primaryKey,
-          client: () => guardClient as unknown as GuardedUpdateClient,
-        });
-        // Reached only when the PATCH was accepted. A gone row (RecordGoneError, from the read
-        // or a 404 PATCH) throws above with nothing sent, so it is NOT this plan's mutation and
-        // the cache is left alone; another user's delete is outside what this cache can track.
-        invalidatePageTokens(write.entitySet);
-      } else if (write.op === "update") {
-        primaryKeyOf(write.entitySet);
-        unwrap(
-          await client.updateRecordAsync<Record<string, unknown>, Record<string, unknown>>(
-            write.entitySet, id!, data,
-          ),
-          label,
-        );
-        logged();
-        invalidatePageTokens(write.entitySet);
-      } else {
-        primaryKeyOf(write.entitySet);
-        // Already gone counts as deleted (`unwrapDelete`).
-        unwrapDelete(await client.deleteRecordAsync(write.entitySet, id!), label);
-        logged();
-        invalidatePageTokens(write.entitySet);
-      }
-      done += 1;
-    } catch (cause) {
-      throw new PlanError(done, plan.writes.length, write.reason, cause, [...createdIds]);
+      i += 1;
+      continue;
     }
+    // A run of consecutive `concurrent` writes: sent together, awaited as one step. Each one sees
+    // the ids created BEFORE the run; the run's own creates join `createdIds` in plan order.
+    let end = i;
+    while (end < writes.length && writes[end]!.concurrent) end += 1;
+    const run = writes.slice(i, end);
+    const before = [...createdIds];
+    const settled = await Promise.allSettled(run.map((w) => sendWrite(w, operation, client, before)));
+    let failure: { reason: string; cause: unknown } | undefined;
+    settled.forEach((s, k) => {
+      if (s.status === "fulfilled") {
+        if (s.value !== undefined) createdIds.push(s.value);
+        done += 1;
+      } else if (!failure) {
+        failure = { reason: run[k]!.reason, cause: s.reason };
+      }
+    });
+    // Every write of the run was sent; `done` counts the ones that landed, and nothing after the
+    // run is sent — the same "N of M changes had already been saved" a sequential stop reports.
+    if (failure) throw new PlanError(done, writes.length, failure.reason, failure.cause, [...createdIds]);
+    i = end;
   }
   return { done, createdIds };
 }

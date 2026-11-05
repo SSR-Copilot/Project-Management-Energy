@@ -1,7 +1,7 @@
 export { AppHeader, environmentBadge, versionLabel, ERROR_TOOLTIP } from "./AppHeader";
 export type { AppHeaderProps } from "./AppHeader";
 export { AppShell } from "./AppShell";
-export { pmHeaderTitle } from "./headerRules";
+export { pmHeaderTitle, projectPermissionLabel } from "./headerRules";
 export { CommandBar } from "./CommandBar";
 export { useCommandRowStyles } from "./commandRow";
 export { CommandSlot, CommandSlotProvider } from "./CommandSlot";
