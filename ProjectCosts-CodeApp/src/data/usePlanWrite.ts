@@ -32,6 +32,14 @@ export interface PlanJob {
    * write, and the first plan's writes stay, which is the canvas's own (non-transactional) order.
    */
   then?: (first: PlanResult, ctl: { setProgress: (text: string) => void }) => Promise<WritePlan | null | undefined>;
+  /**
+   * Called once the job's writes are over, `ok` false when they were refused or failed, BEFORE the awaited reload of the screen's
+   * data starts. A panel closes here, so the reload runs behind a closed panel (the canvas closes it with `Select(…_Reset)`, then
+   * `Navigate`s and refreshes). Optional; no other caller sets it.
+   */
+  onWritten?: (ok: boolean) => void;
+  /** The spinner text for the reload that follows the writes (the canvas's next pop-up, "Loading, please wait..."). */
+  reloadProgress?: string;
 }
 
 /** The message for a refused or failed write — permission first, then how far a plan got. */
@@ -73,18 +81,17 @@ export function usePlanWrite(opts: {
 
   const mutation = useMutation({
     mutationFn: async (job: PlanJob) => {
-      const plan = typeof job.plan === "function" ? await job.plan() : job.plan;
-      const first = await executePlan(plan, job.progress);
-      if (!job.then) return { ...first, plan };
-      const next = await job.then(first, { setProgress });
-      if (!next) return { ...first, plan };
-      const second = await executePlan(next, job.progress);
-      return {
-        done: first.done + second.done,
-        createdIds: [...first.createdIds, ...second.createdIds],
-        createdRows: { ...first.createdRows, ...second.createdRows },
-        plan,
-      };
+      // The writes are over (landed or failed) once the body settles, BEFORE `onSettled` reloads the screen's data:
+      // tell the caller (it closes its panel) and switch the spinner text to the reload's (D106).
+      let ok = false;
+      try {
+        const result = await runJob(job);
+        ok = true;
+        return result;
+      } finally {
+        job.onWritten?.(ok);
+        if (job.reloadProgress) setProgress(job.reloadProgress);
+      }
     },
     onSettled: () => {
       const reload = Promise.all(opts.invalidate.map((queryKey) => qc.invalidateQueries({ queryKey })));
@@ -98,6 +105,21 @@ export function usePlanWrite(opts: {
       return undefined;
     },
   });
+
+  async function runJob(job: PlanJob) {
+    const plan = typeof job.plan === "function" ? await job.plan() : job.plan;
+    const first = await executePlan(plan, job.progress);
+    if (!job.then) return { ...first, plan };
+    const next = await job.then(first, { setProgress });
+    if (!next) return { ...first, plan };
+    const second = await executePlan(next, job.progress);
+    return {
+      done: first.done + second.done,
+      createdIds: [...first.createdIds, ...second.createdIds],
+      createdRows: { ...first.createdRows, ...second.createdRows },
+      plan,
+    };
+  }
 
   /** Runs one job; resolves to the created ids, or null when it was refused or failed. */
   const run = async (job: PlanJob): Promise<string[] | null> => {

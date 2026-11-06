@@ -115,4 +115,35 @@ describe("usePlanWrite then", () => {
     await act(async () => { held.finish(); await running; });
     expect(ended).toBe(true);
   });
+
+  it("UT-PLANWRITE-011 onWritten(true) runs when the writes land, BEFORE the awaited reload; reloadProgress is the spinner text meanwhile", async () => {
+    seen.plans.length = 0;
+    const held = heldReload();
+    const { result } = renderHook(() => usePlanWrite({ invalidate: [["x"]], action: "test" }), { wrapper: held.own });
+    const onWritten = vi.fn();
+    let running: Promise<unknown> = Promise.resolve();
+    act(() => { running = result.current.run({ progress: "go", plan: update("only"), onWritten, reloadProgress: "reloading" }); });
+    await waitFor(() => expect(onWritten).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(result.current.progress).toBe("reloading"));
+    await act(async () => { held.finish(); await running; });
+    expect(result.current.progress).toBeNull();
+  });
+
+  it("UT-PLANWRITE-012 onWritten(false) runs when the writes fail; the error is still reported and the progress still ends", async () => {
+    seen.plans.length = 0;
+    const { result } = renderHook(() => usePlanWrite({ invalidate: [], action: "test", errorText: (d) => `Error: ${d}` }), { wrapper });
+    const onWritten = vi.fn();
+    let created: string[] | null = ["untouched"];
+    await act(async () => {
+      created = await result.current.run({
+        progress: "go", plan: create("first"), onWritten, reloadProgress: "reloading",
+        then: async () => { throw new Error("boom"); },
+      });
+    });
+    expect(onWritten).toHaveBeenCalledTimes(1);
+    expect(onWritten).toHaveBeenCalledWith(false);
+    expect(created).toBeNull();
+    expect(result.current.error).toBe("Error: boom");
+    expect(result.current.progress).toBeNull();
+  });
 });

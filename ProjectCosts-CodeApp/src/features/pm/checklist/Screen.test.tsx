@@ -59,7 +59,7 @@ const state = vi.hoisted(() => ({
   progress: null as string | null,
   writeError: null as string | null,
   patchRow: vi.fn(async (..._a: unknown[]) => [] as string[]),
-  saveTransition: vi.fn(async (_r: unknown) => [] as string[]),
+  saveTransition: vi.fn(async (_r: unknown, _after?: { onWritten: (ok: boolean) => void }) => [] as string[] | null),
   returnToPrevious: vi.fn(async (_r: unknown) => [] as string[]),
   changeTerminal: vi.fn(async (..._a: unknown[]) => [] as string[]),
   prepareCluster: vi.fn(async (..._a: unknown[]) => [] as string[]),
@@ -367,6 +367,56 @@ describe("Project General CheckList Screen (connected)", () => {
     fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
     await waitFor(() => expect(state.saveTransition).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(panelOpen()).toBe(false));
+  });
+
+  /** A saveTransition that reports its writes over, then keeps running (the awaited reload) until `release()`. */
+  const heldSave = (ok: boolean) => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    state.saveTransition.mockImplementationOnce(async (_r, after) => {
+      after?.onWritten(ok);
+      await held;
+      return ok ? [] : null;
+    });
+    return release;
+  };
+
+  it("UT-CHKLST-919 D106: the panel closes the moment the writes land, while the reload is still running", async () => {
+    const release = heldSave(true);
+    await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(state.saveTransition).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+    release();
+  });
+
+  it("UT-CHKLST-920 D106: a failed write closes the panel while the reload is still running", async () => {
+    const release = heldSave(false);
+    await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+    release();
+  });
+
+  it("UT-CHKLST-921 D106: Save hands the write hook the callback that closes the panel", async () => {
+    await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(state.saveTransition).toHaveBeenCalledTimes(1));
+    expect(typeof state.saveTransition.mock.calls[0]![1]?.onWritten).toBe("function");
+  });
+
+  it("UT-CHKLST-922 D106: the spinner of the reload phase is portalled above the page and the panel is already closed behind it", async () => {
+    const release = heldSave(true);
+    const again = await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+    state.progress = MSG.loading;
+    again();
+    const overlay = screen.getByText(MSG.loading).closest("[aria-busy='true']") as HTMLElement;
+    expect(overlay).not.toBeNull();
+    expect(screen.getByTestId("Project General CheckList Screen").contains(overlay)).toBe(false);
+    expect(panelOpen()).toBe(false);
+    release();
   });
 
   it("UT-CHKLST-918 the write error bar shows in the page once the panel is closed", async () => {

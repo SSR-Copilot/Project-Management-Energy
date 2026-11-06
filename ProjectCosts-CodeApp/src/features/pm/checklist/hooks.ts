@@ -219,6 +219,14 @@ export interface GateCancelRequest {
   appId: string;
 }
 
+/**
+ * What a panel's Save does the moment the writes are over (D106): `onWritten` closes the panel, then the reload shows the
+ * canvas's next spinner ("Loading, please wait...") behind the closed panel.
+ */
+export interface WriteEnd { onWritten: (ok: boolean) => void }
+const endOf = (after?: WriteEnd): { onWritten?: (ok: boolean) => void; reloadProgress?: string } =>
+  after ? { onWritten: after.onWritten, reloadProgress: MSG.loading } : {};
+
 /** Runs the screen's writes and refreshes the screen, the header and the other project views. */
 export function useChecklistWrites(projectId: string | undefined) {
   const id = projectId ?? "";
@@ -259,8 +267,9 @@ export function useChecklistWrites(projectId: string | undefined) {
     w.run({ progress: texts.progress, ...(texts.success ? { success: texts.success } : {}), errorText: texts.error, plan: planChecklistRowPatch(row.id, data, row.title) });
 
   /** `pcf_…_Buttons_Save` (Y:5235-5411): the direct move, with the cluster's task table as the note. */
-  const saveTransition = (req: TransitionRequest) => w.run({
+  const saveTransition = (req: TransitionRequest, after?: WriteEnd) => w.run({
     progress: MSG.clusterSaving(req.state.name),
+    ...endOf(after),
     // No green "Cluster data '…' will be saved." bar after the move (PO, 3 Nov 2026).
     errorText: MSG.projectStatusError,
     plan: async () => {
@@ -307,10 +316,10 @@ export function useChecklistWrites(projectId: string | undefined) {
    * the note, in the canvas order, as one job. Cluster mode: the flow updates the tracking row itself, so only the
    * note follows; the row's id (an existing tracking, or the one the patch created) is the flow's StateTrackingGUID.
    */
-  const requestApproval = (req: ApprovalRequest) => {
+  const requestApproval = (req: ApprovalRequest, after?: WriteEnd) => {
     if (req.kind === "checklist") {
       return w.run({
-        progress: MSG.pleaseWait, errorText: MSG.projectStatusError,
+        progress: MSG.pleaseWait, errorText: MSG.projectStatusError, ...endOf(after),
         plan: planChecklistApprovalRequestPatch({
           row: req.row, comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
         }),
@@ -325,7 +334,7 @@ export function useChecklistWrites(projectId: string | undefined) {
     }
     let trackingId: string | null = null;
     return w.run({
-      progress: MSG.pleaseWait, errorText: MSG.projectStatusError,
+      progress: MSG.pleaseWait, errorText: MSG.projectStatusError, ...endOf(after),
       plan: async () => {
         const tracking = trackingFor(await listChecklistTrackings(id), req.state.id);
         trackingId = tracking?.id ?? null;

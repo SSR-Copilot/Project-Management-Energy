@@ -574,7 +574,12 @@ export default function CheckListScreen() {
     // The last cluster has no "Move to …" (the canvas hides NextCluster), so it is never completed here.
     if (!next || panelForm?.kind !== "cluster" || panelForm.stateId !== current.id) return;
     const due = showApprovalDueDate(panel) && panel.approvalDueDate ? ymdToLocalIso(panel.approvalDueDate) : null;
-    const done = await writes.saveTransition({ project, state: current, next, comment: panel.comment, approvalDueDate: due });
+    // D106: the panel closes the moment the writes are over (before the awaited reload), so the reload's "Loading, please wait..."
+    // spinner runs behind a closed panel, in the canvas order (`Select(…_Reset)`, then `Navigate` and refresh).
+    const done = await writes.saveTransition(
+      { project, state: current, next, comment: panel.comment, approvalDueDate: due },
+      { onWritten: (ok) => { setPanelForm(null); if (ok) setSelectedClusterId(null); } },
+    );
     // The canvas closes the panel whatever the outcome (`Select(btn_…_Buttons_Reset)` runs after the `IfError`, Y:5410), and its
     // error text is never shown (the dialog is hidden in the same step). Here the panel closes too, so the error bar of
     // `WriteFeedback` is not left BEHIND an open panel and its scrim; only a success moves the selection to the next cluster.
@@ -596,7 +601,7 @@ export default function CheckListScreen() {
         approvalRequested: rowApproval(settings, panel.target.row).icon === "People",
         comment: panel.comment, approvalDueDate: due,
       };
-    const done = await writes.requestApproval(req);
+    const done = await writes.requestApproval(req, { onWritten: (ok) => { setPanelForm(null); if (ok) setSelectedClusterId(null); } });
     // The canvas closes the panel, refreshes and `Navigate`s to the screen again (Y:5709-5719).
     // Closes whatever the outcome, as the canvas does (Y:5711, `Select(…_Reset)` Y:5717), so an error is not hidden behind the panel.
     setPanelForm(null);
