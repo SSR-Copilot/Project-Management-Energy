@@ -390,3 +390,12 @@ Not committed. Where a row says **fixed**, the code app was changed to follow th
 | Screen | Change | Status |
 |---|---|---|
 | Project Finance | The Individual repayment column no longer runs under the next column: a long validation message wraps inside its column instead of widening the box, and the row grows with it, so no text sits on the next caption. The Canvas clips the one-line message instead | fixed (DIVERGENCE, readable full text) |
+
+## Cluster Checklist, Move to Cluster: loading and layers (6 Nov 2026, D105) — fixed / kept
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | The save spinner now covers the open transition panel, as the Canvas pop-up does; before, it sat under the panel and Save and the ✕ stayed clickable during the write | fixed |
+| Cluster Checklist | The panel's ✕ and Escape are locked while a write runs | fixed |
+| Cluster Checklist | The panel closes after a failed move or approval request, as the Canvas does (Reset runs after the IfError); the error bar is no longer left behind the panel | fixed (the typed comment is discarded; product to confirm) |
+| Cluster Checklist | An error bar with the root cause shows where the Canvas shows nothing (its error text is hidden in the same step) | improvement over the Canvas, kept |
