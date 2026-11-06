@@ -437,3 +437,26 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Production | The roll-up runs in the same job as the Save / Delete / status change, from a fresh read after the writes: one spinner and one reload instead of two | fixed (DIVERGENCE: a roll-up failure carries the Save's error text) |
 | Production | The spinner closes once the writes land; the screen reloads behind it with the command bar off until it has (as Generators) | fixed (DIVERGENCE: the old rows show for about one reload) |
 | Production | Tests UT-PROD-130 and UT-PRODHOOK-001…004 pin the plan shape, the single job and reload, the post-write read and the generation rule | new (tests) |
+
+## Cost: German number audit, the panel boxes open in the user's language (6 Nov 2026, `pm-validation` 4b832e0) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| CAPEX Costs | The month-amount checks read a stored decimal with the user's separator: a German "12.5" no longer flags every decimal % as "Value must be numeric upto one decimal" | fixed |
+| Contracts | Every number in the Edit panel (contract figures, margin % / fixed value, payment-target totals) opens with the user's decimal separator (`inputDecimalText`); a stored 7.5 % opened as "7.5", which German read as 75 % in the total | fixed (a wrong-total bug removed) |
+| Land Lease | The one-time payments, rates, percentages and inflation profile open in the user's locale (`leaseDecimalText`): an English "65.00" was rejected in German, and a hidden "2.3" was saved as 23 | fixed (a data-corruption bug removed) |
+| OPEX | Fix Costs, the EUR rates and the inflation profile open in the user's locale (`opexDecimalText`), and the save reads them in that locale (`opexNumberOrNull`): a German "1234,50" was saved blank and the inflation profile as 0 | fixed (a data-loss bug removed) |
+
+## Revenues: the Balancing Price panel opens as the Canvas (6 Nov 2026, `pm-validation` 4b832e0) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| Revenues | A new balancing period opens with Shift of COD "0" and both duration pickers blank, so the End Date is the day before the Start Date (L3673-3687, L3996-4077, L4185-4197); it opened on "0 Year" / "1 Month" with a blank shift, a month later than the Canvas. A blank picker saves blank, as in the Canvas (L4591-4592). An edited period opens its stored values (`balancingFormFor`). UT-REV-161/162, UT-REV-908 | fixed |
+
+## Cluster Checklist: the information pop-up, the Info notice, and the Only Notifications gate (6 Nov 2026, `pm-validation` 4b832e0) — fixed / new
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | `cmp_PopUp_CheckList_GeneralData_Information` is the Canvas `cmp_PopUp_Information` (450 × 260, 0.7 scrim, themePrimary header with the ✕, one 90-wide "✓ OK"), the shared `ConfirmDialog` "information" variant; it was a plain Fluent dialog | reproduced |
+| Cluster Checklist | The Info notice shows whenever the page is not locked and Next Cluster is disabled, on the last cluster too (`con_…_Buttons_Info.Visible`, S:2026); it also required a next cluster | fixed |
+| Cluster Checklist | **NEW (not in the Canvas):** after a gate approval request on an active Only Notifications gate, the loader stays ("Cluster Transition in Progress. Please wait...") and re-reads the trackings every 1.5 s, for up to 30 s, until the gate flow has completed the cluster, so the screen opens on the moved project. The Canvas shows the half-way state and its tooltip asks the user to "wait 30 Seconds and then Refresh the Page" (Y:1972). UT-CHKLST-082 | proposed (not approved) |

@@ -7102,7 +7102,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D107 — Production: the "can't be deleted/deactivated" pop-up and the disabled Save look like the Canvas (6 Nov 2026)
 
-**Status:** working tree (from `d1ae59b`), not committed, not pushed, not on DEV. Follow the Canvas.
+**Status:** committed on `pm-validation` (`4b832e0`, from `d1ae59b`), not pushed, not on DEV. Follow the Canvas.
 **Report:** (1) the Delete / Deactivate of the last active production study must show the same pop-up as the Canvas; (2) the Add/Edit Production panel's Save button does not look like the Canvas one.
 **Behaviour was already right:** `blocksLastYieldRemoval` (Y:1040-1076) routes BOTH `deleteProductionItem` and `deactivateProdItem` to `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information_1` instead of the confirmation, with the canvas texts (`PREVENT_LAST_YIELD_DIALOG`). Only the look differed: a stock Fluent dialog.
 **Fix (1):** a shared `InformationPopUp` (`src/components/InformationPopUp.tsx`) transcribes the canvas pop-up once: 50 % black scrim; white square card; 64-high RGBA(0,110,185) header with the 15-px white title and a 20-px white ✕; the light-blue ⓘ tag (RGBA(204,226,241,.5), 18-px Grayscale10 icon, `Font.Small` RGBA(44,44,44) text); a 2-px RGBA(213,213,213) rule edge to edge; the outlined blue "Close" at the end. The per-copy size is a prop: Production passes `Width: =550`, `Height: =220`, gutter 30 and the tag `Height: =55` (Y:9314-9407); Generators keeps its defaults (520 measured, gutter 32, tag ≥ 50). The Generators pop-up, which had the same chrome inline, now uses the component (no visual change; same test ids). The canvas control names keep their per-screen suffix (`canvasSuffix`: `""` / `"_1"`).
@@ -7112,7 +7112,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D108 — Production: faster Save, Delete and Activate / Deactivate (6 Nov 2026)
 
-**Status:** working tree, not committed, not pushed, not on DEV.
+**Status:** committed on `pm-validation` (`4b832e0`), not pushed, not on DEV.
 **Report:** saving on the Production screen is slow — create, edit and delete.
 **RCA (from the code; not timed live):** every write path ran (a) the action's writes ONE ROUND TRIP EACH — a yield with negative prices sends one write per curve year (about 25–30 from the COD), plus the seasonality row and the revenue syncs; (b) an awaited reload of the four views (Production, the project header, Milestones' and General Data's copy); (c) a SECOND job for the roll-up (Recalc part 1), with its own fresh read, one write and (d) a second awaited reload. The spinner also closed and reopened between the two jobs.
 **Fix:** the same writes, in the same order where it matters, with fewer waits —
