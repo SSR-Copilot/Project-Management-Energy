@@ -414,3 +414,9 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Cluster Checklist | The panel's ✕ and Escape are locked while a write runs | fixed |
 | Cluster Checklist | The panel closes after a failed move or approval request, as the Canvas does (Reset runs after the IfError); the error bar is no longer left behind the panel | fixed (the typed comment is discarded; product to confirm) |
 | Cluster Checklist | An error bar with the root cause shows where the Canvas shows nothing (its error text is hidden in the same step) | improvement over the Canvas, kept |
+
+## Cluster Checklist, Move to Cluster: the panel closes when the writes end (6 Nov 2026, D106) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | The transition panel closes as soon as the writes end, success or failure, as the Canvas does, and the "Loading, please wait..." spinner then covers the reload behind it; before, the panel stayed open under the spinner for the whole write and reload | fixed |
