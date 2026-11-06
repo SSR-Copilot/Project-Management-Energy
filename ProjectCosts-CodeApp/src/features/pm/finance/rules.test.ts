@@ -72,6 +72,7 @@ import {
   validateCommitmentFeeValue, validateDsraUpfrontFee, validatePofds, validateStartDateOfSaving, vatBaseRateDefault,
   financeCardStandard, trancheFinancialCloseIsStandard,
   FIN_LABEL, PANEL_MAX_LENGTH, shareholderLoanToSave, shouldRegenerateRepayments,
+  monthsOnYearsPicked, trancheStatusChangeClearsSchedules,
   stepUpPeriodChangeAllowed, trancheFormTitle, trancheMonthDefault, trancheRecord,
   type DecommissioningForm, type DsraForm, type FinancingInputRow,
 } from "./rules";
@@ -2068,6 +2069,22 @@ describe("FINANCE-VALIDATION-AUDIT fixes (21 Oct 2026)", () => {
   it("UT-FIN-241 the panel MaxLength values and placeholders are the canvas ones", () => {
     expect(PANEL_MAX_LENGTH).toEqual({ freeEquity: 9, vatBankMargin: 6, vatFacilityAmount: 20, decommissioningValue: 15, other: 20 });
     expect([FIN_LABEL.findBank, FIN_LABEL.yearPlaceholder, FIN_LABEL.monthPlaceholder]).toEqual(["Find Bank", "Year", "Month"]);
+  });
+
+  it("UT-FIN-242 a blank month reads 0 once the years are chosen (the MM DefaultSelectedItems, Y:9935 / 11273)", () => {
+    expect(monthsOnYearsPicked(10, null)).toBe(0);
+    expect(monthsOnYearsPicked(10, 6)).toBe(6);
+    expect(monthsOnYearsPicked(null, null)).toBeNull();
+    expect(monthsOnYearsPicked(0, null)).toBe(0);
+  });
+
+  it("UT-FIN-243 only the Reset branches of the status OnChange clear the schedules; Term Sheet <-> Credit Agreement keeps them (Y:9239, 14046)", () => {
+    const { standardAssumption: sa, termSheet: ts, creditAgreement: ca } = CHOICE_FINANCE.trancheStatus;
+    expect(trancheStatusChangeClearsSchedules({ trancheStatus: ts, storedTrancheStatus: null }, ca)).toBe(false);
+    expect(trancheStatusChangeClearsSchedules({ trancheStatus: ca, storedTrancheStatus: ts }, ts)).toBe(false);
+    expect(trancheStatusChangeClearsSchedules({ trancheStatus: ts, storedTrancheStatus: null }, sa)).toBe(true);
+    expect(trancheStatusChangeClearsSchedules({ trancheStatus: sa, storedTrancheStatus: null }, ts)).toBe(true);
+    expect(trancheStatusChangeClearsSchedules({ trancheStatus: ts, storedTrancheStatus: sa }, ca)).toBe(true);
   });
 });
 

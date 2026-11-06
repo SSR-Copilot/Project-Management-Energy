@@ -66,6 +66,7 @@ const state = {
   inputs: inputs as FinancingInputRow[],
   error: undefined as unknown,
   debt: NO_DEBT,
+  repayments: [] as { id: string; financingInputId: string; year: number; amount: number }[],
 };
 const run = vi.fn(async (_job: PlanJob): Promise<string[] | null> => []);
 const duplicates = vi.fn(async (_key: string): Promise<string[]> => []);
@@ -82,7 +83,7 @@ vi.mock("./hooks", () => ({
   useBanks: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
   useKfwTranches: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
   useFinancingInputs: () => ok(state.inputs),
-  useRepaymentAmounts: () => ok([]),
+  useRepaymentAmounts: () => ok(state.repayments),
   useStepUpMargins: () => ok([]),
   useTotalDevexCapex: () => ok(1000),
   useActiveTurbineCount: () => ok(5),
@@ -109,6 +110,7 @@ beforeEach(() => {
   state.inputs = inputs;
   state.error = undefined;
   state.debt = NO_DEBT;
+  state.repayments = [];
   run.mockClear();
   duplicates.mockClear();
 });
@@ -290,5 +292,78 @@ describe("UT-FIN Screen (connected)", () => {
     expect(screen.queryByTestId("txt_SeniorDebtData_FixedAmountValue")).toBeNull();
     fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Fixed_Amount_Options-${CHOICE_FINANCE.fixedAmount.fixedValue}`));
     expect(screen.getByTestId("txt_SeniorDebtData_FixedAmountValue")).toBeTruthy();
+  });
+});
+
+/** Picks one option of a Fluent dropdown by its canvas control name and visible option text. */
+const pick = async (testId: string, optionName: string) => {
+  fireEvent.click(screen.getByTestId(testId));
+  fireEvent.click(await screen.findByRole("option", { name: optionName }));
+};
+const repaymentInputs = () => screen.queryAllByTestId("txt_SeniorDebtData_RepaymentAmount") as HTMLInputElement[];
+
+describe("UT-FIN Individual repayment schedule (Repayment Durations)", () => {
+  const openAddTermSheetIndividual = async () => {
+    renderScreen();
+    unfold("c3");
+    fireEvent.click(screen.getByTestId("command-AddFinanceInput"));
+    fireEvent.click(await screen.findByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.termSheet}`));
+    fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Data_RepaymentProfile-${CHOICE_FINANCE.repaymentProfile.individual}`));
+  };
+
+  it("UT-FIN-916 Add, Term Sheet, Individual: choosing only the YEARS of Tenor and Start Repayment shows the yearly amount rows (the months default to 0 as in the canvas)", async () => {
+    await openAddTermSheetIndividual();
+    expect(repaymentInputs()).toHaveLength(0);
+    await pick("Drp_SeniorDebtData_Tenor_YY", "10 years");
+    await pick("Drp_SeniorDebtData_StartRepayment_YY", "1 year");
+    // COD 2028-01-01: start 2029, end 2038 -> ten rows, the canvas "<Year> - Repayment Amount [EUR]".
+    expect(repaymentInputs()).toHaveLength(10);
+    expect(screen.getByText("2029 - Repayment Amount [EUR]")).toBeTruthy();
+    expect(screen.getByText("2038 - Repayment Amount [EUR]")).toBeTruthy();
+    // The month dropdowns show the canvas default 0 (`If(Not(IsBlank(<YY>.Selected.Value)), 0)`).
+    expect((screen.getByTestId("drp_SeniorDebtData_Tenor_MM") as HTMLInputElement).value).toBe("0 month");
+  });
+
+  it("UT-FIN-919 Add, Term Sheet: choosing only the YEARS of Commitment Fee Free Period and Fixed Interest Rate shows month 0 (canvas `If(Not(IsBlank(<YY>.Selected.Value)), 0)`, Y:12245, Y:12863)", async () => {
+    await openAddTermSheetIndividual();
+    expect((screen.getByTestId("Drp_SeniorDebtData_Commitment_Fee_Free_Period_MM") as HTMLInputElement).value).not.toBe("0 month");
+    await pick("Drp_SeniorDebtData_Commitment_Fee_Free_Period_YY", "1 year");
+    expect((screen.getByTestId("Drp_SeniorDebtData_Commitment_Fee_Free_Period_MM") as HTMLInputElement).value).toBe("0 month");
+    await pick("drp_SeniorDebtData_Fixed_Interest_Rate_YY", "5 years");
+    expect((screen.getByTestId("drp_SeniorDebtData_Fixed_Interest_Rate_MM") as HTMLInputElement).value).toBe("0 month");
+  });
+
+  it("UT-FIN-917 Add: changing Term Sheet to Credit Agreement keeps the typed Individual schedule (canvas third OnChange branch does not Clear it)", async () => {
+    await openAddTermSheetIndividual();
+    await pick("Drp_SeniorDebtData_Tenor_YY", "10 years");
+    await pick("drp_SeniorDebtData_Tenor_MM", "0 month");
+    await pick("Drp_SeniorDebtData_StartRepayment_YY", "1 year");
+    await pick("Drp_SeniorDebtData_StartRepayment_MM", "0 month");
+    expect(repaymentInputs()).toHaveLength(10);
+    fireEvent.change(repaymentInputs()[0]!, { target: { value: "1000" } });
+    fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.creditAgreement}`));
+    expect(repaymentInputs()).toHaveLength(10);
+    expect(repaymentInputs()[0]!.value).toBe("1000");
+  });
+
+  it("UT-FIN-918 Edit a stored Term Sheet / Individual tranche: its stored amounts show, and Term Sheet to Credit Agreement keeps them", async () => {
+    state.inputs = inputs.map((i) => i.id !== "t2" ? i : input("t2", 3, {
+      ...i.raw, [INPUT_COL.repaymentProfile]: CHOICE_FINANCE.repaymentProfile.individual,
+      [INPUT_COL.tenorDurationYear]: 3, [INPUT_COL.tenorDurationMonth]: 0,
+      [INPUT_COL.startRepaymentYear]: 1, [INPUT_COL.startRepaymentMonth]: 0,
+    }));
+    state.repayments = [
+      { id: "r1", financingInputId: "t2", year: 2029, amount: 100 },
+      { id: "r2", financingInputId: "t2", year: 2030, amount: 200 },
+      { id: "r3", financingInputId: "t2", year: 2031, amount: 300 },
+    ];
+    renderScreen();
+    unfold("c3");
+    fireEvent.click(within(card("c3")).getAllByTestId("btn_FinancingInput_DisplayProject_Body_Form_SeniorDebt_CardHeader_RowTransparent")[1]!);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Tranche" }));
+    await waitFor(() => expect(repaymentInputs()).toHaveLength(3));
+    expect(repaymentInputs().map((x) => x.value)).toEqual(["100", "200", "300"]);
+    fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.creditAgreement}`));
+    expect(repaymentInputs().map((x) => x.value)).toEqual(["100", "200", "300"]);
   });
 });

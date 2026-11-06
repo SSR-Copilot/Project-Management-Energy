@@ -78,7 +78,8 @@ import {
   type FreeEquityMode, type RepaymentRow, type SeniorDebtFormState, type StepUpRow, type TrancheRow,
   type VatForm,
   financeCardStandard, trancheFinancialCloseIsStandard,
-  PANEL_MAX_LENGTH, shouldRegenerateRepayments, stepUpPeriodChangeAllowed, trancheFormTitle,
+  PANEL_MAX_LENGTH, monthsOnYearsPicked, shouldRegenerateRepayments, stepUpPeriodChangeAllowed, trancheFormTitle,
+  trancheStatusChangeClearsSchedules,
 } from "./rules";
 import {
   fetchTrancheDuplicates, useActiveTurbineCount, useBanks, useDebtAssumptions, useFinanceProject,
@@ -1325,7 +1326,8 @@ export default function ProjectFinanceScreen() {
                 disabled={busy || trancheStatusRadioDisabled(form.storedTrancheStatus)}
                 onChange={(v) => {
                   setTranche(applyTrancheStatusChange({ form, next: v, project, standard, banks, tranches: trancheInputs, language: lang }));
-                  setRepaymentRows([]); setStepUpRows([]);
+                  // Y:9239 / Y:14046 — only the Reset branches clear the schedules; Term Sheet <-> Credit Agreement keeps them.
+                  if (trancheStatusChangeClearsSchedules(form, v)) { setRepaymentRows([]); setStepUpRows([]); }
                 }}
               />
               {standardAssumptionConflict(form.trancheStatus ?? -1, form.otherTranches, form.trancheId)
@@ -1374,7 +1376,7 @@ export default function ProjectFinanceScreen() {
                 caption={TRANCHE_FORM_LABEL.tenor} testIdYears="Drp_SeniorDebtData_Tenor_YY"
                 testIdMonths="drp_SeniorDebtData_Tenor_MM" maxYears={25} required
                 yy={form.tenorYears} mm={form.tenorMonths} disabled={tDisabled} error={tenorError || undefined}
-                onChange={(yy, mm) => regenerate({ tenorYears: yy, tenorMonths: mm })}
+                onChange={(yy, mm) => regenerate({ tenorYears: yy, tenorMonths: monthsOnYearsPicked(yy, mm) })}
               />
               <RadioChoice
                 caption={TRANCHE_FORM_LABEL.drawdown} testId="rad_SeniorDebt_Data_Drawdown"
@@ -1441,7 +1443,7 @@ export default function ProjectFinanceScreen() {
                 caption={FIN_LABEL.startRepaymentYears} testIdYears="Drp_SeniorDebtData_StartRepayment_YY"
                 testIdMonths="Drp_SeniorDebtData_StartRepayment_MM" maxYears={5} required
                 yy={form.startRepaymentYears} mm={form.startRepaymentMonths} disabled={tDisabled}
-                onChange={(yy, mm) => regenerate({ startRepaymentYears: yy, startRepaymentMonths: mm })}
+                onChange={(yy, mm) => regenerate({ startRepaymentYears: yy, startRepaymentMonths: monthsOnYearsPicked(yy, mm) })}
               />
               <SelectChoice
                 caption={FIN_LABEL.frequencyOfRepayment} testId="drp_SeniorDebt_Data_Frequency_Of_Repayment" required
@@ -1504,7 +1506,7 @@ export default function ProjectFinanceScreen() {
                 testIdYears="Drp_SeniorDebtData_Commitment_Fee_Free_Period_YY"
                 testIdMonths="Drp_SeniorDebtData_Commitment_Fee_Free_Period_MM" maxYears={3}
                 yy={form.commitmentFeePeriodYears} mm={form.commitmentFeePeriodMonths} disabled={tDisabled}
-                onChange={(yy, mm) => patchTranche({ commitmentFeePeriodYears: yy, commitmentFeePeriodMonths: mm })}
+                onChange={(yy, mm) => patchTranche({ commitmentFeePeriodYears: yy, commitmentFeePeriodMonths: monthsOnYearsPicked(yy, mm) })}
               />
               <Text className={s.trancheRuleTitle}>{TRANCHE_FORM_LABEL.interestRate}</Text>
               <RadioChoice
@@ -1539,7 +1541,7 @@ export default function ProjectFinanceScreen() {
                 yy={form.fixedInterestRateYears} mm={form.fixedInterestRateMonths} disabled={tDisabled}
                 error={validateYearMonthPair(form.fixedInterestRateYears, form.fixedInterestRateMonths).message || undefined}
                 onChange={(yy, mm) => {
-                  patchTranche({ fixedInterestRateYears: yy, fixedInterestRateMonths: mm });
+                  patchTranche({ fixedInterestRateYears: yy, fixedInterestRateMonths: monthsOnYearsPicked(yy, mm) });
                   // B29 — the FIR YY `OnChange` seeds row 1 while the toggle is on and there is no row.
                   if (form.stepUpEnabled && stepUpRows.length === 0) setStepUpRows([firstStepUpRow()]);
                 }}

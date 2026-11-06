@@ -371,3 +371,10 @@ Not committed. Where a row says **fixed**, the code app was changed to follow th
 | Land Lease | The save runs the header, allocation and period steps independently and reports every failure; the allocation Name uses the new description; case-insensitive "Standard" | fixed |
 | Land Lease | F5 keeps the route and "Cost data is unavailable" shows on a failed read | improvement over the Canvas (already built; LEASE-003) |
 | All three | Reads keep `statecode eq 0`; Add Period on any period and the Delete last-period gate stay as the 27 Oct 2026 divergence | proposed (not approved), see D101 |
+
+## Finance, Senior Debt tranche: Individual repayment schedule (6 Nov 2026, D102) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| Project Finance | Term Sheet <-> Credit Agreement keeps the Individual repayment schedule and the step-up rows (they were cleared on every status change, and the next Save then deleted the stored repayment rows) | fixed (a data-loss bug removed) |
+| Project Finance | Tenor, Start Repayment, Commitment Fee Free Period and Fixed Interest Rate months read 0 once their years are chosen, so the schedule appears and Save can enable without opening the month lists | fixed |

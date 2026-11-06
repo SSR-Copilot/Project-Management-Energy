@@ -1709,6 +1709,29 @@ export function shouldRegenerateRepayments(
 }
 
 /**
+ * The month dropdown that pairs with a year dropdown (`drp_SeniorDebtData_Tenor_MM`,
+ * `Drp_SeniorDebtData_StartRepayment_MM`, Commitment Fee Free Period, Fixed Interest Rate; Y:9935, 11273):
+ * `DefaultSelectedItems: … If(Not(IsBlank(<YY>.Selected.Value)), 0)` — once the YEARS are chosen a blank
+ * month reads 0. Without it the repayment schedule (which needs all four dropdowns) and the Save stay
+ * off until the user also opens the month list.
+ */
+export const monthsOnYearsPicked = (years: number | null, months: number | null): number | null =>
+  months ?? (years !== null ? 0 : null);
+
+/**
+ * `rad_SeniorDebt_Data_TrancheStatus.OnChange` (Y:9239) runs `Select(btn_…_Reset_1)` (which does
+ * `Clear(colRepaymentProfileAmount)` and `Clear(colStepUpBankMargins)`, Y:14046) only in its first two
+ * branches (moving TO Standard Assumption, or FROM it). The third branch (Term Sheet <-> Credit Agreement)
+ * only blanks `locSelectedStandardAssumption`: the Individual repayment schedule and the step-up rows stay.
+ */
+export function trancheStatusChangeClearsSchedules(
+  form: Pick<SeniorDebtFormState, "trancheStatus" | "storedTrancheStatus">, next: number,
+): boolean {
+  const sa = CHOICE_FINANCE.trancheStatus.standardAssumption;
+  return next === sa || form.trancheStatus === sa || form.storedTrancheStatus === sa;
+}
+
+/**
  * `btn_SeniorDebt_BankMargin_Add_StepUp_Period_1.OnSelect` / `…_Remove_StepUp_LastPeriod.OnSelect`
  * (Y:13184, 13223): `If(And(Not(IsBlank(FIR_YY)), Not(IsBlank(FIR_MM)), Not(lbl_…_FIR_ErrorMessage.Visible)), …)`.
  * Unlike the toggle's `OnCheck` (`canSeedStepUp`), the FIR MONTHS must be set too.
