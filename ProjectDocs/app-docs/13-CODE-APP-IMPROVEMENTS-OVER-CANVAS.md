@@ -347,3 +347,27 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
 ## Troubleshooting aids (29 Oct 2026, D74) — new
 
 - **Cross-cutting:** console lines carry an action id, errors print their Dataverse root cause with the route, slow requests and actions are flagged `SLOW`, and unhandled errors are logged with the last actions. The canvas silently swallowed these (`App.OnError`, B-1).
+
+## Contracts, OPEX and Land Lease test run 3 (6 Nov 2026, D98, D99) — fixed / reproduced / proposed
+
+Not committed. Where a row says **fixed**, the code app was changed to follow the Canvas; the improvement over the earlier build is that the difference is gone and pinned by a test.
+
+| Screen | Change | Status |
+|---|---|---|
+| Contracts | Card figures `###,##0` (blank as 0), `RoundUp` for Plan and calculated totals, integer total stored, margin only with Margin = Yes in one decimal, payment-target % one decimal | fixed |
+| Contracts | Margin Fixed Value accepts two decimals; range message "0 and 100.0"; Rights total blocked only when not an integer | fixed |
+| Contracts | Standard blue/italic on the card and edit-panel margin, restored on Reset; Margin and Margin-type change reset the boxes to 0 | fixed |
+| Contracts | A failed DevCo link create is shown (`unwrap`), not silent (CONTR-081) | fixed (a silent-failure bug removed) |
+| Contracts | Rights contract written as the Canvas writes it (`BoP RC-…`, 7 columns, 'Total cost of contract [EUR]', no DevCo rows) | fixed (reproduces a Canvas source defect in the name) |
+| Contracts | Add Period needs a selected card and a sum under 100, pre-fills "<base> - n+1" and locks Description; Edit and Delete need the selected card; targets sorted by Created On; card expanded and selection cleared after Save; Cancel and ✕ clear the target | fixed |
+| Contracts | Contracts, targets and DevCo links re-read on every visit; hover texts on card header, captions and the used-account tooltip; Monday week start and project-start calendar on the closing date | fixed |
+| OPEX | No card open at load; Other OPEX keeps its fold state; aria-labels "Year", "Month", "Month"; hover texts; Description limit 100 | fixed |
+| OPEX | The live create and the standard import write what the Canvas writes (Name, COD year + 1, area, profile, threshold, `timezoneruleversionnumber` 4, one contract per Period-1 assumption) | fixed (the tests had pinned helpers the live path did not call) |
+| OPEX | A lone space is not blank (numeric message, Save off), with the `"trimmed"` twin; Country Inflation Profile on lets Save enable; duplicate description compared without case; Threshold resets; selection cleared after Save | fixed / reproduced |
+| OPEX | Start Date flag follows the edited Canvas: Add Contract Type Yes, follow-on from the parent, picker compares with the default date; Start Date editable only on a root; reset icon root-only; a stored Blank flag stays Blank | fixed (edited Canvas confirmed as reference, D98) |
+| OPEX | Save re-chains the periods that follow an edited period when its start date or duration changed, and copies the flag to the child periods; failures of those steps are shown, the save continues | fixed || OPEX | Area dropdown hidden on Italian projects but defaulted to the project zone, so Save works | reproduced (O-2) with a working Save |
+| Land Lease | Picking a Start Date clears the standard flag; header save writes PLN/EUR by country; picking generators by hand no longer changes "Allocate to all WTGs" or the saved flag; Save needs a generator | fixed |
+| Land Lease | Inflation Profile off resets country, year, Area and profile; Start Year and profile follow the Start Date and Area; One-Time Payment restores stored values; payment blocks 2 and 3 follow their own flags | fixed |
+| Land Lease | The save runs the header, allocation and period steps independently and reports every failure; the allocation Name uses the new description; case-insensitive "Standard" | fixed |
+| Land Lease | F5 keeps the route and "Cost data is unavailable" shows on a failed read | improvement over the Canvas (already built; LEASE-003) |
+| All three | Reads keep `statecode eq 0`; Add Period on any period and the Delete last-period gate stay as the 27 Oct 2026 divergence | proposed (not approved), see D99 |
