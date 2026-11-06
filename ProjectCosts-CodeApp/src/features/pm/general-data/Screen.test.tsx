@@ -10,7 +10,7 @@ import { DataMemoryRouter as MemoryRouter } from "@/test/DataMemoryRouter";
 import { useLocation } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { CHOICE, ES } from "@/data/dataverseNames";
-import { GD_LABELS, MSG, type ProjectRow } from "./rules";
+import { GD_LABELS, MAP_MESSAGES, MSG, type ProjectRow } from "./rules";
 
 const ROW: ProjectRow = {
   id: "p-1", projectNumber: "PL-1021", internalProjectId: "INT-7", projectName: "Wirmighausen",
@@ -34,6 +34,8 @@ const state = vi.hoisted(() => ({
   run: vi.fn(async (_job: unknown) => [] as string[]),
   readProject: vi.fn(async (_id: string) => null as unknown),
   cancelDraftGateApproval: vi.fn(async (_args: unknown) => undefined),
+  /** UT-GDATA-911: the map fails to load. */
+  mapError: null as string | null,
 }));
 
 vi.mock("@/app/SessionContext", () => ({ useSession: () => state.session }));
@@ -58,6 +60,17 @@ vi.mock("./hooks", () => ({
     run: state.run, progress: null, error: null, success: null, clear: () => {},
     cancelDraftGateApprovalIfRunning: state.cancelDraftGateApproval,
   }),
+}));
+
+// The Azure Maps SDK needs WebGL, which jsdom lacks: a stub stands in and reports its props; a click picks a point.
+vi.mock("./ProjectMap", () => ({
+  default: (p: { pin: { lat: number; lng: number }; label: string; onPick: (x: { lat: number; lng: number }) => void }) => {
+    if (state.mapError) throw new Error(state.mapError);
+    return <button
+      type="button" aria-label="map-stub" data-testid="map-stub" data-pin={`${p.pin.lat},${p.pin.lng}`} data-label={p.label}
+      onClick={() => p.onPick({ lat: 47.84358412, lng: 12.95615345 })}
+    />;
+  },
 }));
 
 import GeneralDataScreen from "./Screen";
@@ -102,6 +115,48 @@ describe("UT-GDATA General Data screen (connected)", () => {
     expect(screen.getByTestId("lbl_GeneralData_DisplayProject_Body_Content_Buttonscon_GeneralData_DisplayProject_Body_Content_CreatorName").textContent)
       .toMatch(/^Shakti Singh {3}03\.09\.2026/);
     expect(screen.queryByTestId("not-connected-notice")).toBeNull();
+  });
+
+  it("UT-GDATA-910 the map shows the saved position and name; a confirmed click fills Latitude / Longitude", async () => {
+    renderScreen("edit");
+    const map = await screen.findByTestId("map-stub");
+    expect(screen.getByTestId("map_con_GeneralData_DisplayProject_Body_General_Content_Map").getAttribute("aria-label"))
+      .toBe("map_con_GeneralData_DisplayProject_Body_General_Content_Map");
+    expect(map.getAttribute("data-pin")).toBe("51.284745,13.712023");
+    expect(map.getAttribute("data-label")).toBe("Wirmighausen");
+    const lat = () => (screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_Latitude") as HTMLInputElement).value;
+
+    // Cancel keeps the position.
+    fireEvent.click(map);
+    expect(await screen.findByText("Project Location Confirmation")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText("Project Location Confirmation")).toBeNull());
+    expect(lat()).toBe("51.284745");
+
+    // Confirm takes the clicked point (6 decimals), moves the pin and makes the form dirty; nothing is saved.
+    fireEvent.click(screen.getByTestId("map-stub"));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(lat()).toBe("47.843584"));
+    expect((screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_Longitude") as HTMLInputElement).value).toBe("12.956153");
+    expect(screen.getByTestId("map-stub").getAttribute("data-pin")).toBe("47.843584,12.956153");
+    expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(false);
+    expect(state.run).not.toHaveBeenCalled();
+  });
+
+  it("UT-GDATA-911 a map that cannot load stays inside the map area; the form keeps working", async () => {
+    state.mapError = "Worker is not defined";
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      renderScreen("edit");
+      // One plain sentence, not the technical error.
+      expect((await screen.findByTestId("general-data-map-unavailable")).textContent).toBe(MAP_MESSAGES.cannotDisplay);
+      expect((screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_Latitude") as HTMLInputElement).value).toBe("51.284745");
+      fireEvent.change(screen.getByTestId("txt_GeneralData_DisplayProject_Body_General_Content_District"), { target: { value: "Nord" } });
+      await waitFor(() => expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(false));
+    } finally {
+      state.mapError = null;
+      quiet.mockRestore();
+    }
   });
 
   it("UT-GDATA-902 the shareholding grid shows the type and the canvas ownership format", () => {

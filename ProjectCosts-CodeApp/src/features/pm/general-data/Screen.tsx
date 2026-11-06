@@ -17,15 +17,16 @@
  *   `con_ClusterChange_RightPanel`                     the Start-Cluster change panel
  *   `cmp_GeneralData_PopUp_ConfirmationDeleteShareholdingEntity`
  *
- * NOT BUILT (documented gap, D25): the map control (`map_con_…_Map`, a placeholder is kept; Lat /
- * Lng are typed), so the location confirmation never opens. The unsaved-data leave dialog
- * (`cmp_PopUp_Leave_GeneralData_Confirmation`) is the shared `UnsavedChangesGuard` (D35).
+ * The map (`map_con_…_Map`) is `ProjectMap` on Azure Maps (6 Nov 2026, D25), lazy-loaded; a click on
+ * it opens `cmp_GeneralData_Map_PopUp_ConfirmationChangeLocation`, whose Confirm fills Latitude /
+ * Longitude. The unsaved-data leave dialog (`cmp_PopUp_Leave_GeneralData_Confirmation`) is the shared
+ * `UnsavedChangesGuard` (D35).
  *
  * The hidden subroutine buttons are ported as functions: `btn_GeneralData_Save_Actual` → `runSave`,
  * `btn_General_CancelActiveDraftGateApproval…` → the tracking part of `planGeneralDataSave`,
  * `btn_…_Buttons_Reset` → `cancel`, `btn_cluster_change_reset_control` → `openClusterPanel`.
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { refusePlan } from "@/data/writePlan";
 import {
@@ -37,7 +38,7 @@ import {
   Info16Filled, Info16Regular, InfoRegular, bundleIcon,
 } from "@fluentui/react-icons";
 import {
-  ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
+  ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, ErrorBoundary, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
   ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback, type PickerPerson, useFieldControlClass,
   useCanvasRequiredMark, useFieldSkin, useNoInvalidOutline, HINTS,
 } from "@/components";
@@ -67,7 +68,13 @@ import {
   type ClusterPanelField, type ClusterPanelState, type GeneralDataForm, type GeneralDataRefData,
   type ShareholderDraft, type ShareholdingEntity,
   clusterPanelDateIsStandard, LEAVE_DIALOG, shouldConfirmLeave,
+  LOCATION_DIALOG, MAP_MESSAGES, applyMapLocation, mapMarker, shouldConfirmMapLocation,
 } from "./rules";
+import { useDeviceLocation } from "./useDeviceLocation";
+import type { LatLng } from "./ProjectMap";
+
+/** The Azure Maps SDK is fetched only when this screen opens (`ProjectMap`). */
+const ProjectMap = lazy(() => import("./ProjectMap"));
 import {
   useCountries, useCountryAreas, useEntraPeople, useEntraSearch, useGeneralDataProject,
   useGeneralDataWrites, useGermanTradeTaxRate, useProjectReader, useMilestoneDurations, useMunicipalitySearch,
@@ -179,6 +186,8 @@ const useStyles = makeStyles({
     flex: "2 1 0px", minWidth: "240px", maxWidth: "100%", minHeight: "260px",
     display: "flex", alignItems: "center", justifyContent: "center",
   },
+  /** The map area's text when the map cannot load at all. */
+  mapUnavailable: { display: "block", paddingTop: "8px", paddingLeft: "8px", paddingRight: "8px", color: palette.neutralPrimary },
   map: {
     boxSizing: "border-box", width: "90%", height: "90%",
     borderRadius: "4px",
@@ -362,6 +371,9 @@ export default function GeneralDataScreen() {
   const [draft, setDraft] = useState<ShareholderDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [clusterPanel, setClusterPanel] = useState<ClusterPanelState | null>(null);
+  /** `locLocationChanged` — the clicked point waiting for the location confirmation. */
+  const [pendingLocation, setPendingLocation] = useState<LatLng | null>(null);
+  const device = useDeviceLocation();
   const newKey = useRef(0);
   /** The project to switch to once the create is saved and the form is clean (guard-safe). */
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
@@ -378,6 +390,11 @@ export default function GeneralDataScreen() {
     [row, countries, lang, taxFallback.data],
   );
   const live = form ?? baseline;
+  /** The map's one `Items` row; memoised so the pin only moves when the position really changes. */
+  const mapPin = useMemo(
+    () => mapMarker({ latitude: live.latitude, longitude: live.longitude }, device, lang),
+    [live.latitude, live.longitude, device, lang],
+  );
   const snapshot = useMemo(
     () => (row ? toSnapshot(row, { countries, projectStates }) : null),
     [row, countries, projectStates],
@@ -930,7 +947,29 @@ export default function GeneralDataScreen() {
             </div>
           </div>
           <div className={s.mapCell}>
-            <div className={s.map} aria-hidden="true" data-testid="map_con_GeneralData_DisplayProject_Body_General_Content_Map" />
+            <div
+              className={s.map}
+              aria-label="map_con_GeneralData_DisplayProject_Body_General_Content_Map"
+              data-testid="map_con_GeneralData_DisplayProject_Body_General_Content_Map"
+            >
+              {/* A map that cannot load (SDK chunk, WebGL, CSP) stays inside the map area; the form keeps working. */}
+              <ErrorBoundary
+                // The boundary has already traced the technical error; the user gets one plain sentence.
+                fallback={() => (
+                  <Text role="status" size={200} className={s.mapUnavailable} data-testid="general-data-map-unavailable">
+                    {MAP_MESSAGES.cannotDisplay}
+                  </Text>
+                )}
+              >
+                <Suspense fallback={null}>
+                  <ProjectMap
+                    pin={mapPin} label={row?.projectName ?? ""} device={device}
+                    language={lang} disabled={saving}
+                    onPick={(p) => { if (shouldConfirmMapLocation(p, live, lang)) setPendingLocation(p); }}
+                  />
+                </Suspense>
+              </ErrorBoundary>
+            </div>
           </div>
         </div>
       </section>
@@ -1183,6 +1222,20 @@ export default function GeneralDataScreen() {
         confirmWidth={128}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
+      />
+      {/* `cmp_GeneralData_Map_PopUp_ConfirmationChangeLocation` (`cmp_PopUp_Confirmation`, Y:8751-8800). */}
+      <ConfirmDialog
+        open={pendingLocation !== null}
+        title={LOCATION_DIALOG.title}
+        description={LOCATION_DIALOG.description}
+        confirmText={LOCATION_DIALOG.confirm}
+        cancelText={LOCATION_DIALOG.cancel}
+        onConfirm={() => {
+          const p = pendingLocation;
+          setPendingLocation(null);
+          if (p) update((f) => applyMapLocation(f, p, lang));
+        }}
+        onCancel={() => setPendingLocation(null)}
       />
       {/* `cmp_PopUp_Leave_…_Confirmation` — the shared leave guard (D35, PO X1). */}
       <UnsavedChangesGuard when={shouldConfirmLeave(isDirty)} dialog={LEAVE_DIALOG} />

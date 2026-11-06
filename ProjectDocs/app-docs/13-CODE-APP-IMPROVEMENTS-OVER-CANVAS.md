@@ -391,6 +391,21 @@ Not committed. Where a row says **fixed**, the code app was changed to follow th
 |---|---|---|
 | Project Finance | The Individual repayment column no longer runs under the next column: a long validation message wraps inside its column instead of widening the box, and the row grows with it, so no text sits on the next caption. The Canvas clips the one-line message instead | fixed (DIVERGENCE, readable full text) |
 
+## Azure Maps on Project General Data (6 Nov 2026, D25 map) — new (merged to master 6 Nov 2026)
+
+Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-APP.md`.
+
+| Screen | Change | Status |
+|---|---|---|
+| General Data | The map placeholder is now an Azure Maps map (`ProjectMap`, lazy-loaded): the labelled project pin, the device dot, zoom 12, a click → *Project Location Confirmation* → Confirm fills Latitude / Longitude, as the canvas `Map@1.8.27` | reproduced |
+| General Data | **DIVERGENCE:** the view opens on the project pin, not on the device location (the canvas opened on the user's position, so a distant project's pin was off-screen); a typed position outside the view eases the camera to it | proposed (not approved) |
+| General Data | The map's access token comes from a solution flow (`Get Azure Maps SAS Token`) that reads all Azure values from six `vsb_AzureMaps*` environment variables: no key, token or Azure id in the app or the flow; users need no Azure rights; the token is read-only, rate-limited and short-lived (the canvas used a Microsoft-managed account with no control over any of this) | new |
+| General Data | Token cache: one flow call per token lifetime per browser, background refresh before expiry, a 401/403 drops the token, no refresh loop on a short-lived token (UT-AZMAP-001…007) | new |
+| General Data | A failed token or map load shows one plain sentence per cause in the map area (access not granted / not set up / service did not respond / access denied / unknown, `MAP_MESSAGES`), not the raw error; the technical detail is one console line (`[VSB] ERROR Azure Maps token — <kind> — <code>: <message>`); the rest of the screen keeps working (UT-AZMAP-008/009) | new |
+| General Data | The token flow catches its own failure (scope → `Failed_steps` → `Respond_error` → `Terminate_failed`): the app gets `errorcode` / `errormessage` at once instead of a 502 *NoResponse* after a wait, and the run still ends as Failed in the run history | new |
+| General Data | After a token failure the app waits 60 s before calling the flow again: panning a broken map no longer starts a flow run per tile (UT-AZMAP-006) | new |
+| General Data | A map that cannot load at all (SDK chunk, WebGL, a CSP block) is caught by an error boundary around the map: "The map cannot be displayed. Please reload the page." in the map area, the form and Save unaffected (UT-GDATA-911; found when UT-ROUTES-020/021 crashed the whole route without it) | new |
+
 ## Cluster Checklist, Move to Cluster: loading and layers (6 Nov 2026, D105) — fixed / kept
 
 | Screen | Change | Status |

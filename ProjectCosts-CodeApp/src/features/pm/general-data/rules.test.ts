@@ -28,7 +28,7 @@ import {
   plannedTrackingRows, shouldCancelGateApproval, draftTrackingOf, draftGateCancellationPayload,
   planGeneralDataSaveHead, planGeneralDataSaveTail,
   buildProjectPatch, planGeneralDataSave, owningBusinessUnits,
-  mapMarker, MAP_DEFAULT, shouldConfirmLeave, AUTO_SKIPPED_COMMENT,
+  mapMarker, MAP_DEFAULT, shouldConfirmLeave, AUTO_SKIPPED_COMMENT, applyMapLocation, shouldConfirmMapLocation,
   coordinateMessage, coordinateFormatMessage, terrainRangeMessage, acquisitionPriceShapeMessage,
   shareholdingDescription, deleteShareholderName, deleteShareholderNameCanvasParity,
   isSpvLegalStructureVisible, recordStatusLabel, formatAuditStamp, auditStampParts, isCoordinateValid,
@@ -782,6 +782,23 @@ describe("UT-GDATA map, navigation and footer", () => {
     expect(mapMarker({ latitude: "", longitude: "" }, null)).toEqual({ lat: MAP_DEFAULT.lat, lng: MAP_DEFAULT.lng });
     expect(mapMarker({ latitude: "", longitude: "" }, { lat: 1, lng: 2 })).toEqual({ lat: 1, lng: 2 });
     expect(mapMarker({ latitude: "51.284745", longitude: "13.712023" }, { lat: 1, lng: 2 })).toEqual({ lat: 51.284745, lng: 13.712023 });
+  });
+
+  it("UT-GDATA-087 a map click on another point asks for confirmation; the same point does not", () => {
+    const form = { latitude: "51.284745", longitude: "13.712023" };
+    expect(shouldConfirmMapLocation({ lat: 51.284745, lng: 13.712023 }, form)).toBe(false);
+    expect(shouldConfirmMapLocation({ lat: 52.5, lng: 13.712023 }, form)).toBe(true);
+    expect(shouldConfirmMapLocation({ lat: 51.284745, lng: 13.4 }, form)).toBe(true);
+    // Blank boxes (a new project): any click asks.
+    expect(shouldConfirmMapLocation({ lat: 51.284745, lng: 13.712023 }, { latitude: "", longitude: "" })).toBe(true);
+    expect(shouldConfirmMapLocation({ lat: 51.284745, lng: 13.712023 }, { latitude: "51,284745", longitude: "13,712023" }, "de-DE")).toBe(false);
+  });
+
+  it("UT-GDATA-088 the confirmed point fills Latitude / Longitude as Text(Round(x, 6), \"#0.0#######\")", () => {
+    const next = applyMapLocation({ ...emptyGeneralDataForm, district: "Nord" }, { lat: 47.84358412345, lng: 13 }, "en-US");
+    expect(next).toMatchObject({ latitude: "47.843584", longitude: "13.0", district: "Nord" });
+    expect(applyMapLocation(emptyGeneralDataForm, { lat: 47.8435841, lng: 12.9561534 }, "de-DE"))
+      .toMatchObject({ latitude: "47,843584", longitude: "12,956153" });
   });
 
   it("UT-GDATA-053b a pin only for a valid coordinate pair", () => {

@@ -1160,8 +1160,8 @@ export function formLocks(form: GeneralDataForm, project: ProjectSnapshot | null
 export const MAP_DEFAULT = { lat: 51.28474541372019, lng: 13.712023258608735 } as const;
 
 /**
- * `Coalesce(locChangedLatitude2, Location.Latitude, "51.28474541372019")` (Y:4365-4417). Kept for
- * the map control, which this app does not have yet (documented gap, D25).
+ * `Coalesce(locChangedLatitude2, Location.Latitude, "51.28474541372019")` (Y:4365-4417): the map
+ * pin (`ProjectMap`, Azure Maps since 6 Nov 2026, D25).
  */
 export function mapMarker(
   form: Pick<GeneralDataForm, "latitude" | "longitude">,
@@ -1174,6 +1174,31 @@ export function mapMarker(
     lat: !Number.isNaN(lat) ? lat : geolocation?.lat ?? MAP_DEFAULT.lat,
     lng: !Number.isNaN(lng) ? lng : geolocation?.lng ?? MAP_DEFAULT.lng,
   };
+}
+
+/**
+ * `OnMapClick`: `If(Or(locChangedLatitude <> Self.ClickedLocation.Latitude, locChangedLongitude <> …Longitude),
+ * UpdateContext({locLocationChanged: true}))` (Y:4423-4433) — a click on a different point opens the confirmation.
+ */
+export function shouldConfirmMapLocation(
+  clicked: { lat: number; lng: number },
+  form: Pick<GeneralDataForm, "latitude" | "longitude">,
+  language: Lang = "en-US",
+): boolean {
+  return parseNumber(form.latitude, language) !== clicked.lat || parseNumber(form.longitude, language) !== clicked.lng;
+}
+
+/**
+ * The confirmation's `OnConfirm` (Y:8770-8796): `locChangedLatitude/Longitude(2)` take the clicked point, so the
+ * Latitude / Longitude boxes show `Text(Round(x, 6), "#0.0#######")` and the form is dirty (`locIsGeneralFormDirty`).
+ * Nothing is saved until Save, as on the canvas.
+ */
+export function applyMapLocation(
+  form: GeneralDataForm,
+  clicked: { lat: number; lng: number },
+  language: Lang = "en-US",
+): GeneralDataForm {
+  return { ...form, latitude: coordinateText(clicked.lat, language), longitude: coordinateText(clicked.lng, language) };
 }
 
 /**
@@ -2304,7 +2329,21 @@ export const LEAVE_DIALOG = {
 /** `shouldConfirmLeave` — `If(locIsGeneralFormDirty, <dialog>, <navigate>)` (Y:915-1001). */
 export const shouldConfirmLeave = (isDirty: boolean): boolean => isDirty;
 
-/** `cmp_GeneralData_Map_PopUp_ConfirmationChangeLocation` — kept for the map (documented gap, D25). */
+/**
+ * What the map area says when the map cannot load (no canvas twin: the canvas map used a Microsoft-managed account).
+ * One plain sentence per cause; the technical detail goes to the console only (`[VSB] ERROR Azure Maps …`).
+ */
+export const MAP_MESSAGES = {
+  loading: "Loading map...",
+  notAuthorized: "The map is not available yet: access to Azure Maps has not been granted. Please contact your administrator.",
+  notConfigured: "The map is not set up for this environment. Please contact your administrator.",
+  unavailable: "The map service did not respond. Please reload the page or try again later.",
+  accessDenied: "The map could not be loaded because access was denied. Please reload the page.",
+  unknown: "The map could not be loaded. Please try again later.",
+  cannotDisplay: "The map cannot be displayed. Please reload the page.",
+} as const;
+
+/** `cmp_GeneralData_Map_PopUp_ConfirmationChangeLocation` (Y:8751-8800) — opened by a map click. */
 export const LOCATION_DIALOG = {
   title: "Project Location Confirmation",
   description: "Are you sure that you want to change the project location?",

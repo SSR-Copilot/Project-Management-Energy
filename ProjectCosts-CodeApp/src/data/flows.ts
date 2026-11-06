@@ -25,6 +25,8 @@
  *                              email RequesterEmail · text_1 PrimarilyApprovalGroupID · text_4 AppId · text Project (JSON) → `runid`, `approvalid`
  *   cancelModulePermission     Request permission cancellation (D97, Project Generators)
  *                              email RequesterEmail · text_2 AppId · text_3 Project (the module JSON); no response
+ *   getAzureMapsSasToken       Get Azure Maps SAS Token (General Data map, 6 Nov 2026; no canvas twin)
+ *                              no inputs → `sastoken`, `expiresutc` | `errorcode`, `errormessage` (cache: `platform/azureMapsToken.ts`)
  *
  * The two module-permission flows were registered on 5 Nov 2026 (D86, after the run-only connections were switched to
  * connection references, D81 §3b) and wired to the Generators screen in D97. Both write the type row themselves:
@@ -33,6 +35,7 @@
  * approval is declined; the cancellation sets Canceled and blanks both ids. The code app writes none of those fields.
  */
 import type { IOperationResult } from "@microsoft/power-apps/data";
+import { GetAzureMapsSASTokenService } from "@/generated/services/GetAzureMapsSASTokenService";
 import { PerformCommonRequestofCheckListApprovalService } from "@/generated/services/PerformCommonRequestofCheckListApprovalService";
 import { PerformCommonRequestofGateApprovalService } from "@/generated/services/PerformCommonRequestofGateApprovalService";
 import { PerformRequestofCheckListApprovalCancellationService } from "@/generated/services/PerformRequestofCheckListApprovalCancellationService";
@@ -50,6 +53,7 @@ export const FLOW = {
   checklistCancellation: "Perform Request of Check List Approval Cancellation",
   modulePermission: "Request Module Permission",
   permissionCancellation: "Request permission cancellation",
+  azureMapsSasToken: "Get Azure Maps SAS Token",
 } as const;
 
 /**
@@ -196,4 +200,25 @@ export async function cancelModulePermission(args: {
     text_2: args.appId,
     text_3: JSON.stringify(args.module),
   }));
+}
+
+/**
+ * Get Azure Maps SAS Token: ARM `listSas` on the Maps account named by the `vsb_AzureMaps*` environment variables,
+ * signed by its managed identity. On success `sastoken` / `expiresutc`; when the flow's token step fails it still
+ * answers, with `errorcode` (e.g. `AuthorizationFailed`) and `errormessage`, then ends the run as Failed. A blank
+ * output comes back as null; the caller (`platform/azureMapsToken.ts`) caches the token and classifies the error.
+ */
+export interface AzureMapsSasTokenResult {
+  sastoken: string | null;
+  expiresutc: string | null;
+  errorcode: string | null;
+  errormessage: string | null;
+}
+
+export async function getAzureMapsSasToken(): Promise<AzureMapsSasTokenResult> {
+  const data = await runFlow(FLOW.azureMapsSasToken, () => GetAzureMapsSASTokenService.Run({}));
+  return {
+    sastoken: data?.sastoken || null, expiresutc: data?.expiresutc || null,
+    errorcode: data?.errorcode || null, errormessage: data?.errormessage || null,
+  };
 }
