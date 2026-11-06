@@ -55,6 +55,9 @@ const state = vi.hoisted(() => ({
   rows: [] as unknown[],
   settings: [] as unknown[],
   error: undefined as unknown,
+  /** useChecklistWrites().progress / .error: what the write hook is showing right now. */
+  progress: null as string | null,
+  writeError: null as string | null,
   patchRow: vi.fn(async (..._a: unknown[]) => [] as string[]),
   saveTransition: vi.fn(async (_r: unknown) => [] as string[]),
   returnToPrevious: vi.fn(async (_r: unknown) => [] as string[]),
@@ -82,7 +85,7 @@ vi.mock("./hooks", () => ({
   useHistory: () => ok([]),
   useChecklistOrchestration: () => ({ restart: () => {} }),
   useChecklistWrites: () => ({
-    progress: null, error: null, success: null, clear: () => {},
+    progress: state.progress, error: state.writeError, success: null, clear: () => {},
     backfill: vi.fn(), prepareCluster: state.prepareCluster, patchRow: state.patchRow,
     saveTransition: state.saveTransition, returnToPrevious: state.returnToPrevious,
     changeTerminal: state.changeTerminal, refresh: state.refresh,
@@ -116,6 +119,8 @@ afterEach(() => {
     state.requestApproval, state.cancelGateApproval, state.cancelChecklistApproval,
   ]) f.mockClear();
   state.error = undefined;
+  state.progress = null;
+  state.writeError = null;
 });
 
 describe("Project General CheckList Screen (connected)", () => {
@@ -308,5 +313,70 @@ describe("Project General CheckList Screen (connected)", () => {
     renderScreen();
     expect(screen.getByText(SCREEN_TEXT.loadFailedTitle)).toBeTruthy();
     expect(TRACKING_COL.id).toBe("vsb_projectstatetrackingid");
+  });
+
+  /** Opens the cluster-move panel and returns a `rerender` that keeps the same tree (the write hook is mocked). */
+  const openMovePanel = async () => {
+    // A comment is required for the Save to be enabled (UT-CHKLST-906).
+    const view = renderScreen({ trackings: [trackingRow(0, ACS.inProgress, { approvalComment: "Ready" })] });
+    fireEvent.click(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster"));
+    await screen.findByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save");
+    const again = () => view.rerender(
+      <FluentProvider theme={vsbTheme}>
+        <MemoryRouter><CheckListScreen /></MemoryRouter>
+      </FluentProvider>,
+    );
+    return again;
+  };
+  const panelOpen = () => screen.queryByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save") !== null;
+
+  it("UT-CHKLST-914 the write spinner is drawn through a portal, above the open panel, not inside the page (canvas: last control, full screen)", async () => {
+    const again = await openMovePanel();
+    state.progress = MSG.clusterSaving("Draft");
+    again();
+    const text = screen.getByText(MSG.clusterSaving("Draft"));
+    expect(text.textContent).toBe("Cluster data 'Draft' will be save, please wait...");
+    const overlay = text.closest("[aria-busy='true']") as HTMLElement;
+    expect(overlay).not.toBeNull();
+    // Fluent's Portal mount node (z-index 1000000, where the drawer lives) is a child of <body>, never of the screen's root.
+    expect(screen.getByTestId("Project General CheckList Screen").contains(overlay)).toBe(false);
+  });
+
+  it("UT-CHKLST-915 while the move is being saved, the open panel's ✕ is disabled and Escape does not close it", async () => {
+    const again = await openMovePanel();
+    state.progress = MSG.clusterSaving("Draft");
+    again();
+    const close = screen.getAllByTestId("panel-close")[0] as HTMLButtonElement;
+    expect(close.disabled).toBe(true);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape", code: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(panelOpen()).toBe(true);
+  });
+
+  it("UT-CHKLST-916 a failed move closes the panel too (canvas Select(…_Reset) runs after the IfError), so the error is not hidden behind it", async () => {
+    state.saveTransition.mockResolvedValueOnce(null as never);
+    await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(state.saveTransition).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+  });
+
+  it("UT-CHKLST-917 a successful move closes the panel as well", async () => {
+    await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(state.saveTransition).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+  });
+
+  it("UT-CHKLST-918 the write error bar shows in the page once the panel is closed", async () => {
+    state.saveTransition.mockResolvedValueOnce(null as never);
+    const again = await openMovePanel();
+    fireEvent.click(screen.getByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save"));
+    await waitFor(() => expect(panelOpen()).toBe(false));
+    state.writeError = "Error: Project Status was updated.  Internal error";
+    again();
+    expect(screen.getByTestId("checklist-write-error").textContent).toContain("Project Status was updated");
+    expect(panelOpen()).toBe(false);
   });
 });

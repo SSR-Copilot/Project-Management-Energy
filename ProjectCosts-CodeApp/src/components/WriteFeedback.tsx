@@ -14,12 +14,19 @@ export interface WriteFeedbackProps {
   success: string | null;
   /** `<prefix>-write-error` / `<prefix>-write-success`. */
   testIdPrefix: string;
+  /**
+   * Opt-in: draw the blocking spinner through a Fluent `Portal`, so it covers an open side panel. A Fluent drawer lives in a
+   * portal mount node at `z-index: 1000000`, so a spinner drawn in the page (`z-index: 1000`) sits UNDER the panel, which then
+   * stays clickable. The canvas pop-up is the last control of the screen, full screen and above every panel (Checklist
+   * `cmp_PopUp_GateProcess_Saving_LoadingDialog_1`). Off by default, so every existing caller renders exactly where it did.
+   */
+  portal?: boolean;
 }
 
-export function WriteFeedback({ progress, error, success, testIdPrefix }: WriteFeedbackProps) {
+export function WriteFeedback({ progress, error, success, testIdPrefix, portal = false }: WriteFeedbackProps) {
   return (
     <>
-      {progress ? <LoadingOverlay mode="blocking" label={progress} /> : null}
+      {progress ? <LoadingOverlay mode="blocking" label={progress} portal={portal} /> : null}
       {error ? (
         <MessageBar intent="error" data-testid={`${testIdPrefix}-write-error`}>
           <MessageBarBody>

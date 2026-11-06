@@ -575,7 +575,11 @@ export default function CheckListScreen() {
     if (!next || panelForm?.kind !== "cluster" || panelForm.stateId !== current.id) return;
     const due = showApprovalDueDate(panel) && panel.approvalDueDate ? ymdToLocalIso(panel.approvalDueDate) : null;
     const done = await writes.saveTransition({ project, state: current, next, comment: panel.comment, approvalDueDate: due });
-    if (done !== null) { setPanelForm(null); setSelectedClusterId(null); }
+    // The canvas closes the panel whatever the outcome (`Select(btn_…_Buttons_Reset)` runs after the `IfError`, Y:5410), and its
+    // error text is never shown (the dialog is hidden in the same step). Here the panel closes too, so the error bar of
+    // `WriteFeedback` is not left BEHIND an open panel and its scrim; only a success moves the selection to the next cluster.
+    setPanelForm(null);
+    if (done !== null) setSelectedClusterId(null);
   };
 
   /** `pcf_…_Buttons_RequestApproval.OnChange` — both panel modes (D81). */
@@ -594,7 +598,9 @@ export default function CheckListScreen() {
       };
     const done = await writes.requestApproval(req);
     // The canvas closes the panel, refreshes and `Navigate`s to the screen again (Y:5709-5719).
-    if (done !== null) { setPanelForm(null); setSelectedClusterId(null); }
+    // Closes whatever the outcome, as the canvas does (Y:5711, `Select(…_Reset)` Y:5717), so an error is not hidden behind the panel.
+    setPanelForm(null);
+    if (done !== null) setSelectedClusterId(null);
   };
 
   /** `pcf_…_Buttons_CancelApproval.OnChange` (D81) — the comment is the closed panel's box, i.e. the tracking's. */
@@ -620,7 +626,9 @@ export default function CheckListScreen() {
   return (
     <div className={s.page} data-testid="Project General CheckList Screen">
 
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="checklist" />
+      {/* `portal`: the canvas spinner (`cmp_PopUp_GateProcess_Saving_LoadingDialog_1`) is the last control, full screen, ABOVE the
+          open right panel; drawn in the page it sat under the drawer's portal (z-index 1000000) and the panel stayed clickable. */}
+      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="checklist" portal />
 
       {locked ? (
         <div className={s.lock} data-testid="con_Milestones_Page_LockMessage_3" role="status">
@@ -829,6 +837,8 @@ export default function CheckListScreen() {
         width="threeQuarter" panelClassName={mergeClasses(s.panelSkin, s.panelHistory)} closeTooltip={UI.closeTooltip}
         // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
         keepOpenOnOutsideClick
+        // A write is running: the canvas spinner blocks the whole screen, so ✕ and Escape do nothing until it ends.
+        busy={busy}
         onDismiss={closePanel}
         footer={panel ? (
           <>
@@ -961,6 +971,7 @@ export default function CheckListScreen() {
         width="narrow" panelClassName={mergeClasses(s.panelSkin, s.panelComment)}
         // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
         keepOpenOnOutsideClick
+        busy={busy}
         onDismiss={() => setCommentForm(null)}
         footer={<PanelButtons
           onSave={() => {
