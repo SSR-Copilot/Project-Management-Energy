@@ -134,6 +134,18 @@
         "workflowDisplayName": "Request permission cancellation",
         "workflowName": "1a8b4be8-902b-b90c-dcef-1875f75ba7f3"
       }
+    },
+    "4e356b6f-6d08-4b37-973d-bdef0b558d59": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "getazuremapssastoken"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "2c2b6c50-a1d9-f111-a05d-6045bd98c286",
+        "workflowDisplayName": "Get Azure Maps SAS Token",
+        "workflowName": "5ebce9d1-d9c9-f20c-7b1e-b2360e252b77"
+      }
     }
   },
   "databaseReferences": {

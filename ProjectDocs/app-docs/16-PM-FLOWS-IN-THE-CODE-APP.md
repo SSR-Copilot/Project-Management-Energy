@@ -206,6 +206,7 @@ pa app add flow --flow-id d68b3a66-6ae8-ce06-68ec-d9af740cc18c   # Perform Reque
 pa app add flow --flow-id 67e2929f-a73e-a2b3-039c-569b58bda414   # Perform Request of Check List Approval Cancellation
 pa app add flow --flow-id 483a3074-9166-b822-9e47-a891cafbe68e   # Request Module Permission (after section 3b)
 pa app add flow --flow-id 1a8b4be8-902b-b90c-dcef-1875f75ba7f3   # Request permission cancellation (after section 3b)
+pa app add flow --flow-id 5ebce9d1-d9c9-f20c-7b1e-b2360e252b77   # Get Azure Maps SAS Token (General Data map, 18-AZURE-MAPS-IN-THE-CODE-APP.md)
 npm run check:power
 ```
 
