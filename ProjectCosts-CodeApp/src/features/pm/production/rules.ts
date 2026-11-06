@@ -65,7 +65,7 @@ import { addMonths } from "@/domain/dates";
 import { p75, p90, NOT_COMPUTABLE } from "@/domain/yieldStats";
 import { CHOICE_PRODUCTION, ES, ES_FINANCE, ES_PLANT, ES_PRODUCTION } from "@/data/dataverseNames";
 import { bind, dateOnly } from "@/data/odata";
-import { createdRowRef, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { createdRowRef, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import { textFormat } from "@/features/pm/generators/rules";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
@@ -1272,8 +1272,15 @@ export function revenueSyncYieldsCanvasParity(yields: readonly EnergyYieldRow[],
  *   3. the negative-price upserts — or `RemoveIf` of every stored row when the toggle is off;
  *   4. the revenue sync (SOURCE DEFECT 2: against the yields AFTER step 5);
  *   5. an External assessment sets the project's active Internals of its type Inactive.
- * The recalculation (`Select(btn_Load_StandardContracts_For_Project)`) follows as its own job.
+ * The recalculation (`Select(btn_Load_StandardContracts_For_Project)`) follows: the roll-up as the
+ * same job's `then` step, the one-shot generation as its own job (`hooks.ts`).
  * Every create binds the project's owning business unit, as the canvas does.
+ *
+ * Save performance (6 Nov 2026, D108): the yield goes first, alone — every other write binds to it
+ * or follows from it, and a failed yield write sends nothing else. Steps 2–5 are then sent TOGETHER
+ * (`together`, 8 at a time) instead of one round trip each; a curve of 30 negative-price years was
+ * 30 sequential writes. They are independent rows, and no plugin or flow fires on the seasonality,
+ * negative-price, revenue or energy-yield tables (`hooks.ts` header), so their order is free.
  */
 export function planSaveYield(args: {
   editing: EnergyYieldRow | null;
@@ -1326,8 +1333,14 @@ export function planSaveYield(args: {
   for (const id of superseded) {
     writes.push(upd(ES_PRODUCTION.energyYields, id, { ...YIELD_STATUS.inactive }, "an internal yield superseded by the external one"));
   }
-  return { writes, log: [] };
+  const [first, ...rest] = writes;
+  return { writes: [first!, ...together(rest)], log: [] };
 }
+
+/** The revenue sync writes, sent together after the yield write they follow from (D108). */
+const revenueSyncWrites = (changes: readonly { id: string; considerNegativePrices: boolean }[]): PlannedWrite[] =>
+  together(changes.map((r) =>
+    upd(ES_FINANCE.projectRevenues, r.id, { [REVENUE_COL.considerNegativePrices]: r.considerNegativePrices }, "a revenue contract's negative prices")));
 
 /**
  * Delete (`cmp_Delete_ProjectProd.OnConfirm`, Y:9236-9289): `Remove('Energy Yields', selected)`,
@@ -1339,8 +1352,7 @@ export function planDeleteYield(args: { row: EnergyYieldRow; yields: readonly En
   return {
     writes: [
       del(ES_PRODUCTION.energyYields, args.row.id, "the energy yield"),
-      ...syncRevenueNegativePrices({ activeYields: remaining, revenues: args.revenues }).map((r) =>
-        upd(ES_FINANCE.projectRevenues, r.id, { [REVENUE_COL.considerNegativePrices]: r.considerNegativePrices }, "a revenue contract's negative prices")),
+      ...revenueSyncWrites(syncRevenueNegativePrices({ activeYields: remaining, revenues: args.revenues })),
     ],
     log: [],
   };
@@ -1353,8 +1365,7 @@ export function planStatusChange(args: { row: EnergyYieldRow; yields: readonly E
   return {
     writes: [
       upd(ES_PRODUCTION.energyYields, args.row.id, { ...next }, "the energy yield's status"),
-      ...syncRevenueNegativePrices({ activeYields: after, revenues: args.revenues }).map((r) =>
-        upd(ES_FINANCE.projectRevenues, r.id, { [REVENUE_COL.considerNegativePrices]: r.considerNegativePrices }, "a revenue contract's negative prices")),
+      ...revenueSyncWrites(syncRevenueNegativePrices({ activeYields: after, revenues: args.revenues })),
     ],
     log: [],
   };

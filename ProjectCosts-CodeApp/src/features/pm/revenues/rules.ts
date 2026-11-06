@@ -1343,9 +1343,11 @@ export const showsShiftOfCod = (existingCount: number, editing = false): boolean
 
 /**
  * Rule 30 — `Sequence(If(years = 0, 11, 12), If(years = 0, 1, 0))`: with zero years the
- * month list starts at 1, so a zero-length period cannot be created.
+ * month list starts at 1, so a zero-length period cannot be created. A blank year (a new period,
+ * before one is picked) is not 0 (`Blank() = 0` is false: the canvas Years picker opens blank, not on
+ * "0 Year"), so its list is 0…11.
  */
-export function balancingMonthOptions(years: number): number[] {
+export function balancingMonthOptions(years: number | null): number[] {
   const count = years === 0 ? 11 : 12;
   const from = years === 0 ? 1 : 0;
   return Array.from({ length: count }, (_, i) => from + i);
@@ -1354,9 +1356,11 @@ export function balancingMonthOptions(years: number): number[] {
 /**
  * Rule 30 — `DateAdd(DateAdd(start, Sum(years*12, months), TimeUnit.Months), -1, TimeUnit.Days)`.
  * NOTE this is months-only arithmetic, unlike the revenue contract's years-then-months.
+ * `Sum()` skips a blank picker, so a new period with neither picked ends the day BEFORE it starts
+ * (Start 22.02.2027, End 21.02.2027), as the canvas panel shows.
  */
-export function balancingEndDate(start: Date, years: number, months: number): Date {
-  return addDays(addMonths(start, years * 12 + months), -1);
+export function balancingEndDate(start: Date, years: number | null, months: number | null): Date {
+  return addDays(addMonths(start, (years ?? 0) * 12 + (months ?? 0)), -1);
 }
 
 /**
@@ -3041,8 +3045,26 @@ export function planDeleteContract(contract: StoredRevenueContract | null): Writ
   };
 }
 
-/** The balancing panel's inputs. */
-export interface BalancingForm { id: string | null; price: string; years: number; months: number; shift: string }
+/** The balancing panel's inputs. `years` / `months` are null while their picker is blank. */
+export interface BalancingForm { id: string | null; price: string; years: number | null; months: number | null; shift: string }
+
+/**
+ * The balancing panel as it opens. Corrected 6 Nov 2026: a new period opened on "0 Year" / "1 Month"
+ * with a blank shift, so its End Date was a month later than the canvas one.
+ *  - A new period: `txt_BalancingPrice_ShiftOfCODDate.Value` is `"0"` (L3673-3687), and both duration
+ *    pickers are blank: their `DefaultSelectedItems` look up the blank selected period (L3996-4000,
+ *    L4033-4077). The End Date is then the day before the Start Date (L4185-4197).
+ *  - An existing period: its stored price (in the user's language), durations and shift. A blank stored
+ *    duration stays blank, as the canvas lookup finds nothing.
+ */
+export function balancingFormFor(period: BalancingPeriod | null, lang: Lang): BalancingForm {
+  if (!period) return { id: null, price: "", years: null, months: null, shift: "0" };
+  return {
+    id: period.id, price: balancingPriceText(period.price, lang),
+    years: period.durationYears, months: period.durationMonths,
+    shift: period.shiftOfCodMonths === null ? "" : String(period.shiftOfCodMonths),
+  };
+}
 
 /**
  * SOURCE DEFECT (D33): the balancing `Patch` (L4534-4595) writes no `'Owning Business Unit'`,
@@ -3073,6 +3095,7 @@ export function planSaveBalancing(input: {
     [`${NAV.project}@odata.bind`]: bind(ES.projects, project.id),
     [BALANCING_COL.periods]: periodValue,
     [BALANCING_COL.shiftOfCod]: showsShiftOfCod(count, editing !== null) ? valueOf(form.shift, lang) : null,
+    // `.Selected.Value` of each picker (L4591-4592): a picker left blank writes blank, as in the canvas.
     [BALANCING_COL.durationYears]: form.years,
     [BALANCING_COL.durationMonths]: form.months,
     [BALANCING_COL.price]: valueOf(form.price, lang),

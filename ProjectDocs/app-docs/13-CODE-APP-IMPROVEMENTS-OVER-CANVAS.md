@@ -420,3 +420,20 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Screen | Change | Status |
 |---|---|---|
 | Cluster Checklist | The transition panel closes as soon as the writes end, success or failure, as the Canvas does, and the "Loading, please wait..." spinner then covers the reload behind it; before, the panel stayed open under the spinner for the whole write and reload | fixed |
+
+## Production: the "can't be deleted/deactivated" pop-up and the disabled Save (6 Nov 2026, D107) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Production | Delete or Deactivate of the last active study shows the Canvas pop-up itself (blue 64-px header, ⓘ tag, rule, outlined Close; 550 × 220), not a stock Fluent dialog. The behaviour (both commands, the texts) was already the Canvas's | reproduced |
+| Production, Generators | The pop-up is one shared component (`InformationPopUp`) with the per-copy size as props; Generators' inline copy now uses it, unchanged on screen. New tests UT-INFOPOP-001…004, UT-PROD-912 | new (reuse, a new test) |
+| Production | The disabled Save of the Add/Edit panel is the Canvas PowerCAT ActionButton (transparent "✓ Save"), not Fluent's grey filled box; enabled it is unchanged. UT-PROD-913 | reproduced |
+
+## Production: faster Save, Delete and Activate / Deactivate (6 Nov 2026, D108) — fixed (divergences proposed, not approved)
+
+| Screen | Change | Status |
+|---|---|---|
+| Production | After the yield write, the seasonality, negative-price (one per curve year), revenue-sync and superseded-yield writes are sent together, 8 at a time, instead of one round trip each | fixed (DIVERGENCE: a failure among them lets the others finish) |
+| Production | The roll-up runs in the same job as the Save / Delete / status change, from a fresh read after the writes: one spinner and one reload instead of two | fixed (DIVERGENCE: a roll-up failure carries the Save's error text) |
+| Production | The spinner closes once the writes land; the screen reloads behind it with the command bar off until it has (as Generators) | fixed (DIVERGENCE: the old rows show for about one reload) |
+| Production | Tests UT-PROD-130 and UT-PRODHOOK-001…004 pin the plan shape, the single job and reload, the post-write read and the generation rule | new (tests) |

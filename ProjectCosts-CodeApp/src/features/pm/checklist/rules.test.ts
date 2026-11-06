@@ -37,6 +37,7 @@ import {
   type ChecklistProject, type ChecklistRow, type TrackingRow, type ProjectStateRef,
   type GateSetting, type ChecklistApprovalSetting, type DefaultChecklistTemplate,
   type PanelState, type SequenceEntry,
+  clusterTransitionDone, flowMovesCluster,
 } from "./rules";
 import { toChecklistProject, toTrackingRow, toChecklistRow } from "@/data/checklist";
 import {
@@ -1734,5 +1735,22 @@ describe("D81 — the writes around the flows", () => {
     expect(MSG.cancelClusterApproval).toBe("Cancel Cluster Approval ...");
     expect(MSG.cancelingChecklistApproval).toBe("Canceling Check List completion approval request...");
     expect(MSG.pleaseWait).toBe("Please wait...");
+  });
+});
+
+/* Only Notifications gates: the gate flow itself moves the cluster on (6 Nov 2026) */
+describe("Only Notifications gates: the screen waits for the gate flow's move", () => {
+  const MODE_T = CHOICE_PROCESS.approvalMode;
+  const ACS_T = CHOICE_PROCESS.approvalClusterState;
+
+  it("UT-CHKLST-082 waits only for an active Only Notifications gate, until the cluster's tracking is Completed", () => {
+    expect(flowMovesCluster(gate({ gateActive: true, approvalMode: MODE_T.onlyNotifications }))).toBe(true);
+    expect(flowMovesCluster(gate({ gateActive: false, approvalMode: MODE_T.onlyNotifications }))).toBe(false);
+    expect(flowMovesCluster(gate({ gateActive: true, approvalMode: null }))).toBe(false);
+    expect(flowMovesCluster(null)).toBe(false);
+    expect(clusterTransitionDone([tracking({ clusterStateId: "s2", approvalClusterState: ACS_T.inProgress })], "s2")).toBe(false);
+    expect(clusterTransitionDone([tracking({ clusterStateId: "s2", approvalClusterState: ACS_T.completed })], "s2")).toBe(true);
+    expect(clusterTransitionDone([tracking({ clusterStateId: "s3", approvalClusterState: ACS_T.completed })], "s2")).toBe(false);
+    expect(clusterTransitionDone([], "s2")).toBe(false);
   });
 });

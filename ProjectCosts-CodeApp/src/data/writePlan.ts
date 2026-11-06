@@ -35,6 +35,13 @@ export interface PlannedWrite extends WriteOp {
   concurrent?: boolean;
 }
 
+/**
+ * Marks writes `concurrent` (save performance): `executePlan` sends them together, 8 at a time, instead
+ * of one round trip each. Only for writes that depend on nothing but rows created BEFORE them and whose
+ * relative order no server automation depends on.
+ */
+export const together = (writes: readonly PlannedWrite[]): PlannedWrite[] => writes.map((w) => ({ ...w, concurrent: true }));
+
 /** An `update` that never upserts: see `WriteOp.guarded`. */
 export const guardedUpdate = (
   entitySet: string,

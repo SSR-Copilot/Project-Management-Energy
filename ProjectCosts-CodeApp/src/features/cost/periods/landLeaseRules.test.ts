@@ -61,6 +61,7 @@ import {
   type LeaseCostRow, type LeasePeriodRow, type LeaseAllocationRow, type LeaseAssumptionRow,
   type LeaseProjectContext, type LandLeaseForm, type GeneratorOption, type LeaseCommandArgs,
   type LeaseWrite,
+  inflationProfileText, leaseDecimalText,
 } from "./landLeaseRules";
 // The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
@@ -2337,5 +2338,16 @@ describe("Land Lease — run 3 parity fixes", () => {
     });
     expect(gates.EditLandLeasePeriodKey).toBe(false);
     expect(gates.newLandLeasePeriodKey).toBe(false);
+  });
+});
+
+/* German and French numbers (6 Nov 2026) */
+describe("German and French numbers: Land Lease boxes open in the user's locale", () => {
+  it("UT-LAND-145 a stored 65 opens as '65,00', a 2.3 % profile as '2,3' (saved 2.3, not 23) and a payment as '1500,00'", () => {
+    expect(leaseDecimalText("65.00", "de-DE")).toBe("65,00");
+    expect(leaseDecimalText("65.00", "en-US")).toBe("65.00");
+    expect(inflationProfileText(2.3, "de-DE")).toBe("2,3");
+    expect(inflationProfileText(2.3, "en-US")).toBe("2.3");
+    expect(storedPayments({ amountOneTimePayment: 1500 } as never, "fr-FR").amount).toBe("1500,00");
   });
 });

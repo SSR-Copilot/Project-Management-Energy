@@ -141,6 +141,7 @@ import {
   type OpexSubaccount,
   type PanelContext,
   matchesStandardAssumption,
+  opexDecimalText, opexNumberOrNull,
 } from "./opexRules";
 // The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
@@ -1973,5 +1974,20 @@ describe("writeCommandsDisabled / guardOpexCommands (D58)", () => {
     // A parent's stored Blank falls through to the panel's own value.
     expect(inheritStartDateStandard({ isStartDateStandardAssumption: null }, null)).toBeNull();
     expect(inheritStartDateStandard({ isStartDateStandardAssumption: false }, null)).toBe(false);
+  });
+});
+
+/* German and French numbers (6 Nov 2026) */
+describe("German and French numbers: OPEX boxes are written and read in the user's locale", () => {
+  it("UT-OPEX-133 a stored 1234.5 opens as '1234,50' and a typed '1234,50' is saved as 1234.5, not blank", () => {
+    expect(formatTwoDecimalsText(1234.5, "de-DE")).toBe("1234,50");
+    expect(formatOneDecimalText(2.5, "fr-FR")).toBe("2,5");
+    expect(formatTwoDecimalsText(1234.5, "en-US")).toBe("1234.50");
+    expect(opexDecimalText("2.5", "de-DE")).toBe("2,5");
+    expect(opexNumberOrNull("1234,50", "de-DE")).toBe(1234.5);
+    expect(opexNumberOrNull("2,5", "fr-FR")).toBe(2.5);
+    expect(opexNumberOrNull("1234.50", "en-US")).toBe(1234.5);
+    expect(opexNumberOrNull("", "de-DE")).toBeNull();
+    expect(opexNumberOrNull("abc", "de-DE")).toBeNull();
   });
 });

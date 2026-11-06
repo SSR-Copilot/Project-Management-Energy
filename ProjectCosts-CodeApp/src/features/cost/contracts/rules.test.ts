@@ -16,6 +16,7 @@ import {
   gatedContractCommands, contractSelectionAfterDelete,
   cardShowsClosingCosts, cardTotalLabel, CONTRACT_TYPE_NAME, longAbbreviatedDate,
   type AccountRow, type CapexCostRow, type ContractForm, type PaymentTarget, type BopContract,
+  inputDecimalText,
 } from "./rules";
 // The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
@@ -843,5 +844,16 @@ describe("contractSelectionAfterDelete (CA-17)", () => {
       .toEqual({ contractId: "c-1", targetId: "t-2" });
     const none = { contractId: undefined, targetId: undefined };
     expect(contractSelectionAfterDelete(none, { contractId: "c-1" })).toEqual(none);
+  });
+});
+
+/* German and French numbers (6 Nov 2026) */
+describe("German and French numbers: Contracts boxes open in the user's locale", () => {
+  it("UT-CON-87 a stored 7.5 % margin and a 33.3 % payment target open as '7,5' and '33,3'", () => {
+    expect(inputDecimalText(7.5, "de-DE")).toBe("7,5");
+    expect(inputDecimalText(33.3, "fr-FR")).toBe("33,3");
+    expect(inputDecimalText(100000, "de-DE")).toBe("100000");
+    expect(inputDecimalText(7.5, "en-US")).toBe("7.5");
+    expect(inputDecimalText(undefined, "de-DE")).toBe("");
   });
 });

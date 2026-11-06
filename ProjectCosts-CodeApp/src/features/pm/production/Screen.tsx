@@ -17,19 +17,19 @@
  */
 import { useState } from "react";
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
+  Button,
   Input, MessageBar, MessageBarBody, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  ArrowClockwiseRegular, DismissRegular, InfoRegular, LockClosedRegular,
+  ArrowClockwiseRegular, InfoRegular, LockClosedRegular,
   RadioButtonFilled, RadioButtonRegular,
 } from "@fluentui/react-icons";
 import {
-  Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, LoadingOverlay,
+  Choices, type Command, CommandBar, ConfirmDialog, EmptyState, FormPanel, InformationPopUp, LoadingOverlay,
   FIELD_APPEARANCE, NumericField, PanelButtons, ReadOnlyField, TextField, UnsavedChangesGuard, WriteFeedback,
   useFieldControlClass, useStandardValueClass,
-  ExpandChevron, HINTS,
+  ExpandChevron,
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_PRODUCTION } from "@/data/dataverseNames";
@@ -309,7 +309,9 @@ export default function ProductionScreen() {
 
   const selected = selectedYield(yields, selectedId);
   const technology: Technology = panel?.technology ?? "WTG";
-  const busy = writes.progress !== null;
+  // The progress dialog closes once the writes land; the rows reload behind it (D108). Until they have,
+  // the commands stay off, so no Edit / Delete / status change acts on a row that is about to change.
+  const busy = writes.progress !== null || writes.refreshing === true;
 
   /* ── command bar — `commandBarState` is the canvas `Items` table one-for-one. */
   const state = commandBarState({ canEdit: CAN_EDIT_SELECTED_PROJECT, project, selected });
@@ -534,7 +536,9 @@ export default function ProductionScreen() {
         panelClassName={mergeClasses(s.panelSkin, PM_PANEL)} keepOpenOnOutsideClick
         onDismiss={closePanel}
         closeTestId={technology === "PV" ? "pcf_CommandBar_ProductionDataWTG_1" : "pcf_CommandBar_ProductionDataWTG"}
-        footer={<PanelButtons onSave={onSave} onCancel={closePanel} disabled={!saveable}
+        // Both Saves are PowerCAT `IconType: ActionButton` with `IconColor: If(Disabled, black, white)`
+        // (Y:5267-5281, Y:7947-7961): disabled, a transparent "✓ Save", not Fluent's grey primary.
+        footer={<PanelButtons onSave={onSave} onCancel={closePanel} disabled={!saveable} subtleWhenDisabled
           saveTestId={technology === "PV"
             ? "pcf_btn_GeneratorData_RightPanel_Form_PVModuleType_Buttons_Save"
             : "pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_1"}
@@ -732,26 +736,17 @@ export default function ProductionScreen() {
         );
       })() : null}
 
-      <Dialog open={confirm?.kind === "prevent"} onOpenChange={(_, d) => { if (!d.open) setConfirm(null); }}>
-        <DialogSurface data-testid="con_PopUp_Common_Generators_PreventTotalCapacity_Information_1">
-          <DialogBody>
-            <DialogTitle action={
-              <Button appearance="transparent" icon={<DismissRegular />} aria-label="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1" title={HINTS.cancel}
-                data-testid="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1" onClick={() => setConfirm(null)} />
-            }>
-              <span data-testid="txt_PopUp_Common_Generators_PreventTotalCapacity_Title_1">{PREVENT_LAST_YIELD_DIALOG.title}</span>
-            </DialogTitle>
-            <DialogContent>{PREVENT_LAST_YIELD_DIALOG.description}</DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" aria-label={PREVENT_LAST_YIELD_DIALOG.close}
-                data-testid="btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close_1"
-                onClick={() => setConfirm(null)}>
-                {PREVENT_LAST_YIELD_DIALOG.close}
-              </Button>
-            </DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      {/* Delete AND Deactivate of the last active yield (Y:1040-1076): the canvas pop-up's own
+          card — `Width: =550`, `Height: =220`, gutter 30, the ⓘ tag `Height: =55` (Y:9314-9407). */}
+      <InformationPopUp
+        open={confirm?.kind === "prevent"}
+        title={PREVENT_LAST_YIELD_DIALOG.title}
+        message={PREVENT_LAST_YIELD_DIALOG.description}
+        closeText={PREVENT_LAST_YIELD_DIALOG.close}
+        canvasSuffix="_1"
+        width={550} boxHeight={220} gutter={30} tagHeight={55}
+        onClose={() => setConfirm(null)}
+      />
 
       {loading ? <LoadingOverlay mode="inline" /> : null}
       {/* `cmp_PopUp_Leave_…_Confirmation` — the shared leave guard (D35, PO X1). */}

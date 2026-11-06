@@ -55,7 +55,7 @@ import {
 } from "@/domain/powerFxNumeric";
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
-import { createdRowRef, refusePlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 
@@ -3352,13 +3352,12 @@ const ins = (entitySet: string, data: Record<string, unknown>, reason: string): 
   ({ op: "create", entitySet, data, reason });
 const del = (entitySet: string, id: string, reason: string): PlannedWrite =>
   ({ op: "delete", entitySet, id, reason });
-/**
- * Save performance (6 Nov 2026): marks writes that depend on nothing but rows created BEFORE them (a type's
- * turbines, the roll-up, the land-lease allocations, the apply-to-all patches) so `executePlan` sends them
- * together, 8 at a time, instead of one round trip each. No server automation orders these rows: the only
+/*
+ * Save performance (6 Nov 2026): `together` (`data/writePlan.ts`) marks writes that depend on nothing but
+ * rows created BEFORE them (a type's turbines, the roll-up, the land-lease allocations, the apply-to-all
+ * patches) so `executePlan` sends them 8 at a time. No server automation orders these rows: the only
  * project-level trigger (`LoadDevexCapexCostTotalCapacityTrigger`) fires on the roll-up alone.
  */
-const together = (writes: readonly PlannedWrite[]): PlannedWrite[] => writes.map((w) => ({ ...w, concurrent: true }));
 
 /** `Patch(Projects, …, {'Plant WTG Capacity [MW]', 'Plant WTG Cost [EUR]'})` over the eligible types (rule 14). */
 export function projectWtgRollup(

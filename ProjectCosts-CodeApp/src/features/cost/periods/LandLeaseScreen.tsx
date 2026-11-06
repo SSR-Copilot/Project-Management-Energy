@@ -81,7 +81,7 @@ import {
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
   leaseSelectionAfterWrite, leaseSelectionOnAddPeriod, toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
   LeaseStepsError, allocationRequired, countryProfileFor, inflationProfileForSave,
-  inflationProfileText, inflationUncheckPatch, leaseAreaDefault, leaseHttpResponse, leaseStepFailureText,
+  inflationProfileText, inflationUncheckPatch, leaseAreaDefault, leaseDecimalText, leaseHttpResponse, leaseStepFailureText,
   oneTimePaymentUncheckPatch, paymentBlockVisible, periodBlockRequired as periodBlockRequiredRule,
   resolveLeaseCurrencyId, startDatePickPatch,
   type GeneratorOption, type LandLeaseForm, type LeaseAllocationRow, type LeaseContract,
@@ -918,9 +918,9 @@ export default function LandLeaseScreen() {
     // `landLeaseFormFrom` gives them (only Fix Costs is `#0.00`).
     setForm({
       ...loaded,
-      eurPerMwh: canvasRate(selectedPeriod.eurPerMwh),
-      eurPerMw: canvasRate(selectedPeriod.eurPerMw),
-      eurPerWtg: canvasRate(selectedPeriod.eurPerWtg),
+      eurPerMwh: canvasRate(selectedPeriod.eurPerMwh, locale),
+      eurPerMw: canvasRate(selectedPeriod.eurPerMw, locale),
+      eurPerWtg: canvasRate(selectedPeriod.eurPerWtg, locale),
     });
     setWorkingDate(null);
     setResetFlag(false);
@@ -2099,11 +2099,12 @@ function isoDay(value: Date | undefined): string | null {
 
 /** `txt_…_InflationProfile_1.Value` is a one-decimal string; blank stays blank. */
 /** `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` — a whole rate without decimals, else one or two. */
-function canvasRate(value: number | null | undefined): string {
+function canvasRate(value: number | null | undefined, locale?: string): string {
   if (value === null || value === undefined) return "";
   if (Number.isInteger(value)) return String(value);
   const s = value.toFixed(2);
-  return s.endsWith("0") ? s.slice(0, -1) : s;
+  // In the user's locale, as the rate boxes' checks read it (German number audit, 6 Nov 2026).
+  return leaseDecimalText(s.endsWith("0") ? s.slice(0, -1) : s, locale);
 }
 
 const formatProfile = inflationProfileText;

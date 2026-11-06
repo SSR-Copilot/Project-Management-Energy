@@ -511,6 +511,34 @@ describe("write plans", () => {
       ["delete", ES_PRODUCTION.energyYields, "y1"], ["update", ES_FINANCE.projectRevenues, "r1"],
     ]);
   });
+  it("UT-PROD-130 save performance (D108): the yield write goes alone, first; everything after it is sent together", () => {
+    const internal = yieldRow({ id: "i1", considerNegativePrices: true });
+    const ext = form({ assessment: CHOICE_PRODUCTION.yieldAssessment.external, considerSeasonality: true, considerNegativePrices: true });
+    const extPayload = buildYieldPayload({ form: ext, view: viewOf(ext), technology: "WTG", project: project() });
+    const save = planSaveYield({
+      editing: null, payload: extPayload, project: project(),
+      seasonality: { on: true, rows: season, storedId: null },
+      negativePrices: { on: true, rows: negatives, stored: [] },
+      yields: [internal], revenues: [revenue()],
+    });
+    // yield, seasonality, 2 negative prices, the revenue sync (No → Yes), the superseded internal.
+    expect(save.writes).toHaveLength(6);
+    expect(save.writes[0]).toMatchObject({ op: "create", entitySet: ES_PRODUCTION.energyYields });
+    expect(save.writes[0]!.concurrent).toBeUndefined();
+    expect(save.writes.slice(1).every((w) => w.concurrent === true)).toBe(true);
+    // The children still bind the yield created before their run.
+    expect(save.writes[1]!.data![BIND.energyYield]).toBe(`/vsb_energyyields(${createdRowRef(0)})`);
+
+    const row = yieldRow({ considerNegativePrices: true });
+    for (const plan of [
+      planDeleteYield({ row, yields: [row], revenues: [revenue({ considerNegativePrices: true }), revenue({ id: "r2", considerNegativePrices: true })] }),
+      planStatusChange({ row, yields: [row], revenues: [revenue({ considerNegativePrices: true }), revenue({ id: "r2", considerNegativePrices: true })] }),
+    ]) {
+      expect(plan.writes.map((w) => [w.entitySet, w.concurrent ?? false])).toEqual([
+        [ES_PRODUCTION.energyYields, false], [ES_FINANCE.projectRevenues, true], [ES_FINANCE.projectRevenues, true],
+      ]);
+    }
+  });
   it("UT-PROD-105 activate / deactivate writes statecode + statuscode, then syncs", () => {
     const off = planStatusChange({ row: yieldRow(), yields: [yieldRow()], revenues: [] });
     expect(off.writes[0]).toMatchObject({ op: "update", id: "y1", data: { statecode: 1, statuscode: 2 } });
