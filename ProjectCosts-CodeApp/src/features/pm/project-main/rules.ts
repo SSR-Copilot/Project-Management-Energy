@@ -939,7 +939,12 @@ export function serialiseCriteria(c: Criteria): URLSearchParams {
     if (v !== null && v !== undefined && v !== "") p.set(k, v);
   };
 
-  put(PARAM.keyword, c.filter.keyword.trim());
+  // The keyword is written EXACTLY as typed. The URL is the only store of the criteria and the
+  // search box reads its value back from it (`useCriteria`), so trimming here erased every
+  // trailing space on the keystroke that typed it: "Wind Park" could only be typed as "WindPark".
+  // The canvas keeps `Self.Value` raw (`ProjectKeyword: Self.Value`); the query trims for itself
+  // (`keywordClause`), so a space never reaches the `$filter`.
+  put(PARAM.keyword, c.filter.keyword);
   put(PARAM.projectManagerId, c.filter.projectManagerId);
   put(PARAM.countryId, c.filter.countryId);
   put(PARAM.areaId, c.filter.areaId);

@@ -494,6 +494,21 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
+  it("UT-OVUI-047 the Project search accepts spaces: 'Wind Park' can be typed and stays in the box", async () => {
+    // Canvas `txt_Main_Project_Overview_Context_Filter_Project`: `ProjectKeyword: Self.Value`, never trimmed.
+    // The box reads its value back from the URL, which used to be written trimmed, so each space vanished.
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    const box = screen.getByTestId("filter-keyword") as HTMLInputElement;
+    await user.type(box, "Wind Park");
+    expect(box.value).toBe("Wind Park");
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?q=Wind+Park");
+    await user.type(box, " ");
+    expect(box.value).toBe("Wind Park ");
+  });
+
   it("UT-OVUI-023 opens CAPEX in a new tab, leaving the filtered list in place", async () => {
     // The canvas `Launch(gblCostAppLaunchUrl, {projectId: …})` opened a separate app in a new
     // tab. It is this app's own `/costs/capex` route now, but still a new tab — so the

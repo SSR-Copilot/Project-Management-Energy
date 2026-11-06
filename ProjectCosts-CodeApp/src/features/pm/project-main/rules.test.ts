@@ -622,6 +622,20 @@ describe("criteria round trip", () => {
     const c = { ...DEFAULT_CRITERIA, filter: { ...EMPTY_FILTER, capacityOperator: "Equals" as const } };
     expect(serialiseCriteria(c).has("capop")).toBe(false);
   });
+
+  it("UT-OV-097 writes the keyword exactly as typed, spaces included (the search box reads it back from the URL)", () => {
+    for (const typed of ["Wind ", " Wind", "Wind Park", "  Wind  Park  "]) {
+      const c = { ...DEFAULT_CRITERIA, filter: { ...EMPTY_FILTER, keyword: typed } };
+      // The box shows what parseCriteria returns: a trailing space that is lost here is a space the user cannot type.
+      expect(parseCriteria(serialiseCriteria(c)).filter.keyword).toBe(typed);
+    }
+  });
+
+  it("UT-OV-098 keeps the query trimmed even though the typed keyword is not (the space never reaches the $filter)", () => {
+    expect(keywordClause("Wind Park ")).toBe(keywordClause("Wind Park"));
+    expect(keywordClause("  Wind  ")).toBe(keywordClause("Wind"));
+    expect(keywordClause("   ")).toBeUndefined();
+  });
 });
 
 /* ──────────────────────────────────────────────────── people typeahead */
