@@ -50,7 +50,9 @@ export interface ProjectMapProps {
 
 const useStyles = makeStyles({
   root: { position: "relative", width: "100%", height: "100%", borderRadius: "4px", overflow: "hidden" },
-  host: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+  // Width/height explicitly: the SDK's `.maplibregl-map { position: relative }` loads after these styles and
+  // overrides `absolute`, which left the map 0 px high.
+  host: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%" },
   status: {
     position: "absolute", left: "8px", bottom: "8px", maxWidth: "calc(100% - 16px)",
     paddingTop: "2px", paddingBottom: "2px", paddingLeft: "6px", paddingRight: "6px",
