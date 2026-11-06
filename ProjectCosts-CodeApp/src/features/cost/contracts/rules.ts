@@ -9,7 +9,7 @@
  * `control.Property`, so a reviewer can diff against the `.pa.yaml`.
  */
 import { isDecimal, isInteger, inRange, orZero, parseNumber, round, roundUp, sum } from "@/domain/numeric";
-import { dateFormat, numberFormat } from "@/domain/locale";
+import { dateFormat, localeInfo, numberFormat } from "@/domain/locale";
 
 /* ══════════════════════════════════════════════════════════════ option sets */
 
@@ -1440,6 +1440,18 @@ export function contractTotalFromForm(form: ContractForm, locale?: string): numb
 /* ═════════════════════════════════════════════════ card figures and formats */
 
 /** Power Fx `Text(n, "###,##0")` — whole number, grouped, zero shown (`Coalesce(n, 0)` is the caller's). */
+/**
+ * A stored number as a panel box shows it: no grouping, the user's decimal separator ("7,5"). The canvas fills the
+ * boxes from the record, which Power Apps shows in `Language()`, and the checks and the save read them back in the
+ * same locale: `String(7.5)` = "7.5" failed the German check and was read as 75 % in the total (6 Nov 2026).
+ */
+export function inputDecimalText(value: number | null | undefined, locale?: string): string {
+  if (value === null || value === undefined) return "";
+  const sep = localeInfo(locale).decimalSeparator;
+  const en = String(value);
+  return sep === "." ? en : en.replace(".", sep);
+}
+
 export function wholeNumberText(value: number | undefined, locale?: string): string {
   return numberFormat(locale ?? "de-DE", { maximumFractionDigits: 0 }).format(orZero(value));
 }

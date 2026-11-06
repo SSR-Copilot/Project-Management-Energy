@@ -3,14 +3,14 @@
  *
  * The reads live in `data/production.ts` (which reuses `data/generators.ts` and `data/landLease.ts`).
  * Every write is a `WritePlan` from `rules.ts`, run IN ORDER by `usePlanWrite`. Each write path is
- * the canvas sequence of jobs:
+ * the canvas sequence of steps:
  *   1. the action itself — the yield save (`planSaveYield`), delete (`planDeleteYield`) or status
  *      change (`planStatusChange`), each ending with the revenue negative-price sync;
  *   2. "Recalc" part 1 (`Select(btn_Load_StandardContracts_For_Project)`): the project roll-up from
- *      the yields as they now are (`planRollUp`);
+ *      the yields as they now are (`planRollUp`) — the `then` step of job 1 since D108;
  *   3. "Recalc" part 2, only when `shouldGenerate` on the new p50: the standard Land Lease / Other OPEX
- *      / O&M contracts and the four CAPEX flags (`planStandardContracts`).
- * Each plan is built when its job starts, from a fresh read — the canvas `Refresh`es before each step.
+ *      / O&M contracts and the four CAPEX flags (`planStandardContracts`) — its own job.
+ * Each plan is built when its step starts, from a fresh read — the canvas `Refresh`es before each step.
  *
  * SERVER AUTOMATION the writes fire (`ProjectDocs/migration-plans/04-flow-inventory.md`, verified
  * 19 Oct 2026) — the client never does its work:
@@ -142,27 +142,41 @@ export interface SaveYieldRequest {
   negativePrices: { on: boolean; rows: readonly NegativePriceRow[] };
 }
 
-/** Runs the screen's writes and the "Recalc" that follows each, then refreshes the screen and the project's other views. */
+/**
+ * Runs the screen's writes and the "Recalc" that follows each, then refreshes the screen and the project's other views.
+ *
+ * Save performance (6 Nov 2026, D108) — the same writes, in fewer waits:
+ *  - the roll-up (Recalc part 1) is the `then` step of the action's own job, still from a fresh read of
+ *    the yields and the project, so the screen is no longer reloaded (and awaited) between the two;
+ *  - the screen reloads BEHIND the closed progress dialog (`refresh: "background"`, as Generators); the
+ *    Screen holds its commands back while `refreshing`, so nothing acts on the old rows;
+ *  - the plans send their independent writes together (`rules.ts`, `together`).
+ * The one-shot standard-contract generation (Recalc part 2) stays its own job, with its own progress text.
+ */
 export function useProductionWrites(projectId: string | undefined) {
   const id = projectId ?? "";
   const w = usePlanWrite({
     invalidate: [qk.productionAll(id), qk.project(id), qk.milestoneProject(id), qk.generalDataProject(id)],
     action: "change this project's energy yields",
+    refresh: "background",
   });
 
-  /** `btn_Load_StandardContracts_For_Project.OnSelect` (Y:8014-9119): the roll-up, then the one-shot generation. */
-  const recalculate = async (): Promise<boolean> => {
-    const seen: { next: { netYieldP50: number; standardCostCreated: boolean } | null } = { next: null };
-    const rolled = await w.run({
-      progress: UI.saving,
-      plan: async () => {
-        const [yields, project] = await Promise.all([listEnergyYields(id), loadProductionProject(id)]);
-        if (!project) throw new Error("The project could not be read.");
-        seen.next = { netYieldP50: projectYieldTotals(yields).netP50, standardCostCreated: project.standardCostCreated };
-        return planRollUp(id, yields);
-      },
-    });
-    if (rolled === null || seen.next === null || !shouldGenerate(seen.next)) return rolled !== null;
+  /**
+   * `btn_Load_StandardContracts_For_Project.OnSelect` (Y:8014-9119), part 1 — the roll-up, from the yields
+   * and the project as they are AFTER the action's writes (the canvas `Refresh`es first). `seen` keeps what
+   * part 2 decides on.
+   */
+  type Seen = { next: { netYieldP50: number; standardCostCreated: boolean } | null };
+  const rollUp = (seen: Seen) => async () => {
+    const [yields, project] = await Promise.all([listEnergyYields(id), loadProductionProject(id)]);
+    if (!project) throw new Error("The project could not be read.");
+    seen.next = { netYieldP50: projectYieldTotals(yields).netP50, standardCostCreated: project.standardCostCreated };
+    return planRollUp(id, yields);
+  };
+
+  /** Part 2: the one-shot generation, only when `shouldGenerate` on the new p50. */
+  const generateIfDue = async (seen: Seen): Promise<boolean> => {
+    if (seen.next === null || !shouldGenerate(seen.next)) return true;
     const generated = await w.run({
       progress: UI.loadingStandardContracts,
       plan: async () => {
@@ -175,9 +189,11 @@ export function useProductionWrites(projectId: string | undefined) {
   };
 
   const saveYield = async (req: SaveYieldRequest): Promise<boolean> => {
+    const seen: Seen = { next: null };
     const done = await w.run({
       progress: UI.saving,
       errorText: (d) => `${PRODUCTION_SCREEN_TEXT.saveError}: ${d}`,
+      then: rollUp(seen),
       plan: async () => {
         const editingId = req.editing?.id ?? null;
         const [yields, revenues, stored, storedNegative] = await Promise.all([
@@ -193,30 +209,39 @@ export function useProductionWrites(projectId: string | undefined) {
         });
       },
     });
-    return done !== null && (await recalculate());
+    return done !== null && (await generateIfDue(seen));
   };
 
   const deleteYield = async (row: EnergyYieldRow): Promise<boolean> => {
+    const seen: Seen = { next: null };
     const done = await w.run({
       progress: UI.saving,
+      then: rollUp(seen),
       plan: async () => {
         const [yields, revenues] = await Promise.all([listEnergyYields(id), listProjectRevenues(id)]);
         return planDeleteYield({ row: yields.find((y) => y.id === row.id) ?? row, yields, revenues });
       },
     });
-    return done !== null && (await recalculate());
+    return done !== null && (await generateIfDue(seen));
   };
 
   const changeStatus = async (row: EnergyYieldRow): Promise<boolean> => {
+    const seen: Seen = { next: null };
     const done = await w.run({
       progress: UI.saving,
+      then: rollUp(seen),
       plan: async () => {
         const [yields, revenues] = await Promise.all([listEnergyYields(id), listProjectRevenues(id)]);
         return planStatusChange({ row: yields.find((y) => y.id === row.id) ?? row, yields, revenues });
       },
     });
-    return done !== null && (await recalculate());
+    return done !== null && (await generateIfDue(seen));
   };
 
-  return { progress: w.progress, error: w.error, success: w.success, clear: w.clear, saveYield, deleteYield, changeStatus };
+  return {
+    progress: w.progress, error: w.error, success: w.success, clear: w.clear,
+    /** The background reload after a write is still running: the rows on screen may be the old ones. */
+    refreshing: w.refreshing,
+    saveYield, deleteYield, changeStatus,
+  };
 }

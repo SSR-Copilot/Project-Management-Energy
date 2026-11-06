@@ -245,11 +245,17 @@ describe("UT-REV Screen (connected)", () => {
     expect(screen.queryByTestId("con_ProjectBalancing_Price_Grid")).toBeNull();
   });
 
-  it("UT-REV-908 Add Balancing Price creates the first period with the shift and the project's owner", async () => {
+  it("UT-REV-908 Add Balancing Price opens as the canvas, then creates the first period with the shift and the project's owner", async () => {
     renderScreen("/project/revenues?tab=Balancing%20Price");
     expect(screen.getByText(SCREEN_LABEL.balancingEmptyInfo)).toBeTruthy();
     fireEvent.click(button("btn_Revenue_AddBlancing_Price"));
     expect(await screen.findByText("Add balancing price")).toBeTruthy();
+    // The canvas panel: Shift "0", both duration pickers blank, End Date the day before the Start Date (COD).
+    expect(input("txt_BalancingPrice_ShiftOfCODDate").value).toBe("0");
+    expect(screen.getByTestId("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Years_2").textContent).toBe("");
+    expect(screen.getByTestId("drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Months_2").textContent).toBe("");
+    expect(input("dte_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractStartDate_2").value).toBe("01.01.2028");
+    expect(input("dte_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractEndDate_2").value).toBe("31.12.2027");
     fireEvent.change(input("txt_BalancingPrice_ShiftOfCODDate"), { target: { value: "3" } });
     fireEvent.change(input("txt_Revenue_BalancingPrice[EUR/MWh]"), { target: { value: "4.5" } });
     fireEvent.click(await waitFor(() => {
@@ -262,7 +268,7 @@ describe("UT-REV Screen (connected)", () => {
     expect(plan.writes[0]).toMatchObject({ op: "create", entitySet: "vsb_balancingprices" });
     expect(plan.writes[0]!.data).toMatchObject({
       vsb_name: "Balancing Price 1", vsb_shiftofcoddatemonths: 3, vsb_balancingpriceeurpln: 4.5,
-      vsb_contractdurationyear: 0, vsb_contractdurationmonth: 1,
+      vsb_contractdurationyear: null, vsb_contractdurationmonth: null,
       "owningbusinessunit@odata.bind": "/businessunits(bu-fr)",
     });
   });

@@ -38,7 +38,7 @@
  * so a reviewer can diff against the source.
  */
 import { inRange, isDecimal, isNumeric, orZero, parseNumber } from "@/domain/numeric";
-import { numberFormat } from "@/domain/locale";
+import { localeInfo, numberFormat } from "@/domain/locale";
 
 /* ═══════════════════════════════════════════════════════════════════ dates ══ */
 
@@ -1422,13 +1422,32 @@ export function inflationProfileDefault(args: {
 }
 
 /** `Text(x, "#0.00")` — Fix Costs and the three EUR rates, no grouping (`:6422`, `:6690`). */
-export function formatTwoDecimalsText(value: number | null | undefined): string {
-  return value === null || value === undefined ? "" : value.toFixed(2);
+export function formatTwoDecimalsText(value: number | null | undefined, locale?: string): string {
+  return value === null || value === undefined ? "" : opexDecimalText(value.toFixed(2), locale);
 }
 
 /** `Text(x, "0.0")` — the custom Inflation Profile box and the country lookup (`:7811-7822`). */
-export function formatOneDecimalText(value: number | null | undefined): string {
-  return value === null || value === undefined ? "" : value.toFixed(1);
+export function formatOneDecimalText(value: number | null | undefined, locale?: string): string {
+  return value === null || value === undefined ? "" : opexDecimalText(value.toFixed(1), locale);
+}
+
+/**
+ * A plain en-US decimal text written the way the user's language writes it. The canvas fills these boxes with
+ * `Text(x, ...)`, which follows `Language()`, and the panel's checks read them back with the same locale: an English
+ * "1234.50" failed the German check (German number audit, 6 Nov 2026). Undefined is the browser's locale, as for
+ * every other Cost number helper and the panel's own checks.
+ */
+export function opexDecimalText(en: string, locale?: string): string {
+  const sep = localeInfo(locale).decimalSeparator;
+  return sep === "." ? en : en.replace(".", sep);
+}
+
+/**
+ * `Value(txt_...)` of a panel box, read in the locale its checks use; null for blank or not a number. Plain
+ * `Number()` made a German "1234,50" NaN, so the save wrote a blank and the inflation profile 0 (6 Nov 2026).
+ */
+export function opexNumberOrNull(text: string, locale?: string): number | null {
+  return parseNumber(text, locale) ?? null;
 }
 
 /**

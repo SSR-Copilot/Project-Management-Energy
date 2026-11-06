@@ -16,7 +16,7 @@ import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
 import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
-import { numberFormat } from "@/domain/locale";
+import { localeInfo, numberFormat } from "@/domain/locale";
 import { distributionSchedule, equalDistributionAmounts } from "./distribution";
 
 /* ═══════════════════════════════════════════════════════════════ constants ══ */
@@ -557,6 +557,16 @@ export function validateMonthAmount(
 }
 
 /** Every month box that currently reads as invalid, keyed `"<year>-<month>"`. */
+/**
+ * A stored month amount as its box shows it: the user's decimal separator. The checks re-read `String(12.5)` = "12.5"
+ * with a German locale and flagged every decimal % as "Value must be numeric upto one decimal" (6 Nov 2026).
+ */
+const monthAmountText = (amount: number, locale?: string): string => {
+  const sep = localeInfo(locale).decimalSeparator;
+  const en = String(amount);
+  return sep === "." ? en : en.replace(".", sep);
+};
+
 export function monthAmountErrors(
   payments: readonly { year: number; month: number; amount: number }[],
   scheme: CostLine["distributionScheme"],
@@ -565,7 +575,7 @@ export function monthAmountErrors(
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const p of payments) {
-    const { message } = validateMonthAmount(String(p.amount), scheme, countryName, locale);
+    const { message } = validateMonthAmount(monthAmountText(p.amount, locale), scheme, countryName, locale);
     if (message) out.set(`${p.year}-${p.month}`, message);
   }
   return out;
@@ -588,7 +598,7 @@ export function hasMonthRangeError(
   locale?: string,
 ): boolean {
   return payments.some(
-    (p) => validateMonthAmount(String(p.amount), scheme, countryName, locale).kind === "range",
+    (p) => validateMonthAmount(monthAmountText(p.amount, locale), scheme, countryName, locale).kind === "range",
   );
 }
 

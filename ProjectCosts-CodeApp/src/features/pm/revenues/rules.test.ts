@@ -61,7 +61,7 @@ import {
   CONTRACT_CARD_CONTROL, type CardField, type ContractCardContext,
   touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode, showsCountryInflationToggle,
   hedgePercentForCheck, engineEndDate, fmtTwoDecimals,
-  germanFitTariffText, balancingPriceText, localizeContractForm,
+  germanFitTariffText, balancingPriceText, localizeContractForm, balancingFormFor,
 } from "./rules";
 
 /* ═══════════════════════════════════════════════════════════════════ fixtures ═══ */
@@ -1891,5 +1891,33 @@ describe("German and French numbers: Revenues writes and reads every box in the 
     expect(balancingPriceText(7, "fr-FR")).toBe("7");
     expect(balancingPriceText(-2.5, "en-US")).toBe("-2.5");
     expect(balancingPriceText(null, "de-DE")).toBe("");
+  });
+});
+
+/* The balancing panel opens as the canvas (6 Nov 2026) */
+describe("the balancing panel opens as the canvas: Shift 0, blank durations, End Date the day before Start", () => {
+  const stored = (over: Partial<BalancingPeriod> = {}): BalancingPeriod => ({
+    id: "b1", name: "Balancing Price 1", periods: CHOICE_FINANCE.periods.period1,
+    price: -2.5, startDate: d("2027-02-22"), endDate: d("2028-02-21"),
+    durationYears: 1, durationMonths: 0, shiftOfCodMonths: 3, createdOn: "2026-01-01", ...over,
+  });
+
+  it("UT-REV-161 a new period opens with Shift “0” and no duration, ends the day before it starts, and saves 0 / blank / blank", () => {
+    const form = balancingFormFor(null, "de-DE");
+    expect(form).toEqual({ id: null, price: "", years: null, months: null, shift: "0" });
+    expect(balancingEndDate(d("2027-02-22"), form.years, form.months)).toEqual(d("2027-02-21"));
+    expect(balancingMonthOptions(null)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(balancingEndDate(d("2027-02-22"), null, 6)).toEqual(d("2027-08-21"));
+    const plan = planSaveBalancing({ form: { ...form, price: "4,5" }, periods: [], project: project(), language: "de-DE" });
+    expect(plan.writes[0]!.data).toMatchObject({
+      vsb_shiftofcoddatemonths: 0, vsb_contractdurationyear: null, vsb_contractdurationmonth: null,
+      vsb_balancingpriceeurpln: 4.5,
+    });
+  });
+
+  it("UT-REV-162 editing a period opens its stored values; a blank stored duration stays blank", () => {
+    expect(balancingFormFor(stored(), "de-DE")).toEqual({ id: "b1", price: "-2,5", years: 1, months: 0, shift: "3" });
+    expect(balancingFormFor(stored({ price: null, durationYears: null, durationMonths: null, shiftOfCodMonths: null }), "en-US"))
+      .toEqual({ id: "b1", price: "", years: null, months: null, shift: "" });
   });
 });

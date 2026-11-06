@@ -52,11 +52,33 @@ import {
   planChecklistApprovalRequestFollowUp, planChecklistApprovalRequestPatch, planChecklistRowPatch, planClusterTransition,
   planGateApprovalRequestNote, planGateApprovalRequestPatch, planGateCancelNote, planGateCancelPatch,
   planPrepareCluster, planReturnToPreviousCluster, planSkippedClusterBackfill, planTerminalStateChange,
-  shouldBackfillSkippedClusters, startClusterNo, trackingFor,
+  shouldBackfillSkippedClusters, startClusterNo, trackingFor, clusterTransitionDone, flowMovesCluster,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
   type HistoryQueryDescriptor, type ProjectStateRef, type SequenceEntry, type TerminalStaging,
   type TrackingRow, type WritePlan,
 } from "./rules";
+
+/** NEW (6 Nov 2026): how long, and how often, the screen waits for the gate flow to move a cluster on. */
+const TRANSITION_WAIT_MS = 30_000;
+const TRANSITION_POLL_MS = 1_500;
+
+/**
+ * Re-reads the trackings until the gate flow has completed `clusterStateId`, for at most 30 seconds (the canvas
+ * tooltip's "wait 30 Seconds"). True once it has; false on time-out, and the refresh after the job then shows
+ * whatever the server has. A failed read is not an error here: it just waits for the next one.
+ */
+async function waitForClusterTransition(projectId: string, clusterStateId: string): Promise<boolean> {
+  const deadline = Date.now() + TRANSITION_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise<void>((resolve) => { setTimeout(resolve, TRANSITION_POLL_MS); });
+    try {
+      if (clusterTransitionDone(await listChecklistTrackings(projectId), clusterStateId)) return true;
+    } catch {
+      // keep waiting
+    }
+  }
+  return false;
+}
 
 export type { HistoryEntry };
 
@@ -343,11 +365,17 @@ export function useChecklistWrites(projectId: string | undefined) {
           comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
         });
       },
-      then: async (first) => {
+      then: async (first, ctl) => {
         const stateTrackingId = trackingId ?? first.createdIds[0] ?? "";
         await requestGateApproval({
           projectId: req.project.id, stateId: req.state.id, stateTrackingId, defaultApprovalId: req.state.gateId ?? "",
         });
+        // NEW (6 Nov 2026): an Only Notifications gate is moved on by the flow itself, seconds after it answers.
+        // The loader stays until that has happened, so the screen does not open on the half-way state.
+        if (flowMovesCluster(req.gate)) {
+          ctl.setProgress(MSG.clusterTransitionInProgress);
+          await waitForClusterTransition(id, req.state.id);
+        }
         const rows = await listClusterChecklist(id, req.state.id);
         return planGateApprovalRequestNote({
           project: req.project, state: req.state, trackingId: stateTrackingId, comment: req.comment,

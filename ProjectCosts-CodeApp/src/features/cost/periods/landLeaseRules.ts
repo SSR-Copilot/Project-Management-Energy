@@ -41,7 +41,7 @@
  * purpose — `@/features/cost/costing/model`'s `CostPeriod` is being changed concurrently.
  */
 import { inRange, isDecimal, parseNumber, round } from "@/domain/numeric";
-import { numberFormat } from "@/domain/locale";
+import { localeInfo, numberFormat } from "@/domain/locale";
 import { bind } from "@/data/odata";
 
 /* ═════════════════════════════════════════════════════════════════ option sets ══ */
@@ -2071,9 +2071,9 @@ export interface LandLeaseForm {
  * The six one-time-payment boxes as the stored cost shows them — `Text(…, "##0.00")` for the
  * amounts (LL:5020). Also what `Reset` of the DueDate and Amount boxes returns them to (FT-BR-LEASE-060).
  */
-export function storedPayments(cost: LeaseCostRow | null | undefined): OneTimePaymentFields {
+export function storedPayments(cost: LeaseCostRow | null | undefined, locale?: string): OneTimePaymentFields {
   const money2 = (v: number | null | undefined) =>
-    v === null || v === undefined ? "" : v.toFixed(2);
+    v === null || v === undefined ? "" : leaseDecimalText(v.toFixed(2), locale);
   return {
     dueDate: cost?.dueDateOneTimePayment ?? "",
     amount: money2(cost?.amountOneTimePayment),
@@ -2180,9 +2180,20 @@ export function startDatePickPatch(args: {
   return patch;
 }
 
-/** `Text(value, "0.0")`, blank for blank. */
-export const inflationProfileText = (value: number | null): string =>
-  value === null ? "" : value.toFixed(1);
+/**
+ * A plain en-US decimal text with the user's decimal separator. The canvas fills these boxes with `Text(x, ...)`,
+ * which follows `Language()`, and `validateLeaseNumber` and the save read them back with the same locale: an English
+ * "65.00" was rejected in German, and a hidden "2.3" was saved as 23 (German number audit, 6 Nov 2026). Undefined is
+ * the browser's locale, as for the other Cost number helpers.
+ */
+export function leaseDecimalText(en: string, locale?: string): string {
+  const sep = localeInfo(locale).decimalSeparator;
+  return sep === "." ? en : en.replace(".", sep);
+}
+
+/** `Text(value, "0.0")`, blank for blank, in the user's locale. */
+export const inflationProfileText = (value: number | null, locale?: string): string =>
+  value === null ? "" : leaseDecimalText(value.toFixed(1), locale);
 
 /**
  * `tgl_…_InflationProfile_1.OnUncheck` (LL:4203): `Reset` of the country toggle, the Start Year
@@ -2245,16 +2256,18 @@ export function landLeaseFormFrom(args: {
   resetStartDate: boolean;
   /** `leaseAreaDefault(ctx)`; omitted keeps the stored area (callers without a project). */
   areaDefault?: string | null;
+  /** The user's locale (default: the browser's): every number opens with its decimal separator. */
+  locale?: string;
 }): LandLeaseForm {
   const { cost, period } = args;
   const money2 = (v: number | null | undefined) =>
-    v === null || v === undefined ? "" : v.toFixed(2);
+    v === null || v === undefined ? "" : leaseDecimalText(v.toFixed(2), args.locale);
   // `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` — LL:3105 block.
   const percent = (v: number | null | undefined) => {
     if (v === null || v === undefined) return "";
     if (Number.isInteger(v)) return String(v);
     const s = v.toFixed(2);
-    return s.endsWith("0") ? s.slice(0, -1) : s;
+    return leaseDecimalText(s.endsWith("0") ? s.slice(0, -1) : s, args.locale);
   };
   const startDate = resolveStartDate({
     workingDate: args.workingDate,
@@ -2293,7 +2306,7 @@ export function landLeaseFormFrom(args: {
     countryInflationChecked: cost?.useCountryInflationProfile ?? false,
     inflationStartYear: String(inflationStartYearDefault(cost?.inflationStartYear, startDate) ?? ""),
     inflationProfile: cost?.inflationProfile === null || cost?.inflationProfile === undefined
-      ? "" : cost.inflationProfile.toFixed(1),
+      ? "" : leaseDecimalText(cost.inflationProfile.toFixed(1), args.locale),
     // `drp_…_AreaInflationProfile_1.DefaultSelectedItems` (LL:4420) is the PROJECT's region, not the
     // stored area (FT-BR-LEASE-057). A caller that knows the project passes `areaDefault`.
     inflationCountryArea: args.areaDefault !== undefined

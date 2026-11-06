@@ -49,7 +49,7 @@ import {
   negativePriceState, hedgeTypeOptions, volumeRowLabel, resetOnHedgeTypeChange,
   validateHedgedVolume, firstPeriodStart, nextPeriodStart, showsShiftOfCod,
   balancingMonthOptions, balancingEndDate, balancingYearOptions, durationYearOptions,
-  durationMonthOptions, germanFitTariffText, balancingPriceText, tariffP90Text, showsP90Block, shownDescription,
+  durationMonthOptions, germanFitTariffText, tariffP90Text, showsP90Block, shownDescription,
   validateTariff, validateBiddingPrice, validateSiteQuality, validateCorrectionFactor,
   validateVolumeMwh, validateHedgedVolumePercent, validateInflationProfile,
   validateInflationStartYear, validateDescription, validateBalancingPrice, validateShiftOfCod,
@@ -66,7 +66,7 @@ import {
   planSaveContract, planSaveBalancing, saveContractJob, deleteContractJob, saveBalancingJob,
   deleteBalancingJob, SPINNER,
   type RevenueTab, type HedgeType, type RevenueFormState, type StoredRevenueContract,
-  type BalancingPeriod, type BalancingForm,
+  type BalancingPeriod, type BalancingForm, balancingFormFor,
   revenuePanelStandard, touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode,
   showsCountryInflationToggle, hedgePercentForCheck,
 } from "./rules";
@@ -747,18 +747,15 @@ export default function ProjectRevenuesScreen() {
 
   const openNewPeriod = () => {
     writes.clear();
-    setBalancing({ id: null, price: "", years: 0, months: 1, shift: "" });
+    // As the canvas: Shift "0", both duration pickers blank, so End Date = Start Date - 1 day.
+    setBalancing(balancingFormFor(null, lang));
     setPanel("balancing");
   };
 
   const openEditPeriod = (p: BalancingPeriod) => {
     writes.clear();
     setSelectedPeriodId(p.id);
-    setBalancing({
-      id: p.id, price: balancingPriceText(p.price, lang),
-      years: p.durationYears ?? 0, months: p.durationMonths ?? 1,
-      shift: p.shiftOfCodMonths === null ? "" : String(p.shiftOfCodMonths),
-    });
+    setBalancing(balancingFormFor(p, lang));
     setPanel("balancing");
   };
 
@@ -1466,20 +1463,20 @@ export default function ProjectRevenuesScreen() {
               <div className={s.balancingDurationPair}>
                 <DurationPicker
                   name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Years_2"
-                  value={String(balancing.years)}
+                  value={balancing.years === null ? "" : String(balancing.years)}
                   options={balancingYearOptions().map((y) => ({ value: String(y), text: balancingYearsOption(y) }))}
                   onChange={(v) => {
                     const y = Number(v);
                     const months = balancingMonthOptions(y);
                     setBalancing({
                       ...balancing, years: y,
-                      months: months.includes(balancing.months) ? balancing.months : (months[0] ?? 0),
+                      months: balancing.months !== null && months.includes(balancing.months) ? balancing.months : (months[0] ?? 0),
                     });
                   }}
                 />
                 <DurationPicker
                   name="drp_ProjectRevenues_RightPanel_NewEditCost_BodyContent_ContractDuration_Months_2"
-                  value={String(balancing.months)}
+                  value={balancing.months === null ? "" : String(balancing.months)}
                   options={balancingMonthOptions(balancing.years).map((m) => ({ value: String(m), text: balancingMonthsOption(m) }))}
                   onChange={(v) => setBalancing({ ...balancing, months: Number(v) })}
                 />

@@ -56,7 +56,7 @@ import {
   OPEX_AGGREGATION, OPEX_AGGREGATION_LABEL, OPEX_COMMAND_ICONS, OPEX_COMMAND_LABELS,
   OPEX_DISTRIBUTION_FREQUENCY, OPEX_MODE_NAMES, OPEX_MSG, OPEX_PANEL_LABELS, THRESHOLD_TYPE,
   addPeriodRecordType, alignWithProjectDurationDefault, areaFieldVisible,
-  areaWithRegion, formatOneDecimalText, formatTwoDecimalsText, panelDeviceLabel, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
+  areaWithRegion, formatOneDecimalText, formatTwoDecimalsText, opexDecimalText, opexNumberOrNull, panelDeviceLabel, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
   countryInflationPercent, defaultCurrencyCode,
   defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
@@ -577,15 +577,12 @@ const iso = (date: Date | null): string => (date === null ? "" : [
   String(date.getDate()).padStart(2, "0"),
 ].join("-"));
 
-const numberOrNull = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-};
+// `Value(txt_...)`: the box read in the locale the panel's checks use (German number audit, 6 Nov 2026).
+const numberOrNull = (value: string): number | null => opexNumberOrNull(value);
 
+// A stored number as its box shows it: with the user's decimal separator ("2,5", not "2.5").
 const text = (value: number | null | undefined): string =>
-  value === null || value === undefined ? "" : String(value);
+  value === null || value === undefined ? "" : opexDecimalText(String(value));
 
 /**
  * The Other OPEX fold state (`IsFolded` in `colOpexSubaccounts`, built once in `App.OnStart`,

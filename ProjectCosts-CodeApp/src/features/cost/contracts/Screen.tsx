@@ -68,7 +68,7 @@ import {
   closingTypePatch, commentCounter, contractNameFor, devCoLeafCostByAccount, marginChangePatch,
   marginIsStandard, marginTypeChangePatch, newPeriodDescription, oneDecimalText,
   periodDescriptionLocked, saveErrorText, selectionAfterHeaderClick, selectionAfterTargetClick,
-  targetPercentText, usedInContractTooltip, wholeNumberText,
+  targetPercentText, usedInContractTooltip, wholeNumberText, inputDecimalText,
   costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
@@ -146,8 +146,10 @@ function emptyContractForm(contractType: ContractType): ContractForm {
   };
 }
 
-function formFromContract(c: BopContract): ContractForm {
-  const s = (n: number | undefined) => (n === undefined || n === null ? "" : String(n));
+function formFromContract(c: BopContract, locale?: string): ContractForm {
+  // Every number opens with the user's decimal separator, as the canvas shows it; the checks and the save read it
+  // back in that locale (a stored 7.5 % opened "7.5", which German read as 75) (German number audit, 6 Nov 2026).
+  const s = (n: number | undefined) => inputDecimalText(n, locale);
   const rights = c.contractType === CONTRACT_TYPE.ProjectRights;
   return {
     description: c.description ?? "",
@@ -312,11 +314,11 @@ export default function ContractsScreen() {
       ...f,
       margin: a.vsb_margin === true,
       marginType: MARGIN_TYPE.Percentage,
-      marginPercentage: pct === undefined ? "" : String(pct),
-      marginFixedValue: fixed === undefined ? "" : String(fixed),
+      marginPercentage: inputDecimalText(pct, locale),
+      marginFixedValue: inputDecimalText(fixed, locale),
       isMarginStandardAssumption: true,
     }));
-  }, [panel, editing, standardAssumption.data]);
+  }, [panel, editing, standardAssumption.data, locale]);
 
   /* ── recalculation ──────────────────────────────────────────────────── */
 
@@ -448,11 +450,11 @@ export default function ContractsScreen() {
       // follows the assumption's own type.
       marginType: (editing && typeof a?.vsb_margintype === "number"
         ? a.vsb_margintype : MARGIN_TYPE.Percentage) as ContractForm["marginType"],
-      marginPercentage: pct === undefined ? "" : String(pct),
-      marginFixedValue: fixed === undefined ? "" : String(fixed),
+      marginPercentage: inputDecimalText(pct, locale),
+      marginFixedValue: inputDecimalText(fixed, locale),
       isMarginStandardAssumption: Boolean(a),
     }, true, []); // the Reset icon is not a field: it touches nothing
-  }, [standardAssumption.data, updateForm, editing]);
+  }, [standardAssumption.data, updateForm, editing, locale]);
 
   const contractTotal = useMemo(
     () => contractTotalFromForm(form, locale),
@@ -527,7 +529,7 @@ export default function ContractsScreen() {
   const openEditContract = () => {
     if (!selectedContract) return;
     setEditing(true);
-    setForm(formFromContract(selectedContract));
+    setForm(formFromContract(selectedContract, locale));
     setSelectedAccountIds(
       (devCoLinksQuery.data ?? [])
         .filter((l) => l.contractId === selectedContract.id)
@@ -872,7 +874,7 @@ export default function ContractsScreen() {
                           description: t.description ?? "",
                           paymentDate: t.paymentDate ?? "",
                           totalCostsContract:
-                            t.totalCostsContract === undefined ? "" : String(t.totalCostsContract),
+                            inputDecimalText(t.totalCostsContract, locale),
                           note: t.note ?? "",
                         });
                         setTouched(NO_FIELDS_TOUCHED);

@@ -26,7 +26,7 @@
  */
 import { Fragment, useState } from "react";
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle,
+  Button,
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
@@ -669,7 +669,9 @@ export default function CheckListScreen() {
           disabled: !nextEnabled || busy,
           onClick: () => openPanel({ kind: "cluster" }),
         } : null}
-        info={!locked && current && next && !nextEnabled ? (terminalProject ? UI.infoTerminal : UI.infoWaiting) : null}
+        // `con_…_Buttons_Info.Visible` (S:2026): not locked AND NextCluster's DisplayMode is Disabled — the canvas does
+        // not ask for a next cluster, so the last cluster shows Info too (it required `next` until 6 Nov 2026).
+        info={!locked && current && !nextEnabled ? (terminalProject ? UI.infoTerminal : UI.infoWaiting) : null}
         terminals={terminalButtons}
       />
 
@@ -1052,19 +1054,23 @@ export default function CheckListScreen() {
         onCancel={() => setConfirmReturn(false)}
       />
 
-      {/* `cmp_PopUp_CheckList_GeneralData_Information` */}
-      <Dialog open={info !== null} onOpenChange={(_, d) => { if (!d.open) setInfo(null); }}>
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle>{UI.completionDateTitle}</DialogTitle>
-            <DialogContent>{info}</DialogContent>
-            <DialogActions>
-              <Button appearance="primary" aria-label={UI.ok} data-testid="pcf_PopUpInformation_BodyButtons_Ok"
-                onClick={() => setInfo(null)}>{UI.ok}</Button>
-            </DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      {/*
+        * `cmp_PopUp_CheckList_GeneralData_Information` is a `cmp_PopUp_Information` (Components/cmp_PopUp_Information.pa.yaml):
+        * 450 × 260, the 0.7 scrim, a 40-high themePrimary header with the ✕ (`Tooltip: ="Cancel"`), the body in Size 12
+        * RGBA(50,49,48), ONE "OK" with a CheckMark, 90 wide — the shared variant, as on PM Revenues. It was a plain Fluent
+        * dialog (white header, no ✕, no icon) until 6 Nov 2026.
+        */}
+      <ConfirmDialog
+        open={info !== null}
+        title={UI.completionDateTitle}
+        description={info ?? ""}
+        variant="information"
+        confirmText={UI.ok}
+        confirmWidth={90}
+        darkScrim
+        onCancel={() => setInfo(null)}
+        onConfirm={() => setInfo(null)}
+      />
     </div>
   );
 }

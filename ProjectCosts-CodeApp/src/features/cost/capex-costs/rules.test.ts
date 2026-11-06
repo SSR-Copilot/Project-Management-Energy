@@ -1318,3 +1318,15 @@ describe("Save for an Individual contract only needs what the Canvas needs (D91,
     expect(canSaveContract(eq, "1000", [pay(2026, 1, 10)])).toBe(true);
   });
 });
+
+/* German and French numbers (6 Nov 2026) */
+describe("German and French numbers: CAPEX month boxes", () => {
+  it("UT-CAPEXR-203 a decimal % month (12.5) no longer shows the one-decimal error in German or French", () => {
+    const payments = [{ year: 2027, month: 1, amount: 12.5 }];
+    for (const locale of ["de-DE", "fr-FR", "en-US"]) {
+      expect(monthAmountErrors(payments, "percent", "Germany", locale).size).toBe(0);
+    }
+    // A real two-decimal % is still refused.
+    expect(monthAmountErrors([{ year: 2027, month: 1, amount: 12.55 }], "percent", "Germany", "de-DE").size).toBe(1);
+  });
+});

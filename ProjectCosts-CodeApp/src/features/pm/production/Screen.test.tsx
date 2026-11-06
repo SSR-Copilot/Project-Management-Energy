@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { FluentProvider } from "@fluentui/react-components";
 import { DataMemoryRouter as MemoryRouter } from "@/test/DataMemoryRouter";
 import { vsbTheme } from "@/theme/fluent";
+import { PanelButtons } from "@/components";
 import { CHOICE_PRODUCTION } from "@/data/dataverseNames";
 import {
   COMMAND_BAR_LABEL, DELETE_DIALOG, PREVENT_LAST_YIELD_DIALOG, PRODUCTION_SCREEN_TEXT, SUMMARY_LABELS, YIELD_COL,
@@ -189,6 +190,31 @@ describe("Project Production Screen (connected)", () => {
     expect((await screen.findByTestId("production-fabric-notice")).textContent).toBe(PRODUCTION_SCREEN_TEXT.fabricUnavailable);
   });
 
+  it("UT-PROD-913 a disabled Save is the canvas PowerCAT ActionButton (transparent \"✓ Save\"), not Fluent's grey primary", async () => {
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <PanelButtons onSave={vi.fn()} onCancel={vi.fn()} disabled subtleWhenDisabled saveTestId="reference-subtle-save" />
+        <PanelButtons onSave={vi.fn()} onCancel={vi.fn()} disabled saveTestId="reference-primary-save" cancelTestId="reference-cancel" />
+      </FluentProvider>,
+    );
+    const subtle = screen.getByTestId("reference-subtle-save").className;
+    const primary = screen.getByTestId("reference-primary-save").className;
+    expect(subtle).not.toBe(primary);
+    renderScreen();
+    for (const [tech, saveId] of [
+      ["Add Production WTG", "pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_1"],
+      ["Add Production PV", "pcf_btn_GeneratorData_RightPanel_Form_PVModuleType_Buttons_Save"],
+    ] as const) {
+      fireEvent.click(command(tech));
+      // A new yield opens with a blank Description, so Save is disabled.
+      const save = await screen.findByTestId(saveId);
+      expect(save).toBeDisabled();
+      expect(save.className).toBe(subtle);
+      fireEvent.click(screen.getByTestId(tech.endsWith("PV") ? "btn_Cancel_ProductionDataPV" : "btn_Cancel_ProductionDataWTG"));
+      await waitFor(() => expect(screen.queryByTestId(saveId)).toBeNull());
+    }
+  });
+
   it("UT-PROD-907 the panel's Cancel closes at once, without a leave confirmation", async () => {
     renderScreen();
     fireEvent.click(command("Add Production PV"));
@@ -204,6 +230,24 @@ describe("Project Production Screen (connected)", () => {
     expect(screen.getByText(PREVENT_LAST_YIELD_DIALOG.title)).toBeTruthy();
     expect(screen.getByTestId("icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel_1")).toBeTruthy();
     expect(screen.queryByText(DELETE_DIALOG.title)).toBeNull();
+  });
+
+  it("UT-PROD-912 Deactivate of the last active yield shows the same canvas pop-up, and Close only closes it", async () => {
+    renderScreen({ ...baseProject, netYieldP50: 10_200 }, [NORTH]);
+    fireEvent.click(command("Deactivate Production"));
+    const popUp = screen.getByTestId("con_PopUp_Common_Generators_PreventTotalCapacity_Information_1");
+    // `Width: =550`, `Height: =220` (Y:9319, Y:9326).
+    expect(popUp.style.width).toBe("550px");
+    expect(popUp.style.height).toBe("220px");
+    expect(within(popUp).getByTestId("txt_PopUp_Common_Generators_PreventTotalCapacity_Title_1").textContent)
+      .toBe(PREVENT_LAST_YIELD_DIALOG.title);
+    expect(within(popUp).getByTestId("lbl_PopUp_Common_Generators_PreventTotalCapacity_Information_1").textContent)
+      .toBe(PREVENT_LAST_YIELD_DIALOG.description);
+    expect(screen.queryByText("Are you sure you want to deactivate: North?")).toBeNull();
+    fireEvent.click(within(popUp).getByTestId("btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close_1"));
+    await waitFor(() => expect(screen.queryByTestId("con_PopUp_Common_Generators_PreventTotalCapacity_Information_1")).toBeNull());
+    expect(state.changeStatus).not.toHaveBeenCalled();
+    expect(state.deleteYield).not.toHaveBeenCalled();
   });
 
   it("UT-PROD-909 Delete and Deactivate hand the selected row to the write hook", async () => {

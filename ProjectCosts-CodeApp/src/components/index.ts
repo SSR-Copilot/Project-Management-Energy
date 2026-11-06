@@ -7,6 +7,8 @@ export { useCommandRowStyles } from "./commandRow";
 export { CommandSlot, CommandSlotProvider } from "./CommandSlot";
 export type { Command, CommandIcon } from "./CommandBar";
 export { ConfirmDialog } from "./ConfirmDialog";
+export { InformationPopUp } from "./InformationPopUp";
+export type { InformationPopUpProps } from "./InformationPopUp";
 export { EmptyState } from "./EmptyState";
 export { ErrorBoundary } from "./ErrorBoundary";
 export { Choices, CostField, CostSelect, PanelButtons, PanelCancelButton, PanelExtraButton, testIdPart } from "./CanvasFields";

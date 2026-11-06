@@ -2364,6 +2364,19 @@ export const trackingFor = (
 ): TrackingRow | null =>
   trackings.find((t) => t.clusterStateId === clusterStateId) ?? null;
 
+/**
+ * NEW (6 Nov 2026, not in the canvas): an ACTIVE gate in Only Notifications mode is moved on by the gate flow itself,
+ * a few seconds after it answers: it completes the cluster's tracking and starts the next one. The canvas shows the
+ * half-way state and its NextCluster tooltip asks the user to "wait 30 Seconds and then Refresh the Page" (Y:1972);
+ * the code app waits for the move instead, so the screen opens on the moved project.
+ */
+export const flowMovesCluster = (gate: GateSetting | null | undefined): boolean =>
+  gate?.gateActive === true && gate.approvalMode === MODE.onlyNotifications;
+
+/** The gate flow has moved the project on: the cluster's own tracking row is Completed. */
+export const clusterTransitionDone = (trackings: TrackingRow[], clusterStateId: string | null): boolean =>
+  trackingFor(trackings, clusterStateId)?.approvalClusterState === ACS.completed;
+
 /* ═══════════════════════════════════════════ GUIDE q18/q19 — the checklist table ════ */
 
 /**
@@ -2607,6 +2620,11 @@ export const MSG = {
   cancelApprovalSent: (state: string) => `Cancel Request Approval for '${state}' has been sent, please wait...`,
   /** Y:1569 — while the cancellation flow runs. */
   cancelClusterApproval: "Cancel Cluster Approval ...",
+  /**
+   * NEW (6 Nov 2026, not a canvas text): the loader's text while the gate flow moves an Only Notifications cluster
+   * on. The words are the canvas NextCluster tooltip's "Cluster Transition in Progress. Please wait ...".
+   */
+  clusterTransitionInProgress: "Cluster Transition in Progress. Please wait...",
   /** `ico_…_ListRow_CancelApproval.OnSelect` (Y:3692). */
   cancelingChecklistApproval: "Canceling Check List completion approval request...",
   /**

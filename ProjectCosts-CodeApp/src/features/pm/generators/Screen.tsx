@@ -51,7 +51,7 @@ import {
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
-  CommandBar, ConfirmDialog, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, ReadOnlyField,
+  CommandBar, ConfirmDialog, EmptyState, FIELD_APPEARANCE, FormPanel, InformationPopUp, LoadingOverlay, ReadOnlyField,
   WriteFeedback, type Command, useFieldControlClass,
   ExpandChevron, HINTS,
 } from "@/components";
@@ -346,63 +346,8 @@ const useStyles = makeStyles({
     borderBottomColor: palette.Warning, borderLeftColor: palette.Warning,
   },
   permDisabled: { color: "#bdbdbd" },
-  /*
-   * `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information` (Y:17341-17506): a black 50 %
-   * scrim; a white, square, 500-wide card (the container's default width); the 64-high #006EB9 header
-   * (PaddingLeft/Right 32) with the white 15-px title and a 20-px white ✕; the body (Padding 13 / 32,
-   * LayoutGap 15): the light-blue `…_InformationTag` (rgba(204,226,241,.5), 50 high) holding the 18-px
-   * Grayscale10 info icon at X 10 and the message (`rgb(44,44,44)`, `Font.Small`) 5 to its right, a
-   * 2-px #d5d5d5 rule across the card, and the outlined blue "Close" (`Button@0.0.45` Secondary) at
-   * the end.
-   */
-  infoScrim: { backgroundColor: "rgba(0, 0, 0, 0.5)" },
-  // 520 wide, measured off the live canvas pop-up (3 Nov 2026); the YAML sets no Width.
-  infoSurface: {
-    width: "520px", maxWidth: "calc(100vw - 32px)", boxSizing: "border-box",
-    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-    borderRadius: 0, backgroundColor: palette.white, overflow: "hidden",
-    // Fluent's surface has a 1-px transparent border, and the white card showed through it as a
-    // white line round the blue header; the canvas header runs to the card's edge.
-    borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0,
-  },
-  infoHeader: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", columnGap: "12px",
-    height: "64px", paddingLeft: "32px", paddingRight: "32px", boxSizing: "border-box",
-    backgroundColor: "rgb(0, 110, 185)",
-  },
-  infoTitle: { flex: "1 1 auto", minWidth: 0, color: palette.white, fontSize: "15px", fontWeight: 400, lineHeight: "20px" },
-  infoClose: {
-    minWidth: "20px", width: "20px", height: "20px", paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-    color: palette.white, backgroundColor: "transparent",
-    ":hover": { color: palette.white, backgroundColor: "transparent" },
-    ":hover:active": { color: "rgb(16, 110, 190)", backgroundColor: "transparent" },
-    "& svg": { width: "20px", height: "20px" },
-    // The dialog focuses its first button on open; the canvas ✕ shows no focus box.
-    ":focus, :focus-visible, &[data-fui-focus-visible]": {
-      outlineStyle: "none", boxShadow: "none",
-      borderTopColor: "transparent", borderRightColor: "transparent",
-      borderBottomColor: "transparent", borderLeftColor: "transparent",
-    },
-    "::after": { display: "none" },
-  },
-  infoBody: {
-    display: "flex", flexDirection: "column", alignItems: "center", rowGap: "15px",
-    paddingTop: "13px", paddingBottom: "13px", paddingLeft: "32px", paddingRight: "32px",
-  },
-  infoTag: {
-    display: "flex", alignItems: "center", columnGap: "5px", alignSelf: "stretch", boxSizing: "border-box",
-    minHeight: "50px", paddingLeft: "10px", paddingRight: "10px", paddingTop: "4px", paddingBottom: "4px",
-    backgroundColor: "rgba(204, 226, 241, 0.5)",
-  },
-  infoTagIcon: { flexShrink: 0, width: "18px", height: "18px", fontSize: "18px", color: palette.Grayscale10 },
-  // `Font.Small` is 10 pt (13.33 px), three lines in a 62-px tag on the canvas.
-  infoTagText: { color: "rgb(44, 44, 44)", fontSize: "13.33px", lineHeight: "18px" },
-  infoRule: { alignSelf: "stretch", height: "2px", marginLeft: "-32px", marginRight: "-32px", backgroundColor: "rgb(213, 213, 213)" },
-  infoButton: {
-    alignSelf: "flex-end", color: "rgb(0, 110, 185)",
-    borderTopColor: "rgb(0, 110, 185)", borderRightColor: "rgb(0, 110, 185)",
-    borderBottomColor: "rgb(0, 110, 185)", borderLeftColor: "rgb(0, 110, 185)",
-  },
+  // `con_Main_PopUp_Common_Generators_PreventTotalCapacity_Information` (Y:17341-17506) is the
+  // shared `InformationPopUp` (`@/components`), at its default (Generators) size.
   /** `con_Generator_GeneratorStatus` while Active: Green border, SuccessLight fill. */
   chipActive: {
     borderTopColor: palette.Green, borderRightColor: palette.Green,
@@ -2697,43 +2642,15 @@ export default function GeneratorsScreen() {
       />
 
       {/* ── `con_PopUp_Common_Generators_PreventTotalCapacity` — information only ── */}
-      <Dialog open={dialog?.kind === "blocked"} onOpenChange={(_, d) => { if (!d.open) closeDialog(); }}>
-        <DialogSurface
-          aria-label={LAST_CAPACITY_TITLES.delete} className={s.infoSurface}
-          backdrop={{ className: s.infoScrim }}
-          data-testid="con_PopUp_Common_Generators_PreventTotalCapacity_Information"
-        >
-          <div className={s.infoHeader}>
-            <span className={s.infoTitle} data-testid="txt_PopUp_Common_Generators_PreventTotalCapacity_Title">
-              {LAST_CAPACITY_TITLES.delete}
-            </span>
-            <Button
-              appearance="transparent" className={s.infoClose} icon={<DismissRegular />}
-              aria-label="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel"
-              data-testid="icn_PopUp_Common_Generators_PreventTotalCapacity_Cancel"
-              onClick={closeDialog}
-            />
-          </div>
-          <div className={s.infoBody}>
-            <div className={s.infoTag}>
-              <InfoRegular className={s.infoTagIcon} aria-hidden="true" />
-              <span className={s.infoTagText} data-testid="lbl_PopUp_Common_Generators_PreventTotalCapacity_Information">
-                {dialog?.kind === "blocked" && dialog.reason !== "Capacity"
-                  ? opexDependencyMessage(dialog.reason, dialog.name)
-                  : LAST_CAPACITY_MESSAGES.delete}
-              </span>
-            </div>
-            <span className={s.infoRule} aria-hidden="true" />
-            <Button
-              appearance="secondary" className={s.infoButton} aria-label={DIALOG_LABELS.close}
-              data-testid="btn_PopUp_Common_Generators_PreventTotalCapacity_Information_Close"
-              onClick={closeDialog}
-            >
-              {DIALOG_LABELS.close}
-            </Button>
-          </div>
-        </DialogSurface>
-      </Dialog>
+      <InformationPopUp
+        open={dialog?.kind === "blocked"}
+        title={LAST_CAPACITY_TITLES.delete}
+        message={dialog?.kind === "blocked" && dialog.reason !== "Capacity"
+          ? opexDependencyMessage(dialog.reason, dialog.name)
+          : LAST_CAPACITY_MESSAGES.delete}
+        closeText={DIALOG_LABELS.close}
+        onClose={closeDialog}
+      />
 
       {/* ── `cmp_PopUp_Common_Generators_Information` — the Add Substructure precondition (G9) ── */}
       <Dialog open={dialog?.kind === "info"} onOpenChange={(_, d) => { if (!d.open) closeDialog(); }}>
