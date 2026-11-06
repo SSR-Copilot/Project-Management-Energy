@@ -378,3 +378,15 @@ Not committed. Where a row says **fixed**, the code app was changed to follow th
 |---|---|---|
 | Project Finance | Term Sheet <-> Credit Agreement keeps the Individual repayment schedule and the step-up rows (they were cleared on every status change, and the next Save then deleted the stored repayment rows) | fixed (a data-loss bug removed) |
 | Project Finance | Tenor, Start Repayment, Commitment Fee Free Period and Fixed Interest Rate months read 0 once their years are chosen, so the schedule appears and Save can enable without opening the month lists | fixed |
+
+## Project Overview: the Project search accepts spaces (6 Nov 2026, D103) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| Project Overview | The Project search box accepts spaces, as the Canvas does (the typed text is kept as typed; only the query trims it). A space was erased on the keystroke that typed it because the URL copy of the criteria was written trimmed | fixed |
+
+## Finance, Add Tranche panel layout (6 Nov 2026, D104) — fixed (a deliberate divergence)
+
+| Screen | Change | Status |
+|---|---|---|
+| Project Finance | The Individual repayment column no longer runs under the next column: a long validation message wraps inside its column instead of widening the box, and the row grows with it, so no text sits on the next caption. The Canvas clips the one-line message instead | fixed (DIVERGENCE, readable full text) |
