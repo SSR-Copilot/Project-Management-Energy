@@ -324,6 +324,17 @@ const useStyles = makeStyles({
   trancheColumn: {
     display: "flex", flexDirection: "column", minWidth: 0, boxSizing: "border-box",
     paddingLeft: "25px", paddingRight: "45px",
+    // DIVERGENCE (D104): the canvas error labels are one line (`Wrap: false`) and are CLIPPED at the label width. The
+    // shared PM rule `.pm-canvas-panel .fui-Field__validationMessage { white-space: nowrap }` let a long message
+    // ("value must be numeric in range 0 to 100,000,000 without decimal place.") widen its Field's grid track, so the
+    // box ran about 90 px under the next column and the text sat on the next row's caption. Here the track stays the
+    // column's width and the message wraps inside it (the whole text stays readable), with a gap before the next row.
+    // `.pm-canvas-panel .fui-Field` pins every Field to 70 px (the canvas row), so a taller message spilled onto the next
+    // row's caption: the Field may now grow with its message, 70 px stays the minimum (a row with no error is unchanged).
+    "& .fui-Field.fui-Field": { gridTemplateColumns: "minmax(0, 1fr)", height: "auto", minHeight: "70px" },
+    "& .fui-Field .fui-Field__validationMessage": {
+      whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: "16px", paddingBottom: "6px",
+    },
   },
   trancheColumnMid: { paddingLeft: "20px", paddingRight: "20px", width: "340px" },
   // `lbl_…_DSCR`: a 30-high caption container, no box.
