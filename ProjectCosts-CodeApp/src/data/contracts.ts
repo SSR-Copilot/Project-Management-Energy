@@ -109,6 +109,7 @@ function toPaymentTarget(row: Vsb_bopcontractspaymenttargetses): PaymentTarget {
   return {
     id: row.vsb_bopcontractspaymenttargetsid,
     contractId: row._vsb_bopprojectcontract_value ?? "",
+    createdOn: row.createdon,
     description: row.vsb_description,
     // vsb_paymentdate is an `nvarchar` column — the canvas app stores "MM/YYYY" as text.
     paymentDate: row.vsb_paymentdate,
@@ -148,7 +149,12 @@ const CONTRACT_SELECT = [
   "vsb_ismarginstandardassumption",
 ];
 
-/** `ClearCollect(colBoPContracts, Filter('BoP Projects Contracts', Project.Project = …))` */
+/**
+ * `ClearCollect(colBoPContracts, Filter('BoP Projects Contracts', Project.Project = …))`
+ *
+ * PRODUCT DECISION, left as is (CONTR-005): the canvas filter has NO state condition, so it also lists
+ * INACTIVE contracts; this read keeps `statecode eq 0` (same shape as D45 G2). Not changed here.
+ */
 export async function listContracts(projectId: string): Promise<BopContract[]> {
   const rows = await fetchAll(
     "list BoP contracts",
@@ -179,7 +185,7 @@ export async function listPaymentTargets(
         {
           select: [
             "vsb_bopcontractspaymenttargetsid", "vsb_description", "vsb_paymentdate",
-            "vsb_totalcostscontract", "vsb_note", "_vsb_bopprojectcontract_value",
+            "vsb_totalcostscontract", "vsb_note", "_vsb_bopprojectcontract_value", "createdon",
           ],
           filter: and(lookupIn("vsb_bopprojectcontract", ids), ACTIVE),
         },
@@ -262,7 +268,12 @@ export async function listCapexCostRows(projectId: string): Promise<CapexCostRow
   }));
 }
 
-/** `ClearCollect(colCapexAllAccountsTemporary, 'CAPEX Account Lists')` — the chart of accounts. */
+/**
+ * `ClearCollect(colCapexAllAccountsTemporary, 'CAPEX Account Lists')` — the chart of accounts.
+ *
+ * PRODUCT DECISION, left as is (CONTR-057): the canvas reads ALL states (no filter); this read keeps
+ * `statecode eq 0`, so an inactive account is hidden from the DevCo picker. Not changed here.
+ */
 export async function listCapexAccounts(): Promise<AccountRow[]> {
   const rows = await fetchAll(
     "list CAPEX accounts",
@@ -443,8 +454,30 @@ export function contractPayload(w: ContractWrite) {
   };
 }
 
+/**
+ * The Project Rights `Patch` (`:3744-3759`) writes SEVEN columns only: Name, Project, Description,
+ * Closing Date, Contract Types, `Total cost of contract [EUR]` and the Owning Business Unit. None of
+ * the cost-type, margin, comment or standard columns is touched (CONTR-091). The description is trimmed
+ * here as everywhere (the canvas writes it untrimmed; harmless).
+ */
+export function rightsContractPayload(w: ContractWrite) {
+  return {
+    vsb_name: w.name,
+    "vsb_Project@odata.bind": `/${ES.projects}(${w.projectId})`,
+    vsb_description: w.description.trim(),
+    vsb_closingdate: dateOnly(w.closingDate),
+    vsb_contracttypes: w.contractType,
+    vsb_totalcostofcontract: w.totalCostOfContract,
+    ...(w.owningBusinessUnitId && !w.id
+      ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
+      : {}),
+  };
+}
+
 export async function saveContract(w: ContractWrite): Promise<BopContract> {
-  const payload = contractPayload(w);
+  const payload = w.contractType === CONTRACT_TYPE.ProjectRights
+    ? rightsContractPayload(w)
+    : contractPayload(w);
   const result = w.id
     ? await Vsb_bopprojectscontractsesService.update(w.id, payload as never)
     : await Vsb_bopprojectscontractsesService.create(payload as never);
@@ -485,16 +518,21 @@ export async function replaceDevCoLinks(args: {
       existing.map((row) => deleteRecord("delete a contract's DevCo-cost link", ES.devCoCosts, row.id)),
     );
   }
+  // The SDK never throws on a refusal: every create is checked (CONVENTIONS rule 3, CONTR-081), so
+  // a refused link reaches the save's error banner like the canvas `IfError(... Notify(...))`.
   await Promise.all(
-    args.accounts.map((account) =>
-      Vsb_bopcontractsdevcocostsesService.create({
-        vsb_name: account.name,
-        "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
-        "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
-        ...(args.owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
-          : {}),
-      } as never),
+    args.accounts.map(async (account) =>
+      unwrap(
+        await Vsb_bopcontractsdevcocostsesService.create({
+          vsb_name: account.name,
+          "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
+          "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
+          ...(args.owningBusinessUnitId
+            ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
+            : {}),
+        } as never),
+        "create DevCo cost link",
+      ),
     ),
   );
 }

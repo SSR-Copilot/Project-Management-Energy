@@ -71,6 +71,9 @@ import {
   durationBadge,
   externalContractDefault,
   formatOneDecimalPercent,
+  formatOneDecimalText,
+  formatTwoDecimalsText,
+  panelDeviceLabel,
   formatRevenuePercent,
   formatTableDate,
   formatWholeNumber,
@@ -106,7 +109,8 @@ import {
   planDeleteCost,
   planStandardImport,
   rangeMessage,
-  resetStartDateFlag,
+  defaultStartDateForFlag, parentDerivedStartDateFlag, planFollowingPeriodStarts, sameStartDate,
+  startDateFlagAfterPick, startDateFlagOnOpen,
   resetStartDateVisible,
   resolveInflationProfile,
   selectedAccount,
@@ -121,7 +125,6 @@ import {
   startDateDefault,
   startDateError,
   startDateErrorVisibleCanvasParity,
-  startDateStandardFlagAfterManualChange,
   subaccountsForMode,
   thresholdColumnText,
   thresholdToggleLabel,
@@ -987,26 +990,21 @@ describe("OPEX — save and cascade", () => {
 
   it("UT-OPEX-052 a child period inherits its parent's start-date standard flag", () => {
     expect(inheritStartDateStandard({ isStartDateStandardAssumption: true }, false)).toBe(true);
+    expect(inheritStartDateStandard({ isStartDateStandardAssumption: false }, true)).toBe(false);
     expect(inheritStartDateStandard(null, true)).toBe(true);
-    expect(startDateStandardFlagAfterManualChange(null)).toBe(false);
-    expect(startDateStandardFlagAfterManualChange("parent")).toBe(true);
-    expect(startDateStandardFlagAfterManualChange(undefined)).toBe(false);
+    // Coalesce: a stored Blank on the parent falls through to the panel's own flag.
+    expect(inheritStartDateStandard({ isStartDateStandardAssumption: null }, true)).toBe(true);
   });
 
-  it("UT-OPEX-053 the refresh icon appears on a chain root only, and re-sets the flag", () => {
-    expect(resetStartDateVisible({ selected: null, parent: null })).toBe(true);
-    expect(resetStartDateVisible({ selected: cost({ parentCostId: null }), parent: null }))
+  it("UT-OPEX-053 the refresh icon appears on a root period of a project with a COD only", () => {
+    const cod = "2027-01-01";
+    expect(resetStartDateVisible({ selected: null, parent: null, projectCod: cod })).toBe(true);
+    expect(resetStartDateVisible({ selected: cost({ parentCostId: null }), parent: null, projectCod: cod }))
       .toBe(true);
-    expect(resetStartDateVisible({ selected: cost({ parentCostId: "r" }), parent: null }))
+    expect(resetStartDateVisible({ selected: cost({ parentCostId: "r" }), parent: null, projectCod: cod }))
       .toBe(false);
-    expect(resetStartDateVisible({ selected: null, parent: cost() })).toBe(false);
-    expect(resetStartDateFlag({ selected: null, parent: null, next: null })).toBe(true);
-    expect(resetStartDateFlag({
-      selected: cost({ parentCostId: null }), parent: null, next: null,
-    })).toBe(true);
-    expect(resetStartDateFlag({
-      selected: cost({ parentCostId: "r" }), parent: cost(), next: cost(),
-    })).toBe(false);
+    expect(resetStartDateVisible({ selected: null, parent: cost(), projectCod: cod })).toBe(false);
+    expect(resetStartDateVisible({ selected: null, parent: null, projectCod: null })).toBe(false);
   });
 });
 
@@ -1308,7 +1306,8 @@ describe("OPEX — panel behaviour and validation", () => {
     expect(child.externalContract).toBe("view");
     // Money and dates stay editable on a child — which is why they are not cascaded.
     expect(child.fixCosts).toBe("edit");
-    expect(child.startDate).toBe("edit");
+    // Edited canvas (6 Nov 2026): the Start Date is Disabled on a follow-on period (UT-OPEX-125).
+    expect(child.startDate).toBe("disabled");
     expect(child.durationYears).toBe("edit");
   });
 
@@ -1697,6 +1696,237 @@ describe("OPEX — rendered rows", () => {
   });
 });
 
+/* ── Run 3 canvas-parity fixes (FT-BR-OPEX-nnn) ─────────────────────────────────────── */
+
+describe("run 3 parity fixes", () => {
+  it("UT-OPEX-110 a lone space or padded figure is NOT blank: the decimal message shows and Save is off", () => {
+    // FT-BR-OPEX-055/056/057/063/068 — `IsBlank(" ")` is false and the patterns are anchored.
+    for (const field of ["fixCosts", "eurPerMwh", "eurPerMw", "eurPerWtg"] as const) {
+      expect(validateOpexNumber(field, " ")).toBe(OPEX_MSG.twoDecimal);
+      expect(validateOpexNumber(field, "1 ")).toBe(OPEX_MSG.twoDecimal);
+    }
+    expect(validateOpexNumber("percentOfRevenues", " ")).toBe(OPEX_MSG.twoDecimalRevenues);
+    expect(validateOpexNumber("inflationProfile", " ")).toBe(OPEX_MSG.oneDecimalInflation);
+    expect(validateOpexNumber("thresholdIndividual", " ")).toBe(OPEX_MSG.thresholdOneDecimal);
+    expect(validateOpexNumber("fixCosts", "")).toBeNull();
+    // The earlier behaviour stays reachable as the reversible twin.
+    expect(validateOpexNumber("fixCosts", " ", undefined, "trimmed")).toBeNull();
+    expect(canSaveOpexCost(form({ eurPerMw: " " }), { selected: null, costsInScope: [], countryName: "Germany" }))
+      .toBe(false);
+  });
+
+  it("UT-OPEX-111 Inflation Start Year has no 4-character cap: 20255 and a lone space show the YYYY message", () => {
+    expect(validateInflationStartYear("20255")).toBe(OPEX_MSG.inflationStartYearFormat);
+    expect(validateInflationStartYear(" ")).toBe(OPEX_MSG.inflationStartYearFormat);
+    expect(validateInflationStartYear("2028")).toBeNull();
+    expect(validateInflationStartYear("")).toBeNull();
+  });
+
+  it("UT-OPEX-112 Country Inflation Profile on lets Save through although the hidden % box is empty", () => {
+    // FT-BR-OPEX-071 — the hidden box's canvas Value is `Text(Max(LookUp(...), 0), "0.0")`, never blank.
+    const ctx = { selected: null, costsInScope: [], countryName: "Germany" };
+    const on = form({
+      inflationOn: true, useCountryInflationProfile: true, inflationStartYear: "2028", inflationProfile: "",
+    });
+    expect(canSaveOpexCost(on, ctx)).toBe(true);
+    expect(opexFormErrors(on, ctx)).toEqual([]);
+    expect(canSaveOpexCost({ ...on, useCountryInflationProfile: false }, ctx)).toBe(false);
+  });
+
+  it("UT-OPEX-113 an Italian project saves with the Area defaulted and hidden", () => {
+    const ctx = { selected: null, costsInScope: [], countryName: "Italy" };
+    const base = form({
+      inflationOn: true, useCountryInflationProfile: true, inflationStartYear: "2028",
+    });
+    expect(canSaveOpexCost({ ...base, inflationCountryArea: "North" }, ctx)).toBe(true);
+    expect(canSaveOpexCost(base, ctx)).toBe(false);
+    // FT-BR-OPEX-065 — the dropdown stays hidden, as the canvas has it.
+    expect(areaFieldVisible()).toBe(false);
+  });
+
+  it("UT-OPEX-114 a duplicate Description is found whatever its case", () => {
+    const ctx = { selected: null, costsInScope: [cost({ description: "Service" })], countryName: "Germany" };
+    expect(canSaveOpexCost(form({ description: "service" }), ctx)).toBe(false);
+    expect(opexFormErrors(form({ description: "SERVICE" }), ctx).map((e) => e.message))
+      .toContain(OPEX_DESCRIPTION_MSG.duplicate);
+    expect(canSaveOpexCost(form({ description: "Other" }), ctx)).toBe(true);
+  });
+
+  it("UT-OPEX-115 the standard locks and the row styling ignore case, like Power Fx StartsWith", () => {
+    expect(isStandardLocked({ isStandardContract: false, name: "standard x" })).toBe(true);
+    expect(isStandardLocked({ isStandardContract: false, name: "Other" })).toBe(false);
+    const row = toOpexRow({
+      cost: cost({ description: "standard cover" }), mode: "other", selectedId: null, project, cardCosts: [],
+    });
+    expect(row.standard).toBe(true);
+  });
+
+  it("UT-OPEX-116 Other OPEX bolds the Description of a chain root only", () => {
+    const rowOf = (mode: "om" | "other", parentCostId: string | null) => toOpexRow({
+      cost: cost({ parentCostId }), mode, selectedId: null, project, cardCosts: [],
+    });
+    expect(rowOf("other", null).boldDescription).toBe(true);
+    expect(rowOf("other", "root").boldDescription).toBe(false);
+    expect(rowOf("om", null).boldDescription).toBe(false);
+  });
+
+  it("UT-OPEX-117 a blank stored Inflation Start Year falls to Year(Start Date) + 1", () => {
+    const selected = cost({ inflationStartYear: null });
+    expect(inflationStartYearDefault({ selected, parent: null, startDate: "2027-04-01" })).toBe(2028);
+    expect(inflationStartYearDefault({ selected: cost({ inflationStartYear: 2031 }), parent: null, startDate: "2027-04-01" }))
+      .toBe(2031);
+  });
+
+  it("UT-OPEX-118 prefills Fix Costs and the rates as #0.00 and the custom inflation as 0.0", () => {
+    expect(formatTwoDecimalsText(1234.5)).toBe("1234.50");
+    expect(formatTwoDecimalsText(0)).toBe("0.00");
+    expect(formatTwoDecimalsText(null)).toBe("");
+    expect(formatOneDecimalText(2)).toBe("2.0");
+    expect(formatOneDecimalText(null)).toBe("");
+  });
+
+  it("UT-OPEX-119 Other OPEX Edit and Add Period panels do not name the sub-account", () => {
+    const base = { mode: "other" as const, cardTitle: "Insurance" };
+    expect(panelDeviceLabel({ ...base, selected: null, parent: null })).toBe("Insurance");
+    expect(panelDeviceLabel({ ...base, selected: cost(), parent: null })).toBe("");
+    expect(panelDeviceLabel({ ...base, selected: null, parent: cost() })).toBe("");
+    expect(panelDeviceLabel({ mode: "om", cardTitle: "V150", selected: cost(), parent: null })).toBe("V150");
+  });
+
+  /* ── Edited canvas (6 Nov 2026, product owner): the start-date flag and the re-chain ── */
+
+  const COD = "2027-01-01";
+  const flagOf = (o: Partial<OpexCost>): Pick<OpexCost, "isStartDateStandardAssumption" | "startDate"> =>
+    ({ isStartDateStandardAssumption: null, startDate: "2027-01-01", ...o });
+
+  it("UT-OPEX-120 Add Contract Type starts with the flag Yes", () => {
+    expect(startDateFlagOnOpen({
+      command: "addContractType", mode: "other", selected: null, parent: null, codDate: COD,
+    })).toBe(true);
+  });
+
+  it("UT-OPEX-121 Add Period takes the flag from the parent, Coalesced with 'parent start = COD'", () => {
+    const open = (parent: ReturnType<typeof flagOf> | null, mode: "om" | "other") =>
+      startDateFlagOnOpen({ command: "addPeriod", mode, selected: null, parent, codDate: COD });
+    expect(open(flagOf({ isStartDateStandardAssumption: false }), "other")).toBe(false);
+    expect(open(flagOf({ isStartDateStandardAssumption: true, startDate: "2030-05-05" }), "other")).toBe(true);
+    // A stored Blank falls through to the date test.
+    expect(open(flagOf({ isStartDateStandardAssumption: null, startDate: COD }), "other")).toBe(true);
+    expect(open(flagOf({ isStartDateStandardAssumption: null, startDate: "2028-02-02" }), "other")).toBe(false);
+    // No parent: O&M (`:3037`) says Yes, Other OPEX (`:637`) compares a Blank start with COD.
+    expect(open(null, "om")).toBe(true);
+    expect(open(null, "other")).toBe(false);
+  });
+
+  it("UT-OPEX-122 Edit: a root keeps its own flag; a follow-on is parent-derived in Other OPEX, No in O&M", () => {
+    const root: { parentCostId: string | null; isStartDateStandardAssumption: boolean | null } = { parentCostId: null, isStartDateStandardAssumption: true };
+    const kid = { parentCostId: "r", isStartDateStandardAssumption: true };
+    const parent = flagOf({ isStartDateStandardAssumption: true });
+    const open = (selected: typeof root | typeof kid, mode: "om" | "other") =>
+      startDateFlagOnOpen({ command: "edit", mode, selected, parent: selected === root ? null : parent, codDate: COD });
+    expect(open(root, "other")).toBe(true);
+    // A stored Blank stays Blank (UT-OPEX-132).
+    expect(open({ ...root, isStartDateStandardAssumption: null }, "other")).toBeNull();
+    expect(open(kid, "other")).toBe(true);
+    expect(open(kid, "om")).toBe(false);
+  });
+
+  it("UT-OPEX-123 the picker default: COD for a root, end of the previous period when adding, none on Edit of a follow-on", () => {
+    const next = { startDate: "2027-01-01", durationYears: 2, durationMonths: 3 };
+    expect(defaultStartDateForFlag({ parent: null, selected: null, next: null, codDate: COD })?.getFullYear()).toBe(2027);
+    expect(defaultStartDateForFlag({ parent: {}, selected: null, next, codDate: COD }))
+      .toEqual(new Date(2029, 3, 1, 12));
+    expect(defaultStartDateForFlag({ parent: {}, selected: {}, next, codDate: COD })).toBeNull();
+    expect(defaultStartDateForFlag({ parent: {}, selected: null, next: null, codDate: COD })).toBeNull();
+  });
+
+  it("UT-OPEX-124 picking a date sets the flag only when it equals the default, else No", () => {
+    const base = { selected: null, next: null, codDate: COD, projectCod: COD };
+    expect(startDateFlagAfterPick({ ...base, picked: "2027-01-01", parent: null })).toBe(true);
+    expect(startDateFlagAfterPick({ ...base, picked: "2027-01-02", parent: null })).toBe(false);
+    expect(startDateFlagAfterPick({ ...base, picked: null, parent: null })).toBe(false);
+    const next = { startDate: "2027-01-01", durationYears: 1, durationMonths: 0 };
+    const parent = flagOf({ isStartDateStandardAssumption: false });
+    // A follow-on while adding: the end of the previous period, parent-derived value.
+    expect(startDateFlagAfterPick({ ...base, picked: "2028-01-01", parent, next })).toBe(false);
+    expect(startDateFlagAfterPick({
+      ...base, picked: "2028-01-01", parent: flagOf({ isStartDateStandardAssumption: true }), next,
+    })).toBe(true);
+    expect(startDateFlagAfterPick({ ...base, picked: "2028-01-02", parent, next })).toBe(false);
+    // Edit of a follow-on has no default, so the flag is always No.
+    expect(startDateFlagAfterPick({ ...base, picked: COD, parent, selected: {}, next })).toBe(false);
+  });
+
+  it("UT-OPEX-125 Start Date is editable on a root period only", () => {
+    const base = { eurPerMwh: "12.00", useCountryInflationProfile: false };
+    expect(panelFieldModes(panelCtx(), base).startDate).toBe("edit");
+    expect(panelFieldModes(panelCtx({ parent: cost({ id: "r" }) }), base).startDate).toBe("disabled");
+    expect(panelFieldModes(panelCtx({ selected: cost({ parentCostId: "r" }) }), base).startDate).toBe("disabled");
+  });
+
+  it("UT-OPEX-126 sameStartDate follows Power Fx: two Blanks are equal, a Blank and a date are not", () => {
+    expect(sameStartDate(null, null)).toBe(true);
+    expect(sameStartDate(null, COD)).toBe(false);
+    expect(sameStartDate("2027-01-01", new Date(2027, 0, 1, 23))).toBe(true);
+    expect(parentDerivedStartDateFlag(null, null)).toBe(true);
+  });
+
+  const link = (id: string, startDate: string | null, years: number, months: number) =>
+    ({ id, startDate, durationYears: years, durationMonths: months });
+
+  it("UT-OPEX-127 re-chain: the periods after an edited one are moved back to back", () => {
+    const chain = [link("p3", "2030-01-01", 1, 0), link("p1", "2027-01-01", 2, 0), link("p2", "2029-01-01", 1, 0)];
+    // p1 now starts 2027-07-01 and lasts 2 y 6 m: p2 -> 2030-01-01, p3 -> 2031-01-01.
+    const plan = planFollowingPeriodStarts({
+      chain, saved: link("p1", "2027-07-01", 2, 6), previous: link("p1", "2027-01-01", 2, 0),
+    });
+    expect(plan).toEqual([
+      { id: "p2", startDate: "2030-01-01" },
+      { id: "p3", startDate: "2031-01-01" },
+    ]);
+  });
+
+  it("UT-OPEX-128 re-chain: only the periods FOLLOWING the saved one, in the order loaded before the save", () => {
+    const chain = [link("p1", "2027-01-01", 1, 0), link("p2", "2028-01-01", 1, 0), link("p3", "2029-01-01", 1, 0)];
+    // p2 edited: p1 is left alone; p3 follows p2's new end. The order uses p2's OLD start.
+    expect(planFollowingPeriodStarts({
+      chain, saved: link("p2", "2035-01-01", 2, 0), previous: link("p2", "2028-01-01", 1, 0),
+    })).toEqual([{ id: "p3", startDate: "2037-01-01" }]);
+    // The last period has nothing after it.
+    expect(planFollowingPeriodStarts({
+      chain, saved: link("p3", "2040-01-01", 5, 0), previous: link("p3", "2029-01-01", 1, 0),
+    })).toEqual([]);
+  });
+
+  it("UT-OPEX-129 re-chain: nothing when the period is new or its start and total months are unchanged", () => {
+    const chain = [link("p1", "2027-01-01", 1, 0), link("p2", "2028-01-01", 1, 0)];
+    expect(planFollowingPeriodStarts({ chain, saved: link("p1", "2027-01-01", 1, 0), previous: null })).toEqual([]);
+    expect(planFollowingPeriodStarts({
+      chain, saved: link("p1", "2027-01-01", 0, 12), previous: link("p1", "2027-01-01", 1, 0),
+    })).toEqual([]);
+    // A saved id missing from the chain plans nothing.
+    expect(planFollowingPeriodStarts({
+      chain, saved: link("zz", "2030-01-01", 1, 0), previous: link("zz", "2029-01-01", 1, 0),
+    })).toEqual([]);
+  });
+
+  it("UT-OPEX-130 re-chain clamps the day like DateAdd(…, Months)", () => {
+    const chain = [link("p1", "2027-01-31", 0, 1), link("p2", "2027-03-01", 0, 1)];
+    expect(planFollowingPeriodStarts({
+      chain, saved: link("p1", "2027-01-31", 0, 1), previous: link("p1", "2027-01-31", 0, 2),
+    })).toEqual([{ id: "p2", startDate: "2027-02-28" }]);
+  });
+
+  it("UT-OPEX-131 the edited canvas' Notify texts are verbatim", () => {
+    expect(OPEX_MSG.updatingFollowingPeriods).toBe("Updating start dates of the following periods...");
+    expect(OPEX_MSG.childPeriodsFailed("Save", "boom"))
+      .toBe("Error: the child periods could not be updated. Internal error: originated on Save. Message: boom");
+    expect(OPEX_MSG.followingPeriodsFailed("Save", "boom")).toBe(
+      "Error: the start dates of the following periods could not be updated. Internal error: originated on Save. Message: boom",
+    );
+  });
+});
+
 /* ── D58: the write guard that replaced `cmp_OpexCosts_PopUpLoading` ─────────────────── */
 
 describe("writeCommandsDisabled / guardOpexCommands (D58)", () => {
@@ -1729,5 +1959,19 @@ describe("writeCommandsDisabled / guardOpexCommands (D58)", () => {
     expect(guardOpexCommands(allOn, true)).toEqual(allOff);
     // It only ever removes: a command its own gate disabled stays disabled.
     expect(guardOpexCommands(allOff, true)).toEqual(allOff);
+  });
+
+  it("UT-OPEX-132 Edit of a root whose stored flag is Blank opens Blank, and the save inherits Blank", () => {
+    const blankRoot = { parentCostId: null, isStartDateStandardAssumption: null };
+    expect(startDateFlagOnOpen({
+      command: "edit", mode: "om", selected: blankRoot, parent: null, codDate: "2027-01-01",
+    })).toBeNull();
+    expect(startDateFlagOnOpen({
+      command: "edit", mode: "other", selected: blankRoot, parent: null, codDate: "2027-01-01",
+    })).toBeNull();
+    expect(inheritStartDateStandard(null, null)).toBeNull();
+    // A parent's stored Blank falls through to the panel's own value.
+    expect(inheritStartDateStandard({ isStartDateStandardAssumption: null }, null)).toBeNull();
+    expect(inheritStartDateStandard({ isStartDateStandardAssumption: false }, null)).toBe(false);
   });
 });

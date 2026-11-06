@@ -373,7 +373,8 @@ export interface OpexCost {
   alignWithProjectDuration: boolean;
   externalContract: boolean;
   isStandardContract: boolean;
-  isStartDateStandardAssumption: boolean;
+  /** `null` is a stored Blank: `Coalesce(parent.IsStartDateStandardAssumption, …)` falls through it. */
+  isStartDateStandardAssumption: boolean | null;
   /** `Created On` — the start-date default reads it (`:5853`). */
   createdOn?: string | null;
 }
@@ -724,13 +725,14 @@ export function descriptionIsFree(
  * `Add Period` / `Edit` (`:449-455`, `:520-526`, `:2826`, `:2873-2879`) — a standard row is
  * locked when `'Is Standard Contract?' = Yes` OR `StartsWith(Name, "Standard")`.
  *
- * The `StartsWith(Name, …)` half is case-SENSITIVE and reads `Name`, which the save builds as
+ * The `StartsWith(Name, …)` half is case-INSENSITIVE (Power Fx) and reads `Name`, which the save builds as
  * `<subaccount>-<device>-<description>` — so it only ever fires when the sub-account itself
  * starts with "Standard". The delete rule below uses a different, case-insensitive test on
  * `Description`. Both are transcribed as written.
  */
 export function isStandardLocked(cost: Pick<OpexCost, "isStandardContract" | "name">): boolean {
-  return cost.isStandardContract || cost.name.startsWith("Standard");
+  // Power Fx `StartsWith` ignores case (FT-BR-OPEX-028, run 3): "standard…" locks like "Standard…".
+  return cost.isStandardContract || cost.name.toLowerCase().startsWith("standard");
 }
 
 /** `Delete`'s own test (`:541-544`, `:2889-2892`) — `StartsWith(Lower(Description), "standard")`. */
@@ -813,7 +815,9 @@ export function panelFieldModes(
 
   return {
     description: brandNew ? "edit" : "disabled",
-    startDate: "edit",
+    // `dte_…_StartDate.DisplayMode` (edited canvas): Edit only on a root period (no parent
+    // period and the selected row has no 'Parent Cost'), otherwise Disabled.
+    startDate: isRoot ? "edit" : "disabled",
     durationYears: "edit",
     durationMonths: "edit",
     // `drp_…_Currency.DisplayMode: =DisplayMode.Disabled` — always.
@@ -1321,7 +1325,8 @@ export function inflationStartYearDefault(args: {
 }): number | null {
   const { selected, parent, startDate } = args;
   if (parent !== null && selected === null) return parent.inflationStartYear;
-  if (selected !== null && selected.inflationStartYear !== 0) return selected.inflationStartYear;
+  // `<> 0` is false for a Blank year too, so a stored null/0 falls through to `Year(start) + 1`.
+  if (selected !== null && selected.inflationStartYear) return selected.inflationStartYear;
   const d = toDate(startDate);
   return d === null ? null : d.getFullYear() + 1;
 }
@@ -1416,6 +1421,33 @@ export function inflationProfileDefault(args: {
   return Math.max(orZero(countryProfile), 0);
 }
 
+/** `Text(x, "#0.00")` — Fix Costs and the three EUR rates, no grouping (`:6422`, `:6690`). */
+export function formatTwoDecimalsText(value: number | null | undefined): string {
+  return value === null || value === undefined ? "" : value.toFixed(2);
+}
+
+/** `Text(x, "0.0")` — the custom Inflation Profile box and the country lookup (`:7811-7822`). */
+export function formatOneDecimalText(value: number | null | undefined): string {
+  return value === null || value === undefined ? "" : value.toFixed(1);
+}
+
+/**
+ * The panel caption's suffix. `locSelectedDevice` is written only by Add Contract Type and by the
+ * O&M commands (`:601`, `:2943`), never by the Other bar's Edit / Add Period (`:607-630`, `:926-955`),
+ * so on Other OPEX an Edit / Add Period panel does not name the sub-account (run 3, FT-BR-OPEX-038;
+ * the canvas shows whatever was left in the variable, here blank).
+ */
+export function panelDeviceLabel(args: {
+  mode: OpexMode;
+  selected: OpexCost | null;
+  parent: OpexCost | null;
+  cardTitle: string;
+}): string {
+  const { mode, selected, parent, cardTitle } = args;
+  if (mode === "om") return cardTitle;
+  return selected === null && parent === null ? cardTitle : "";
+}
+
 /**
  * `txt_…_InflationProfileCountry.Value` (`:7869-7927`) — the read-only twin shown INSTEAD of the
  * percentage box while `Country Inflation Profile` is on:
@@ -1439,6 +1471,12 @@ export function inflationProfileCountryText(
  * for an Italian project with both inflation toggles on (`:8672-8676`). On such a project Save
  * is permanently disabled with no visible field to fix. Reproduced: `areaFieldVisible` returns
  * the canvas answer, `areaFieldVisibleIntended` the commented-out one.
+ */
+/**
+ * Run 3 (FT-BR-OPEX-065): the screen now follows the canvas and keeps the Area dropdown hidden.
+ * The Save clause still needs an Area, and the hidden control's `DefaultSelectedItems`
+ * (`:7618-7628`) is the project's own zone (`Substitute(gblAreaWithRegion, "Italy_", "")`), so the
+ * form is seeded with `italyZone(areaRegion)` and the clause is met without a visible field.
  */
 export function areaFieldVisible(): boolean {
   return false;
@@ -1777,6 +1815,7 @@ export const CASCADED_FIELDS = [
   "threshold",
   "thresholdIndividual",
   "thresholdType",
+  "isStartDateStandardAssumption",
   "alignWithProjectDuration",
   "externalContract",
 ] as const;
@@ -1798,6 +1837,8 @@ export function cascadeToChildren(
     threshold: saved.threshold,
     thresholdIndividual: saved.thresholdIndividual,
     thresholdType: saved.thresholdType,
+    // The edited canvas also copies `IsStartDateStandardAssumption: locSelectedOpexCost.…` (eleven fields).
+    isStartDateStandardAssumption: saved.isStartDateStandardAssumption,
     alignWithProjectDuration:
       fromPanel?.alignWithProjectDuration ?? saved.alignWithProjectDuration,
     externalContract: fromPanel?.externalContract ?? saved.externalContract,
@@ -2149,6 +2190,16 @@ export const OPEX_MSG = {
   savingCost: "Saving OPEX cost...",
   /** `locSpinnerInformationText` — the child cascade (`:8695`, `:8786`). */
   updatingChildCosts: "Updating inflation profiles on child costs...",
+  /** `locSpinnerInformationText` — the re-chain of the following periods (`pcf_…_Save.OnChange`, edited canvas). */
+  updatingFollowingPeriods: "Updating start dates of the following periods...",
+  /** The child cascade `Notify` (`pcf_…_Save.OnChange`, edited canvas) — verbatim, no separator added. */
+  childPeriodsFailed: (source: string, message: string): string =>
+    `Error: the child periods could not be updated. Internal error: originated on ${source}. `
+    + `Message: ${message}`,
+  /** The re-chain `Notify` (`pcf_…_Save.OnChange`, edited canvas) — verbatim. */
+  followingPeriodsFailed: (source: string, message: string): string =>
+    `Error: the start dates of the following periods could not be updated. `
+    + `Internal error: originated on ${source}. Message: ${message}`,
   /** `locSpinnerInformationText` — `cmp_…_DeleteCost.OnConfirm` (`:8856`). */
   deletingCost: "Deleting OPEX cost...",
 
@@ -2431,60 +2482,196 @@ export function alignWithProjectDurationDefault(args: {
 }
 
 /**
- * `dte_…_StartDate.OnChange` (`:5823-5832`) —
- * `locIsStartDateStandardAssumption: If(IsBlank(locSelectedOpexCostNext.'Parent Cost'), No, Yes)`.
- *
- * Choosing a date by hand clears the flag only when the period this one FOLLOWS is a chain root;
- * following a child period leaves the flag set. Note it tests `locSelectedOpexCostNext`, the
- * previous period, not the record being edited.
+ * Power Fx `a = b` on two dates, as the picker and the flag formulas use it: two Blanks are equal,
+ * a Blank and a date are not, and the time of day never counts.
  */
-export function startDateStandardFlagAfterManualChange(
-  nextParentCostId: string | null | undefined,
+export function sameStartDate(
+  a: string | Date | null | undefined,
+  b: string | Date | null | undefined,
 ): boolean {
-  return nextParentCostId !== null && nextParentCostId !== undefined;
+  const x = toDate(a);
+  const y = toDate(b);
+  if (x === null || y === null) return x === y;
+  return ymd(x) === ymd(y);
 }
 
 /**
- * `ico_ResetStartDay_NewEditCost_OPEXCosts.OnChange` (`:5941-5955`) — the refresh icon beside the
- * date resets it to COD and re-derives the flag from a three-arm `Switch`, all three of which
- * answer `Yes`:
+ * `Coalesce(parent.IsStartDateStandardAssumption, If(parent.'Start Date' = COD, Yes, No))` —
+ * the flag a period takes from the chain head it follows (`:637`, `:948`, `:3037`, `:5888`).
  *
- *   no next AND no selection                  → Yes
- *   selection is a chain root                 → Yes
- *   no parent AND no selection                → Yes
- *   otherwise                                 → No
- *
- * Its `.Visible` (`:5959-5963`) is `Or(IsBlank(selected) && IsBlank(parent),
- * IsBlank(selected.'Parent Cost') && Not(IsBlank(selected)))` — the icon only appears on a chain
- * root.
+ * A stored Blank flag falls through to the date test (`OpexCost.isStartDateStandardAssumption` is
+ * `null` for it). With NO parent the first term is Blank and the test compares a Blank start with
+ * COD, so it answers No unless COD is Blank too.
  */
-export function resetStartDateFlag(args: {
-  selected: OpexCost | null;
-  parent: OpexCost | null;
-  next: OpexCost | null;
-}): boolean {
-  const { selected, parent, next } = args;
-  if (next === null && selected === null) return true;
-  if (selected !== null && selected.parentCostId === null) return true;
-  if (parent === null && selected === null) return true;
-  return false;
+export function parentDerivedStartDateFlag(
+  parent: Pick<OpexCost, "isStartDateStandardAssumption" | "startDate"> | null,
+  codDate: string | Date | null,
+): boolean {
+  return parent?.isStartDateStandardAssumption
+    ?? sameStartDate(parent?.startDate ?? null, codDate);
 }
 
+/**
+ * `locIsStartDateStandardAssumption` when the panel opens, per command (edited canvas):
+ *
+ *   Add Contract Type (`:605`)                         → Yes
+ *   Add Period, Other OPEX (`:637`)                    → `parentDerivedStartDateFlag`
+ *   Add Period, O&M (`:3037`)                          → Yes with no parent, else the same
+ *   Edit, a root (`:948`, `:3449`)                     → the row's own flag
+ *   Edit, a follow-on, Other OPEX (`:948`)             → `parentDerivedStartDateFlag`
+ *   Edit, a follow-on, O&M (`:3449`, NOT changed)      → No
+ */
+export function startDateFlagOnOpen(args: {
+  command: "addContractType" | "addPeriod" | "edit";
+  mode: OpexMode;
+  selected: Pick<OpexCost, "parentCostId" | "isStartDateStandardAssumption"> | null;
+  parent: Pick<OpexCost, "isStartDateStandardAssumption" | "startDate"> | null;
+  codDate: string | Date | null;
+}): boolean | null {
+  const { command, mode, selected, parent, codDate } = args;
+  if (command === "addContractType") return true;
+  if (command === "addPeriod") {
+    if (mode === "om" && parent === null) return true;
+    return parentDerivedStartDateFlag(parent, codDate);
+  }
+  if (selected === null) return false;
+  // `If(IsBlank(Parent Cost), varSelectedOpexCost.IsStartDateStandardAssumption, …)`: a stored Blank
+  // stays Blank (null), so the save writes and cascades Blank, not No (UT-OPEX-132).
+  if (selected.parentCostId === null) return selected.isStartDateStandardAssumption;
+  return mode === "om" ? false : parentDerivedStartDateFlag(parent, codDate);
+}
+
+/**
+ * `varDefaultStartDate` of `dte_…_StartDate.OnChange` (`:5851-5878`) — the date the picker would
+ * show if the user had not touched it:
+ *
+ *   root period (no parent)                       → the project COD
+ *   follow-on while ADDING (no `locSelectedOpexCost`) → end of the previous period,
+ *                                                    `DateAdd(next.'Start Date', years * 12 + months)`
+ *   Edit of a follow-on                           → Blank
+ */
+export function defaultStartDateForFlag(args: {
+  parent: unknown | null;
+  selected: unknown | null;
+  next: Pick<OpexCost, "startDate" | "durationYears" | "durationMonths"> | null;
+  codDate: string | Date | null;
+}): Date | null {
+  if (args.parent === null) return toDate(args.codDate);
+  if (args.selected !== null) return null;
+  const nextStart = toDate(args.next?.startDate);
+  if (args.next === null || nextStart === null) return null;
+  return addMonths(
+    nextStart,
+    orZero(args.next.durationYears) * 12 + orZero(args.next.durationMonths),
+  );
+}
+
+/**
+ * `dte_…_StartDate.OnChange` (`:5851-5897`) — picking a date sets the flag to the parent-derived
+ * value (Yes for a root) ONLY when it equals `varDefaultStartDate`, and to No otherwise (also when
+ * there is no default at all, i.e. Edit of a follow-on).
+ */
+export function startDateFlagAfterPick(args: {
+  picked: string | Date | null;
+  parent: Pick<OpexCost, "isStartDateStandardAssumption" | "startDate"> | null;
+  selected: unknown | null;
+  next: Pick<OpexCost, "startDate" | "durationYears" | "durationMonths"> | null;
+  codDate: string | Date | null;
+  /** The project's COD (`gblSelectedProject.'Operations start date (COD)'`). */
+  projectCod: string | Date | null;
+}): boolean {
+  const def = defaultStartDateForFlag({
+    parent: args.parent, selected: args.selected, next: args.next, codDate: args.projectCod,
+  });
+  if (def === null) return false;
+  if (!sameStartDate(args.picked, def)) return false;
+  return args.parent === null ? true : parentDerivedStartDateFlag(args.parent, args.projectCod);
+}
+
+/**
+ * `ico_ResetStartDay_NewEditCost_OPEXCosts.Visible` (`:6054-6060`, edited canvas) —
+ * `And(IsBlank(locSelectedOpexCostParent), IsBlank(locSelectedOpexCost.'Parent Cost'),
+ * Not(IsBlank(COD)))`: a ROOT period and a project that has a COD. The previous formula (root or
+ * a brand-new cost type) is commented out in the canvas.
+ */
 export function resetStartDateVisible(args: {
-  selected: OpexCost | null;
-  parent: OpexCost | null;
+  selected: Pick<OpexCost, "parentCostId"> | null;
+  parent: unknown | null;
+  projectCod: string | Date | null;
 }): boolean {
-  const { selected, parent } = args;
-  return (selected === null && parent === null)
-    || (selected !== null && selected.parentCostId === null);
+  return args.parent === null
+    && (args.selected?.parentCostId ?? null) === null
+    && toDate(args.projectCod) !== null;
 }
 
-/** Rule 13 — `IsStartDateStandardAssumption: Coalesce(parent.…, locIsStartDateStandardAssumption)`. */
+/** `IsStartDateStandardAssumption: Coalesce(parent.…, locIsStartDateStandardAssumption)` (`:8814`). */
 export function inheritStartDateStandard(
   parent: Pick<OpexCost, "isStartDateStandardAssumption"> | null,
-  own: boolean,
-): boolean {
-  return parent ? parent.isStartDateStandardAssumption : own;
+  own: boolean | null,
+): boolean | null {
+  return parent?.isStartDateStandardAssumption ?? own;
+}
+
+/* ═══════════════════════════════════════════════ re-chaining following periods ══ */
+
+/** A period of one chain as the screen loaded it before the save. */
+export interface ChainPeriod {
+  id: string;
+  startDate: string | null;
+  durationYears: number | null;
+  durationMonths: number | null;
+}
+
+const monthsOf = (p: Pick<ChainPeriod, "durationYears" | "durationMonths">): number =>
+  orZero(p.durationYears) * 12 + orZero(p.durationMonths);
+
+/**
+ * The Save's re-chain (`pcf_…_BodyButtons_Save.OnChange`, edited canvas): when an EXISTING period's
+ * Start Date or total months changed, the periods that FOLLOW it are moved so the chain stays
+ * contiguous.
+ *
+ * The chain is the root and its children, sorted by Start Date ascending AS LOADED BEFORE THE SAVE
+ * (`colOpexProjectCosts`, stable on ties; a Blank date sorts first). The first following period
+ * starts at the saved period's new start plus its new duration; each next one at the previous
+ * one's new start plus the previous one's duration. A period whose new start equals its stored
+ * start is still listed (the canvas Patches all of them).
+ */
+export function planFollowingPeriodStarts(args: {
+  /** The chain as loaded before the save, the saved period included, in any order. */
+  chain: readonly ChainPeriod[];
+  saved: ChainPeriod;
+  /** The saved period's values before the save, or null when it was just created. */
+  previous: Pick<ChainPeriod, "startDate" | "durationYears" | "durationMonths"> | null;
+}): { id: string; startDate: string }[] {
+  const { chain, saved, previous } = args;
+  if (previous === null) return [];
+  const changed = !sameStartDate(saved.startDate, previous.startDate)
+    || monthsOf(saved) !== monthsOf(previous);
+  if (!changed) return [];
+
+  const keyOf = (p: ChainPeriod): string => toDate(p.startDate) === null ? "" : ymd(toDate(p.startDate)!);
+  const ordered = chain
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => keyOf(a.p).localeCompare(keyOf(b.p)) || a.i - b.i)
+    .map((x) => x.p);
+  const at = ordered.findIndex((p) => p.id === saved.id);
+  if (at === -1) return [];
+
+  const out: { id: string; startDate: string }[] = [];
+  let prevStart = toDate(saved.startDate);
+  let prevMonths = monthsOf(saved);
+  for (const row of ordered.slice(at + 1)) {
+    if (prevStart === null) break;
+    const start = addMonths(prevStart, prevMonths);
+    out.push({
+      id: row.id,
+      startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${
+        String(start.getDate()).padStart(2, "0")}`,
+    });
+    prevStart = start;
+    prevMonths = monthsOf(row);
+  }
+  return out;
 }
 
 /* ═════════════════════════════════════════════════════════════ validation ══ */
@@ -2510,6 +2697,14 @@ export const OPEX_RANGES = {
 
 export type OpexNumericField = keyof typeof OPEX_RANGES;
 
+/**
+ * How a numeric / year box treats a lone space or padding. `"canvas"` (default): `IsBlank(" ")` is
+ * false, so the box shows the decimal message and Save stays off. `"trimmed"`: the earlier
+ * behaviour, where padding counts as blank. Reversible twin of the run 3 fix.
+ */
+export type OpexInputMode = "canvas" | "trimmed";
+export const OPEX_INPUT_MODE: OpexInputMode = "canvas";
+
 /** `$"Value must be between 0 and {Text(max, "#,###.0#")}."` (`:6381-6384`). */
 export function rangeMessage(max: number): string {
   return `Value must be between 0 and ${
@@ -2533,11 +2728,15 @@ export function validateOpexNumber(
   field: OpexNumericField,
   value: string,
   locale?: string,
+  mode: OpexInputMode = OPEX_INPUT_MODE,
 ): string | null {
-  if (value.trim() === "") return null;
+  // DIVERGENCE (run 3, FT-BR-OPEX-055..057/063/068): the canvas `IsBlank(" ")` is false and the
+  // `fn_Numeric` patterns are fully anchored, so a lone space or a padded value is NOT blank and
+  // fails the decimal test. `"trimmed"` is the earlier code-app behaviour, kept as the twin.
+  if (mode === "trimmed" ? value.trim() === "" : value === "") return null;
   const spec = OPEX_RANGES[field];
   const twoDecimal = spec.places === 2;
-  const ok = isDecimal(value, {
+  const ok = (mode === "trimmed" || value === value.trim()) && isDecimal(value, {
     places: spec.places,
     allowNegative: twoDecimal,
     locale,
@@ -2570,9 +2769,13 @@ export function validateOpexNumber(
  * `lbl_…_InflationStartYear_ErrorMessage.Visible` (`:7461-7465`) —
  * `And(Not(IsBlank(value)), Not(IsMatch(value, "^\d{4}$")))`.
  */
-export function validateInflationStartYear(value: string): string | null {
-  if (value.trim() === "") return null;
-  return /^\d{4}$/.test(value.trim()) ? null : OPEX_MSG.inflationStartYearFormat;
+export function validateInflationStartYear(
+  value: string,
+  mode: OpexInputMode = OPEX_INPUT_MODE,
+): string | null {
+  const v = mode === "trimmed" ? value.trim() : value;
+  if (v === "") return null;
+  return /^\d{4}$/.test(v) ? null : OPEX_MSG.inflationStartYearFormat;
 }
 
 /**
@@ -2647,6 +2850,11 @@ export interface OpexForm {
   externalContract: boolean;
 }
 
+/** Power Fx `=` on text ignores case. */
+export function sameDescription(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 export interface SaveGateContext {
   /** `locSelectedOpexCost` — null while adding. */
   selected: OpexCost | null;
@@ -2704,7 +2912,8 @@ export function canSaveOpexCost(form: OpexForm, ctx: SaveGateContext): boolean {
   const description = form.description.trim();
   if (description === "") return false;
   if (descriptionHasReservedStandard(form.description)) return false;
-  if (selected === null && scope.some((c) => c.description === description)) return false;
+  // `Description = Trim(Value)` — Power Fx text equality ignores case (FT-BR-OPEX-071, run 3).
+  if (selected === null && scope.some((c) => sameDescription(c.description, description))) return false;
 
   if (toDate(form.startDate) === null) return false;
   if (form.durationYears === null || form.durationMonths === null) return false;
@@ -2726,8 +2935,13 @@ export function canSaveOpexCost(form: OpexForm, ctx: SaveGateContext): boolean {
   if (form.inflationOn) {
     if (form.inflationStartYear.trim() === "") return false;
     if (validateInflationStartYear(form.inflationStartYear) !== null) return false;
-    if (validateOpexNumber("inflationProfile", form.inflationProfile, locale) !== null) return false;
-    if (form.inflationProfile.trim() === "") return false;
+    // With Country Inflation Profile on the box is hidden and its canvas Value is
+    // `Text(Max(LookUp(...).Inflation, 0), "0.0")`, never blank (FT-BR-OPEX-071, run 3); the save
+    // recomputes the percentage, so the typed box neither blocks nor validates.
+    if (!form.useCountryInflationProfile) {
+      if (validateOpexNumber("inflationProfile", form.inflationProfile, locale) !== null) return false;
+      if (form.inflationProfile.trim() === "") return false;
+    }
   }
 
   if (countryName === "Italy" && form.inflationOn && form.useCountryInflationProfile) {
@@ -2772,7 +2986,7 @@ export function opexFormErrors(form: OpexForm, ctx: SaveGateContext): FieldError
   // box and only Save stays disabled. A duplicate is still named once something is typed, since
   // nothing else on the panel explains why Save will not enable.
   if (form.description.trim() !== "" && ctx.selected === null
-    && ctx.costsInScope.some((c) => c.description === form.description.trim())) {
+    && ctx.costsInScope.some((c) => sameDescription(c.description, form.description.trim()))) {
     errors.push({ field: "description", message: OPEX_DESCRIPTION_MSG.duplicate });
   }
   push("fixCosts", validateOpexNumber("fixCosts", form.fixCosts, ctx.locale));
@@ -2788,8 +3002,10 @@ export function opexFormErrors(form: OpexForm, ctx: SaveGateContext): FieldError
   }
   if (form.inflationOn) {
     push("inflationStartYear", validateInflationStartYear(form.inflationStartYear));
-    push("inflationProfile",
-      validateOpexNumber("inflationProfile", form.inflationProfile, ctx.locale));
+    if (!form.useCountryInflationProfile) {
+      push("inflationProfile",
+        validateOpexNumber("inflationProfile", form.inflationProfile, ctx.locale));
+    }
   }
   return errors;
 }
@@ -2851,7 +3067,7 @@ export interface OpexCostWrite {
   distributionFrequency: number | null;
   owningBusinessUnitId: string | null;
   alignWithProjectDuration: boolean;
-  isStartDateStandardAssumption: boolean;
+  isStartDateStandardAssumption: boolean | null;
   externalContract: boolean;
   timeZoneRuleVersionNumber: number;
 }
@@ -2879,7 +3095,7 @@ export function opexCostWrite(
     deviceTypeInProjectId: string | null;
     deviceName: string | null;
     parent: OpexCost | null;
-    isStartDateStandardAssumption: boolean;
+    isStartDateStandardAssumption: boolean | null;
     owningBusinessUnitId: string | null;
     locale?: string;
   },
@@ -2943,6 +3159,8 @@ export interface OpexRow {
   id: string;
   /** A row whose Description starts with "Standard" renders italic and in the link colour. */
   standard: boolean;
+  /** Other OPEX only: the Description of a chain root renders bold, a period's does not. */
+  boldDescription: boolean;
   selected: boolean;
   /** Whether the amber "does not align" info button shows beside it. */
   warnAlignment: boolean;
@@ -2972,7 +3190,11 @@ export function toOpexRow(args: {
   const end = periodEndDate(cost);
   return {
     id: cost.id,
-    standard: cost.description.startsWith("Standard"),
+    // `StartsWith(ThisItem.Description, "Standard")` — case-insensitive in Power Fx.
+    standard: isStandardByDescription(cost),
+    // Other OPEX table only: `FontWeight = If(!IsBlank(ThisItem.'Parent Cost'), Normal, Bold)`
+    // (`:2084-2089`): a chain root's Description is bold, a period's is not.
+    boldDescription: mode === "other" && cost.parentCostId === null,
     selected: cost.id === selectedId,
     warnAlignment: mode === "om"
       ? omAlignWarningVisible(cardCosts, project)

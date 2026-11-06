@@ -48,6 +48,8 @@ const DELETE_TABLE: Record<string, string> = {
 };
 /** Ids whose delete Dataverse refuses: `deleteRecord` then throws, as the real one does on `{ success: false }`. */
 let refusedDeletes = new Set<string>();
+/** Ids whose update the service answers with { success: false }. */
+const failingUpdates = new Set<string>();
 
 vi.mock("./client", () => ({
   fetchAll: async (label: string, _page: unknown, options: unknown) => {
@@ -70,6 +72,7 @@ function service(table: string, idColumn: string) {
       return { success: true, data: { [idColumn]: id } };
     },
     update: async (id: string, fields: Record<string, unknown>) => {
+      if (failingUpdates.has(id)) return { success: false, error: new Error("refused") };
       writes.push({ op: "update", table, id, fields });
       return { success: true, data: {} };
     },
@@ -122,8 +125,9 @@ vi.mock("@/generated/services/Vsb_countryinflationprofilesService", () => ({
 }));
 
 const {
-  addStandardContract, deletePeriod, nextLandLeaseSlot, savePeriod,
+  addStandardContract, deletePeriod, nextLandLeaseSlot, opexStandardName, savePeriod,
 } = await import("./periodWrites");
+const { standardCostName } = await import("@/features/cost/periods/opexRules");
 const { mapOpexRow, mapLandLeasePeriodRow } = await import("./costBook");
 const { loadLeaseBook } = await import("./landLease");
 
@@ -225,6 +229,7 @@ beforeEach(() => {
   rowsByLabel = {};
   queriedBy = {};
   writes = [];
+  failingUpdates.clear();
   for (const key of Object.keys(NEW_ID)) delete NEW_ID[key];
 });
 
@@ -280,7 +285,7 @@ describe("saveOpexPeriod", () => {
     expect(saved.periodIndex).toBe(3);
   });
 
-  it("UT-PWRITE-003 cascades the ten contract-level fields from a head onto every period", async () => {
+  it("UT-PWRITE-003 cascades the eleven contract-level fields from a head onto every period", async () => {
     /*
      * `OpexCostScreenCode.txt:8695` — after the head's own Patch,
      * `ForAll(Filter(costs, 'Parent Cost' = saved), Patch(child, {Use Inflation Profile, Use
@@ -312,6 +317,8 @@ describe("saveOpexPeriod", () => {
         vsb_threshold: false,
         vsb_thresholdindividual: null,
         vsb_thresholdtype: null,
+        // Edited canvas: the saved row's flag is copied too (eleven fields).
+        vsb_isstartdatestandardassumption: false,
         vsb_alignwithprojectduration: false,
         vsb_externalcontract: true,
       });
@@ -355,6 +362,109 @@ describe("saveOpexPeriod", () => {
     expect(on.vsb_eurmwh).toBe(33);
   });
 
+  it("UT-PWRITE-040 composes Name from the RAW description, adds Time Zone 4 and never writes Is Standard Contract", async () => {
+    // FT-BR-OPEX-073 (run 3): `Name: … & txt_Description.Value` (raw), `Description: Trim(…)`,
+    // `'Time Zone Rule Version Number': 4`, and no `'Is Standard Contract?'` in the Patch.
+    NEW_ID.opex = ["9d3168e6-2b7c-ef11-ac20-6045bda08851"];
+    await savePeriod(
+      CTX, { ...OM_PERIOD, description: "Initialized O&M Contract", rawDescription: "Initialized O&M Contract " },
+      true,
+    );
+    const f = fieldsOf(created("opex"));
+    expect(f.vsb_name).toBe("Operation & Maintenance-WTG-1630-Initialized O&M Contract ");
+    expect(f.vsb_description).toBe("Initialized O&M Contract");
+    expect(f.timezoneruleversionnumber).toBe(4);
+    expect(f).not.toHaveProperty("vsb_isstandardcontract");
+    // The cascade stays ten columns.
+    expect(Object.keys(f)).toContain("vsb_isstartdatestandardassumption");
+  });
+
+  it("UT-PWRITE-043 keeps the reset Threshold Type and Individual value when the toggle is off", async () => {
+    // FT-BR-OPEX-079 (run 3): `'Threshold Type': rdg.Selected.Value`, `'Threshold individual':
+    // Value(txt.Value)` are written whatever `Threshold` says.
+    await savePeriod(
+      CTX,
+      { ...OM_PERIOD, id: QUELLENDORF, threshold: false, thresholdType: 952850002, thresholdIndividual: 12.5 },
+      false,
+    );
+    const f = fieldsOf(writes.find((w) => w.op === "update" && w.table === "opex"));
+    expect(f.vsb_threshold).toBe(false);
+    expect(f.vsb_thresholdtype).toBe(952850002);
+    expect(f.vsb_thresholdindividual).toBe(12.5);
+  });
+
+  /* ── Edited canvas (6 Nov 2026): the Save re-chains the periods that follow ── */
+
+  const HEAD_ID = "9d3168e6-2b7c-ef11-ac20-6045bda08851";
+  const chainPeriod = (id: string, startDate: string, years: number, parentId?: string): CostPeriod =>
+    ({ ...OM_PERIOD, id, startDate, years, months: 0, parentId, contractId: HEAD_ID });
+  const book = [
+    chainPeriod(HEAD_ID, "2027-01-01", 1),
+    chainPeriod("p2", "2028-01-01", 1, HEAD_ID),
+    chainPeriod("p3", "2029-01-01", 1, HEAD_ID),
+  ];
+
+  it("UT-PWRITE-044 an edited start date or duration re-chains the following periods, one PATCH each", async () => {
+    const warnings: string[] = [];
+    const before = book[0]!;
+    await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: book, warnings });
+    const moves = writes.filter((w) => w.op === "update" && (w.id === "p2" || w.id === "p3"));
+    expect(moves.map((w) => [w.id, w.fields])).toEqual([
+      ["p2", { vsb_startdate: "2029-01-01" }],
+      ["p3", { vsb_startdate: "2030-01-01" }],
+    ]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("UT-PWRITE-045 no re-chain on an Add, an unchanged start/duration, or without the screen's extras", async () => {
+    const before = book[0]!;
+    await savePeriod(CTX, { ...before, fixed: 1 }, false, { before, bookPeriods: book });
+    expect(writes.filter((w) => w.id === "p2" || w.id === "p3")).toEqual([]);
+    await savePeriod(CTX, { ...before, years: 2 }, false);
+    expect(writes.filter((w) => w.id === "p2" || w.id === "p3")).toEqual([]);
+    NEW_ID.opex = ["7db92415-8111-e7ee-bd6c-032eeb14100b"];
+    await savePeriod(CTX, { ...book[2]!, id: "new", years: 3, parentId: HEAD_ID }, true,
+      { before: null, bookPeriods: book });
+    expect(writes.filter((w) => w.id === "p2" || w.id === "p3")).toEqual([]);
+  });
+
+  it("UT-PWRITE-046 a failed re-chain PATCH is reported as the canvas' Notify text and the save goes on", async () => {
+    const warnings: string[] = [];
+    const before = book[0]!;
+    failingUpdates.add("p2");
+    const saved = await savePeriod(CTX, { ...before, years: 2 }, false, { before, bookPeriods: book, warnings });
+    expect(saved.id).toBe(HEAD_ID);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^Error: the start dates of the following periods could not be updated\. Internal error: originated on Save\. Message: /,
+    );
+    // The other period is still moved.
+    expect(writes.some((w) => w.id === "p3" && w.fields?.vsb_startdate === "2030-01-01")).toBe(true);
+  });
+
+  it("UT-PWRITE-047 a failed child cascade is reported and the save continues; without a sink it still throws", async () => {
+    rowsByLabel["list OPEX chain children"] = [{ vsb_opexprojectcostid: "child-a", vsb_name: "…- 2" }];
+    failingUpdates.add("child-a");
+    const warnings: string[] = [];
+    await savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID }, false, { before: null, bookPeriods: [], warnings });
+    expect(warnings[0]).toMatch(/^Error: the child periods could not be updated\. Internal error: originated on Save\. Message: /);
+    await expect(savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID }, false)).rejects.toThrow(/child periods could not be updated/);
+  });
+  it("UT-PWRITE-048 a Blank Start Date flag stays Blank on the row and on the cascade, never false", async () => {
+    // Canvas Save: `IsStartDateStandardAssumption: Coalesce(parent flag, locIsStartDateStandardAssumption)`;
+    // for a root whose stored flag is Blank both are Blank, and the cascade copies the saved row's value.
+    rowsByLabel["list OPEX chain children"] = [{ vsb_opexprojectcostid: "child-a", vsb_name: "x- 2" }];
+    await savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID, isStartDateStandard: null }, false);
+    const upd = writes.filter((w) => w.op === "update" && w.table === "opex");
+    expect(fieldsOf(upd[0])).toHaveProperty("vsb_isstartdatestandardassumption", null);
+    const cascade = writes.find((w) => w.op === "update" && w.id === "child-a");
+    expect(fieldsOf(cascade)).toHaveProperty("vsb_isstartdatestandardassumption", null);
+    // An explicit No and Yes are still written as they are.
+    writes = [];
+    await savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID, isStartDateStandard: false }, false);
+    expect(fieldsOf(writes.find((w) => w.op === "update" && w.table === "opex")))
+      .toHaveProperty("vsb_isstartdatestandardassumption", false);
+  });
   it("UT-PWRITE-023 defaults the threshold type to Individual only when the panel sent none", async () => {
     // 952850002 "Individual", measured in `stringmap` on 16 Sep — the value all 8 live rows hold.
     await savePeriod(
@@ -775,6 +885,59 @@ describe("addStandardContract", () => {
     ];
     await expect(addStandardContract(CTX, ARGS)).rejects.toThrow(/already has a standard contract/);
     expect(writes).toEqual([]);
+  });
+
+  it("UT-PWRITE-041 writes the canvas import's Name, COD year + 1, area and Blank profile on a no-inflation assumption", async () => {
+    // FT-BR-OPEX-089 / 091 (run 3). `Name: "Operation & Maintenance" & "-" & locSelectedSubaccount.Name
+    // & "-" & StandardAssumptionContract.Description` — no device name, RAW description; inflation
+    // start year and area on every row; threshold copied whatever the toggle says.
+    rowsByLabel["check for an existing OPEX standard contract"] = [];
+    rowsByLabel["list OPEX / Land Lease standard assumptions"] = [
+      assumption(1, {
+        vsb_description: "Standard O&M ",
+        vsb_useinflationprofile: false,
+        vsb_inflationprofile: 5,
+        vsb_inflationcountryarea: "North",
+        vsb_threshold: false,
+        vsb_thresholdtype: 952850001,
+        vsb_thresholdindividual: 12.5,
+      }),
+    ];
+    NEW_ID.opex = ["9d3168e6-2b7c-ef11-ac20-6045bda08851"];
+
+    await addStandardContract(CTX, ARGS);
+    const f = fieldsOf(created("opex"));
+    expect(f.vsb_name).toBe("Operation & Maintenance-Operation & Maintenance-Standard O&M ");
+    expect(f.vsb_name).toBe(standardCostName("om", "Operation & Maintenance", "Standard O&M "));
+    expect(opexStandardName("other", "Insurance", "Standard X"))
+      .toBe(standardCostName("other", "Insurance", "Standard X"));
+    expect(f.vsb_description).toBe("Standard O&M");
+    expect(f.vsb_inflationstartyear).toBe(2028);
+    expect(f.vsb_inflationcountryarea).toBe("North");
+    expect(f.vsb_inflationprofile).toBeNull();
+    expect(f.vsb_thresholdtype).toBe(952850001);
+    expect(f.vsb_thresholdindividual).toBe(12.5);
+    expect(f).not.toHaveProperty("timezoneruleversionnumber");
+  });
+
+  it("UT-PWRITE-042 creates one contract per Period-1 assumption and parents the later periods on the first", async () => {
+    rowsByLabel["check for an existing OPEX standard contract"] = [];
+    rowsByLabel["list OPEX / Land Lease standard assumptions"] = [
+      assumption(1, { vsb_description: "Standard A" }),
+      assumption(1, { vsb_description: "Standard B" }),
+      assumption(2, { vsb_description: "Standard A - 2" }),
+    ];
+    // Description order (the canvas `Sort(…, Description)`): A, A - 2, B.
+    NEW_ID.opex = ["head-a", "p2", "head-b"];
+
+    const seeded = await addStandardContract(CTX, ARGS);
+    expect(seeded).toHaveLength(3);
+    const creates = writes.filter((w) => w.op === "create" && w.table === "opex");
+    expect(fieldsOf(creates[0])).not.toHaveProperty("vsb_ParentCost@odata.bind");
+    expect(fieldsOf(creates[2])).not.toHaveProperty("vsb_ParentCost@odata.bind");
+    expect(fieldsOf(creates[1])["vsb_ParentCost@odata.bind"]).toBe("/vsb_opexprojectcosts(head-a)");
+    // Period 2 starts when the FIRST contract ends.
+    expect(seeded[1]?.startDate).toBe("2032-03-24");
   });
 
   it("UT-PWRITE-019 seeds a Land Lease contract as one header plus Period1..N", async () => {

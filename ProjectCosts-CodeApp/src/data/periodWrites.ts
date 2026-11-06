@@ -61,6 +61,8 @@ import { Vsb_landleaseallocationwtgsService } from "@/generated/services/Vsb_lan
 import { Vsb_opexlandleasestandardassumptionsesService } from "@/generated/services/Vsb_opexlandleasestandardassumptionsesService";
 import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import { unwrap } from "@/platform/errors";
+import { loggedCall } from "@/platform/requestLog";
+import { OPEX_MSG, planFollowingPeriodStarts, type ChainPeriod } from "@/features/cost/periods/opexRules";
 import type { CostPeriod, PeriodMode } from "@/features/cost/costing/model";
 import { deleteRecord, fetchAll } from "./client";
 import { ES, ES_PLANT } from "./dataverseNames";
@@ -109,6 +111,23 @@ function numberOfOption(value: unknown): number | undefined {
  * `.'Opex Other'` (`OpexCostScreenCode.txt:656`, `:3044`; `LandLeaseCostScreenCode.txt:388`).
  */
 const CONTRACT_TYPE = { land: 952850000, om: 952850001, other: 952850002 } as const;
+
+/** `'Time Zone Rule Version Number': 4` in the OPEX Save Patch (`Opex Costs Screen.pa.yaml:8703`). */
+export const OPEX_TIME_ZONE_RULE_VERSION_NUMBER = 4;
+
+/**
+ * `Name` of a standard-imported OPEX row: `"Operation & Maintenance" & "-" & locSelectedSubaccount.Name
+ * & "-" & Description` (`:3088`, `:3227`) and `"Other OPEX Costs" & "-" & subaccount.Name & "-" &
+ * Description` (`:697`, `:839`), with the RAW assumption description. Pinned equal to
+ * `standardCostName` (opexRules) by UT-PWRITE-OPEX-NAME.
+ */
+export function opexStandardName(
+  mode: "om" | "other",
+  subaccountName: string,
+  rawDescription: string,
+): string {
+  return `${OPEX_MODE_NAME[mode]}-${subaccountName}-${rawDescription}`;
+}
 
 /** `vsb_opexlandleasestandardassumptionsesvsb_period` — Period1 is the chain head. */
 const ASSUMPTION_PERIOD_1 = 952850000;
@@ -285,6 +304,8 @@ function cascadeFields(fields: Record<string, unknown>): Record<string, unknown>
     vsb_threshold: fields.vsb_threshold,
     vsb_thresholdindividual: fields.vsb_thresholdindividual,
     vsb_thresholdtype: fields.vsb_thresholdtype,
+    // Edited canvas: `IsStartDateStandardAssumption: locSelectedOpexCost.IsStartDateStandardAssumption`.
+    vsb_isstartdatestandardassumption: fields.vsb_isstartdatestandardassumption,
     vsb_alignwithprojectduration: fields.vsb_alignwithprojectduration,
     vsb_externalcontract: fields.vsb_externalcontract,
   };
@@ -312,7 +333,8 @@ function opexFields(
   currencyId: string | undefined,
 ): Record<string, unknown> {
   return {
-    vsb_name: opexRowName(target, period.description.trim()),
+    // The canvas interpolates the RAW text into `Name` and trims only `Description` (`:8695`).
+    vsb_name: opexRowName(target, period.rawDescription ?? period.description.trim()),
     vsb_description: period.description.trim(),
     vsb_startdate: period.startDate,
     vsb_opexprojectdurationyears: period.years,
@@ -338,9 +360,13 @@ function opexFields(
     // — which is what this did — would have overwritten the stored threshold on all 8 live rows
     // that carry one: measured 16 Sep, every one of them has `vsb_thresholdindividual` 222.00
     // against a `vsb_eurmwh` of 33.00 or 990.00.
-    vsb_thresholdtype: period.threshold
-      ? (period.thresholdType ?? THRESHOLD_TYPE_INDIVIDUAL) : null,
-    vsb_thresholdindividual: period.threshold ? money(period.thresholdIndividual) : null,
+    //
+    // Run 3 (FT-BR-OPEX-079): the canvas writes `rdg.Selected.Value` and
+    // `Value(txt_Individual.Value)` whatever the toggle says (`:8703`), so a row saved with the
+    // toggle off keeps the type and the Individual figure the (reset) controls held.
+    vsb_thresholdtype: period.thresholdType
+      ?? (period.threshold ? THRESHOLD_TYPE_INDIVIDUAL : null),
+    vsb_thresholdindividual: money(period.thresholdIndividual),
     vsb_useinflationprofile: period.inflation,
     vsb_usecountryinflationprofile: period.countryInflation,
     /*
@@ -363,23 +389,50 @@ function opexFields(
       period.countryInflation ? (period.inflationCountryArea ?? "") || null : null,
     vsb_alignwithprojectduration: period.align,
     vsb_externalcontract: period.external,
-    vsb_isstandardcontract: period.standard,
-    vsb_isstartdatestandardassumption: period.isStartDateStandard === true,
+    // Never part of a hand-saved Patch (`:8703`); only the standard import sets it.
+    ...(period.standard ? { vsb_isstandardcontract: true } : {}),
+    // Blank stays Blank: `Coalesce(parent flag, locIsStartDateStandardAssumption)` of a root whose
+    // stored flag is Blank is Blank, so null is written and cascaded, never false (UT-PWRITE-048).
+    vsb_isstartdatestandardassumption: period.isStartDateStandard ?? null,
     ...(currencyId ? { "vsb_Currency@odata.bind": bind("transactioncurrencies", currencyId) } : {}),
   };
 }
+
+/**
+ * What the OPEX Save needs from the screen beyond the row itself (all optional, additive).
+ *
+ * The canvas remembers `locWasExisting` / `locPrevStartDate` / `locPrevDurationMonths` before the
+ * Patch and orders the chain from `colOpexProjectCosts` as loaded BEFORE the save; `before` and
+ * `bookPeriods` carry exactly those. `warnings` receives the two non-fatal `Notify` texts (the
+ * canvas shows them and carries on), so the caller can show them without failing the save.
+ */
+export interface OpexSaveExtras {
+  /** The period as it was before this save, or null for an Add. */
+  before: CostPeriod | null;
+  /** Every period of the book as loaded before the save. */
+  bookPeriods: readonly CostPeriod[];
+  warnings?: string[];
+}
+
+const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 export async function saveOpexPeriod(
   ctx: PeriodWriteContext,
   period: CostPeriod,
   isNew: boolean,
+  extras?: OpexSaveExtras,
 ): Promise<CostPeriod> {
   const mode = period.mode as "om" | "other";
   const [currencyId, target] = await Promise.all([
     resolveCurrencyId(period.currency),
     resolveOpexGroupTarget(ctx.projectId, mode, period.group, period.deviceId),
   ]);
-  const fields = opexFields(period, target, currencyId);
+  // `'Time Zone Rule Version Number': 4` is in every hand-saved Patch (`:8703`); the standard
+  // import does not set it. Not part of `cascadeFields`, which copies ten named columns only.
+  const fields = {
+    ...opexFields(period, target, currencyId),
+    timezoneruleversionnumber: OPEX_TIME_ZONE_RULE_VERSION_NUMBER,
+  };
 
   // The canvas re-binds Subaccount and DeviceTypeInProject on every save, not only on create
   // (`:8695` patches them unconditionally). That is what lets a period follow its group when the
@@ -422,11 +475,56 @@ export async function saveOpexPeriod(
   // filter simply returns nothing, because the chain is a star and only heads have children.
   const children = await childrenOfChain(savedId);
   const cascade = cascadeFields(fields);
+  // The canvas wraps the ForAll in `IfError(…, Notify("Error: the child periods could not be
+  // updated. …"); Blank())`: every child is tried, the first failure is shown, the save goes on.
+  let childFailure: string | null = null;
   for (const child of children) {
-    unwrap(
-      await Vsb_opexprojectcostsService.update(child.id, cascade as never),
-      "cascade OPEX inflation to a child period",
-    );
+    try {
+      unwrap(
+        await Vsb_opexprojectcostsService.update(child.id, cascade as never),
+        "cascade OPEX inflation to a child period",
+      );
+    } catch (e) {
+      childFailure ??= messageOf(e);
+    }
+  }
+  if (childFailure !== null) {
+    extras?.warnings?.push(OPEX_MSG.childPeriodsFailed("Save", childFailure));
+    if (!extras?.warnings) throw new Error(OPEX_MSG.childPeriodsFailed("Save", childFailure));
+  }
+
+  // Edited canvas: when an EXISTING period's Start Date or total months changed, re-chain the
+  // periods that follow it (`planFollowingPeriodStarts`), one PATCH per period.
+  if (extras && !isNew && extras.before) {
+    const rootId = period.parentId ?? savedId;
+    const inChain = (p: CostPeriod) => p.id === rootId || p.parentId === rootId;
+    const toChain = (p: CostPeriod): ChainPeriod => ({
+      id: p.id, startDate: p.startDate || null, durationYears: p.years, durationMonths: p.months,
+    });
+    const plan = planFollowingPeriodStarts({
+      chain: extras.bookPeriods.filter(inChain).map(toChain),
+      saved: toChain({ ...period, id: savedId }),
+      previous: toChain(extras.before),
+    });
+    let rechainFailure: string | null = null;
+    for (const step of plan) {
+      try {
+        await loggedCall(
+          "update", `${ES_PLANT.opexProjectCosts} (re-chain start date)`,
+          async () => unwrap(
+            await Vsb_opexprojectcostsService.update(step.id, { vsb_startdate: step.startDate } as never),
+            "re-chain a following OPEX period",
+          ),
+          () => 1,
+        );
+      } catch (e) {
+        rechainFailure ??= messageOf(e);
+      }
+    }
+    if (rechainFailure !== null) {
+      extras.warnings?.push(OPEX_MSG.followingPeriodsFailed("Save", rechainFailure));
+      if (!extras.warnings) throw new Error(OPEX_MSG.followingPeriodsFailed("Save", rechainFailure));
+    }
   }
 
   // Where the saved row now sits in its chain, read back rather than assumed: the slot depends on
@@ -1045,20 +1143,42 @@ async function addOpexStandardContract(
     throw new Error(`No standard assumptions are configured for "${args.group}".`);
   }
 
+  /*
+   * Run 3 (FT-BR-OPEX-089/091): the canvas makes ONE contract per Period-1 assumption
+   * (`ForAll(recStandardAssumptionContracts, …)`, `:3066-3077`), then every later period is
+   * parented on the FIRST contract (`LookUp(colContract, …)`, `:3169-3175`). Period 2 starts when
+   * that contract ends; a later period starts when the last period created so far ends (sorted by
+   * Description for O&M, `:3189-3215`; by Period for Other OPEX, `:801-827`).
+   */
   const out: CostPeriod[] = [];
-  let headId: string | undefined;
-  let startDate = args.codDate;
+  const heads: CostPeriod[] = [];
+  const later: { period: CostPeriod; order: number }[] = [];
+  const codYear = new Date(`${args.codDate}T12:00:00`).getFullYear() + 1;
 
   for (const a of assumptions) {
     const isFirst = Number(a.vsb_period ?? ASSUMPTION_PERIOD_1) === ASSUMPTION_PERIOD_1;
-    if (isFirst && headId) break; // a second Period-1 row is a second contract; one per press.
+    const headId = isFirst ? undefined : heads[0]?.id;
     if (!isFirst && !headId) continue; // a chain with no head is not one this command can seed.
-    const previous = out[out.length - 1];
-    if (!isFirst && previous) {
-      startDate = addMonths(previous.startDate, previous.years * 12 + previous.months);
+    let startDate = args.codDate;
+    if (!isFirst) {
+      const periodNo = Number(a.vsb_period ?? 0) - ASSUMPTION_PERIOD_1;
+      const sorted = [...later].sort((x, y) => mode === "om"
+        ? x.period.description.localeCompare(y.period.description)
+        : x.order - y.order);
+      const previous = periodNo === 1 || sorted.length === 0
+        ? heads[0] : sorted[sorted.length - 1]?.period;
+      if (previous) startDate = addMonths(previous.startDate, previous.years * 12 + previous.months);
     }
 
-    const description = (a.vsb_description ?? "").trim();
+    const rawDescription = a.vsb_description ?? "";
+    const description = rawDescription.trim();
+    // `Switch(true, inflation && country → LookUp(...).Inflation, inflation && !country →
+    // assumption's profile, Blank())` — Blank (null), not 0, when nothing matches.
+    const profile = a.vsb_useinflationprofile !== true
+      ? null
+      : a.vsb_usecountryinflationprofile === true
+        ? args.countryInflationPercent ?? null
+        : a.vsb_inflationprofile ?? null;
     const period: CostPeriod = {
       id: "",
       group: args.group,
@@ -1079,16 +1199,15 @@ async function addOpexStandardContract(
       inflation: a.vsb_useinflationprofile === true,
       countryInflation: a.vsb_usecountryinflationprofile === true,
       // `'Inflation Start Year': recCODYear` — COD year + 1, on every seeded row.
-      inflationYear: new Date(`${args.codDate}T12:00:00`).getFullYear() + 1,
-      inflationPercent: assumptionInflation(a, args.countryInflationPercent),
+      inflationYear: codYear,
+      inflationPercent: profile ?? 0,
       inflationCountryArea: a.vsb_inflationcountryarea ?? "",
       threshold: a.vsb_threshold === true,
       // `'Threshold Type': StandardAssumptionContractRecord.'Threshold Type'` and
-      // `'Threshold individual': …'Threshold Individual'` (`:702-703`) — the assumption's own,
-      // which `opexFields` now writes straight through.
-      thresholdType: a.vsb_threshold === true
-        ? (numberOfOption(a.vsb_thresholdtype) ?? THRESHOLD_TYPE_INDIVIDUAL) : undefined,
-      thresholdIndividual: a.vsb_threshold === true ? money(a.vsb_thresholdindividual) : null,
+      // `'Threshold individual': …'Threshold Individual'` (`:702-703`, `:3101-3102`) — copied from
+      // the assumption whatever its Threshold toggle says.
+      thresholdType: numberOfOption(a.vsb_thresholdtype),
+      thresholdIndividual: money(a.vsb_thresholdindividual),
       align: a.vsb_alignwithprojectduration === true,
       external: a.vsb_externalcontract === true,
       standard: true,
@@ -1101,6 +1220,14 @@ async function addOpexStandardContract(
         // The assumption's own threshold type and individual value ride on the period and are
         // written by `opexFields`, so there is no longer a second, overriding copy here.
         ...opexFields(period, target, a._vsb_currency_value),
+        // What the canvas import writes that the hand-save fields do not (run 3):
+        // the raw description in `Name` with the account display name (no device name), the
+        // profile as Blank when nothing resolves, COD year + 1 and the assumption's area on
+        // every row whatever the toggles say. No `Time Zone Rule Version Number`.
+        vsb_name: opexStandardName(mode, target.subaccountName, rawDescription),
+        vsb_inflationprofile: profile,
+        vsb_inflationstartyear: codYear,
+        vsb_inflationcountryarea: a.vsb_inflationcountryarea || null,
         "vsb_Project@odata.bind": bind("vsb_projects", ctx.projectId),
         "vsb_Subaccount@odata.bind": bind("vsb_opexsubaccounts", target.subaccountId),
         ...(target.deviceTypeInProjectId
@@ -1114,14 +1241,16 @@ async function addOpexStandardContract(
     );
 
     const id = created.vsb_opexprojectcostid;
-    if (!headId) headId = id;
-    out.push({
+    const saved: CostPeriod = {
       ...period,
       id,
-      contractId: headId,
-      contractName: out[0]?.description ?? description,
-      periodIndex: out.length + 1,
-    });
+      contractId: headId ?? id,
+      contractName: heads[0]?.description ?? description,
+      periodIndex: isFirst ? 1 : later.length + 2,
+    };
+    if (isFirst) heads.push(saved);
+    else later.push({ period: saved, order: Number(a.vsb_period ?? 0) });
+    out.push(saved);
   }
   return out;
 }
@@ -1265,10 +1394,11 @@ export async function savePeriod(
   ctx: PeriodWriteContext,
   period: CostPeriod,
   isNew: boolean,
+  extras?: OpexSaveExtras,
 ): Promise<CostPeriod> {
   return period.mode === "land"
     ? saveLandLeasePeriod(ctx, period, isNew)
-    : saveOpexPeriod(ctx, period, isNew);
+    : saveOpexPeriod(ctx, period, isNew, extras);
 }
 
 export async function deletePeriod(period: CostPeriod): Promise<void> {

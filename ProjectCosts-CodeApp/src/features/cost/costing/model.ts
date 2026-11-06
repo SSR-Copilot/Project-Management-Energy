@@ -120,6 +120,11 @@ export interface CostPeriod {
    */
   name?: string;
   /**
+   * OPEX only, on a write: the Description exactly as typed (untrimmed). The canvas composes
+   * `vsb_name` from the raw text and stores `Trim(…)` in `vsb_description` (`:8695`).
+   */
+  rawDescription?: string;
+  /**
    * O&M only: the `vsb_devicetypesinproject` row the period belongs to. `group` is that device's
    * `vsb_name`, which is NOT unique — a project can hold two devices of the same name — so cards,
    * row filtering and saves key on this id, as the canvas' `DeviceTypeInProject = ThisItem` does.
@@ -230,7 +235,7 @@ export interface CostPeriod {
    * The canvas coalesces the PARENT's value over the panel's on every save
    * (`OpexCostScreenCode.txt:8695`), so a period added to a seeded chain inherits it.
    */
-  isStartDateStandard?: boolean;
+  isStartDateStandard?: boolean | null;
   /**
    * `vsb_secured` on the Land Lease header — the `Secured` column.
    *

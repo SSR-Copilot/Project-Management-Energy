@@ -31,7 +31,7 @@
  *   `Cost App - Other opex -  Tab selected.png`
  *   `Cost App - Add & Edit ContractPeriod Panel - Almost same for Landlease and other Opex also.png`
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button, Dropdown, Input, Option, Switch, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
@@ -55,17 +55,17 @@ import {
   DELETE_DIALOG, DURATION_BADGE_TEXT, DURATION_MONTH_OPTIONS, DURATION_YEAR_OPTIONS,
   OPEX_AGGREGATION, OPEX_AGGREGATION_LABEL, OPEX_COMMAND_ICONS, OPEX_COMMAND_LABELS,
   OPEX_DISTRIBUTION_FREQUENCY, OPEX_MODE_NAMES, OPEX_MSG, OPEX_PANEL_LABELS, THRESHOLD_TYPE,
-  addPeriodRecordType, alignWithProjectDurationDefault, areaFieldVisible, areaFieldVisibleIntended,
-  areaWithRegion, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
+  addPeriodRecordType, alignWithProjectDurationDefault, areaFieldVisible,
+  areaWithRegion, formatOneDecimalText, formatTwoDecimalsText, panelDeviceLabel, canSaveOpexCost, chainHead, chainLastPeriod, childrenOf, costName, costsInScope,
   countryInflationPercent, defaultCurrencyCode,
   defaultSubaccount, deleteDialogTextCanvasParity, deviceTypeList, durationBadge, externalContractDefault,
   inflationProfileCountryText, inflationProfileDefault, inflationStartYearDefault,
   inheritStartDateStandard, italyZone, matchesStandardAssumption, nextPeriodDescriptionPanel,
   guardOpexCommands, omDurationBadge, opexColumns, opexCommands,
   opexFormErrors, panelFieldModes, panelRateLabel, panelRequiredMarkers, panelTitle, planDeleteCost,
-  resetStartDateFlag, resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
+  resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
   showEurPerWtgField, showThresholdColumn, standardAssumptionFilter, startDateDefault,
-  startDateStandardFlagAfterManualChange,
+  startDateFlagAfterPick, startDateFlagOnOpen, planFollowingPeriodStarts,
   subaccountsForMode, thresholdToggleLabel, toOpexRow, toggleRowSelection, visibleCommands,
   type CountryInflationProfile, type FieldMode, type OpexCommandKey, type OpexCost, type OpexForm,
   type OpexMode, type OpexProjectContext, type OpexSubaccount, type PanelContext,
@@ -475,7 +475,7 @@ interface PanelState {
   /** `locCODDate` — the project's COD, except on Edit where `:954` / `:3422` set it to the row. */
   codDate: string | null;
   /** `locIsStartDateStandardAssumption`. */
-  startDateStandard: boolean;
+  startDateStandard: boolean | null;
   /** The book row behind `selected`, so an Edit hands `contractId`/`parentId`/`periodIndex` back. */
   period: CostPeriod | null;
 }
@@ -554,8 +554,10 @@ function toOpexCost(
     aggregation: AGGREGATION_VALUE_OF[period.aggregation],
     distributionFrequency: period.frequency,
     threshold: period.threshold,
-    thresholdType: period.threshold ? period.thresholdType ?? THRESHOLD_TYPE.individual : null,
-    thresholdIndividual: period.threshold ? period.thresholdIndividual ?? null : null,
+    // Stored values are passed through whatever the toggle says: the canvas radio and Individual
+    // box default to them (`:8226-8230`, `:8298-8308`), and a row saved with the toggle off keeps them.
+    thresholdType: period.thresholdType ?? (period.threshold ? THRESHOLD_TYPE.individual : null),
+    thresholdIndividual: period.thresholdIndividual ?? null,
     useInflationProfile: period.inflation,
     useCountryInflationProfile: period.countryInflation,
     inflationProfile: blankZero(period.inflationPercent),
@@ -564,7 +566,7 @@ function toOpexCost(
     alignWithProjectDuration: period.align,
     externalContract: period.external,
     isStandardContract: period.standard,
-    isStartDateStandardAssumption: period.isStartDateStandard === true,
+    isStartDateStandardAssumption: period.isStartDateStandard ?? null,
     createdOn: null,
   };
 }
@@ -584,6 +586,18 @@ const numberOrNull = (value: string): number | null => {
 
 const text = (value: number | null | undefined): string =>
   value === null || value === undefined ? "" : String(value);
+
+/**
+ * The Other OPEX fold state (`IsFolded` in `colOpexSubaccounts`, built once in `App.OnStart`,
+ * `:205`) survives leaving the screen; the O&M cards are rebuilt folded on every entry
+ * (`colDeviceTypesInProject`, `OnVisible:100,114`). Kept per project, outside the component.
+ */
+const otherFoldState = new Map<string, Record<string, boolean>>();
+
+/** Forgets the remembered Other OPEX fold state (the unit tests start every case folded). */
+export function resetOpexFoldState(): void {
+  otherFoldState.clear();
+}
 
 /**
  * Everything the panel opens with, seeded in the canvas' own order:
@@ -616,14 +630,11 @@ function seedForm(
     resetStartDate: panel.resetStartDate,
   }).date;
 
-  // `drp_…_Currency.DefaultSelectedItems` (`:6194-6205`) reads the COUNTRY only. The control is
-  // permanently Disabled, so a row saved in a third currency would silently be rewritten to EUR
-  // on the next edit; the row's own currency is preferred here and the country default is the
-  // fallback. Deliberate divergence — see the report.
-  const currencyId = selected?.currencyName
-    ?? parent?.currencyName
-    ?? CURRENCY_NAME_BY_CODE[defaultCurrencyCode(project.countryName)]
-    ?? "Euro";
+  // `drp_…_Currency.DefaultSelectedItems` (`:6288`) is `Switch(gblSelectedProject.Country.Name,
+  // "Poland", PLN, EUR)` and the control is permanently Disabled: on Add and on Edit alike the
+  // panel shows (and the save writes) the COUNTRY currency, never the row's or the parent's own.
+  // Run 3 (edited canvas) removed the earlier row-currency preference (UT-OPEXUI-048).
+  const currencyId = CURRENCY_NAME_BY_CODE[defaultCurrencyCode(project.countryName)] ?? "Euro";
 
   const useCountryInflationProfile = contractLevel?.useCountryInflationProfile ?? false;
   const inflationStartYear = inflationStartYearDefault({
@@ -647,25 +658,29 @@ function seedForm(
     currencyId,
     aggregation: selected?.aggregation ?? null,
     distributionFrequency: selected?.distributionFrequency ?? null,
-    fixCosts: text(selected?.fixCosts),
+    // `Text(x, "#0.00")` on Fix Costs and the three rates (`:6422`, `:6690`); Share of Revenues is
+    // `"#"` when whole, else `"#0.0#"`, which `String()` already reproduces.
+    fixCosts: formatTwoDecimalsText(selected?.fixCosts),
     percentOfRevenues: text(selected?.percentOfRevenues),
-    eurPerMwh: text(selected?.eurPerMwh),
-    eurPerMw: text(selected?.eurPerMw),
-    eurPerWtg: text(selected?.eurPerWtg),
+    eurPerMwh: formatTwoDecimalsText(selected?.eurPerMwh),
+    eurPerMw: formatTwoDecimalsText(selected?.eurPerMw),
+    eurPerWtg: formatTwoDecimalsText(selected?.eurPerWtg),
     thresholdOn: contractLevel?.threshold ?? false,
     thresholdType: contractLevel?.thresholdType ?? null,
     thresholdIndividual: text(contractLevel?.thresholdIndividual),
     inflationOn: contractLevel?.useInflationProfile ?? false,
     useCountryInflationProfile,
     inflationStartYear: text(inflationStartYear),
-    inflationProfile: text(inflationProfileDefault({
+    // `Text(x, "0.0")` (`:7811-7822`).
+    inflationProfile: formatOneDecimalText(inflationProfileDefault({
       selected,
       parent,
       useCountryInflationProfile,
       countryName: project.countryName,
       countryProfile,
     })),
-    inflationCountryArea: contractLevel?.inflationCountryArea ?? null,
+    // The hidden Area dropdown's `DefaultSelectedItems` is the project's own zone (`:7618-7628`).
+    inflationCountryArea: contractLevel?.inflationCountryArea || italyZone(areaRegion) || null,
     alignWithProjectDuration: alignWithProjectDurationDefault({ selected, parent }),
     externalContract: externalContractDefault({
       selected, parent, mode, subaccountOrder: panel.card.subaccount.order,
@@ -685,7 +700,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const { project, projectId } = useSession();
   // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
   // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
-  const { data: book, isLoading, error, save } = useCostBook();
+  const { data: book, isLoading: bookLoading, error, save } = useCostBook();
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
   /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
@@ -697,6 +712,13 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const catalog = useOpexCatalog();
   /** `colDeviceTypesInProject` — `[generators, pvModules]` for `deviceTypeList` to order. */
   const deviceTypes = useOpexDeviceTypes(projectId);
+  /**
+   * Run 3 (FT-BR-OPEX-011/095): the canvas fills `colOpexSubaccounts` and `colDeviceTypesInProject`
+   * in `OnVisible` before the screen draws (`LoadingSpinner =LoadingSpinner.Data`), so the empty
+   * text never shows from a half-loaded screen. Here that is the cost book, the catalogue and (O&M)
+   * the device-type query: all must have finished before any "no generators" text.
+   */
+  const isLoading = bookLoading || catalog.isLoading || (mode === "om" && deviceTypes.isLoading);
   /** `Country Inflation Profiles` for the project's country — every year, every Area. */
   const countryInflation = useCountryInflation(extras.data?.countryId);
   /** The catalogue behind `Add Standard Contract`, for the command's gate. */
@@ -704,7 +726,21 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     extras.data?.countryId, extras.data?.technology,
   );
 
-  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  // Every card starts folded (`IsFolded = true`, `OnVisible:100,114`). Other OPEX keeps its fold
+  // map for the session (`colOpexSubaccounts`); O&M starts folded on every entry.
+  const [openCards, setOpenCardsState] = useState<Record<string, boolean>>(
+    () => (mode === "other" ? otherFoldState.get(projectId ?? "") ?? {} : {}),
+  );
+  // Switching rail item without unmounting re-enters the screen: O&M refolds, Other restores.
+  useEffect(() => {
+    setOpenCardsState(mode === "other" ? otherFoldState.get(projectId ?? "") ?? {} : {});
+  }, [mode, projectId]);
+  const setOpenCards = (update: (prev: Record<string, boolean>) => Record<string, boolean>) =>
+    setOpenCardsState((prev) => {
+      const next = update(prev);
+      if (mode === "other") otherFoldState.set(projectId ?? "", next);
+      return next;
+    });
   const [selection, setSelection] = useState<RowSelection>(NO_SELECTION);
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [form, setForm] = useState<OpexForm | null>(null);
@@ -848,12 +884,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
     }));
   }, [book, mode, subaccount, account, catalog.subaccounts, deviceTypes.data, deviceIdOf]);
 
-  // The first card opens by default — that is what both reference screenshots show. `openCards`
-  // holds only what the user has since changed, so the default never fights a deliberate close.
-  const firstCardId = cards[0]?.id;
-  const isOpen = (id: string) => openCards[id] ?? id === firstCardId;
+  // Run 3 (FT-BR-OPEX-006/012): no card opens at load; `gal_….Selected.IsFolded` starts true.
+  const isOpen = (id: string) => openCards[id] ?? false;
   const toggleCard = (id: string) =>
-    setOpenCards((prev) => ({ ...prev, [id]: !(prev[id] ?? id === firstCardId) }));
+    setOpenCards((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }));
 
   const selectedCost = allCosts.find((c) => c.id === selection.selectedId) ?? null;
 
@@ -861,8 +895,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
 
   const openPanel = (next: PanelState) => {
     setForm(seedForm(next, projectContext, mode, countryInflation.data ?? [], areaRegion));
-    setPanel(next);
-    setBanner(null);
+    setPanel(next);    setBanner(null);
   };
 
   /**
@@ -884,7 +917,11 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       // `:588-606` — a brand-new cost type: no parent, no next, start at COD, flag cleared.
       openPanel({
         card, selected: null, parent: null, next: null, resetStartDate: true,
-        codDate: projectContext.codDate, startDateStandard: false, period: null,
+        // Edited canvas (:605): Add Contract Type starts with the flag Yes.
+        codDate: projectContext.codDate, period: null,
+        startDateStandard: startDateFlagOnOpen({
+          command: "addContractType", mode, selected: null, parent: null, codDate: projectContext.codDate,
+        }),
       });
       return;
     }
@@ -900,7 +937,11 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       const next = owns ? chainLastPeriod(cardCosts, selectedCost) : null;
       openPanel({
         card, selected: null, parent, next, resetStartDate: next === null,
-        codDate: projectContext.codDate, startDateStandard: false, period: null,
+        // Edited canvas (:637 / :3037): the flag comes from the chain head it follows.
+        codDate: projectContext.codDate, period: null,
+        startDateStandard: startDateFlagOnOpen({
+          command: "addPeriod", mode, selected: null, parent, codDate: projectContext.codDate,
+        }),
       });
       return;
     }
@@ -919,9 +960,10 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
         next: null,
         resetStartDate: false,
         codDate: selectedCost.startDate,
-        startDateStandard: selectedCost.parentCostId === null
-          ? selectedCost.isStartDateStandardAssumption
-          : false,
+        // Edited canvas (:948; O&M :3449 unchanged): a follow-on takes the parent-derived flag in Other OPEX.
+        startDateStandard: startDateFlagOnOpen({
+          command: "edit", mode, selected: selectedCost, parent, codDate: projectContext.codDate,
+        }),
         period: periodById.get(selectedCost.id) ?? null,
       });
       return;
@@ -958,22 +1000,35 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
           },
         ) ?? undefined,
       })
+        .then(() => {
+          // O&M only: the canvas rebuilds `colDeviceTypesInProject` with `IsFolded = true` and
+          // clears `locSelectedOpexCost` / `locSelectedDeviceTypeInProject` (`:3306-3312`,
+          // `:3340-3381`). The Other OPEX import does neither.
+          if (mode === "om") {
+            setOpenCards(() => ({}));
+            setSelection(NO_SELECTION);
+          }
+        })
         .catch((e: unknown) => reportFailure(e instanceof Error ? e.message : String(e), setBanner))
         .finally(() => setBusyLabel(null));
     }
   };
 
   /**
-   * `dte_…_StartDate.OnChange` (`:5823-5832`) — picking a date by hand also re-derives
-   * `locIsStartDateStandardAssumption` from the period this one FOLLOWS, not from the row being
-   * edited, and sets `locCODDate` to the chosen date (`:5838`).
+   * `dte_…_StartDate.OnChange` (edited canvas) — the flag becomes Yes (or the parent-derived value)
+   * only when the picked date equals `varDefaultStartDate` (root: project COD; follow-on while
+   * adding: end of the previous period; Edit of a follow-on: none), else No; `locCODDate` is the
+   * chosen date.
    */
   const onStartDate = (value: string) => {
     setForm((f) => (f ? { ...f, startDate: value } : f));
     setPanel((p) => (p ? {
       ...p,
       codDate: value,
-      startDateStandard: startDateStandardFlagAfterManualChange(p.next?.parentCostId),
+      startDateStandard: startDateFlagAfterPick({
+        picked: value === "" ? null : value, parent: p.parent, selected: p.selected, next: p.next,
+        codDate: p.codDate, projectCod: projectContext.codDate,
+      }),
     } : p));
   };
 
@@ -985,9 +1040,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       ...p,
       codDate: cod,
       resetStartDate: true,
-      startDateStandard: resetStartDateFlag({
-        selected: p.selected, parent: p.parent, next: p.next,
-      }),
+      // The icon only shows on a root period, so the canvas' guard always holds: flag Yes.
+      startDateStandard: true,
     } : p));
   };
 
@@ -1027,6 +1081,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       deviceId: card.deviceId,
       mode,
       description: form.description.trim(),
+      // `Name` takes the RAW text, `Description` the `Trim(…)` (`:8703`).
+      rawDescription: form.description,
       startDate: form.startDate ?? "",
       years: form.durationYears ?? 0,
       months: form.durationMonths ?? 0,
@@ -1045,12 +1101,12 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
       countryInflation: form.useCountryInflationProfile,
       inflationYear: inflationYear ?? 0,
       inflationPercent,
-      inflationCountryArea: form.inflationCountryArea ?? "",
+      inflationCountryArea: form.inflationCountryArea ?? italyZone(areaRegion) ?? "",
       threshold: form.thresholdOn,
       // `rdg_….Selected.Value` and `Value(txt_…_Threshold_Individual.Value)` — the panel's own
-      // two controls, not Individual-and-`vsb_eurmwh`.
-      thresholdType: form.thresholdOn ? form.thresholdType ?? undefined : undefined,
-      thresholdIndividual: form.thresholdOn ? numberOrNull(form.thresholdIndividual) : null,
+      // two controls, written whatever the toggle says (FT-BR-OPEX-079, run 3).
+      thresholdType: form.thresholdType ?? undefined,
+      thresholdIndividual: numberOrNull(form.thresholdIndividual),
       align: form.alignWithProjectDuration,
       external: form.externalContract,
       standard: period?.standard ?? false,
@@ -1079,19 +1135,33 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
      * saving. The failure branch is just `Notify(…)`: the panel is already gone by then, so the
      * error surfaces as the screen banner below, not inside a panel.
      */
-    setBusyLabel(cascades ? OPEX_MSG.updatingChildCosts : OPEX_MSG.savingCost);
+    // Edited canvas: an existing period whose Start Date or total months changed also re-chains the
+    // periods that follow it ("Updating start dates of the following periods..."), the last phase.
+    const rootId = selected?.parentCostId ?? selected?.id;
+    const rechains = selected !== null && planFollowingPeriodStarts({
+      chain: allCosts.filter((c) => c.id === rootId || c.parentCostId === rootId),
+      saved: { id: selected.id, startDate: saved.startDate || null, durationYears: saved.years, durationMonths: saved.months },
+      previous: selected,
+    }).length > 0;
+    setBusyLabel(rechains ? OPEX_MSG.updatingFollowingPeriods
+      : cascades ? OPEX_MSG.updatingChildCosts : OPEX_MSG.savingCost);
     setPanel(null);
     setForm(null);
     try {
-      await save.mutateAsync({
+      const result = await save.mutateAsync({
         ...book,
         periods: [...book.periods.filter((p) => p.id !== saved.id), saved],
       });
+      // The canvas' two non-fatal `Notify` texts (child cascade, re-chain): shown, save carries on.
+      for (const warning of result?.warnings ?? []) reportFailure(warning, setBanner);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       reportFailure(OPEX_MSG.saveFailed("Save", message), setBanner);
     } finally {
       setBusyLabel(null);
+      // The canvas ends every Save with `locSelectedOpexCost`, `locSelectedOpexCostParent` and
+      // `locSelectedDeviceTypeInProject` Blank (`:8703`): no row stays selected (FT-BR-OPEX-080).
+      setSelection(NO_SELECTION);
     }
   };
 
@@ -1132,7 +1202,12 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
 
   // `lbl_OpexCosts_Content_GeneratorsInProject_Instruction.Visible` (`:309`) — O&M with an empty
   // device gallery renders this and nothing else. Never while loading: no "no rows" text then.
-  if (!isLoading && mode === "om" && cards.length === 0) {
+  // `gal_…_GeneratorsInProject.AllItemsCount=0` counts `colDeviceTypesInProject` (the real device
+  // rows), not the cards: an orphan card (a cost whose device the project no longer lists, a
+  // code-app safety net the canvas lacks) does not keep the sentence away. A failed device query is
+  // not "no generators": it falls through to the normal render.
+  const noDevices = (deviceTypes.data?.[0]?.length ?? 0) + (deviceTypes.data?.[1]?.length ?? 0) === 0;
+  if (!isLoading && mode === "om" && !deviceTypes.isError && deviceTypes.data !== undefined && noDevices) {
     return (
       <div className={styles.page}>
         <Text className={styles.instruction}>{OPEX_MSG.noGenerators}</Text>
@@ -1215,12 +1290,20 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
           project={projectContext}
           areaRegion={areaRegion}
           areaOptions={areas.data ?? []}
+          countryRows={countryInflation.data ?? []}
           cardCosts={costsInScope(allCosts, mode, panel.card.id)}
           busy={save.isPending}
           onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
           onStartDate={onStartDate}
           onResetStartDate={onResetStartDate}
-          onCancel={() => { setPanel(null); setForm(null); }}
+          // `btn_…_X.OnSelect` (`:5495`) / `Cancel.OnChange` (`:8690`): `locSelectedDeviceTypeInProject:
+          // Blank()`. In O&M the Edit / Add Period / Delete gates need that variable to equal the row's
+          // device, so they go disabled until the row is clicked again: the selection SCOPE is
+          // cleared (the row stays). Other OPEX has no such variable and keeps its selection.
+          onCancel={() => {
+            setPanel(null); setForm(null);
+            if (mode === "om") setSelection((s) => ({ ...s, scopeId: null }));
+          }}
           onSave={() => { void commit(); }}
         />
       ) : null}
@@ -1324,6 +1407,10 @@ function OpexCardView({
         onClick={onToggle}
         aria-labelledby={`opex-card-title-${card.id}`}
         data-testid={`opex-card-${card.id}`}
+        // `lbl_…_SubaccountsCardHeader_SubaccountName_1.Tooltip: =ThisItem.Name` (`:4849`), the
+        // O&M gallery only: the device row's Name, while the title shows its turbine type / label.
+        // The Other OPEX header label carries no Tooltip.
+        title={mode === "om" ? card.group : undefined}
       >
         <Text className={styles.cardTitle} id={`opex-card-title-${card.id}`}>{card.title}</Text>
         {badge !== "none" ? (
@@ -1408,6 +1495,9 @@ function OpexCardView({
                         row.selected && styles.rowSelected,
                       )}
                       onClick={() => onSelectRow(cost)}
+                      // `btn_…_TransparentButton_1.Tooltip: =ThisItem.Description` (`:4668`), the
+                      // O&M row button, `Width: Parent.Width-Self.X`: the hover spans the row.
+                      title={mode === "om" ? row.cells.description : undefined}
                       aria-label="Select cost"
                       data-testid={mode === "om"
                         ? `btn_OpexCosts_Content_Subaccounts_CardBody_CostsTableRow_TransparentButton_1-${row.id}`
@@ -1434,11 +1524,18 @@ function OpexCardView({
                             styles.td,
                             c.numeric && styles.tdNumeric,
                             c.align === "right" && styles.alignRight,
-                            (c.key === "description" || c.key === "startDate") && styles.tdStrong,
+                            // Other OPEX: Description is bold on a chain root, normal on a period
+                            // (`:2084-2089`); Start Date and the O&M Description keep the
+                            // semibold the canvas formulas (`con_Costs_ProjectCostsInAccount`,
+                            // a control missing from this screen) cannot decide.
+                            (mode === "other" && c.key === "description"
+                              ? row.boldDescription
+                              : c.key === "description" || c.key === "startDate") && styles.tdStrong,
                             c.key === "durationMonths" && styles.tdOverhang,
                           )}
-                          // `Tooltip: =Self.Text` on the description, the one label that clips.
-                          title={c.key === "description" ? row.cells.description : undefined}
+                          // O&M only: `lbl_…_Description_1.Tooltip: =Self.Text` (`:4055`). The Other
+                          // OPEX `lbl_…_CostsTableRow_Description` (`:2083`) sets no Tooltip.
+                          title={mode === "om" && c.key === "description" ? row.cells.description : undefined}
                         >
                           {c.key === "durationMonths" ? (
                             <span className={styles.warnCell}>
@@ -1482,7 +1579,7 @@ function OpexCardView({
 /* ══════════════════════════════════════════════════════════════ the panel ══ */
 
 function OpexPanel({
-  mode, panel, form, project, areaRegion, areaOptions, cardCosts, busy,
+  mode, panel, form, project, areaRegion, areaOptions, countryRows, cardCosts, busy,
   onChange, onStartDate, onResetStartDate, onCancel, onSave,
 }: {
   mode: OpexMode;
@@ -1491,6 +1588,8 @@ function OpexPanel({
   project: OpexProjectContext;
   areaRegion: string | null;
   areaOptions: readonly string[];
+  /** `Country Inflation Profiles`, for the defaults a `Reset()` returns the inflation block to. */
+  countryRows: readonly CountryInflationProfile[];
   cardCosts: readonly OpexCost[];
   busy: boolean;
   onChange: (patch: Partial<OpexForm>) => void;
@@ -1509,7 +1608,8 @@ function OpexPanel({
     // `locSelectedAccount = First(colOpexAccounts)` is true exactly in O&M mode; the panel header
     // says "Cost Type" only when it is NOT (`:5430-5445`).
     isFirstAccount: mode === "om",
-    deviceLabel: card.title,
+    // Other OPEX: only Add Contract Type names the sub-account (`locSelectedDevice`, `:601`).
+    deviceLabel: panelDeviceLabel({ mode, selected, parent, cardTitle: card.title }),
     // `locSelectedRecordTypeAddPeriod = If(Left(ThisItem.Name, 3) = "WTG", …)` (`:2927-2934`)
     // keys off the DEVICE ROW's name, which is `card.group` — the header's turbine type would
     // never start with "WTG" and would hide `EUR/WTG` on every generator card.
@@ -1542,25 +1642,53 @@ function OpexPanel({
   };
 
   /**
-   * `con_…_AreaInflationProfile.Visible` is literally `false` (`:7576`) — defect O-2 — while the
-   * Save gate still demands an Area on an Italian project with both inflation toggles on
-   * (`:8672-8676`). Reproducing only the canvas answer makes Save permanently impossible there,
-   * so the commented-out INTENDED condition is ORed in. Deliberate divergence — see the report.
+   * `con_…_AreaInflationProfile.Visible` is literally `false` (`:7578-7584`) — defect O-2,
+   * reproduced (FT-BR-OPEX-065, run 3). Save is still possible on an Italian project because the
+   * hidden dropdown's default is the project's own zone, which `seedForm` puts in the form.
    */
-  const showArea = areaFieldVisible() || areaFieldVisibleIntended({
-    inflationOn: form.inflationOn,
-    useCountryInflationProfile: form.useCountryInflationProfile,
-    countryName: project.countryName,
-  });
+  const showArea = areaFieldVisible();
+  const defaultArea = italyZone(areaRegion);
+
+  /** `Reset()` of the stored-value controls: what the threshold block returns to. */
+  const storedThreshold = (() => {
+    const level = selected ?? parent;
+    return {
+      thresholdOn: level?.threshold ?? false,
+      thresholdType: level?.thresholdType ?? null,
+      thresholdIndividual: text(level?.thresholdIndividual),
+    };
+  })();
+
+  /** The values `Reset()` returns the inflation block to, for a given country toggle. */
+  const inflationDefaults = (useCountry: boolean, startDate: string | null) => {
+    const year = inflationStartYearDefault({ selected, parent, startDate });
+    const area = (selected ?? parent)?.inflationCountryArea || defaultArea || null;
+    return {
+      inflationStartYear: text(year),
+      inflationCountryArea: area,
+      inflationProfile: formatOneDecimalText(inflationProfileDefault({
+        selected,
+        parent,
+        useCountryInflationProfile: useCountry,
+        countryName: project.countryName,
+        countryProfile: countryInflationPercent(countryRows, {
+          year, countryName: project.countryName, area,
+        }),
+      })),
+    };
+  };
 
   const star = (on: boolean | undefined) =>
-    (on === true ? <span className={styles.required}>*</span> : null);
+    (on === true ? <span className={styles.required} title="*">*</span> : null);
 
-  /** A panel label: the conditional red asterisk, then the caption in its own element. */
+  /**
+   * A panel label: the conditional red asterisk, then the caption in its own element. The caption
+   * carries the canvas `Tooltip: =Self.Text` as its hover.
+   */
   const fieldLabel = (on: boolean | undefined, caption: string) => (
     <Text className={styles.label}>
-      {on === true ? <span className={styles.required}>*</span> : null}
-      <span>{caption}</span>
+      {on === true ? <span className={styles.required} title="*">*</span> : null}
+      <span title={caption}>{caption}</span>
     </Text>
   );
 
@@ -1571,6 +1699,7 @@ function OpexPanel({
   ) => (
     <CostField
       label={label}
+      labelTitle={label}
       name={name}
       // `TextInputCanvas.Type'.Text` (`:6413`): the figure is typed as text and checked by
       // `validateOpexNumber`, so no browser spin buttons and a comma still reaches the message.
@@ -1578,7 +1707,13 @@ function OpexPanel({
       value={form[field]}
       disabled={disabled(modes[field])}
       error={errorFor(field)}
-      onChange={(v) => onChange({ [field]: v } as Partial<OpexForm>)}
+      onChange={(v) => onChange(
+        // `txt_EuroPerMwh.OnChange` (`:6687`): `If(IsBlank(Self.Value), Reset(togl_Threshold);
+        // Reset(rdg_Threshold); Reset(txt_Threshold_Individual))` (FT-BR-OPEX-066, run 3).
+        field === "eurPerMwh" && v === ""
+          ? { eurPerMwh: v, ...storedThreshold }
+          : { [field]: v } as Partial<OpexForm>,
+      )}
     />
   );
 
@@ -1599,7 +1734,10 @@ function OpexPanel({
           onCancel={onCancel}
           disabled={!canSave || busy}
           subtleWhenDisabled
-          hint={showAtLeastOneFigureHint(form) ? OPEX_MSG.atLeastOneFigure : undefined}
+          // `lbl_…_BodyButtons_Hint.Tooltip: =Self.Text` (`:8772`).
+          hint={showAtLeastOneFigureHint(form)
+            ? <span title={OPEX_MSG.atLeastOneFigure}>{OPEX_MSG.atLeastOneFigure}</span>
+            : undefined}
           saveTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Save"
           cancelTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Cancel"
         />
@@ -1610,24 +1748,29 @@ function OpexPanel({
         <div className={styles.panelColumn}>
           <CostField
             label={OPEX_PANEL_LABELS.description}
+            labelTitle={OPEX_PANEL_LABELS.description}
+            // `txt_…_Description.MaxLength: =100` (`:5633`).
+            maxLength={100}
             name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description"
             required={required.description}
             value={form.description}
             disabled={disabled(modes.description)}
             error={errorFor("description")}
+            // `lbl_…_Description_ErrorMessage.Tooltip: =Self.Text` (`:5589`).
+            errorTitle={errorFor("description")}
             onChange={(v) => onChange({ description: v })}
           />
 
           <div>
             {fieldLabel(required.startDate, OPEX_PANEL_LABELS.startDate)}
-            <div className={styles.dateRow} data-standard-start={panel.startDateStandard || undefined}>
+            <div className={styles.dateRow} data-standard-start={panel.startDateStandard === true || undefined}>
               {/* `dte_…_StartDate` — a `DatePicker@0.0.46`, `Format: LongAbbreviated` (`:5821`),
                   `Width: =Parent.Width-Self.X*2-40`, which leaves room for the reset icon.
                   `FontColor` / `FontItalic` follow `locIsStartDateStandardAssumption` (`:5819`). */}
               <DateInput
                 value={form.startDate}
                 format="LongAbbreviated"
-                standard={panel.startDateStandard}
+                standard={panel.startDateStandard === true}
                 disabled={disabled(modes.startDate)}
                 className={styles.startDate}
                 ariaLabel={OPEX_PANEL_LABELS.startDate}
@@ -1635,7 +1778,7 @@ function OpexPanel({
                 onChange={(v) => onStartDate(v ?? "")}
               />
               {/* `ico_ResetStartDay_NewEditCost_OPEXCosts` (`:5942-5963`) — chain roots only. */}
-              {resetStartDateVisible({ selected, parent }) ? (
+              {resetStartDateVisible({ selected, parent, projectCod: project.codDate }) ? (
                 <Tooltip content={OPEX_MSG.resetStartDateTooltip} relationship="label">
                   <Button
                     appearance="subtle"
@@ -1655,7 +1798,7 @@ function OpexPanel({
             {fieldLabel(required.duration, OPEX_PANEL_LABELS.duration)}
             <div className={styles.duration}>
               <Dropdown
-                aria-label="Duration years"
+                aria-label="Year"
                 className={styles.durationYears}
                 data-testid="opex-years"
                 {...canvasList}
@@ -1674,7 +1817,7 @@ function OpexPanel({
                 ))}
               </Dropdown>
               <Dropdown
-                aria-label="Duration months"
+                aria-label="Month"
                 className={styles.durationMonths}
                 data-testid="opex-months"
                 {...canvasList}
@@ -1751,7 +1894,7 @@ function OpexPanel({
               required.distributionFrequency, OPEX_PANEL_LABELS.distributionFrequency,
             )}
             <Dropdown
-              aria-label={OPEX_PANEL_LABELS.distributionFrequency}
+              aria-label="Month"
               className={styles.panelDropdown}
               data-testid="opex-frequency"
               {...canvasList}
@@ -1781,12 +1924,14 @@ function OpexPanel({
               aria-label={OPEX_PANEL_LABELS.inflationProfile}
               data-testid="opex-inflation"
               onChange={(_, d) => onChange(d.checked ? { inflationOn: true } : {
-                // `tgl_…_InflationProfile.OnUncheck` resets the whole block (`:7378-7386`).
+                // `tgl_…_InflationProfile.OnUncheck` Reset()s the country toggle, start year,
+                // area and % box (`:7378-7386`); each returns to its default formula, not to
+                // blank (FT-BR-OPEX-061, run 3), so switching on again shows the defaults.
                 inflationOn: false,
-                useCountryInflationProfile: false,
-                inflationStartYear: "",
-                inflationProfile: "",
-                inflationCountryArea: null,
+                useCountryInflationProfile: (selected ?? parent)?.useCountryInflationProfile ?? false,
+                ...inflationDefaults(
+                  (selected ?? parent)?.useCountryInflationProfile ?? false, form.startDate,
+                ),
               })}
             />
             <Text>{OPEX_PANEL_LABELS.inflationProfile}</Text>
@@ -1803,8 +1948,11 @@ function OpexPanel({
                   data-testid="opex-country-inflation"
                   onChange={(_, d) => onChange({
                     useCountryInflationProfile: d.checked,
-                    // `OnSelect: Reset(txt_…_InflationProfile)` (`:7345`).
-                    inflationProfile: "",
+                    // `OnSelect: Reset(txt_…_InflationProfile)` (`:7345`): back to its default
+                    // formula for the new toggle state.
+                    inflationProfile: inflationDefaults(
+                      d.checked, form.startDate,
+                    ).inflationProfile,
                   })}
                 />
                 <Text>{OPEX_PANEL_LABELS.countryInflationProfile}</Text>
@@ -1812,12 +1960,14 @@ function OpexPanel({
 
               <CostField
                 label={OPEX_PANEL_LABELS.inflationStartYear}
+                labelTitle={OPEX_PANEL_LABELS.inflationStartYear}
                 name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear"
                 required={required.inflationStartYear}
                 value={form.inflationStartYear}
                 disabled={disabled(modes.inflationStartYear)}
                 placeholder={OPEX_PANEL_LABELS.inflationStartYearPlaceholder}
-                maxLength={4}
+                // No `MaxLength` on the canvas box (the only one on the screen is Description):
+                // "20255" is typed and answered by the YYYY message (FT-BR-OPEX-062, run 3).
                 error={errorFor("inflationStartYear")}
                 onChange={(v) => onChange({ inflationStartYear: v })}
               />
@@ -1888,9 +2038,13 @@ function OpexPanel({
                   disabled={disabled(modes.threshold)}
                   aria-label={thresholdToggleLabel(project.isoCurrencyCode)}
                   data-testid="opex-threshold"
-                  onChange={(_, d) => onChange(d.checked
-                    ? { thresholdOn: true }
-                    : { thresholdOn: false, thresholdType: null, thresholdIndividual: "" })}
+                  // `togl_…_Threshold.OnSelect: Reset(rdg); Reset(txt_Individual)` (`:8445-8447`):
+                  // both return to the stored values, in either direction.
+                  onChange={(_, d) => onChange({
+                    thresholdOn: d.checked,
+                    thresholdType: storedThreshold.thresholdType,
+                    thresholdIndividual: storedThreshold.thresholdIndividual,
+                  })}
                 />
                 <Text>{thresholdToggleLabel(project.isoCurrencyCode)}</Text>
               </div>
@@ -1929,6 +2083,7 @@ function OpexPanel({
                   {form.thresholdType === THRESHOLD_TYPE.individual ? (
                     <CostField
                       label={OPEX_PANEL_LABELS.individualThreshold}
+                      labelTitle={OPEX_PANEL_LABELS.individualThreshold}
                       name="txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual"
                       required={required.thresholdIndividual}
                       type="text"

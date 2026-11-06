@@ -180,7 +180,12 @@ describe("Add / Edit Contract panel: errors show only for touched fields (D61)",
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
     const percent = await screen.findByTestId("txt_Contracts_RightPanel_NewEdit_MarginPercentage");
     expect(shownErrors()).toEqual([]);
+    // CONTR-076: the canvas zeroes both margin boxes on a Margin change (`:6022`), so the box reads 0 and is valid.
+    expect(percent).toHaveValue("0");
     fireEvent.blur(percent);
+    expect(shownErrors()).toEqual([]);
+    // A box the user empties still reports the blank (D4).
+    fireEvent.change(percent, { target: { value: "" } });
     expect(shownErrors()).toEqual([RESX.inputBlank]);
   });
 

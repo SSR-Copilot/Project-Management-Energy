@@ -51,8 +51,7 @@ import {
  */
 import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
-import { parseNumber, round } from "@/domain/numeric";
-import { numberFormat } from "@/domain/locale";
+import { parseNumber } from "@/domain/numeric";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { DataError } from "@/platform/errors";
@@ -63,7 +62,14 @@ import {
   canSaveContract, canSavePaymentTarget, cardShowsClosingCosts, cardTotalLabel,
   contractCardTitle, contractCommands, contractErrors, contractSelectionAfterDelete,
   gatedContractCommands, longAbbreviatedDate,
-  contractName, costLabel, currencyCode, devCoCostName,
+  PAYMENT_TARGET_DESCRIPTION_MAX_LENGTH,
+  canAddPaymentTarget, canChangePaymentTarget, canSaveRightsContract, cardClosingFigure,
+  cardContractTotalText, cardMarginFigure, cardRightsTotalText, cardTotalCostsFigure,
+  closingTypePatch, commentCounter, contractNameFor, devCoLeafCostByAccount, marginChangePatch,
+  marginIsStandard, marginTypeChangePatch, newPeriodDescription, oneDecimalText,
+  periodDescriptionLocked, saveErrorText, selectionAfterHeaderClick, selectionAfterTargetClick,
+  targetPercentText, usedInContractTooltip, wholeNumberText,
+  costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
   contractTotalFromForm, selectedLeafAccounts, toggleParentAccounts,
@@ -77,6 +83,9 @@ import {
   usePaymentTargets, useProjectExtras, useSaveContract, useSavePaymentTarget,
 } from "./hooks";
 import { costRowsForAccounts } from "@/data/costRepository";
+
+/** `StartOfWeek.Monday` — Fluent's `DayOfWeek.Monday` (as `components/DateField.tsx`). */
+const MONDAY = 1;
 
 /* ─────────────────────────────────────────────────────────────────── styles */
 
@@ -139,6 +148,7 @@ function emptyContractForm(contractType: ContractType): ContractForm {
 
 function formFromContract(c: BopContract): ContractForm {
   const s = (n: number | undefined) => (n === undefined || n === null ? "" : String(n));
+  const rights = c.contractType === CONTRACT_TYPE.ProjectRights;
   return {
     description: c.description ?? "",
     contractType: c.contractType,
@@ -153,17 +163,22 @@ function formFromContract(c: BopContract): ContractForm {
         ? CLOSING_DATE_TYPE.Plan : c.costsAfterClosingType,
     costsAfterClosingPlan: s(c.costsAfterClosingPlan),
     costsAfterClosingActual: s(c.costsAfterClosingActual),
-    totalCostsType:
-      c.totalCostsType === TOTAL_COSTS_TYPE.None
+    totalCostsType: rights
+      ? TOTAL_COSTS_TYPE.Overwrite
+      : c.totalCostsType === TOTAL_COSTS_TYPE.None
         ? TOTAL_COSTS_TYPE.Calculated : c.totalCostsType,
     totalCostsCalculated: s(c.totalCostsCalculated),
-    totalCostsOverwrite: s(c.totalCostsOverwrite),
+    // The Project Rights panel reads and writes `Total cost of contract [EUR]` (`:3590`, `:3757`).
+    totalCostsOverwrite: rights ? s(c.totalCostOfContract) : s(c.totalCostsOverwrite),
     margin: c.margin,
     marginType: c.marginType ?? MARGIN_TYPE.Percentage,
     marginPercentage: s(c.marginPercentage),
     marginFixedValue: s(c.marginFixedValue),
     comment: c.comment ?? "",
-    isMarginStandardAssumption: c.isMarginStandardAssumption,
+    // `locIsStandardAssumtions: If(locSelectedContract.'Is Standard Contract', true, false)` (`:673`) —
+    // the flag the margin boxes' blue italic reads on Edit comes from 'Is Standard Contract', not from
+    // the stored 'Is Margin Standard Assumption?' (CONTR-055).
+    isMarginStandardAssumption: marginIsStandard({ isMarginStandardAssumption: c.isStandardContract }),
   };
 }
 
@@ -285,13 +300,20 @@ export default function ContractsScreen() {
     if (panel !== "contract" || editing) return;
     const a = standardAssumption.data;
     if (!a) return;
+    /*
+     * DIVERGENCE (data source only, D2/D54): the canvas seeds BOTH boxes from the one Fabric column
+     * `marginvalue` (`:594-595`) and a NEW contract's type radio defaults to Percentage whatever the
+     * assumption's type is (`:5903`, CONTR-052). Dataverse keeps the two values apart, so each box takes
+     * its own column and falls back to the other.
+     */
+    const pct = a.vsb_marginpercentage ?? a.vsb_marginfixedvalue;
+    const fixed = a.vsb_marginfixedvalue ?? a.vsb_marginpercentage;
     setForm((f) => ({
       ...f,
       margin: a.vsb_margin === true,
-      marginType: (typeof a.vsb_margintype === "number"
-        ? a.vsb_margintype : MARGIN_TYPE.Percentage) as ContractForm["marginType"],
-      marginPercentage: a.vsb_marginpercentage === undefined ? "" : String(a.vsb_marginpercentage),
-      marginFixedValue: a.vsb_marginfixedvalue === undefined ? "" : String(a.vsb_marginfixedvalue),
+      marginType: MARGIN_TYPE.Percentage,
+      marginPercentage: pct === undefined ? "" : String(pct),
+      marginFixedValue: fixed === undefined ? "" : String(fixed),
       isMarginStandardAssumption: true,
     }));
   }, [panel, editing, standardAssumption.data]);
@@ -418,22 +440,59 @@ export default function ContractsScreen() {
    */
   const resetMarginToStandardAssumption = useCallback(() => {
     const a = standardAssumption.data;
+    const pct = a?.vsb_marginpercentage ?? a?.vsb_marginfixedvalue;
+    const fixed = a?.vsb_marginfixedvalue ?? a?.vsb_marginpercentage;
     updateForm({
       margin: a?.vsb_margin === true,
-      marginType: (typeof a?.vsb_margintype === "number"
+      // `rad_…_MarginType` after the Reset (`:5887`): a new contract's radio is Percentage; on Edit it
+      // follows the assumption's own type.
+      marginType: (editing && typeof a?.vsb_margintype === "number"
         ? a.vsb_margintype : MARGIN_TYPE.Percentage) as ContractForm["marginType"],
-      marginPercentage:
-        a?.vsb_marginpercentage === undefined ? "" : String(a.vsb_marginpercentage),
-      marginFixedValue:
-        a?.vsb_marginfixedvalue === undefined ? "" : String(a.vsb_marginfixedvalue),
+      marginPercentage: pct === undefined ? "" : String(pct),
+      marginFixedValue: fixed === undefined ? "" : String(fixed),
       isMarginStandardAssumption: Boolean(a),
     }, true, []); // the Reset icon is not a field: it touches nothing
-  }, [standardAssumption.data, updateForm]);
+  }, [standardAssumption.data, updateForm, editing]);
 
   const contractTotal = useMemo(
     () => contractTotalFromForm(form, locale),
     [form, locale],
   );
+  const leafCosts = useMemo(
+    () => devCoLeafCostByAccount(devCoContractsQuery.data ?? [], capexCostRows.data ?? []),
+    [devCoContractsQuery.data, capexCostRows.data],
+  );
+  const contractDescriptionById = useMemo(
+    () => new Map((contractsQuery.data ?? []).map((c) => [c.id, c.description] as const)),
+    [contractsQuery.data],
+  );
+
+  /** The header's own click and its radio: toggles the contract and clears the payment target (`:1986`). */
+  const clickContractHeader = (contractId: string) => {
+    const next = selectionAfterHeaderClick(
+      { contractId: selectedContractId, targetId: selectedTargetId }, contractId,
+    );
+    setSelectedContractId(next.contractId);
+    setSelectedTargetId(next.targetId);
+  };
+
+  /** A payment-target row's click (`:1850`): toggles the target and selects the row's contract. */
+  const clickTargetRow = (contractId: string, targetId: string) => {
+    const next = selectionAfterTargetClick(
+      { contractId: selectedContractId, targetId: selectedTargetId }, contractId, targetId,
+    );
+    setSelectedContractId(next.contractId);
+    setSelectedTargetId(next.targetId);
+  };
+
+  /**
+   * Leaves the payment-target panel without saving: `pcf_…_PaymentTarget_Buttons_Cancel.OnChange` and
+   * the header ✕ clear `locSelectedContractPaymentTarget` (`:3033`, `:2253`).
+   */
+  const cancelTargetPanel = () => {
+    setSelectedTargetId(undefined);
+    setPanel("none");
+  };
 
   /* ── command bar ────────────────────────────────────────────────────── */
 
@@ -508,15 +567,11 @@ export default function ContractsScreen() {
   /* ── saves ──────────────────────────────────────────────────────────── */
 
   /** The banner text, or (CA-15) the toast's detail once the screen has been left. */
-  const handleError = (error: unknown, action: string) => {
+  const handleError = (error: unknown, action: string, kind: "contract" | "paymentTarget" = "contract") => {
     const message = permissionMessage(error, action);
     if (message) { reportFailure(message, setBanner); return; }
-    reportFailure(
-      error instanceof DataError
-        ? `Error: BoP Contract could not be saved correctly. ${error.message}`
-        : `Error: BoP Contract could not be saved correctly.`,
-      setBanner,
-    );
+    // `Notify("Error: BoP Contract [payment target ]could not be saved correctly. ...")` (`:3126`, `:7487`).
+    reportFailure(saveErrorText(kind, error instanceof DataError ? error.message : undefined), setBanner);
   };
 
   const saveContractNow = async () => {
@@ -538,13 +593,14 @@ export default function ContractsScreen() {
     setSavingLabel(form.contractType === CONTRACT_TYPE.ProjectRights
       ? MSG.spinnerSavingRightsContract : MSG.spinnerSavingContract);
     setPanel("none");
+    const rights = form.contractType === CONTRACT_TYPE.ProjectRights;
     try {
-      await saveContractMutation.mutateAsync({
+      const saved = await saveContractMutation.mutateAsync({
         write: {
           ...(editing && selectedContract ? { id: selectedContract.id } : {}),
           projectId,
           owningBusinessUnitId: project.owningBusinessUnitId,
-          name: contractName(project.projectIdCode, form.description),
+          name: contractNameFor(form.contractType, project.projectIdCode, form.description),
           description: form.description,
           contractType: form.contractType,
           closingDate: form.closingDate as Date,
@@ -561,12 +617,25 @@ export default function ContractsScreen() {
           marginType: form.marginType,
           marginPercentage: num(form.marginPercentage),
           marginFixedValue: num(form.marginFixedValue),
-          totalCostOfContract: round(contractTotal, 2),
+          // `Value(txt_…_TotalCosts_Contract.Value)` is the `RoundUp` text (`:7400`); a Project Rights
+          // contract stores its own typed total (`:3757`).
+          totalCostOfContract: rights ? num(form.totalCostsOverwrite) ?? 0 : contractTotal,
           comment: form.comment,
           isMarginStandardAssumption: form.isMarginStandardAssumption,
         },
         accounts: leaves.map((n) => ({ id: n.id, name: devCoCostName(n) })),
       });
+      /*
+       * After the save the canvas leaves the card EXPANDED (`IsFolded: false`, `:7452-7475`, `:3764`) and a
+       * Development/Construction contract DESELECTED (`locSelectedContract: Blank()`, `:7496`); an edited
+       * Project Rights contract stays selected (`:3789`) (CONTR-079, CONTR-082).
+       */
+      const savedId = saved?.id ?? (editing ? selectedContract?.id : undefined);
+      if (savedId) setExpanded((prev) => (prev.includes(savedId) ? prev : [...prev, savedId]));
+      if (!rights) {
+        setSelectedContractId(undefined);
+        setSelectedTargetId(undefined);
+      }
     } catch (error) {
       handleError(error, "save this contract");
     } finally {
@@ -592,7 +661,7 @@ export default function ContractsScreen() {
         note: targetForm.note,
       });
     } catch (error) {
-      handleError(error, "save this payment target");
+      handleError(error, "save this payment target", "paymentTarget");
     } finally {
       setSavingLabel(null);
     }
@@ -643,11 +712,17 @@ export default function ContractsScreen() {
   }
 
   const currency = currencyCode(project ?? {});
-  const errors = contractErrors(form, tree, locale);
+  const errors = contractErrors(form, tree, locale, editing);
   /** The error to SHOW under a field: only once the user has touched that field (D61, CA-23). */
   const errorFor = (field: string) => visibleFieldError(errors, touched, field);
-  /** Whether a field is invalid, touched or not: the Save gate must not depend on what is shown. */
-  const invalid = (field: string) => errors.some((e) => e.field === field);
+  /**
+   * The error under a read-only Plan box. The canvas label tests the Plan value itself (`:4419`, the
+   * corrected shape of D-3) and shows once it is non-blank; nobody types in the box, so it is not gated
+   * on "touched" (CONTR-069).
+   */
+  const planError = (field: string, value: string) =>
+    value.trim() === "" ? undefined : errors.find((e) => e.field === field)?.message;
+
   const targetErrors = paymentTargetErrors({
     form: targetForm,
     projectStart: project?.startDate,
@@ -726,10 +801,10 @@ export default function ContractsScreen() {
                     checked={selectedContractId === contract.id}
                     aria-label={`Select ${contract.description ?? ""}`}
                     data-testid={`img_Contracts_List_CardHeaderRadioSelection-${contract.id}`}
-                    onChange={() => {
-                      setSelectedContractId(contract.id);
-                      setSelectedTargetId(undefined);
-                    }}
+                    // A click on the radio is the header's click (it toggles); `onChange` alone never
+                    // fires for the radio that is already checked.
+                    onClick={() => clickContractHeader(contract.id)}
+                    onChange={() => undefined}
                   />
                   {/*
                     * `btn_Contracts_List_CardHeader_TransparentButton` covers the band and
@@ -741,9 +816,8 @@ export default function ContractsScreen() {
                     className="canvas-contract-title"
                     aria-label="Select contract"
                     data-testid={`btn_Contracts_List_CardHeader_TransparentButton-${contract.id}`}
-                    onClick={() => setSelectedContractId(
-                      selectedContractId === contract.id ? undefined : contract.id,
-                    )}
+                    title={contractCardTitle(contract)}
+                    onClick={() => clickContractHeader(contract.id)}
                   >
                     {contractCardTitle(contract)}
                   </button>
@@ -774,14 +848,20 @@ export default function ContractsScreen() {
                     <ContractCardBody
                       contract={contract}
                       currency={currency}
+                      locale={locale}
                       targets={targets.byContract.get(contract.id) ?? []}
                       selectedTargetId={selectedTargetId}
+                      isSelectedContract={selectedContractId === contract.id}
                       writesDisabled={writesDisabled}
-                      onSelectTarget={setSelectedTargetId}
+                      onSelectTarget={(targetId) => clickTargetRow(contract.id, targetId)}
                       onAddTarget={() => {
                         setSelectedContractId(contract.id);
                         setSelectedTargetId(undefined);
-                        setTargetForm(EMPTY_TARGET_FORM);
+                        // `txt_…_PaymentTarget_Description.Value` (`:2380`): the newest period's name, numbered on.
+                        setTargetForm({
+                          ...EMPTY_TARGET_FORM,
+                          description: newPeriodDescription(targets.byContract.get(contract.id) ?? []),
+                        });
                         setTouched(NO_FIELDS_TOUCHED);
                         setPanel("target");
                       }}
@@ -837,18 +917,23 @@ export default function ContractsScreen() {
               label={MSG.description}
               name="txt_Contracts_RightPanel_NewEdit_Description"
               required
+              labelTitle={MSG.description}
               value={form.description}
               error={errorFor("description")}
-              onChange={(v) => updateForm({ description: v })}
+              // `txt_…_Description.OnChange` sets `locContractDevCoCostsDirty: true` (`:4014`), which Save needs.
+              onChange={(v) => { updateForm({ description: v }); setRecalculated(true); }}
               onBlur={() => touch("description")}
             />
 
             <div className="canvas-field" data-invalid={errorFor("closingDate") ? true : undefined}>
-              <span data-required="true">{MSG.contractClosingDate}</span>
+              <span data-required="true" title={MSG.contractClosingDate}>{MSG.contractClosingDate}</span>
               <DatePicker
                 aria-label={MSG.contractClosingDate}
                 data-testid="dtp_Contracts_RightPanel_NewEdit_ContractClosingDate"
                 placeholder={MSG.closingDatePlaceholder}
+                // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:4124`).
+                firstDayOfWeek={MONDAY}
+                initialPickerDate={project?.startDate}
                 value={form.closingDate ?? null}
                 onSelectDate={(date: Date | null | undefined) => updateForm({ closingDate: date ?? undefined }, true)}
               />
@@ -866,7 +951,10 @@ export default function ContractsScreen() {
               planValue={form.costsUntilClosingPlan}
               actualValue={form.costsUntilClosingActual}
               actualError={errorFor("costsUntilClosingActual")}
-              onType={(t) => updateForm({ costsUntilClosingType: t }, true, [])}
+              planError={planError("costsUntilClosingPlan", form.costsUntilClosingPlan)}
+              onType={(t) => updateForm(
+                closingTypePatch("until", t, editing ? selectedContract : undefined), true, [],
+              )}
               onActual={(v) => updateForm({ costsUntilClosingActual: v }, true)}
               onActualBlur={() => touch("costsUntilClosingActual")}
             />
@@ -880,13 +968,17 @@ export default function ContractsScreen() {
               planValue={form.costsAfterClosingPlan}
               actualValue={form.costsAfterClosingActual}
               actualError={errorFor("costsAfterClosingActual")}
-              onType={(t) => updateForm({ costsAfterClosingType: t }, true, [])}
+              planError={planError("costsAfterClosingPlan", form.costsAfterClosingPlan)}
+              onType={(t) => updateForm(
+                closingTypePatch("after", t, editing ? selectedContract : undefined), true, [],
+              )}
               onActual={(v) => updateForm({ costsAfterClosingActual: v }, true)}
               onActualBlur={() => touch("costsAfterClosingActual")}
             />
 
             <Choices
               label={costLabel("Total Costs", project ?? {})}
+              labelTitle={costLabel("Total Costs", project ?? {})}
               name="rad_Contracts_RightPanel_NewEdit_TotalCosts"
               value={form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? MSG.calculated : MSG.overwrite}
               options={[MSG.calculated, MSG.overwrite]}
@@ -897,11 +989,13 @@ export default function ContractsScreen() {
             />
             {form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? (
               // `txt_…_TotalCosts_Calculated` is what Recalculate writes, so it is read-only.
-              <CostField label={MSG.calculated} name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Calculated"
+              <CostField label={MSG.calculated} labelTitle={MSG.calculated}
+                name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Calculated"
                 required disabled value={form.totalCostsCalculated} />
             ) : (
               <CostField
                 label={MSG.overwrite}
+                labelTitle={MSG.overwrite}
                 name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Overwrite"
                 required
                 value={form.totalCostsOverwrite}
@@ -922,15 +1016,13 @@ export default function ContractsScreen() {
               */}
             <Choices
               label={MSG.margin}
+              labelTitle={MSG.margin}
               name="rad_Contracts_RightPanel_NewEdit_Margin"
               value={form.margin ? "Yes" : "No"}
               options={["Yes", "No"]}
-              onChange={(v) => updateForm({
-                margin: v === "Yes",
-                marginPercentage: "",
-                marginFixedValue: "",
-                isMarginStandardAssumption: false,
-              }, true, [])}
+              onChange={(v) => updateForm(
+                marginChangePatch(v === "Yes", editing ? selectedContract : undefined), true, [],
+              )}
               action={
                 <button
                   type="button"
@@ -952,18 +1044,17 @@ export default function ContractsScreen() {
                   name="rad_Contracts_RightPanel_NewEdit_MarginType"
                   value={form.marginType === MARGIN_TYPE.Percentage ? "Percentage" : "Fixed Value"}
                   options={["Percentage", "Fixed Value"]}
-                  onChange={(v) => updateForm({
-                    marginType: v === "Percentage" ? MARGIN_TYPE.Percentage : MARGIN_TYPE.FixedValue,
-                    marginPercentage: "",
-                    marginFixedValue: "",
-                    isMarginStandardAssumption: false,
-                  }, true, [])}
+                  onChange={(v) => updateForm(marginTypeChangePatch(
+                    v === "Percentage" ? MARGIN_TYPE.Percentage : MARGIN_TYPE.FixedValue,
+                  ), true, [])}
                 />
                 {form.marginType === MARGIN_TYPE.Percentage ? (
                   <CostField
                     label={MSG.marginPercent}
+                    labelTitle={MSG.marginPercent}
                     name="txt_Contracts_RightPanel_NewEdit_MarginPercentage"
                     required
+                    standard={marginIsStandard(form)}
                     value={form.marginPercentage}
                     error={errorFor("marginPercentage")}
                     onChange={(v) => updateForm(
@@ -975,8 +1066,10 @@ export default function ContractsScreen() {
                 ) : (
                   <CostField
                     label={costLabel(MSG.marginFixedValue, project ?? {})}
+                    labelTitle={costLabel(MSG.marginFixedValue, project ?? {})}
                     name="txt_Contracts_RightPanel_NewEdit_MarginFixedValues"
                     required
+                    standard={marginIsStandard(form)}
                     value={form.marginFixedValue}
                     error={errorFor("marginFixedValue")}
                     onChange={(v) => updateForm(
@@ -993,19 +1086,23 @@ export default function ContractsScreen() {
               label={costLabel("Total cost of contract", project ?? {})}
               name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract"
               disabled
-              value={numberFormat(locale, { maximumFractionDigits: 2 }).format(contractTotal)}
+              labelTitle={costLabel("Total cost of contract", project ?? {})}
+              // `Text(RoundUp(…, 0), "###,##0")` (`:6167`).
+              value={wholeNumberText(contractTotal, locale)}
             />
           </div>
 
           <div className="canvas-panel-column">
             <div className="canvas-field">
-              <span data-required="true">{MSG.devCoCostsFrom}</span>
+              <span data-required="true" title={MSG.devCoCostsFrom}>{MSG.devCoCostsFrom}</span>
               {errorFor("devCoCosts") ? (
                 <span className="canvas-field-error" role="alert">{errorFor("devCoCosts")}</span>
               ) : null}
               <DevCoAccountPicker
                 tree={tree}
                 locale={locale}
+                leafCosts={leafCosts}
+                contractDescriptionById={contractDescriptionById}
                 expandedId={expandedAccountId}
                 onExpand={setExpandedAccountId}
                 onToggleLeaf={toggleLeafAccount}
@@ -1016,13 +1113,15 @@ export default function ContractsScreen() {
             <CostField
               label={MSG.comment}
               name="txt_Contracts_RightPanel_NewEdit_Comment"
-              counter={`${form.comment.length}/${COMMENT_MAX_LENGTH}`}
+              counter={commentCounter(form.comment)}
+              labelTitle={MSG.comment}
             >
               <textarea
                 value={form.comment}
                 maxLength={COMMENT_MAX_LENGTH}
                 aria-label={MSG.comment}
-                onChange={(e) => updateForm({ comment: e.target.value })}
+                // `txt_…_Comment.OnChange` also sets `locContractDevCoCostsDirty: true` (`:7129`).
+                onChange={(e) => { updateForm({ comment: e.target.value }); setRecalculated(true); }}
                 data-testid="contract-comment"
               />
             </CostField>
@@ -1039,14 +1138,13 @@ export default function ContractsScreen() {
         footer={<PanelButtons
           onSave={() => { void saveContractNow(); }}
           onCancel={() => setPanel("none")}
-          // `invalid`, not `errorFor`: whether Save is allowed must not depend on which errors the
-          // user has touched into view (D61).
-          disabled={busy || !form.description.trim() || invalid("description")
-            || !form.closingDate
-            || !form.totalCostsOverwrite.trim() || invalid("totalCostsOverwrite")} />}
+          // `canSaveRightsContract` (`:3708`), not `errorFor`: whether Save is allowed must not depend
+          // on which errors the user has touched into view (D61).
+          disabled={busy || !canSaveRightsContract(form)} />}
       >
         <CostField
           label={MSG.description}
+          labelTitle={MSG.description}
           name="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_Description"
           required
           value={form.description}
@@ -1054,18 +1152,30 @@ export default function ContractsScreen() {
           onChange={(v) => updateForm({ description: v })}
           onBlur={() => touch("description")}
         />
-        <div className="canvas-field">
-          <span data-required="true">{MSG.contractClosingDate}</span>
+        <div className="canvas-field" data-invalid={errorFor("closingDate") ? true : undefined}>
+          <span data-required="true" title={MSG.contractClosingDate}>{MSG.contractClosingDate}</span>
           <DatePicker
             aria-label={MSG.contractClosingDate}
             data-testid="dtp_Contracts_RightPanel_NewEdit_RightsContract_Content_ClosingDate"
             placeholder={MSG.closingDatePlaceholder}
+            // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:3450`).
+            firstDayOfWeek={MONDAY}
+            initialPickerDate={project?.startDate}
             value={form.closingDate ?? null}
-            onSelectDate={(date: Date | null | undefined) => updateForm({ closingDate: date ?? undefined })}
+            onSelectDate={(date: Date | null | undefined) => {
+              touch("closingDate");
+              updateForm({ closingDate: date ?? undefined });
+            }}
           />
+          {errorFor("closingDate") ? (
+            <span className="canvas-field-error" role="alert" title={errorFor("closingDate")}>
+              {errorFor("closingDate")}
+            </span>
+          ) : null}
         </div>
         <CostField
           label={`Total Costs Contract [${currency}]`}
+          labelTitle={`Total Costs Contract [${currency}]`}
           name="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts"
           required
           value={form.totalCostsOverwrite}
@@ -1083,10 +1193,10 @@ export default function ContractsScreen() {
         open={panel === "target"}
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"
-        onDismiss={() => setPanel("none")}
+        onDismiss={cancelTargetPanel}
         footer={<PanelButtons
           onSave={() => { void saveTargetNow(); }}
-          onCancel={() => setPanel("none")}
+          onCancel={cancelTargetPanel}
           disabled={busy || !canSavePaymentTarget({
             form: targetForm,
             projectStart: project?.startDate,
@@ -1099,6 +1209,10 @@ export default function ContractsScreen() {
           label={MSG.description}
           name="txt_Contracts_RightPanel_NewEdit_PaymentTarget_Description"
           required
+          labelTitle={MSG.description}
+          // `DisplayMode`: Edit only while the contract has no payment target (`:2365`); `MaxLength: =55`.
+          disabled={periodDescriptionLocked(contractTargets)}
+          maxLength={PAYMENT_TARGET_DESCRIPTION_MAX_LENGTH}
           value={targetForm.description}
           error={targetErrorFor("description")}
           onChange={(v) => updateTargetForm({ description: v })}
@@ -1111,6 +1225,7 @@ export default function ContractsScreen() {
         */}
         <CostField
           label={MSG.paymentDate}
+          labelTitle={MSG.paymentDate}
           name="txt_Contracts_RightPanel_NewEdit_PaymentTarget_PaymentDate"
           required
           placeholder={MSG.paymentDatePlaceholder}
@@ -1121,6 +1236,7 @@ export default function ContractsScreen() {
         />
         <CostField
           label={MSG.totalCostsContractPercent}
+          labelTitle={MSG.totalCostsContractPercent}
           name="txt_Contracts_Payment_Targets_RightPanel_TotalCosts"
           required
           value={targetForm.totalCostsContract}
@@ -1138,6 +1254,7 @@ export default function ContractsScreen() {
         */}
         <CostField
           label={MSG.notes}
+          labelTitle={MSG.notes}
           name="txt_Contracts_RightPanel_NewEdit_PaymentTarget_Note"
           counter={`${targetForm.note.length}/${NOTE_MAX_LENGTH}`}
           error={targetErrorFor("note")}
@@ -1235,6 +1352,8 @@ function ClosingHalf(props: {
   planValue: string;
   actualValue: string;
   actualError?: string;
+  /** The message under the read-only Plan box (the canvas `…_Plan_ErrorMessage`). */
+  planError?: string;
   onType: (t: ContractForm["costsUntilClosingType"]) => void;
   onActual: (v: string) => void;
   /** The Actual box lost focus (the "touched" signal, D61). */
@@ -1245,6 +1364,7 @@ function ClosingHalf(props: {
     <>
       <Choices
         label={props.legend}
+        labelTitle={props.legend}
         name={props.choiceName}
         value={isPlan ? MSG.plan : MSG.actual}
         options={[MSG.plan, MSG.actual]}
@@ -1255,10 +1375,12 @@ function ClosingHalf(props: {
       {isPlan ? (
         // The Plan figure is what Recalculate writes, so it is read-only here — the canvas
         // left it editable and then overwrote whatever was typed on the next Recalculate.
-        <CostField label={MSG.plan} name={props.planName} required disabled value={props.planValue} />
+        <CostField label={MSG.plan} labelTitle={MSG.plan} name={props.planName} required disabled
+          value={props.planValue} error={props.planError} />
       ) : (
         <CostField
           label={MSG.actual}
+          labelTitle={MSG.actual}
           name={props.actualName}
           required
           value={props.actualValue}
@@ -1353,10 +1475,14 @@ function ParentCheckbox({
  * clicked, so at most one stands open — hence a single `expandedId`, not a set.
  */
 function DevCoAccountPicker({
-  tree, locale, expandedId, onExpand, onToggleLeaf, onToggleParent,
+  tree, locale, leafCosts, contractDescriptionById, expandedId, onExpand, onToggleLeaf, onToggleParent,
 }: {
   tree: readonly AccountNode[];
   locale: string | undefined;
+  /** Per level-3 account: the sum of the project's monthly DevCo CAPEX costs (`:6464`). */
+  leafCosts: ReadonlyMap<string, number>;
+  /** `colBoPContracts` description by id — the "Used in contract" tooltip (`:6429`). */
+  contractDescriptionById: ReadonlyMap<string, string | undefined>;
   expandedId: string | undefined;
   onExpand: (id: string | undefined) => void;
   onToggleLeaf: (id: string, checked: boolean) => void;
@@ -1407,11 +1533,9 @@ function DevCoAccountPicker({
                 {leaves.map((leaf) => (
                   <div key={leaf.id} className="canvas-devco-row" data-used={leaf.used}>
                     <span className="canvas-devco-name">{`${leaf.number} ${leaf.name}`}</span>
-                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(…)), "-")`. */}
+                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`; 0 shows "0". */}
                     <span className="canvas-devco-total">
-                      {leaf.totalCost > 0
-                        ? numberFormat(locale, { maximumFractionDigits: 0 }).format(leaf.totalCost)
-                        : "-"}
+                      {wholeNumberText(leafCosts.get(leaf.id), locale)}
                     </span>
                     {/*
                       * `chb_…_CostssRow`: `Checked: =Or(ThisItem.Selected, ThisItem.Used)` and
@@ -1427,7 +1551,9 @@ function DevCoAccountPicker({
                       disabled={!leafSelectable(leaf)}
                       aria-label={`${leaf.number} ${leaf.name}${
                         leaf.used ? " (used by another contract)" : ""}`}
-                      title={leaf.used ? "Used by another contract" : undefined}
+                      title={leaf.used
+                        ? usedInContractTooltip(contractDescriptionById.get(leaf.usedByContractId ?? ""))
+                        : undefined}
                       onChange={(e) => onToggleLeaf(leaf.id, e.target.checked)}
                     />
                   </div>
@@ -1443,13 +1569,16 @@ function DevCoAccountPicker({
 
 /** The body of a contract card: its figures and its payment-target table. */
 function ContractCardBody({
-  contract, currency, targets, selectedTargetId, writesDisabled,
+  contract, currency, locale, targets, selectedTargetId, isSelectedContract, writesDisabled,
   onSelectTarget, onAddTarget, onEditTarget, onDeleteTarget,
 }: {
   contract: BopContract;
   currency: string;
+  locale: string | undefined;
   targets: readonly PaymentTarget[];
   selectedTargetId: string | undefined;
+  /** This card is the screen's selected contract (`locSelectedContract`): the period bar needs it (`:1415`, `:1423`). */
+  isSelectedContract: boolean;
   /** `writeCommandsDisabled` (D58): Add Period, Edit and Delete grey out while a write runs. */
   writesDisabled: boolean;
   onSelectTarget: (id: string) => void;
@@ -1460,22 +1589,17 @@ function ContractCardBody({
   // The payment-target bar: no button inset, so its `+` sits on the card body's 20 px edge,
   // over the targets table and under "Payment Targets" (21 Oct 2026).
   const commandRow = useCommandRowStyles();
-  const fmt = (n: number | undefined) =>
-    n === undefined || n === null ? "-" : numberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
-
-  const untilClosing =
-    contract.costsUntilClosingType === CLOSING_DATE_TYPE.Actual
-      ? contract.costsUntilClosingActual : contract.costsUntilClosingPlan;
-  const afterClosing =
-    contract.costsAfterClosingType === CLOSING_DATE_TYPE.Actual
-      ? contract.costsAfterClosingActual : contract.costsAfterClosingPlan;
-  const totalCosts =
-    contract.totalCostsType === TOTAL_COSTS_TYPE.Overwrite
-      ? contract.totalCostsOverwrite : contract.totalCostsCalculated;
+  // Every card figure follows its canvas `Text(…, "###,##0")` (CONTR-020/021/022/024): a blank is 0, the
+  // figure is whole and grouped; the Plan figure is read ONLY when the type is Plan.
+  const untilClosing = cardClosingFigure(
+    contract.costsUntilClosingType, contract.costsUntilClosingPlan, contract.costsUntilClosingActual,
+  );
+  const afterClosing = cardClosingFigure(
+    contract.costsAfterClosingType, contract.costsAfterClosingPlan, contract.costsAfterClosingActual,
+  );
+  const totalCosts = cardTotalCostsFigure(contract);
   const marginUnit = contract.marginType === MARGIN_TYPE.Percentage ? "%" : currency;
-  const marginValue =
-    contract.marginType === MARGIN_TYPE.Percentage
-      ? contract.marginPercentage : contract.marginFixedValue;
+  const marginValue = cardMarginFigure(contract);
 
   /*
    * Canvas lays the card out in four COLUMNS, each up to two fields deep
@@ -1488,6 +1612,16 @@ function ContractCardBody({
    * total in column 1 instead — see `cardShowsClosingCosts`.
    */
   const selectedTarget = targets.find((t) => t.id === selectedTargetId);
+  const canAdd = canAddPaymentTarget({
+    selectedContractId: isSelectedContract ? contract.id : undefined,
+    cardContractId: contract.id,
+    targets,
+  });
+  const canChange = canChangePaymentTarget({
+    selectedContractId: isSelectedContract ? contract.id : undefined,
+    cardContractId: contract.id,
+    hasSelectedTarget: Boolean(selectedTarget),
+  });
   const showsClosingCosts = cardShowsClosingCosts(contract.contractType);
   const closingDateField = (
     <CostField label={MSG.closingDate} name="dtp_Contracts_List_Card_Body_Fields_ClosingDate" disabled
@@ -1501,7 +1635,9 @@ function ContractCardBody({
       name={contract.contractType === CONTRACT_TYPE.ProjectRights
         ? "txt_Contracts_List_Card_Body_Fields_TotalCosts_RC"
         : "txt_Contracts_List_Card_Body_Fields_TotalDevContract"}
-      disabled value={fmt(contract.totalCostOfContract)} />
+      disabled value={contract.contractType === CONTRACT_TYPE.ProjectRights
+        ? cardRightsTotalText(contract.totalCostOfContract, locale)
+        : cardContractTotalText(contract.totalCostOfContract, locale)} />
   );
 
   return (
@@ -1511,17 +1647,19 @@ function ContractCardBody({
           <>
             <CostField label={`Costs Until Closing [${currency}]`}
               name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
-              disabled value={fmt(untilClosing)} />
+              disabled value={wholeNumberText(untilClosing, locale)} />
             {closingDateField}
             <CostField label={`Costs After Closing [${currency}]`}
               name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
-              disabled value={fmt(afterClosing)} />
+              disabled value={wholeNumberText(afterClosing, locale)} />
             <CostField label={`Total Costs [${currency}]`}
               name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
-              disabled value={fmt(totalCosts)} />
+              disabled value={wholeNumberText(totalCosts, locale)} />
             <CostField label={`Margin [${marginUnit}]`}
               name="txt_Contracts_List_Card_Body_Fields_Margins"
-              disabled value={fmt(marginValue)} />
+              // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
+              standard={marginIsStandard(contract)}
+              disabled value={oneDecimalText(marginValue, locale)} />
             {totalField}
           </>
         ) : (
@@ -1544,7 +1682,7 @@ function ContractCardBody({
         <div className={mergeClasses("canvas-contract-targets-bar", commandRow.row)}>
           <Button aria-label={MSG.addPeriod} data-testid={`contracts-add-target-${contract.id}`}
             className={commandRow.command}
-            appearance="transparent" icon={<AddRegular />} disabled={writesDisabled} onClick={onAddTarget}>
+            appearance="transparent" icon={<AddRegular />} disabled={writesDisabled || !canAdd} onClick={onAddTarget}>
             {MSG.addPeriod}
           </Button>
           <Button
@@ -1553,7 +1691,7 @@ function ContractCardBody({
             className={commandRow.command}
             appearance="transparent"
             icon={<EditRegular />}
-            disabled={!selectedTarget || writesDisabled}
+            disabled={!canChange || writesDisabled}
             onClick={() => { if (selectedTarget) onEditTarget(selectedTarget); }}
           >
             {MSG.edit}
@@ -1564,7 +1702,7 @@ function ContractCardBody({
             className={commandRow.command}
             appearance="transparent"
             icon={<DeleteRegular />}
-            disabled={!selectedTarget || writesDisabled}
+            disabled={!canChange || writesDisabled}
             onClick={() => { if (selectedTarget) onDeleteTarget(selectedTarget); }}
           >
             {MSG.delete}
@@ -1607,13 +1745,14 @@ function ContractCardBody({
                     checked={selectedTargetId === t.id}
                     aria-label={`Select ${t.description ?? ""}`}
                     data-testid={`img_Contracts_List_Card_Body_PaymentTargetsRow_RadioSelection-${t.id}`}
-                    onChange={() => onSelectTarget(t.id)}
+                    // The row's own click (it bubbles from the radio) does the toggling (`:1850`).
+                    onChange={() => undefined}
                   />
                 </td>
-                <td>{t.description ?? "-"}</td>
-                <td>{t.paymentDate ?? "-"}</td>
-                <td className="numeric">{fmt(t.totalCostsContract)}</td>
-                <td>{t.note ?? "-"}</td>
+                <td>{t.description ?? ""}</td>
+                <td>{t.paymentDate ?? ""}</td>
+                <td className="numeric">{targetPercentText(t.totalCostsContract, locale)}</td>
+                <td title={t.note}>{t.note ?? ""}</td>
               </tr>
             ))}
           </tbody>

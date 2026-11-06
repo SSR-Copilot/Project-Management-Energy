@@ -381,7 +381,9 @@ export function mapOpexRow(
     align: r.vsb_alignwithprojectduration === true,
     external: r.vsb_externalcontract === true,
     standard: r.vsb_isstandardcontract === true,
-    isStartDateStandard: r.vsb_isstartdatestandardassumption === true,
+    // A stored Blank stays `null` (not `false`): the edited canvas Coalesces the parent's flag.
+    isStartDateStandard: typeof r.vsb_isstartdatestandardassumption === "boolean"
+      ? r.vsb_isstartdatestandardassumption : null,
     parentId: r._vsb_parentcost_value || undefined,
     contractId: place?.contractId ?? (r._vsb_parentcost_value || r.vsb_opexprojectcostid),
     contractName: place?.contractName ?? (r.vsb_description ?? ""),

@@ -11,7 +11,7 @@
  * nor a QueryClient.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render as rtlRender, screen, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 import { vsbTheme } from "@/theme/fluent";
@@ -25,6 +25,9 @@ const save = { mutate: vi.fn(), mutateAsync: vi.fn((_book: unknown) => Promise.r
 const addStandard = { mutate: vi.fn(), mutateAsync: vi.fn((_args: unknown) => Promise.resolve()), isPending: false };
 let book: CostBook | undefined;
 let loading = false;
+/** Run 3: the catalogue and device-type queries, loading independently of the book. */
+let catalogLoading = false;
+let deviceTypesLoading = false;
 /**
  * `Filter('OPEX & Land Lease Standard Assumptions', Country && Technology && 'Type Of Contract'
  * [&& 'Opex Subaccount'])` — the catalogue the `Add Standard Contract` gate tests against.
@@ -90,9 +93,11 @@ vi.mock("@/features/cost/costing/useCostBook", () => ({
   useCountryInflationAreas: () => ({ data: ["North", "Centre - North"] }),
   useCountryInflation: () => ({ data: [{ year: 2028, area: "", inflation: 2.1 }] }),
   useOpexCatalog: () => ({
-    accounts: OPEX_ACCOUNTS, subaccounts: OPEX_SUBACCOUNTS, isLoading: false,
+    accounts: OPEX_ACCOUNTS, subaccounts: OPEX_SUBACCOUNTS, isLoading: catalogLoading,
   }),
-  useOpexDeviceTypes: () => ({ data: deviceTypes }),
+  useOpexDeviceTypes: () => ({
+    data: deviceTypesLoading ? undefined : deviceTypes, isLoading: deviceTypesLoading,
+  }),
   useOpexAssumptionScopes: () => ({ data: assumptionScopes }),
 }));
 vi.mock("@/app/SessionContext", () => ({
@@ -109,7 +114,20 @@ vi.mock("@/features/cost/contracts/hooks", () => ({
   useProjectExtras: () => ({ data: { countryId: "country-de", technology: 1 } }),
 }));
 
-import OpexScreen from "./OpexScreen";
+import OpexScreen, { resetOpexFoldState } from "./OpexScreen";
+
+/**
+ * Every card starts FOLDED (run 3, FT-BR-OPEX-012: `IsFolded = true` at load). Most cases below
+ * need the leading card's command bar and rows, so this `render` opens it; the fold-state cases
+ * (UT-OPEXUI-032…) use `rtlRender` directly.
+ */
+const render = (ui: ReactNode) => {
+  resetOpexFoldState(); // each render is a fresh visit; only UT-OPEXUI-032 tests the memory
+  const result = rtlRender(ui);
+  const first = document.querySelector("section button");
+  if (first) fireEvent.click(first);
+  return result;
+};
 
 const period = (
   over: Partial<CostPeriod> & Pick<CostPeriod, "id" | "mode" | "group" | "description">,
@@ -156,7 +174,10 @@ function expectOrder(haystack: string, needles: readonly string[]) {
 describe("OpexScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetOpexFoldState();
     loading = false;
+    catalogLoading = false;
+    deviceTypesLoading = false;
     writeInFlight = false;
     save.isPending = false;
     addStandard.isPending = false;
@@ -198,20 +219,215 @@ describe("OpexScreen", () => {
 
   /* ── the card shell ─────────────────────────────────────────────────── */
 
-  it("UT-OPEXUI-001 renders one O&M card per device, WTG types first, first card open", () => {
-    render(<Harness><OpexScreen mode="om" /></Harness>);
+  it("UT-OPEXUI-001 renders one O&M card per device, WTG types first, every card folded", () => {
+    rtlRender(<Harness><OpexScreen mode="om" /></Harness>);
 
     const titles = [...document.querySelectorAll("section")]
       .map((s) => s.querySelector("button")?.textContent ?? "");
     expect(titles[0]).toContain("WTG V150-6.0");
     expect(titles[1]).toContain("PV Module A");
 
-    // The leading card is open, the rest are collapsed and their rows are not in the document.
-    expect(screen.getByText("Initialized O&M Contract")).toBeInTheDocument();
+    // FT-BR-OPEX-012: no card opens at load (`IsFolded = true`), so no rows and no command bar.
+    expect(screen.queryByText("Initialized O&M Contract")).not.toBeInTheDocument();
     expect(screen.queryByText("Standard Operation & Maintenance")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("opex-newOpexProjectCost")).not.toBeInTheDocument();
 
     open("PV Module A");
     expect(screen.getByText("Standard Operation & Maintenance")).toBeInTheDocument();
+    expect(screen.queryByText("Initialized O&M Contract")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-032 keeps the Other OPEX fold state when the screen is left and re-entered", () => {
+    const first = rtlRender(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    expect(screen.getByText("All-Risk Insurance")).toBeInTheDocument();
+    first.unmount();
+
+    rtlRender(<Harness><OpexScreen mode="other" /></Harness>);
+    expect(screen.getByText("All-Risk Insurance")).toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-033 refolds the O&M cards on every entry", () => {
+    const first = rtlRender(<Harness><OpexScreen mode="om" /></Harness>);
+    open("PV Module A");
+    expect(screen.getByText("PV Service")).toBeInTheDocument();
+    first.unmount();
+
+    rtlRender(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.queryByText("PV Service")).not.toBeInTheDocument();
+  });
+
+  /** Opens the O&M edit panel on `om-1` (inflation on, stored year 2028, EUR/MWh 1.4, no threshold). */
+  const openEditOm1 = () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+  };
+
+  it("UT-OPEXUI-034 labels the three dropdowns with the canvas AccessibleLabels Year / Month / Month", () => {
+    openEditOm1();
+    const scope = within(panel());
+    expect(scope.getByLabelText("Year")).toBeInTheDocument();
+    expect(scope.getAllByLabelText("Month")).toHaveLength(2);
+    // The test ids are unchanged (CONVENTIONS rule 16).
+    for (const id of ["opex-years", "opex-months", "opex-frequency"]) {
+      expect(scope.getByTestId(id)).toBeInTheDocument();
+    }
+  });
+
+  it("UT-OPEXUI-035 caps Description at 100 characters and leaves Inflation Start Year uncapped", () => {
+    openEditOm1();
+    const scope = within(panel());
+    expect(scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description"))
+      .toHaveAttribute("maxlength", "100");
+    expect(scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear"))
+      .not.toHaveAttribute("maxlength");
+    // 20255 reaches the box whole and is answered by the YYYY message, Save off.
+    fireEvent.change(
+      scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear"),
+      { target: { value: "20255" } },
+    );
+    expect(scope.getByText(OPEX_MSG.inflationStartYearFormat)).toBeInTheDocument();
+    expect(scope.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("UT-OPEXUI-036 gives the panel captions, the reserved-term message and the figure hint a hover text", () => {
+    openEditOm1();
+    const scope = within(panel());
+    for (const caption of ["Description", "Start Date", "Duration", "Currency", "Aggregation",
+      "Distribution Frequency", "EUR/MWh p.a.", "EUR/MW p.a."]) {
+      expect(scope.getByText(caption)).toHaveAttribute("title", caption);
+    }
+    fireEvent.change(
+      scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Description"),
+      { target: { value: "Standard cover" } },
+    );
+    expect(scope.getByText(OPEX_MSG.descriptionStandardReserved))
+      .toHaveAttribute("title", OPEX_MSG.descriptionStandardReserved);
+    for (const id of ["FixCosts", "ProcentOfRevenues", "EuroPerMwh", "EuroPerMw", "EuroPerWtg"]) {
+      fireEvent.change(
+        scope.getByTestId(`txt_OpexCosts_RightPanel_NewEditCost_BodyContent_${id}`),
+        { target: { value: "" } },
+      );
+    }
+    expect(scope.getByText(OPEX_MSG.atLeastOneFigure))
+      .toHaveAttribute("title", OPEX_MSG.atLeastOneFigure);
+  });
+
+  it("UT-OPEXUI-037 hovers the O&M card title with the device Name and the row with its Description", () => {
+    deviceTypes = [
+      [{ id: "dev-wtg", name: "WTG V150-6.0", typeInProjectId: "gt-1",
+        createdOn: "2024-01-01T00:00:00Z", displayName: "Siemens Gamesa 5-7" }],
+      [{ id: "dev-pv", name: "PV Module A", typeInProjectId: "pt-1",
+        createdOn: null, displayName: "PV Module A" }],
+    ];
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.getByTestId("opex-card-dev-wtg")).toHaveAttribute("title", "WTG V150-6.0");
+    expect(screen.getByTestId("opex-select-om-1").closest("tr"))
+      .toHaveAttribute("title", "Initialized O&M Contract");
+  });
+
+  it("UT-OPEXUI-038 gives the Other OPEX card and row no hover (the canvas sets none)", () => {
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    expect(screen.getByTestId("opex-card-sub-3")).not.toHaveAttribute("title");
+    expect(screen.getByTestId("opex-select-other-1").closest("tr")).not.toHaveAttribute("title");
+  });
+
+  it("UT-OPEXUI-039 does not name the sub-account on an Other OPEX Edit panel", () => {
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    fireEvent.click(screen.getByTestId("opex-select-other-1"));
+    fireEvent.click(within(card("Insurance")).getByTestId("opex-editOpexProjectCost"));
+    const heading = within(panel()).getByText(/^Edit Cost Type -/);
+    expect(heading.textContent).not.toContain("Insurance");
+  });
+
+  it("UT-OPEXUI-040 keeps the Area dropdown hidden on an Italian project", () => {
+    const original = project.countryName;
+    project.countryName = "Italy";
+    try {
+      openEditOm1();
+      fireEvent.click(within(panel()).getByTestId("opex-country-inflation"));
+      expect(within(panel()).queryByTestId("opex-area")).not.toBeInTheDocument();
+    } finally {
+      project.countryName = original;
+    }
+  });
+
+  it("UT-OPEXUI-041 lets Save through with Country Inflation Profile switched on", () => {
+    openEditOm1();
+    fireEvent.click(within(panel()).getByTestId("opex-country-inflation"));
+    expect(within(panel()).getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("UT-OPEXUI-042 clearing EUR/MWh resets the Threshold toggle, radio and Individual value", () => {
+    openEditOm1();
+    const scope = within(panel());
+    fireEvent.click(scope.getByTestId("opex-threshold"));
+    expect(scope.getByTestId("opex-threshold")).toBeChecked();
+    fireEvent.click(scope.getByTestId(`opex-threshold-${952850002}`));
+    fireEvent.change(
+      scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual"),
+      { target: { value: "2.5" } },
+    );
+    fireEvent.change(
+      scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_EuroPerMwh"),
+      { target: { value: "" } },
+    );
+    expect(scope.getByTestId("opex-threshold")).not.toBeChecked();
+    expect(scope.queryByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual"))
+      .not.toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-043 switching Inflation Profile off and on again restores the default start year", () => {
+    openEditOm1();
+    const scope = within(panel());
+    const year = () => scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear");
+    expect(year()).toHaveValue("2028");
+    fireEvent.change(year(), { target: { value: "1999" } });
+    fireEvent.click(scope.getByTestId("opex-inflation"));
+    fireEvent.click(scope.getByTestId("opex-inflation"));
+    expect(year()).toHaveValue("2028");
+    expect(scope.getByTestId("opex-inflation-profile")).toHaveValue("2.0");
+  });
+
+  it("UT-OPEXUI-044 prefills Fix Costs and the rates as #0.00", () => {
+    openEditOm1();
+    const scope = within(panel());
+    expect(scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_FixCosts"))
+      .toHaveValue("0.00");
+    expect(scope.getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_EuroPerMwh"))
+      .toHaveValue("1.40");
+  });
+
+  it("UT-OPEXUI-045 clears the row selection once Save has run", async () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    expect(screen.getByTestId("opex-select-om-2")).toBeChecked();
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    await act(async () => { fireEvent.click(within(panel()).getByRole("button", { name: "Save" })); });
+    expect(save.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("opex-select-om-2")).not.toBeChecked();
+  });
+
+  it("UT-OPEXUI-046 refolds every O&M card after Add Standard Contract", async () => {
+    deviceTypes = [
+      [{ id: "dev-wtg", name: "WTG V150-6.0", typeInProjectId: "gt-1",
+        createdOn: "2024-01-01T00:00:00Z", displayName: "WTG V150-6.0" },
+      { id: "dev-empty", name: "WTG Empty", typeInProjectId: "gt-2",
+        createdOn: "2024-02-01T00:00:00Z", displayName: "WTG Empty" }],
+      [],
+    ];
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    open("WTG Empty");
+    expect(screen.getByText("Initialized O&M Contract")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(within(card("WTG Empty")).getByTestId("opex-addStandardContract"));
+    });
+    expect(addStandard.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Initialized O&M Contract")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("opex-addStandardContract")).not.toBeInTheDocument();
   });
 
   it("UT-OPEXUI-002 renders the Other OPEX sub-accounts in vsb_order, never alphabetically", () => {
@@ -545,6 +761,13 @@ describe("OpexScreen", () => {
     expect(within(panel()).getByTestId("opex-start")).toHaveValue("Sun, Aug 30, 2037");
   });
 
+  it("UT-OPEXUI-047 Start Date is disabled and the reset icon hidden on a follow-on period (edited canvas)", () => {
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-newOpexProjectCost"));
+    expect(within(panel()).getByTestId("opex-start")).toBeDisabled();
+    expect(within(panel()).queryByTestId("opex-reset-start")).not.toBeInTheDocument();
+  });
   it("UT-OPEXUI-022b fills Months with 0 months once Years is picked, as the canvas does", () => {
     render(<Harness><OpexScreen mode="om" /></Harness>);
     fireEvent.click(screen.getByTestId("opex-select-om-2"));
@@ -736,7 +959,10 @@ describe("OpexScreen", () => {
   it("UT-OPEXUI-029 keeps a card for a device the project no longer lists", () => {
     // A cost row whose device has gone is the silent-drop failure this codebase has had once:
     // its card stays so the row is still visible and deletable.
-    deviceTypes = [[], []];
+    // With NO listed device at all the canvas shows the sentence instead (UT-OPEXUI-050), so one
+    // real device is listed here.
+    deviceTypes = [[], [{ id: "dev-pv", name: "PV Module A", typeInProjectId: "pt-1",
+      createdOn: null, displayName: "PV Module A" }]];
     render(<Harness><OpexScreen mode="om" /></Harness>);
     expect(screen.getByText("WTG V150-6.0")).toBeInTheDocument();
   });
@@ -1008,5 +1234,107 @@ describe("OpexScreen", () => {
     expect(reportFailure).toHaveBeenCalledTimes(1);
     expect(reportFailure.mock.calls[0]?.[0]).toBe("refused");
     expect(screen.getByRole("alert")).toHaveTextContent("refused");
+  });
+
+  /* -- Run 3 (edited canvas): loading, Cancel, currency, hover ------------------------------- */
+
+  it("UT-OPEXUI-048 the panel's currency is the project's country currency, never the row's own", () => {
+    // `drp_…_Currency.DefaultSelectedItems` (`:6288`): Switch(country, "Poland", PLN, EUR), Disabled.
+    book = makeBook([
+      period({ id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Zloty row",
+        currency: "Polish Zloty", periodIndex: 1, contractId: "om-1" }),
+    ]);
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"));
+    expect(within(panel()).getByTestId("opex-currency")).toHaveValue("Euro");
+  });
+
+  it("UT-OPEXUI-049 no 'no generators' text while the catalogue or the device types still load", () => {
+    deviceTypes = [[], []];
+    book = makeBook([]);
+    deviceTypesLoading = true;
+    const first = render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    expect(screen.getByTestId("opex-loading")).toBeInTheDocument();
+    first.unmount();
+
+    deviceTypesLoading = false;
+    catalogLoading = true;
+    const second = render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.queryByText(OPEX_MSG.noGenerators)).not.toBeInTheDocument();
+    second.unmount();
+
+    // Everything finished: now (and only now) the canvas text shows.
+    catalogLoading = false;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.getByText(OPEX_MSG.noGenerators)).toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-049b the write commands stay disabled while the device types load", () => {
+    deviceTypesLoading = true;
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    for (const c of document.querySelectorAll("[data-testid^='opex-newOpexProjectCost'], [data-testid='opex-editOpexProjectCost']")) {
+      expect(c).toBeDisabled();
+    }
+    expect(document.querySelector("[aria-busy='true']")).not.toBeNull();
+  });
+
+  it("UT-OPEXUI-050 an orphan card does not keep the sentence away: it follows the device collection", () => {
+    // `gal_…_GeneratorsInProject.AllItemsCount=0` counts `colDeviceTypesInProject`. The book still
+    // has O&M periods (pointing at a device the project no longer lists): the canvas shows the text.
+    deviceTypes = [[], []];
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    expect(screen.getByText(OPEX_MSG.noGenerators)).toBeInTheDocument();
+    expect(document.querySelector("section")).toBeNull();
+  });
+
+  it("UT-OPEXUI-051 Cancel in O&M clears the selected device: Edit, Add Period and Delete go off", () => {
+    // `Cancel.OnChange` (`:8690`): `locSelectedDeviceTypeInProject: Blank()`.
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    const scope = within(card("WTG V150-6.0"));
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+    fireEvent.click(scope.getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByText("Cancel"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeDisabled();
+    expect(scope.getByTestId("opex-deleteOpexProjectCost")).toBeDisabled();
+    expect(scope.getByTestId("opex-newOpexProjectCost")).toBeDisabled();
+    // Clicking the row again restores them.
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+  });
+
+  it("UT-OPEXUI-052 the panel X does the same as Cancel in O&M", () => {
+    // `btn_…_X.OnSelect` (`:5495`).
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-1"));
+    const scope = within(card("WTG V150-6.0"));
+    fireEvent.click(scope.getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByTestId("panel-close"));
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeDisabled();
+  });
+
+  it("UT-OPEXUI-053 Cancel in Other OPEX keeps the selection (the canvas clears no variable there)", () => {
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    fireEvent.click(screen.getByTestId("opex-select-other-1"));
+    const scope = within(card("Insurance"));
+    fireEvent.click(scope.getByTestId("opex-editOpexProjectCost"));
+    fireEvent.click(within(panel()).getByText("Cancel"));
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+  });
+
+  it("UT-OPEXUI-054 only the O&M description cell hovers; Other OPEX sets no Tooltip there", () => {
+    const first = render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    const otherRow = screen.getByTestId("opex-select-other-1").closest("tr") as HTMLElement;
+    expect(otherRow.querySelector("td[title]")).toBeNull();
+    first.unmount();
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    const omRow = screen.getByTestId("opex-select-om-1").closest("tr") as HTMLElement;
+    expect(omRow.querySelector("td[title]")).not.toBeNull();
   });
 });

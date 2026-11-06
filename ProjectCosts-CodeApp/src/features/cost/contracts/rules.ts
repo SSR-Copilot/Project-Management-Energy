@@ -8,7 +8,7 @@
  * Provenance comments cite the canvas control and property the rule came from, in the form
  * `control.Property`, so a reviewer can diff against the `.pa.yaml`.
  */
-import { isDecimal, isInteger, inRange, orZero, parseNumber, round, sum } from "@/domain/numeric";
+import { isDecimal, isInteger, inRange, orZero, parseNumber, round, roundUp, sum } from "@/domain/numeric";
 import { dateFormat, numberFormat } from "@/domain/locale";
 
 /* ══════════════════════════════════════════════════════════════ option sets */
@@ -191,7 +191,24 @@ export const MSG = {
   spinnerSavingPaymentTarget: "Saving payment target data...",
   spinnerDeletingContract: "Deleting contract...",
   spinnerDeletingPaymentTarget: "Deleting payment target...",
+
+  /**
+   * `lbl_..._ClosingDate_ErrorMessage.Text` (Dev/Construction panel `:4109`, Project Rights panel `:3434`).
+   * Visible on EDIT only (`Not(IsBlank(locSelectedContract))`).
+   */
+  closingDateEmpty: "The Contract Closing Date cannot be empty.",
+  /** The `Notify(...)` prefix of the contract save (`:3798`, `:7487`), before "Internal error: ...". */
+  saveErrorContract: "Error: BoP Contract could not be saved correctly.",
+  /** The `Notify(...)` prefix of the payment-target save (`:3126`). */
+  saveErrorPaymentTarget: "Error: BoP Contract payment target could not be saved correctly.",
 } as const;
+
+/**
+ * `rec_..._CostssRow_Used.Tooltip` (`:6429`): `$"Used in contract ""{...Description}"""`.
+ */
+export function usedInContractTooltip(contractDescription: string | undefined): string {
+  return `Used in contract "${contractDescription ?? ""}"`;
+}
 
 /**
  * `locContractsCostsMax`, set in `Contracts Screen.OnVisible`. Every cost field on this
@@ -202,6 +219,10 @@ export const CONTRACT_COSTS_MAX = 1_000_000_000;
 /** `lbl_..._PaymentTarget_Note_Details.Text` is `{Len}/55`; the comment counter is `/255`. */
 export const NOTE_MAX_LENGTH = 55;
 export const COMMENT_MAX_LENGTH = 255;
+/** `txt_..._PaymentTarget_Description.MaxLength: =55` (`:2376`). */
+export const PAYMENT_TARGET_DESCRIPTION_MAX_LENGTH = 55;
+/** The Project Rights total box tests `InRange(…, 0, 10000000)` (`:3552`), but only shows it for a non-integer. */
+export const RIGHTS_TOTAL_MAX = 10_000_000;
 
 /* ════════════════════════════════════════════════════════════════════ types */
 
@@ -335,6 +356,8 @@ export interface BopContract {
 export interface PaymentTarget {
   id: string;
   contractId: string;
+  /** `createdon` — the canvas gallery sorts by `Created On` ascending (`:1627`); the Add Period description follows the newest. */
+  createdOn?: string;
   description?: string;
   /** STORED AS TEXT. `vsb_paymentdate` is `nvarchar`, not a date column — see notes below. */
   paymentDate?: string;
@@ -668,6 +691,12 @@ export interface ContractForm {
   costsAfterClosingActual: string;
   totalCostsType: TotalCostsType;
   totalCostsCalculated: string;
+  /**
+   * The UNROUNDED total the last recalculation produced (`varSelectedContractTotalCostsCalculated`, `:7667`).
+   * The canvas shows `RoundUp(…)` of it (`:5339`) but applies the margin to the unrounded figure
+   * (`:7705`), so it travels with the form. Absent on a form loaded from a stored contract.
+   */
+  totalCostsCalculatedRaw?: number;
   totalCostsOverwrite: string;
   margin: boolean;
   marginType: MarginType;
@@ -687,8 +716,9 @@ export interface ContractForm {
  *
  * `vsb_totalcostscalculated` is a Dataverse **integer** column (so is `..._overwrite`, and so
  * are both `...plan` / `...actual` columns), while `vsb_cost` on CAPEX Cost is a decimal. The
- * canvas app wrote the unrounded sum and let Dataverse round it; rounding here makes what the
- * user sees and what is stored the same number.
+ * canvas boxes show `RoundUp(…, 0)` (`:4456`, `:5339`) and the Save writes `Value(box.Value)`,
+ * i.e. the ROUNDED-UP figure (CONTR-066/070/079). The total is `RoundUp(Sum(until, after))` of
+ * the UNROUNDED halves (`:7669`), not the sum of two rounded figures.
  */
 export function totalCostsCalculated(
   form: Pick<
@@ -703,6 +733,35 @@ export function totalCostsCalculated(
   if (form.totalCostsType !== TOTAL_COSTS_TYPE.Calculated) {
     return round(orZero(parseNumber(form.totalCostsOverwrite, locale)));
   }
+  return roundUpClean(totalCostsRaw(form, recalculated, locale));
+}
+
+/**
+ * Power Fx `RoundUp(x, 0)`, guarded against binary noise (`1000 * 1.1` is `1100.0000000000002`
+ * in JS and would round up to 1101; Power Fx's decimal arithmetic gives 1100).
+ */
+export function roundUpClean(value: number): number {
+  return roundUp(round(value, 6));
+}
+
+/**
+ * `varSelectedContractTotalCostsCalculated` (`:7667`) — the UNROUNDED figure: the sum of the two
+ * halves (the recalculated Plan figure or the typed Actual one, per that half's radio) when the
+ * type is Calculated, else the typed Overwrite value.
+ */
+export function totalCostsRaw(
+  form: Pick<
+    ContractForm,
+    | "totalCostsType" | "totalCostsOverwrite"
+    | "costsUntilClosingType" | "costsUntilClosingActual"
+    | "costsAfterClosingType" | "costsAfterClosingActual"
+  >,
+  recalculated: { untilClosingPlan: number; afterClosingPlan: number },
+  locale?: string,
+): number {
+  if (form.totalCostsType !== TOTAL_COSTS_TYPE.Calculated) {
+    return orZero(parseNumber(form.totalCostsOverwrite, locale));
+  }
   const until =
     form.costsUntilClosingType === CLOSING_DATE_TYPE.Plan
       ? recalculated.untilClosingPlan
@@ -711,7 +770,7 @@ export function totalCostsCalculated(
     form.costsAfterClosingType === CLOSING_DATE_TYPE.Plan
       ? recalculated.afterClosingPlan
       : orZero(parseNumber(form.costsAfterClosingActual, locale));
-  return round(until + after);
+  return until + after;
 }
 
 /**
@@ -827,14 +886,62 @@ export function validateMarginPercentage(raw: string, locale?: string): FieldErr
     return { field: "marginPercentage", message: RESX.numericOneDecimals };
   }
   if (!inRange(raw, 0, 100, locale)) {
-    return { field: "marginPercentage", message: betweenMessage(0, 100, locale) };
+    // `$"Please select a value between 0 and {Text(100, "###,###0.0")}"` (`:5767`) — "100.0".
+    return {
+      field: "marginPercentage",
+      message: `Please select a value between 0 and ${formatOneDecimal(100, locale)}`,
+    };
   }
   return undefined;
 }
 
-/** `lbl_..._MarginFixedValues_ErrorMessage` — whole currency, 0..max. */
+/**
+ * `lbl_..._MarginFixedValues_ErrorMessage.Text` (`:5570`) — TWO decimals (`fn_Numeric.IsTwoDecimal`,
+ * which also accepts a sign, so a negative reaches the range check), then 0..max.
+ * The canvas range text formats the maximum with `"###,###0,00"` (`:5588`); that odd format string
+ * is rendered here as the plain grouped maximum, to be confirmed against a Canvas run.
+ */
 export function validateMarginFixedValue(raw: string, locale?: string): FieldError | undefined {
-  return validateCostField("marginFixedValue", raw, locale);
+  const field = "marginFixedValue";
+  if (raw.trim() === "") return { field, message: RESX.inputBlank };
+  if (!isDecimal(raw, { places: 2, allowNegative: true, locale })) {
+    return { field, message: RESX.numericTwoDecimals };
+  }
+  if (!inRange(raw, 0, CONTRACT_COSTS_MAX, locale)) {
+    return { field, message: betweenMessage(0, CONTRACT_COSTS_MAX, locale) };
+  }
+  return undefined;
+}
+
+/**
+ * `lbl_..._RightsContract_Content_ErrorMessage` (`:3540-3579`) for the Project Rights total.
+ *
+ * SOURCE DEFECT: the label computes a range message for 0..10,000,000 but its `Visible` is
+ * `And(And(Not(IsBlank), Not(IsInteger)), Or(...))`, so only a NON-INTEGER ever shows (and blocks Save,
+ * `:3715`). `-1` and `20000000` are accepted. Reproduced (CONTR-090); `rightsTotalOutOfRange` is the
+ * unreachable range text, kept for the decision log. Blank reports "Input must not be blank" (D4).
+ */
+export function validateRightsTotal(raw: string): FieldError | undefined {
+  const field = "totalCostsOverwrite";
+  if (raw.trim() === "") return { field, message: RESX.inputBlank };
+  if (!isInteger(raw)) return { field, message: RESX.numeric };
+  return undefined;
+}
+
+/** The range text the canvas builds but never shows (`:3556`). */
+export function rightsTotalOutOfRange(): string {
+  return `Please select a value between 0 and ${formatThousands(RIGHTS_TOTAL_MAX)}`;
+}
+
+/**
+ * The Project Rights panel's Save gate (`:3708`): a non-blank description, a closing date, no visible
+ * date error, a non-blank total with no visible total error.
+ */
+export function canSaveRightsContract(
+  form: Pick<ContractForm, "description" | "closingDate" | "totalCostsOverwrite">,
+): boolean {
+  return form.description.trim() !== "" && Boolean(form.closingDate) &&
+    form.totalCostsOverwrite.trim() !== "" && !validateRightsTotal(form.totalCostsOverwrite);
 }
 
 /**
@@ -898,12 +1005,21 @@ export function contractErrors(
   form: ContractForm,
   tree: readonly AccountNode[],
   locale?: string,
+  editing = false,
 ): FieldError[] {
   const errors: FieldError[] = [];
   const push = (e: FieldError | undefined) => { if (e) errors.push(e); };
 
   push(validateDescription(form.description));
-  if (!form.closingDate) errors.push({ field: "closingDate", message: RESX.inputBlank });
+  // `lbl_..._ClosingDate_ErrorMessage` is visible on EDIT only, with its own text (`:4106`);
+  // on Add the canvas shows nothing and this app keeps the D4 "Input must not be blank".
+  if (!form.closingDate) {
+    errors.push({ field: "closingDate", message: editing ? MSG.closingDateEmpty : RESX.inputBlank });
+  }
+  if (form.contractType === CONTRACT_TYPE.ProjectRights) {
+    push(validateRightsTotal(form.totalCostsOverwrite));
+    return errors;
+  }
 
   push(validateCostField(
     form.costsUntilClosingType === CLOSING_DATE_TYPE.Plan
@@ -1110,6 +1226,27 @@ export function contractName(projectIdCode: string, description: string): string
   return `BoP-${projectIdCode}-${description.trim()}`;
 }
 
+/**
+ * `Name: $"BoP RC-{gblSelectedProject.'Project ID'}-{txt_Contracts_RightPanel_NewEdit_Description.Value}"`
+ * (`:3752`) — the Project Rights Save.
+ *
+ * SOURCE DEFECT (reproduced, CONTR-091): the suffix reads the Development/Construction panel's
+ * Description box, not the rights panel's own, so on a Project Rights contract it is normally empty
+ * and the name is `BoP RC-<Project ID>-`. The prefix differs from the other contract types' `BoP-`.
+ */
+export function rightsContractName(projectIdCode: string): string {
+  return `BoP RC-${projectIdCode}-`;
+}
+
+/** The `vsb_name` for a contract of this type. */
+export function contractNameFor(
+  contractType: ContractType, projectIdCode: string, description: string,
+): string {
+  return contractType === CONTRACT_TYPE.ProjectRights
+    ? rightsContractName(projectIdCode)
+    : contractName(projectIdCode, description);
+}
+
 /** `Name: $"BoP-PT-{locSelectedContract.Description}-{txt_..._Description.Value}"`. */
 export function paymentTargetName(
   contractDescription: string | undefined,
@@ -1199,12 +1336,6 @@ export function gatedContractCommands(
   return commands.map((c) => (writesDisabled ? { ...c, enabled: false } : { ...c }));
 }
 
-/** The screen's selection: one contract card and, inside it, at most one payment target. */
-interface ContractSelection {
-  contractId: string | undefined;
-  targetId: string | undefined;
-}
-
 /**
  * The selection once a successful delete ends (CA-17).
  *
@@ -1268,20 +1399,22 @@ export function recalculateForm(
   locale?: string,
 ): ContractForm {
   if (!form.closingDate) return form;
-  const untilClosingPlan = round(costsUntilClosing({ closingDate: form.closingDate, costs }));
-  const afterClosingPlan = round(costsAfterClosing({ closingDate: form.closingDate, costs }));
-  const calculated = totalCostsCalculated(form, { untilClosingPlan, afterClosingPlan }, locale);
+  // The halves stay UNROUNDED for the total (`:7669`); the Plan boxes show `RoundUp(…, 0)` (`:4456`).
+  const untilRaw = costsUntilClosing({ closingDate: form.closingDate, costs });
+  const afterRaw = costsAfterClosing({ closingDate: form.closingDate, costs });
+  const raw = totalCostsRaw(form, { untilClosingPlan: untilRaw, afterClosingPlan: afterRaw }, locale);
   return {
     ...form,
     costsUntilClosingPlan:
       form.costsUntilClosingType === CLOSING_DATE_TYPE.Plan
-        ? String(untilClosingPlan) : form.costsUntilClosingPlan,
+        ? String(roundUpClean(untilRaw)) : form.costsUntilClosingPlan,
     costsAfterClosingPlan:
       form.costsAfterClosingType === CLOSING_DATE_TYPE.Plan
-        ? String(afterClosingPlan) : form.costsAfterClosingPlan,
+        ? String(roundUpClean(afterRaw)) : form.costsAfterClosingPlan,
     totalCostsCalculated:
       form.totalCostsType === TOTAL_COSTS_TYPE.Calculated
-        ? String(calculated) : form.totalCostsCalculated,
+        ? String(roundUpClean(raw)) : form.totalCostsCalculated,
+    totalCostsCalculatedRaw: raw,
   };
 }
 
@@ -1290,9 +1423,257 @@ export function recalculateForm(
  * `txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Default`.
  */
 export function contractTotalFromForm(form: ContractForm, locale?: string): number {
-  const calculated =
+  const stored =
     form.totalCostsType === TOTAL_COSTS_TYPE.Calculated
       ? orZero(parseNumber(form.totalCostsCalculated, locale))
       : orZero(parseNumber(form.totalCostsOverwrite, locale));
-  return totalCostOfContract(form, calculated, locale);
+  // The margin applies to the UNROUNDED calculated total (`:7705`) when a recalculation produced one.
+  const calculated =
+    form.totalCostsType === TOTAL_COSTS_TYPE.Calculated && form.closingDate &&
+    form.totalCostsCalculatedRaw !== undefined
+      ? form.totalCostsCalculatedRaw
+      : stored;
+  // `Text(RoundUp(…, 0), "###,##0")` (`:6167`), and the Save stores that rounded text (`:7400`).
+  return roundUpClean(totalCostOfContract(form, calculated, locale));
+}
+
+/* ═════════════════════════════════════════════════ card figures and formats */
+
+/** Power Fx `Text(n, "###,##0")` — whole number, grouped, zero shown (`Coalesce(n, 0)` is the caller's). */
+export function wholeNumberText(value: number | undefined, locale?: string): string {
+  return numberFormat(locale ?? "de-DE", { maximumFractionDigits: 0 }).format(orZero(value));
+}
+
+/** Power Fx `Text(n, "###,##0.0")` — one decimal, grouped. */
+export function oneDecimalText(value: number | undefined, locale?: string): string {
+  return formatOneDecimal(orZero(value), locale);
+}
+
+/**
+ * The card's `Costs Until / After Closing` figure (`:857`, `:1223`):
+ * `If(type = Plan, Coalesce(Plan, 0), Coalesce(Actual, 0))` — Plan ONLY when the type is Plan, so a
+ * type of None reads the Actual figure.
+ */
+export function cardClosingFigure(
+  type: ClosingDateType, plan: number | undefined, actual: number | undefined,
+): number {
+  return type === CLOSING_DATE_TYPE.Plan ? orZero(plan) : orZero(actual);
+}
+
+/** The card's `Total Costs` figure (`:1318`): Calculated, else Overwrite; blank is 0. */
+export function cardTotalCostsFigure(
+  contract: Pick<BopContract, "totalCostsType" | "totalCostsCalculated" | "totalCostsOverwrite">,
+): number {
+  return contract.totalCostsType === TOTAL_COSTS_TYPE.Calculated
+    ? orZero(contract.totalCostsCalculated)
+    : orZero(contract.totalCostsOverwrite);
+}
+
+/**
+ * The card's Margin figure (`:930`): only when `Margin = Yes` (else 0), the percentage or the fixed
+ * value per the margin type, blank as 0.
+ */
+export function cardMarginFigure(
+  contract: Pick<BopContract, "margin" | "marginType" | "marginPercentage" | "marginFixedValue">,
+): number {
+  if (!contract.margin) return 0;
+  return contract.marginType === MARGIN_TYPE.Percentage
+    ? orZero(contract.marginPercentage)
+    : orZero(contract.marginFixedValue);
+}
+
+/**
+ * The Margin box's standard-assumption condition (rule 20): `ThisItem.'Is Margin Standard Assumption?'`
+ * on the card (`:925`), `locIsStandardAssumtions` in the panel (`:5794`).
+ */
+export function marginIsStandard(source: { isMarginStandardAssumption: boolean }): boolean {
+  return source.isMarginStandardAssumption;
+}
+
+/** The card's Development/Construction total (`:1136`): `Text(Coalesce(total, 0), "###,##0")`. */
+export function cardContractTotalText(total: number | undefined, locale?: string): string {
+  return wholeNumberText(total, locale);
+}
+
+/** The Project Rights card total (`:1005`): `Text(total, "###,###")` — a blank or 0 total is empty. */
+export function cardRightsTotalText(total: number | undefined, locale?: string): string {
+  return orZero(total) === 0 ? "" : wholeNumberText(total, locale);
+}
+
+/** A payment-target row's percentage (`:1725`, `"###,###,###,##0.0"`) — always one decimal; blank is empty. */
+export function targetPercentText(value: number | undefined, locale?: string): string {
+  return value === undefined || value === null ? "" : formatOneDecimal(value, locale);
+}
+
+/**
+ * The DevCo leaf's amount (`:6464`): the sum of the project's monthly DevCo CAPEX COST rows
+ * (`colSelectedProjectCapexContractsCosts`) of the CAPEX contracts filed under that account. Zero is
+ * shown as `0` (`Text(0, …)` is `"0"`, so the canvas `Coalesce(…, "-")` never reaches the dash).
+ */
+export function devCoLeafCostByAccount(
+  devCoContracts: readonly CapexProjectContract[],
+  costs: readonly CapexCostRow[],
+): Map<string, number> {
+  const accountOfContract = new Map<string, string>();
+  for (const c of devCoContracts) if (c.accountId) accountOfContract.set(c.id, c.accountId);
+  const out = new Map<string, number>();
+  for (const row of costs) {
+    const account = accountOfContract.get(row.contractId);
+    if (account === undefined) continue;
+    out.set(account, orZero(out.get(account)) + orZero(row.cost));
+  }
+  return out;
+}
+
+/* ═══════════════════════════════════════════════ selection and the period bar */
+
+/** The screen's selection: one contract card and, inside it, at most one payment target. */
+export interface ContractSelection {
+  contractId: string | undefined;
+  targetId: string | undefined;
+}
+
+/**
+ * `btn_…_CardHeader_TransparentButton.OnSelect` (`:1986`): clicking the selected contract clears it,
+ * clicking another selects it; BOTH branches clear the selected payment target.
+ */
+export function selectionAfterHeaderClick(
+  current: ContractSelection, contractId: string,
+): ContractSelection {
+  return {
+    contractId: current.contractId === contractId ? undefined : contractId,
+    targetId: undefined,
+  };
+}
+
+/**
+ * `btn_…_PaymentTargetsRow_TransparentButton.OnSelect` (`:1850`): clicking the selected target clears
+ * it (the contract stays); otherwise the row's contract becomes the selected one and the row the target.
+ */
+export function selectionAfterTargetClick(
+  current: ContractSelection, contractId: string, targetId: string,
+): ContractSelection {
+  if (current.targetId === targetId) return { contractId: current.contractId, targetId: undefined };
+  return { contractId, targetId };
+}
+
+/**
+ * Add Period's `ItemEnabled` (`:1407`): the card is the selected contract AND its targets total
+ * strictly less than 100.
+ */
+export function canAddPaymentTarget(args: {
+  selectedContractId: string | undefined;
+  cardContractId: string;
+  targets: readonly PaymentTarget[];
+}): boolean {
+  if (args.selectedContractId !== args.cardContractId) return false;
+  return round(sum(...args.targets.map((t) => t.totalCostsContract)), 6) < 100;
+}
+
+/** Edit and Delete of a payment target (`:1422`, `:1431`): the card is the selected contract AND a target is selected. */
+export function canChangePaymentTarget(args: {
+  selectedContractId: string | undefined;
+  cardContractId: string;
+  hasSelectedTarget: boolean;
+}): boolean {
+  return args.selectedContractId === args.cardContractId && args.hasSelectedTarget;
+}
+
+/** `Sort('BoP Contracts Payment Targets', 'Created On', SortOrder.Ascending)` (`:1627`). */
+export function sortPaymentTargets(targets: readonly PaymentTarget[]): PaymentTarget[] {
+  return [...targets].sort((a, b) => (a.createdOn ?? "").localeCompare(b.createdOn ?? ""));
+}
+
+/**
+ * The Add Period Description default (`:2380`): the newest target (by `Created On`) with its trailing
+ * ` - n` incremented (the text before the FIRST ` - ` kept), else that description with ` - 2`
+ * appended; empty when the contract has no target yet.
+ */
+export function nextPeriodDescription(newestDescription: string | undefined): string {
+  if (newestDescription === undefined) return "";
+  if (/ - \d+$/.test(newestDescription)) {
+    const first = newestDescription.indexOf(" - ");
+    const n = Number(/ - (\d+)/.exec(newestDescription)?.[1] ?? "0");
+    return `${newestDescription.slice(0, first)} - ${n + 1}`;
+  }
+  return `${newestDescription} - 2`;
+}
+
+/** The description for a NEW period: the next number after the newest target, or empty when there is none. */
+export function newPeriodDescription(targetsOldestFirst: readonly PaymentTarget[]): string {
+  const newest = targetsOldestFirst[targetsOldestFirst.length - 1];
+  return newest ? nextPeriodDescription(newest.description) : "";
+}
+
+/** The Description box is editable only while the contract has no payment target (`:2365`). */
+export function periodDescriptionLocked(targets: readonly PaymentTarget[]): boolean {
+  return targets.length > 0;
+}
+
+/* ═════════════════════════════════════════════════════ panel field resets */
+
+/**
+ * `rad_…_CostsUntilClosingDate.OnChange` / the After twin (`:4546`, `:4986`): choosing Plan resets the
+ * Actual box to its default (the stored value on Edit, blank on a new contract); choosing Actual
+ * resets the Plan box, which the recalculation that follows rewrites.
+ */
+export function closingTypePatch(
+  half: "until" | "after",
+  type: ClosingDateType,
+  original: Pick<BopContract, "costsUntilClosingActual" | "costsAfterClosingActual"> | undefined,
+): Partial<ContractForm> {
+  const s = (n: number | undefined) => (n === undefined ? "" : String(n));
+  if (half === "until") {
+    return type === CLOSING_DATE_TYPE.Plan
+      ? { costsUntilClosingType: type, costsUntilClosingActual: s(original?.costsUntilClosingActual) }
+      : { costsUntilClosingType: type };
+  }
+  return type === CLOSING_DATE_TYPE.Plan
+    ? { costsAfterClosingType: type, costsAfterClosingActual: s(original?.costsAfterClosingActual) }
+    : { costsAfterClosingType: type };
+}
+
+/**
+ * `rad_…_Margin.OnChange` (`:6022`): both boxes become 0, the standard flag clears, and the type radio
+ * is Reset — to Percentage for a new contract, to the stored type on Edit (`:5887`).
+ */
+export function marginChangePatch(
+  yes: boolean,
+  original: Pick<BopContract, "marginType"> | undefined,
+): Partial<ContractForm> {
+  return {
+    margin: yes,
+    marginType: original?.marginType ?? MARGIN_TYPE.Percentage,
+    marginPercentage: "0",
+    marginFixedValue: "0",
+    isMarginStandardAssumption: false,
+  };
+}
+
+/** `rad_…_MarginType.OnChange` (`:5911`): both boxes become 0 and the standard flag clears. */
+export function marginTypeChangePatch(type: MarginType): Partial<ContractForm> {
+  return {
+    marginType: type,
+    marginPercentage: "0",
+    marginFixedValue: "0",
+    isMarginStandardAssumption: false,
+  };
+}
+
+/**
+ * `lbl_…_Comment_Details.Text` (`:7147`): `Len(Trim(comment))/255`.
+ */
+export function commentCounter(comment: string): string {
+  return `${comment.trim().length}/${COMMENT_MAX_LENGTH}`;
+}
+
+/**
+ * The `Notify(...)` text of a failed save (`:3126`, `:7487`):
+ * `<prefix> Internal error: originated on <Source>. Message: <Message>`; this app only has the message.
+ */
+export function saveErrorText(
+  kind: "contract" | "paymentTarget", detail: string | undefined,
+): string {
+  const prefix = kind === "paymentTarget" ? MSG.saveErrorPaymentTarget : MSG.saveErrorContract;
+  return detail ? `${prefix} ${detail}` : prefix;
 }

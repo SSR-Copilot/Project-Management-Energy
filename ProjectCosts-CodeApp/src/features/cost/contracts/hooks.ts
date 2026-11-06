@@ -18,17 +18,25 @@ import type { ContractWrite, PaymentTargetWrite } from "@/data/contracts";
 import { loadProjectExtras } from "@/data/project";
 import { costWriteKey } from "@/domain/writeGuard";
 import {
-  applySelection, applyUsage, buildAccountTree, sortContracts,
+  CONTRACT_TYPE, applySelection, applyUsage, buildAccountTree, sortContracts, sortPaymentTargets,
   type AccountNode, type BopContract, type ContractType, type PaymentTarget,
 } from "./rules";
 
 /* ═════════════════════════════════════════════════════════════════ queries */
+
+/**
+ * The canvas re-reads `colBoPContracts` on EVERY visit (`OnVisible`, `:59`; `OnHidden` clears it, `:15`),
+ * so the three project-scoped reads below are always stale on mount (CONTR-010): a quick return shows
+ * what was saved elsewhere. `refetchOnMount: "always"` keeps the cached rows on screen meanwhile.
+ */
+const REREAD_ON_VISIT = { staleTime: 0, refetchOnMount: "always" } as const;
 
 export function useContracts(projectId: string | undefined) {
   return useQuery({
     queryKey: qk.contracts(projectId ?? "none"),
     queryFn: async () => sortContracts(await costRepository().listContracts(projectId as string)),
     enabled: Boolean(projectId),
+    ...REREAD_ON_VISIT,
   });
 }
 
@@ -44,6 +52,7 @@ export function usePaymentTargets(projectId: string | undefined, contracts: BopC
     queryKey: [...qk.paymentTargets(projectId ?? "none"), ids.length] as const,
     queryFn: () => costRepository().listPaymentTargets(projectId as string, ids),
     enabled: Boolean(projectId) && ids.length > 0,
+    ...REREAD_ON_VISIT,
   });
 
   const byContract = useMemo(() => {
@@ -53,11 +62,8 @@ export function usePaymentTargets(projectId: string | undefined, contracts: BopC
       if (bucket) bucket.push(t);
       else map.set(t.contractId, [t]);
     }
-    // `gal_..._PaymentTargets` had no explicit sort; ordering by the text payment date is
-    // the closest stable equivalent and at least keeps the list from reshuffling.
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.paymentDate ?? "").localeCompare(b.paymentDate ?? ""));
-    }
+    // `gal_..._PaymentTargets.Items`: `Sort(Filter(...), 'Created On', SortOrder.Ascending)` (`:1627`).
+    for (const [id, list] of map) map.set(id, sortPaymentTargets(list));
     return map;
   }, [query.data]);
 
@@ -88,6 +94,7 @@ export function useDevCoLinks(projectId: string | undefined, contracts: BopContr
     queryKey: [...qk.devCoLinks(projectId ?? "none"), ids.length] as const,
     queryFn: () => costRepository().listDevCoLinks(projectId as string, ids),
     enabled: Boolean(projectId) && ids.length > 0,
+    ...REREAD_ON_VISIT,
   });
 }
 
@@ -187,12 +194,15 @@ export function useSaveContract(projectId: string | undefined) {
     mutationFn: async ({ write, accounts }: SaveContractArgs) => {
       const repo = costRepository();
       const saved = await repo.saveContract(write);
-      await repo.replaceDevCoLinks(write.projectId, {
-        contractId: saved.id,
-        isNewContract: !write.id,
-        owningBusinessUnitId: write.owningBusinessUnitId,
-        accounts,
-      });
+      // The Project Rights Save writes no DevCo rows and removes none (`:3744-3801`).
+      if (write.contractType !== CONTRACT_TYPE.ProjectRights) {
+        await repo.replaceDevCoLinks(write.projectId, {
+          contractId: saved.id,
+          isNewContract: !write.id,
+          owningBusinessUnitId: write.owningBusinessUnitId,
+          accounts,
+        });
+      }
       return saved;
     },
     onSuccess: async () => {

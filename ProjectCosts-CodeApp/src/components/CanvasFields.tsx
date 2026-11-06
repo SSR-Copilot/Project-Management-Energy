@@ -113,8 +113,12 @@ const useStyles = makeStyles({
  * `Y: =8`, i.e. beside the caption, not under the box. Same for the contract panel's
  * `Comment  0/255`.
  */
-export function CostField({ label, name, required, value, onChange, onBlur, type = "text", inputMode, disabled = false, error, maxLength, placeholder, counter, standard, children }: {
+export function CostField({ label, name, required, value, onChange, onBlur, type = "text", inputMode, disabled = false, error, maxLength, placeholder, counter, standard, labelTitle, errorTitle, children }: {
   label: string;
+  /** Hover text of the caption (canvas `Tooltip: =Self.Text` on the label). Omitted: no hover. */
+  labelTitle?: string;
+  /** Hover text of the error line (canvas `Tooltip: =Self.Text` on the `*_ErrorMessage` label). */
+  errorTitle?: string;
   /**
    * The original canvas control's own name (`txt_Screen_Panel_Field_1`), when known — Tosca's
    * prior scans of the canvas app identify a field by this name, not by its caption.
@@ -154,10 +158,10 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
 }) {
   const standardClass = useStandardValueClass();
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
-    <span data-required={required} data-counter={counter ? true : undefined}>{label}
+    <span data-required={required} data-counter={counter ? true : undefined} title={labelTitle}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
     {children ?? <input className={standardClass(standard)} type={type} inputMode={inputMode} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
-    {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
+    {error ? <span className="canvas-field-error" role="alert" title={errorTitle}>{error}</span> : null}
   </label>;
 }
 
@@ -197,8 +201,10 @@ export function CostSelect({ label, value, options, onChange, required, error, t
  * `label` renders the group with no caption at all, which is the Margin Type radio: the
  * canvas gives it no `lbl_` of its own, it simply follows the Yes/No group.
  */
-export function Choices({ label, name, value, options, onChange, required, disabled, action, ariaLabel, horizontal, standard }: {
+export function Choices({ label, name, value, options, onChange, required, disabled, action, ariaLabel, horizontal, standard, labelTitle }: {
   label: string;
+  /** Hover text of the caption (canvas `Tooltip: =Self.Text` on the label). Omitted: no hover. */
+  labelTitle?: string;
   /** The canvas radio GROUP's own name (`rad_Screen_Panel_Field_1`), when known — see `CostField`'s `name`. */
   name?: string;
   value: string; options: readonly string[]; onChange: (value: string) => void;
@@ -220,7 +226,7 @@ export function Choices({ label, name, value, options, onChange, required, disab
      * reported as "N items are not unique"; each radio keeps its own option text below.
      */
     aria-label={ariaLabel ?? name ?? (label || undefined)} data-testid={name}>
-    {label || action ? <legend><span data-required={required}>{label}</span>{action}</legend> : null}
+    {label || action ? <legend><span data-required={required} title={labelTitle}>{label}</span>{action}</legend> : null}
     {options.map(option => <label key={option} className={standardClass(standard)}>
       <input type="radio" value={option} checked={value === option} onChange={() => onChange(option)} aria-label={option}
         data-testid={name ? `${name}-${testIdPart(option)}` : undefined} />{option}</label>)}

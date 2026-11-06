@@ -40,7 +40,7 @@ import {
 } from "./addCostSheet";
 import {
   addStandardContract, deletePeriod, savePeriod,
-  type PeriodWriteContext, type StandardContractArgs,
+  type OpexSaveExtras, type PeriodWriteContext, type StandardContractArgs,
 } from "./periodWrites";
 import {
   applyLeaseWrites, loadCountryInflation, loadCurrencies, loadLeaseAssumptions, loadLeaseBook,
@@ -177,7 +177,9 @@ export interface CostRepository {
   ): Promise<LeaseAssumptionRow[]>;
 
   /** Runs a `planLeaseSave` / `planLeaseDelete` / `planStandardImport` plan, in order. */
-  applyLeaseWrites(writes: readonly LeaseWrite[]): Promise<LeaseWriteResult>;
+  applyLeaseWrites(
+    writes: readonly LeaseWrite[], options?: { independentSteps?: boolean },
+  ): Promise<LeaseWriteResult>;
 
   /* ── OPEX reference data ──────────────────────────────────────────────── */
 
@@ -251,7 +253,9 @@ export interface CostRepository {
    * caller (`useCostBook`'s `save` mutation) swaps it into the book it hands back so a later
    * edit or delete in the same session addresses the real row.
    */
-  savePeriod(ctx: PeriodWriteContext, period: CostPeriod, isNew: boolean): Promise<CostPeriod>;
+  savePeriod(
+    ctx: PeriodWriteContext, period: CostPeriod, isNew: boolean, extras?: OpexSaveExtras,
+  ): Promise<CostPeriod>;
 
   /**
    * Delete one period — and, when it is the FIRST period of its contract, the whole contract.

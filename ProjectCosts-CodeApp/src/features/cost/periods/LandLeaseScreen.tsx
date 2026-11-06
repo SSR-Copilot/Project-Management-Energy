@@ -80,6 +80,10 @@ import {
   planLeaseDelete, planLeaseSave, planStandardImport, resetStartDate, resetStartDateVisible,
   resolveInflationProfileValue, resolveStartDate, startDateIsStandard, subaccountPeriodRows,
   leaseSelectionAfterWrite, leaseSelectionOnAddPeriod, toLeaseGridRow, toggleFold, toggleLeaseSelection, NO_LEASE_SELECTION,
+  LeaseStepsError, allocationRequired, countryProfileFor, inflationProfileForSave,
+  inflationProfileText, inflationUncheckPatch, leaseAreaDefault, leaseHttpResponse, leaseStepFailureText,
+  oneTimePaymentUncheckPatch, paymentBlockVisible, periodBlockRequired as periodBlockRequiredRule,
+  resolveLeaseCurrencyId, startDatePickPatch,
   type GeneratorOption, type LandLeaseForm, type LeaseAllocationRow, type LeaseContract,
   type LeaseCostRow, type LeasePeriodRow, type LeaseProjectContext, type LeaseSubaccountCard,
 } from "./landLeaseRules";
@@ -826,16 +830,12 @@ export default function LandLeaseScreen() {
    * (`LL:4616`). The year is the panel's own start-year box, which is what the canvas reads.
    */
   const countryProfile = useMemo(() => {
-    const rows = countryInflation.data ?? [];
-    if (rows.length === 0 || !form) return null;
-    const year = Number(form.inflationStartYear);
-    if (!Number.isFinite(year)) return null;
-    const area = (form.inflationCountryArea ?? "").trim();
-    const match = rows.find(
-      (r) => r.year === year && (area === "" || r.area === area),
-    );
-    return match ? match.inflation : null;
-  }, [countryInflation.data, form]);
+    if (!form) return null;
+    // Recomputed on every year / Area change (LL:4632); Italy needs the Area to match (FT-BR-LEASE-058).
+    return countryProfileFor(countryInflation.data ?? [], {
+      startYear: form.inflationStartYear, area: form.inflationCountryArea, countryName: ctx.countryName,
+    });
+  }, [countryInflation.data, form, ctx.countryName]);
 
   /** The Area dropdown's `Items` — `Distinct(Filter('Country Inflation Profiles', …).Area)`. */
   const areaOptions = useMemo(
@@ -891,6 +891,7 @@ export default function LandLeaseScreen() {
     setForm(landLeaseFormFrom({
       cost: selectedCost, period: null, parentPeriod,
       allocations, panelState: "New", workingDate: null, resetStartDate: false,
+      areaDefault: leaseAreaDefault(ctx),
     }));
     setWorkingDate(null);
     setResetFlag(false);
@@ -910,6 +911,7 @@ export default function LandLeaseScreen() {
     const loaded = landLeaseFormFrom({
       cost, period: selectedPeriod, parentPeriod: null,
       allocations, panelState: "Edit", workingDate: null, resetStartDate: false,
+      areaDefault: leaseAreaDefault(ctx),
     });
     // `txt_…_EuroMWh_1` / `_EuroMW_1` / `_EuroWTG_1.Value` (LL:3245, :3376, :3507) are
     // `If(Int(v) = v, Text(v, "#"), Text(v, "#0.0#"))` — "54", not the "54.00" that
@@ -990,8 +992,9 @@ export default function LandLeaseScreen() {
 
   /**
    * `drp_…_Currency_1.DefaultSelectedItems` (LL:2762) — `Switch(country, "Poland", PLN, EUR)`.
-   * The control is `DisplayMode.Disabled`, so this is the only value it can ever have; a
-   * contract that already carries one keeps it rather than being re-pointed on every save.
+   * The control is `DisplayMode.Disabled`, so this is the only value it can ever have, and the
+   * header Patch writes it on every save (LL:6062 `Currency: drp_…_Currency_1.Selected`), so a
+   * contract that carried another currency is re-pointed (FT-BR-LEASE-047/083).
    */
   const defaultCurrencyId = (currencies.data ?? [])
     .find((c) => c.code === defaultCurrencyCode(ctx.countryName))?.id ?? null;
@@ -999,7 +1002,13 @@ export default function LandLeaseScreen() {
   const commit = async () => {
     if (!form || !panel || saveDisabled) return;
     const plan = planLeaseSave({
-      form: { ...form, currencyId: form.currencyId ?? defaultCurrencyId },
+      form: {
+        ...form,
+        currencyId: resolveLeaseCurrencyId(defaultCurrencyId, form.currencyId),
+        // `Value(txt_…_InflationProfile_1.Value)` is the country profile of the current year/Area
+        // while the country toggle is on (FT-BR-LEASE-058).
+        inflationProfile: inflationProfileForSave({ form, countryName: ctx.countryName, countryProfile }),
+      },
       ctx,
       subaccountId: panel.subaccountId,
       subaccountName: panel.subaccountName,
@@ -1031,15 +1040,22 @@ export default function LandLeaseScreen() {
       // allocation deletes, and the period. `applyLeaseWrites` resolves each `parentRef`
       // against the ids the earlier creates returned, because `batch` is not a changeset and
       // an OData `$id` content reference would have nothing to resolve inside.
-      await writes.mutateAsync(plan.writes);
+      // FT-BR-LEASE-089: header, allocation and period steps run independently, as the canvas'
+      // two `IfError` blocks do (LL:6062); a failed step does not stop the next one.
+      await writes.mutateAsync({ writes: plan.writes, independentSteps: true });
       // `UpdateContext({locSelectedLandLeaseCost: Blank(), locSelectedLandLeasePeriod: Blank()})`
       // — `clearsSelectionAfterSave`, LL:5895; a row selected mid-save is kept (CA-17).
       setSelection((current) => leaseSelectionAfterWrite({ atStart: selectionAtStart, current }));
     } catch (e) {
-      const source = plan.writesHeader ? "Land Lease Project Costs" : "Land Lease Periods";
-      reportFailure(plan.writesHeader
-        ? leaseSaveError.contract(source, messageOf(e))
-        : leaseSaveError.period(source, messageOf(e)), setError);
+      if (e instanceof LeaseStepsError) {
+        // One `Notify` per failed step, `Source` = the canvas value, `HttpResponse` appended.
+        reportFailure(e.failures.map(leaseStepFailureText).join("\n"), setError);
+      } else {
+        const failure = { message: messageOf(e), httpResponse: leaseHttpResponse(e) };
+        reportFailure(plan.writesHeader
+          ? leaseStepFailureText({ step: "contract", ...failure })
+          : leaseStepFailureText({ step: "period", ...failure }), setError);
+      }
     } finally {
       setBusy(null);
     }
@@ -1198,7 +1214,14 @@ export default function LandLeaseScreen() {
             onStartDate={(value) => {
               setWorkingDate(value);
               setResetFlag(false);
-              patch({ startDate: value });
+              // `dte_…_StartDate_1.OnChange` (LL:2342) sets `locIsStartDateStandardAssumption` to No,
+              // and the Inflation Start Year box follows the date while no year is stored (LL:4328).
+              setForm((f) => (f ? {
+                ...f,
+                ...startDatePickPatch({
+                  form: f, cost: panel.cost, startDate: value, countryName: ctx.countryName,
+                }),
+              } : f));
             }}
             onResetStartDate={() => {
               const next = resetStartDate({
@@ -1496,24 +1519,16 @@ function LeasePanelBody({
   } as const;
 
   /**
-   * The dynamic required markers on Start Date, Duration, Distribution Frequency and
-   * Allocation — `lbl_…_StartDateAsterisk_1.Visible` and its three twins (`PA:2481`, `PA:2726`,
-   * `PA:3765`, `PA:4040`), which are the same three-armed formula four times over.
-   *
-   * THE ONE RULE THAT IS NOT IN `landLeaseRules.ts`. It is the visible face of the Save gate's
-   * clauses F and I — the period block is required unless this is a payment-only contract with
-   * no rate typed — but the rules module exposes that only inside `canSaveLandLease`, and that
-   * file is not ours to extend. Kept here, next to the controls it marks, rather than
-   * duplicated per control.
+   * The dynamic required markers on Start Date, Duration and Distribution Frequency —
+   * `lbl_…_StartDateAsterisk_1.Visible` and its two twins (`PA:2481`, `PA:2726`, `PA:3765`), the
+   * same three-armed formula (`periodBlockRequired` in `landLeaseRules.ts`). Allocation has its
+   * own (`PA:4040`, `allocationRequired`, FT-BR-LEASE-079).
    */
-  const periodBlockRequired = (() => {
-    const anyRate = [
-      form.fixedCosts, form.percentOfRevenues, form.eurPerMwh, form.eurPerMw, form.eurPerWtg,
-    ].some((v) => v.trim() !== "");
-    if (form.oneTimePaymentsOn && !panel.cost) return anyRate;
-    if (panel.cost && isPeriodOne(panel.period?.period ?? null)) return anyRate;
-    return true;
-  })();
+  const periodBlockRequired = periodBlockRequiredRule({
+    form, hasCost: Boolean(panel.cost), periodIsOne: isPeriodOne(panel.period?.period ?? null),
+  });
+  /** `lbl_…_AllocationAsterisk_1.Visible` (LL:4040) — its own formula, not the three-armed one. */
+  const allocationAsterisk = allocationRequired(form);
 
   /*
    * `bold`: the Duration, Distribution Frequency and Allocation markers are `FontWeight.Bold`
@@ -1548,9 +1563,9 @@ function LeasePanelBody({
       : { showThirdPayment: true });
   };
 
-  const currencyName = currencies.find((c) => c.id === form.currencyId)?.name
-    // `drp_…_Currency_1.DefaultSelectedItems` (LL:2762) — PLN for Poland, EUR otherwise.
-    ?? currencies.find((c) => c.code === defaultCurrencyCode(ctx.countryName))?.name
+  // `drp_…_Currency_1.DefaultSelectedItems` (LL:2774) — PLN for Poland, EUR otherwise, whatever
+  // the contract stores (FT-BR-LEASE-047).
+  const currencyName = currencies.find((c) => c.code === defaultCurrencyCode(ctx.countryName))?.name
     ?? defaultCurrencyCode(ctx.countryName);
 
   // `Start Date`'s displayed value is `resolveStartDate`'s, not the raw box: the working date
@@ -1570,6 +1585,7 @@ function LeasePanelBody({
       <div className={styles.panelColumn}>
         <CostField
           label={LEASE_LABELS.description}
+          labelTitle={LEASE_LABELS.description}
           name="txt_LandLease_RightPanel_NewEditCost_BodyContent_Description_1"
           // `lbl_…_DescriptionAsterisk_1.Visible = IsBlank(locSelectedLandLeasePeriod)` (LL:2246).
           required={panel.period === null}
@@ -1581,7 +1597,7 @@ function LeasePanelBody({
         />
 
         <div>
-          <Text className={styles.label}>
+          <Text className={styles.label} title={LEASE_LABELS.startDate}>
             {required(periodBlockRequired)}{LEASE_LABELS.startDate}
           </Text>
           <div className={styles.dateRow}>
@@ -1619,7 +1635,7 @@ function LeasePanelBody({
         </div>
 
         <div>
-          <Text className={styles.label}>
+          <Text className={styles.label} title={LEASE_LABELS.duration}>
             {required(periodBlockRequired, true)}{LEASE_LABELS.duration}
           </Text>
           <div className={styles.duration}>
@@ -1659,7 +1675,7 @@ function LeasePanelBody({
 
         <div>
           {/* `drp_…_Currency_1` is `DisplayMode.Disabled` always — `currencyEditable()`. */}
-          <Text className={styles.label}>{LEASE_LABELS.currency}</Text>
+          <Text className={styles.label} title={LEASE_LABELS.currency}>{LEASE_LABELS.currency}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.currency}
             {...canvasList}
@@ -1674,32 +1690,32 @@ function LeasePanelBody({
         </div>
 
         <CostField
-          label={leaseCurrencyLabel.fixCosts(iso)}
+          label={leaseCurrencyLabel.fixCosts(iso)} labelTitle={leaseCurrencyLabel.fixCosts(iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_FixedCosts_1"
           type="text" value={form.fixedCosts}
           error={errorFor("fixedCosts")} onChange={(v) => patch({ fixedCosts: v })}
         />
         <CostField
-          label="Share of Revenues [%]"
+          label="Share of Revenues [%]" labelTitle="Share of Revenues [%]"
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_PercentOfRevenues_1"
           type="text" value={form.percentOfRevenues}
           error={errorFor("percentOfRevenues")}
           onChange={(v) => patch({ percentOfRevenues: v })}
         />
         <CostField
-          label={rateLabel("MWh", iso)}
+          label={rateLabel("MWh", iso)} labelTitle={rateLabel("MWh", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMWh_1"
           type="text" value={form.eurPerMwh}
           error={errorFor("eurPerMwh")} onChange={(v) => patch({ eurPerMwh: v })}
         />
         <CostField
-          label={rateLabel("MW", iso)}
+          label={rateLabel("MW", iso)} labelTitle={rateLabel("MW", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroMW_1"
           type="text" value={form.eurPerMw}
           error={errorFor("eurPerMw")} onChange={(v) => patch({ eurPerMw: v })}
         />
         <CostField
-          label={rateLabel("WTG", iso)}
+          label={rateLabel("WTG", iso)} labelTitle={rateLabel("WTG", iso)}
           name="txt_LandLease_RightPanel_NewEditPeriod_BodyContent_EuroWTG_1"
           type="text" value={form.eurPerWtg}
           error={errorFor("eurPerWtg")} onChange={(v) => patch({ eurPerWtg: v })}
@@ -1707,7 +1723,7 @@ function LeasePanelBody({
 
         <div>
           {/* `lbl_…_AggregationAsterisk_1.Visible = false` (LL:3627) — no marker, deliberately. */}
-          <Text className={styles.label}>{LEASE_LABELS.aggregation}</Text>
+          <Text className={styles.label} title={LEASE_LABELS.aggregation}>{LEASE_LABELS.aggregation}</Text>
           <Dropdown
             aria-label={LEASE_LABELS.aggregation}
             {...canvasList}
@@ -1724,7 +1740,7 @@ function LeasePanelBody({
         </div>
 
         <div>
-          <Text className={styles.label}>
+          <Text className={styles.label} title={LEASE_LABELS.distributionFrequency}>
             {required(periodBlockRequired, true)}{LEASE_LABELS.distributionFrequency}
           </Text>
           <Dropdown
@@ -1786,8 +1802,8 @@ function LeasePanelBody({
             </div>
 
             <div data-testid="lease-allocation">
-              <Text className={mergeClasses(styles.label, styles.labelStrong)}>
-                {required(periodBlockRequired, true)}{LEASE_LABELS.allocation}
+              <Text className={mergeClasses(styles.label, styles.labelStrong)} title={LEASE_LABELS.allocation}>
+                {required(allocationAsterisk, true)}{LEASE_LABELS.allocation}
               </Text>
               <Dropdown
                 multiselect
@@ -1802,12 +1818,11 @@ function LeasePanelBody({
                   .filter((g) => form.allocatedGeneratorIds.includes(g.id))
                   .map((g) => g.label)
                   .join(", ")}
-                onOptionSelect={(_, d) => patch({
-                  allocatedGeneratorIds: d.selectedOptions,
-                  // `Rule 10` — `CountIf(SelectedItems) = CountIf(colGeneratorsInProject)`.
-                  allWtgAllocated: generators.length > 0
-                    && d.selectedOptions.length === generators.length,
-                })}
+                // `cmb_…_AllocationWtg_1.OnChange` (LL:3945) only sets `locAllWTGAllocated` (read by no
+                // control) and `locSelectAllWTG: false`; the toggle Reset is commented out (LL:3958).
+                // So picking generators by hand never moves the toggle or the saved AllWTGAllocated
+                // (FT-BR-LEASE-053).
+                onOptionSelect={(_, d) => patch({ allocatedGeneratorIds: d.selectedOptions })}
                 data-testid="cmb_LandLease_RightPanel_NewEditCost_BodyContent_AllocationWtg_1"
               >
                 {allocationList.map((g) => (
@@ -1822,12 +1837,15 @@ function LeasePanelBody({
           <Switch
             checked={form.inflationChecked}
             disabled={!headerOn}
-            onChange={(_, d) => patch({
-              inflationChecked: d.checked,
-              inflationStartYear: d.checked && form.inflationStartYear === ""
+            onChange={(_, d) => patch(d.checked ? {
+              inflationChecked: true,
+              inflationStartYear: form.inflationStartYear === ""
                 ? String(inflationStartYearDefault(null, startDate) ?? "")
                 : form.inflationStartYear,
-            })}
+            } : inflationUncheckPatch({
+              // `OnUncheck` (LL:4203): Reset of the country toggle, Start Year, Area and profile.
+              cost: panel.cost, startDate, areaDefault: leaseAreaDefault(ctx), countryName: ctx.countryName,
+            }))}
             aria-label={LEASE_LABELS.inflationProfile}
             data-testid="lease-inflation"
           />
@@ -1862,6 +1880,7 @@ function LeasePanelBody({
 
             <CostField
               label={LEASE_LABELS.inflationStartYear}
+              labelTitle={LEASE_LABELS.inflationStartYear}
               name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationStartYear_1"
               required
               value={form.inflationStartYear}
@@ -1891,7 +1910,7 @@ function LeasePanelBody({
               countryName: ctx.countryName,
             }) ? (
               <div>
-                <Text className={mergeClasses(styles.label, styles.labelLighter)}>
+                <Text className={mergeClasses(styles.label, styles.labelLighter)} title={LEASE_LABELS.area}>
                   {required()}{LEASE_LABELS.area}
                 </Text>
                 <Dropdown
@@ -1900,7 +1919,8 @@ function LeasePanelBody({
                   className={mergeClasses(styles.panelDropdown, styles.areaDropdown)}
                   value={form.inflationCountryArea ?? ""}
                   selectedOptions={form.inflationCountryArea ? [form.inflationCountryArea] : []}
-                  disabled={!headerOn}
+                  // No `disabled`: the canvas box's `DisplayMode` is only a comment (LL:4438), so it is
+                  // always editable, and it defaults to the project's region (FT-BR-LEASE-057).
                   onOptionSelect={(_, d) => patch({ inflationCountryArea: d.optionValue ?? null })}
                   data-testid="lease-area"
                 >
@@ -1917,14 +1937,14 @@ function LeasePanelBody({
               */}
             {form.countryInflationChecked ? (
               <CostField
-                label={inflationProfileLabel(true)}
+                label={inflationProfileLabel(true)} labelTitle={inflationProfileLabel(true)}
                 name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_2"
                 value={countryInflationDisplay(ctx)}
                 disabled
               />
             ) : (
               <CostField
-                label={inflationProfileLabel(false)}
+                label={inflationProfileLabel(false)} labelTitle={inflationProfileLabel(false)}
                 name="txt_LandLease_RightPanel_NewEditCost_BodyContent_InflationProfile_1"
                 required
                 type="text"
@@ -1941,17 +1961,11 @@ function LeasePanelBody({
           <Switch
             checked={form.oneTimePaymentsOn}
             disabled={!headerOn}
-            onChange={(_, d) => patch({
-              oneTimePaymentsOn: d.checked,
-              // `OnUncheck` resets all six boxes and both extra blocks (LL:4748).
-              ...(d.checked ? {} : {
-                showSecondPayment: false,
-                showThirdPayment: false,
-                payments: {
-                  dueDate: "", amount: "", dueDate2: "", amount2: "", dueDate3: "", amount3: "",
-                },
-              }),
-            })}
+            // `OnUncheck` (LL:4764) `Reset`s all six boxes — back to the STORED values — and hides both
+            // extra blocks (FT-BR-LEASE-060).
+            onChange={(_, d) => patch(d.checked
+              ? { oneTimePaymentsOn: true }
+              : oneTimePaymentUncheckPatch(panel.cost))}
             aria-label={LEASE_LABELS.oneTimePayment}
             data-testid="lease-otp"
           />
@@ -1965,7 +1979,7 @@ function LeasePanelBody({
           * canvas screenshot (26 Oct 2026) shows. Unchecking the toggle resets both extra
           * blocks, so the third button (`Visible: =locShowSecondPayment`) is hidden then.
           */}
-        {form.oneTimePaymentsOn ? (
+        {paymentBlockVisible(1, form) ? (
           <PaymentBlock
             n={1} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
           />
@@ -1986,7 +2000,8 @@ function LeasePanelBody({
             {paymentButton(2).label}
           </Button>
         ) : null}
-        {form.oneTimePaymentsOn && form.showSecondPayment ? (
+        {/* Blocks 2 and 3 follow their own flags alone (LL:5152, :5508); only block 1 has the toggle term. */}
+        {paymentBlockVisible(2, form) ? (
           <PaymentBlock
             n={2} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
           />
@@ -2006,7 +2021,7 @@ function LeasePanelBody({
             {paymentButton(3).label}
           </Button>
         ) : null}
-        {form.oneTimePaymentsOn && form.showThirdPayment ? (
+        {paymentBlockVisible(3, form) ? (
           <PaymentBlock
             n={3} form={form} patch={patch} iso={iso} errors={errors} disabled={!headerOn}
           />
@@ -2047,6 +2062,7 @@ function PaymentBlock({
     <div className={styles.contents} data-strong-captions>
       <CostField
         label={LEASE_LABELS.oneTimePaymentDate(n)}
+        labelTitle={LEASE_LABELS.oneTimePaymentDate(n)}
         // `lbl_…_DueDate_1_1` / `_1_2` / `_1_3` — a `*` with no `Visible`, so always shown (LL:4888).
         required
         name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_DueDate${nSuffix}_1`}
@@ -2058,6 +2074,7 @@ function PaymentBlock({
       />
       <CostField
         label={leaseCurrencyLabel.oneTimePaymentAmount(n, iso)}
+        labelTitle={leaseCurrencyLabel.oneTimePaymentAmount(n, iso)}
         // `lbl_…_Amount_1_1` / `_1_2` / `_1_3` — a `*` with no `Visible`, so always shown (LL:5053).
         required
         name={`txt_LandLease_RightPanel_NewEditCost_BodyContent_Amount${nSuffix}_1`}
@@ -2089,8 +2106,7 @@ function canvasRate(value: number | null | undefined): string {
   return s.endsWith("0") ? s.slice(0, -1) : s;
 }
 
-const formatProfile = (value: number | null): string =>
-  value === null ? "" : value.toFixed(1);
+const formatProfile = inflationProfileText;
 
 /**
  * The `Country Inflation Profiles` row the standard import uses — (country, COD year + 1),

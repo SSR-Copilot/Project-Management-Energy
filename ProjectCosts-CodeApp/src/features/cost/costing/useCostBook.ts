@@ -7,7 +7,7 @@ import { loadActiveWtgCount, loadStandardAssumptions } from "@/data/standardCont
 import { deleteComment, loadComments, saveComment } from "@/data/comments";
 import { loadCapexCategories, loadMilestoneDurations, loadProjectStates, standardContractExists } from "@/data/costBook";
 import type { PeriodWriteContext, StandardContractArgs } from "@/data/periodWrites";
-import type { LeaseWrite } from "@/features/cost/periods/landLeaseRules";
+import { LeaseStepsError, type LeaseWrite } from "@/features/cost/periods/landLeaseRules";
 import { useProjectExtras } from "@/features/cost/contracts/hooks";
 import { useNotify, type Notify } from "@/components/useNotify";
 import {
@@ -103,7 +103,7 @@ export function useCostBook(category?: number) {
   const save = useMutation({
     // CA-15: counted by `useCostWriteInFlight` even after the screen that started it is gone.
     mutationKey: costWriteKey(projectId, "periods"),
-    mutationFn: async (nextBook: CostBook): Promise<{ book: CostBook; touchedPeriods: boolean }> => {
+    mutationFn: async (nextBook: CostBook): Promise<{ book: CostBook; touchedPeriods: boolean; warnings: string[] }> => {
       if (!projectId) throw new Error("No project is selected.");
       const previous = query.data;
       if (!previous) throw new Error("The Cost book has not finished loading yet.");
@@ -114,6 +114,7 @@ export function useCostBook(category?: number) {
       // Keyed by the id the book came in with, because a create's id changes underneath us.
       const savedByKey = new Map<string, CostPeriod>();
       let touchedPeriods = false;
+      const warnings: string[] = [];
 
       for (const [id, period] of nextById) {
         const before = prevById.get(id);
@@ -121,7 +122,11 @@ export function useCostBook(category?: number) {
           savedByKey.set(id, await costRepository().savePeriod(ctx, period, true));
           touchedPeriods = true;
         } else if (!periodsEqual(before, period)) {
-          savedByKey.set(id, await costRepository().savePeriod(ctx, period, false));
+          // OPEX only reads `extras` (the re-chain of the following periods and the non-fatal
+          // child / re-chain `Notify` texts); Land Lease ignores it.
+          savedByKey.set(id, await costRepository().savePeriod(
+            ctx, period, false, { before, bookPeriods: previous.periods, warnings },
+          ));
           touchedPeriods = true;
         }
       }
@@ -139,7 +144,7 @@ export function useCostBook(category?: number) {
       const periods = savedByKey.size === 0
         ? nextBook.periods
         : nextBook.periods.map((p) => savedByKey.get(p.id) ?? p);
-      return { book: { ...nextBook, periods }, touchedPeriods };
+      return { book: { ...nextBook, periods }, touchedPeriods, warnings };
     },
     onSuccess: ({ book, touchedPeriods }) => {
       queryClient.setQueryData(queryKey, book);
@@ -313,8 +318,22 @@ export function useLeaseWrites(projectId: string | undefined) {
   const client = useQueryClient();
   return useMutation({
     mutationKey: costWriteKey(projectId, "land-lease"), // CA-15
-    mutationFn: (writes: readonly LeaseWrite[]) => costRepository().applyLeaseWrites(writes),
+    // `{ writes, independentSteps }` is the Save of the panel (FT-BR-LEASE-089: header, allocation
+    // and period run independently, as the canvas' two `IfError` blocks do).
+    mutationFn: (input: readonly LeaseWrite[] | { writes: readonly LeaseWrite[]; independentSteps: true }) =>
+      "writes" in input
+        ? costRepository().applyLeaseWrites(input.writes, { independentSteps: input.independentSteps })
+        : costRepository().applyLeaseWrites(input),
     onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
+        client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),
+        client.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] }),
+      ]);
+    },
+    // A partly failed save has still written the steps that passed (the canvas reloads either way).
+    onError: async (error) => {
+      if (!(error instanceof LeaseStepsError)) return;
       await Promise.all([
         client.invalidateQueries({ queryKey: leaseBookKey(projectId) }),
         client.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] }),

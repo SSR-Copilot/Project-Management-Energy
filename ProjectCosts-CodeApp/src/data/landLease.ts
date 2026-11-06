@@ -52,8 +52,8 @@ import { Vsb_countryinflationprofilesService } from "@/generated/services/Vsb_co
 import { TransactioncurrenciesService } from "@/generated/services/TransactioncurrenciesService";
 import { unwrap } from "@/platform/errors";
 import {
-  bindParent, generatorOptions, LEASE_ENTITY_SET, TYPE_OF_CONTRACT,
-  type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
+  bindParent, generatorOptions, LEASE_ENTITY_SET, LeaseStepsError, leaseHttpResponse, leaseStepOf,
+  TYPE_OF_CONTRACT, type LeaseStepFailure, type GeneratorOption, type LeaseAllocationRow, type LeaseAssumptionRow, type LeaseCostRow,
   type LeasePeriodRow, type LeaseSubaccountRow, type LeaseWrite,
 } from "@/features/cost/periods/landLeaseRules";
 import { deleteRecord, fetchAll } from "./client";
@@ -120,12 +120,18 @@ export async function loadLeaseBook(projectId: string): Promise<LeaseBook> {
       (o) => Vsb_landleasesubaccountsService.getAll(o),
       {
         select: ["vsb_landleasesubaccountid", "vsb_name", "vsb_order"],
+        // DIVERGENCE (product decision, FT-BR-LEASE-005): the canvas reads the whole table, no state
+        // filter (LL:14 `ClearCollect(colLandLeaseSubaccounts, Sort(AddColumns('Land Lease
+        // Subaccounts', …)))`); this app lists active rows only. Kept (cf. D45 G2).
         filter: ACTIVE,
       },
     ),
     fetchAll(
       "list Land Lease project costs",
       (o) => Vsb_landleaseprojectcostsService.getAll(o),
+      // DIVERGENCE (product decision, FT-BR-LEASE-006/026): the canvas filters the contracts by
+      // project only (LL:14 `Filter('Land Lease Project Costs', Project.Project = …)`), so an
+      // inactive contract (and its periods, and the Add Contract/Standard gates) shows there; active only here.
       { select: LEASE_COST_SELECT, filter: and(lookupEq("vsb_project", projectId), ACTIVE) },
     ),
   ]);
@@ -263,6 +269,9 @@ const GENERATOR_STATE_LABEL: Record<number, string> = { 0: "Active", 1: "Inactiv
  * `periodWrites.resolveDeviceType` uses.
  */
 export async function loadLeaseGenerators(projectId: string): Promise<GeneratorOption[]> {
+  // DIVERGENCE (product decision, FT-BR-LEASE-010): the canvas `colGeneratorsInProject` (LL:14)
+  // filters the generators by project only; the two type tables are read ACTIVE-only here, so a
+  // generator whose type row is inactive drops out of the picker.
   const [generatorTypes, pvTypes] = await Promise.all([
     fetchAll(
       "list generator types in project for Land Lease",
@@ -399,6 +408,8 @@ export async function loadLeaseAssumptions(
         countryId ? lookupEq("vsb_country", countryId) : undefined,
         technology !== null && technology !== undefined
           ? eq("vsb_technology", technology) : undefined,
+        // DIVERGENCE (product decision, FT-BR-LEASE-026): the canvas `LookUp` over 'OPEX & Land Lease
+        // Standard Assumptions' (LL:301) has no state filter; active rows only here.
         ACTIVE,
       ),
       orderBy: ["vsb_description asc"],
@@ -506,9 +517,42 @@ export interface LeaseWriteResult {
  */
 export async function applyLeaseWrites(
   writes: readonly LeaseWrite[],
+  options?: { independentSteps?: boolean },
 ): Promise<LeaseWriteResult> {
   const createdIds: Record<string, string> = {};
 
+  if (options?.independentSteps) {
+    /*
+     * FT-BR-LEASE-089: `Save_1.OnChange` (LL:6062) wraps the header Patch and the period Patch in
+     * their OWN `IfError(…, Notify(…))` and carries on after a failure, the allocation loops
+     * included. So the contract, allocation and period steps each run to their first failure and
+     * the next step still starts; every failure is reported at the end, one message per step.
+     */
+    const failures: LeaseStepFailure[] = [];
+    for (const step of ["contract", "allocation", "period"] as const) {
+      const inStep = writes.filter((w) => leaseStepOf(w.entitySet) === step);
+      try {
+        await runLeaseWrites(inStep, createdIds);
+      } catch (e) {
+        failures.push({
+          step,
+          message: e instanceof Error ? e.message : String(e),
+          httpResponse: leaseHttpResponse(e),
+        });
+      }
+    }
+    if (failures.length > 0) throw new LeaseStepsError(failures);
+    return { createdIds };
+  }
+
+  await runLeaseWrites(writes, createdIds);
+  return { createdIds };
+}
+
+async function runLeaseWrites(
+  writes: readonly LeaseWrite[],
+  createdIds: Record<string, string>,
+): Promise<void> {
   for (const write of writes) {
     const [bound] = bindParent([write], createdIds);
     if (!bound) continue;
@@ -532,6 +576,4 @@ export async function applyLeaseWrites(
     const id = created[writer.idField];
     if (bound.ref && typeof id === "string") createdIds[bound.ref] = id;
   }
-
-  return { createdIds };
 }

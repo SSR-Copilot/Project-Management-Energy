@@ -55,6 +55,9 @@ import {
   leaseAssumptionQuery, mapAssumptionPeriod, mapAssumptionPeriodStrict, mapAggregation,
   mapSecured, mapAllWtgAllocated, roundTwoDecimals, resolveStandardInflationProfile,
   planStandardAllocation, standardPeriodStarts, planStandardImport,
+  startDatePickPatch, inflationUncheckPatch, leaseAreaDefault, oneTimePaymentUncheckPatch, storedPayments,
+  paymentBlockVisible, countryProfileFor, inflationProfileForSave, allocationRequired, periodBlockRequired,
+  startDateIsStandard, resolveLeaseCurrencyId, leaseStepFailureText, leaseHttpResponse, leaseStepOf, LeaseStepsError,
   type LeaseCostRow, type LeasePeriodRow, type LeaseAllocationRow, type LeaseAssumptionRow,
   type LeaseProjectContext, type LandLeaseForm, type GeneratorOption, type LeaseCommandArgs,
   type LeaseWrite,
@@ -588,10 +591,12 @@ describe("Land Lease — the grid", () => {
     expect(Object.keys(row.cells)).toHaveLength(LAND_LEASE_COLUMNS.length);
   });
 
-  it("UT-LAND-038 'Standard' is case-sensitive everywhere except the delete gate", () => {
-    // canvas-only: LL:252/992 use StartsWith, LL:361 lower-cases first.
+  it("UT-LAND-038 'Standard' is case-INSENSITIVE, as Power Fx StartsWith is (FT-BR-LEASE-027)", () => {
+    // canvas-only: LL:252/341/992 use StartsWith, LL:361 lower-cases first (redundant).
     expect(isStandardPeriodName("Standard LL Locations")).toBe(true);
-    expect(isStandardPeriodName("standard LL Locations")).toBe(false);
+    expect(isStandardPeriodName("standard LL Locations")).toBe(true);
+    expect(isStandardPeriodName("STANDARD")).toBe(true);
+    expect(isStandardPeriodName("Owner B Standard")).toBe(false);
     expect(isStandardPeriodNameLower("standard LL Locations")).toBe(true);
     expect(isStandardPeriodNameLower("Standard LL Locations")).toBe(true);
     expect(isStandardPeriodNameLower("Owner B")).toBe(false);
@@ -1191,9 +1196,14 @@ describe("Land Lease — the save gate", () => {
       .toBe(false);
     expect(canSaveLandLease(saveCtx({ form: noAlloc, technology: TECHNOLOGY.bess })))
       .toBe(true);
-    // Allocate-to-all satisfies the picker requirement without an explicit selection.
+    // FT-BR-LEASE-054: the toggle does not satisfy the picker requirement (LL:6004, the picker's
+    // own `Selected.Name`); with it on and no generator selected Save stays off.
     expect(canSaveLandLease(saveCtx({
       form: form({ allocatedGeneratorIds: [], allWtgAllocated: true }),
+      technology: TECHNOLOGY.wind,
+    }))).toBe(false);
+    expect(canSaveLandLease(saveCtx({
+      form: form({ allocatedGeneratorIds: ["G1"], allWtgAllocated: true }),
       technology: TECHNOLOGY.wind,
     }))).toBe(true);
   });
@@ -1400,10 +1410,11 @@ describe("Land Lease — the save write plan", () => {
     expect(plan.writes.some((w) => w.entitySet === LEASE_ENTITY_SET.allocation)).toBe(false);
   });
 
-  it("UT-LAND-097 allocate-to-all selects every generator in the plan", () => {
+  it("UT-LAND-097 the plan allocates the PICKER's selection; the toggle only seeds it (FT-BR-LEASE-053)", () => {
+    // LL:6062 reads `cmb_…_AllocationWtg_1.SelectedItems`; `AllWTGAllocated` is the toggle's own value.
     const plan = planLeaseSave({
       ...planArgs,
-      form: form({ allWtgAllocated: true, allocatedGeneratorIds: [] }),
+      form: form({ allWtgAllocated: true, allocatedGeneratorIds: ["G1", "G2"] }),
     });
     const creates = plan.writes.filter(
       (w) => w.op === "create" && w.entitySet === LEASE_ENTITY_SET.allocation,
@@ -1412,6 +1423,19 @@ describe("Land Lease — the save write plan", () => {
     expect(payloadOf(creates[0])["vsb_GeneratorInProject@odata.bind"])
       .toBe("/vsb_generatorinprojects(G2)");
     expect(plan.writes.filter((w) => w.op === "delete")).toHaveLength(0);
+    // Toggle ON but the picker narrowed to one generator: the subset is allocated, the flag stays Yes.
+    const subset = planLeaseSave({
+      ...planArgs,
+      form: form({ allWtgAllocated: true, allocatedGeneratorIds: ["G1"] }),
+    });
+    expect(subset.writes.some((w) => w.op === "create" && w.entitySet === LEASE_ENTITY_SET.allocation)).toBe(false);
+    expect(payloadOf(subset.writes[0])[LEASE_COST_COL.allWtgAllocated]).toBe(true);
+    // Every generator picked by hand with the toggle off: the flag is saved No.
+    const byHand = planLeaseSave({
+      ...planArgs,
+      form: form({ allWtgAllocated: false, allocatedGeneratorIds: ["G1", "G2"] }),
+    });
+    expect(payloadOf(byHand.writes[0])[LEASE_COST_COL.allWtgAllocated]).toBe(false);
   });
 
   it("UT-LAND-098 a brand-new contract defers its child binds to the created id", () => {
@@ -2106,5 +2130,212 @@ describe("Land Lease parity fixes (D79)", () => {
     expect(leaseCellWeight("description", false)).toBe("normal");
     expect(leaseCellWeight("endDate", true)).toBe("normal");
     expect(leaseCellWeight("secured", false)).toBe("normal");
+  });
+});
+
+/* ═══════════════════════════════════════ run 3 parity fixes (FT-BR-LEASE-*, 5 Nov 2026) ══ */
+
+describe("Land Lease — run 3 parity fixes", () => {
+  it("UT-LAND-130 picking a Start Date sets the standard-assumption flag to No (FT-BR-LEASE-040/041)", () => {
+    // LL:2342 `dte_…_StartDate_1.OnChange`: `locIsStartDateStandardAssumption: …No`.
+    const f = form({ isStartDateStandardAssumption: true });
+    const patch = startDatePickPatch({ form: f, cost: cost(), startDate: "2030-05-08", countryName: "Germany" });
+    expect(patch.startDate).toBe("2030-05-08");
+    expect(patch.isStartDateStandardAssumption).toBe(false);
+    expect(startDateIsStandard({ ...f, ...patch }.isStartDateStandardAssumption)).toBe(false);
+  });
+
+  it("UT-LAND-131 the header save after a date pick writes the flag as No (FT-BR-LEASE-083)", () => {
+    const f = form({ isStartDateStandardAssumption: true });
+    const after = { ...f, ...startDatePickPatch({ form: f, cost: cost(), startDate: "2030-05-08", countryName: "Germany" }) };
+    const payload = buildCostPayload({ form: after, ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders" });
+    expect(payload[LEASE_COST_COL.isStartDateStandardAssumption]).toBe(false);
+    // Untouched, the stored Yes still round-trips (UT-LAND-129).
+    expect(buildCostPayload({ form: f, ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders" })
+      [LEASE_COST_COL.isStartDateStandardAssumption]).toBe(true);
+  });
+
+  it("UT-LAND-132 the Inflation Start Year follows the picked date while none is stored (FT-BR-LEASE-056)", () => {
+    // LL:4328 `Coalesce(stored, Year(StartDate)+1)`.
+    const f = form({ inflationStartYear: "2028" });
+    expect(startDatePickPatch({ form: f, cost: cost({ inflationStartYear: null }), startDate: "2031-02-01", countryName: "Germany" })
+      .inflationStartYear).toBe("2032");
+    // A stored year wins over the date.
+    expect(startDatePickPatch({ form: f, cost: cost({ inflationStartYear: 2040 }), startDate: "2031-02-01", countryName: "Germany" })
+      .inflationStartYear).toBeUndefined();
+    // The new contract (no cost) follows too.
+    expect(startDatePickPatch({ form: f, cost: null, startDate: "2031-02-01", countryName: "Germany" })
+      .inflationStartYear).toBe("2032");
+  });
+
+  it("UT-LAND-133 a year change by the date pick drops a typed profile with the country toggle off (V4)", () => {
+    const f = form({ inflationStartYear: "2028", inflationProfile: "2.0", inflationChecked: true });
+    const patch = startDatePickPatch({
+      form: f, cost: cost({ inflationStartYear: null, inflationProfile: null }), startDate: "2031-02-01", countryName: "Germany",
+    });
+    expect(patch.inflationProfile).toBe("");
+    // Country toggle on: the box is read-only, nothing is reset.
+    expect(startDatePickPatch({
+      form: { ...f, countryInflationChecked: true }, cost: cost({ inflationStartYear: null }), startDate: "2031-02-01",
+      countryName: "Germany",
+    }).inflationProfile).toBeUndefined();
+  });
+
+  it("UT-LAND-134 the header always writes the country's currency, PLN or EUR (FT-BR-LEASE-047/083)", () => {
+    // LL:2774 + LL:6062: the disabled dropdown's default is what the Patch writes.
+    expect(resolveLeaseCurrencyId("cur-pln", "cur-eur")).toBe("cur-pln");
+    expect(resolveLeaseCurrencyId(null, "cur-eur")).toBe("cur-eur");
+    expect(resolveLeaseCurrencyId(null, null)).toBeNull();
+    const payload = buildCostPayload({
+      form: form({ currencyId: resolveLeaseCurrencyId("cur-pln", "cur-eur") }),
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+    });
+    expect(payload["vsb_Currency@odata.bind"]).toBe("/transactioncurrencies(cur-pln)");
+  });
+
+  it("UT-LAND-135 a rename reaches the allocation Names in the same save (FT-BR-LEASE-083)", () => {
+    // `Name: locSelectedLandLeaseCost.'Land Owner' & "-" & locSelectedLandLeaseCost.Description & …` reads the
+    // cost the header Patch just returned.
+    const plan = planLeaseSave({
+      form: form({ description: "Renamed", allocatedGeneratorIds: ["G1", "G2"] }),
+      ctx: ctx(), subaccountId: "sub-1", subaccountName: "Leaseholders",
+      selectedCost: cost({ description: "Owner B" }), selectedPeriod: period(), parentPeriod: null,
+      existingAllocations: [alloc({ id: "a1", generatorInProjectId: "G1" })],
+      generators: [gen("G1", "WTG_1", 1), gen("G2", "WTG_2", 2)], panelState: "Edit",
+    });
+    const names = plan.writes.filter((w) => w.entitySet === LEASE_ENTITY_SET.allocation)
+      .map((w) => payloadOf(w)[LEASE_ALLOC_COL.name]);
+    expect(names).toEqual(["Owner B-Renamed-WTG_2", "Owner B-Renamed-WTG_1"]);
+  });
+
+  it("UT-LAND-136 switching Inflation Profile off resets the country toggle, year, Area and profile (FT-BR-LEASE-055)", () => {
+    // LL:4203 `OnUncheck`: Reset of the four dependants to their formula defaults.
+    const stored = cost({
+      useInflationProfile: true, useCountryInflationProfile: false, inflationStartYear: 2030,
+      inflationProfile: 1.5, inflationCountryArea: "Lombardia",
+    });
+    expect(inflationUncheckPatch({ cost: stored, startDate: "2027-04-01", areaDefault: "Sicilia", countryName: "Italy" })).toEqual({
+      inflationChecked: false, countryInflationChecked: false, inflationStartYear: "2030",
+      inflationCountryArea: "Sicilia", inflationProfile: "1.5",
+    });
+    // A new contract: back to Year(StartDate)+1, no profile.
+    expect(inflationUncheckPatch({ cost: null, startDate: "2027-04-01", areaDefault: null, countryName: "Germany" })).toEqual({
+      inflationChecked: false, countryInflationChecked: false, inflationStartYear: "2028",
+      inflationCountryArea: null, inflationProfile: "",
+    });
+  });
+
+  it("UT-LAND-137 the Area defaults to the project's region (Italy only) and is seeded into the form (FT-BR-LEASE-057)", () => {
+    // LL:4420 `Area = Substitute(gblAreaWithRegion, "Italy_", "")`.
+    expect(leaseAreaDefault({ countryName: "Italy", areaWithRegion: "Italy_Sicilia" })).toBe("Sicilia");
+    expect(leaseAreaDefault({ countryName: "Italy", areaWithRegion: null })).toBeNull();
+    expect(leaseAreaDefault({ countryName: "Germany", areaWithRegion: "Italy_Sicilia" })).toBeNull();
+    const italy = ctx({ countryName: "Italy", areaWithRegion: "Italy_Sicilia" });
+    expect(emptyLandLeaseForm(italy).inflationCountryArea).toBe("Sicilia");
+    const loaded = landLeaseFormFrom({
+      cost: cost({ inflationCountryArea: "Lombardia" }), period: period(), parentPeriod: null, allocations: [],
+      panelState: "Edit", workingDate: null, resetStartDate: false, areaDefault: leaseAreaDefault(italy),
+    });
+    expect(loaded.inflationCountryArea).toBe("Sicilia");
+    // Without a project context the stored area is kept.
+    expect(landLeaseFormFrom({
+      cost: cost({ inflationCountryArea: "Lombardia" }), period: period(), parentPeriod: null, allocations: [],
+      panelState: "Edit", workingDate: null, resetStartDate: false,
+    }).inflationCountryArea).toBe("Lombardia");
+  });
+
+  it("UT-LAND-138 One-Time Payment off then on restores the STORED values; the extra blocks hide (FT-BR-LEASE-060)", () => {
+    const stored = cost({
+      amountOneTimePayment: 1000, dueDateOneTimePayment: "04/2027",
+      amountOneTimePayment2: 500, dueDateOneTimePayment2: "04/2028",
+    });
+    const patch = oneTimePaymentUncheckPatch(stored);
+    expect(patch.oneTimePaymentsOn).toBe(false);
+    expect(patch.showSecondPayment).toBe(false);
+    expect(patch.showThirdPayment).toBe(false);
+    expect(patch.payments).toEqual({
+      dueDate: "04/2027", amount: "1000.00", dueDate2: "04/2028", amount2: "500.00", dueDate3: "", amount3: "",
+    });
+    // A new contract has nothing stored: blank, as before.
+    expect(oneTimePaymentUncheckPatch(null).payments).toEqual(storedPayments(null));
+    expect(storedPayments(null).amount).toBe("");
+  });
+
+  it("UT-LAND-139 payment blocks 2 and 3 follow their own flags; block 1 follows the toggle (FT-BR-LEASE-062)", () => {
+    const base = { oneTimePaymentsOn: false, showSecondPayment: true, showThirdPayment: true };
+    expect(paymentBlockVisible(1, base)).toBe(false);
+    expect(paymentBlockVisible(2, base)).toBe(true);
+    expect(paymentBlockVisible(3, base)).toBe(true);
+    expect(paymentBlockVisible(2, { ...base, oneTimePaymentsOn: true, showSecondPayment: false })).toBe(false);
+    expect(paymentBlockVisible(1, { ...base, oneTimePaymentsOn: true })).toBe(true);
+  });
+
+  it("UT-LAND-140 the country profile follows the year and, in Italy, the Area (FT-BR-LEASE-058)", () => {
+    const rows = [
+      { year: 2028, area: "Sicilia", inflation: 2.1 },
+      { year: 2028, area: "Lombardia", inflation: 1.7 },
+      { year: 2029, area: "Sicilia", inflation: 2.4 },
+    ];
+    expect(countryProfileFor(rows, { startYear: "2029", area: "Sicilia", countryName: "Italy" })).toBe(2.4);
+    expect(countryProfileFor(rows, { startYear: "2028", area: "Lombardia", countryName: "Italy" })).toBe(1.7);
+    // Italy with no Area matches no row (the canvas shows 0.0).
+    expect(countryProfileFor(rows, { startYear: "2028", area: null, countryName: "Italy" })).toBeNull();
+    // Elsewhere the year alone decides.
+    expect(countryProfileFor(rows, { startYear: "2028", area: null, countryName: "Germany" })).toBe(2.1);
+    expect(countryProfileFor(rows, { startYear: "", area: null, countryName: "Germany" })).toBeNull();
+  });
+
+  it("UT-LAND-141 the saved Inflation Profile is the country value for the current year/Area while the toggle is on (FT-BR-LEASE-058)", () => {
+    expect(inflationProfileForSave({
+      form: { countryInflationChecked: true, inflationProfile: "9.9" }, countryName: "Italy", countryProfile: 2.4,
+    })).toBe("2.4");
+    // A missing row is `Max(…, 0)` = 0.0.
+    expect(inflationProfileForSave({
+      form: { countryInflationChecked: true, inflationProfile: "9.9" }, countryName: "Italy", countryProfile: null,
+    })).toBe("0.0");
+    expect(inflationProfileForSave({
+      form: { countryInflationChecked: false, inflationProfile: "1.5" }, countryName: "Germany", countryProfile: 2.4,
+    })).toBe("1.5");
+  });
+
+  it("UT-LAND-142 the Allocation asterisk has its own formula, the other three share one (FT-BR-LEASE-079)", () => {
+    // LL:4040 `If(OneTimePayment.Checked, anyRate, true)`; LL:2481 the three-armed one.
+    const noRate = form();
+    expect(allocationRequired(noRate)).toBe(true);
+    expect(allocationRequired(form({ oneTimePaymentsOn: true, fixedCosts: "" }))).toBe(false);
+    expect(allocationRequired(form({ oneTimePaymentsOn: true, fixedCosts: "5.00" }))).toBe(true);
+    // Existing contract, Period 1, toggle off, no rate: the three-armed one says no, Allocation says yes.
+    const blank = form({ fixedCosts: "" });
+    expect(periodBlockRequired({ form: blank, hasCost: true, periodIsOne: true })).toBe(false);
+    expect(allocationRequired(blank)).toBe(true);
+    expect(periodBlockRequired({ form: blank, hasCost: true, periodIsOne: false })).toBe(true);
+    expect(periodBlockRequired({ form: form({ oneTimePaymentsOn: true, fixedCosts: "" }), hasCost: false, periodIsOne: false }))
+      .toBe(false);
+  });
+
+  it("UT-LAND-143 each failed save step has its own Notify text with Source and HttpResponse (FT-BR-LEASE-089)", () => {
+    expect(leaseStepFailureText({ step: "contract", message: "boom", httpResponse: " {\"code\":403}" }))
+      .toBe("Error: Land Lease Contract could not be saved correctly. Internal error: originated on Patch. Message: boom {\"code\":403}");
+    expect(leaseStepFailureText({ step: "allocation", message: "boom", httpResponse: "" }))
+      .toContain("Land Lease Contract could not be saved");
+    expect(leaseStepFailureText({ step: "period", message: "boom", httpResponse: "" }))
+      .toBe("Error: Land Lease Period could not be saved correctly. Internal error: originated on Patch. Message: boom");
+    expect(leaseHttpResponse(Object.assign(new Error("x"), { cause: { httpResponse: "{r}" } }))).toBe("{r}");
+    expect(leaseHttpResponse(new Error("plain"))).toBe("");
+    expect(leaseStepOf(LEASE_ENTITY_SET.cost)).toBe("contract");
+    expect(leaseStepOf(LEASE_ENTITY_SET.allocation)).toBe("allocation");
+    expect(leaseStepOf(LEASE_ENTITY_SET.period)).toBe("period");
+    expect(new LeaseStepsError([{ step: "period", message: "m", httpResponse: "" }]).failures).toHaveLength(1);
+  });
+
+  it("UT-LAND-144 a period named 'standard …' in lower case locks Edit and Add Period, as StartsWith does (FT-BR-LEASE-027)", () => {
+    const lower = period({ name: "standard test" });
+    const contract = buildContracts([cost()], [lower])[0]!;
+    const gates = leaseCommandGates({
+      subaccountId: "sub-1", isSelectedCard: true, selectedPeriod: lower, selectedCost: cost(), contract,
+      costsInSubaccount: [cost()], hasMatchingAssumption: false, permissions: perms,
+    });
+    expect(gates.EditLandLeasePeriodKey).toBe(false);
+    expect(gates.newLandLeasePeriodKey).toBe(false);
   });
 });

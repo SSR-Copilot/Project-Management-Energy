@@ -516,6 +516,7 @@ describe("LandLeaseScreen", () => {
     );
     // A wind contract needs an allocation before its Save gate opens.
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     fireEvent.click(screen.getByTestId("lease-select-p2"));
@@ -542,6 +543,7 @@ describe("LandLeaseScreen", () => {
       () => new Promise((r) => { finish = () => r({ createdIds: {} }); }),
     );
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     fireEvent.click(screen.getByTestId("lease-select-p2"));
@@ -563,6 +565,7 @@ describe("LandLeaseScreen", () => {
       () => new Promise((_r, reject) => { fail = reject; }),
     );
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     fireEvent.click(screen.getByTestId("lease-select-p2"));
@@ -606,6 +609,7 @@ describe("LandLeaseScreen", () => {
   it("UT-LEASE-FLIGHT-002 a failed save goes through the reporter with the screen's own text", async () => {
     mutateAsync.mockImplementationOnce(async () => { throw new Error("HTTP 403"); });
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     editP2();
@@ -621,6 +625,7 @@ describe("LandLeaseScreen", () => {
   it("UT-LEASE-SEL-010 a row selected while a save runs is still selected when it ends", async () => {
     const finish = holdNextWrite();
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     saveP2();
@@ -634,6 +639,7 @@ describe("LandLeaseScreen", () => {
   it("UT-LEASE-SEL-011 the selection the save started with is still cleared (LL:5895)", async () => {
     const finish = holdNextWrite();
     book.costs = [cost({ id: "cost-1", allWtgAllocated: true })];
+    book.allocations = [{ id: "a1", projectCostId: "cost-1", generatorInProjectId: "g1" }];
     render(<Harness><LandLeaseScreen /></Harness>);
     openCard("Locations");
     saveP2();

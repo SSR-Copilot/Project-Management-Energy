@@ -164,8 +164,11 @@ const recordedContract: LeaseContract = { cost: recordedCost, periods: [recorded
 
 /** The Edit panel as loaded: `landLeaseFormFrom`, with the text boxes exactly as the Canvas showed them. */
 function editPanelForm(): LandLeaseForm {
+  // The recorded contract is "allocated to all WTGs" and the Canvas offered Save, so its picker held
+  // a generator (`Not(IsBlank(cmb_…_AllocationWtg_1.Selected.Name))`, LL:6004; FT-BR-LEASE-054).
   const loaded = landLeaseFormFrom({
-    cost: recordedCost, period: recordedPeriod, parentPeriod: null, allocations: [],
+    cost: recordedCost, period: recordedPeriod, parentPeriod: null,
+    allocations: [{ id: "alloc-rec", projectCostId: recordedCost.id, generatorInProjectId: "gen-rec" }],
     panelState: "Edit", workingDate: null, resetStartDate: false,
   });
   const t = gates.edit.texts;

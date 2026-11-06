@@ -38,15 +38,20 @@ vi.mock("./client", () => ({
   },
 }));
 
+/** Tables whose create / update answers `{ success: false }` (UT-LLDATA-015…). */
+let failingTables = new Set<string>();
+
 function service(table: string, idColumn: string) {
   return {
     getAll: async () => ({ success: true, data: [] }),
     create: async (payload: Record<string, unknown>) => {
+      if (failingTables.has(table)) return { success: false, error: new Error(`${table} refused`) };
       const id = NEW_ID[table]?.shift() ?? `${table}-new`;
       writes.push({ op: "create", table, id, payload });
       return { success: true, data: { [idColumn]: id } };
     },
     update: async (id: string, payload: Record<string, unknown>) => {
+      if (failingTables.has(table)) return { success: false, error: new Error(`${table} refused`) };
       writes.push({ op: "update", table, id, payload });
       return { success: true, data: {} };
     },
@@ -93,7 +98,7 @@ const {
   applyLeaseWrites, loadCountryInflation, loadCurrencies, loadLeaseAssumptions, loadLeaseBook,
   loadLeaseGenerators,
 } = await import("./landLease");
-const { LEASE_ENTITY_SET } = await import("@/features/cost/periods/landLeaseRules");
+const { LEASE_ENTITY_SET, LeaseStepsError } = await import("@/features/cost/periods/landLeaseRules");
 
 /** Real VSBCloud_Dev ids — `guid()` rejects anything that is not a GUID. */
 const PROJECT_NEW_DATA = "910d8ed0-282a-ef11-840a-6045bd9e5ce7";
@@ -383,5 +388,62 @@ describe("applyLeaseWrites", () => {
     } finally {
       refusedDeletes = new Set();
     }
+  });
+
+  it("UT-LLDATA-015 independent steps: a failed header does not stop the period, and both failures are reported (FT-BR-LEASE-089)", async () => {
+    // LL:6062 wraps the header Patch and the period Patch in their own `IfError(…, Notify(…))`.
+    failingTables = new Set(["cost"]);
+    try {
+      const run = applyLeaseWrites([
+        { op: "update", entitySet: LEASE_ENTITY_SET.cost, id: "c1", payload: {} },
+        { op: "update", entitySet: LEASE_ENTITY_SET.allocation, id: "a1", payload: {} },
+        { op: "update", entitySet: LEASE_ENTITY_SET.period, id: "p1", payload: {} },
+      ] as never, { independentSteps: true });
+      await expect(run).rejects.toBeInstanceOf(LeaseStepsError);
+      // The allocation and the period were still written.
+      expect(writes.map((w) => `${w.op}:${w.table}`)).toEqual(["update:alloc", "update:period"]);
+      const err = await run.catch((e: unknown) => e);
+      expect((err as InstanceType<typeof LeaseStepsError>).failures.map((f: { step: string }) => f.step)).toEqual(["contract"]);
+    } finally {
+      failingTables = new Set();
+    }
+  });
+
+  it("UT-LLDATA-016 independent steps: header and period both failing give two failures", async () => {
+    failingTables = new Set(["cost", "period"]);
+    try {
+      const err = await applyLeaseWrites([
+        { op: "update", entitySet: LEASE_ENTITY_SET.cost, id: "c1", payload: {} },
+        { op: "update", entitySet: LEASE_ENTITY_SET.period, id: "p1", payload: {} },
+      ] as never, { independentSteps: true }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(LeaseStepsError);
+      expect((err as InstanceType<typeof LeaseStepsError>).failures.map((f: { step: string }) => f.step)).toEqual(["contract", "period"]);
+      expect(writes).toEqual([]);
+    } finally {
+      failingTables = new Set();
+    }
+  });
+
+  it("UT-LLDATA-017 without the option the first failure still stops the plan (delete and import paths)", async () => {
+    failingTables = new Set(["cost"]);
+    try {
+      await expect(applyLeaseWrites([
+        { op: "update", entitySet: LEASE_ENTITY_SET.cost, id: "c1", payload: {} },
+        { op: "update", entitySet: LEASE_ENTITY_SET.period, id: "p1", payload: {} },
+      ] as never)).rejects.toThrow(/update Land Lease contract failed/);
+      expect(writes).toEqual([]);
+    } finally {
+      failingTables = new Set();
+    }
+  });
+
+  it("UT-LLDATA-018 independent steps: a new contract's period still gets the created id when the header worked", async () => {
+    NEW_ID.cost = [HDR_COST101];
+    await applyLeaseWrites([
+      { op: "create", entitySet: LEASE_ENTITY_SET.cost, ref: "cost", payload: {} },
+      { op: "create", entitySet: LEASE_ENTITY_SET.period, parentRef: "cost", payload: {} },
+    ] as never, { independentSteps: true });
+    expect(writes[1]?.payload?.["vsb_ProjectCost@odata.bind"])
+      .toBe(`/vsb_landleaseprojectcosts(${HDR_COST101})`);
   });
 });

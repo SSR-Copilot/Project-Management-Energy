@@ -424,6 +424,95 @@ export const leaseSaveError = {
 } as const;
 
 /**
+ * `FirstError.Source` of the failed `Patch` (the existing wording test pins "Patch"). The same
+ * word for the contract, allocation and period steps: the canvas names the function, not a table.
+ */
+export const LEASE_ERROR_SOURCE = "Patch";
+
+/** The three independent steps of the Save (LL:6062): header Patch, allocation loops, period Patch. */
+export type LeaseSaveStep = "contract" | "allocation" | "period";
+
+export interface LeaseStepFailure {
+  step: LeaseSaveStep;
+  message: string;
+  /** `FirstError.Details.HttpResponse`, appended straight after the message; "" when none. */
+  httpResponse: string;
+}
+
+/**
+ * Thrown by `applyLeaseWrites` in independent-steps mode after EVERY step has run, listing the
+ * ones that failed (FT-BR-LEASE-089; the canvas wraps the header Patch and the period Patch in
+ * their own `IfError` and carries on after the first).
+ */
+export class LeaseStepsError extends Error {
+  readonly failures: readonly LeaseStepFailure[];
+  constructor(failures: readonly LeaseStepFailure[]) {
+    super(failures.map((f) => f.message).join(" | "));
+    this.name = "LeaseStepsError";
+    this.failures = failures;
+  }
+}
+
+/** `FirstError.Details.HttpResponse`, read defensively from whatever the SDK attached. */
+export function leaseHttpResponse(error: unknown): string {
+  const seen = new Set<unknown>();
+  let cur: unknown = error;
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur);
+    const rec = cur as Record<string, unknown>;
+    for (const key of ["httpResponse", "HttpResponse", "responseText", "body"]) {
+      const v = rec[key];
+      if (typeof v === "string" && v !== "") return v;
+    }
+    cur = rec["cause"];
+  }
+  return "";
+}
+
+/** The `Notify` text of one failed step: contract wording for the header and allocations, period wording for the period. */
+export function leaseStepFailureText(f: LeaseStepFailure): string {
+  return f.step === "period"
+    ? leaseSaveError.period(LEASE_ERROR_SOURCE, f.message, f.httpResponse)
+    : leaseSaveError.contract(LEASE_ERROR_SOURCE, f.message, f.httpResponse);
+}
+
+/** The entity set each save step writes to. */
+export function leaseStepOf(entitySet: string): LeaseSaveStep {
+  if (entitySet === LEASE_ENTITY_SET.cost) return "contract";
+  if (entitySet === LEASE_ENTITY_SET.period) return "period";
+  return "allocation";
+}
+
+/**
+ * `drp_…_Currency_1.DefaultSelectedItems` (LL:2774) is `Switch(country, "Poland", PLN, EUR)` and the
+ * control is always disabled, so the header Patch writes THAT currency on every save (LL:6062),
+ * re-pointing a contract that carried another (FT-BR-LEASE-047/083). The stored one only
+ * survives while the currency list has not loaded.
+ */
+export const resolveLeaseCurrencyId = (
+  defaultCurrencyId: string | null | undefined,
+  storedCurrencyId: string | null | undefined,
+): string | null => defaultCurrencyId ?? storedCurrencyId ?? null;
+
+/**
+ * What the save writes as `Inflation Profile`: `Value(txt_…_InflationProfile_1.Value)` (LL:6062),
+ * a box whose value is the country profile of the CURRENT year and Area while the country toggle is
+ * on (LL:4632), and the typed text otherwise (FT-BR-LEASE-058).
+ */
+export function inflationProfileForSave(args: {
+  form: Pick<LandLeaseForm, "countryInflationChecked" | "inflationProfile">;
+  countryName: string | null | undefined;
+  countryProfile: number | null;
+}): string {
+  return args.form.countryInflationChecked
+    ? inflationProfileText(resolveInflationProfileValue({
+      selectedCost: null, countryInflationChecked: true,
+      countryName: args.countryName, countryProfile: args.countryProfile,
+    }))
+    : args.form.inflationProfile;
+}
+
+/**
  * The canvas `AccessibleLabel`s that differ from the visible caption (CONVENTIONS rule 16, X1 in
  * the Land Lease parity report of 3 Nov 2026). These replaced `Duration years`,
  * `Duration months` and `Distribution Frequency` as the aria-labels (D79).
@@ -948,12 +1037,17 @@ export interface LeaseGridRow {
   cells: Record<string, string>;
 }
 
-/** `StartsWith(ThisItem.Name, "Standard")` — case SENSITIVE here (LL:992, LL:252). */
-export const isStandardPeriodName = (name: string): boolean => name.startsWith("Standard");
+/**
+ * `StartsWith(ThisItem.Name, "Standard")` (LL:992, LL:252, LL:341). Power Fx `StartsWith` is case
+ * INSENSITIVE, so "standard x" and "STANDARD" count (FT-BR-LEASE-027).
+ */
+export const isStandardPeriodName = (name: string): boolean =>
+  name.toLowerCase().startsWith("standard");
 
 /**
- * `StartsWith(Lower(name), "standard")` — the DELETE gate lower-cases first (LL:361), where
- * every other check does not. Reproduced as its own predicate so the difference is visible.
+ * `StartsWith(Lower(name), "standard")` — the DELETE gate lower-cases first (LL:361). Redundant
+ * since `StartsWith` ignores case anyway, so it equals `isStandardPeriodName`; kept as the
+ * canvas' own spelling of that gate.
  */
 export const isStandardPeriodNameLower = (name: string): boolean =>
   name.toLowerCase().startsWith("standard");
@@ -1468,10 +1562,11 @@ export function diffAllocation(
 
 /**
  * The allocation join's `Name` — `cost.'Land Owner' & "-" & cost.Description & "-" &
- * generator.Name` (LL:5895).
+ * generator.Name` (LL:6062).
  *
- * It reads the SAVED cost, not the description box, so a rename only reaches the allocation
- * rows on the save AFTER the rename. A blank land owner leaves a leading hyphen; verified
+ * It reads `locSelectedLandLeaseCost` as the header Patch just returned it, so it carries the
+ * NEW description (FT-BR-LEASE-083; the earlier reading, "the save after the rename", was wrong).
+ * A blank land owner leaves a leading hyphen; verified
  * against live rows, e.g. `"-Standard LL Locations-WTG 111_1"`.
  */
 export const allocationName = (
@@ -1973,6 +2068,167 @@ export interface LandLeaseForm {
 }
 
 /**
+ * The six one-time-payment boxes as the stored cost shows them — `Text(…, "##0.00")` for the
+ * amounts (LL:5020). Also what `Reset` of the DueDate and Amount boxes returns them to (FT-BR-LEASE-060).
+ */
+export function storedPayments(cost: LeaseCostRow | null | undefined): OneTimePaymentFields {
+  const money2 = (v: number | null | undefined) =>
+    v === null || v === undefined ? "" : v.toFixed(2);
+  return {
+    dueDate: cost?.dueDateOneTimePayment ?? "",
+    amount: money2(cost?.amountOneTimePayment),
+    dueDate2: cost?.dueDateOneTimePayment2 ?? "",
+    amount2: money2(cost?.amountOneTimePayment2),
+    dueDate3: cost?.dueDateOneTimePayment3 ?? "",
+    amount3: money2(cost?.amountOneTimePayment3),
+  };
+}
+
+/**
+ * `One-Time Payment` toggle `OnUncheck` (LL:4764): `Reset` of the six boxes — back to the STORED
+ * values, not blank — and both extra blocks hidden. The save still writes Blank() while the
+ * toggle is off (`oneTimePaymentPayload`), so only the boxes' interaction state is concerned.
+ */
+export function oneTimePaymentUncheckPatch(
+  cost: LeaseCostRow | null | undefined,
+): Pick<LandLeaseForm, "oneTimePaymentsOn" | "showSecondPayment" | "showThirdPayment" | "payments"> {
+  return {
+    oneTimePaymentsOn: false,
+    showSecondPayment: false,
+    showThirdPayment: false,
+    payments: storedPayments(cost),
+  };
+}
+
+/**
+ * `Visible` of payment blocks 2 and 3 (LL:5152, :5290, :5508, :5647): their own flag ALONE. Only
+ * the first block's containers carry the toggle term (LL:4796) (FT-BR-LEASE-062).
+ */
+export const paymentBlockVisible = (
+  n: 1 | 2 | 3,
+  form: Pick<LandLeaseForm, "oneTimePaymentsOn" | "showSecondPayment" | "showThirdPayment">,
+): boolean => n === 1
+  ? form.oneTimePaymentsOn
+  : n === 2 ? form.showSecondPayment : form.showThirdPayment;
+
+/**
+ * `drp_…_AreaInflationProfile_1.DefaultSelectedItems` (LL:4420): the profile Area equal to
+ * `Substitute(gblAreaWithRegion, "Italy_", "")`, i.e. the project's own region — Italy only. The
+ * box is always editable (its `DisplayMode` is a comment, LL:4438) (FT-BR-LEASE-057).
+ */
+export function leaseAreaDefault(
+  ctx: Pick<LeaseProjectContext, "countryName" | "areaWithRegion">,
+): string | null {
+  if (ctx.countryName !== "Italy") return null;
+  const area = (ctx.areaWithRegion ?? "").replace(/Italy_/g, "").trim();
+  return area === "" ? null : area;
+}
+
+/**
+ * `Visible` of `lbl_…_StartDateAsterisk_1`, `…DurationAsterisk…` and `…DistributionFrequency
+ * Asterisk…` (LL:2481, :2726, :3765): the same three-armed formula.
+ */
+export function periodBlockRequired(args: {
+  form: LandLeaseForm;
+  hasCost: boolean;
+  /** `isPeriodOne(selectedPeriod.period)`. */
+  periodIsOne: boolean;
+}): boolean {
+  const anyRate = formHasAnyRate(args.form);
+  if (args.form.oneTimePaymentsOn && !args.hasCost) return anyRate;
+  if (args.hasCost && args.periodIsOne) return anyRate;
+  return true;
+}
+
+/**
+ * `lbl_…_AllocationAsterisk_1.Visible` (LL:4040): `If(OneTimePayment.Checked, anyRate, true)` —
+ * its own formula, with no contract term (FT-BR-LEASE-079).
+ */
+export const allocationRequired = (form: LandLeaseForm): boolean =>
+  form.oneTimePaymentsOn ? formHasAnyRate(form) : true;
+
+/**
+ * `dte_…_StartDate_1.OnChange` (LL:2342): every pick of the date sets
+ * `locIsStartDateStandardAssumption` to No, so the blue/italic style clears and the header save
+ * writes No (FT-BR-LEASE-040/041/083). The reset icon alone stamps Yes (`resetStartDate`).
+ *
+ * `txt_…_InflationStartYear_1.Value` (LL:4328) is `Coalesce(stored year, Year(StartDate)+1)`: while the
+ * cost has no stored year the box follows the picked date, and SOURCE DEFECT V4 (D79) — the profile
+ * box re-evaluates and drops its typed text when the year changes with the country toggle off.
+ */
+export function startDatePickPatch(args: {
+  form: LandLeaseForm;
+  cost: LeaseCostRow | null | undefined;
+  startDate: string;
+  countryName: string | null | undefined;
+}): Partial<LandLeaseForm> {
+  const { form, cost } = args;
+  const patch: Partial<LandLeaseForm> = {
+    startDate: args.startDate,
+    isStartDateStandardAssumption: false,
+  };
+  if (cost?.inflationStartYear === null || cost?.inflationStartYear === undefined) {
+    const year = String(inflationStartYearDefault(null, args.startDate) ?? "");
+    patch.inflationStartYear = year;
+    if (inflationProfileResetsOnYearChange(form.inflationStartYear, year, form.countryInflationChecked)) {
+      patch.inflationProfile = inflationProfileText(resolveInflationProfileValue({
+        selectedCost: cost, countryInflationChecked: false,
+        countryName: args.countryName, countryProfile: null,
+      }));
+    }
+  }
+  return patch;
+}
+
+/** `Text(value, "0.0")`, blank for blank. */
+export const inflationProfileText = (value: number | null): string =>
+  value === null ? "" : value.toFixed(1);
+
+/**
+ * `tgl_…_InflationProfile_1.OnUncheck` (LL:4203): `Reset` of the country toggle, the Start Year
+ * box, the Area dropdown and the profile box — each back to its formula default for the open
+ * contract and the CURRENT start date (FT-BR-LEASE-055).
+ */
+export function inflationUncheckPatch(args: {
+  cost: LeaseCostRow | null | undefined;
+  startDate: string | null | undefined;
+  areaDefault: string | null;
+  countryName: string | null | undefined;
+}): Pick<LandLeaseForm,
+  "inflationChecked" | "countryInflationChecked" | "inflationStartYear" | "inflationCountryArea" | "inflationProfile"> {
+  const { cost } = args;
+  const countryOn = cost?.useCountryInflationProfile ?? false;
+  return {
+    inflationChecked: false,
+    countryInflationChecked: countryOn,
+    inflationStartYear: String(inflationStartYearDefault(cost?.inflationStartYear, args.startDate) ?? ""),
+    inflationCountryArea: args.areaDefault,
+    inflationProfile: inflationProfileText(resolveInflationProfileValue({
+      selectedCost: cost, countryInflationChecked: countryOn,
+      countryName: args.countryName, countryProfile: null,
+    })),
+  };
+}
+
+/**
+ * `LookUp('Country Inflation Profiles', Country = project's, Year = Value(StartYear box)
+ * [, Area = drp.Selected.Value])` (LL:4632). In Italy the Area clause applies, and an unset Area
+ * matches no row (so the box shows `0.0`); elsewhere the year alone decides (FT-BR-LEASE-058).
+ */
+export function countryProfileFor(
+  rows: readonly { year: number; area: string; inflation: number }[],
+  args: { startYear: string; area: string | null; countryName: string | null | undefined },
+): number | null {
+  if (rows.length === 0) return null;
+  const year = Number(args.startYear);
+  if (args.startYear.trim() === "" || !Number.isFinite(year)) return null;
+  const area = (args.area ?? "").trim();
+  const match = rows.find((r) => r.year === year
+    && (args.countryName === "Italy" ? r.area === area : true));
+  return match ? match.inflation : null;
+}
+
+/**
  * The panel's initial values, read off each control's `Value` / `DefaultSelectedItems`.
  *
  * The `Text(..., "#0.00")` on Fix Costs (LL:2988), `Text(..., "##0.00")` on the amounts
@@ -1987,6 +2243,8 @@ export function landLeaseFormFrom(args: {
   panelState: "New" | "Edit";
   workingDate: string | null;
   resetStartDate: boolean;
+  /** `leaseAreaDefault(ctx)`; omitted keeps the stored area (callers without a project). */
+  areaDefault?: string | null;
 }): LandLeaseForm {
   const { cost, period } = args;
   const money2 = (v: number | null | undefined) =>
@@ -2036,16 +2294,13 @@ export function landLeaseFormFrom(args: {
     inflationStartYear: String(inflationStartYearDefault(cost?.inflationStartYear, startDate) ?? ""),
     inflationProfile: cost?.inflationProfile === null || cost?.inflationProfile === undefined
       ? "" : cost.inflationProfile.toFixed(1),
-    inflationCountryArea: cost?.inflationCountryArea ?? null,
+    // `drp_…_AreaInflationProfile_1.DefaultSelectedItems` (LL:4420) is the PROJECT's region, not the
+    // stored area (FT-BR-LEASE-057). A caller that knows the project passes `areaDefault`.
+    inflationCountryArea: args.areaDefault !== undefined
+      ? args.areaDefault
+      : cost?.inflationCountryArea ?? null,
     oneTimePaymentsOn: oneTimePaymentChecked(cost),
-    payments: {
-      dueDate: cost?.dueDateOneTimePayment ?? "",
-      amount: money2(cost?.amountOneTimePayment),
-      dueDate2: cost?.dueDateOneTimePayment2 ?? "",
-      amount2: money2(cost?.amountOneTimePayment2),
-      dueDate3: cost?.dueDateOneTimePayment3 ?? "",
-      amount3: money2(cost?.amountOneTimePayment3),
-    },
+    payments: storedPayments(cost),
     showSecondPayment: showSecondPayment(cost),
     showThirdPayment: showThirdPayment(cost),
     // `locIsStartDateStandardAssumption: locSelectedLandLeaseCost.IsStartDateStandardAssumption`
@@ -2080,7 +2335,7 @@ export function emptyLandLeaseForm(ctx: LeaseProjectContext): LandLeaseForm {
     countryInflationChecked: false,
     inflationStartYear: String(inflationStartYearFromCod(ctx.codDate) ?? ""),
     inflationProfile: "",
-    inflationCountryArea: null,
+    inflationCountryArea: leaseAreaDefault(ctx),
     oneTimePaymentsOn: false,
     payments: { dueDate: "", amount: "", dueDate2: "", amount2: "", dueDate3: "", amount3: "" },
     showSecondPayment: false,
@@ -2258,7 +2513,10 @@ function periodBlockComplete(form: LandLeaseForm, technology: number | null): bo
   if (form.durationYears === 0 && form.durationMonths === 0) return false;
   if (allocationVisible(technology)) {
     if (form.aggregation === null) return false;
-    if (form.allocatedGeneratorIds.length === 0 && !form.allWtgAllocated) return false;
+    // `Not(IsBlank(cmb_…_AllocationWtg_1.Selected.Name))` (LL:6004): the PICKER must hold a
+    // generator, whatever the toggle says. With the toggle on and no generator in the project the
+    // picker is empty, so Save stays off (FT-BR-LEASE-054).
+    if (form.allocatedGeneratorIds.length === 0) return false;
   }
   if (form.distributionFrequency === null) return false;
   return true;
@@ -2522,16 +2780,19 @@ export function planLeaseSave(args: {
     if (costId) writes.push({ op: "update", entitySet: LEASE_ENTITY_SET.cost, id: costId, payload });
     else writes.push({ op: "create", entitySet: LEASE_ENTITY_SET.cost, payload, ref: "cost" });
 
-    // The all-WTG toggle selects every generator; otherwise the picker's own selection wins.
-    const selected = args.form.allWtgAllocated
-      ? args.generators.map((g) => g.id)
-      : args.form.allocatedGeneratorIds;
+    // The allocation is `cmb_…_AllocationWtg_1.SelectedItems` (LL:6062), whatever the toggle says:
+    // the toggle only SEEDS the picker (`locSelectAllWTG`, LL:3921), it is not read at save time
+    // (FT-BR-LEASE-053).
+    const selected = args.form.allocatedGeneratorIds;
     const mine = args.existingAllocations.filter((a) => a.projectCostId === costId);
     const diff = diffAllocation(mine, selected);
+    // `Name: locSelectedLandLeaseCost.'Land Owner' & "-" & locSelectedLandLeaseCost.Description & …`
+    // reads the cost the header Patch JUST returned (`UpdateContext({locSelectedLandLeaseCost:
+    // Patch(…)})`), so a rename reaches the allocation Names in the same save (FT-BR-LEASE-083).
     const costForName = {
       id: costId ?? "",
       landOwner: args.selectedCost?.landOwner ?? null,
-      description: args.selectedCost?.description ?? args.form.description,
+      description: args.form.description,
     };
     const byId = new Map(args.generators.map((g) => [g.id, g]));
 
@@ -2769,7 +3030,9 @@ export function leaseCommands(args: LeaseCommandArgs): LeaseCommand[] {
   // "Add Period" — LL:241. Create permission on the PERIODS table, the cost is not standard,
   // the selected period's name does not start with "Standard", both a period and a cost are
   // selected, the card is the selected one, and Period 1 carries at least one rate.
-  // DIVERGENCE (product owner, 27 Oct 2026): the canvas also requires the selected period to be
+  // DIVERGENCE (product owner, 27 Oct 2026; FT-BR-LEASE-024 left as is by decision): the canvas
+  // (LL:253-295, `And(locSelectedLandLeasePeriod.'Land Lease Period' = varLastLandLeasePeriod.
+  // 'Land Lease Period', …)`) also requires the selected period to be
   // the LAST by period number; that clause is dropped. Add Period is enabled on any period of the
   // contract, and the new one always follows `lastPeriod(contract)` (the screen passes it as the
   // parent), so the cap is checked against the last period too.
