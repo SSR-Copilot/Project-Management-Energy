@@ -2,7 +2,8 @@
 /**
  * UT-PLANWRITE-006..008 — `PlanJob.then` (D81): a second step in the same job after the plan's writes, where a cloud
  * flow is called between the canvas's writes. `executePlan` is stubbed; the order, the handed-over result, the
- * progress text and the error path are pinned.
+ * progress text and the error path are pinned. UT-PLANWRITE-009..010 — `refresh: "background"` (save performance,
+ * 6 Nov 2026) against the default, which still waits for the reload.
  */
 import { describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -40,7 +41,7 @@ describe("usePlanWrite then", () => {
     await act(async () => { created = await result.current.run({ progress: "go", plan: create("first"), then }); });
     expect(seen.plans.map((p) => p.writes[0]!.reason)).toEqual(["first", "second"]);
     expect(then).toHaveBeenCalledTimes(1);
-    expect(then.mock.calls[0]![0]).toEqual({ done: 1, createdIds: ["new-1-0"] });
+    expect(then.mock.calls[0]![0]).toMatchObject({ done: 1, createdIds: ["new-1-0"] });
     expect(created).toEqual(["new-1-0"]);
     expect(result.current.error).toBeNull();
   });
@@ -74,5 +75,44 @@ describe("usePlanWrite then", () => {
     expect(created).toBeNull();
     expect(seen.plans).toHaveLength(1);
     expect(result.current.error).toBe("Error: flow Perform Common Request of Gate Approval failed: no");
+  });
+
+  /** A QueryClient whose reload (`invalidateQueries`) only finishes when the test says so. */
+  function heldReload() {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    let finish: () => void = () => {};
+    const reload = new Promise<void>((resolve) => { finish = resolve; });
+    vi.spyOn(qc, "invalidateQueries").mockReturnValue(reload);
+    const own = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    return { own, reload, finish: () => finish() };
+  }
+
+  it("UT-PLANWRITE-009 refresh \"background\": the job ends once the writes land; `refreshing` holds until the reload ends", async () => {
+    seen.plans.length = 0;
+    const held = heldReload();
+    const { result } = renderHook(
+      () => usePlanWrite({ invalidate: [["x"]], action: "test", refresh: "background" }), { wrapper: held.own },
+    );
+    let ended = false;
+    await act(async () => { await result.current.run({ progress: "go", plan: update("only") }); ended = true; });
+    expect(ended).toBe(true);
+    expect(result.current.progress).toBeNull();
+    expect(result.current.refreshing).toBe(true);
+    await act(async () => { held.finish(); await held.reload; });
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+  });
+
+  it("UT-PLANWRITE-010 by default the job still waits for the reload before it ends", async () => {
+    seen.plans.length = 0;
+    const held = heldReload();
+    const { result } = renderHook(() => usePlanWrite({ invalidate: [["x"]], action: "test" }), { wrapper: held.own });
+    let ended = false;
+    let running: Promise<unknown> = Promise.resolve();
+    act(() => { running = result.current.run({ progress: "go", plan: update("only") }).then(() => { ended = true; }); });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(ended).toBe(false);
+    expect(result.current.refreshing).toBe(false);
+    await act(async () => { held.finish(); await running; });
+    expect(ended).toBe(true);
   });
 });

@@ -15,7 +15,7 @@ import {
   isInRevenueSlice, revenuePricePool,
   clearSkippedMilestones, shouldConfirmLeave, milestoneMeta,
   isDerivedMilestone, classifyDerivedMilestones, resetShareOfFarmdown,
-  isMilestoneFieldVisible, isRecalculateVisible, farmdownError, MILESTONES_MSG, MILESTONE_FIELD_ERROR,
+  isMilestoneFieldVisible, isFirstDateColumnVisible, isRecalculateVisible, farmdownError, MILESTONES_MSG, MILESTONE_FIELD_ERROR,
   accumulatedIndexCanvasParity, requiredFieldsContent, isMilestoneFieldErrorVisible, nextDirtyKeys,
   recalculateMilestoneCanvasParity, isRecalculateEnabled, needsPlantCostRecalculationCanvasParity,
   cancelMilestones, cancelMilestonesCanvasParity, formatFarmdown, formatShortDateTime24,
@@ -806,6 +806,14 @@ describe("UT-MSTONE field visibility and screen copy", () => {
     expect(isMilestoneFieldVisible("FinalInvestmentDecision", 6)).toBe(true);
     expect(isMilestoneFieldVisible("EndDate", 6)).toBe(true);
     expect(isMilestoneFieldVisible("StartDate", null)).toBe(true);
+  });
+
+  it("UT-MSTONE-059b the first date column hides once none of its dates shows (start at Cluster 4+)", () => {
+    expect(isFirstDateColumnVisible(null)).toBe(true);
+    expect(isFirstDateColumnVisible(0)).toBe(true);
+    expect(isFirstDateColumnVisible(3)).toBe(true);
+    expect(isFirstDateColumnVisible(4)).toBe(false);
+    expect(isFirstDateColumnVisible(6)).toBe(false);
   });
 
   it("UT-MSTONE-060 recalculate buttons render for Wind and PV only", () => {

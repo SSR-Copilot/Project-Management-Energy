@@ -6933,12 +6933,88 @@ CAPEX-135, 140 (stale option not removed from the menu; no empty-payments guard)
 **Residuals found by the reviewers, not fixed:** a cleared or unreadable month still stores 0 (Save overwrites that month's stored cost with 0; the Canvas writes no row; the cleared-box part existed before run 2); a negative Absolute total passes the click check and the code sums raw months where the Canvas sums rounded ones; the paid spinner keeps "Please wait..." for the whole write.
 **Not done:** a live Canvas-versus-Code run; the 11 live cases; the 5 access cases need one account per role.
 
-## D98 — Contracts, OPEX and Land Lease test run 3, and the failures fixed (6 Nov 2026)
+## D97 · Generators: the module-permission flows wired (5 Nov 2026)
+
+*Recorded as D90 on branch `pm-flows`; renumbered to D97 when it was merged into `master` (6 Nov 2026), whose D90 is the
+DEVEX/CAPEX "follow the Canvas" decisions. The code comments that cited D90 for this work now read D97.*
+
+**Instruction (user, 5 Nov 2026):** "all the flows has been added i want them in working position". The four Check List /
+General Data flows were already wired (D81); this wires the two Generators flows registered in D86, `Request Module
+Permission` and `Request permission cancellation`, and removes D27's `EXCLUDED` disabled states.
+
+**What the flows do themselves** (VSBCloud export, read 5 Nov 2026): Request Module Permission responds with `runid` /
+`approvalid`, then sets the type row's 'Request Permission State' Pending, `FlowRunId` and `FlowApprovalId`
+(`Scope_update_RunId_and_Approval_Id_info`); after the approval it sets Approved and rolls the plant cost / capacity up, or
+deletes the row when declined. Request permission cancellation completes the approval as Canceled and sets the row Canceled
+with both ids blank. **So the code app writes none of those fields** (the canvas only mirrors them into its collections): a
+late Pending patch could overwrite the flow's Approved or hit a row a decline deleted.
+
+**Wired (Screen → `useModulePermissionFlows` in `hooks.ts` → `data/flows.ts`), each inside the same `usePlanWrite` job:**
+- WTG type save and Replace Generator Type **out of country**: the same type / turbine writes without the roll-up, then
+  `RequestModulePermission(User().Email, vsb_PrimarilyApprovalGroupID, vsb_ProjectManagementAppID, JSON(varProject))` for
+  the new type (canvas Y:15214 / 16514). Progress text `Request Permission for "…" has been sent, please wait...`.
+- Inverter / substructure save **with an Other Supplier** (Y:10243 / 8979, which doc 16 had missed): the row, no PV-cost
+  roll-up, then the request for the row. The PV request stays off, as in the canvas (commented out there).
+- The cards' **Cancel** (WTG / PV / inverter / substructure): the cancellation flow, then the canvas success text.
+- **Delete** and **Replace** of a type whose `FlowRunId` is set: the cancellation flow first, then the existing plan.
+
+**DIVERGENCES:** (1) the cancellation runs before any delete write (the WTG canvas runs it after the O&M deletes, so a
+failed cancellation left the type without its costs); (2) the card Cancel does not `Patch` the row — the flow already wrote
+Canceled, and the WTG canvas patched `locSelectedGeneratorEntity`, the selected type rather than the card's (SOURCE DEFECT);
+(3) a blank app id, approval group or user e-mail refuses the call with `PERMISSION_MSG.setupMissing` instead of sending a
+blank; (4) the substructure cancellation sends `ModuleType.Substructure`, not the canvas's `Inverter` (D27 SOURCE DEFECT).
+
+- Tests: UT-FLOWS-006…008; UT-GEN-147…150; UT-GEN-904 rewritten, UT-GEN-914, 915 new, 909 / 912 extended; the refusal
+  assertions of UT-GEN-118, 122, 126, 127, 133, 137 and 139 now assert the plans instead.
+- `typecheck`, lint, `check:power` (95 registered, 0 problems) and both label gates clean; `flows.test.ts`, the Generators
+  `rules.test.ts` and `Screen.test.tsx` pass (3 files, 178 tests). The full suite was not run.
+- **Not run live.** Every call sends real approvals and mails to the `vsb_PrimarilyApprovalGroupID` group; the test plan of
+  doc 16 §7 (which project, which approvers) is still open.
+
+## D98 · Team: a person cannot be added twice with the same description (6 Nov 2026) — NEW
+
+*Recorded as D91 on branch `pm-flows`; renumbered to D98 when it was merged into `master` (6 Nov 2026), whose D91 is the
+DEVEX/CAPEX run-1 failures. The code comments that cited D91 for this work now read D98.*
+
+**Trigger:** testing on DEV (6 Nov 2026). Adding Shakti Singh as Project Manager on project `5747f327-…` failed with the raw
+Dataverse error `DuplicateRecordEntityKey` (HTTP 412): `Project Members` has the alternate key `ProjectMembers_V2` (Member +
+Project + Project Member Description), and Shakti already held that description in the team (rows created on DEV on
+5 Nov 2026). The canvas sends the same `Patch(…, Defaults(…))` with no check, so it fails the same way; the merge of
+5 Nov 2026 did not change this path (`executePlan` has no retry).
+
+**Change (DIVERGENCE, NEW text):** the member panel checks the team it already shows. When the chosen person already holds
+the chosen description (the edited row excluded), the Name error label (`lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage`)
+reads "`<name>` is already in the team as `<description>`. Choose another name or description." and Save stays disabled;
+`planSaveMember` refuses the pair as well. The same person with another description is still allowed.
+
+- Code: `duplicateMember`, `memberPanelErrors`, `canSaveMember`, `planSaveMember`, `MSG.duplicate` in `features/pm/team/rules.ts`.
+- Tests: UT-TEAM-038, 039.
+
+## D99 · Generators: save performance — parallel independent writes, one job, background reload (6 Nov 2026)
+
+**Instruction (user, 6 Nov 2026):** a generator save took too long; target under 3 s. Not yet timed live.
+
+**Shared code (affects every screen that uses it):**
+- `data/executePlan.ts`: a run of `concurrent` writes now holds at most `WRITE_CONCURRENCY` (8) requests in flight
+  (`createGate`, `data/concurrency.ts`), under Dataverse's 52-request limit. `PlanResult` gained `createdRows` — each created
+  row as returned, by id (the SDK sends creates with `Prefer: return=representation`, so autonumbers come back). UT-PLAN-036, 037.
+- `data/usePlanWrite.ts`: opt-in `refresh: "background"` — a job ends once its writes land and the reload runs behind it,
+  with `refreshing` true until it ends. The default (`"await"`) is unchanged for every other screen. UT-PLANWRITE-009, 010.
+
+**Generators (`features/pm/generators`):** only rows of ONE canvas step are marked `concurrent` (turbines; apply-to-all
+patches; land-lease clean-up, allocation creates / moves / removals; O&M deletes, detaches and re-links; substructure
+costs); between the steps the canvas order holds, so the roll-up (`LoadDevexCapexCostTotalCapacityTrigger`) fires after the
+rows, a failure stops before it, and a Replace deletes the old device-type row only after the O&M detach has finished. The
+WTG / PV type save and both Replaces run as ONE job (`then`) and take a new type's autonumber name from `createdRows`
+instead of reading it back. The screen uses the background reload and holds its actions (command bar, Add Generator,
+turbine edit / delete, permission Cancel) while `refreshing`. Same rows and values as before; only timing changes.
+
+## D100 — Contracts, OPEX and Land Lease test run 3, and the failures fixed (6 Nov 2026)
 
 **Status:** built on the local sub-branch `sub/cost-screens-test-run` (from `origin/RounakDev1` at `5dfe3eb`), not committed, not pushed, not on DEV. Same rule as D90 and D96: follow the Canvas; each point was checked against the live YAML.
 **The run:** the 308 FT-BR cases of the three screens (Contracts 103, OPEX 100, Land Lease 105) were judged by twelve independent reviewers reading the canvas YAML and the code (OPEX against the committed export copy, see below), with the unit run as the baseline (5,240 tests, 0 failed). Result: 98 FAIL, 3 AMBIGUOUS, 29 NEEDS-LIVE-RUN, 178 PASS (Contracts 46 / 1 / 11 / 45, OPEX 31 / 0 / 12 / 57, Land Lease 21 / 2 / 6 / 76). No live Canvas-versus-Code run was possible (no sessions, URLs, test project or role accounts), so every verdict is by reading plus unit pins.
 **What the failures had in common:** (1) display formats and rounding (card figures `###,##0`, `RoundUp`, margin shown only with Margin = Yes, one-decimal %); (2) the standard blue/italic missing or not cleared (Contracts margin, Land Lease Start Date); (3) selection and expansion after an action (card expanded and selection cleared after Save, target cleared on header click, Cancel and the ✕, no card open at load on OPEX); (4) gates and validation (Add Period needs a selected card and a sum under 100, Edit and Delete need the selected card, a lone space is not blank, Description limits, Save needs a generator); (5) live write paths that did not write what the Canvas writes (OPEX create and standard import, Land Lease currency, `AllWTGAllocated`, allocation name on rename, the Rights contract name `BoP RC-` and its 7-column payload, a failed DevCo link create that was silent); (6) tooltips and accessible names.
-**Fixed:** every FAIL except the items in D99. Contracts 44 cases (`rules.ts`, `Screen.tsx`, `hooks.ts`, `data/contracts.ts`), OPEX 31 minus the D99 ones and OPEX-068 (`OpexScreen.tsx`, `opexRules.ts`, `data/periodWrites.ts`), Land Lease 15 (`LandLeaseScreen.tsx`, `landLeaseRules.ts`, `data/landLease.ts`). Shared, additive: `CostField` `labelTitle` / `errorTitle`, `Choices` `labelTitle`, `CostPeriod.rawDescription`, `applyLeaseWrites` option `independentSteps`. New tests: UT-CONTR-* (rules, screen, hooks, data), UT-OPEX-110…119, UT-OPEXUI-032…046, UT-PWRITE-040…043, UT-LAND-130…144, UT-LLDATA-015…018.
+**Fixed:** every FAIL except the items in D101. Contracts 44 cases (`rules.ts`, `Screen.tsx`, `hooks.ts`, `data/contracts.ts`), OPEX 31 minus the D101 ones and OPEX-068 (`OpexScreen.tsx`, `opexRules.ts`, `data/periodWrites.ts`), Land Lease 15 (`LandLeaseScreen.tsx`, `landLeaseRules.ts`, `data/landLease.ts`). Shared, additive: `CostField` `labelTitle` / `errorTitle`, `Choices` `labelTitle`, `CostPeriod.rawDescription`, `applyLeaseWrites` option `independentSteps`. New tests: UT-CONTR-* (rules, screen, hooks, data), UT-OPEX-110…119, UT-OPEXUI-032…046, UT-PWRITE-040…043, UT-LAND-130…144, UT-LLDATA-015…018.
 **Divergences kept on purpose (marked in the code, each with a twin or a reason):**
 - **OPEX lone space / padded input is not blank** (Canvas), with the earlier trimming kept as `OPEX_INPUT_MODE = "trimmed"` and a `mode` argument on `validateOpexNumber`.
 - **OPEX standard import** now follows the Canvas (Name, COD year + 1 on every row, area, profile, threshold, one contract per Period-1 assumption, refold and clear selection). It still throws for an existing contract, where the Canvas is a silent no-op (the button is gated to empty cards).
@@ -6956,11 +7032,11 @@ CAPEX-135, 140 (stale option not removed from the menu; no empty-payments guard)
 - **Land Lease failure text (LEASE-089):** `Source` stays "Patch" (the value the existing test pins); the Canvas `FirstError.Source` could not be verified. Live check.
 **Kept minor difference (CONTR-053):** the margin Reset icon is disabled while no standard assumption has loaded; the Canvas has no such gate and its result with no assumption cannot be derived from the YAML (live check). **Retest side notes:** a failed DevCo link create reaches the banner, but the list may show stale links until the next refetch (no onError invalidation in useSaveContract).
 **Open, for a live run:** CONTR-050, 051, 086, 098, 002, 008, 013, 102, 025, 036, 088; OPEX-004, 005, 011, 052, 081, 083, 084, 090, 095, 096, 097, 099; LEASE-014, 017, 019, 044, 104, 105 (and OPEX-068, the trailing full stop of the threshold range message).
-**The edited OPEX canvas file (settled 6 Nov 2026):** `ProjectDocs/_extracted/msapp/projectcosts/Src/Opex Costs Screen.pa.yaml` had an uncommitted edit when the run started. The product owner confirmed it as verified and the reference. It is a newer canvas version, and the code was ported to it after the first pass of the fixes: (1) the Start Date flag `IsStartDateStandardAssumption`: Add Contract Type starts at Yes; Add Period and a follow-on take it from the parent as `Coalesce(parent flag, parent Start Date = project COD)`; the picker's OnChange compares the picked date with the default (root: project COD; follow-on while adding: end of the previous period; follow-on on Edit: none, so No); a stored Blank flag stays Blank (`null`), so the date test decides; the child cascade now copies eleven fields including the flag; (2) the Start Date picker is Edit only on a root period, Disabled on a follow-on; (3) the Start Date reset icon ('Reset to current project COD date.') is visible and acts only on a root period with a project COD; (4) Save re-chains the periods that follow an edited period whose Start Date or duration changed (`planFollowingPeriodStarts`, one PATCH per period, spinner "Updating start dates of the following periods...", the child and re-chain errors shown as the canvas Notify texts without stopping the save). **Kept differences:** O&M Edit of a follow-on still gives No (the canvas formula at `:3449` was not changed by the edit; Other OPEX gives the parent-derived value); `next` is still the chain's last period (the 27 Oct divergence, D99), so the picker default and the re-chain use it; the canvas shows three spinner texts one after another and the code shows the last relevant one; the re-chain stops when the saved period's Start Date is blank (the canvas would write blanks). The reviewers' first-pass verdicts on OPEX-027, 048, 051, 076 and 077 were given on the old export and were re-judged against the edited file.
+**The edited OPEX canvas file (settled 6 Nov 2026):** `ProjectDocs/_extracted/msapp/projectcosts/Src/Opex Costs Screen.pa.yaml` had an uncommitted edit when the run started. The product owner confirmed it as verified and the reference. It is a newer canvas version, and the code was ported to it after the first pass of the fixes: (1) the Start Date flag `IsStartDateStandardAssumption`: Add Contract Type starts at Yes; Add Period and a follow-on take it from the parent as `Coalesce(parent flag, parent Start Date = project COD)`; the picker's OnChange compares the picked date with the default (root: project COD; follow-on while adding: end of the previous period; follow-on on Edit: none, so No); a stored Blank flag stays Blank (`null`), so the date test decides; the child cascade now copies eleven fields including the flag; (2) the Start Date picker is Edit only on a root period, Disabled on a follow-on; (3) the Start Date reset icon ('Reset to current project COD date.') is visible and acts only on a root period with a project COD; (4) Save re-chains the periods that follow an edited period whose Start Date or duration changed (`planFollowingPeriodStarts`, one PATCH per period, spinner "Updating start dates of the following periods...", the child and re-chain errors shown as the canvas Notify texts without stopping the save). **Kept differences:** O&M Edit of a follow-on still gives No (the canvas formula at `:3449` was not changed by the edit; Other OPEX gives the parent-derived value); `next` is still the chain's last period (the 27 Oct divergence, D101), so the picker default and the re-chain use it; the canvas shows three spinner texts one after another and the code shows the last relevant one; the re-chain stops when the saved period's Start Date is blank (the canvas would write blanks). The reviewers' first-pass verdicts on OPEX-027, 048, 051, 076 and 077 were given on the old export and were re-judged against the edited file.
 **Final OPEX pass against the edited canvas (6 Nov 2026):** all 100 cases were re-judged by two reviewers: 83 PASS, 3 FAIL, 14 NEEDS-LIVE-RUN. The three failures were then fixed (unit-pinned, not re-reviewed): OPEX-011 and 095 (the 'no generators' sentence and the loading state now cover the cost book, the catalogue and the device-type queries, and the sentence follows the canvas Visible formula `gal_…_GeneratorsInProject.AllItemsCount = 0`; with no devices it replaces the whole screen, as the canvas does), OPEX-039 (Cancel and the panel ✕ clear the selected device scope on O&M, as the canvas clears `locSelectedDeviceTypeInProject`; Edit, Add Period and Delete go disabled until the row is clicked again). Also closed to parity: a stored Blank Start Date flag stays Blank when saved and cascaded; the panel currency is the country currency only (the canvas dropdown is permanently disabled), so a row saved in another currency is rewritten to the country currency on its next edit; the description-cell hover is O&M only. **Kept divergence:** orphan O&M cards still render when the project lists at least one device (the canvas gallery would not show them). **Verification:** `npm run verify` exit 0, 226 files, 5,382 tests passed, 3 todo, build OK.
 **Not done:** a live Canvas-versus-Code run; the E2E parity suite (declined by default, ask before any commit).
 
-## D99 — Run 3 differences kept as product decisions, not fixed (6 Nov 2026)
+## D101 — Run 3 differences kept as product decisions, not fixed (6 Nov 2026)
 
 **Status:** open, needs product sign-off. The code keeps today's behaviour and each place carries a comment naming the Canvas behaviour.
 | Item | Canvas | Code app today |

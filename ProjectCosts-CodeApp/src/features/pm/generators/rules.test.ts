@@ -771,7 +771,7 @@ describe("validation", () => {
     };
     expect(
       canSaveTurbine({
-        ...base,
+        lang: "en-US", ...base,
         form: {
           nameIndex: "3", effectiveCapacity: "5.6", effectiveHubHeight: "148",
           foundationPlinth: "0", dirty: new Set(["nameIndex"]),
@@ -780,7 +780,7 @@ describe("validation", () => {
     ).toBe(true);
     expect(
       canSaveTurbine({
-        ...base,
+        lang: "en-US", ...base,
         form: {
           nameIndex: "3", effectiveCapacity: "", effectiveHubHeight: "148",
           foundationPlinth: "", dirty: new Set(["nameIndex"]),
@@ -789,7 +789,7 @@ describe("validation", () => {
     ).toBe(false);
     expect(
       canSaveTurbine({
-        ...base,
+        lang: "en-US", ...base,
         form: {
           nameIndex: "3", effectiveCapacity: "5.6", effectiveHubHeight: "148",
           foundationPlinth: "", dirty: new Set<string>(),
@@ -1145,24 +1145,24 @@ describe("canvas 1.21.753 — Replace Generator Type", () => {
   });
 
   it("UT-GEN-064 Replace needs supplier, turbine type and a non-zero hub height", () => {
-    expect(replaceWtgSaveable({ form: form(), inProgress: false, heightBlocked: false })).toBe(true);
-    expect(replaceWtgSaveable({ form: form({ supplier: null }), inProgress: false, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: form({ turbineType: null }), inProgress: false, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: form({ hubHeight: null }), inProgress: false, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: form({ hubHeight: 0 }), inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form(), inProgress: false, heightBlocked: false })).toBe(true);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form({ supplier: null }), inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form({ turbineType: null }), inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form({ hubHeight: null }), inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form({ hubHeight: 0 }), inProgress: false, heightBlocked: false })).toBe(false);
   });
 
   it("UT-GEN-065 the Dummy path takes a revised hub height in 1..200 with two decimals", () => {
     const dummy = form({ supplier: "Dummy Supplier", hubHeight: null });
-    expect(replaceWtgSaveable({ form: { ...dummy, revisedHubHeight: "120.50" }, inProgress: false, heightBlocked: false })).toBe(true);
-    expect(replaceWtgSaveable({ form: { ...dummy, revisedHubHeight: "0.5" }, inProgress: false, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: { ...dummy, revisedHubHeight: "120.505" }, inProgress: false, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: { ...dummy, revisedHubHeight: "" }, inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: { ...dummy, revisedHubHeight: "120.50" }, inProgress: false, heightBlocked: false })).toBe(true);
+    expect(replaceWtgSaveable({ lang: "en-US", form: { ...dummy, revisedHubHeight: "0.5" }, inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: { ...dummy, revisedHubHeight: "120.505" }, inProgress: false, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: { ...dummy, revisedHubHeight: "" }, inProgress: false, heightBlocked: false })).toBe(false);
   });
 
   it("UT-GEN-066 Replace is disabled while a replace runs and over the height limit", () => {
-    expect(replaceWtgSaveable({ form: form(), inProgress: true, heightBlocked: false })).toBe(false);
-    expect(replaceWtgSaveable({ form: form(), inProgress: false, heightBlocked: true })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form(), inProgress: true, heightBlocked: false })).toBe(false);
+    expect(replaceWtgSaveable({ lang: "en-US", form: form(), inProgress: false, heightBlocked: true })).toBe(false);
     expect(REPLACE_MSG.inProgress).toBe(
       "A generator replace is already in progress for this type - please wait for it to finish.",
     );
@@ -1496,7 +1496,7 @@ describe("D27 — type and turbine panels", () => {
     expect(R.validateFoundationPlinth("101")).not.toBeNull();
     expect(R.validateFoundationPlinth("2,5", "de-DE")).toBeNull();
     expect(canSaveTurbine({
-      form: { nameIndex: "3", effectiveCapacity: "5.6", effectiveHubHeight: "148", foundationPlinth: "", dirty: new Set(["x"]) },
+      lang: "en-US", form: { nameIndex: "3", effectiveCapacity: "5.6", effectiveHubHeight: "148", foundationPlinth: "", dirty: new Set(["x"]) },
       existingIndices: [], specificCapacity: 5.6, heightBlocked: false,
     })).toBe(false);
   });
@@ -1515,8 +1515,8 @@ describe("D27 — type and turbine panels", () => {
     expect(e.dirty.size).toBe(0);
     expect(R.turbinePanelPrefix(turbine(2, { name: "WTG OLD_2" }), "NEW")).toBe("WTG OLD_");
     expect(R.turbinePanelPrefix(null, "NEW")).toBe("WTG NEW_");
-    expect(R.turbinePanelTotalHeight({ form: e, storedTotalHeight: 223, rotorDiameter: 150 })).toBe(223);
-    expect(R.turbinePanelTotalHeight({ form: { ...e, dirty: new Set(["x"]) }, storedTotalHeight: 223, rotorDiameter: 150 })).toBe(148 + 0 + 75);
+    expect(R.turbinePanelTotalHeight({ lang: "en-US", form: e, storedTotalHeight: 223, rotorDiameter: 150 })).toBe(223);
+    expect(R.turbinePanelTotalHeight({ lang: "en-US", form: { ...e, dirty: new Set(["x"]) }, storedTotalHeight: 223, rotorDiameter: 150 })).toBe(148 + 0 + 75);
   });
 });
 
@@ -1567,13 +1567,15 @@ describe("D27 — write plans", () => {
     expect(plan.writes[1]!.data!["vsb_ModuleTypeInProjectId_vsb_generatortypeinproject@odata.bind"]).toBe("/vsb_generatortypeinprojects(@created#0)");
     expect(plan.writes[1]!.data![GEN_INSTANCE_COL.totalHeight]).toBe(223);
     expect(plan.writes[3]!.data).toEqual({ vsb_plantwtgcapacity: 10 + 11.2, vsb_plantwtgcost: 1 + 1_800_000.92 });
-    // Out of country = the excluded permission flow: refused, nothing sent.
-    const refused = R.planCreateGeneratorType({
+    // D97 — out of country: the type and its turbines, no roll-up (the screen requests permission instead).
+    const requested = R.planCreateGeneratorType({
       project: P, inCountry: false, model: model(), numberOfGenerators: 1, costPerWtg: 1, selectedHeight: 1,
       revisedHubHeight: null, existingTypes: [], projectTurbines: [],
     });
-    expect(refused.writes).toHaveLength(0);
-    expect(refused.refusedReason).toBe(R.EXCLUDED.permissionRequest);
+    expect(requested.refusedReason).toBeUndefined();
+    expect(requested.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
+      "create:vsb_generatortypeinprojects", "create:vsb_generatorinprojects",
+    ]);
   });
 
   it("UT-GEN-119 the type save's second job: the device-type shadow, then the AllWTG allocations", () => {
@@ -1597,7 +1599,7 @@ describe("D27 — write plans", () => {
     const type = genType({ id: "t1" });
     const siblings = [turbine(1, { foundationPlinth: 2, hubHeightExclPlinth: 148 }), turbine(2, { foundationPlinth: 0 })];
     const plan = R.planSaveTurbine({
-      project: P, type, model: model({ rotorDiameter: 150 }), accumulatedIndex: 1, turbine: null,
+      lang: "en-US", project: P, type, model: model({ rotorDiameter: 150 }), accumulatedIndex: 1, turbine: null,
       typeTurbines: siblings, allTypes: [type],
       form: { nameIndex: "3", effectiveCapacity: "5", effectiveHubHeight: "150", foundationPlinth: "1", dirty: new Set(["nameIndex"]) },
       applyAll: { capacity: true, hubHeight: true, plinth: false }, totalHeight: 226,
@@ -1607,6 +1609,9 @@ describe("D27 — write plans", () => {
       "create:vsb_generatorinprojects", "update:vsb_generatorinprojects", "update:vsb_generatorinprojects",
       "update:vsb_generatortypeinprojects", "update:vsb_projects", "create:vsb_landleaseallocationwtgs",
     ]);
+    // Save performance (6 Nov 2026): only rows of one step go together — the apply-to-all patches, then the
+    // allocations; the turbine, the type totals and the roll-up keep their canvas places between them.
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, true, false, false, true]);
     expect(plan.writes[0]!.data![GEN_INSTANCE_COL.name]).toBe("WTG WPN_3");
     // SOURCE DEFECT fix: each sibling keeps ITS OWN plinth in its total (150 + 2 + 75; 150 + 0 + 75).
     expect(plan.writes[1]!.data![GEN_INSTANCE_COL.totalHeight]).toBe(227);
@@ -1655,10 +1660,12 @@ describe("D27 — write plans", () => {
       "delete:vsb_opexprojectcosts", "delete:vsb_generatortypeinprojects", "update:vsb_projects",
     ]);
     expect(plan.writes[2]!.data).toEqual({ vsb_plantwtgcapacity: 3, vsb_plantwtgcost: 4 });
+    // D97 — an open request no longer refuses the delete: the screen cancels the flow first.
     const open = R.planDeleteGeneratorType({
-      project: P, type: genType({ flowRunId: "run" }), allTypes: [], allocations: [], allocationCountByCost: {}, opexCostIds: [],
+      project: P, type: genType({ id: "t9", flowRunId: "run" }), allTypes: [], allocations: [], allocationCountByCost: {}, opexCostIds: [],
     });
-    expect(open.refusedReason).toBe(R.EXCLUDED.deleteWithOpenRequest);
+    expect(open.refusedReason).toBeUndefined();
+    expect(open.writes[0]).toMatchObject({ op: "delete", entitySet: "vsb_generatortypeinprojects", id: "t9" });
   });
 
   it("UT-GEN-123 activate / deactivate: the type, its turbines, the roll-up (W5)", () => {
@@ -1673,7 +1680,7 @@ describe("D27 — write plans", () => {
 
   it("UT-GEN-124 the PV save (W6) and its second job; the PV delete re-costs the substructures (W7)", () => {
     const save = R.planSavePvType({
-      project: P, pv: null, deviceCostModules: 300, otherSupplierChosen: false,
+      lang: "en-US", project: P, pv: null, deviceCostModules: 300, otherSupplierChosen: false,
       form: pvForm({ supplier: "m1", capacity: "10" }),
     });
     expect(save.writes[0]!.op).toBe("create");
@@ -1707,7 +1714,7 @@ describe("D27 — write plans", () => {
   it("UT-GEN-125 BESS / Hydrogen / Substation save and delete roll the plant capacity up (W11, W12)", () => {
     const row = simple({ id: "s1", capacity: 4 });
     const save = R.planSaveSimple({
-      project: P, family: "storage", row, rows: [row, simple({ id: "s2", capacity: 6 })],
+      lang: "en-US", project: P, family: "storage", row, rows: [row, simple({ id: "s2", capacity: 6 })],
       form: { label: "B", capacity: "10", energyCapacity: "20", supplier: "T", dirty: new Set(["label"]) },
     });
     expect(save.writes[0]).toMatchObject({ op: "update", entitySet: "vsb_storagetypeinprojects", id: "s1" });
@@ -1721,16 +1728,18 @@ describe("D27 — write plans", () => {
     expect(del.writes[1]!.data).toEqual({ vsb_plantsubstationcapacity: 3 });
   });
 
-  it("UT-GEN-126 the inverter / substructure delete updates Plant PV Cost; refused with an open flow (W10)", () => {
+  it("UT-GEN-126 the inverter / substructure delete updates Plant PV Cost, also with an open flow (W10, D97)", () => {
     const inv = simple({ id: "i1", cost: 40 });
     const plan = R.planDeleteInverterOrSubstructure({
       project: P, family: "inverter", row: inv, pv: [simple({ cost: 100 })], inverters: [inv], substructures: [simple({ cost: 5 })],
     });
     expect(plan.writes[0]).toMatchObject({ op: "delete", entitySet: "vsb_invertertypeinprojects", id: "i1" });
     expect(plan.writes[1]!.data).toEqual({ vsb_plantpvcost: 105 });
-    expect(R.planDeleteInverterOrSubstructure({
-      project: P, family: "substructure", row: simple({ flowRunId: "r" }), pv: [], inverters: [], substructures: [],
-    }).refusedReason).toBe(R.EXCLUDED.deleteWithOpenRequest);
+    const open = R.planDeleteInverterOrSubstructure({
+      project: P, family: "substructure", row: simple({ id: "s1", flowRunId: "r" }), pv: [], inverters: [], substructures: [],
+    });
+    expect(open.refusedReason).toBeUndefined();
+    expect(open.writes[0]).toMatchObject({ op: "delete", entitySet: "vsb_substructuretypeinprojects", id: "s1" });
   });
 });
 
@@ -1759,11 +1768,14 @@ describe("D27 — PO answers: PV delete (G2), PV back-fill (G7)", () => {
     expect(R.planDeletePvTypeCanvasParity(base).writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "delete:vsb_pvmoduletypeinprojects", "update:vsb_projects", "update:vsb_projects",
     ]);
+    // D97 — an open request no longer refuses the delete: the screen cancels the flow first.
     const open = R.planDeletePvType({
-      ...base, pv: simple({ flowRunId: "run" }), unitIds: ["u1"], opexCostIds: [], allocations: [], allocationCountByCost: {},
+      ...base, pv: simple({ id: "pvX", flowRunId: "run" }), unitIds: ["u1"], opexCostIds: [], allocations: [], allocationCountByCost: {},
     });
-    expect(open.refusedReason).toBe(R.EXCLUDED.deleteWithOpenRequest);
-    expect(open.writes).toHaveLength(0);
+    expect(open.refusedReason).toBeUndefined();
+    expect(open.writes.map((w) => `${w.op}:${w.entitySet}:${w.id ?? ""}`).slice(0, 2)).toEqual([
+      "delete:vsb_generatorinprojects:u1", "delete:vsb_pvmoduletypeinprojects:pvX",
+    ]);
   });
 
   it("UT-GEN-128 a NEW PV type's unit is back-filled into the AllWTG land-lease costs (G7); an edit is not", () => {
@@ -1779,6 +1791,8 @@ describe("D27 — PO answers: PV delete (G2), PV back-fill (G7)", () => {
     expect(created.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
       "create:vsb_generatorinprojects", "create:vsb_landleaseallocationwtgs", "update:vsb_projects",
     ]);
+    // Save performance (6 Nov 2026): the allocations are one parallel run; the unit before, the roll-up after.
+    expect(created.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, false]);
     expect(created.writes[1]!.data).toEqual({
       vsb_name: "Meyer-A-PVT-0007", "vsb_ProjectCost@odata.bind": "/vsb_landleaseprojectcosts(c1)",
       "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(@created#0)", [OBU]: "/businessunits(bu-1)",
@@ -1859,7 +1873,7 @@ describe("D27 G9 — the Inverter and Substructure panels", () => {
 
   it("UT-GEN-133 the inverter save: the canvas Patch payload, then Plant PV Cost; Other Supplier is refused", () => {
     const plan = R.planSaveInverter({
-      project: P, row: null, form: inverterForm(), otherSupplierChosen: false, deviceCostInverter: 80,
+      lang: "en-US", project: P, row: null, form: inverterForm(), otherSupplierChosen: false, deviceCostInverter: 80,
       pv: [{ cost: 100 }], inverters: [simple({ id: "i0", cost: 5 })], substructures: [{ cost: 7 }],
     });
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual(["create:vsb_invertertypeinprojects", "update:vsb_projects"]);
@@ -1871,16 +1885,21 @@ describe("D27 G9 — the Inverter and Substructure panels", () => {
     });
     expect(plan.writes[1]!.data).toEqual({ vsb_plantpvcost: 100 + 5 + 200 + 7 });
     const edit = R.planSaveInverter({
-      project: P, row: simple({ id: "i0", cost: 5 }), form: inverterForm({ inverterTypes: [STRING, CENTRAL] }),
+      lang: "en-US", project: P, row: simple({ id: "i0", cost: 5 }), form: inverterForm({ inverterTypes: [STRING, CENTRAL] }),
       otherSupplierChosen: false, deviceCostInverter: null, pv: [], inverters: [simple({ id: "i0", cost: 5 })], substructures: [],
     });
     expect(edit.writes[0]).toMatchObject({ op: "update", id: "i0" });
     expect(edit.writes[0]!.data).toMatchObject({ vsb_selectedinvertertypes: `${STRING},${CENTRAL}`, vsb_costperinverter: 0, vsb_invertertypecost: 0 });
     expect(edit.writes[1]!.data).toEqual({ vsb_plantpvcost: 0 });
-    expect(R.planSaveInverter({
-      project: P, row: null, form: inverterForm({ otherSupplier: "Acme" }), otherSupplierChosen: true, deviceCostInverter: 1,
+    // D97 — an Other Supplier writes the row and skips the PV-cost roll-up (the screen requests permission).
+    const requested = R.planSaveInverter({
+      lang: "en-US", project: P, row: null, form: inverterForm({ otherSupplier: "Acme" }), otherSupplierChosen: true, deviceCostInverter: 1,
       pv: [], inverters: [], substructures: [],
-    }).refusedReason).toBe(R.EXCLUDED.permissionRequest);
+    });
+    expect(requested.refusedReason).toBeUndefined();
+    expect(requested.writes).toHaveLength(1);
+    expect(requested.writes[0]).toMatchObject({ op: "create", entitySet: "vsb_invertertypeinprojects" });
+    expect(requested.writes[0]!.data).toMatchObject({ vsb_invothersupplier: "Acme" });
   });
 
   it("UT-GEN-134 the substructure texts and Save gate; the canvas' inverted type seed is the twin", () => {
@@ -1952,8 +1971,12 @@ describe("D27 G6 — Replace Generator / PV Module Type write plans (1.21.753)",
       project: P, oldType: genType(), inCountry: true, model: model(), costPerWtg: 1, selectedHeight: 1,
       revisedHubHeight: null, otherTypes: [], otherTurbines: [], inputs: inputs(),
     };
-    expect(R.planReplaceGeneratorType({ ...args, inCountry: false }).refusedReason).toBe(R.EXCLUDED.permissionRequest);
-    expect(R.planReplaceGeneratorType({ ...args, oldType: genType({ flowRunId: "run" }) }).refusedReason).toBe(R.EXCLUDED.replaceWithOpenRequest);
+    // D97 — out of country: the same Detach / Delete / Add without the roll-up; an open request no longer refuses.
+    const outOfCountry = R.planReplaceGeneratorType({ ...args, inCountry: false });
+    expect(outOfCountry.refusedReason).toBeUndefined();
+    expect(outOfCountry.writes.some((w) => w.entitySet === "vsb_projects")).toBe(false);
+    expect(outOfCountry.writes.some((w) => w.op === "create" && w.entitySet === "vsb_generatortypeinprojects")).toBe(true);
+    expect(R.planReplaceGeneratorType({ ...args, oldType: genType({ flowRunId: "run" }) }).refusedReason).toBeUndefined();
   });
 
   it("UT-GEN-138 job 2: device type, AllWTG back-fill, allocations moved by position, surplus and old AllWTG removed, O&M re-linked", () => {
@@ -1986,7 +2009,7 @@ describe("D27 G6 — Replace Generator / PV Module Type write plans (1.21.753)",
 
   it("UT-GEN-139 Replace PV: job 1 detaches and deletes, then adds; job 2 makes the unit, moves the land lease, re-links O&M", () => {
     const first = R.planReplacePvType({
-      project: P, oldPv: simple({ id: "pvA" }), form: pvForm({ supplier: "m1", capacity: "10" }), deviceCostModules: 300,
+      lang: "en-US", project: P, oldPv: simple({ id: "pvA" }), form: pvForm({ supplier: "m1", capacity: "10" }), deviceCostModules: 300,
       otherSupplierChosen: false, inputs: inputs({ unitIds: ["u1"] }),
     });
     expect(first.writes.map((w) => `${w.op}:${w.entitySet}:${w.id ?? ""}`)).toEqual([
@@ -1994,9 +2017,10 @@ describe("D27 G6 — Replace Generator / PV Module Type write plans (1.21.753)",
       "delete:vsb_pvmoduletypeinprojects:pvA", "create:vsb_pvmoduletypeinprojects:",
     ]);
     expect(first.writes[4]!.data).toMatchObject({ "vsb_PVModule@odata.bind": "/vsb_pvmodules(m1)", vsb_cost: 3000 });
+    // D97 — an open request no longer refuses the replace: the screen cancels the flow first.
     expect(R.planReplacePvType({
-      project: P, oldPv: simple({ flowRunId: "r" }), form: pvForm(), deviceCostModules: 1, otherSupplierChosen: false, inputs: inputs(),
-    }).refusedReason).toBe(R.EXCLUDED.replaceWithOpenRequest);
+      lang: "en-US", project: P, oldPv: simple({ flowRunId: "r" }), form: pvForm(), deviceCostModules: 1, otherSupplierChosen: false, inputs: inputs(),
+    }).refusedReason).toBeUndefined();
     const second = R.planReplacePvTypeFollowUp({
       project: P, newPvId: "pvN", newPvName: "PVT-0009", existingBridgeId: null,
       inputs: inputs({
@@ -2111,5 +2135,166 @@ describe("type Save blocked warning (NEW, D89)", () => {
   it("UT-GEN-146 a non-Dummy 0 m hub height is named as soon as it is chosen, before the count", () => {
     expect(run(form({ hubHeight: 0, numberOfGenerators: "" }), priced)).toEqual({ saveable: false, warning: TEXT.hubHeightZero });
     expect(run(form({ hubHeight: 0 }), priced).warning).toBe(TEXT.hubHeightZero);
+  });
+});
+
+describe("D97 — the module-permission flows: texts, payloads, the request paths", () => {
+  const P = { id: "11111111-1111-1111-1111-111111111111", shortName: "WPN", owningBusinessUnitId: "bu-1" };
+
+  it("UT-GEN-147 the request-path progress texts are the canvas's own (Y:15214, Y:10181, Y:8924)", () => {
+    expect(R.typeSaveProgressText("Vestas V150", false)).toBe('Request Permission for "Vestas V150" has been sent, please wait...');
+    expect(R.typeSaveProgressText("Vestas V150")).toBe('Generator "Vestas V150" will be saved, please wait...');
+    expect(R.inverterSaveProgressText("INV A", "Acme")).toBe("Request Permission for inverter 'Acme' has been sent, please wait...");
+    expect(R.inverterSaveProgressText("INV A", "  ")).toBe("Inverter 'INV A' will be saved, please wait...");
+    expect(R.substructureSaveProgressText("SUB A", "Acme")).toBe("Request Permission for substructure 'Acme' has been sent, please wait...");
+    expect(R.substructureSaveProgressText("SUB A")).toBe("Substructure 'SUB A' will be saved, please wait...");
+  });
+
+  it("UT-GEN-148 the cards' Cancel texts are verbatim, typos included", () => {
+    expect(R.PERMISSION_MSG.canceled("wtg", "V150")).toBe("Request permisson forg generator V150 was canceled !");
+    expect(R.PERMISSION_MSG.canceled("pv", "JA 550")).toBe("Request permisson was canceled for PV Module JA 550!");
+    expect(R.PERMISSION_MSG.canceled("inverter", "INV A")).toBe("Request permisson was canceled for inverter INV A!");
+    expect(R.PERMISSION_MSG.canceled("substructure", "SUB A")).toBe("Request permisson was canceled for substructure SUB A!");
+    expect(R.PERMISSION_MSG.cancelError("boom")).toBe(
+      "Error: Current project cannot be send to controlling for approval. Internal error: originated on Request permission cancellation. Message: boom",
+    );
+  });
+
+  it("UT-GEN-149 varModule names the row as each canvas call does, and maps the substructure family correctly", () => {
+    const wtg = genType({ id: "t1", generatorDisplayName: "Vestas V150-5.6", flowRunId: "r1", flowApprovalId: "a1" });
+    expect(R.cancellationPayloadFor("wtg", wtg)).toEqual({
+      ModuleTypeGuid: "t1", ModuleType: 952850000, Name: "Vestas V150-5.6", FlowRunId: "r1", FlowApprovalId: "a1",
+    });
+    expect(R.cancellationPayloadFor("pv", simple({ id: "p1", moduleLabel: "JA 550", flowRunId: "r2" })).Name).toBe("JA 550");
+    const sub = R.cancellationPayloadFor("substructure", simple({ id: "s1", label: "SUB A", flowRunId: "r3" }));
+    // SOURCE DEFECT (D27): the canvas sends ModuleType.Inverter for a substructure; the family's own value goes here.
+    expect(sub).toMatchObject({ ModuleTypeGuid: "s1", ModuleType: 952850003, Name: "SUB A" });
+  });
+
+  it("UT-GEN-150 a substructure save with an Other Supplier writes the row and skips the PV-cost roll-up", () => {
+    const form: R.SubstructureFormState = {
+      label: "SUB A", supplierId: "sub1", otherSupplier: "Acme", substructureType: 952850000, dirty: new Set(["label"]),
+    };
+    const args = {
+      project: P, row: null, form, deviceCostFix: 100, deviceCostTracker: 200, plantPvCapacity: 10,
+      pv: [], inverters: [], substructures: [],
+    };
+    const requested = R.planSaveSubstructure({ ...args, otherSupplierChosen: true });
+    expect(requested.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual(["create:vsb_substructuretypeinprojects"]);
+    expect(requested.writes[0]!.data).toMatchObject({ vsb_substrothersupplier: "Acme" });
+    const saved = R.planSaveSubstructure({ ...args, otherSupplierChosen: false });
+    expect(saved.writes.map((w) => `${w.op}:${w.entitySet}`)).toEqual([
+      "create:vsb_substructuretypeinprojects", "update:vsb_projects",
+    ]);
+  });
+});
+
+/* ═══════════════════════════════════════════ German and French numbers (5 Nov 2026) ═══ */
+
+/*
+ * The German number audit: every box on this screen opens in the user's language, so every save, Save check and
+ * calculation must read it in that language too. Before the fix the screen left `lang` out and the rules fell back
+ * to en-US, which reads "12,50" as 1250 and "120,00" as 12000. `lang` is now required, so the compiler catches a
+ * missing one. The expected values are the canvas results: `Value()` follows `Language()`.
+ */
+describe("German and French numbers: the Generators saves and checks read the user's language", () => {
+  const P = { id: "11111111-1111-1111-1111-111111111111", shortName: "WPN", owningBusinessUnitId: "bu-1" };
+  const COMMA_LANGUAGES = ["de-DE", "fr-FR"] as const;
+
+  it("UT-GEN-151 BESS / Hydrogen / Substation: the box opens as “12,50” and saves 12.5, even when only the label changes (A4)", () => {
+    const row = simple({ id: "s1", capacity: 12.5 });
+    for (const lang of COMMA_LANGUAGES) {
+      const opened = R.simpleFormDefaults("storage", row, lang);
+      expect(opened.capacity).toBe("12,50");
+      const form = { ...opened, label: "BESS renamed", energyCapacity: "48,00", dirty: new Set(["label"]) };
+      const save = R.planSaveSimple({ project: P, family: "storage", row, rows: [row], form, lang });
+      expect(save.writes[0]!.data).toMatchObject({ vsb_storagecapacitydec: 12.5, crc36_energycapacitymwh: 48 });
+      expect(save.writes[1]!.data).toEqual({ vsb_plantstoragecapacity: 12.5 });
+    }
+    const hydrogen = R.planSaveSimple({
+      project: P, family: "hydrogen", row: null, rows: [], lang: "de-DE",
+      form: { label: "H2", capacity: "12,5", energyCapacity: "", supplier: "T", dirty: new Set(["label"]) },
+    });
+    expect(hydrogen.writes[0]!.data).toMatchObject({ vsb_hydrogencapacitydec: 12.5 });
+  });
+
+  it("UT-GEN-152 PV module type: “2,5” MWp and “0,5” / “0,25” % save as 2.5, 0.5 and 0.25, and the cost follows 2.5 (A3)", () => {
+    for (const lang of COMMA_LANGUAGES) {
+      const save = R.planSavePvType({
+        project: P, pv: null, deviceCostModules: 300, otherSupplierChosen: false, lang,
+        form: pvForm({ supplier: "m1", capacity: "2,5", degradation1stYear: "0,5", degradationRemainingYears: "0,25" }),
+      });
+      expect(save.writes[0]!.data).toMatchObject({
+        [PV_TYPE_COL.capacity]: 2.5, [PV_TYPE_COL.cost]: pvCosts({ deviceCostModules: 300, capacityMwp: 2.5 }).cost,
+        [PV_TYPE_COL.degradation1stYear]: 0.5, [PV_TYPE_COL.degradationRemainingYears]: 0.25,
+      });
+    }
+  });
+
+  it("UT-GEN-153 Replace PV: the “Replace to” capacity “2,5” is saved as 2.5, and the cost follows it", () => {
+    const inputs: R.ReplaceInputs = { bridgeIds: [], opexCostIds: [], unitIds: [], allocations: [], landLeaseCosts: [] };
+    const plan = R.planReplacePvType({
+      project: P, oldPv: simple({ id: "pvA" }), form: pvForm({ supplier: "m1", capacity: "2,5" }), deviceCostModules: 300,
+      otherSupplierChosen: false, inputs, lang: "de-DE",
+    });
+    const created = plan.writes.find((w) => w.op === "create" && w.entitySet === "vsb_pvmoduletypeinprojects");
+    expect(created?.data).toMatchObject({
+      [PV_TYPE_COL.capacity]: 2.5, [PV_TYPE_COL.cost]: pvCosts({ deviceCostModules: 300, capacityMwp: 2.5 }).cost,
+    });
+  });
+
+  it("UT-GEN-154 Inverter: nominal power “2500,0” kW is saved as 2500, and its costs follow", () => {
+    const form: R.InverterFormState = {
+      label: "INV A", supplierId: "s", otherSupplier: "", inverterTypes: [952850000], warranty: "20",
+      numberOfInverters: "10", nominalPower: "2500,0", dirty: new Set(["label"]),
+    };
+    const plan = R.planSaveInverter({
+      project: P, row: null, form, otherSupplierChosen: false, deviceCostInverter: 80,
+      pv: [], inverters: [], substructures: [], lang: "de-DE",
+    });
+    expect(plan.writes[0]!.data).toMatchObject({
+      vsb_inverterwarranty: 20, vsb_numberofinverters: 10, vsb_inverternominalpower: 2500,
+      vsb_costperinverter: 200, vsb_invertertypecost: 2000,
+    });
+  });
+
+  it("UT-GEN-155 WTG panel: “5,0” / “120,00” / “0” enable Save, Total Height is 195, and the save writes 5, 120 and 195 (A5)", () => {
+    const form = {
+      nameIndex: "3", effectiveCapacity: "5,0", effectiveHubHeight: "120,00", foundationPlinth: "0",
+      dirty: new Set(["effectiveHubHeight"]),
+    };
+    const type = genType({ id: "t1" });
+    for (const lang of COMMA_LANGUAGES) {
+      const totalHeight = R.turbinePanelTotalHeight({ form, storedTotalHeight: 223, rotorDiameter: 150, lang });
+      expect(totalHeight).toBe(195);
+      expect(canSaveTurbine({
+        form, existingIndices: [1, 2], currentIndex: null, specificCapacity: 5.6, heightBlocked: false, lang,
+      })).toBe(true);
+      const plan = R.planSaveTurbine({
+        project: P, type, model: model({ rotorDiameter: 150 }), accumulatedIndex: 1, turbine: null,
+        typeTurbines: [], allTypes: [type], form, applyAll: { capacity: false, hubHeight: false, plinth: false },
+        totalHeight, landLeaseCosts: [], lang,
+      });
+      expect(plan.writes[0]!.data).toMatchObject({
+        [GEN_INSTANCE_COL.effectiveCapacity]: 5, [GEN_INSTANCE_COL.hubHeightExclPlinth]: 120,
+        [GEN_INSTANCE_COL.foundationPlinth]: 0, [GEN_INSTANCE_COL.totalHeight]: 195,
+      });
+    }
+    // An English-format capacity is not a German number: the canvas keeps Save off, and so does the code.
+    expect(canSaveTurbine({
+      form: { ...form, effectiveCapacity: "5.0" }, existingIndices: [], currentIndex: null, specificCapacity: 5.6,
+      heightBlocked: false, lang: "de-DE",
+    })).toBe(false);
+  });
+
+  it("UT-GEN-156 Replace Generator, Dummy supplier: “120,5” enables Replace; the English “120.5” does not, as in the canvas", () => {
+    const dummy = {
+      supplier: "Dummy Supplier", turbineType: "V162-6.2", hubHeight: null, revisedHubHeight: "120,5", inCountry: true,
+    };
+    expect(replaceWtgSaveable({ form: dummy, inProgress: false, heightBlocked: false, lang: "de-DE" })).toBe(true);
+    expect(replaceWtgSaveable({
+      form: { ...dummy, revisedHubHeight: "120.5" }, inProgress: false, heightBlocked: false, lang: "de-DE",
+    })).toBe(false);
+    expect(replaceWtgSaveable({ form: dummy, inProgress: false, heightBlocked: false, lang: "fr-FR" })).toBe(true);
   });
 });

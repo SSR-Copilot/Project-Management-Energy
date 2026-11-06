@@ -34,7 +34,7 @@ import {
 } from "@fluentui/react-components";
 import {
   AddFilled, CalendarAddRegular, CheckmarkRegular, DeleteFilled, DismissRegular, EditFilled,
-  InfoRegular,
+  Info16Filled, Info16Regular, InfoRegular, bundleIcon,
 } from "@fluentui/react-icons";
 import {
   ChoiceField, ConfirmDialog, DateField, DateInput, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay, PanelButtons, PeoplePicker,
@@ -132,8 +132,20 @@ const useStyles = makeStyles({
   },
   /** `con_…_ClusterChange*` — the Acquisition cells are 81 high (92 with an error). */
   acquisitionRow: { paddingTop: "5px", "& > *": { minHeight: "76px" } },
-  /** `PGroup_5Row_2.Height: If(AcquisitionDate_ErrorMessage_1.Visible, 92, 81)`, PaddingTop 5. */
+  /**
+   * `PGroup_5Row_2.Height: If(AcquisitionDate_ErrorMessage_1.Visible, 92, 81)`, PaddingTop 5 (Y:2545). Despite its
+   * name, that label is the Acquisition PRICE message (Y:2884): the row grows with `errors.acquisitionPrice`.
+   */
   acquisitionRowError: { "& > *": { minHeight: "87px" } },
+  /**
+   * `lbl_GeneralData_DisplayProject_Body_General_Content_AcquisitionDate_ErrorMessage_1` (the price message, Y:2884)
+   * keeps the `Label@2.5.1` default `Wrap: true` and is 25 high (Y:2895): the range message wraps onto a second
+   * line under the box, not one line cut with an ellipsis. Two 13-px lines, as `latLngRow`; the doubled class
+   * outranks the one-line rule on `body`.
+   */
+  acquisitionPriceError: {
+    "&.fui-Field__validationMessage.fui-Field__validationMessage": { whiteSpace: "normal", overflow: "visible", lineHeight: "13px" },
+  },
   placement: {
     display: "flex", flexWrap: "wrap", alignItems: "stretch",
     width: "calc(100% - 20px)",
@@ -230,11 +242,13 @@ const useStyles = makeStyles({
   /** `con_…_Body_Buttons_Reset` (130 wide): the info button and "Required fields", `gblAppColors.Error`. */
   required: {
     color: palette.akzent5, cursor: "default", display: "inline-flex", alignItems: "center", gap: space.xxs, minWidth: "130px", fontSize: "10.67px",
-    // `ibtn_…_Requered_Fileds.Color: gblAppColors.Error` — the info icon in the same colour as the text.
+    // `ibtn_…_Requered_Fileds.IconColor: gblAppColors.Error` (Y:5964) — the info icon in the same colour as the text.
     "& .fui-Button": { color: palette.akzent5 },
     "& .fui-Button:hover": { color: palette.akzent5 },
     "& .fui-Button__icon": { color: palette.akzent5 },
   },
+  /** `ibtn_GeneralData_DisplayProject_Body_Buttons_Requered_Fileds.Color: =gblAppColors.Error` (Y:5851): the tooltip text. */
+  requiredTip: { color: palette.akzent5 },
   /** `con_…_Body_Content_ProjectInfo` — PaddingRight 20; the labels right-aligned. */
   stampBox: { paddingRight: "20px", alignItems: "flex-end" },
   /**
@@ -265,6 +279,33 @@ function GroupHeader({ title, testId }: { title: string; testId: string }) {
     <div className={l.groupHeader}>
       <Text as="h3" className={l.groupTitle} data-testid={testId}>{title}</Text>
     </div>
+  );
+}
+
+/** Fluent InfoButton's own medium glyph pair: 16 px, so its 4-px padding gives the canvas 24 x 24 (Y:5963/5967). */
+const RequiredFieldsIcon = bundleIcon(Info16Filled, Info16Regular);
+
+/**
+ * `ibtn_GeneralData_DisplayProject_Body_Buttons_Requered_Fileds` (Y:5847) is a `ModernInformationButton@1.0.1`, i.e.
+ * Fluent's InfoButton: its glyph is outlined at rest and FILLED - a red disc, the "i" cut out white - on hover (the
+ * transparent Button swaps it) and while its popover, here the tooltip, is open. Its own component, so the open flag
+ * resets when the button goes.
+ */
+function RequiredFieldsInfo({ lines }: { lines: readonly string[] }) {
+  const s = useStyles();
+  const [open, setOpen] = useState(false);
+  return (
+    <Tooltip
+      content={<span className={mergeClasses(s.multiline, s.requiredTip)}>{lines.join("\n")}</span>}
+      relationship="description"
+      onVisibleChange={(_, data) => setOpen(data.visible)}
+    >
+      <Button
+        appearance="transparent" size="small" icon={<RequiredFieldsIcon filled={open} />}
+        aria-label={GD_LABELS.requiredFields}
+        data-testid="ibtn_GeneralData_DisplayProject_Body_Buttons_Requered_Fileds"
+      />
+    </Tooltip>
   );
 }
 
@@ -742,7 +783,7 @@ export default function GeneralDataScreen() {
         {acquired ? (
           <>
             <GroupHeader title={GD_LABELS.acquisitionInformation} testId="lbl_GeneralData_DisplayProject_Body_General_Content_Basic_Aquisition_Details" />
-            <div className={mergeClasses(s.row, s.acquisitionRow, errors.acquisitionDate && s.acquisitionRowError)}>
+            <div className={mergeClasses(s.row, s.acquisitionRow, errors.acquisitionPrice && s.acquisitionRowError)}>
               <ChoiceField
                 label={GD_LABELS.startCluster} required error={errors.startCluster}
                 ariaLabel="drp_GeneralData_DisplayProject_Body_General_Content_ClusterChange"
@@ -769,7 +810,7 @@ export default function GeneralDataScreen() {
                 label={acquisitionPriceLabel(country?.name)} required
                 value={live.acquisitionPrice} disabled={saving}
                 onChange={(v) => patch({ acquisitionPrice: v })}
-                error={errors.acquisitionPrice}
+                error={errors.acquisitionPrice} errorClassName={s.acquisitionPriceError}
                 testId="txt_GeneralData_DisplayProject_Body_TechnologyTab_Content_AcquisitionPrice"
               />
             </div>
@@ -988,13 +1029,7 @@ export default function GeneralDataScreen() {
           </Button>
           {required.length > 0 ? (
             <span className={s.required}>
-              <Tooltip content={<span className={s.multiline}>{required.join("\n")}</span>} relationship="description">
-                <Button
-                  appearance="transparent" size="small" icon={<InfoRegular />}
-                  aria-label={GD_LABELS.requiredFields}
-                  data-testid="ibtn_GeneralData_DisplayProject_Body_Buttons_Requered_Fileds"
-                />
-              </Tooltip>
+              <RequiredFieldsInfo lines={required} />
               <span data-testid="lbl_GeneralData_DisplayProject_Body_General_Content_ProjectName_ErrorMessage_2">
                 {GD_LABELS.requiredFields}
               </span>
@@ -1141,8 +1176,11 @@ export default function GeneralDataScreen() {
         description={deleteShareholderDescription(deleteRow ? deleteShareholderName(deleteRow) : "")}
         confirmText={DELETE_SHAREHOLDER_DIALOG.confirm}
         cancelText={DELETE_SHAREHOLDER_DIALOG.cancel}
-        confirmIcon="delete"
-        destructive
+        // `pcf_PopUpConfirmation_BodyButtons_Confirm` (cmp_PopUp_Confirmation:199-218): themePrimary fill, white
+        // caption and check mark (`IconName: ="CheckMark"` is fixed, so `IconRightButton: ="Trash"`, Y:8736, never
+        // renders), `Width: =128`. Not red. Cancel (:221-246) is ConfirmDialog's default: white, themePrimary outline.
+        confirmIcon="checkmark"
+        confirmWidth={128}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
       />

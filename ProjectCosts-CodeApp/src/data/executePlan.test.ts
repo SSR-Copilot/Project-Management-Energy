@@ -57,7 +57,7 @@ describe("executePlan", () => {
       { op: "delete", entitySet: "vsb_capexcosts", id: "c-9", reason: "delete" },
     );
     const result = await executePlan(plan, "test", client);
-    expect(result).toEqual({ done: 3, createdIds: ["new-1"] });
+    expect(result).toMatchObject({ done: 3, createdIds: ["new-1"] });
     expect(calls).toEqual([
       'create vsb_capexaccountlists {"vsb_name":"A"}',
       'update vsb_capexaccountlists new-1 {"statecode":1}',
@@ -176,7 +176,7 @@ describe("executePlan: guarded updates", () => {
   it("UT-PLAN-007 a guarded update reads the row by primary key, then PATCHes it", async () => {
     const { client, log, raw } = guardedStub();
     const result = await executePlan(planOf(guardedUpdate(SET, ROW, { vsb_name: "A" }, "rename")), "test", client);
-    expect(result).toEqual({ done: 1, createdIds: [] });
+    expect(result).toMatchObject({ done: 1, createdIds: [] });
     expect(log).toEqual([`read ${SET} ${ROW}`, `update ${SET} ${ROW} {"vsb_name":"A"}`]);
     expect(raw.retrieveMultipleRecordsAsync).toHaveBeenCalledWith(SET, { select: [PK], filter: `${PK} eq ${ROW}`, maxPageSize: 1 });
   });
@@ -206,7 +206,7 @@ describe("executePlan: guarded updates", () => {
       guardedUpdate(SET, CREATED_ROW_ID, { statecode: 1 }, "status"),
     );
     const result = await executePlan(plan, "test", client);
-    expect(result).toEqual({ done: 2, createdIds: [CREATED] });
+    expect(result).toMatchObject({ done: 2, createdIds: [CREATED] });
     expect(log).toEqual([
       `create ${SET} {"vsb_name":"N"}`, `read ${SET} ${CREATED}`, `update ${SET} ${CREATED} {"statecode":1}`,
     ]);
@@ -233,7 +233,7 @@ describe("executePlan: guarded updates", () => {
   it("UT-PLAN-012 PM pin: an unguarded update works on a client that has no read at all", async () => {
     const { client, calls } = stubClient();
     const plan = planOf({ op: "update", entitySet: SET, id: "x", data: {}, reason: "plain" });
-    await expect(executePlan(plan, "test", client)).resolves.toEqual({ done: 1, createdIds: [] });
+    await expect(executePlan(plan, "test", client)).resolves.toMatchObject({ done: 1, createdIds: [] });
     expect(calls).toEqual([`update ${SET} x {}`]);
   });
 
@@ -435,7 +435,7 @@ describe("executePlan: page-token invalidation", () => {
     const running = executePlan(plan, "test", client);
     await vi.waitFor(() => expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b"]));
     releases.forEach((release) => release());
-    await expect(running).resolves.toEqual({ done: 3, createdIds: [] });
+    await expect(running).resolves.toMatchObject({ done: 3, createdIds: [] });
     expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b", "delete vsb_capexcosts c"]);
   });
 
@@ -455,7 +455,7 @@ describe("executePlan: page-token invalidation", () => {
       { op: "update", entitySet: "vsb_capexaccountlists", id: CREATED_ROW_ID, data: {}, reason: "after" },
     );
     const result = await executePlan(plan, "test", client);
-    expect(result).toEqual({ done: 4, createdIds: ["new-1", "new-2", "new-3"] });
+    expect(result).toMatchObject({ done: 4, createdIds: ["new-1", "new-2", "new-3"] });
     expect(calls.filter((c) => c.includes('"vsb_name":"new-1"'))).toHaveLength(2);
     // After the run, CREATED_ROW_ID is the run's last create in plan order.
     expect(calls.at(-1)).toBe("update vsb_capexaccountlists new-3 {}");
@@ -480,6 +480,49 @@ describe("executePlan: page-token invalidation", () => {
     expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b", "update vsb_projects c"]);
   });
 
+  it("UT-PLAN-036 a run never holds more than 8 requests in flight, and the creates keep plan order (6 Nov 2026)", async () => {
+    const { client, raw } = stubClient();
+    let inFlight = 0;
+    let peak = 0;
+    let n = 0;
+    raw.createRecordAsync.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      const id = `t-${++n}`;
+      // Later rows answer first, so plan order cannot come from completion order.
+      await new Promise((resolve) => setTimeout(resolve, 30 - n));
+      inFlight -= 1;
+      return ok({ vsb_capexaccountlistid: id }) as never;
+    });
+    const plan = emptyPlan();
+    for (let i = 0; i < 20; i += 1) {
+      plan.writes.push({ op: "create", entitySet: "vsb_capexaccountlists", data: { vsb_name: `r${i}` }, reason: `r${i}`, concurrent: true });
+    }
+    const result = await executePlan(plan, "test", client);
+    expect(peak).toBe(8);
+    expect(result.done).toBe(20);
+    expect(result.createdIds).toEqual(Array.from({ length: 20 }, (_, i) => `t-${i + 1}`));
+  });
+
+  it("UT-PLAN-037 each created row comes back as Dataverse returned it, by id, from sequential and parallel steps (6 Nov 2026)", async () => {
+    const { client, raw } = stubClient();
+    let n = 0;
+    raw.createRecordAsync.mockImplementation(async () => {
+      n += 1;
+      // `Prefer: return=representation`: the server-generated autonumber arrives with the create.
+      return ok({ vsb_capexaccountlistid: `new-${n}`, vsb_name: `AUTO-000${n}` }) as never;
+    });
+    const plan = emptyPlan();
+    plan.writes.push(
+      { op: "create", entitySet: "vsb_capexaccountlists", data: {}, reason: "parent" },
+      { op: "create", entitySet: "vsb_capexaccountlists", data: {}, reason: "child", concurrent: true },
+    );
+    const result = await executePlan(plan, "test", client);
+    expect(result.createdIds).toEqual(["new-1", "new-2"]);
+    expect(result.createdRows["new-1"]).toMatchObject({ vsb_name: "AUTO-0001" });
+    expect(result.createdRows["new-2"]).toMatchObject({ vsb_name: "AUTO-0002" });
+  });
+
   it("UT-PLAN-035 a plan that marks nothing still sends one write at a time", async () => {
     const { client, raw, calls } = stubClient();
     let release: () => void = () => {};
@@ -497,7 +540,7 @@ describe("executePlan: page-token invalidation", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(calls).toEqual(["update vsb_projects a"]);
     release();
-    await expect(running).resolves.toEqual({ done: 2, createdIds: [] });
+    await expect(running).resolves.toMatchObject({ done: 2, createdIds: [] });
     expect(calls).toEqual(["update vsb_projects a", "update vsb_projects b {}"]);
   });
 });

@@ -270,7 +270,7 @@ export default function TeamScreen() {
   const onSave = async () => {
     if (!draft) return;
     setLastWasSave(true);
-    await writes.run(saveMemberJob(draft, project));
+    await writes.run(saveMemberJob(draft, project, members));
     closePanel();
   };
 
@@ -291,7 +291,7 @@ export default function TeamScreen() {
     );
   }
 
-  const errors = draft ? memberPanelErrors(draft) : {};
+  const errors = draft ? memberPanelErrors(draft, members) : {};
   // The canvas list is alphabetical.
   const descriptionOptions = [...descriptionsQ.data].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -381,7 +381,7 @@ export default function TeamScreen() {
             saveLabel="pcf_btn_Team_RightPanel_Member_Form_Buttons_Save"
             cancelLabel="pcf_btn_Team_RightPanel_Member_Form_Buttons_Cancel"
             saveTooltip={TEAM_PANEL_LABELS.saveTooltip}
-            disabled={busy || !draft || !canSaveMember(draft)}
+            disabled={busy || !draft || !canSaveMember(draft, members)}
             subtleWhenDisabled
           />
         }
@@ -428,8 +428,11 @@ export default function TeamScreen() {
                 suggestions={toPickerList(people.data)}
                 disabled={busy}
               />
-              {errors.person ? (
-                <Text className={s.error} data-testid="lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage">{errors.person}</Text>
+              {/* D98 — the duplicate pair shows in the same label (the canvas has none; Dataverse refused it on Save). */}
+              {errors.person || errors.duplicate ? (
+                <Text className={s.error} data-testid="lbl_Team_RightPanel_Member_Form_Principal_ErrorMessage" role="alert">
+                  {errors.person ?? errors.duplicate}
+                </Text>
               ) : null}
             </div>
             {/*

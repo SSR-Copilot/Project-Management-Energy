@@ -5,7 +5,7 @@
  * Shared by the admin screens (Default Checklists, CAPEX Accounts, …) so each screen only decides
  * WHAT to write (`rules.ts`) and which canvas texts to show.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
@@ -55,11 +55,21 @@ export function usePlanWrite(opts: {
   action: string;
   /** Wraps the failure detail in the screen's canvas error text, when it has one. */
   errorText?: (detail: string) => string;
+  /**
+   * `"await"` (default): a job ends — its progress closes, `run` resolves — once the screen's data has been
+   * reloaded. `"background"` (save performance, 6 Nov 2026): it ends as soon as the writes have landed and the
+   * reload runs behind it; `refreshing` is true until that reload finishes, so a screen can hold back actions
+   * that would read the old data.
+   */
+  refresh?: "await" | "background";
 }) {
   const qc = useQueryClient();
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  /** Background reloads still running (two quick jobs can overlap). */
+  const pendingRefreshes = useRef(0);
 
   const mutation = useMutation({
     mutationFn: async (job: PlanJob) => {
@@ -69,9 +79,24 @@ export function usePlanWrite(opts: {
       const next = await job.then(first, { setProgress });
       if (!next) return { ...first, plan };
       const second = await executePlan(next, job.progress);
-      return { done: first.done + second.done, createdIds: [...first.createdIds, ...second.createdIds], plan };
+      return {
+        done: first.done + second.done,
+        createdIds: [...first.createdIds, ...second.createdIds],
+        createdRows: { ...first.createdRows, ...second.createdRows },
+        plan,
+      };
     },
-    onSettled: () => Promise.all(opts.invalidate.map((queryKey) => qc.invalidateQueries({ queryKey }))),
+    onSettled: () => {
+      const reload = Promise.all(opts.invalidate.map((queryKey) => qc.invalidateQueries({ queryKey })));
+      if (opts.refresh !== "background") return reload;
+      pendingRefreshes.current += 1;
+      setRefreshing(true);
+      void reload.catch(() => undefined).finally(() => {
+        pendingRefreshes.current -= 1;
+        if (pendingRefreshes.current === 0) setRefreshing(false);
+      });
+      return undefined;
+    },
   });
 
   /** Runs one job; resolves to the created ids, or null when it was refused or failed. */
@@ -93,5 +118,5 @@ export function usePlanWrite(opts: {
 
   // Stable across renders, so a screen can clear the messages from a timer effect.
   const clear = useCallback(() => { setError(null); setSuccess(null); }, []);
-  return { run, progress, error, success, clear };
+  return { run, progress, error, success, clear, refreshing };
 }

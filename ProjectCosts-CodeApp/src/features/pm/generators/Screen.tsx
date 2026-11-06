@@ -46,8 +46,8 @@ import {
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  CheckmarkRegular, ChevronLeftRegular, ChevronRightRegular,
-  ChevronDoubleLeftRegular, DeleteRegular, DismissRegular, EditRegular,
+  ArrowLeftRegular, ArrowPreviousRegular, ArrowRightRegular, CheckmarkRegular,
+  DeleteRegular, DismissRegular, EditRegular,
   InfoRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
@@ -59,7 +59,9 @@ import { useSession } from "@/app/SessionContext";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import { media, palette, space } from "@/theme/tokens";
 import {
-  CANCEL_REQUEST, COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, EXCLUDED, GENERATORS_PAGE_SIZE,
+  CANCEL_REQUEST, COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, GENERATORS_PAGE_SIZE, PERMISSION_MSG,
+  buildGeneratorPermissionPayload, buildInverterPermissionPayload, buildSubstructurePermissionPayload,
+  permissionModuleName, requiresPermissionRequest, type PermissionFamily,
   GENERATORS_SCREEN_TEXT, GENERATOR_TYPE_SAVED_BANNER, HEIGHT_LIMIT_PM_MESSAGE, HYDROGEN_CARD_LABELS,
   HYDROGEN_PANEL_LABELS, INVERTER_CARD_LABELS, LAST_CAPACITY_MESSAGES, LAST_CAPACITY_TITLES, PAGER_TOOLTIPS,
   PAGE_LOCK_TITLE, PANEL_BUTTONS, PV_CAPACITY_MAX_LENGTH, PV_DEGRADATION_MAX_LENGTH, PV_FIELD_LABELS,
@@ -94,15 +96,16 @@ import {
   plantRequestsPermission, plantSupplierDisplayName, plantSupplierOptions, replaceGeneratorTitle,
   replaceProgressText, replacePvProgressText, replacePvTitle, replaceSuccessText, replaceWtgSaveable,
   substructureFormDefaults, substructureNeedsPvCapacity, substructurePanelTitle,
-  substructureSaveProgressText, validateInverterForm, validateSubstructureForm, needsPermissionCancellation,
+  substructureSaveProgressText, validateInverterForm, validateSubstructureForm,
   type CapacityGuardReason, type CatalogModel, type GeneratorCommandKey, type GeneratorTypeRow,
   type InverterFormState, type PlanProject, type PlantFamily, type PvTypeFormState, type ReplaceInputs,
   type ReplaceWtgForm, type SelectedRow, type SimpleCapacityFamily, type SimpleFormState,
   type SimpleTypeRow, type SubstructureFormState, type TurbineFormState, type TurbineRow, type TypeFormState,
 } from "./rules";
-import type { WritePlan } from "@/data/writePlan";
+import { emptyPlan, type WritePlan } from "@/data/writePlan";
+import type { PlanResult } from "@/data/executePlan";
 import {
-  SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs,
+  SERVER_DECIDES, loadAllocations, loadNewTypeInputs, loadPvDeleteInputs, loadPvFollowUpInputs, useModulePermissionFlows,
   loadReplaceInputs, loadTypeDeleteInputs,
   useAllWtgLandLeaseCosts, useDeviceCosts, useEntraObjectId, useGeneratorCatalog, useGeneratorModels,
   useGeneratorTypes, useGeneratorWrites, useGeneratorsProject, useInflationIndex, useInverterTypes,
@@ -411,7 +414,40 @@ const useStyles = makeStyles({
   expanded: { display: "flex", flexDirection: "column", gap: space.s, maxWidth: "850px", minWidth: 0, overflowX: "auto" },
   warning: { fontSize: tokens.fontSizeBase200, color: palette.Warning },
   note: { fontSize: tokens.fontSizeBase200, color: palette.Error },
-  pager: { display: "flex", alignItems: "center", gap: space.s, fontSize: tokens.fontSizeBase200 },
+  /**
+   * `con_…GeneratorType_CardDetails_Pagination_Buttons` (Y:1885): a 24-high horizontal row, `LayoutGap: =5`,
+   * `LayoutJustifyContent: End`, `Width: =<GeneratorList>.Width - 20` (850 − 20) — so the pager ends 20 px
+   * short of the grid's right edge, not at the left of the card (screenshot, 6 Nov 2026).
+   */
+  pager: {
+    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "5px",
+    width: "830px", maxWidth: "100%", height: "24px", flexShrink: 0,
+  },
+  /** `lbl_…_GeneratorsList_TotalRows` (Y:1914): Width 100, `Align: Start`, `Size: =12` (modern Text, px). */
+  pagerTotalRows: { width: "100px", flexShrink: 0, textAlign: "left", fontSize: "12px", whiteSpace: "nowrap" },
+  /** `lbl_…_GeneratorsList_Pagination` (Y:1993): Width 120, `Align: Center`, `Size: =12`. */
+  pagerPage: { width: "120px", flexShrink: 0, textAlign: "center", fontSize: "12px", whiteSpace: "nowrap" },
+  /**
+   * The three `cat_PowerCAT.Icon`s, `IconType: IconButon` (Y:1925 / 1955 / 2005): 24 × 24, `FillColor`
+   * themePrimary with a white 16-px glyph (`FontColor` white, `FontSize: =16`), `HoverFillColor` themeLighter /
+   * `HoverFontColor` themePrimary; disabled, a light grey square — the Project list pager's `iconButton`, at 24.
+   */
+  pagerButton: {
+    minWidth: "24px", width: "24px", height: "24px", padding: 0, flexShrink: 0,
+    borderRadius: "2px",
+    backgroundColor: palette.themePrimary, color: palette.white,
+    "& svg": { fontSize: "16px", width: "16px", height: "16px" },
+    ":hover:enabled": {
+      backgroundColor: palette.themeLighter, color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+      borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    },
+    ":disabled": { backgroundColor: palette.neutralLighter, color: palette.white },
+    "&:disabled .fui-Button__icon": { color: palette.white },
+    "&:disabled svg": { color: palette.white },
+  },
   panelBody: { display: "flex", flexDirection: "column", gap: space.m },
   /**
    * `con_…_Filter_CountryAvailability`, under the toggle: `ico_…_Filter_Message` (18 px, X 15,
@@ -420,14 +456,6 @@ const useStyles = makeStyles({
   filterAvailability: { display: "flex", alignItems: "center", columnGap: "20px", minHeight: "32px", paddingLeft: "15px" },
   /** `cmb_Supplier` & co.: `Width: Parent.Width - Self.X*2 - 80` — 314 px in the 450-px panel. */
   typeField: { width: "314px", maxWidth: "100%" },
-  /** `ComboBox@0.0.51` in `DisplayMode.Disabled`: a white box with a light outline, not the filled skin. */
-  comboDisabled: {
-    backgroundColor: palette.white,
-    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
-    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
-    borderTopColor: palette.Grayscale20, borderRightColor: palette.Grayscale20,
-    borderBottomColor: palette.Grayscale20, borderLeftColor: palette.Grayscale20,
-  },
   prefixRow: { display: "flex", alignItems: "center", gap: space.s },
   /** The Add Generator fields: `Width: Parent.Width/2 + Self.X + 20` — 265 px in the 450-px panel. */
   turbineField: { width: "265px", maxWidth: "100%" },
@@ -488,22 +516,25 @@ interface SelectOption { value: string; label: string }
 /** A `.canvas-field` combobox — a sibling caption, never a wrapping `<label>`; no red outline (see `InputField`). */
 function SelectField({
   label, name, ariaLabel, value, options, onChange, required, disabled, error, placeholder, className,
-  disabledClassName,
+  disabledLook,
 }: {
   label: string; name: string; ariaLabel?: string; value: string | null; options: readonly SelectOption[];
   onChange: (v: string) => void; required?: boolean; disabled?: boolean;
   error?: string | null; placeholder?: string; className?: string;
-  /** Replaces the filled disabled skin (e.g. `comboDisabled`). */
-  disabledClassName?: string;
+  /**
+   * `true`: while disabled, the canvas `ComboBox@0.0.51` `DisplayMode.Disabled` box — white, a light outline, grey
+   * text (`canvas.css`, `.canvas-field[data-display="disabled"]`) — instead of the panels' filled grey.
+   */
+  disabledLook?: boolean;
 }) {
   const s = useStyles();
   const controlClass = useFieldControlClass();
   const selected = options.find((o) => o.value === value);
   return (
-    <div className={mergeClasses("canvas-field", className)}>
+    <div className={mergeClasses("canvas-field", className)} data-display={disabled && disabledLook ? "disabled" : undefined}>
       <span data-required={required}>{label}</span>
       <Dropdown
-        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"), disabled && disabledClassName)}
+        className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit"))}
         appearance={FIELD_APPEARANCE}
         aria-label={ariaLabel ?? label}
         data-testid={name}
@@ -553,6 +584,13 @@ function MultiSelectField({
 
 const plainOptions = (values: readonly (string | number)[]): SelectOption[] =>
   values.map((v) => ({ value: String(v), label: String(v) }));
+
+/**
+ * The hub-height combobox (`cmb_Supplier_2.Items` = `{Height: Item.Value}`, Y:14674): the canvas shows each height as a
+ * number in the user's language ("169,5"). The option value stays the plain number, so the selection still maps.
+ */
+const heightOptions = (values: readonly number[], lang: string): SelectOption[] =>
+  values.map((v) => ({ value: String(v), label: fmtHubHeight(v, lang) }));
 
 /** `Choices('Inverter Type')` / `Choices('Substructure Type')` as combobox options. */
 const choiceOptions = (labels: Readonly<Record<number, string>>): SelectOption[] =>
@@ -827,6 +865,7 @@ export default function GeneratorsScreen() {
   const allWtgQ = useAllWtgLandLeaseCosts(projectId);
   const entraObjectId = useEntraObjectId();
   const writes = useGeneratorWrites(projectId);
+  const permissionFlows = useModulePermissionFlows();
   const perms = SERVER_DECIDES;
 
   /** Every model a card or the panel needs — the types' own rows win over the orderable catalogue. */
@@ -960,15 +999,16 @@ export default function GeneratorsScreen() {
   const turbineNameError = validateTurbineName(turbineForm.nameIndex, {
     existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
   }, lang);
+  // The boxes open in the user's language, so the total, the Save check and the save read them in it (A5).
   const turbineHeight = turbinePanelTotalHeight({
-    form: turbineForm, storedTotalHeight: panelTurbine?.totalHeight, rotorDiameter: panelModel?.rotorDiameter,
+    form: turbineForm, storedTotalHeight: panelTurbine?.totalHeight, rotorDiameter: panelModel?.rotorDiameter, lang,
   });
   const turbineHeightBlocked = turbineHeightBlocksSave({
     planning, storedTotalHeight: panelTurbine?.totalHeight, project, entraObjectId,
   });
   const turbineSaveable = canSaveTurbine({
     form: turbineForm, existingIndices: projectIndices, currentIndex: panelTurbine?.index ?? null,
-    specificCapacity: panelModel?.specificCapacity ?? null, heightBlocked: turbineHeightBlocked,
+    specificCapacity: panelModel?.specificCapacity ?? null, heightBlocked: turbineHeightBlocked, lang,
   });
   const touchTurbine = <K extends keyof TurbineFormState>(field: K, value: TurbineFormState[K]) =>
     setTurbineForm((prev) => ({ ...prev, [field]: value, dirty: markDirty(prev.dirty, String(field)) }));
@@ -1017,7 +1057,7 @@ export default function GeneratorsScreen() {
   const inverterOtherValue = effectiveOtherSupplier(inverterForm.otherSupplier, inverterOther);
   const inverterErrors = validateInverterForm(inverterForm, { otherSupplierChosen: inverterOther }, lang);
   const inverterRequests = plantRequestsPermission(inverterOtherValue);
-  const inverterSaveable = !inverterRequests && canSaveInverter(inverterForm, { otherSupplierChosen: inverterOther }, lang);
+  const inverterSaveable = canSaveInverter(inverterForm, { otherSupplierChosen: inverterOther }, lang);
   // `DisplayMode: If(IsBlank(<row>.Inverter), Edit, View)` and the title test the stored catalogue row.
   const inverterEditing = Boolean(selectedInverter?.catalogueId);
   const touchInverter = <K extends keyof InverterFormState>(field: K, value: InverterFormState[K]) =>
@@ -1045,7 +1085,7 @@ export default function GeneratorsScreen() {
   const substructureOtherValue = effectiveOtherSupplier(substructureForm.otherSupplier, substructureOther);
   const substructureErrors = validateSubstructureForm(substructureForm, { otherSupplierChosen: substructureOther });
   const substructureRequests = plantRequestsPermission(substructureOtherValue);
-  const substructureSaveable = !substructureRequests && canSaveSubstructure(substructureForm, { otherSupplierChosen: substructureOther });
+  const substructureSaveable = canSaveSubstructure(substructureForm, { otherSupplierChosen: substructureOther });
   const substructureEditing = Boolean(selectedSubstructure?.catalogueId);
   const touchSubstructure = <K extends keyof SubstructureFormState>(field: K, value: SubstructureFormState[K]) =>
     setSubstructureForm((prev) => {
@@ -1082,8 +1122,9 @@ export default function GeneratorsScreen() {
       }).totalHeight
     : 0;
   const replaceHeightBlocked = replaceModel !== null && heightBlocksSave({ planning, totalHeight: replaceHeight, project, entraObjectId });
-  const replaceWtgOk = replaceModel !== null && replaceWtg.inCountry && replaceWtgSaveable({
-    form: { ...replaceWtg, hubHeight: replaceHub }, inProgress: writes.progress !== null, heightBlocked: replaceHeightBlocked,
+  // D97 — out of country is no longer excluded: the replace requests permission for the new type.
+  const replaceWtgOk = replaceModel !== null && replaceWtgSaveable({
+    form: { ...replaceWtg, hubHeight: replaceHub }, inProgress: writes.progress !== null, heightBlocked: replaceHeightBlocked, lang,
   });
 
   /* G6 — Replace PV Module Type: the "Replace to" form is the PV panel's form and validation. */
@@ -1103,6 +1144,12 @@ export default function GeneratorsScreen() {
   // A New Project (no record yet) is locked too: `IsBlank(gblRecordSelectedProject.'Project ID')`.
   const locked = !loading && isPageLocked(project);
   const editable = !locked;
+  /**
+   * Save performance (6 Nov 2026): a save's dialog closes before the screen has reloaded (`useGeneratorWrites`).
+   * Until it has, the actions that write or open a panel wait, so none starts from the data before the save
+   * (e.g. a next turbine number taken from the old list). Selection and folding stay available.
+   */
+  const actionsOpen = editable && !writes.refreshing;
   const cmdState = commandBarState({
     canEdit: perms.canEdit,
     project,
@@ -1122,7 +1169,7 @@ export default function GeneratorsScreen() {
     storage: selectedStorage !== null, hydrogen: selectedHydrogen !== null, substation: selectedSubstation !== null,
   };
   const commandEnabled = (key: GeneratorCommandKey) =>
-    project !== null && editable && cmdState[key].visible && cmdState[key].enabled;
+    project !== null && actionsOpen && cmdState[key].visible && cmdState[key].enabled;
   const commands: Command[] = commandBarOrder(familySelected)
     .filter((key) => cmdState[key].visible)
     .map((key) => {
@@ -1258,36 +1305,52 @@ export default function GeneratorsScreen() {
   });
 
   const saveType = async () => {
-    if (!planProject || !resolvedModel) return;
+    if (!project || !planProject || !resolvedModel) return;
+    const header = project;
+    const model = resolvedModel;
     const n = numericOr(typeForm.numberOfGenerators, 0, lang);
-    const progress = typeSaveProgressText(resolvedModel.displayName);
+    const requesting = requiresPermissionRequest(inCountry);
+    const progress = typeSaveProgressText(model.displayName, inCountry);
     const names = buildTurbineNames({ shortName: planProject.shortName, existing: turbinesQ.data, count: n });
     close();
+    /*
+     * Save performance (6 Nov 2026): ONE job. The queued second step (the device-type row and the AllWTG
+     * allocations, which need the new type's autonumber name and the turbine ids) runs as the job's `then`,
+     * so the screen reloads once at the end instead of after each step.
+     */
     const ids = await run({
-      progress,
-      errorText: WRITE_ERROR.typeSave,
-      plan: planCreateGeneratorType({
-        project: planProject, inCountry, model: resolvedModel, numberOfGenerators: n, costPerWtg: derivedCost,
-        selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
-        existingTypes: types, projectTurbines: turbinesQ.data,
-      }),
-    });
-    const typeId = ids?.[0];
-    if (!typeId) return;
-    setSelection({ family: "wtg", id: typeId });
-    await run({
       progress,
       success: GENERATOR_TYPE_SAVED_BANNER,
       errorText: WRITE_ERROR.typeSave,
-      plan: async (): Promise<WritePlan> => {
-        const inputs = await loadNewTypeInputs("wtg", typeId);
+      plan: planCreateGeneratorType({
+        project: planProject, inCountry, model, numberOfGenerators: n, costPerWtg: derivedCost,
+        selectedHeight: effectiveHubHeight ?? 0, revisedHubHeight: numericOr(typeForm.revisedHubHeight, 0, lang),
+        existingTypes: types, projectTurbines: turbinesQ.data,
+      }),
+      then: async (first: PlanResult): Promise<WritePlan | null> => {
+        const typeId = first.createdIds[0];
+        if (!typeId) return null;
+        // D97 — out of country: `RequestModulePermission` for the new type instead of the roll-up (Y:15214, Y:16514).
+        if (requesting) await permissionFlows.request(buildGeneratorPermissionPayload(header, typeId, model.id));
+        /*
+         * Save performance (6 Nov 2026): the create returned the new row, its autonumber `vsb_name` included
+         * (`PlanResult.createdRows`), so the name needs no read-back; and a type this save has just created has
+         * no `DeviceTypesInProjects` row yet (no plugin or flow creates one — `hooks.ts`). The two reads of
+         * `loadNewTypeInputs` stay only as the fallback for a create that came back without the name.
+         */
+        const createdName = first.createdRows?.[typeId]?.["vsb_name"];
+        const inputs = typeof createdName === "string" && createdName !== ""
+          ? { typeName: createdName, hasDeviceType: false }
+          : await loadNewTypeInputs("wtg", typeId);
         return planGeneratorTypeFollowUp({
           project: planProject, typeId, typeName: inputs.typeName, hasDeviceType: inputs.hasDeviceType,
-          turbines: (ids ?? []).slice(1, 1 + n).map((id, i) => ({ id, name: names[i] ?? null })),
+          turbines: first.createdIds.slice(1, 1 + n).map((id, i) => ({ id, name: names[i] ?? null })),
           landLeaseCosts: allWtgQ.data,
         });
       },
     });
+    const typeId = ids?.[0];
+    if (typeId) setSelection({ family: "wtg", id: typeId });
   };
 
   const saveTurbine = async (fromPopup: boolean) => {
@@ -1299,7 +1362,7 @@ export default function GeneratorsScreen() {
       plan: planSaveTurbine({
         project: planProject, type: panelType, model: panelModel, accumulatedIndex: indexQ.data,
         turbine: panelTurbine, typeTurbines: panelTurbines, allTypes: types, form: turbineForm, applyAll,
-        totalHeight: turbineHeight, landLeaseCosts: allWtgQ.data,
+        totalHeight: turbineHeight, landLeaseCosts: allWtgQ.data, lang,
       }),
     };
     close();
@@ -1314,22 +1377,29 @@ export default function GeneratorsScreen() {
     const costPerPower = deviceQ.data.modules ?? 0;
     const others = pvQ.data.filter((r) => r.id !== editing?.id);
     close();
+    /*
+     * Save performance (6 Nov 2026): ONE job, as the WTG type save — the second step (the unit, the G7
+     * allocations, the roll-up, the device-type row) is the job's `then`, so the screen reloads once.
+     */
     const ids = await run({
-      progress: pvSaveProgressText(label),
-      errorText: pvSaveErrorText,
-      plan: planSavePvType({
-        project: planProject, pv: editing, form: pvForm, deviceCostModules: deviceQ.data.modules, otherSupplierChosen,
-      }),
-    });
-    const pvId = editing?.id ?? ids?.[0];
-    if (!ids || !pvId) return;
-    setSelection({ family: "pv", id: pvId });
-    await run({
       progress: pvSaveProgressText(label),
       success: PV_MSG.saved,
       errorText: pvSaveErrorText,
-      plan: async (): Promise<WritePlan> => {
-        const inputs = await loadPvFollowUpInputs(pvId);
+      plan: planSavePvType({
+        project: planProject, pv: editing, form: pvForm, deviceCostModules: deviceQ.data.modules, otherSupplierChosen, lang,
+      }),
+      then: async (first: PlanResult): Promise<WritePlan | null> => {
+        const pvId = editing?.id ?? first.createdIds[0];
+        if (!pvId) return null;
+        /*
+         * A NEW type: the create returned its autonumber `vsb_name` (`PlanResult.createdRows`), and a row this
+         * save has just created has no unit and no `DeviceTypesInProjects` row yet — so no read-back. An EDIT
+         * still reads them (`loadPvFollowUpInputs`), as does a create that came back without the name.
+         */
+        const createdName = editing ? undefined : first.createdRows?.[pvId]?.["vsb_name"];
+        const inputs = typeof createdName === "string" && createdName !== ""
+          ? { pvName: createdName, unitId: null, hasDeviceType: false }
+          : await loadPvFollowUpInputs(pvId);
         const saved = { capacity, cost: costPerPower * capacity };
         return planPvFollowUp({
           project: planProject, pvId, pvName: inputs.pvName, unitId: inputs.unitId, hasDeviceType: inputs.hasDeviceType,
@@ -1339,49 +1409,89 @@ export default function GeneratorsScreen() {
         });
       },
     });
+    const pvId = editing?.id ?? ids?.[0];
+    if (ids && pvId) setSelection({ family: "pv", id: pvId });
   };
 
-  /** G9 — `pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save.OnChange`. */
+  /**
+   * G9 — `pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save.OnChange`. D97 — with an Other Supplier the
+   * row is written and `RequestModulePermission` runs for it instead of the PV-cost roll-up (Y:10243).
+   */
   const saveInverter = async () => {
-    if (!planProject) return;
+    if (!project || !planProject) return;
+    const header = project;
+    const editing = selectedInverter;
     const job = {
-      progress: inverterSaveProgressText(inverterForm.label),
+      progress: inverterSaveProgressText(inverterForm.label, inverterOtherValue),
       success: WRITE_MSG.inverterSaved,
       errorText: WRITE_ERROR.inverterSave,
       plan: planSaveInverter({
-        project: planProject, row: selectedInverter, form: inverterForm, otherSupplierChosen: inverterOther,
-        deviceCostInverter: deviceQ.data.inverter, pv: pvQ.data, inverters: inverterQ.data, substructures: substructureQ.data,
+        project: planProject, row: editing, form: inverterForm, otherSupplierChosen: inverterOther,
+        deviceCostInverter: deviceQ.data.inverter, pv: pvQ.data, inverters: inverterQ.data, substructures: substructureQ.data, lang,
       }),
+      ...(inverterRequests ? {
+        then: async (first: { createdIds: string[] }) => {
+          const rowId = editing?.id ?? first.createdIds[0];
+          if (rowId) await permissionFlows.request(buildInverterPermissionPayload(header, rowId));
+          return null;
+        },
+      } : {}),
     };
     close();
     // The canvas blanks `locSelectedInverterTypeEntity` after the save.
     if (await run(job)) setSelection(null);
   };
 
-  /** G9 — `pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save.OnChange`. */
+  /**
+   * G9 — `pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save.OnChange`. D97 — with an Other Supplier
+   * the row is written and `RequestModulePermission` runs for it instead of the PV-cost roll-up (Y:8979).
+   */
   const saveSubstructure = async () => {
-    if (!planProject) return;
+    if (!project || !planProject) return;
+    const header = project;
+    const editing = selectedSubstructure;
     const job = {
-      progress: substructureSaveProgressText(substructureForm.label),
+      progress: substructureSaveProgressText(substructureForm.label, substructureOtherValue),
       success: WRITE_MSG.substructureSaved,
       errorText: WRITE_ERROR.substructureSave,
       plan: planSaveSubstructure({
-        project: planProject, row: selectedSubstructure, form: substructureForm, otherSupplierChosen: substructureOther,
+        project: planProject, row: editing, form: substructureForm, otherSupplierChosen: substructureOther,
         deviceCostFix: deviceQ.data.mountingFix, deviceCostTracker: deviceQ.data.mountingTracker,
-        plantPvCapacity: project?.plantPvCapacity, pv: pvQ.data, inverters: inverterQ.data, substructures: substructureQ.data,
+        plantPvCapacity: project.plantPvCapacity, pv: pvQ.data, inverters: inverterQ.data, substructures: substructureQ.data,
       }),
+      ...(substructureRequests ? {
+        then: async (first: { createdIds: string[] }) => {
+          const rowId = editing?.id ?? first.createdIds[0];
+          if (rowId) await permissionFlows.request(buildSubstructurePermissionPayload(header, rowId));
+          return null;
+        },
+      } : {}),
     };
     close();
     if (await run(job)) setSelection(null);
   };
 
   /**
-   * G6 — Replace Generator Type (1.21.753): job 1 reads the old type's links (Identify) and runs Detach,
-   * Delete and Add; job 2 needs the new ids and runs the device-type row, the land lease and the O&M
-   * re-link. The new type is selected afterwards.
+   * Save performance (6 Nov 2026): what the second step of a new WTG / PV type needs — its autonumber name and its
+   * device-type row. The create returned the row (`PlanResult.createdRows`, `Prefer: return=representation`), and a
+   * type this job has just created has no `DeviceTypesInProjects` row yet (no plugin or flow creates one —
+   * `hooks.ts`). `loadNewTypeInputs` (two reads) stays only as the fallback for a create without the name.
+   */
+  const newTypeInputs = async (family: "wtg" | "pv", first: PlanResult, typeId: string) => {
+    const name = first.createdRows?.[typeId]?.["vsb_name"];
+    return typeof name === "string" && name !== ""
+      ? { typeName: name, hasDeviceType: false, bridgeId: null }
+      : loadNewTypeInputs(family, typeId);
+  };
+
+  /**
+   * G6 — Replace Generator Type (1.21.753), ONE job (save performance, 6 Nov 2026): its plan reads the old
+   * type's links (Identify) and runs Detach, Delete and Add; its `then` step uses the new ids for the
+   * device-type row, the land lease and the O&M re-link. The new type is selected afterwards.
    */
   const replaceGeneratorType = async () => {
-    if (!planProject || !selectedType || !replaceModel) return;
+    if (!project || !planProject || !selectedType || !replaceModel) return;
+    const header = project;
     const oldType = selectedType;
     const model = replaceModel;
     const form = { ...replaceWtg };
@@ -1395,38 +1505,42 @@ export default function GeneratorsScreen() {
     close();
     const ids = await run({
       progress,
+      success: () => replaceSuccessText(box.unmatched),
       errorText: WRITE_ERROR.wtgReplace,
       plan: async (): Promise<WritePlan> => {
         box.inputs = await loadReplaceInputs(planProject.id, oldType.id);
+        // D97 — "RDel001: Cancel pending permission for replaced generator", before the old type goes.
+        await permissionFlows.cancelIfOpen("wtg", oldType);
         return planReplaceGeneratorType({
           project: planProject, oldType, inCountry: form.inCountry, model, costPerWtg: replaceCost,
           selectedHeight: replaceHub ?? 0, revisedHubHeight: numericOr(form.revisedHubHeight, 0, lang),
           otherTypes: types.filter((t) => t.id !== oldType.id), otherTurbines, inputs: box.inputs,
         });
       },
-    });
-    const newTypeId = ids?.[0];
-    const inputs = box.inputs;
-    if (!newTypeId || !inputs) return;
-    setSelection({ family: "wtg", id: newTypeId });
-    await run({
-      progress,
-      success: () => replaceSuccessText(box.unmatched),
-      errorText: WRITE_ERROR.wtgReplace,
-      plan: async (): Promise<WritePlan> => {
-        const created = await loadNewTypeInputs("wtg", newTypeId);
+      then: async (first: PlanResult): Promise<WritePlan | null> => {
+        // The plan's deletes and updates create nothing: the new type is its first create, its units the next.
+        const newTypeId = first.createdIds[0];
+        const inputs = box.inputs;
+        if (!newTypeId || !inputs) return null;
+        // D97 — out of country the Add requests permission for the new type instead of the roll-up.
+        if (requiresPermissionRequest(form.inCountry)) {
+          await permissionFlows.request(buildGeneratorPermissionPayload(header, newTypeId, model.id));
+        }
+        const created = await newTypeInputs("wtg", first, newTypeId);
         const plan = planReplaceGeneratorTypeFollowUp({
           project: planProject, newTypeId, newTypeName: created.typeName, existingBridgeId: created.bridgeId ?? null,
-          newUnits: (ids ?? []).slice(1, 1 + replaceCount).map((id, i) => ({ id, name: names[i] ?? null })),
+          newUnits: first.createdIds.slice(1, 1 + replaceCount).map((id, i) => ({ id, name: names[i] ?? null })),
           inputs,
         });
         box.unmatched = plan.unmatchedCount;
         return plan;
       },
     });
+    const newTypeId = ids?.[0];
+    if (newTypeId) setSelection({ family: "wtg", id: newTypeId });
   };
 
-  /** G6 — Replace PV Module Type (1.21.753), in the same two jobs. */
+  /** G6 — Replace PV Module Type (1.21.753), as ONE job in the same two steps (save performance, 6 Nov 2026). */
   const replacePvType = async () => {
     if (!planProject || !selectedPv) return;
     const oldPv = selectedPv;
@@ -1437,25 +1551,22 @@ export default function GeneratorsScreen() {
     close();
     const ids = await run({
       progress,
-      errorText: WRITE_ERROR.pvReplace,
-      plan: async (): Promise<WritePlan> => {
-        box.inputs = await loadReplaceInputs(planProject.id, oldPv.id);
-        return planReplacePvType({
-          project: planProject, oldPv, form, deviceCostModules: deviceQ.data.modules,
-          otherSupplierChosen: replacePvOther, inputs: box.inputs,
-        });
-      },
-    });
-    const newPvId = ids?.[0];
-    const inputs = box.inputs;
-    if (!newPvId || !inputs) return;
-    setSelection({ family: "pv", id: newPvId });
-    await run({
-      progress,
       success: REPLACE_MSG.pvReplaced,
       errorText: WRITE_ERROR.pvReplace,
       plan: async (): Promise<WritePlan> => {
-        const created = await loadNewTypeInputs("pv", newPvId);
+        box.inputs = await loadReplaceInputs(planProject.id, oldPv.id);
+        // D97 — an open request on the replaced PV type is cancelled before it goes.
+        await permissionFlows.cancelIfOpen("pv", oldPv);
+        return planReplacePvType({
+          project: planProject, oldPv, form, deviceCostModules: deviceQ.data.modules,
+          otherSupplierChosen: replacePvOther, inputs: box.inputs, lang,
+        });
+      },
+      then: async (first: PlanResult): Promise<WritePlan | null> => {
+        const newPvId = first.createdIds[0];
+        const inputs = box.inputs;
+        if (!newPvId || !inputs) return null;
+        const created = await newTypeInputs("pv", first, newPvId);
         return planReplacePvTypeFollowUp({
           project: planProject, newPvId, newPvName: created.typeName, existingBridgeId: created.bridgeId ?? null,
           inputs,
@@ -1464,6 +1575,8 @@ export default function GeneratorsScreen() {
         });
       },
     });
+    const newPvId = ids?.[0];
+    if (newPvId) setSelection({ family: "pv", id: newPvId });
   };
 
   const saveSimple = async () => {
@@ -1475,7 +1588,7 @@ export default function GeneratorsScreen() {
       progress: simpleSaveProgressText(simpleForm.label),
       success: cfg.savedText,
       errorText: cfg.saveError,
-      plan: planSaveSimple({ project: planProject, family, row, rows: simpleRowsOf(family), form: simpleForm }),
+      plan: planSaveSimple({ project: planProject, family, row, rows: simpleRowsOf(family), form: simpleForm, lang }),
     };
     close();
     const ids = await run(job);
@@ -1512,6 +1625,8 @@ export default function GeneratorsScreen() {
         const ok = await run({
           progress: WRITE_MSG.working, success: WRITE_MSG.typeDeleted, errorText: WRITE_ERROR.typeDelete,
           plan: async (): Promise<WritePlan> => {
+            // D97 — `If(Not(IsBlank(FlowRunId)), Requestpermissioncancellation.Run(…))` (Y:15659), before any delete.
+            await permissionFlows.cancelIfOpen("wtg", d.type);
             const inputs = await loadTypeDeleteInputs(planProject.id, d.type.id, typeTurbines.map((t) => t.id));
             return planDeleteGeneratorType({
               project: planProject, type: d.type, allTypes: types, allocations: inputs.allocations,
@@ -1553,6 +1668,8 @@ export default function GeneratorsScreen() {
             progress: WRITE_MSG.working, success: PV_MSG.deleted, errorText: pvDeleteErrorText,
             // G2 — the unit, its land lease and the O&M costs go first, as the confirmation says.
             plan: async (): Promise<WritePlan> => {
+              // D97 — the open request is cancelled first (Y:15469).
+              await permissionFlows.cancelIfOpen("pv", d.row);
               const inputs = await loadPvDeleteInputs(planProject.id, d.row.id);
               return planDeletePvType({
                 project: planProject, pv: d.row, pvRows: pvQ.data, inverters: inverterQ.data,
@@ -1568,10 +1685,14 @@ export default function GeneratorsScreen() {
             progress: WRITE_MSG.working,
             success: f === "inverter" ? WRITE_MSG.inverterDeleted : WRITE_MSG.substructureDeleted,
             errorText: f === "inverter" ? WRITE_ERROR.inverterDelete : WRITE_ERROR.substructureDelete,
-            plan: planDeleteInverterOrSubstructure({
-              project: planProject, family: f, row: d.row, pv: pvQ.data, inverters: inverterQ.data,
-              substructures: substructureQ.data,
-            }),
+            plan: async (): Promise<WritePlan> => {
+              // D97 — the open request is cancelled first (inverter Y:15380, substructure Y:15291).
+              await permissionFlows.cancelIfOpen(f, d.row);
+              return planDeleteInverterOrSubstructure({
+                project: planProject, family: f, row: d.row, pv: pvQ.data, inverters: inverterQ.data,
+                substructures: substructureQ.data,
+              });
+            },
           });
           if (ok) setSelection(null);
         } else {
@@ -1590,6 +1711,27 @@ export default function GeneratorsScreen() {
     }
   };
 
+  /**
+   * D97 — a card's Cancel (`pcf_btn_GeneralData_DisplayProject_Body_Buttons_Reset_1` WTG Y:2612, `…_PVModule_Reset`,
+   * `…_Inverter_Reset`, `…_Substructure_Reset`): `Requestpermissioncancellation.Run(User().Email, AppId, JSON(varModule))`,
+   * then the success `Notify`. The flow writes Canceled and blanks the ids itself (it ends before `Run` returns), so the
+   * refresh shows them. DIVERGENCE: the canvas then also `Patch`es Canceled onto `locSelectedGeneratorEntity` — the
+   * SELECTED type, not the card's (SOURCE DEFECT) — and the PV / inverter / substructure cards only update the collection.
+   */
+  const cancelRequest = (family: PermissionFamily, row: GeneratorTypeRow | SimpleTypeRow) => {
+    const name = permissionModuleName(family, row);
+    void run({
+      progress: PERMISSION_MSG.canceling(name),
+      success: PERMISSION_MSG.canceled(family, name),
+      errorText: PERMISSION_MSG.cancelError,
+      plan: emptyPlan(),
+      then: async () => {
+        await permissionFlows.cancel(family, row);
+        return null;
+      },
+    });
+  };
+
   /* ── galleries ── */
   const iso = project?.isoCurrencyCode;
   const PERM_TONE_CLASS = { success: s.permSuccess, error: s.permError, warning: s.permWarning, disabled: s.permDisabled };
@@ -1603,11 +1745,17 @@ export default function GeneratorsScreen() {
         {chip ? (
           <span className={mergeClasses(s.permChip, PERM_TONE_CLASS[permissionStateTone(row.requestPermissionState)])}>{chip}</span>
         ) : null}
-        {cancelName && cancelRequestVisible(family, row) ? (
+        {cancelName && showsPermissionChip(family) && cancelRequestVisible(family, row) ? (
           <Button
             size="small" appearance="secondary" icon={<DismissRegular />}
             aria-label={cancelName} data-testid={`${cancelName}-${row.id}`}
-            disabled title={EXCLUDED.permissionCancel}
+            title={family === "wtg" ? CANCEL_REQUEST.wtgTooltip : CANCEL_REQUEST.tooltip}
+            disabled={writes.refreshing}
+            onClick={(e) => {
+              // The button sits in the card's title: the click must not also select / fold the card.
+              e.stopPropagation();
+              cancelRequest(family as PermissionFamily, row);
+            }}
           >
             {CANCEL_REQUEST.text}
           </Button>
@@ -1673,7 +1821,7 @@ export default function GeneratorsScreen() {
             ariaLabel={WTG_CARD_LABELS.addGeneratorBarLabel}
             commands={[{
               key: "addGenerator", label: WTG_CARD_LABELS.addGenerator, icon: "Add",
-              enabled: editable && addEnabled,
+              enabled: actionsOpen && addEnabled,
             }]}
             onCommand={() => openTurbine(type, null)}
           />
@@ -1695,22 +1843,23 @@ export default function GeneratorsScreen() {
           ) : null}
           {pagerVisible(type.numberOfGenerators) ? (
             <div className={s.pager}>
-              <span>{generatorsTotalRowsText(type.numberOfGenerators ?? 0)}</span>
+              <span className={s.pagerTotalRows}>{generatorsTotalRowsText(type.numberOfGenerators ?? 0)}</span>
+              {/* MDL2 `Previous` / `Back` / `Forward` → Fluent ArrowPrevious / ArrowLeft / ArrowRight, as on the Project list. */}
               <Button
-                appearance="subtle" size="small" icon={<ChevronDoubleLeftRegular />} title={PAGER_TOOLTIPS.first}
+                appearance="primary" className={s.pagerButton} icon={<ArrowPreviousRegular />} title={PAGER_TOOLTIPS.first}
                 aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_FirstPage"
                 data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_FirstPage-${type.id}`}
                 disabled={page <= 1} onClick={() => setPage(1)}
               />
               <Button
-                appearance="subtle" size="small" icon={<ChevronLeftRegular />} title={PAGER_TOOLTIPS.previous}
+                appearance="primary" className={s.pagerButton} icon={<ArrowLeftRegular />} title={PAGER_TOOLTIPS.previous}
                 aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageLeft"
                 data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageLeft-${type.id}`}
                 disabled={page <= 1} onClick={() => setPage(page - 1)}
               />
-              <span>{paginationText(page, pageTotal)}</span>
+              <span className={s.pagerPage}>{paginationText(page, pageTotal)}</span>
               <Button
-                appearance="subtle" size="small" icon={<ChevronRightRegular />} title={PAGER_TOOLTIPS.next}
+                appearance="primary" className={s.pagerButton} icon={<ArrowRightRegular />} title={PAGER_TOOLTIPS.next}
                 aria-label="ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageRight"
                 data-testid={`ico_Generators_DisplayProject_Body_Form_GeneratorType_CardDetails_GeneratorsList_Pagination_PageRight-${type.id}`}
                 disabled={page >= pageTotal} onClick={() => setPage(page + 1)}
@@ -1748,7 +1897,7 @@ export default function GeneratorsScreen() {
                       appearance="subtle" size="small" icon={<EditRegular />}
                       aria-label={WTG_CARD_LABELS.editIconColumn}
                       data-testid={`generators-turbine-edit-${t.id}`}
-                      disabled={!editable || !isActive(type.status)}
+                      disabled={!actionsOpen || !isActive(type.status)}
                       onClick={() => openTurbine(type, t)}
                     />
                   </TableCell>
@@ -1757,7 +1906,7 @@ export default function GeneratorsScreen() {
                       appearance="subtle" size="small" icon={<DeleteRegular />}
                       aria-label={WTG_CARD_LABELS.deleteIconColumn}
                       data-testid={`generators-turbine-delete-${t.id}`}
-                      disabled={!editable || !isActive(type.status)}
+                      disabled={!actionsOpen || !isActive(type.status)}
                       onClick={() => {
                         writes.clear();
                         setSelection({ family: "wtg", id: type.id });
@@ -1894,11 +2043,12 @@ export default function GeneratorsScreen() {
       {loading ? <LoadingOverlay mode="inline" /> : null}
 
       <div className={s.capacity}>
+        {/* `Value: =gblRecordSelectedProject.'Total Capacity'` (Y:1289): the number in the user's language ("22,4"). */}
         <ReadOnlyField
           label={TOTAL_CAPACITY_LABEL}
           labelWeight="semibold"
           align="right"
-          value={project?.totalCapacity ?? ""}
+          value={project?.totalCapacity == null ? "" : forLanguage(String(project.totalCapacity), lang)}
           testId="txt_Generators_DisplayProject_Body_Form_PlantWtgCapacity"
           ariaLabel="txt_Generators_DisplayProject_Body_Form_PlantWtgCapacity"
         />
@@ -1970,8 +2120,7 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel"
             primaryTooltip={TYPE_PANEL_TOOLTIPS.save} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            reason={inCountry ? undefined : EXCLUDED.permissionRequest}
-            disabled={!inCountry || !typeSaveable}
+            disabled={!typeSaveable}
             onCancel={close}
             onPrimary={onTypeSave}
           />
@@ -2003,7 +2152,7 @@ export default function GeneratorsScreen() {
           />
           <SelectField
             label={TYPE_PANEL_LABELS.turbineType} name="cmb_Supplier_1" ariaLabel="cmb_Supplier_1" required
-            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+            className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
             disabled={!typeForm.supplier}
             value={typeForm.turbineType} options={plainOptions(cascade.turbineTypes)}
             error={typeFieldBlankMessage(typeDirty("turbineType"), typeForm.turbineType === null)}
@@ -2013,10 +2162,10 @@ export default function GeneratorsScreen() {
           {!dummy ? (
             <SelectField
               label={TYPE_PANEL_LABELS.hubHeight} name="cmb_Supplier_2" ariaLabel="cmb_Supplier_2" required
-              className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+              className={s.typeField} placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
               disabled={!typeForm.turbineType}
               value={typeForm.hubHeight === null ? null : String(typeForm.hubHeight)}
-              options={plainOptions(cascade.hubHeights)}
+              options={heightOptions(cascade.hubHeights, lang)}
               error={typeFieldBlankMessage(typeDirty("hubHeight"), typeForm.hubHeight === null)}
               onChange={(v) => touchType("hubHeight", Number(v))}
             />
@@ -2033,8 +2182,9 @@ export default function GeneratorsScreen() {
             label={TYPE_PANEL_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator"
             ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required maxLength={6}
             className={s.typeField}
-            disabled={effectiveHubHeight === null} value={typeForm.numberOfGenerators}
-            error={numberOfGeneratorsMessage(typeForm.numberOfGenerators)}
+            // `DisplayMode.Disabled` until a hub height is chosen: the white outlined box, as the canvas.
+            disabled={effectiveHubHeight === null} disabledLook value={typeForm.numberOfGenerators}
+            error={numberOfGeneratorsMessage(typeForm.numberOfGenerators, lang)}
             onChange={(v) => touchType("numberOfGenerators", v)}
           />
           {typeHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
@@ -2239,7 +2389,6 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Save"
             primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Inverter_Buttons_Cancel"
-            reason={inverterRequests ? EXCLUDED.permissionRequest : undefined}
             disabled={!inverterSaveable} onCancel={close} onPrimary={() => void saveInverter()}
           />
         }
@@ -2298,7 +2447,6 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Save"
             primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Substructure_Buttons_Cancel"
-            reason={substructureRequests ? EXCLUDED.permissionRequest : undefined}
             disabled={!substructureSaveable} onCancel={close} onPrimary={() => void saveSubstructure()}
           />
         }
@@ -2349,9 +2497,7 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save_1"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel_1"
             primaryTooltip={REPLACE_LABELS.replaceTooltip} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            reason={!replaceWtg.inCountry ? EXCLUDED.permissionRequest
-              : selectedType && needsPermissionCancellation(selectedType) ? EXCLUDED.replaceWithOpenRequest : undefined}
-            disabled={!replaceWtgOk || (selectedType !== null && needsPermissionCancellation(selectedType))}
+            disabled={!replaceWtgOk}
             onCancel={close} onPrimary={() => void replaceGeneratorType()}
           />
         }
@@ -2362,14 +2508,14 @@ export default function GeneratorsScreen() {
             {/* The "from" side is the disabled canvas controls: comboboxes keep their chevron. */}
             <SelectField
               label={REPLACE_LABELS.supplier} name="cmb_Supplier_6" ariaLabel="cmb_Supplier" required disabled
-              disabledClassName={s.comboDisabled}
+              disabledLook
               value={selectedTypeModel?.supplier ? "from" : null}
               options={selectedTypeModel?.supplier ? [{ value: "from", label: selectedTypeModel.supplier }] : []}
               onChange={() => {}}
             />
             <SelectField
               label={REPLACE_LABELS.turbineType} name="cmb_Supplier_7" ariaLabel="cmb_Supplier_1" required disabled
-              disabledClassName={s.comboDisabled}
+              disabledLook
               value={selectedTypeModel?.turbineType ? "from" : null}
               options={selectedTypeModel?.turbineType ? [{ value: "from", label: selectedTypeModel.turbineType }] : []}
               onChange={() => {}}
@@ -2378,7 +2524,7 @@ export default function GeneratorsScreen() {
                 height as stored — "169", not "169.00" (canvas screenshot, 3 Nov 2026). */}
             <SelectField
               label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required disabled
-              disabledClassName={s.comboDisabled}
+              disabledLook
               value={selectedTypeModel?.hubHeight != null ? "from" : null}
               options={selectedTypeModel?.hubHeight != null ? [{ value: "from", label: fmtHubHeight(selectedTypeModel.hubHeight, lang) }] : []}
               onChange={() => {}}
@@ -2414,17 +2560,17 @@ export default function GeneratorsScreen() {
             />
             <SelectField
               label={REPLACE_LABELS.turbineType} name="cmb_Supplier_4" ariaLabel="cmb_Supplier_1" required
-              placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+              placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
               disabled={!replaceWtg.supplier} value={replaceWtg.turbineType} options={plainOptions(replaceCascade.turbineTypes)}
               onChange={(v) => setReplaceWtg({ ...replaceWtg, turbineType: v, hubHeight: null, revisedHubHeight: "" })}
             />
             {!replaceDummy ? (
               <SelectField
                 label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_5" ariaLabel="cmb_Supplier_2" required
-                placeholder={TYPE_PANEL_LABELS.findItems} disabledClassName={s.comboDisabled}
+                placeholder={TYPE_PANEL_LABELS.findItems} disabledLook
                 disabled={!replaceWtg.turbineType}
                 value={replaceWtg.hubHeight === null ? null : String(replaceWtg.hubHeight)}
-                options={plainOptions(replaceCascade.hubHeights)}
+                options={heightOptions(replaceCascade.hubHeights, lang)}
                 onChange={(v) => setReplaceWtg({ ...replaceWtg, hubHeight: Number(v), revisedHubHeight: "" })}
               />
             ) : (
@@ -2454,8 +2600,7 @@ export default function GeneratorsScreen() {
             primary={REPLACE_LABELS.replace}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_2"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_1"
-            reason={selectedPv && needsPermissionCancellation(selectedPv) ? EXCLUDED.replaceWithOpenRequest : undefined}
-            disabled={!replacePvOk || (selectedPv !== null && needsPermissionCancellation(selectedPv))}
+            disabled={!replacePvOk}
             onCancel={close} onPrimary={() => void replacePvType()}
           />
         }
@@ -2476,7 +2621,7 @@ export default function GeneratorsScreen() {
             <SelectField
               label={PV_FIELD_LABELS.supplier} name="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier_1"
               ariaLabel="cmb_GeneratorData_RightPanel_Form_PvModuleType_Fields_Supplier" required disabled
-              disabledClassName={s.comboDisabled}
+              disabledLook
               value={selectedPv ? "from" : null}
               options={selectedPv ? [{ value: "from", label: pvCardValues(selectedPv, lang).supplier }] : []}
               onChange={() => {}}

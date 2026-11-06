@@ -35,7 +35,7 @@ const onePatch = () => {
 describe("runPlan", () => {
   it("UT-RUNPLAN-001 resolves with the PlanResult when every write lands", async () => {
     const { client: c } = client();
-    await expect(runPlan(onePatch(), "test", { client: c })).resolves.toEqual({ done: 1, createdIds: [] });
+    await expect(runPlan(onePatch(), "test", { client: c })).resolves.toMatchObject({ done: 1, createdIds: [] });
   });
 
   it("UT-RUNPLAN-002 a part-way failure is rethrown as the failed write's own error (a RecordGoneError for a gone row)", async () => {

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { ES, CHOICE } from "@/data/dataverseNames";
-import { isSixDecimal } from "@/domain/powerFxNumeric";
+import { formatInteger, isSixDecimal } from "@/domain/powerFxNumeric";
 import { TECHNOLOGY_LABEL } from "@/domain/technology";
 // The pac-generated choice enums, imported as VALUES in the test only (D25, PO answer 9).
 import {
@@ -947,5 +947,23 @@ describe("UT-GDATA creating a project (PO 20 Oct 2026, D25)", () => {
     expect(run.every((w) => w.concurrent === true && w.entitySet !== ES.projects)).toBe(true);
     expect(run.filter((w) => w.entitySet === ES.projectStateTrackings)).toHaveLength(7);
     expect(run.filter((w) => w.entitySet === ES.shareholderEntityInProjects)).toHaveLength(2);
+  });
+});
+
+/* ═══════════════════════════════════════════ German and French numbers (6 Nov 2026) ═══ */
+
+describe("German and French numbers: Acquisition Price in every language's grouping", () => {
+  it("UT-GDATA-086 the price opens grouped in the user's language and passes the check and the save in each", () => {
+    const acq = { developmentType: CHOICE.developmentType.acquiredProject, startCluster: 2, acquisitionDate: "2026-01-01" };
+    for (const language of ["de-DE", "en-US", "fr-FR", "pl-PL", "fi-FI", "de-CH"]) {
+      // `Text(p, "###,###,###", Language())`: "1.500.000", "1,500,000", "1 500 000", "1'500'000".
+      const shown = formatInteger(1_500_000, language);
+      expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: shown }, r: { language } })).acquisitionPrice).toBeUndefined();
+      const patch = buildProjectPatch(form({ ...acq, acquisitionPrice: shown }), ref({ language }), project());
+      expect(patch[PROJECT_COL.acquisitionPrice]).toBe(1_500_000);
+    }
+    // Decimals are still refused, whatever the grouping.
+    expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: "1 500 000,5" }, r: { language: "fr-FR" } })).acquisitionPrice)
+      .toBe(acquisitionPriceShapeMessage("fr-FR"));
   });
 });
