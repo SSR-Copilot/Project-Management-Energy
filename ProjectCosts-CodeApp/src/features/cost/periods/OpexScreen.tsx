@@ -71,6 +71,7 @@ import {
   type OpexMode, type OpexProjectContext, type OpexSubaccount, type PanelContext,
   type RowSelection,
 } from "./opexRules";
+import { canvasScrollbar } from "./canvasScrollbar";
 
 /* ═══════════════════════════════════════════════════════════ reference data ══ */
 
@@ -123,7 +124,12 @@ const useStyles = makeStyles({
    * The canvas gallery scrolls itself and always shows its scrollbar (grey thumb, arrows), in the 10 px right of the
    * cards — even when everything fits. `overflow-y: scroll` keeps that scrollbar on screen at all times.
    */
-  cardList: { display: "flex", flexDirection: "column", rowGap: 0, flexGrow: 1, minHeight: 0, overflowY: "scroll" },
+  cardList: {
+    display: "flex", flexDirection: "column", rowGap: 0, flexGrow: 1, minHeight: 0, overflowY: "scroll",
+    // The canvas classic bar — 10 px grey handle on a light track with arrow buttons — drawn by the page itself,
+    // so it shows on every machine (Windows can otherwise hide an idle scrollbar).
+    ...canvasScrollbar,
+  },
   card: {
     // Inside the scrolling gallery a card keeps its own height instead of being squeezed to fit.
     flexShrink: 0,
@@ -234,8 +240,9 @@ const useStyles = makeStyles({
    * command bar, header and gallery all sit in it, and the gallery is a fixed width wider than
    * the screen, so the whole body scrolls sideways under a permanent grey bar.
    */
+  /** `con_…_CardBody.Height: =Max(gallery.Y + gallery.Height + 20, 50)` — 20 px under the rows (or the empty gallery). */
   scroll: {
-    overflowX: "auto", paddingLeft: "20px", paddingBottom: space.xxs,
+    overflowX: "auto", paddingLeft: "20px", paddingBottom: "20px",
     scrollbarColor: "#868686 #f1f1f1",
     "::-webkit-scrollbar": { height: "10px" },
     "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
@@ -247,6 +254,7 @@ const useStyles = makeStyles({
   },
   // Fixed layout so every column holds its canvas width; `width` is set inline to their sum.
   table: { tableLayout: "fixed", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  emptyGallery: { height: "50px" },
   /*
    * `lbl_…_CardBody_CostsTableHeader_*` — `Color: gblAppStyles.Label.Color` (the app's dark
    * label colour) with `FontWeight.Semibold`. Without an explicit colour these headings picked
@@ -1497,7 +1505,9 @@ function OpexCardView({
             ))}
           </div>
 
-          {cardCosts.length === 0 ? null : (
+          {/* `gal_…_CardBody_Costs.Height: =Max(AllItemsCount * 30, 50)`: an empty contract type keeps a 50 px empty
+              gallery under its command bar, as the canvas shows. */}
+          {cardCosts.length === 0 ? <div className={styles.emptyGallery} aria-hidden="true" /> : (
             <table
               className={styles.table}
               style={{ width: `${SELECT_COLUMN_WIDTH + columns.reduce((sum, c) => sum + c.width, 0)}px` }}

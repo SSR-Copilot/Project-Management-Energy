@@ -1658,30 +1658,43 @@ function ContractCardBody({
 
   return (
     <>
+      {/*
+        * `con_Contracts_List_Card_Body_Columns`: a wrapping row of vertical columns, each `Width: =Parent.Width/5`
+        * (`LayoutMinWidth: =150`). Column 1 stacks Costs Until Closing over Margin, column 2 Closing Date over Total
+        * Development Contract, then Costs After Closing and Total Costs — four columns, filled top to bottom.
+        */}
       <div className="canvas-contract-fields">
         {showsClosingCosts ? (
           <>
-            <CostField label={`Costs Until Closing [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
-              disabled value={wholeNumberText(untilClosing, locale)} />
-            {closingDateField}
-            <CostField label={`Costs After Closing [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
-              disabled value={wholeNumberText(afterClosing, locale)} />
-            <CostField label={`Total Costs [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
-              disabled value={wholeNumberText(totalCosts, locale)} />
-            <CostField label={`Margin [${marginUnit}]`}
-              name="txt_Contracts_List_Card_Body_Fields_Margins"
-              // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
-              standard={marginIsStandard(contract)}
-              disabled value={oneDecimalText(marginValue, locale)} />
-            {totalField}
+            <div className="canvas-contract-col canvas-contract-col-first">
+              <CostField label={`Costs Until Closing [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
+                disabled value={wholeNumberText(untilClosing, locale)} />
+              <CostField label={`Margin [${marginUnit}]`}
+                name="txt_Contracts_List_Card_Body_Fields_Margins"
+                // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
+                standard={marginIsStandard(contract)}
+                disabled value={oneDecimalText(marginValue, locale)} />
+            </div>
+            <div className="canvas-contract-col">
+              {closingDateField}
+              {totalField}
+            </div>
+            <div className="canvas-contract-col">
+              <CostField label={`Costs After Closing [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
+                disabled value={wholeNumberText(afterClosing, locale)} />
+            </div>
+            <div className="canvas-contract-col">
+              <CostField label={`Total Costs [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
+                disabled value={wholeNumberText(totalCosts, locale)} />
+            </div>
           </>
         ) : (
           <>
-            {totalField}
-            {closingDateField}
+            <div className="canvas-contract-col canvas-contract-col-first">{totalField}</div>
+            <div className="canvas-contract-col">{closingDateField}</div>
           </>
         )}
       </div>

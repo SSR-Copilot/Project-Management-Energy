@@ -22,7 +22,7 @@ import {
   Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowLeftRegular, ArrowRightRegular, WarningRegular,
+  AddRegular, ArrowLeftRegular, ArrowRightRegular, InfoRegular, WarningRegular,
 } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -170,6 +170,13 @@ const useStyles = makeStyles({
    * under the 40 px Apply VAT row, i.e. the two switches sit ~38 px apart, not a full field gap.
    */
   toggleTight: { marginTop: "-10px" },
+  footerError: {
+    display: "flex", alignItems: "center", columnGap: "14px",
+    color: "#d20532", fontSize: "12px", lineHeight: "14px",
+  },
+  footerErrorIcon: { fontSize: "16px", flexShrink: 0 },
+  /** The component's text box is narrow and centred, so "Total percentage is below 100%" breaks onto two lines. */
+  footerErrorText: { maxWidth: "150px", textAlign: "center" },
   /** The canvas `DisplayMode.Disabled` look (`canvas.css`, `.canvas-field[data-display="disabled"]`). */
   disabledLook: {
     "& .canvas-field > input:disabled": {
@@ -204,9 +211,9 @@ const useStyles = makeStyles({
     marginLeft: "auto", display: "flex", alignItems: "center",
     color: palette.themePrimary, fontSize: tokens.fontSizeBase500,
   },
-  /** The month rows sit 40 px apart in the canvas: a 32 px box plus 8 px. */
+  /** The month rows sit ~40 px apart in the canvas (measured 12 Nov 2026): the 30 px Fluent box plus 10 px. */
   monthList: {
-    display: "flex", flexDirection: "column", gap: space.s, paddingBottom: space.m,
+    display: "flex", flexDirection: "column", gap: "10px", paddingBottom: space.m,
   },
   monthRow: { display: "flex", alignItems: "flex-start", gap: "0", minHeight: "32px" },
   /**
@@ -1004,10 +1011,21 @@ export default function CapexCostsScreen() {
     </>}
 
     <FormPanel centerClose open={!!edit} width="cost" onDismiss={closePanel}
-      {...(contractError ? { messages: { error: contractError } } : {})}
+      // Canvas label / radio geometry for this panel only (canvas.css `.capex-canvas-panel`).
+      panelClassName="capex-canvas-panel"
       title={panelTitle(isEdit, book.accounts.find(a => a.id === edit?.accountId)?.name ?? "")}
       footer={<PanelButtons onSave={() => { void commit(); }} onCancel={closePanel}
         disabled={!valid || writesDisabled}
+        /*
+         * `cmp_ShowErrorInContract` (a `cmp_Information_Button_PCF`) sits at the FOOTER's left edge, not over the form:
+         * a red info icon and the red `ErrorTitle` text wrapped in a narrow box.
+         */
+        hint={contractError ? (
+          <span className={styles.footerError} role="alert">
+            <InfoRegular className={styles.footerErrorIcon} aria-hidden="true" />
+            <span className={styles.footerErrorText}>{contractError}</span>
+          </span>
+        ) : undefined}
         saveTestId="btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save"
         cancelTestId="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_2"
         /*
