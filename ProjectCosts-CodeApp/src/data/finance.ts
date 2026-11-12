@@ -205,8 +205,11 @@ export async function listDebtAssumptions(countryName: string): Promise<DebtAssu
     (o) => AssumptionsDebtService.getAll(o),
     { select: ["country", "debttype", "category", "pv", "wind"], filter: eq("country", countryName) },
   );
+  // The delegated SQL compare ignores case and trailing spaces, so the re-check does too. Corrected 12 Nov 2026
+  // (D109): an exact match dropped every row when Fabric spelt the country differently from Dataverse.
+  const key = countryName.trim().toLowerCase();
   return rows
-    .filter((r) => r.country === countryName)
+    .filter((r) => (r.country ?? "").trim().toLowerCase() === key)
     .map((r) => ({
       country: r.country ?? "", debttype: r.debttype ?? "", category: r.category ?? "",
       wind: r.wind ?? null, pv: r.pv ?? null,

@@ -1514,16 +1514,30 @@ const ProjectGridRow = memo(function ProjectGridRow({
   row: ProjectRow;
   selected: boolean;
   alternate: boolean;
-  onSelect: (id: string) => void;
+  /** The row to select, or `undefined` to clear the selection. */
+  onSelect: (id: string | undefined) => void;
   locale: string;
 }) {
   const styles = useStyles();
   const decoration = approvalDecoration(row.approvalState);
   const select = () => onSelect(row.id);
+  /*
+   * `psf_MainScreen_DetailList_Container_FluentDetailsList` (Project Main Screen Y:1759) is the PowerCAT Fluent
+   * DetailsList in single selection with `SelectionAlwaysVisible`: its check circle TOGGLES the row, so clicking the
+   * selected row's circle (or Space on it) deselects it, and Ctrl+click on the selected row does too; a plain click
+   * on a row selects it and never deselects. Corrected 12 Nov 2026: a native radio cannot be unchecked, so the
+   * selection could only move, never clear. The circle's click stops at the circle, so the row does not reselect.
+   */
+  const toggle = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    onSelect(selected ? undefined : row.id);
+  };
+  const rowClick = (e: { ctrlKey: boolean; metaKey: boolean }) =>
+    onSelect(selected && (e.ctrlKey || e.metaKey) ? undefined : row.id);
   return (
     <TableRow
       className={mergeClasses(alternate && styles.rowAlt, selected && styles.rowSelected)}
-      onClick={select}
+      onClick={rowClick}
       aria-selected={selected}
     >
       <TableCell className={styles.selectCell}>
@@ -1534,6 +1548,7 @@ const ProjectGridRow = memo(function ProjectGridRow({
           className={styles.radio}
           name="selectedProject"
           checked={selected}
+          onClick={toggle}
           onChange={select}
           aria-label={`Select ${row.name}`}
           data-testid={`select-${row.id}`}

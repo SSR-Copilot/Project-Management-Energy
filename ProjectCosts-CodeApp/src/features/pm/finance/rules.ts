@@ -66,7 +66,7 @@
  */
 import {
   parseNumber, isNumeric, isInteger, inRange, inRangeAbs, isDecimalWithPlaces, isBlank,
-  decimalSeparator, pfxRound, formatInteger, type Lang,
+  decimalSeparator, pfxRound, type Lang,
 } from "@/domain/powerFxNumeric";
 import { addDays, addMonths, addYears, toMMYY, fromMMYY } from "@/domain/dates";
 import { CHOICE_FINANCE, ES, ES_FINANCE } from "@/data/dataverseNames";
@@ -777,6 +777,14 @@ export function shareholderLoanToSave(
 export const freeEquityLabel = (mode: FreeEquityMode, country: string | null): string =>
   mode === "percentage" ? "[%]" : country === "Poland" ? "[PLN]" : "[EUR]";
 
+/**
+ * The Equity CARD's mode (caption Y:2986-2994, Shareholder Loan `Visible` Y:3039-3044): both test
+ * `'Free Equity' = Percentage`, so a BLANK choice reads as a money value ("[EUR]" / "[PLN]", no loan line).
+ * Corrected 12 Nov 2026 (D109): a blank choice showed "[%]" and the loan line.
+ */
+export const equityCardMode = (freeEquityOption: number | null): FreeEquityMode =>
+  freeEquityOption === CHOICE_FINANCE.freeEquity.percentage ? "percentage" : "fixed";
+
 /** Rule 14 — the fixed-mode cap: 500 000 000 for Poland, 100 000 000 elsewhere. */
 export const freeEquityCap = (country: string | null): number =>
   country === "Poland" ? 500_000_000 : 100_000_000;
@@ -1322,10 +1330,28 @@ export function packMMYY(months: number, years: number): string {
 }
 
 export function unpackMMYY(value: string | null | undefined): { months: number; years: number } {
-  if (!value || value.length !== 4) return { months: 0, years: 0 };
-  const asDate = fromMMYY(value);
-  if (asDate) return { months: asDate.getMonth() + 1, years: asDate.getFullYear() - 2000 };
-  return { months: Number(value.slice(0, 2)) || 0, years: Number(value.slice(2)) || 0 };
+  if (value && value.length === 4) {
+    const asDate = fromMMYY(value);
+    if (asDate) return { months: asDate.getMonth() + 1, years: asDate.getFullYear() - 2000 };
+  }
+  const { months, years } = mmyyParts(value);
+  return { months: months ?? 0, years: years ?? 0 };
+}
+
+/**
+ * `Value(Left(v, 2))` months and `Value(Right(v, 2))` years, as every Canvas reader does (Y:5700, Y:6923,
+ * Y:14912), for a value of ANY length. Corrected 12 Nov 2026 (D109): only 4-character values were read, but the
+ * decommissioning seed writes `"00" & duration_saving` (Y:555, `buildDecommissioningStandard`), so a one-digit SQL
+ * value is stored as "005" (5 years), which opened as 0 / 0. A blank value, or a part that is not a number, is blank.
+ */
+export function mmyyParts(value: string | null | undefined): { months: number | null; years: number | null } {
+  const part = (s: string): number | null => {
+    if (s.trim() === "") return null;
+    const n = Number(s);
+    return Number.isNaN(n) ? null : n;
+  };
+  if (!value) return { months: null, years: null };
+  return { months: part(value.slice(0, 2)), years: part(value.slice(-2)) };
 }
 
 /** Rule 10 — the DSRA seed zero-pads the raw SQL duration to four characters. */
@@ -1338,8 +1364,10 @@ export const padMMYY = (raw: string | null | undefined): string =>
  * `If(YY <= 1, " Year", " Years")` — ZERO is singular too ("0 Year"). Corrected (D34; was `=== 1`).
  */
 export function mmyyLabel(value: string | null | undefined): string {
-  const { months, years } = unpackMMYY(value);
-  return `${years} ${years <= 1 ? "Year" : "Years"} ${months} ${months <= 1 ? "Month" : "Months"}`;
+  // `Value(Right(d, 2)) & If(… <= 1, " Year ", " Years ") & Value(Left(d, 2)) & If(… <= 1, " Month", " Months")`
+  // (Y:6923-6960): a blank duration, or no DSRA row, shows " Year  Month", as `Value("")` is blank (D109).
+  const { months, years } = mmyyParts(value);
+  return `${years ?? ""}${(years ?? 0) <= 1 ? " Year " : " Years "}${months ?? ""}${(months ?? 0) <= 1 ? " Month" : " Months"}`;
 }
 
 /**
@@ -1350,10 +1378,9 @@ export function mmyyLabel(value: string | null | undefined): string {
  * NOTE the canvas's `<= 1`, which makes ZERO singular: `"0 Year 0 Month"`.
  */
 export function yearMonthLabel(years: number | null, months: number | null): string {
-  const y = years ?? 0;
-  const m = months ?? 0;
-  const pad = (n: number) => (n === 0 ? "0" : String(n).padStart(2, "0"));
-  return `${pad(y)}${y <= 1 ? " Year " : " Years "}${pad(m)}${m <= 1 ? " Month" : " Months"}`;
+  // `Text(Blank(), "0#")` is "" and a blank compares as 0. Corrected 12 Nov 2026 (D109): a blank part read "0".
+  const pad = (n: number | null) => (n === null ? "" : n === 0 ? "0" : String(n).padStart(2, "0"));
+  return `${pad(years)}${(years ?? 0) <= 1 ? " Year " : " Years "}${pad(months)}${(months ?? 0) <= 1 ? " Month" : " Months"}`;
 }
 
 /**
@@ -1410,9 +1437,11 @@ export function validatePofds(text: string, lang: Lang = "en-US"): ValidationRes
  */
 export function totalDecommissioningCost(
   costType: number, value: number | null, activeTurbines: number,
-): number {
-  const v = value ?? 0;
-  return costType === CHOICE_FINANCE.costsOfDecommissioning.perTurbine ? v * activeTurbines : v;
+): number | null {
+  // `Text(If(Per Turbine, value * count, value), …)` (Y:5247-5264): a blank value times the count is 0, but a blank
+  // Total stays blank and shows "". Corrected 12 Nov 2026 (D109): it showed "0".
+  if (costType === CHOICE_FINANCE.costsOfDecommissioning.perTurbine) return (value ?? 0) * activeTurbines;
+  return value;
 }
 
 /**
@@ -1693,7 +1722,26 @@ export const trancheFormTitle = (form: Pick<SeniorDebtFormState, "trancheId" | "
  */
 export const trancheMonthDefault = (
   stored: number | null, standard: number | null | undefined, years: number | null,
-): number | null => fieldDefault(stored, standard) ?? (years !== null ? 0 : null);
+): number | null => inMonthList(fieldDefault(stored, standard) ?? (years !== null ? 0 : null));
+
+/**
+ * `colMonthsForDuration` (App.pa.yaml:453) is 0…11, and each month dropdown's `DefaultSelectedItems` LOOKS the
+ * Coalesce UP in it: a value outside the list (an SQL "fixed interest rate time" of 120 months, say) selects
+ * nothing, so the dropdown is blank and Save stays off until a month is picked (Y:12863, Save Y:13592).
+ * Corrected 12 Nov 2026 (D109): the form kept the raw number, so the box looked blank but Save was on and wrote it.
+ */
+function inMonthList(v: number | null): number | null {
+  return v !== null && Number.isInteger(v) && v >= 0 && v <= 11 ? v : null;
+}
+
+/**
+ * `drp_SeniorDebt_Data_Frequency_Of_Repayment.DefaultSelectedItems` (Y:11439): the same `LookUp`, in
+ * `colFrequencyInMonths` (1, 2, 3, 6, 12). Any other stored or standard value opens blank (D109).
+ */
+export function frequencyDefault(stored: number | null, standard: number | null | undefined): number | null {
+  const v = fieldDefault(stored, standard);
+  return v !== null && FREQUENCY_OPTIONS.some((o) => o.value === v) ? v : null;
+}
 
 /**
  * The five repayment-schedule `OnChange`s (tenor YY / MM, start YY / MM, the profile radio, Y:9865 …):
@@ -2132,10 +2180,12 @@ export function trancheDisplayName(
  * Rule 34 — the upfront fee is formatted by its OWN option:
  * `If('Upfront Fee' = 'Percentage of Debt', Text(v, "##0.0"), Text(v, "###,###,##0"))`.
  */
-export function formatUpfrontFee(option: number, value: number | null, lang?: Lang): string {
+export function formatUpfrontFee(option: number | null, value: number | null, lang?: Lang): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "";
   if (option === CHOICE_FINANCE.upfrontFee.percentageOfDebt) return forLanguage(pfxRound(value, 1).toFixed(1), lang);
-  return formatInteger(value, lang ?? "en-GB");
+  // Any other option, a blank one included, is `Text(v, "###,###,##0")`, in the engine every other card number uses.
+  // Corrected 12 Nov 2026 (D109): it used the Intl grouping, which differs for French and Polish users.
+  return textFormat(value, "###,###,##0", lang);
 }
 
 /**
@@ -2372,8 +2422,33 @@ export function trancheDeletePlan(
 
 /* ═════════════════════════════════════════════════════════════════ formatting ══ */
 
+/**
+ * `Text(v, "###,###,###,##0")` (the decommissioning total, Y:5263), in the same engine as `fmtCard`. Corrected
+ * 12 Nov 2026 (D109): it used the Intl grouping, so a French or Polish user saw "1 234 567" here and "1.234.567"
+ * on the other cards of the page.
+ */
 export const fmtAmount = (v: number | null | undefined, lang?: Lang): string =>
-  v === null || v === undefined || Number.isNaN(v) ? "" : formatInteger(v, lang ?? "en-GB");
+  textFormat(v ?? null, "###,###,###,##0", lang);
+
+/**
+ * NEW (D111, 12 Nov 2026, the user's request; not the Canvas): an Edit panel's Save stays off until something in it
+ * differs from what the panel opened with. The Canvas Equity, VAT-Financing and DSRA/DSRF Saves have no such term
+ * (Y:7893, Y:8632, Y:16821); the tranche (`locFormIsDirty`) and Decommissioning (`locIsDirtyDecommissiongForm`) Saves
+ * already have one. The VALUES are compared, standard flags included, so a value typed back to what it was turns
+ * Save off again, while retyping a standard value (its flag goes false, which the Save would write) counts as a change.
+ */
+export { formChanged } from "@/domain/formChanged";
+
+/** `rad_ProjectFinance_FinancingOptions.DefaultSelectedItems` (Y:2381-2389): `Coalesce('Financing Options', 'Debt Financing')`. */
+export const financingOptionShown = (pending: number | null, stored: number | null | undefined): number =>
+  pending ?? stored ?? CHOICE_FINANCE.financingOptions.debtFinancing;
+
+/**
+ * `txt_VATFinancingData_BankMargin_1.Value` (Y:3339-3348): the stored number as `Text()` shows it, in the user's
+ * language ("1,5" in German). Corrected 12 Nov 2026 (D109): the card always showed "1.5".
+ */
+export const vatBankMarginText = (margin: number | null, lang: Lang = "en-US"): string =>
+  margin === null ? "" : forLanguage(String(margin), lang);
 
 export const fmtPercent = (v: number | null | undefined, places = 2): string =>
   v === null || v === undefined || Number.isNaN(v) ? "" : `${pfxRound(v, places).toFixed(places)} %`;
@@ -3613,7 +3688,11 @@ export function openTrancheForm(input: {
   const language = input.language ?? "en-US";
   const fmtField = (v: number | null | undefined, pattern: string): string => fmtFieldIn(v, pattern, language);
   const r = existing?.raw ?? {};
-  // On Edit the canvas blanks `locSelectedStandardAssumption`, so only the stored values count.
+  // On Edit only the stored values count. Corrected comment (12 Nov 2026, D109): the Canvas Edit branch
+  // (Y:2663-2689) does NOT blank `locSelectedStandardAssumption`; only Add (Y:2653) and the status change (Y:9239)
+  // set it. So after one of those in the same visit, a field stored blank (a Fixed Amount tranche's DSCR, the
+  // Commitment Fee Free Period) reopens with the standard and the next Save writes it: a Canvas state leak, not
+  // reproduced.
   const std = existing ? null : input.standard;
   const n = (col: string) => rawNum(r[col]);
   const bankId = rawStr(r[INPUT_COL.bank]);
@@ -3649,7 +3728,7 @@ export function openTrancheForm(input: {
     repaymentProfile: repaymentProfileDefault(n(INPUT_COL.repaymentProfile), std?.repaymentProfile ?? null),
     startRepaymentYears,
     startRepaymentMonths: trancheMonthDefault(n(INPUT_COL.startRepaymentMonth), std?.repaymentStartAfterCod, startRepaymentYears),
-    frequencyOfRepayment: fieldDefault(n(INPUT_COL.frequencyOfRepayment), std?.repaymentFreq),
+    frequencyOfRepayment: frequencyDefault(n(INPUT_COL.frequencyOfRepayment), std?.repaymentFreq),
     hedging: fmtField(fieldDefault(n(INPUT_COL.hedging), std?.hedging), "##0.0"),
     upfrontFeeOption: upfrontOption,
     upfrontFeeValue: fmtField(fieldDefault(n(INPUT_COL.upfrontFeeValue), std?.upFrontFee),
@@ -3751,8 +3830,9 @@ export function dsraPeriodLabel(years: number | null, months: number | null): st
 
 /** `Value(Right(d, 2)) & " Years " & Value(Left(d, 2)) & " Months"` (Y:5655) — always plural. */
 export function decommissioningDurationLabel(value: string | null | undefined): string {
-  const { months, years } = unpackMMYY(value);
-  return `${years} Years ${months} Months`;
+  // A blank duration, or no decommissioning row, shows " Years  Months": `Value("")` is blank (D109).
+  const { months, years } = mmyyParts(value);
+  return `${years ?? ""} Years ${months ?? ""} Months`;
 }
 
 /** The card number formats (U2): `Text(v, "<pattern>")`. */

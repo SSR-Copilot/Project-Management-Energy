@@ -68,3 +68,18 @@ describe("Finance Fabric SQL loaders (3 Nov 2026)", () => {
     await expect(listDebtAssumptions("Germany")).rejects.toThrow();
   });
 });
+
+describe("Finance Fabric SQL: the country re-check (12 Nov 2026, D109)", () => {
+  it("UT-FIN-DATA-005 the re-check ignores case and trailing spaces, as the delegated SQL compare does", async () => {
+    debtGetAll.mockResolvedValueOnce({
+      success: true,
+      data: [
+        { country: "GERMANY ", debttype: "debt facility", category: "loan tenor", wind: "18" },
+        { country: "germany", debttype: "DSCR", category: "dscr-target contracted", wind: "1.15" },
+        { country: "Poland", debttype: "debt facility", category: "loan tenor", wind: "15" },
+      ],
+    });
+    const rows = await listDebtAssumptions("Germany");
+    expect(rows.map((r) => r.category)).toEqual(["loan tenor", "dscr-target contracted"]);
+  });
+});

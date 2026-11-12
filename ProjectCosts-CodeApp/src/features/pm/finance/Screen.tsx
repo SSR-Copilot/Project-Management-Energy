@@ -60,6 +60,7 @@ import {
   dsraCardToggle, dsraPeriodLabel, dsraSaveJob, dsraToggleDialog, dsraToggleJob, durationOptionName,
   durationRange, endDateOfSaving, equitySaveJob, firstStepUpRow, vatBankMarginResetText, fmtAmount as fmtAmountIn, fmtCard as fmtCardIn, fmtDateDots,
   fmtLongDate, formatDscr as formatDscrIn, formatUpfrontFee as formatUpfrontFeeIn, financingOptionJob, freeEquityLabel, isOtherBank,
+  equityCardMode, financingOptionShown, vatBankMarginText, formChanged,
   isPageLocked, isTrancheFolded, mmyyLabel, openDecommissioningForm, openDsraForm, openEquityForm,
   openTrancheForm, openVatForm, pageLock, planCategoryToggle, planDecommissioningSave, planDsraSave,
   planDsraToggle, planEquitySave, planFinancingOption, planFinancingOptionOnVisit, planSeeds,
@@ -299,6 +300,13 @@ const useStyles = makeStyles({
     borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
     borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
     "& .fui-Button__icon": { color: palette.themePrimary },
+    // The canvas `Button@0.0.45` has one `BorderColor` and keeps it when hovered, pressed or focused; Fluent's
+    // transparent button clears the border on hover / press (D111: the box went when Edit was selected).
+    "&:enabled:hover, &:enabled:active, &:enabled:hover:active, &:enabled:focus, &:enabled:focus-visible": {
+      color: palette.themePrimary,
+      borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+    },
     // Disabled: no visible box, just the greyed pencil and label (PO screenshot, 21 Oct 2026).
     ":disabled": {
       color: tokens.colorNeutralForegroundDisabled,
@@ -484,7 +492,7 @@ function YearMonth({ caption, testIdYears, testIdMonths, maxYears, yy, mm, onCha
   return (
     <div className="canvas-field" data-invalid={error ? true : undefined}>
       <span data-required={required}>{caption}</span>
-      <div className={s.pair}>
+      <div className={mergeClasses(s.pair, "finance-ym-pair")}>
         <div className={s.pairItem}>
           <SelectChoice
             caption={caption} testId={testIdYears} value={yy} choices={years(maxYears)} hideCaption standard={standard}
@@ -541,7 +549,7 @@ function ResetIcon({ tooltip, testId, disabled, onClick }: {
   return (
     <Tooltip content={tooltip} relationship="description">
       <Button
-        appearance="transparent" className={s.resetIcon} icon={<ArrowClockwiseRegular />}
+        appearance="transparent" className={mergeClasses(s.resetIcon, "finance-reset")} icon={<ArrowClockwiseRegular />}
         aria-label={ariaLabel} data-testid={testId} disabled={disabled} onClick={onClick}
       />
     </Tooltip>
@@ -625,7 +633,7 @@ export default function ProjectFinanceScreen() {
   const fmtCard = (v: number | null | undefined, pattern: string) => fmtCardIn(v, pattern, lang);
   const fmtAmount = (v: number | null | undefined) => fmtAmountIn(v, lang);
   const formatDscr = (v: number | null | undefined) => formatDscrIn(v, lang);
-  const formatUpfrontFee = (option: number, value: number | null) => formatUpfrontFeeIn(option, value, lang);
+  const formatUpfrontFee = (option: number | null, value: number | null) => formatUpfrontFeeIn(option, value, lang);
 
   const projectQ = useFinanceProject(projectId);
   const project = projectQ.data;
@@ -711,6 +719,8 @@ export default function ProjectFinanceScreen() {
   const [equity, setEquity] = useState<EquityForm | null>(null);
   const [vat, setVat] = useState<VatForm | null>(null);
   const [dsra, setDsra] = useState<DsraForm | null>(null);
+  // The form the open Equity / VAT-Financing / DSRA panel started with: its Save stays off until the form differs (D111).
+  const [openedForm, setOpenedForm] = useState<unknown>(null);
   const [decom, setDecom] = useState<DecommissioningForm | null>(null);
   const [tranche, setTranche] = useState<SeniorDebtFormState | null>(null);
   const [repaymentRows, setRepaymentRows] = useState<RepaymentRow[]>([]);
@@ -744,7 +754,10 @@ export default function ProjectFinanceScreen() {
   // `gal_…_FinancingInputs.Visible: And(!IsBlank('Cluster State'.Name), 'Cluster State'.Name <> "Draft")`.
   const galleryVisible = Boolean(project?.clusterStateName) && project?.clusterStateName !== "Draft";
   const [pendingOption, setPendingOption] = useState<number | null>(null);
-  const financingOption = pendingOption ?? project?.financingOptions ?? null;
+  // `Coalesce('Financing Options', 'Debt Financing')` (Y:2381): a blank column shows Debt Financing (D109),
+  // and so does New Project mode, where `gblRecordSelectedProject` itself is blank (D112). A saved
+  // project waits for its row, so the radio never flashes the default before the stored choice.
+  const financingOption = project || !projectId ? financingOptionShown(pendingOption, project?.financingOptions) : null;
 
   const trancheName = (i: FinancingInputRow | null): string => (i === null ? "" : trancheDisplayName(
     num(i.raw[INPUT_COL.trancheStatus]),
@@ -829,8 +842,8 @@ export default function ProjectFinanceScreen() {
   const onCategoryCommand = (order: number, input: FinancingInputRow | null) => (key: string) => {
     writes.clear();
     if (key === "EditFinanceInput") {
-      if (order === CATEGORY_ORDER.equity) { setEquity(openEquityForm(input, lang)); setPanel("equity"); }
-      else if (order === CATEGORY_ORDER.vatFinancing) { setVat(openVatForm(input, country, lang)); setPanel("vat"); }
+      if (order === CATEGORY_ORDER.equity) { const f = openEquityForm(input, lang); setEquity(f); setOpenedForm(f); setPanel("equity"); }
+      else if (order === CATEGORY_ORDER.vatFinancing) { const f = openVatForm(input, country, lang); setVat(f); setOpenedForm(f); setPanel("vat"); }
       else if (order === CATEGORY_ORDER.decommissioning) { setDecom(openDecommissioningForm(input, lang)); setPanel("decommissioning"); }
     } else {
       setToggleTarget(input);
@@ -875,8 +888,8 @@ export default function ProjectFinanceScreen() {
 
   const equityBody = () => {
     const raw = equityInput?.raw ?? {};
-    const mode: FreeEquityMode =
-      num(raw[INPUT_COL.freeEquity]) === CHOICE_FINANCE.freeEquity.fixedValue ? "fixed" : "percentage";
+    // The card tests `'Free Equity' = Percentage` (Y:2986, Y:3039): a blank choice reads as money, no loan line (D109).
+    const mode: FreeEquityMode = equityCardMode(num(raw[INPUT_COL.freeEquity]));
     const value = num(raw[INPUT_COL.freeEquityValue]);
     // `txt_EquityData_ShareholderLoanEUR_1.Value` (Y:3072): Fixed → `Max(0, CAPEX − value)`, Percentage → `100 − value`.
     const loan = value === null ? null
@@ -898,7 +911,7 @@ export default function ProjectFinanceScreen() {
     return (
       <div className={mergeClasses(s.fields, s.fieldsRow)}>
         {field(FIN_LABEL.baseRate, label(BASE_RATE_OPTION_LABEL, num(raw[INPUT_COL.baseRate])), "txt_VATFinancingData_BaseRate_2", cardStd.vat.locIsStandardBaseRate)}
-        {field(FIN_LABEL.bankMargin, margin === null ? "" : String(margin), "txt_VATFinancingData_BankMargin_1", cardStd.vat.locIsStandardBankMargin)}
+        {field(FIN_LABEL.bankMargin, vatBankMarginText(margin, lang), "txt_VATFinancingData_BankMargin_1", cardStd.vat.locIsStandardBankMargin)}
         {num(raw[INPUT_COL.vatFacilityAmount]) === CHOICE_FINANCE.vatFacilityAmount.individual
           ? field(FIN_LABEL.vatFacilityAmountPrefix + unit, fmtCard(num(raw[INPUT_COL.vatFacilityAmountValue]), CARD_FORMAT.amount),
             "txt_VATFinancingData_VATFacilityAmountEUR_1")
@@ -911,7 +924,8 @@ export default function ProjectFinanceScreen() {
     const r = i.raw;
     const selected = i.id === selectedTrancheId;
     const isFolded = isTrancheFolded(i, trancheFolded);
-    const upfront = num(r[INPUT_COL.upfrontFee]) ?? CHOICE_FINANCE.upfrontFee.percentageOfDebt;
+    // A blank option is not Percentage of Debt: currency caption and `"###,###,##0"` (Y:4305, Y:4327; D109).
+    const upfront = num(r[INPUT_COL.upfrontFee]);
     const dscr = (v: number | null) => (v === null ? "" : formatDscr(v));
     const toggleFold = () => setTrancheFolded((m) => new Map(m).set(i.id, !isFolded));
     return (
@@ -1002,7 +1016,7 @@ export default function ProjectFinanceScreen() {
             icon={<EditRegular />} aria-label="con_DSRA_DSRF_Data_Edit" data-testid="con_DSRA_DSRF_Data_Edit"
             // `DisplayMode: If(con_DSRA_DSRF_Data_Deactivate.Text = "Activate", Disabled, Edit)`
             disabled={busy || locked || dsraInput === null || toggle.label === DSRA_TOGGLE_LABEL.activate}
-            onClick={() => { writes.clear(); setDsra(openDsraForm(dsraInput, lang)); setPanel("dsra"); }}
+            onClick={() => { writes.clear(); const f = openDsraForm(dsraInput, lang); setDsra(f); setOpenedForm(f); setPanel("dsra"); }}
           >
             {FIN_LABEL.edit}
           </Button>
@@ -1017,7 +1031,8 @@ export default function ProjectFinanceScreen() {
           </Button>
         </div>
         <div className={mergeClasses(s.fields, s.dsraFields, s.dsraType)}>
-          {field(FIN_LABEL.type, dsraInput ? (isDsrf ? "DSRF" : "DSRA") : "", "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_3", cardStd.dsra.locIsStandardType)}
+          {/* `If(type = DSRF, "DSRF", "DSRA")` (Y:6001): no DSRA row reads "DSRA" too (D109). */}
+          {field(FIN_LABEL.type, isDsrf ? "DSRF" : "DSRA", "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_3", cardStd.dsra.locIsStandardType)}
         </div>
         <div className={mergeClasses(s.fields, s.dsraFields, s.dsraRest)}>
           {isDsrf ? field(TRANCHE_FORM_LABEL.commitmentFeeValue, fmtCard(num(raw[INPUT_COL.commitmentFeeValue]), CARD_FORMAT.dsraCommitmentFee), "txt_Decommissioning_Data_Display_Card_Cost_of_Decommissioning_3", cardStd.dsra.locIsStandardCommitmentFee) : null}
@@ -1026,7 +1041,7 @@ export default function ProjectFinanceScreen() {
           {field(FIN_LABEL.margin, fmtCard(num(raw[INPUT_COL.margin]), CARD_FORMAT.dsraMargin), "txt_Decommissioning_Data_Display_Card_Date_of_Expiry_3", cardStd.dsra.locIsStandardMargin)}
           {isDsrf ? field(FIN_LABEL.upfrontFeePercent, fmtCard(num(raw[INPUT_COL.upfrontFeeValue]), CARD_FORMAT.dsraUpfrontFee), "txt_Decommissioning_Data_Display_Card_Start_Date_of_Saving_3", cardStd.dsra.locIsStandardUpfrontfee) : null}
           {field(FIN_LABEL.percentageOfFutureDebtService, fmtCard(num(raw[INPUT_COL.percentageOfFutureDebtService]), CARD_FORMAT.pofds), "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_4", cardStd.dsra.locIsStandardPercentageoffuturedebtservice)}
-          {field(FIN_LABEL.durationOfFutureDebtService, dsraInput ? mmyyLabel(str(raw[INPUT_COL.durationOfFutureDebtServiceMmyy])) : "", "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_5", cardStd.dsra.locIsStandardDurationoffuturedebtservice)}
+          {field(FIN_LABEL.durationOfFutureDebtService, mmyyLabel(str(raw[INPUT_COL.durationOfFutureDebtServiceMmyy])), "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_5", cardStd.dsra.locIsStandardDurationoffuturedebtservice)}
           {field(FIN_LABEL.endOfDebtServiceSavings, fmtDateDots(day(raw[INPUT_COL.endOfDebtServiceSavings])), "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_6", cardStd.dsra.locIsStandardEndofDebtserviceSavings)}
         </div>
       </>
@@ -1045,7 +1060,7 @@ export default function ProjectFinanceScreen() {
         {field(FIN_LABEL.dateOfIssue, fmtDateDots(day(raw[INPUT_COL.dateOfIssue])), "txt_Decommissioning_Data_Display_Card_Date_of_Issue_1", cardStd.decommissioning.DateofIssue)}
         {field(FIN_LABEL.dateOfExpiry, fmtDateDots(day(raw[INPUT_COL.dateOfExpiry])), "txt_Decommissioning_Data_Display_Card_Date_of_Expiry_1", cardStd.decommissioning.DateofExpiry)}
         {field(FIN_LABEL.startDateOfSaving, fmtDateDots(day(raw[INPUT_COL.startDateOfSaving])), "txt_Decommissioning_Data_Display_Card_Start_Date_of_Saving_1", cardStd.decommissioning.StartDateofSaving)}
-        {field(FIN_LABEL.durationOfSavingDisplay, decInput ? decommissioningDurationLabel(str(raw[INPUT_COL.durationOfSaving])) : "", "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_1", cardStd.decommissioning.DurationofSaving)}
+        {field(FIN_LABEL.durationOfSavingDisplay, decommissioningDurationLabel(str(raw[INPUT_COL.durationOfSaving])), "txt_Decommissioning_Data_Display_Card_Duration_of_Saving_1", cardStd.decommissioning.DurationofSaving)}
       </div>
     );
   };
@@ -1175,7 +1190,8 @@ export default function ProjectFinanceScreen() {
       {/* ─────────────────────────────────────────────────────── Equity panel ── */}
       <FormPanel
         open={panel === "equity" && equity !== null} title={FIN_LABEL.equityTitle} width="narrow"
-        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
+        // `finance-form-*` (canvas.css, D110): the canvas rows, 245-px boxes and Reload icons beside the box.
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL, "finance-form finance-form-equity")} keepOpenOnOutsideClick
         onDismiss={closePanel}
         closeTestId="ico_EditEquity_RightPanel_BodyHeaderCancel" closeLabel="ico_EditEquity_RightPanel_BodyHeaderCancel"
         footer={<PanelButtons
@@ -1188,7 +1204,7 @@ export default function ProjectFinanceScreen() {
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save" cancelTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel"
           saveLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save" cancelLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel"
-          subtleWhenDisabled disabled={busy || !equity || equity.value === ""
+          subtleWhenDisabled disabled={busy || !equity || !formChanged(openedForm, equity) || equity.value === ""
             || !validateFreeEquity(equity.value, equity.mode, country, totalCapex, lang).valid} />}
       >
         {equity ? (
@@ -1202,7 +1218,7 @@ export default function ProjectFinanceScreen() {
                 flags: { locIsStandardFreeEquity: false, locIsStandardShareholderLoan: false },
               })}
             />
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <TextField
                   label={FIN_LABEL.freeEquityPrefix + freeEquityLabel(equity.mode, country)} required
@@ -1239,7 +1255,7 @@ export default function ProjectFinanceScreen() {
       {/* ─────────────────────────────────────────────────────────── VAT panel ── */}
       <FormPanel
         open={panel === "vat" && vat !== null} title={FIN_LABEL.vatTitle} width="narrow" onDismiss={closePanel}
-        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL, "finance-form finance-form-vat")} keepOpenOnOutsideClick
         closeTestId="ico_EditEquity_RightPanel_BodyHeaderCancel_1" closeLabel="ico_EditEquity_RightPanel_BodyHeaderCancel_1"
         footer={<PanelButtons
           onSave={() => {
@@ -1252,11 +1268,11 @@ export default function ProjectFinanceScreen() {
           saveTestId="pcf_btn_GeneralData_RightPanel_VATFinancing_Form_Buttons_Save" cancelTestId="pcf_btn_GeneralData_RightPanel_VATFinancing_Form_Buttons_Cancel"
           // The canvas Save sets no AccessibleLabel; its Cancel carries `btn_…_VATFinancing_Form_Button_Reset` (a copy-paste, verbatim).
           cancelLabel="btn_GeneralData_RightPanel_VATFinancing_Form_Button_Reset"
-          subtleWhenDisabled disabled={busy || !vat || !canSaveVatFinancing(vat, country, lang)} />}
+          subtleWhenDisabled disabled={busy || !vat || !formChanged(openedForm, vat) || !canSaveVatFinancing(vat, country, lang)} />}
       >
         {vat ? (
           <div className={s.panel}>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <SelectChoice
                   caption={FIN_LABEL.baseRate} testId="cmb_VATFinancingData_BaseRate"
@@ -1275,7 +1291,7 @@ export default function ProjectFinanceScreen() {
                 }}
               />
             </div>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <TextField
                   label={FIN_LABEL.bankMargin} testId="txt_VATFinancingData_BankMargin" ariaLabel="txt_VATFinancingData_BankMargin"
@@ -1668,7 +1684,7 @@ export default function ProjectFinanceScreen() {
       <FormPanel
         open={panel === "decommissioning" && decom !== null} title={FIN_LABEL.decommissioningTitle}
         width="narrow" onDismiss={closePanel}
-        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL, "finance-form finance-form-decom")} keepOpenOnOutsideClick
         closeTestId="Icon5" closeLabel="Icon5"
         footer={<PanelButtons
           onSave={() => {
@@ -1689,7 +1705,7 @@ export default function ProjectFinanceScreen() {
               value={decom.costType} choices={options(CHOICE_LABEL.costsOfDecommissioning)} disabled={busy}
               onChange={(v) => patchDecom({ costType: v, value: "" }, "CostsofDecommissioningValue")}
             />
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <TextField
                   label={decom.costType === CHOICE_FINANCE.costsOfDecommissioning.perTurbine
@@ -1711,7 +1727,7 @@ export default function ProjectFinanceScreen() {
                 }, "CostsofDecommissioningValue", true)}
               />
             </div>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <TextField
                   label={FIN_LABEL.costOfGuarantee} required testId="txt_DecommissioningData_Cost_of_Guarantee_Percentage_1"
@@ -1727,7 +1743,7 @@ export default function ProjectFinanceScreen() {
                 onClick={() => patchDecom({ guarantee: fmtCard(decStandard?.guaranteeCosts, "0.0") }, "CostofGuarantee", true)}
               />
             </div>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <DateBox
                   caption={FIN_LABEL.dateOfIssue} testId="dte_DecommissioningData_Date_of_Issue_1" required format="dd.mm.yyyy"
@@ -1742,7 +1758,7 @@ export default function ProjectFinanceScreen() {
                 onClick={() => patchDecom({ dateOfIssue: project?.construction ?? null }, "DateofIssue", true)}
               />
             </div>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <DateBox
                   caption={FIN_LABEL.startDateOfSaving} testId="dte_DecommissioningData_Start_Date_of_Saving_1" required format="dd.mm.yyyy"
@@ -1757,7 +1773,7 @@ export default function ProjectFinanceScreen() {
                 onClick={() => patchDecom({ startDateOfSaving: project?.cod ?? null }, "StartDateofSaving", true)}
               />
             </div>
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <YearMonth
                   caption={FIN_LABEL.durationOfSaving} testIdYears="cmb_DecommissioningData_Duration_of_Saving_YY_1" combo
@@ -1783,8 +1799,8 @@ export default function ProjectFinanceScreen() {
                 disabled onChange={() => undefined} />
             </div>
             {decEnd !== null && project?.endDate && decEnd.getTime() > project.endDate.getTime()
-              ? <Text className={s.error} role="alert">{FIN_LABEL.endDateOfSavingAfterEnd}</Text> : null}
-            <div className={s.withAction}>
+              ? <Text className={mergeClasses(s.error, "finance-row-error")} role="alert">{FIN_LABEL.endDateOfSavingAfterEnd}</Text> : null}
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <DateBox
                   caption={FIN_LABEL.dateOfExpiry} testId="dte_DecommissioningData_Date_of_Expiry_1" required format="dd.mm.yyyy"
@@ -1806,7 +1822,7 @@ export default function ProjectFinanceScreen() {
       {/* ──────────────────────────────────────────────────────── DSRA/DSRF panel ── */}
       <FormPanel
         open={panel === "dsra" && dsra !== null} title={FIN_LABEL.dsraTitle} width="narrow" onDismiss={closePanel}
-        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL)} keepOpenOnOutsideClick
+        panelClassName={mergeClasses(s.panelSkin, FINANCE_PANEL, "finance-form finance-form-dsra")} keepOpenOnOutsideClick
         closeTestId="ico_EditDSRA_DRSF_RightPanel_BodyHeaderCancel" closeLabel="ico_EditDSRA_DRSF_RightPanel_BodyHeaderCancel"
         footer={<PanelButtons
           onSave={() => {
@@ -1818,7 +1834,7 @@ export default function ProjectFinanceScreen() {
           onCancel={closePanel}
           saveTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save_1" cancelTestId="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel_1"
           saveLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save_1" cancelLabel="pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Cancel_1"
-          subtleWhenDisabled disabled={busy || !dsra || !canSaveDsra(dsra, project?.cod ?? null, lang)} />}
+          subtleWhenDisabled disabled={busy || !dsra || !formChanged(openedForm, dsra) || !canSaveDsra(dsra, project?.cod ?? null, lang)} />}
       >
         {dsra ? (
           <div className={s.panel}>
@@ -1881,7 +1897,7 @@ export default function ProjectFinanceScreen() {
               error={dsra.durYears === 0 && dsra.durMonths === 0 ? FIN_LABEL.zeroDurationNotAllowed : undefined}
               onChange={(yy, mm) => setDsra({ ...dsra, durYears: yy, durMonths: mm, flags: { ...dsra.flags, locIsStandardDurationoffuturedebtservice: false } })}
             />
-            <div className={s.withAction}>
+            <div className={mergeClasses(s.withAction, "finance-row")}>
               <div className={s.grow}>
                 <DateBox
                   caption={FIN_LABEL.endOfDebtServiceSavings} testId="dte_DSRA_DRSFData_End_of_debt_service_savings"
@@ -1892,7 +1908,7 @@ export default function ProjectFinanceScreen() {
               </div>
               {/* `but_DSRA_DRSFData_End_of_debt_service_savings` — `Icon: "CalendarAdd"`, no caption. */}
               <Button
-                appearance="transparent" icon={<CalendarAddRegular />}
+                appearance="transparent" className="finance-reset finance-calendar" icon={<CalendarAddRegular />}
                 aria-label="but_DSRA_DRSFData_End_of_debt_service_savings"
                 data-testid="but_DSRA_DRSFData_End_of_debt_service_savings" disabled={busy}
                 onClick={() => setDsra({

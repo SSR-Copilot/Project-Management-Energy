@@ -55,6 +55,13 @@ import {
 } from "./rules";
 
 /** The Dataverse entity sets the screen reads and writes. */
+/**
+ * The project-scoped reads re-run on EVERY visit, as the Canvas `OnVisible` does (`Refresh('Financing Inputs')`
+ * and a `ClearCollect` of each collection, Y:69-166). Corrected 12 Nov 2026 (D109): with the app-wide 30 s
+ * `staleTime`, coming back within 30 s of a change made elsewhere (COD, CAPEX, turbines) showed the old values.
+ */
+const EVERY_VISIT = { refetchOnMount: "always" } as const;
+
 export const TABLES: readonly string[] = [
   ES.projects,
   ES_FINANCE.financingCategories,
@@ -78,6 +85,7 @@ export function useFinanceProject(projectId: string | undefined): ScreenData<Fin
     queryKey: qk.finance(projectId ?? "", "project"),
     queryFn: () => loadFinanceProject(projectId!),
     enabled: Boolean(projectId),
+    ...EVERY_VISIT,
   });
   return out<FinanceProject | null>(q, null);
 }
@@ -135,6 +143,7 @@ export function useFinancingInputs(
     queryKey: qk.finance(projectId ?? "", "inputs", categories.map((c) => c.id).join(",")),
     queryFn: () => listFinancingInputs(projectId!, categories),
     enabled: Boolean(projectId) && categories.length > 0,
+    ...EVERY_VISIT,
   });
   return out<FinancingInputRow[]>(q, []);
 }
@@ -145,6 +154,7 @@ export function useRepaymentAmounts(projectId: string | undefined): ScreenData<S
     queryKey: qk.finance(projectId ?? "", "repayments"),
     queryFn: () => listRepaymentAmounts(projectId!),
     enabled: Boolean(projectId),
+    ...EVERY_VISIT,
   });
   return out<StoredRepaymentRow[]>(q, []);
 }
@@ -155,6 +165,7 @@ export function useStepUpMargins(projectId: string | undefined): ScreenData<Stor
     queryKey: qk.finance(projectId ?? "", "stepUps"),
     queryFn: () => listStepUpMargins(projectId!),
     enabled: Boolean(projectId),
+    ...EVERY_VISIT,
   });
   return out<StoredStepUpMarginRow[]>(q, []);
 }
@@ -165,6 +176,7 @@ export function useTotalDevexCapex(projectId: string | undefined): ScreenData<nu
     queryKey: qk.finance(projectId ?? "", "totalCapex"),
     queryFn: () => loadTotalDevexCapex(projectId!),
     enabled: Boolean(projectId),
+    ...EVERY_VISIT,
   });
   return out(q, 0);
 }
@@ -175,6 +187,7 @@ export function useActiveTurbineCount(projectId: string | undefined): ScreenData
     queryKey: qk.finance(projectId ?? "", "activeTurbines"),
     queryFn: () => countActiveTurbines(projectId!),
     enabled: Boolean(projectId),
+    ...EVERY_VISIT,
   });
   return out(q, 0);
 }

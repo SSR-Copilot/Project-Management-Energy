@@ -7125,3 +7125,74 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 **Divergences:** (1) the writes after the yield land in parallel, so a failure among them lets the others finish (the canvas `ForAll` / `Patch` chain also had no transaction); (2) a roll-up failure is now reported with the Save's error text ("…: “the project's yield totals” failed: …") because it is part of the Save's job; (3) for about one reload after the spinner closes, the list shows the previous rows with the command bar off.
 **Tests:** UT-PROD-130 (plan shape), UT-PRODHOOK-001…004 (one job and one reload; roll-up from the post-write read; generation only when due; `refreshing`; a failed action sends nothing more).
 **Needs a live check:** time a Save with seasonality and negative prices on DEV before / after (the `[VSB] DATA` lines give per-write ms); confirm no Dataverse throttling at 8 concurrent writes on `vsb_pvnegativepriceses`.
+
+## D109 — Finance: the page and the panels compared with the Canvas, 12 differences fixed (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**Report:** "Check finance app its data is coming correct like canvas or not and compare code app with canvas finance screen." A read of the Canvas YAML against the code: the data reads, about 95 page items, about 64 panel opening values and the five Save payloads. Everything not listed below matched, including the 27 Senior Debt, the DSRA/DSRF and the Decommissioning standards read from Fabric.
+
+| # | Where | Canvas | Code app before | Now |
+|---|---|---|---|---|
+| 1 | Tranche panel: the four month pickers and Frequency of Repayment | `DefaultSelectedItems` looks the Coalesce up in `colMonthsForDuration` (0…11) / `colFrequencyInMonths`; a value outside it (e.g. an SQL "fixed interest rate time" of 120) selects nothing and Save stays off (Y:12863, Y:11439, Save Y:13592) | The picker looked blank, but the form kept 120 and Save wrote it | `trancheMonthDefault` / `frequencyDefault` keep only listed values |
+| 2 | Duration of Saving (panel, reset icon, card) and the MMYY labels | `Value(Left(v, 2))` months and `Value(Right(v, 2))` years, any length; the seed writes `"00" & duration_saving` ("005" for "5") | Only 4-character values were read: "005" opened as 0 / 0, with the zero-duration error and Save off | `mmyyParts` / `unpackMMYY` read any length |
+| 3 | Financing Options radio | `Coalesce('Financing Options', 'Debt Financing')` (Y:2381) | No option selected while the column was blank | `financingOptionShown` |
+| 4 | VAT card, Bank Margin [%] | `Text()` in the user's language (Y:3339) | Always "1.5" | `vatBankMarginText`: "1,5" in German or French |
+| 5 | The six project-scoped reads | Re-read on every visit (`OnVisible`, Y:69-166) | Kept 30 s (app-wide `staleTime`): a change made elsewhere within 30 s showed the old values | `refetchOnMount: "always"` |
+| 6 | Decommissioning Total Costs, value blank | `Text(Blank())` = "" for Total; Per Turbine is 0 (Y:5247) | "0" | `totalDecommissioningCost` returns null for a blank Total |
+| 7 | Start Repayment / Tenor / Fixed Interest card text, one part blank | `Text(Blank(), "0#")` = "" | "0" | `yearMonthLabel` |
+| 8 | DSRA card Type and Duration; Decommissioning Duration, blank or no row | "DSRA"; " Year  Month"; " Years  Months" | ""; "0 Year 0 Month"; "0 Years 0 Months" or "" | as the Canvas |
+| 9 | Equity card, Free Equity choice blank | Caption and Shareholder Loan test `= Percentage` (Y:2986, Y:3039): "[EUR]" / "[PLN]", no loan line | "[%]" and the loan line | `equityCardMode` |
+| 10 | Tranche card Upfront Fee, option blank | Not Percentage of Debt: currency caption and `"###,###,##0"` (Y:4305, Y:4327) | "[%]" and `"##0.0"` | the default is gone |
+| 11 | Fabric country re-check (`listDebtAssumptions`) | The delegated SQL compare ignores case and trailing spaces | Exact match: a differently spelt country dropped every standard | trimmed, case-insensitive |
+| 12 | Card amounts for French / Polish users | One `Text()` engine | The Decommissioning total and the fixed Upfront Fee used Intl ("1 234 567"), the other cards `textFormat` ("1.234.567") | Both use `textFormat` (D70's rule). Which grouping the Canvas shows for French is still not checked live (D70 open point) |
+
+**Corrected comment, not reproduced (Canvas state leak):** the Canvas Edit branch (Y:2663-2689) never blanks `locSelectedStandardAssumption`, so after an Add or a status change in the same visit a blank stored DSCR or Commitment Fee Free Period reopens with the standard and the next Save writes it. `openTrancheForm` keeps using only the stored values on Edit; its comment said the Canvas blanks it, which was wrong.
+**Not changed:** the eight documented D34 divergences; the category "Edit …" and DSRA Activate/Deactivate buttons need the row to exist (the Canvas keeps them always enabled; safer, recorded here); status pills are hidden, not drawn empty, for a blank status (cosmetic); an unconfirmed reading that the first Standard Assumption → Term Sheet change of a visit keeps the standard fees in the Canvas (`locPreviousSelectedTranche` uninitialised).
+**Tests:** UT-FIN-810…815, UT-FIN-DATA-005; UT-FIN-074 updated (a blank MMYY label).
+**Needs a live check:** the real `fixed interest rate time`, `repayment start (after cod)` and `duration_saving` values in `Assumptions Debt SQL`. If the FIR time is stored in months above 11, a new tranche now opens with a blank FIR month and Save off until one is picked, as in the Canvas.
+
+## D110 — Finance: the Equity, VAT, Decommissioning and DSRA/DSRF panels laid out as the Canvas (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**Report:** "form is not same check all the forms" (Edit Equity, code app beside Canvas): the code app's boxes ran across the whole panel, the rows were further apart and the Reload icon sat at the right edge in a 32-px button.
+**Canvas** (`con_GeneralData_RightPanel_*_InpForm`, Y:7480, 8118, 14147, 15518): a vertical AutoLayout with no LayoutGap and PaddingTop 10 (VAT 16, DSRA also PaddingLeft 5); every row a ManualLayout container of a fixed height (70; Decommissioning's Start Date of Saving and Date of Expiry 76; DSRA's text rows 75 with PaddingTop 5; the radios 110 / 100 / 80); the caption across the panel and the box `Parent.Width/2 + Self.X` = 245 of the 450 (DSRA 285, its date 280); a year / month pair two boxes 10 apart; the Reload icon 10 right of the box (`Classic/Icon` 18 wide in Equity and VAT, `cat_PowerCAT.Icon` 30 x 30 in Decommissioning); DSRA Type a horizontal radio with a 1.5-px rule; DSRA's CalendarAdd button 32 wide at X 313.
+**Now:** `canvas.css` "D110" scopes those metrics to the four panels (`finance-form-equity` / `-vat` / `-decom` / `-dsra`); the rows, Reload icons, year / month pairs and the End Date of Saving message carry static hooks (`finance-row`, `finance-reset`, `finance-ym-pair`, `finance-row-error`). The tranche panel's year / month pairs are also 10 apart now (135 + 10 + 135, as `X: YY.X + YY.Width + 10`); the rest of the tranche panel was matched earlier (3 Nov 2026, D102, D104) and is unchanged.
+**Not changed:** the VAT Base Rate combobox sits 5 px lower than the Canvas one (`Y: label.Y + label.Height`, no `+ 5`); the horizontal radio's option spacing is an estimate (20 px).
+**Tests:** UT-FIN-920 (the layout hooks). jsdom has no layout, so the sizes themselves need a look in the browser.
+**Needs a live check:** open each of the four panels beside the Canvas (Equity in both modes, VAT with Individual, Decommissioning with an error, DSRA as DSRA and DSRF).
+
+## D111 — Finance: Edit panels keep Save off until something changed; the DSRA buttons keep their border (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**Report:** "on selecting blue border removal is not their in canvas fix this and for edit forms dont enable save if nothing is modified".
+**1. Save (DIVERGENCE, the user's request).** The Equity, VAT-Financing and DSRA/DSRF Saves were on as soon as the panel opened, as in the Canvas (their `DisplayMode` has no dirty term: Y:7893, Y:8632, Y:16821). Now `formChanged(opened, current)` keeps them off until the form differs from what it opened with, comparing values (dates and standard flags included). A value typed back to what it was turns Save off again; retyping a standard value clears its flag, which the Save writes, so it counts as a change. The tranche Edit (`locFormIsDirty`) and Decommissioning (`locIsDirtyDecommissiongForm`) Saves already had a dirty term and are unchanged; Add Tranche still opens with Save on, as the Canvas.
+**2. DSRA/DSRF Edit and Activate / Deactivate.** The Canvas `Button@0.0.45` (Transparent, `BorderColor` themePrimary, 2 px, Y:5779, Y:5832) keeps the border when hovered, pressed or focused. Fluent's transparent button cleared it on hover / press; `dsraButton` now keeps it (disabled buttons still show no box).
+**Tests:** UT-FIN-816 (`formChanged`), UT-FIN-921 (the Equity Save off on open, on after a change).
+
+## D112 — Locked pages: the disabled Financing Options radio shows its choice; Production's New Project bar shows all five commands (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**1. Finance, Financing Options (parity fix).** Report: "debt financing is selected in this page" (locked Finance page in New Project mode, code app beside Canvas), then "finance is not same as canvas" (code app screenshot, still no choice). Two causes:
+- *No choice in New Project mode.* `DefaultSelectedItems` is `Coalesce(gblRecordSelectedProject.'Financing Options', 'Debt Financing')` (Y:2381); with no project saved, `gblRecordSelectedProject` is blank, so the Canvas shows Debt Financing. The code app only applied the default once the project row was in (`project ? … : null`), so a new project showed nothing chosen. Now New Project mode (no `projectId`) shows Debt Financing; a saved project still waits for its row, so the stored choice never flashes the default first. Nothing is written: the visit patch still needs a saved project.
+- *The disabled look.* The Canvas `Radio@0.0.25` disabled is a #e0e0e0 ring, a #bdbdbd dot and #bdbdbd captions; the browser's own disabled radio has a grey filled ring and kept the captions #242424. `canvas.css` now draws the Canvas look for every disabled `.canvas-radio-group` radio; the legend keeps its colour. Panels that already greyed their captions (`.pm-canvas-panel`, `.opex-canvas-panel`, `Choices` `choicesDisabled`) change only in the ring and dot.
+**2. Production, New Project mode (DIVERGENCE, the user's choice).** Report: "only 2 things are there in code apps add remaining things also" (Canvas locked Production bar: Add Production WTG, Add Production PV, Edit, Delete, Deactivate Production, all disabled). In New Project mode `gblRecordSelectedProject` is blank, so `ClearCollect(colEnergyYieldsInProject, Filter('Energy Yields', Project.Project = …))` (Y:42) collects the yields that have no project, and `OnVisible` selects the first one. The Edit / Delete / Deactivate items (`ItemVisible` on `locSelectedEnergyYield`, Y:480-512) then show for a row of no project. The code app loads no such rows; `commandBarState({ newProject })` shows Edit (WTG), Delete and Deactivate Production, all disabled, with no selection. A saved project that is locked and has no yields keeps the Canvas's two Add commands.
+**Tests:** UT-FIN-922 (New Project mode: Debt Financing chosen, disabled, no write), UT-FIN-923 (a saved project shows no choice before its row), UT-PROD-131 (`commandBarState`), UT-PROD-914 (the New Project bar). jsdom has no paint, so the radio look needs a look in the browser.
+**Needs a live check:** a locked Finance page beside the Canvas (Debt Financing and All Equity); a disabled radio in a Production / Finance / Cost panel, to confirm the dot.
+
+## D113 — Revenues: Save on the Edit forms stays off until something changed (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**Report:** "check for revenue also same behaviour … check for forms save button enabled after modification" (after D111, Finance).
+**Checked:** the contract panel already behaves so, as the Canvas (`locRevenueContractFormDirty`): Edit opens with `formDirty: false` and `canSaveRevenueContract` requires it; every change path sets it (`editField`, `touchField`, `editFieldIfValid`, `withTerm`, `resetStartToCod`, `resyncNegativePrice`, `toggleCountryInflation`, `changeInflationStartYear`, the Type picker's engine result, the hedge type and the individual volumes). Add Contract opens with Save off until a Type is chosen, as before.
+**Changed (DIVERGENCE, the user's request):** the balancing-price Save (`pcf_…_Save_2.DisplayMode`, Y:4498) has no dirty term in the Canvas, so Edit opened with Save on. Editing a period, Save now stays off until the form differs from what it opened with (`formChanged`, moved from Finance to `@/domain/formChanged`; Finance re-exports it). A value typed back turns Save off again. Add Balancing Price is unchanged (Save on once a valid price is typed).
+**Buttons:** Add Contract and Add Balancing Price already keep the Canvas 2-px themePrimary outline when hovered, pressed or focused (`addButton`, 29 Oct 2026); nothing to change.
+**Tests:** UT-REV-917.
+
+## D114 — Project overview grid: the selected project can be deselected, as the Canvas (12 Nov 2026)
+
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
+**Report:** "on main grid deselect thing is not there like canvas".
+**Canvas:** `psf_MainScreen_DetailList_Container_FluentDetailsList` (Project Main Screen Y:1759) is the PowerCAT Fluent DetailsList in single selection with `SelectionAlwaysVisible`: its check circle toggles the row, so clicking the selected row's circle deselects it (Space on it and Ctrl+click on the row too); a plain row click selects. With nothing selected, Edit Project, Edit Costs and Delete Project are disabled again.
+**Code app before:** a native radio, which cannot be unchecked: the selection could move but never clear.
+**Now:** the circle toggles (its click stops there, so the row does not reselect); Ctrl / Cmd + click on the selected row deselects; a plain row click selects and never toggles. Arrow keys still move the selection.
+**Tests:** UT-OVUI-048.

@@ -136,6 +136,17 @@ describe("page lock, command bar and selection", () => {
     expect(none.activateProdItem.visible || none.deactivateProdItem.visible || none.deleteProductionItem.visible).toBe(false);
   });
 
+  it("UT-PROD-131 DIVERGENCE (D112): New Project mode shows Edit, Delete and Deactivate Production, all disabled", () => {
+    const visible = (st: ReturnType<typeof commandBarState>) =>
+      Object.entries(st).filter(([, c]) => c.visible).map(([, c]) => c.label);
+    const fresh = commandBarState({ canEdit: true, project: null, selected: null, newProject: true });
+    expect(visible(fresh)).toEqual(["Add Production WTG", "Add Production PV", "Edit", "Delete", "Deactivate Production"]);
+    expect(Object.values(fresh).every((c) => c.enabled === false)).toBe(true);
+    // Only New Project mode: a saved, locked project with no yields keeps the Canvas's two Add commands.
+    const saved = commandBarState({ canEdit: true, project: project({ endDate: null }), selected: null });
+    expect(visible(saved)).toEqual(["Add Production WTG", "Add Production PV"]);
+  });
+
   it("UT-PROD-114 the first yield is pre-selected; the header only selects", () => {
     const rows = [yieldRow({ id: "a" }), yieldRow({ id: "b" })];
     expect(selectedYield(rows, undefined)?.id).toBe("a");

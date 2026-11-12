@@ -494,6 +494,24 @@ describe("ProjectOverviewScreen", () => {
     expect(screen.getByTestId("command-viewDashboardFunctionality")).toBeEnabled();
   });
 
+  it("UT-OVUI-048 the selected row's circle deselects it; a plain row click selects and never toggles (canvas DetailsList)", async () => {
+    projectRows = [deletableRow()];
+    const user = userEvent.setup();
+    render(<Harness><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await selectRow(user);
+    const radio = screen.getByTestId(`select-${PROJECT_ID}`) as HTMLInputElement;
+    expect(radio.checked).toBe(true);
+    await user.click(radio);
+    await waitFor(() => expect(screen.getByTestId("command-editProject")).toBeDisabled());
+    expect(radio.checked).toBe(false);
+    await user.click(screen.getByText("Contr. Endpoint Testproject"));
+    await waitFor(() => expect(screen.getByTestId("command-editProject")).toBeEnabled());
+    await user.click(screen.getByText("Contr. Endpoint Testproject"));
+    expect(screen.getByTestId("command-editProject")).toBeEnabled();
+    expect(radio.checked).toBe(true);
+  });
+
   it("UT-OVUI-047 the Project search accepts spaces: 'Wind Park' can be typed and stays in the box", async () => {
     // Canvas `txt_Main_Project_Overview_Context_Filter_Project`: `ProjectKeyword: Self.Value`, never trimmed.
     // The box reads its value back from the URL, which used to be written trimmed, so each space vanished.

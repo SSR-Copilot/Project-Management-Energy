@@ -273,6 +273,20 @@ describe("UT-REV Screen (connected)", () => {
     });
   });
 
+  it("UT-REV-917 Edit balancing price opens with Save off; a change turns it on and typing the value back turns it off (D113)", async () => {
+    state.periods = [period()];
+    renderScreen("/project/revenues?tab=Balancing%20Price");
+    fireEvent.click(button("con_Main_Project_Overview_Header_SuitBar_CommandBar_1-b-1-editProject"));
+    const price = await waitFor(() => input("txt_Revenue_BalancingPrice[EUR/MWh]"));
+    const save = button("pcf_ProjectRevenues_RightPanel_NewEditCost_BodyButtons_Save_2");
+    expect(price.value).toBe("5");
+    expect(save.disabled).toBe(true);
+    fireEvent.change(price, { target: { value: "6" } });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.change(price, { target: { value: "5" } });
+    await waitFor(() => expect(save.disabled).toBe(true));
+  });
+
   it("UT-REV-909 only the newest balancing period can be edited or deleted; Delete runs one delete", async () => {
     state.periods = [period(), period({ id: "b-2", name: "Balancing Price 2", createdOn: "2026-02-01T00:00:00Z", shiftOfCodMonths: null })];
     renderScreen("/project/revenues?tab=Balancing%20Price");

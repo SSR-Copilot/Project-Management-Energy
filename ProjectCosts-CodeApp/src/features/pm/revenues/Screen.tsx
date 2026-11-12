@@ -43,6 +43,7 @@ import {
 import { useSession } from "@/app/SessionContext";
 import { media, palette, space } from "@/theme/tokens";
 import { dateOnly } from "@/data/odata";
+import { formChanged } from "@/domain/formChanged";
 import {
   PAGE_LOCK_TITLE, pageLock, REVENUE_TABS, DEFAULT_TAB, parseRevenueTab,
   REVENUE_FORM_LABEL, SCREEN_LABEL, DIALOG, MSG, REVENUE_SCREEN_TEXT, HEDGE_TYPE_LABEL,
@@ -650,6 +651,8 @@ export default function ProjectRevenuesScreen() {
   const [hedgeError, setHedgeError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
   const [balancing, setBalancing] = useState<BalancingForm | null>(null);
+  // The period the balancing panel opened with: editing one, Save stays off until the form differs (D113).
+  const [balancingOpened, setBalancingOpened] = useState<BalancingForm | null>(null);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [editingVolumesFor, setEditingVolumesFor] = useState<string | null>(null);
 
@@ -748,14 +751,18 @@ export default function ProjectRevenuesScreen() {
   const openNewPeriod = () => {
     writes.clear();
     // As the canvas: Shift "0", both duration pickers blank, so End Date = Start Date - 1 day.
-    setBalancing(balancingFormFor(null, lang));
+    const opened = balancingFormFor(null, lang);
+    setBalancing(opened);
+    setBalancingOpened(opened);
     setPanel("balancing");
   };
 
   const openEditPeriod = (p: BalancingPeriod) => {
     writes.clear();
     setSelectedPeriodId(p.id);
-    setBalancing(balancingFormFor(p, lang));
+    const opened = balancingFormFor(p, lang);
+    setBalancing(opened);
+    setBalancingOpened(opened);
     setPanel("balancing");
   };
 
@@ -1432,6 +1439,9 @@ export default function ProjectRevenuesScreen() {
             cancelLabel="pcf_ProjectRevenues_RightPanel_NewEditCost_BodyButtons_Cancel_2"
             disabled={
               busy || !balancing || balancing.price.trim() === ""
+              // DIVERGENCE (D113, the user's request): an edited period saves only once something changed; the
+              // Canvas Save (`pcf_…_Save_2.DisplayMode`, Y:4498) has no dirty term. A new period is unchanged.
+              || (balancing.id !== null && !formChanged(balancingOpened, balancing))
               || !validateBalancingPrice(balancing.price, country, lang).valid
               || (shiftVisible && !validateShiftOfCod(balancing.shift, lang).valid)
             }
