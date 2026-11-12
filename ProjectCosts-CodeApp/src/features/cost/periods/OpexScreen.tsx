@@ -112,14 +112,21 @@ const AGGREGATION_OPTIONS: readonly number[] = [
 /* ══════════════════════════════════════════════════════════════════ styles ══ */
 
 const useStyles = makeStyles({
-  page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0 },
+  // Fills the content area so the card gallery below can own the scroll, as the canvas screen does.
+  page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0, flexGrow: 1, minHeight: 0 },
   /*
    * `gal_…_Subaccounts` / `gal_…_GeneratorsInProject` - `TemplatePadding: =0`, so the cards touch.
    * Each `con_…_Card` is `Parent.Width - 10` wide with no border (`BorderStyle.None`); the thin
    * line between cards is the `GroupContainer`'s default light drop shadow.
    */
-  cardList: { display: "flex", flexDirection: "column", rowGap: 0 },
+  /*
+   * The canvas gallery scrolls itself and always shows its scrollbar (grey thumb, arrows), in the 10 px right of the
+   * cards — even when everything fits. `overflow-y: scroll` keeps that scrollbar on screen at all times.
+   */
+  cardList: { display: "flex", flexDirection: "column", rowGap: 0, flexGrow: 1, minHeight: 0, overflowY: "scroll" },
   card: {
+    // Inside the scrolling gallery a card keeps its own height instead of being squeezed to fit.
+    flexShrink: 0,
     width: "calc(100% - 10px)",
     backgroundColor: palette.white,
     boxShadow: "0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14)",
