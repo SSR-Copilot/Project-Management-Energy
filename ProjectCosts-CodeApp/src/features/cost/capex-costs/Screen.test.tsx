@@ -496,11 +496,11 @@ describe("the Add Costs panel — year gallery", () => {
     expect(screen.queryByLabelText("Jan")).not.toBeInTheDocument();
   });
 
-  it("keeps only one year open at a time", () => {
+  it("lets several years stay open at once, as the canvas (each row folds on its own)", () => {
     mountAndOpen();
     fireEvent.click(screen.getByRole("button", { name: /^2020 Allocated Cost/ }));
     fireEvent.click(screen.getByRole("button", { name: /^2021 Allocated Cost/ }));
-    expect(screen.queryByLabelText("January 2020")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("January 2020")).toBeInTheDocument();
     expect(screen.getByLabelText("January 2021")).toBeInTheDocument();
   });
 
@@ -512,12 +512,12 @@ describe("the Add Costs panel — year gallery", () => {
     expect(row()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("totals the equal distribution into the year it falls in", () => {
+  it("does not preview an equal distribution: a new contract's gallery stays at 0, as the canvas", () => {
     mountAndOpen();
     fireEvent.change(screen.getByLabelText(/Total Costs/), { target: { value: "1200" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "chk_AddContract_RightPanel_SelectCluster1_1" }));
-    // Cluster 1 is 2015-01 → 2015-12, so every cent lands in 2015 and nowhere else.
-    expect(screen.getByRole("button", { name: "2015 Allocated Cost: 1200 EUR" }))
+    // The canvas gallery is `colNewEditPanelCost` as the panel opened; the equal split only happens on Save.
+    expect(screen.getByRole("button", { name: "2015 Allocated Cost: 0 EUR" }))
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2016 Allocated Cost: 0 EUR" }))
       .toBeInTheDocument();
@@ -1176,11 +1176,14 @@ describe("the panel footer", () => {
   });
 
   /** `DisplayMode` (`:17541-17555`) — the save gate is its last clause. */
-  it("disables Recalculate Allocated Cost while the form is invalid", () => {
+  it("enables Recalculate Allocated Cost on the first edit, even while Save is disabled (canvas dirty flag)", () => {
+    // `locEditSaveButtonEnabled` is set `true` by every field's OnChange; it is not the Save gate.
     lines = [individualContract()];
     mountAndOpenEdit("l1");
-    fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Recalculate Allocated Cost" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Description/), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Recalculate Allocated Cost" })).toBeEnabled();
   });
 });
 
@@ -1374,8 +1377,9 @@ describe("confirmation dialog dimensions", () => {
 
   it("UT-CAPEXPCT-001 clicking Save on an Individual % contract that does not add up shows the Canvas strip and saves nothing (D91)", () => {
     lines = [individualContract({
+      // Dataverse stores MONEY: 1010 of a 1000 total opens as 101 % (`paymentsAsPercent`).
       distributionScheme: "percent", totalCost: 1000,
-      payments: [{ year: 2016, month: 6, amount: 101, paid: false }],
+      payments: [{ year: 2016, month: 6, amount: 1010, paid: false }],
     })];
     mountAndOpenEdit("l1");
     touchPanel();

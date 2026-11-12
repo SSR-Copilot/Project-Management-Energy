@@ -897,6 +897,8 @@ export default function ContractsScreen() {
       {/* ── the Development / Construction contract panel ───────────────── */}
       <FormPanel centerClose
         open={panel === "contract"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={panelTitle(editing, form.contractType)}
         onDismiss={() => setPanel("none")}
         /*
@@ -1066,6 +1068,9 @@ export default function ContractsScreen() {
                     onBlur={() => touch("marginPercentage")}
                   />
                 ) : (
+                  // `lbl_Contracts_RightPanel_NewEdit_MarginFixedValues` has no `FontWeight` (normal), unlike Margin [%] and the
+                  // other captions of this panel, which are Semibold.
+                  <div className="canvas-label-regular">
                   <CostField
                     label={costLabel(MSG.marginFixedValue, project ?? {})}
                     labelTitle={costLabel(MSG.marginFixedValue, project ?? {})}
@@ -1080,6 +1085,7 @@ export default function ContractsScreen() {
                     )}
                     onBlur={() => touch("marginFixedValue")}
                   />
+                  </div>
                 )}
               </>
             ) : null}
@@ -1112,6 +1118,9 @@ export default function ContractsScreen() {
               />
             </div>
 
+            {/* `lbl_…_NewEdit_Comment` sits at `Y: =20` in its container: 20 px more space above Comment than between fields;
+                `txt_…_Comment` is a canvas multiline TextInput, which cannot be resized by the user. */}
+            <div className="canvas-contract-comment">
             <CostField
               label={MSG.comment}
               name="txt_Contracts_RightPanel_NewEdit_Comment"
@@ -1127,6 +1136,7 @@ export default function ContractsScreen() {
                 data-testid="contract-comment"
               />
             </CostField>
+            </div>
           </div>
         </div>
       </FormPanel>
@@ -1134,6 +1144,8 @@ export default function ContractsScreen() {
       {/* ── the Project Rights contract panel ───────────────────────────── */}
       <FormPanel centerClose
         open={panel === "rights"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={panelTitle(editing, CONTRACT_TYPE.ProjectRights)}
         width="narrow"
         onDismiss={() => setPanel("none")}
@@ -1193,6 +1205,8 @@ export default function ContractsScreen() {
       {/* ── the payment-target panel ────────────────────────────────────── */}
       <FormPanel centerClose
         open={panel === "target"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"
         onDismiss={cancelTargetPanel}

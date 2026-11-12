@@ -1330,3 +1330,30 @@ describe("German and French numbers: CAPEX month boxes", () => {
     expect(monthAmountErrors([{ year: 2027, month: 1, amount: 12.55 }], "percent", "Germany", "de-DE").size).toBe(1);
   });
 });
+
+describe("paymentsAsPercent — an existing % contract opens in percent, as the canvas JanUIv…DecUIv", () => {
+  it("UT-CAPEX-PCT-OPEN-001 converts each stored month to Round(cost / Total Cost * 100, 1)", async () => {
+    const { paymentsAsPercent } = await import("./rules");
+    const line = {
+      distribution: "individual", distributionScheme: "percent", totalCost: 35343,
+      payments: [
+        { id: "a", year: 2027, month: 3, amount: 12016.62, paid: false },
+        { id: "b", year: 2027, month: 7, amount: 15904.35, paid: false },
+        { id: "c", year: 2027, month: 9, amount: 7422.03, paid: false },
+      ],
+    } as unknown as Parameters<typeof paymentsAsPercent>[0];
+    expect(paymentsAsPercent(line).payments.map((p) => p.amount)).toEqual([34, 45, 21]);
+    expect(paymentsAsPercent(line).payments.map((p) => p.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("UT-CAPEX-PCT-OPEN-002 leaves absolute, equal and total-less contracts unchanged", async () => {
+    const { paymentsAsPercent } = await import("./rules");
+    const base = { distribution: "individual", distributionScheme: "absolute", totalCost: 100,
+      payments: [{ id: "a", year: 2027, month: 1, amount: 50, paid: false }] } as unknown as Parameters<typeof paymentsAsPercent>[0];
+    expect(paymentsAsPercent(base)).toBe(base);
+    const equal = { ...base, distribution: "equal", distributionScheme: "percent" } as typeof base;
+    expect(paymentsAsPercent(equal)).toBe(equal);
+    const noTotal = { ...base, distributionScheme: "percent", totalCost: undefined } as typeof base;
+    expect(paymentsAsPercent(noTotal)).toBe(noTotal);
+  });
+});
