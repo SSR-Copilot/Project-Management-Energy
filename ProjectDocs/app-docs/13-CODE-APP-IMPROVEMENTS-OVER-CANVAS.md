@@ -461,6 +461,35 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Cluster Checklist | The Info notice shows whenever the page is not locked and Next Cluster is disabled, on the last cluster too (`con_…_Buttons_Info.Visible`, S:2026); it also required a next cluster | fixed |
 | Cluster Checklist | **NEW (not in the Canvas):** after a gate approval request on an active Only Notifications gate, the loader stays ("Cluster Transition in Progress. Please wait...") and re-reads the trackings every 1.5 s, for up to 30 s, until the gate flow has completed the cluster, so the screen opens on the moved project. The Canvas shows the half-way state and its tooltip asks the user to "wait 30 Seconds and then Refresh the Page" (Y:1972). UT-CHKLST-082 | proposed (not approved) |
 
+## Finance: the page and the panels compared with the Canvas (12 Nov 2026, D109) — fixed / one safer divergence kept
+
+A read of the Canvas YAML against the code (data reads, ~95 page items, ~64 panel opening values, the five Save payloads); everything not listed matched.
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance, tranche panel | The four month pickers and Frequency of Repayment keep only a listed value (`colMonthsForDuration` 0…11, `colFrequencyInMonths`): an SQL "fixed interest rate time" of 120 now selects nothing with Save off, as the Canvas; the picker looked blank but Save wrote 120 | fixed (a hidden-value save removed) |
+| Finance | Duration of Saving (panel, reset icon, card) and the MMYY labels read any length (`"005"` = 5 years), as `Value(Left(v, 2))` / `Value(Right(v, 2))`; "005" opened as 0 / 0 with the zero-duration error and Save off | fixed |
+| Finance | Financing Options shows Debt Financing while the column is blank (`Coalesce`, Y:2381) | fixed |
+| Finance | VAT Bank Margin shows in the user's language ("1,5" in German / French) | fixed |
+| Finance | The six project-scoped reads re-read on every visit, as `OnVisible`; they were kept 30 s, so a change made elsewhere could show stale values | fixed |
+| Finance, cards | Blank values show as the Canvas: Decommissioning Total "" (not "0"), year / month parts "", DSRA Type "DSRA" and the bare " Year  Month" duration, Equity "[EUR]" / no loan line for a blank Free Equity choice, the Upfront Fee currency caption and format for a blank option | fixed |
+| Finance | The Fabric country re-check ignores case and trailing spaces, as the delegated SQL compare; a differently spelt country dropped every standard | fixed |
+| Finance | French / Polish card amounts use one formatter (`textFormat`, D70); the Decommissioning total and the fixed Upfront Fee used Intl grouping | fixed (French grouping still to check live) |
+| Finance | The category "Edit …" and DSRA Activate / Deactivate buttons need their row to exist; the Canvas keeps them always enabled | DIVERGENCE (safer, kept) |
+
+## Finance: the Equity, VAT, Decommissioning and DSRA/DSRF panels laid out as the Canvas (12 Nov 2026, D110) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance panels | The four panels use the Canvas row metrics (`con_GeneralData_RightPanel_*_InpForm`): fixed-height rows, the box at `Parent.Width/2 + X`, year / month pairs 10 apart, the Reload icon 10 right of the box; the boxes ran across the panel and the rows were further apart. The tranche panel's year / month pairs are 10 apart too. UT-FIN-920 | reproduced (sizes need a live look) |
+
+## Finance: Edit panels keep Save off until something changed (12 Nov 2026, D111) — divergence (the user's request) / reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance | **NEW (not in the Canvas):** the Equity, VAT-Financing and DSRA/DSRF Edit Saves stay off until the form differs from what it opened with (`formChanged`, values compared, standard flags included); a value typed back turns Save off again. The Canvas `DisplayMode` has no dirty term (Y:7893, Y:8632, Y:16821). Tranche Edit and Decommissioning already had one; Add Tranche is unchanged. UT-FIN-816, UT-FIN-921 | DIVERGENCE (the user's request, 12 Nov 2026) |
+| Finance | DSRA/DSRF Edit and Activate / Deactivate keep the Canvas 2-px themePrimary border when hovered, pressed or focused; Fluent's transparent button cleared it | reproduced |
+
 ## Locked pages: the disabled radio and the New Project Production bar (12 Nov 2026, D112) — reproduced / divergence
 
 | Screen | Change | Status |
@@ -468,3 +497,16 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Finance | In New Project mode Financing Options shows Debt Financing, as the Canvas `Coalesce(gblRecordSelectedProject.'Financing Options', 'Debt Financing')` does with no project; it showed nothing chosen. UT-FIN-922/923 | reproduced |
 | Finance (and every `.canvas-radio-group`) | A disabled radio draws the Canvas `Radio@0.0.25` look: #e0e0e0 ring, #bdbdbd dot on the chosen option, #bdbdbd captions (the browser's own had a grey filled ring and dark captions) | reproduced |
 | Production | In New Project mode the bar shows Add Production WTG / PV, Edit, Delete and Deactivate Production, all disabled, as the Canvas does. The Canvas gets the extra three by selecting a yield that has **no project** (`Filter('Energy Yields', Project.Project = <blank>)`, Y:42); the code app shows them without loading or selecting such a row. UT-PROD-131, UT-PROD-914 | DIVERGENCE (the user's choice, 12 Nov 2026) |
+
+## Revenues: Edit Balancing Price keeps Save off until something changed (12 Nov 2026, D113) — divergence (the user's request)
+
+| Screen | Change | Status |
+|---|---|---|
+| Revenues | **NEW (not in the Canvas):** editing a balancing period, Save stays off until the form differs from what it opened with; a value typed back turns it off again. The Canvas Save (`pcf_…_Save_2.DisplayMode`, Y:4498) has no dirty term. Add Balancing Price is unchanged; the contract panel already had the Canvas dirty flag (`locRevenueContractFormDirty`). UT-REV-917 | DIVERGENCE (the user's request, 12 Nov 2026) |
+| Revenues, Finance | `formChanged` is one shared helper (`@/domain/formChanged`), moved from Finance, which re-exports it | new (reuse) |
+
+## Project overview: the selected project can be deselected (12 Nov 2026, D114) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Project overview | The grid's check circle toggles the row, as the PowerCAT Fluent DetailsList with `SelectionAlwaysVisible` (Project Main Screen Y:1759): clicking the selected row's circle (or Space on it, or Ctrl / Cmd + click on the row) deselects it, and Edit Project, Edit Costs and Delete Project turn off again. The native radio could move the selection but never clear it. UT-OVUI-048 | reproduced |

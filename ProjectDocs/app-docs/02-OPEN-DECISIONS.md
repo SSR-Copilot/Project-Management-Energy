@@ -7128,7 +7128,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D109 — Finance: the page and the panels compared with the Canvas, 12 differences fixed (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **Report:** "Check finance app its data is coming correct like canvas or not and compare code app with canvas finance screen." A read of the Canvas YAML against the code: the data reads, about 95 page items, about 64 panel opening values and the five Save payloads. Everything not listed below matched, including the 27 Senior Debt, the DSRA/DSRF and the Decommissioning standards read from Fabric.
 
 | # | Where | Canvas | Code app before | Now |
@@ -7153,7 +7153,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D110 — Finance: the Equity, VAT, Decommissioning and DSRA/DSRF panels laid out as the Canvas (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **Report:** "form is not same check all the forms" (Edit Equity, code app beside Canvas): the code app's boxes ran across the whole panel, the rows were further apart and the Reload icon sat at the right edge in a 32-px button.
 **Canvas** (`con_GeneralData_RightPanel_*_InpForm`, Y:7480, 8118, 14147, 15518): a vertical AutoLayout with no LayoutGap and PaddingTop 10 (VAT 16, DSRA also PaddingLeft 5); every row a ManualLayout container of a fixed height (70; Decommissioning's Start Date of Saving and Date of Expiry 76; DSRA's text rows 75 with PaddingTop 5; the radios 110 / 100 / 80); the caption across the panel and the box `Parent.Width/2 + Self.X` = 245 of the 450 (DSRA 285, its date 280); a year / month pair two boxes 10 apart; the Reload icon 10 right of the box (`Classic/Icon` 18 wide in Equity and VAT, `cat_PowerCAT.Icon` 30 x 30 in Decommissioning); DSRA Type a horizontal radio with a 1.5-px rule; DSRA's CalendarAdd button 32 wide at X 313.
 **Now:** `canvas.css` "D110" scopes those metrics to the four panels (`finance-form-equity` / `-vat` / `-decom` / `-dsra`); the rows, Reload icons, year / month pairs and the End Date of Saving message carry static hooks (`finance-row`, `finance-reset`, `finance-ym-pair`, `finance-row-error`). The tranche panel's year / month pairs are also 10 apart now (135 + 10 + 135, as `X: YY.X + YY.Width + 10`); the rest of the tranche panel was matched earlier (3 Nov 2026, D102, D104) and is unchanged.
@@ -7163,7 +7163,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D111 — Finance: Edit panels keep Save off until something changed; the DSRA buttons keep their border (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **Report:** "on selecting blue border removal is not their in canvas fix this and for edit forms dont enable save if nothing is modified".
 **1. Save (DIVERGENCE, the user's request).** The Equity, VAT-Financing and DSRA/DSRF Saves were on as soon as the panel opened, as in the Canvas (their `DisplayMode` has no dirty term: Y:7893, Y:8632, Y:16821). Now `formChanged(opened, current)` keeps them off until the form differs from what it opened with, comparing values (dates and standard flags included). A value typed back to what it was turns Save off again; retyping a standard value clears its flag, which the Save writes, so it counts as a change. The tranche Edit (`locFormIsDirty`) and Decommissioning (`locIsDirtyDecommissiongForm`) Saves already had a dirty term and are unchanged; Add Tranche still opens with Save on, as the Canvas.
 **2. DSRA/DSRF Edit and Activate / Deactivate.** The Canvas `Button@0.0.45` (Transparent, `BorderColor` themePrimary, 2 px, Y:5779, Y:5832) keeps the border when hovered, pressed or focused. Fluent's transparent button cleared it on hover / press; `dsraButton` now keeps it (disabled buttons still show no box).
@@ -7171,7 +7171,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D112 — Locked pages: the disabled Financing Options radio shows its choice; Production's New Project bar shows all five commands (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **1. Finance, Financing Options (parity fix).** Report: "debt financing is selected in this page" (locked Finance page in New Project mode, code app beside Canvas), then "finance is not same as canvas" (code app screenshot, still no choice). Two causes:
 - *No choice in New Project mode.* `DefaultSelectedItems` is `Coalesce(gblRecordSelectedProject.'Financing Options', 'Debt Financing')` (Y:2381); with no project saved, `gblRecordSelectedProject` is blank, so the Canvas shows Debt Financing. The code app only applied the default once the project row was in (`project ? … : null`), so a new project showed nothing chosen. Now New Project mode (no `projectId`) shows Debt Financing; a saved project still waits for its row, so the stored choice never flashes the default first. Nothing is written: the visit patch still needs a saved project.
 - *The disabled look.* The Canvas `Radio@0.0.25` disabled is a #e0e0e0 ring, a #bdbdbd dot and #bdbdbd captions; the browser's own disabled radio has a grey filled ring and kept the captions #242424. `canvas.css` now draws the Canvas look for every disabled `.canvas-radio-group` radio; the legend keeps its colour. Panels that already greyed their captions (`.pm-canvas-panel`, `.opex-canvas-panel`, `Choices` `choicesDisabled`) change only in the ring and dot.
@@ -7181,7 +7181,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D113 — Revenues: Save on the Edit forms stays off until something changed (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **Report:** "check for revenue also same behaviour … check for forms save button enabled after modification" (after D111, Finance).
 **Checked:** the contract panel already behaves so, as the Canvas (`locRevenueContractFormDirty`): Edit opens with `formDirty: false` and `canSaveRevenueContract` requires it; every change path sets it (`editField`, `touchField`, `editFieldIfValid`, `withTerm`, `resetStartToCod`, `resyncNegativePrice`, `toggleCountryInflation`, `changeInflationStartYear`, the Type picker's engine result, the hedge type and the individual volumes). Add Contract opens with Save off until a Type is chosen, as before.
 **Changed (DIVERGENCE, the user's request):** the balancing-price Save (`pcf_…_Save_2.DisplayMode`, Y:4498) has no dirty term in the Canvas, so Edit opened with Save on. Editing a period, Save now stays off until the form differs from what it opened with (`formChanged`, moved from Finance to `@/domain/formChanged`; Finance re-exports it). A value typed back turns Save off again. Add Balancing Price is unchanged (Save on once a valid price is typed).
@@ -7190,7 +7190,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D114 — Project overview grid: the selected project can be deselected, as the Canvas (12 Nov 2026)
 
-**Status:** uncommitted (working tree), not on DEV.
+**Status:** committed on `finance-fixes` (`947ca34`), not on DEV.
 **Report:** "on main grid deselect thing is not there like canvas".
 **Canvas:** `psf_MainScreen_DetailList_Container_FluentDetailsList` (Project Main Screen Y:1759) is the PowerCAT Fluent DetailsList in single selection with `SelectionAlwaysVisible`: its check circle toggles the row, so clicking the selected row's circle deselects it (Space on it and Ctrl+click on the row too); a plain row click selects. With nothing selected, Edit Project, Edit Costs and Delete Project are disabled again.
 **Code app before:** a native radio, which cannot be unchecked: the selection could move but never clear.
