@@ -62,6 +62,8 @@ const inputs: FinancingInputRow[] = [
 /** The `useDebtAssumptions` result: not connected by default (the cases written before Fabric). */
 const NO_DEBT = { data: { debt: [], decommissioning: [], dsra: [] }, isLoading: false, error: undefined as unknown, connected: false };
 const state = {
+  /** `undefined` = New Project mode (no project saved yet). */
+  projectId: "p-1" as string | undefined,
   project: baseProject as FinanceProject | null,
   inputs: inputs as FinancingInputRow[],
   error: undefined as unknown,
@@ -73,7 +75,7 @@ const duplicates = vi.fn(async (_key: string): Promise<string[]> => []);
 const ok = <T,>(data: T) => ({ data, isLoading: false, error: undefined, connected: true });
 
 vi.mock("@/app/SessionContext", () => ({
-  useSession: () => ({ projectId: "p-1", locale: "en-GB", loading: false }),
+  useSession: () => ({ projectId: state.projectId, locale: "en-GB", loading: false }),
 }));
 vi.mock("./hooks", () => ({
   TABLES: ["vsb_financinginputs"],
@@ -106,6 +108,7 @@ const planOf = async (job: PlanJob): Promise<WritePlan> => (typeof job.plan === 
 const lastJob = (): PlanJob => run.mock.calls.at(-1)![0];
 
 beforeEach(() => {
+  state.projectId = "p-1";
   state.project = baseProject;
   state.inputs = inputs;
   state.error = undefined;
@@ -152,6 +155,28 @@ describe("UT-FIN Screen (connected)", () => {
     expect(screen.queryByTestId("con_ProjectFinance_DisplayProject_Body_Form_FinancingInputs_Card-c1")).toBeNull();
     expect(screen.getByTestId("con_Milestones_Page_LockMessage_8").textContent).toContain("• Change the project status from Draft");
     expect((within(screen.getByTestId("rad_ProjectFinance_FinancingOptions")).getByLabelText("All Equity") as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("UT-FIN-922 New Project mode: locked, and Financing Options shows Debt Financing (Coalesce, D112) with no write", async () => {
+    state.projectId = undefined;
+    state.project = null;
+    state.inputs = [];
+    renderScreen();
+    expect(screen.getByTestId("con_Milestones_Page_LockMessage_8").textContent).toContain("• Change the project status from Draft");
+    const radio = screen.getByTestId("rad_ProjectFinance_FinancingOptions");
+    const debt = within(radio).getByLabelText("Debt Financing") as HTMLInputElement;
+    expect(debt.checked).toBe(true);
+    expect(debt.disabled).toBe(true);
+    expect((within(radio).getByLabelText("All Equity") as HTMLInputElement).checked).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("UT-FIN-923 a saved project shows no choice until its row is read, never the default first", () => {
+    state.project = null;
+    renderScreen();
+    const radio = screen.getByTestId("rad_ProjectFinance_FinancingOptions");
+    expect(within(radio).getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(false);
   });
 
   it("UT-FIN-904 the financing option writes the project and the cascade, with the canvas spinner", async () => {
@@ -224,6 +249,32 @@ describe("UT-FIN Screen (connected)", () => {
     const data = (await planOf(lastJob())).writes[0]!.data!;
     expect(data).toMatchObject({ vsb_freeequityvalue: 12.5, vsb_shareholderloanvalue: 87.5 });
     expect(data.vsb_isstandardvalue).toBe('[{"locIsStandardFreeEquity":false,"locIsStandardShareholderLoan":false}]');
+  });
+
+  it("UT-FIN-920 the narrow panels carry the canvas layout hooks: rows, 245-px boxes, Reload icons beside the box (D110)", async () => {
+    renderScreen();
+    unfold("c1");
+    fireEvent.click(within(card("c1")).getByRole("button", { name: "Edit Equity" }));
+    await screen.findByTestId("txt_EquityData_FreeEquityEUR");
+    const panel = document.querySelector(".canvas-panel")!;
+    expect([...panel.classList]).toEqual(expect.arrayContaining(["finance-form", "finance-form-equity", "finance-canvas-panel"]));
+    const reset = screen.getByTestId("but_Milestones_DisplayProject_Body_General_Content_farmdown_Reset_2");
+    expect(reset.classList.contains("finance-reset")).toBe(true);
+    expect(reset.parentElement!.classList.contains("finance-row")).toBe(true);
+  });
+
+  it("UT-FIN-921 an Edit panel opens with Save off, and a change turns it on (D111)", async () => {
+    renderScreen();
+    unfold("c1");
+    fireEvent.click(within(card("c1")).getByRole("button", { name: "Edit Equity" }));
+    const field = await screen.findByTestId("txt_EquityData_FreeEquityEUR") as HTMLInputElement;
+    const save = screen.getByTestId("pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "12" } });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.change(field, { target: { value: "10" } });
+    // Typing the stored 10 back clears its standard flag, which the Save would write: still a change.
+    await waitFor(() => expect(save.disabled).toBe(false));
   });
 
   it("UT-FIN-907 the tranche Deactivate dialog writes the toggle with the canvas error text", async () => {

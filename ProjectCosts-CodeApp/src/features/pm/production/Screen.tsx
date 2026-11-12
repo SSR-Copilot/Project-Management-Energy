@@ -314,7 +314,7 @@ export default function ProductionScreen() {
   const busy = writes.progress !== null || writes.refreshing === true;
 
   /* ── command bar — `commandBarState` is the canvas `Items` table one-for-one. */
-  const state = commandBarState({ canEdit: CAN_EDIT_SELECTED_PROJECT, project, selected });
+  const state = commandBarState({ canEdit: CAN_EDIT_SELECTED_PROJECT, project, selected, newProject: !projectId });
   const commands: Command[] = PRODUCTION_COMMAND_KEYS
     .filter((key) => state[key].visible)
     .map((key) => ({ key, label: state[key].label, icon: COMMAND_ICON[key], enabled: state[key].enabled && !busy }));

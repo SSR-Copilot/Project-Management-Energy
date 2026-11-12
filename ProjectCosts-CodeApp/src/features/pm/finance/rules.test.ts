@@ -74,6 +74,7 @@ import {
   FIN_LABEL, PANEL_MAX_LENGTH, shareholderLoanToSave, shouldRegenerateRepayments,
   monthsOnYearsPicked, trancheStatusChangeClearsSchedules,
   stepUpPeriodChangeAllowed, trancheFormTitle, trancheMonthDefault, trancheRecord,
+  frequencyDefault, mmyyParts, equityCardMode, financingOptionShown, vatBankMarginText, fmtAmount, formChanged,
   type DecommissioningForm, type DsraForm, type FinancingInputRow,
 } from "./rules";
 import {
@@ -438,7 +439,8 @@ describe("MMYY packing (rule 29)", () => {
     // `If(… <= 1, " Year", " Years")` — zero is singular too (corrected D34).
     expect(mmyyLabel("0115")).toBe("15 Years 1 Month");
     expect(mmyyLabel("0001")).toBe("1 Year 0 Month");
-    expect(mmyyLabel(null)).toBe("0 Year 0 Month");
+    // A blank duration: `Value("")` is blank, so the parts are "" (corrected 12 Nov 2026, D109).
+    expect(mmyyLabel(null)).toBe(" Year  Month");
     expect(mmyyLabel("0602")).toBe("2 Years 6 Months");
   });
 
@@ -2120,5 +2122,101 @@ describe("German and French numbers: Finance opens every box in the user's langu
     expect(equity.value).toBe("12,5");
     expect(validateFreeEquity(equity.value, "percentage", null, 0, "fr-FR").valid).toBe(true);
     expect(openEquityForm(row("eq", 1, { [INPUT_COL.freeEquityValue]: 12.5 })).value).toBe("12.5");
+  });
+});
+
+/* Finance compared with the Canvas, 12 differences fixed (12 Nov 2026, D109) */
+describe("D109 Finance parity with the Canvas", () => {
+  it("UT-FIN-810 a month outside 0…11, or a frequency outside the list, opens blank and Save stays off", () => {
+    expect(trancheMonthDefault(null, 120, 0)).toBeNull();
+    expect(trancheMonthDefault(12, 6, 1)).toBeNull(); // the stored 12 wins the Coalesce, then the LookUp finds nothing
+    expect(trancheMonthDefault(null, 11, 0)).toBe(11);
+    expect(trancheMonthDefault(null, 6.5, 0)).toBeNull();
+    expect(frequencyDefault(null, 2)).toBe(2);
+    expect(frequencyDefault(12, 2)).toBe(12);
+    expect(frequencyDefault(null, 4)).toBeNull();
+    const add = openTrancheForm({ existing: null, project: project(), standard: stdAt(2027), banks: [], tranches: [] });
+    expect(add.fixedInterestRateMonths).toBeNull(); // the fixture's "fixed interest rate time" is 120
+    expect(add.startRepaymentMonths).toBe(6);
+    expect(add.frequencyOfRepayment).toBe(2);
+    expect(canSaveSeniorDebtTranche(seniorForm())).toBe(true);
+    expect(canSaveSeniorDebtTranche(seniorForm({ fixedInterestRateMonths: add.fixedInterestRateMonths }))).toBe(false);
+  });
+
+  it("UT-FIN-811 a duration of any length is read Left 2 = months, Right 2 = years: the seeded “005” is 5 years", () => {
+    expect(unpackMMYY("005")).toEqual({ months: 0, years: 5 });
+    expect(unpackMMYY("0015")).toEqual({ months: 0, years: 15 });
+    expect(unpackMMYY("0615")).toEqual({ months: 6, years: 15 });
+    expect(unpackMMYY(null)).toEqual({ months: 0, years: 0 });
+    expect(mmyyParts("5")).toEqual({ months: 5, years: 5 }); // `Left("5", 2)` and `Right("5", 2)` are both "5"
+    expect(mmyyParts("")).toEqual({ months: null, years: null });
+    const std = buildDecommissioningStandard(
+      [r("decommissioning costs", DECOMMISSIONING_CATEGORY.durationSaving, "5", "5")], "wind", project(),
+    );
+    expect(std.durationSaving).toBe("005");
+    expect(unpackMMYY(std.durationSaving)).toEqual({ months: 0, years: 5 });
+    const form = openDecommissioningForm(row("dec", 5, { [INPUT_COL.durationOfSaving]: "005" }));
+    expect([form.years, form.months]).toEqual([5, 0]);
+    expect(decommissioningDurationLabel("005")).toBe("5 Years 0 Months");
+  });
+
+  it("UT-FIN-812 card texts with blank data read as the Canvas: blank parts, a blank Total, the DSRA defaults", () => {
+    expect(yearMonthLabel(null, 3)).toBe(" Year 03 Months");
+    expect(yearMonthLabel(3, null)).toBe("03 Years  Month");
+    expect(yearMonthLabel(null, null)).toBe(" Year  Month");
+    expect(yearMonthLabel(0, 3)).toBe("0 Year 03 Months");
+    expect(mmyyLabel(null)).toBe(" Year  Month");
+    expect(mmyyLabel("0006")).toBe("6 Years 0 Month");
+    expect(decommissioningDurationLabel(null)).toBe(" Years  Months");
+    expect(totalDecommissioningCost(CHOICE_FINANCE.costsOfDecommissioning.total, null, 12)).toBeNull();
+    expect(totalDecommissioningCost(CHOICE_FINANCE.costsOfDecommissioning.perTurbine, null, 12)).toBe(0);
+    expect(fmtAmount(totalDecommissioningCost(CHOICE_FINANCE.costsOfDecommissioning.total, null, 12))).toBe("");
+  });
+
+  it("UT-FIN-813 a blank Free Equity choice reads as money; a blank Upfront Fee option uses the integer format", () => {
+    expect(equityCardMode(null)).toBe("fixed");
+    expect(freeEquityLabel(equityCardMode(null), "Poland")).toBe("[PLN]");
+    expect(freeEquityLabel(equityCardMode(null), "Germany")).toBe("[EUR]");
+    expect(equityCardMode(CHOICE_FINANCE.freeEquity.percentage)).toBe("percentage");
+    expect(equityCardMode(CHOICE_FINANCE.freeEquity.fixedValue)).toBe("fixed");
+    expect(formatUpfrontFee(null, 1_250_000)).toBe("1,250,000");
+    expect(formatUpfrontFee(null, 1_250_000, "de-DE")).toBe("1.250.000");
+    expect(formatUpfrontFee(CHOICE_FINANCE.upfrontFee.percentageOfDebt, 1.25, "de-DE")).toBe("1,3");
+  });
+
+  it("UT-FIN-814 Financing Options shows Debt Financing while blank; the VAT Bank Margin follows the language", () => {
+    const { allEquity, debtFinancing } = CHOICE_FINANCE.financingOptions;
+    expect(financingOptionShown(null, null)).toBe(debtFinancing);
+    expect(financingOptionShown(null, allEquity)).toBe(allEquity);
+    expect(financingOptionShown(allEquity, debtFinancing)).toBe(allEquity);
+    expect(vatBankMarginText(1.5, "de-DE")).toBe("1,5");
+    expect(vatBankMarginText(1.5, "fr-FR")).toBe("1,5");
+    expect(vatBankMarginText(1.5, "en-US")).toBe("1.5");
+    expect(vatBankMarginText(null, "de-DE")).toBe("");
+  });
+
+  it("UT-FIN-815 every card amount uses one engine: French and Polish group as the other cards do", () => {
+    for (const lang of ["fr-FR", "pl-PL", "de-DE", "en-US"]) {
+      expect(fmtAmount(1_234_567, lang)).toBe(fmtCard(1_234_567, CARD_FORMAT.amount, lang));
+      expect(formatUpfrontFee(CHOICE_FINANCE.upfrontFee.fixed, 1_234_567, lang)).toBe(fmtCard(1_234_567, "###,###,##0", lang));
+    }
+    expect(fmtAmount(1_234_567, "en-US")).toBe("1,234,567");
+    expect(fmtAmount(1_234_567, "de-DE")).toBe("1.234.567");
+    expect(fmtAmount(null)).toBe("");
+  });
+});
+
+describe("D111 Edit panels: Save stays off until something changed", () => {
+  it("UT-FIN-816 the opened form is compared by value: dates, flags and nested values count; a value typed back does not", () => {
+    const opened = openEquityForm(row("eq", 1, { [INPUT_COL.freeEquity]: CHOICE_FINANCE.freeEquity.percentage, [INPUT_COL.freeEquityValue]: 10 }));
+    expect(formChanged(opened, { ...opened })).toBe(false);
+    expect(formChanged(opened, { ...opened, value: "12" })).toBe(true);
+    expect(formChanged(opened, { ...opened, value: opened.value })).toBe(false); // typed back, flags untouched
+    expect(formChanged(opened, { ...opened, flags: { ...opened.flags, locIsStandardFreeEquity: !opened.flags.locIsStandardFreeEquity } })).toBe(true);
+    const day = (s: string) => new Date(`${s}T00:00:00`);
+    expect(formChanged({ end: day("2030-01-01") }, { end: day("2030-01-01") })).toBe(false);
+    expect(formChanged({ end: day("2030-01-01") }, { end: day("2030-01-02") })).toBe(true);
+    expect(formChanged({ end: null }, { end: day("2030-01-01") })).toBe(true);
+    expect(formChanged(null, opened)).toBe(true);
   });
 });

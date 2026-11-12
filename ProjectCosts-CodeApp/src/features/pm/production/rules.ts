@@ -418,23 +418,33 @@ export const COMMAND_BAR_LABEL = "pcf_ProjectRevenues_Content_ContractCommandBar
  * `And(gblCurrentUser.CanEditSelectedProject, 'Total Capacity' <> 0)`, and the whole bar is
  * `DisplayMode.Disabled` while the page lock shows (Y:458). With no selection, Activate and
  * Deactivate are both hidden (`!IsBlank(Status)`).
+ *
+ * DIVERGENCE (D112): in New Project mode `gblRecordSelectedProject` is blank, so the Canvas
+ * `ClearCollect(colEnergyYieldsInProject, Filter('Energy Yields', Project.Project = …))` (Y:42)
+ * collects the yields that have NO project and `OnVisible` selects the first one. The locked bar
+ * then shows Edit, Delete and Deactivate Production as well, all disabled (Canvas screenshot,
+ * 12 Nov 2026). The code app loads no such rows; in New Project mode it shows those three commands,
+ * disabled, without a selection (user, 12 Nov 2026).
  */
 export function commandBarState(ctx: {
   canEdit: boolean;
   project: ProductionProject | null;
   selected: EnergyYieldRow | null;
+  /** New Project mode: no project saved yet (D112). */
+  newProject?: boolean;
 }): Record<ProductionCommandKey, CommandItemState> {
   const capacityOk = (ctx.project?.totalCapacity ?? 0) !== 0;
-  const enabled = ctx.canEdit && capacityOk && !isPageLocked(ctx.project);
-  const sel = ctx.selected;
+  const placeholder = ctx.newProject === true;
+  const enabled = !placeholder && ctx.canEdit && capacityOk && !isPageLocked(ctx.project);
+  const sel = placeholder ? null : ctx.selected;
   return {
     newProductionWTG: { visible: true, enabled, label: "Add Production WTG" },
     newProductionPV: { visible: true, enabled, label: "Add Production PV" },
-    editProductionWTG: { visible: sel?.type === CHOICE_PRODUCTION.yieldType.wtg, enabled, label: "Edit" },
+    editProductionWTG: { visible: placeholder || sel?.type === CHOICE_PRODUCTION.yieldType.wtg, enabled, label: "Edit" },
     editProductionPV: { visible: sel?.type === CHOICE_PRODUCTION.yieldType.pv, enabled, label: "Edit" },
-    deleteProductionItem: { visible: sel !== null, enabled, label: "Delete" },
+    deleteProductionItem: { visible: placeholder || sel !== null, enabled, label: "Delete" },
     activateProdItem: { visible: sel !== null && sel.status !== 0, enabled, label: "Activate Production" },
-    deactivateProdItem: { visible: sel !== null && sel.status !== 1, enabled, label: "Deactivate Production" },
+    deactivateProdItem: { visible: placeholder || (sel !== null && sel.status !== 1), enabled, label: "Deactivate Production" },
   };
 }
 

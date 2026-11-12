@@ -32,6 +32,8 @@ const yieldRow = (over: Partial<EnergyYieldRow>): EnergyYieldRow => ({
 });
 
 const state = vi.hoisted(() => ({
+  /** `undefined` = New Project mode (no project saved yet). */
+  projectId: "p1" as string | undefined,
   project: null as unknown,
   yields: [] as unknown[],
   error: undefined as unknown,
@@ -43,7 +45,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/SessionContext", () => ({
-  useSession: () => ({ projectId: "p1", locale: "en-US", loading: false, envVars: {} }),
+  useSession: () => ({ projectId: state.projectId, locale: "en-US", loading: false, envVars: {} }),
 }));
 
 const ok = <T,>(data: T) => ({ data, isLoading: false, error: undefined, connected: true });
@@ -81,6 +83,7 @@ afterEach(() => {
   state.deleteYield.mockClear();
   state.changeStatus.mockClear();
   state.error = undefined;
+  state.projectId = "p1";
   state.standard = { seasonality: [], negativePrices: [] };
   state.standardError = undefined;
 });
@@ -115,6 +118,17 @@ describe("Project Production Screen (connected)", () => {
     expect(screen.getByTestId("con_Milestones_Page_LockMessage_2").textContent).toContain("• Milestones");
     expect(command("Add Production WTG").disabled).toBe(true);
     expect(screen.queryByTestId("gal_Production_Items")).toBeNull();
+  });
+
+  it("UT-PROD-914 DIVERGENCE (D112): New Project mode shows all five commands of the Canvas bar, disabled", () => {
+    state.projectId = undefined;
+    renderScreen(null, []);
+    expect(screen.getByTestId("con_Milestones_Page_LockMessage_2").textContent).toContain("• Generator");
+    expect(within(bar()).getAllByRole("button").map((b) => b.textContent?.trim()))
+      .toEqual(["Add Production WTG", "Add Production PV", "Edit", "Delete", "Deactivate Production"]);
+    expect(within(bar()).getAllByRole("button").every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    // The six roll-up boxes stay, empty.
+    expect((screen.getByTestId("txt_Production_DisplayProject_Body_Form_GrossYield") as HTMLInputElement).value).toBe("");
   });
 
   it("UT-PROD-904 the chevron expands a card with the canvas detail values and labels", () => {

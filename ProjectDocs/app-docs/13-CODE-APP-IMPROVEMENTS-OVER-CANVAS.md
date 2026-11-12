@@ -460,3 +460,11 @@ Branch `feature/azure-maps-integration`; details in `18-AZURE-MAPS-IN-THE-CODE-A
 | Cluster Checklist | `cmp_PopUp_CheckList_GeneralData_Information` is the Canvas `cmp_PopUp_Information` (450 × 260, 0.7 scrim, themePrimary header with the ✕, one 90-wide "✓ OK"), the shared `ConfirmDialog` "information" variant; it was a plain Fluent dialog | reproduced |
 | Cluster Checklist | The Info notice shows whenever the page is not locked and Next Cluster is disabled, on the last cluster too (`con_…_Buttons_Info.Visible`, S:2026); it also required a next cluster | fixed |
 | Cluster Checklist | **NEW (not in the Canvas):** after a gate approval request on an active Only Notifications gate, the loader stays ("Cluster Transition in Progress. Please wait...") and re-reads the trackings every 1.5 s, for up to 30 s, until the gate flow has completed the cluster, so the screen opens on the moved project. The Canvas shows the half-way state and its tooltip asks the user to "wait 30 Seconds and then Refresh the Page" (Y:1972). UT-CHKLST-082 | proposed (not approved) |
+
+## Locked pages: the disabled radio and the New Project Production bar (12 Nov 2026, D112) — reproduced / divergence
+
+| Screen | Change | Status |
+|---|---|---|
+| Finance | In New Project mode Financing Options shows Debt Financing, as the Canvas `Coalesce(gblRecordSelectedProject.'Financing Options', 'Debt Financing')` does with no project; it showed nothing chosen. UT-FIN-922/923 | reproduced |
+| Finance (and every `.canvas-radio-group`) | A disabled radio draws the Canvas `Radio@0.0.25` look: #e0e0e0 ring, #bdbdbd dot on the chosen option, #bdbdbd captions (the browser's own had a grey filled ring and dark captions) | reproduced |
+| Production | In New Project mode the bar shows Add Production WTG / PV, Edit, Delete and Deactivate Production, all disabled, as the Canvas does. The Canvas gets the extra three by selecting a yield that has **no project** (`Filter('Energy Yields', Project.Project = <blank>)`, Y:42); the code app shows them without loading or selecting such a row. UT-PROD-131, UT-PROD-914 | DIVERGENCE (the user's choice, 12 Nov 2026) |

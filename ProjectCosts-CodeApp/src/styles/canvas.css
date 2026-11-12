@@ -215,6 +215,15 @@
 .canvas-radio-group label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 14px; color: #242424; font-weight: 400; }
 .canvas-radio-group input { accent-color: #006eb9; width: 16px; height: 16px; }
 .canvas-radio-group label:has(> input:enabled), .canvas-radio-group input:enabled { cursor: pointer; }
+/* A `DisplayMode.Disabled` `Radio@0.0.25` (Fluent v9): a #e0e0e0 ring, the chosen option's 10 px #bdbdbd
+   dot, and the option captions #bdbdbd (canvas Financing Options on a locked page, PO screenshot,
+   12 Nov 2026, D112). The browser's own disabled radio has a grey filled ring and keeps the captions
+   dark, so the circle is drawn here in the Canvas colours. The legend keeps its colour. */
+.canvas-radio-group input[type="radio"]:disabled {
+  appearance: none; flex: none; box-sizing: border-box; border: 1px solid #e0e0e0; border-radius: 50%; background: #fff;
+}
+.canvas-radio-group input[type="radio"]:disabled:checked { background: radial-gradient(circle, #bdbdbd 5px, transparent 5.5px) #fff; }
+.canvas-radio-group label:has(> input[type="radio"]:disabled) { color: #bdbdbd; }
 .canvas-cost-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .canvas-capex-tabs { display: flex; flex-shrink: 0; height: 50px; border-bottom: 1px solid #f1f1f1; overflow-x: auto; padding: 0 14px; gap: 26px; }
 /* Tab labels: 14px, #424242 idle / #242424 + semibold when selected — without an explicit
@@ -605,3 +614,49 @@
 .fui-Field .fui-Field__validationMessage { color: #d20532; font-weight: 600; font-size: 12px; padding-left: 0; }
 /* The canvas error labels carry no glyph. */
 .fui-Field .fui-Field__validationMessageIcon { display: none; }
+
+/*
+ * D110 — the narrow Finance panels as the Canvas lays them out: Edit Equity, VAT-Financing, Decommissioning Costs and
+ * DSRA/DSRF (`con_GeneralData_RightPanel_*_InpForm`, Y:7480, 8118, 14147, 15518). Corrected 12 Nov 2026: the boxes ran
+ * across the whole panel, the rows were 16 px apart and the Reload icons sat at the panel's right edge.
+ *  - The form is a vertical AutoLayout with NO LayoutGap and PaddingTop 10 (VAT 16; DSRA also PaddingLeft 5). Each row
+ *    is a ManualLayout container 70 high: Decommissioning's Start Date of Saving and Date of Expiry 76, DSRA's four text
+ *    rows 75 (PaddingTop 5); the radios 110 (Equity, VAT), 100 (Decommissioning), 80 (DSRA Type: horizontal, with a
+ *    1.5-px Grayscale30 rule 10.5 from the bottom).
+ *  - The caption spans the panel; the box is `Parent.Width/2 + Self.X` = 245 of the 450 (DSRA: 285, its date 280).
+ *    A year / month pair is two boxes 10 apart: (245 - 10) / 2 each; DSRA `(245)/2 + 17` = 139.5 each.
+ *  - A Reload icon sits 10 right of the box, on the box's line: `Classic/Icon` 18 wide and the box's height (Equity,
+ *    VAT), `cat_PowerCAT.Icon` 30 x 30 (Decommissioning). DSRA's CalendarAdd button is 32 wide at X 313.
+ */
+.finance-form.canvas-panel .canvas-panel-body { padding: 10px 20px 20px; }
+.finance-form-vat.canvas-panel .canvas-panel-body { padding-top: 16px; }
+.finance-form-dsra.canvas-panel .canvas-panel-body { padding-left: 25px; }
+.finance-form .canvas-panel-body > div { gap: 0; }
+.finance-form :is(.fui-Field, .canvas-field) > :is(.fui-Input, .fui-Dropdown) { width: 245px; max-width: 100%; justify-self: start; }
+.finance-form-dsra :is(.fui-Field, .canvas-field) > :is(.fui-Input, .fui-Dropdown) { width: 285px; }
+.finance-form-dsra .fui-Field > .fui-DatePicker { width: 280px; }
+.finance-form .finance-ym-pair { width: 245px; max-width: 100%; }
+.finance-form-dsra .finance-ym-pair { width: 289px; }
+.finance-form .finance-ym-pair .canvas-field > .fui-Dropdown { width: 100%; }
+.finance-form.pm-canvas-panel .canvas-radio-group { box-sizing: border-box; height: 110px; padding-bottom: 0; }
+.finance-form-decom.pm-canvas-panel .canvas-radio-group { height: 100px; }
+.finance-form-dsra.pm-canvas-panel .canvas-radio-group {
+  position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 20px; height: 80px;
+}
+.finance-form-dsra.pm-canvas-panel .canvas-radio-group::after {
+  content: ""; position: absolute; left: 0; right: -5px; bottom: 9px; height: 1.5px; background: #f1f1f1;
+}
+.finance-form-dsra .fui-Field:has(input[data-testid^="txt_DSRA_DRSFData_"]) { box-sizing: border-box; height: 75px; padding-top: 5px; }
+.finance-form-decom .fui-Field:has(input:is([data-testid="dte_DecommissioningData_Start_Date_of_Saving_1"], [data-testid="dte_DecommissioningData_Date_of_Expiry_1"])) { height: 76px; }
+.finance-form .finance-row { position: relative; display: block; }
+.finance-form .finance-reset { position: absolute; top: 25px; left: 255px; min-width: 0; width: 18px; height: 32px; padding: 0; border: 0; color: #0078d4; }
+.finance-form .finance-reset .fui-Button__icon { width: 18px; height: 18px; font-size: 18px; }
+.finance-form .finance-reset:hover:enabled { color: #106ebe; background: transparent; }
+.finance-form .finance-reset:disabled { color: #e1dfdd; }
+.finance-form-decom .finance-reset { width: 30px; height: 30px; }
+.finance-form-decom .finance-reset .fui-Button__icon { width: 20px; height: 20px; font-size: 20px; }
+.finance-form-dsra .finance-reset.finance-calendar { left: 293px; width: 32px; height: 32px; }
+.finance-form-dsra .finance-reset.finance-calendar .fui-Button__icon { width: 20px; height: 20px; font-size: 20px; }
+.finance-form .finance-row-error { display: block; height: 16px; margin-top: -16px; line-height: 16px; }
+/* Every Finance year / month pair (the tranche's too): the two boxes are 10 apart, `X: YY.X + YY.Width + 10`. */
+.finance-canvas-panel .finance-ym-pair { column-gap: 10px; }
