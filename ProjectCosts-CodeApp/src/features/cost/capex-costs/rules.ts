@@ -225,6 +225,22 @@ export function clusterPayments(
   return slots.map((p, i) => ({ ...p, amount: amounts[i] ?? 0 }));
 }
 
+/**
+ * The month boxes of an EXISTING individual / % Values contract, as the canvas opens them: Dataverse stores money
+ * (`vsb_cost`), but the panel works in percent, so each stored month becomes `Round(cost / 'Total Cost' * 100, 1)`
+ * (`JanUIv` … `DecUIv`: `If(schemeIsPct, If(!IsBlank(mX), Round(mX / locContract.'Total Cost' * 100, 1), Blank()), …)`).
+ * Without this the boxes showed the euro amounts ("12016") against a 0-100 rule. Any other line, or a contract
+ * with no usable total, is returned unchanged.
+ */
+export function paymentsAsPercent(line: CostLine): CostLine {
+  const total = line.totalCost;
+  if (line.distribution !== "individual" || line.distributionScheme !== "percent" || !total) return line;
+  return {
+    ...line,
+    payments: line.payments.map((p) => ({ ...p, amount: Math.round((p.amount / total) * 100 * 10) / 10 })),
+  };
+}
+
 /** Everything the panel would write, for the current form state. */
 export function proposedPayments(
   line: CostLine | null,

@@ -21,7 +21,7 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Button, MessageBar, MessageBarBody, MessageBarTitle, Text, makeStyles, tokens,
+  Button, MessageBar, MessageBarBody, Text, makeStyles, tokens,
 } from "@fluentui/react-components";
 import { CopyRegular } from "@fluentui/react-icons";
 import { FormPanel, TextAreaField, TextField } from "@/components";
@@ -105,15 +105,6 @@ export function ReportProblemPanel({
         </>
       }
     >
-      <MessageBar intent="warning">
-        <MessageBarBody>
-          <MessageBarTitle>This does not file a ticket yet</MessageBarTitle>
-          The canvas app&apos;s Save button had its <code>ReportDevOpsBug</code> flow call
-          commented out, so nothing was ever submitted. Re-enabling it is an open decision.
-          For now, copy the report and send it to the team.
-        </MessageBarBody>
-      </MessageBar>
-
       <TextField
         label="Title"
         required

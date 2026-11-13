@@ -10,7 +10,7 @@
  */
 import { Button, makeStyles, mergeClasses, tokens, Tooltip } from "@fluentui/react-components";
 import {
-  TableSimpleRegular, ChevronDownRegular, ChevronUpRegular, NavigationRegular,
+  TableSimpleRegular, ChevronDownRegular, ChevronUpRegular,
 } from "@fluentui/react-icons";
 import { useMemo, useState, type ReactElement } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -78,8 +78,7 @@ const MDL2_PATH = {
 // A fixed 20-px box (not `1em`, which followed the 14-px label and drew an 11-px glyph): the glyph
 // 16 px, 8 px from the rail edge and its label 33 px in, as the canvas rail (screenshot, 3 Nov 2026).
 const Mdl2Icon = ({ path }: { path: string }) => (
-  <svg width="20" height="20" viewBox="-256 -256 2560 2560" fill="currentColor" aria-hidden="true"
-    style={{ marginLeft: "-3px", marginRight: "-2px" }}>
+  <svg className="canvas-rail-icon" width="20" height="20" viewBox="-256 -256 2560 2560" fill="currentColor" aria-hidden="true">
     <path d={path} />
   </svg>
 );
@@ -127,6 +126,17 @@ const COLLAPSE_CAPTION = "Collapse Menu";
 const collapseTooltip = (expanded: boolean) => `${expanded ? "Decrease" : "Expand"} left naviagtion panel`;
 /** `gblAppSizes.LeftNavigation.DecreasedWidth` — the PM rail's container width once collapsed. */
 const PM_RAIL_COLLAPSED_WIDTH = 32;
+
+/**
+ * `icon_Left_Navigation_Expand`: `Icon.Hamburger` — the canvas classic icon's three thin full-width bars (the MDL2
+ * `GlobalNavButton` outline, U+E700: 128-unit bars on a 2048 em, i.e. 1 px at 16 px), not Fluent v9's rounded
+ * `NavigationRegular`.
+ */
+const HamburgerIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 2048 2048" fill="currentColor" aria-hidden="true">
+    <path d="M2048 1408v128H0v-128h2048zm0-512v128H0V896h2048zm0-512v128H0V384h2048z" />
+  </svg>
+);
 
 /** The rail's accessible name per section. */
 const RAIL_LABEL = { cost: "Cost sections", project: "Project sections", admin: "Administration sections" } as const;
@@ -234,7 +244,7 @@ export function LeftNav({ adminVisible = true }: { adminVisible?: boolean } = {}
           <Button
             appearance="transparent"
             data-testid={EXPAND_TEST_ID}
-            icon={<NavigationRegular />}
+            icon={<HamburgerIcon />}
             aria-expanded={expanded}
             /*
              * Tosca rule 1. The `Tooltip relationship="label"` above already names this for a

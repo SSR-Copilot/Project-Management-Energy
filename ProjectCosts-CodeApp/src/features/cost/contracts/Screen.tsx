@@ -52,6 +52,7 @@ import {
 import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
 import { parseNumber } from "@/domain/numeric";
+import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { DataError } from "@/platform/errors";
@@ -86,6 +87,8 @@ import { costRowsForAccounts } from "@/data/costRepository";
 
 /** `StartOfWeek.Monday` — Fluent's `DayOfWeek.Monday` (as `components/DateField.tsx`). */
 const MONDAY = 1;
+/** `dtp_..._ClosingDate` has no `Format`, so it shows the control's default: "Tue, Nov 24, 2026". */
+const formatClosingDate = (d: Date | null | undefined) => formatCanvasDate(d, DATE_PICKER_FORMAT, "en-US");
 
 /* ─────────────────────────────────────────────────────────────────── styles */
 
@@ -897,6 +900,8 @@ export default function ContractsScreen() {
       {/* ── the Development / Construction contract panel ───────────────── */}
       <FormPanel centerClose
         open={panel === "contract"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={panelTitle(editing, form.contractType)}
         onDismiss={() => setPanel("none")}
         /*
@@ -936,7 +941,9 @@ export default function ContractsScreen() {
                 // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:4124`).
                 firstDayOfWeek={MONDAY}
                 initialPickerDate={project?.startDate}
-                value={form.closingDate ?? null}
+                // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
+            formatDate={formatClosingDate}
+            value={form.closingDate ?? null}
                 onSelectDate={(date: Date | null | undefined) => updateForm({ closingDate: date ?? undefined }, true)}
               />
               {errorFor("closingDate") ? (
@@ -1066,6 +1073,9 @@ export default function ContractsScreen() {
                     onBlur={() => touch("marginPercentage")}
                   />
                 ) : (
+                  // `lbl_Contracts_RightPanel_NewEdit_MarginFixedValues` has no `FontWeight` (normal), unlike Margin [%] and the
+                  // other captions of this panel, which are Semibold.
+                  <div className="canvas-label-regular">
                   <CostField
                     label={costLabel(MSG.marginFixedValue, project ?? {})}
                     labelTitle={costLabel(MSG.marginFixedValue, project ?? {})}
@@ -1080,6 +1090,7 @@ export default function ContractsScreen() {
                     )}
                     onBlur={() => touch("marginFixedValue")}
                   />
+                  </div>
                 )}
               </>
             ) : null}
@@ -1112,6 +1123,9 @@ export default function ContractsScreen() {
               />
             </div>
 
+            {/* `lbl_…_NewEdit_Comment` sits at `Y: =20` in its container: 20 px more space above Comment than between fields;
+                `txt_…_Comment` is a canvas multiline TextInput, which cannot be resized by the user. */}
+            <div className="canvas-contract-comment">
             <CostField
               label={MSG.comment}
               name="txt_Contracts_RightPanel_NewEdit_Comment"
@@ -1127,6 +1141,7 @@ export default function ContractsScreen() {
                 data-testid="contract-comment"
               />
             </CostField>
+            </div>
           </div>
         </div>
       </FormPanel>
@@ -1134,6 +1149,8 @@ export default function ContractsScreen() {
       {/* ── the Project Rights contract panel ───────────────────────────── */}
       <FormPanel centerClose
         open={panel === "rights"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={panelTitle(editing, CONTRACT_TYPE.ProjectRights)}
         width="narrow"
         onDismiss={() => setPanel("none")}
@@ -1163,6 +1180,8 @@ export default function ContractsScreen() {
             // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:3450`).
             firstDayOfWeek={MONDAY}
             initialPickerDate={project?.startDate}
+            // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
+            formatDate={formatClosingDate}
             value={form.closingDate ?? null}
             onSelectDate={(date: Date | null | undefined) => {
               touch("closingDate");
@@ -1193,6 +1212,8 @@ export default function ContractsScreen() {
       {/* ── the payment-target panel ────────────────────────────────────── */}
       <FormPanel centerClose
         open={panel === "target"}
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
+        panelClassName="contract-canvas-panel"
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"
         onDismiss={cancelTargetPanel}
@@ -1644,30 +1665,43 @@ function ContractCardBody({
 
   return (
     <>
+      {/*
+        * `con_Contracts_List_Card_Body_Columns`: a wrapping row of vertical columns, each `Width: =Parent.Width/5`
+        * (`LayoutMinWidth: =150`). Column 1 stacks Costs Until Closing over Margin, column 2 Closing Date over Total
+        * Development Contract, then Costs After Closing and Total Costs — four columns, filled top to bottom.
+        */}
       <div className="canvas-contract-fields">
         {showsClosingCosts ? (
           <>
-            <CostField label={`Costs Until Closing [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
-              disabled value={wholeNumberText(untilClosing, locale)} />
-            {closingDateField}
-            <CostField label={`Costs After Closing [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
-              disabled value={wholeNumberText(afterClosing, locale)} />
-            <CostField label={`Total Costs [${currency}]`}
-              name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
-              disabled value={wholeNumberText(totalCosts, locale)} />
-            <CostField label={`Margin [${marginUnit}]`}
-              name="txt_Contracts_List_Card_Body_Fields_Margins"
-              // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
-              standard={marginIsStandard(contract)}
-              disabled value={oneDecimalText(marginValue, locale)} />
-            {totalField}
+            <div className="canvas-contract-col canvas-contract-col-first">
+              <CostField label={`Costs Until Closing [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
+                disabled value={wholeNumberText(untilClosing, locale)} />
+              <CostField label={`Margin [${marginUnit}]`}
+                name="txt_Contracts_List_Card_Body_Fields_Margins"
+                // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
+                standard={marginIsStandard(contract)}
+                disabled value={oneDecimalText(marginValue, locale)} />
+            </div>
+            <div className="canvas-contract-col">
+              {closingDateField}
+              {totalField}
+            </div>
+            <div className="canvas-contract-col">
+              <CostField label={`Costs After Closing [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
+                disabled value={wholeNumberText(afterClosing, locale)} />
+            </div>
+            <div className="canvas-contract-col">
+              <CostField label={`Total Costs [${currency}]`}
+                name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
+                disabled value={wholeNumberText(totalCosts, locale)} />
+            </div>
           </>
         ) : (
           <>
-            {totalField}
-            {closingDateField}
+            <div className="canvas-contract-col canvas-contract-col-first">{totalField}</div>
+            <div className="canvas-contract-col">{closingDateField}</div>
           </>
         )}
       </div>

@@ -71,6 +71,7 @@ import {
   type OpexMode, type OpexProjectContext, type OpexSubaccount, type PanelContext,
   type RowSelection,
 } from "./opexRules";
+import { canvasScrollbar } from "./canvasScrollbar";
 
 /* ═══════════════════════════════════════════════════════════ reference data ══ */
 
@@ -112,14 +113,26 @@ const AGGREGATION_OPTIONS: readonly number[] = [
 /* ══════════════════════════════════════════════════════════════════ styles ══ */
 
 const useStyles = makeStyles({
-  page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0 },
+  // Fills the content area so the card gallery below can own the scroll, as the canvas screen does.
+  page: { display: "flex", flexDirection: "column", gap: space.s, minWidth: 0, flexGrow: 1, minHeight: 0 },
   /*
    * `gal_…_Subaccounts` / `gal_…_GeneratorsInProject` - `TemplatePadding: =0`, so the cards touch.
    * Each `con_…_Card` is `Parent.Width - 10` wide with no border (`BorderStyle.None`); the thin
    * line between cards is the `GroupContainer`'s default light drop shadow.
    */
-  cardList: { display: "flex", flexDirection: "column", rowGap: 0 },
+  /*
+   * The canvas gallery scrolls itself and always shows its scrollbar (grey thumb, arrows), in the 10 px right of the
+   * cards — even when everything fits. `overflow-y: scroll` keeps that scrollbar on screen at all times.
+   */
+  cardList: {
+    display: "flex", flexDirection: "column", rowGap: 0, flexGrow: 1, minHeight: 0, overflowY: "scroll",
+    // The canvas classic bar — 10 px grey handle on a light track with arrow buttons — drawn by the page itself,
+    // so it shows on every machine (Windows can otherwise hide an idle scrollbar).
+    ...canvasScrollbar,
+  },
   card: {
+    // Inside the scrolling gallery a card keeps its own height instead of being squeezed to fit.
+    flexShrink: 0,
     width: "calc(100% - 10px)",
     backgroundColor: palette.white,
     boxShadow: "0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14)",
@@ -227,8 +240,9 @@ const useStyles = makeStyles({
    * command bar, header and gallery all sit in it, and the gallery is a fixed width wider than
    * the screen, so the whole body scrolls sideways under a permanent grey bar.
    */
+  /** `con_…_CardBody.Height: =Max(gallery.Y + gallery.Height + 20, 50)` — 20 px under the rows (or the empty gallery). */
   scroll: {
-    overflowX: "auto", paddingLeft: "20px", paddingBottom: space.xxs,
+    overflowX: "auto", paddingLeft: "20px", paddingBottom: "20px",
     scrollbarColor: "#868686 #f1f1f1",
     "::-webkit-scrollbar": { height: "10px" },
     "::-webkit-scrollbar-track": { backgroundColor: "#f1f1f1" },
@@ -240,6 +254,7 @@ const useStyles = makeStyles({
   },
   // Fixed layout so every column holds its canvas width; `width` is set inline to their sum.
   table: { tableLayout: "fixed", borderCollapse: "collapse", whiteSpace: "nowrap" },
+  emptyGallery: { height: "50px" },
   /*
    * `lbl_…_CardBody_CostsTableHeader_*` — `Color: gblAppStyles.Label.Color` (the app's dark
    * label colour) with `FontWeight.Semibold`. Without an explicit colour these headings picked
@@ -319,12 +334,37 @@ const useStyles = makeStyles({
    * sits at `X: =20`, `Width: =Parent.Width-Self.X*2`: two 290 px columns, 20 px from the panel
    * edges and 40 px apart. The panel body already pads 20 px.
    */
+  /*
+   * Both columns are `Height: =Parent.Height` with `LayoutOverflowY: =LayoutOverflow.Scroll` (`:5523`, `:7315`): each
+   * scrolls ON ITS OWN, its scrollbar at its own right edge, and the other column stays put — the panel body itself
+   * does not scroll (`opex-canvas-panel .canvas-panel-body` in canvas.css). `PaddingTop: =10` on each.
+   */
   panelColumns: {
-    display: "grid", gap: "40px",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-    "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
+    display: "grid", gap: "0",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)",
+    flexGrow: 1, minHeight: 0, height: "100%",
+    "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "none", overflowY: "auto" },
   },
-  panelColumn: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
+  panelColumn: {
+    display: "flex", flexDirection: "column", gap: space.m, minWidth: 0, minHeight: 0,
+    overflowY: "auto", boxSizing: "border-box",
+    // The boxes run to ~5 px short of the column's scrollbar, as the canvas (`Width: =Parent.Width-Self.X*2`).
+    paddingTop: "10px", paddingBottom: "20px", paddingLeft: "20px", paddingRight: "3px",
+    "@media (max-width: 899px)": { overflowY: "visible" },
+  },
+  /*
+   * The right column's rows carry their own canvas heights, so its toggles sit 34 / 51 / 44 px apart as in the
+   * canvas instead of an even 45. Other blocks (the inflation fields) keep the column's 12 px spacing.
+   */
+  rightColumn: { gap: "0", "& > :not([data-toggle-row])": { marginBottom: space.m } },
+  /** `con_…_InflationToggles` row: `PaddingTop: =2`, a 32 px toggle. */
+  rowInflation: { minHeight: "34px", paddingTop: "2px", boxSizing: "border-box" },
+  /** `con_…_Threshold_Container`: `Height: = toggle.X + toggle.Height` (44), the toggle at its top. */
+  rowThreshold: { minHeight: "44px", paddingBottom: "12px", boxSizing: "border-box" },
+  /** `con_…_AlignWithProjectDuration`: `Height: =50`, the toggle centred. */
+  rowAlign: { minHeight: "50px", boxSizing: "border-box" },
+  /** `con_…_AlignWithProjectDuration_1`: `Height: =50`, the External Contract toggle at `Y: =5`. */
+  rowExternal: { minHeight: "50px", paddingTop: "5px", paddingBottom: "13px", boxSizing: "border-box" },
   /*
    * `drp_…_DurationYears.Width = 100`, `…_DurationMonths.Width = 120`, months placed at
    * `DurationYears.X + Width + 20` (`OpexCostScreenCode.txt:5989`, `:6053`). Fluent's Dropdown
@@ -383,8 +423,22 @@ const useStyles = makeStyles({
     minWidth: "30px", width: "30px", height: "30px",
     color: palette.themePrimary,
     ":hover": { color: palette.themePrimary },
+    // The PowerCAT icon draws no box around itself. Fluent's black focus ring is replaced by the canvas's thin
+    // theme-blue `FocusedBorderColor`, so keyboard users still see focus but no black square appears.
+    ":focus-visible::after": { borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px" },
+    "&[data-fui-focus-visible]::after": { borderTopColor: palette.themePrimary, borderRightColor: palette.themePrimary,
+      borderBottomColor: palette.themePrimary, borderLeftColor: palette.themePrimary,
+      borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px" },
   },
-  toggleRow: { display: "flex", alignItems: "center", gap: space.s, position: "relative" },
+  // `Toggle@1.1.5` draws its label ~11 px after the switch.
+  toggleRow: { display: "flex", alignItems: "center", gap: "4px", position: "relative" },
+  /**
+   * `lbl_…_BodyButtons_Hint`: `Size: =gblAppSizes.Font.ExtraSmall` (9 pt), `Width: =Parent.Width-Self.X*2-Save.X`, wrapping —
+   * a narrow box, so "Please fill in at least one commercial figure" breaks onto two lines.
+   */
+  hint: { display: "block", maxWidth: "150px", fontSize: "9pt", lineHeight: "13px" },
   /*
    * `InfoButtonCanvas1` - `X: =Toggle.X + Toggle.Width` with the toggle `Parent.Width - 24 - 60`
    * wide, which puts the button 20 px in from the column's right edge rather than against the
@@ -402,9 +456,13 @@ const useStyles = makeStyles({
    * `lbl_…_Asterisk` - `palette.Error`, semibold, 10 px wide at `X: =label.X - Self.Width`, i.e.
    * in the margin LEFT of the caption, which stays aligned with the box under it.
    */
+  /*
+   * `lbl_…_*Asterisk`: `AutoHeight: =true`, no padding, at the label row's top — so the star sits RAISED at the top-left
+   * of the 32 px caption (which is vertically centred), not on the caption's middle line.
+   */
   required: {
-    position: "absolute", left: "-10px", top: 0, height: "32px",
-    display: "flex", alignItems: "center",
+    position: "absolute", left: "-10px", top: 0, height: "auto", lineHeight: "20px",
+    display: "block",
     color: palette.Error, fontWeight: tokens.fontWeightSemibold,
   },
   /** `lbl_…_BodyContent_*` - a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
@@ -1447,7 +1505,9 @@ function OpexCardView({
             ))}
           </div>
 
-          {cardCosts.length === 0 ? null : (
+          {/* `gal_…_CardBody_Costs.Height: =Max(AllItemsCount * 30, 50)`: an empty contract type keeps a 50 px empty
+              gallery under its command bar, as the canvas shows. */}
+          {cardCosts.length === 0 ? <div className={styles.emptyGallery} aria-hidden="true" /> : (
             <table
               className={styles.table}
               style={{ width: `${SELECT_COLUMN_WIDTH + columns.reduce((sum, c) => sum + c.width, 0)}px` }}
@@ -1733,7 +1793,7 @@ function OpexPanel({
           subtleWhenDisabled
           // `lbl_…_BodyButtons_Hint.Tooltip: =Self.Text` (`:8772`).
           hint={showAtLeastOneFigureHint(form)
-            ? <span title={OPEX_MSG.atLeastOneFigure}>{OPEX_MSG.atLeastOneFigure}</span>
+            ? <span className={styles.hint} title={OPEX_MSG.atLeastOneFigure}>{OPEX_MSG.atLeastOneFigure}</span>
             : undefined}
           saveTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Save"
           cancelTestId="pcf_OpexCosts_RightPanel_NewEditCost_BodyButtons_Cancel"
@@ -1910,10 +1970,10 @@ function OpexPanel({
         </div>
 
         {/* ── con_…_Body_ColumnRight ─────────────────────────────────────── */}
-        <div className={styles.panelColumn}>
+        <div className={mergeClasses(styles.panelColumn, styles.rightColumn)}>
           {/* `con_…_InflationToggles` — Inflation Profile first, Country Inflation Profile below
               it, and the container clips to the first toggle while inflation is off (`:7273`). */}
-          <div className={styles.toggleRow}>
+          <div className={mergeClasses(styles.toggleRow, styles.rowInflation)} data-toggle-row>
             {star(required.inflationProfileToggle)}
             <Switch
               checked={form.inflationOn}
@@ -2029,7 +2089,7 @@ function OpexPanel({
           {/* `con_…_Threshold_Container.Visible` (`:8100`) — O&M only. */}
           {showThresholdColumn(mode) ? (
             <>
-              <div className={styles.toggleRow}>
+              <div className={mergeClasses(styles.toggleRow, styles.rowThreshold)} data-toggle-row>
                 <Switch
                   checked={form.thresholdOn}
                   disabled={disabled(modes.threshold)}
@@ -2095,7 +2155,7 @@ function OpexPanel({
             </>
           ) : null}
 
-          <div className={styles.toggleRow}>
+          <div className={mergeClasses(styles.toggleRow, styles.rowAlign)} data-toggle-row>
             <Switch
               checked={form.alignWithProjectDuration}
               disabled={disabled(modes.alignWithProjectDuration)}
@@ -2106,7 +2166,7 @@ function OpexPanel({
             <Text>{OPEX_PANEL_LABELS.alignWithProjectDuration}</Text>
           </div>
 
-          <div className={styles.toggleRow}>
+          <div className={mergeClasses(styles.toggleRow, styles.rowExternal)} data-toggle-row>
             <Switch
               checked={form.externalContract}
               disabled={disabled(modes.externalContract)}

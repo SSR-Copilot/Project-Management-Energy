@@ -71,7 +71,9 @@
    `UI Screenshots/Cost App Landing Screen - Devex Capex Screen.png`. */
 /* `con_Left_Navigation_Header` is 45 high and holds `icon_Left_Navigation_Expand`, a 28 box
    with `padding: 0 6px` around a 16 x 28 hamburger in `rgba(0,110,185,1)`. */
-.canvas-rail-header { flex-shrink: 0; display: flex; align-items: center; height: 43px; padding: 0 6px; }
+/* `icon_Left_Navigation_Expand` sets no X / Y: the 28 x 28 icon sits at the header's top-left corner (0, 0), its 16 px
+   glyph 6 px in from each side — not centred in the 45 px header, not padded in. */
+.canvas-rail-header { flex-shrink: 0; display: flex; align-items: flex-start; height: 43px; padding: 0; }
 .canvas-rail-header button { min-width: 28px; width: 28px; height: 28px; padding: 0; border-radius: 0; color: #006eb9; }
 /* `rec_Left_Navigation_Expanded_Delimiter` — its OWN 200 x 2 rectangle at `top: 42`, so it
    spans the whole nav rather than just the hamburger, in `rgba(15,108,189,1)` = #0f6cbd,
@@ -79,10 +81,17 @@
 .canvas-rail-divider { flex-shrink: 0; display: block; height: 2px; background: #0f6cbd; margin-bottom: 6px; }
 .canvas-rail a { border-left-width: 2px; padding: 8px 6px; min-height: 44px; color: #111; font-size: 14px; }
 .canvas-rail a svg { color: #006eb9; flex-shrink: 0; }
+/* The MDL2 glyph box: 20 px with the glyph at 16 px (PM rail). The margins were inline on the svg. */
+.canvas-rail-icon { margin-left: -3px; margin-right: -2px; }
+/* `icon_Left_Navigation_Expand`: `Icon.Hamburger`, `Color: themePrimary`, 28 x 28 with 6 px padding — a 16 px blue
+   glyph. Fluent's transparent Button paints its icon slot itself, so the button's own `color` never reached it. */
+.canvas-rail-header button .fui-Button__icon { color: #006eb9; font-size: 16px; width: 16px; height: 16px; }
 .canvas-rail a[aria-current="page"] { border-left-color: #006eb9; background: #edebe9; color: #111; font-weight: 600; }
 .canvas-rail a span { white-space: normal; line-height: 18px; }
 .canvas-rail > div a { padding-left: 20px; }
-.canvas-rail > div > button { height: 43px; padding-left: 8px; color: #111; font-size: 14px; font-weight: 400; }
+/* The OPEX group row, measured against the canvas rail (12 Nov 2026): its chevron sits in the icon column of the rows
+   around it and "OPEX" starts where their labels do (x 40), and the first child follows 37 px below, not 42. */
+.canvas-rail > div > button { height: 38px; padding-left: 0; border-left-width: 2px; column-gap: 0; color: #111; font-size: 14px; font-weight: 400; }
 /* ── Shell parity, Project Management + admin routes (20 Oct 2026, D35) ────────────────────
    The PM app's `cmp_Header` and `cmp_Left_Navigation`. Scoped to `.canvas-pm-header` (the
    header when it carries the back arrow) and `.canvas-rail-pm`, so the Cost shell is untouched. */
@@ -199,7 +208,9 @@
 .canvas-radio-group legend > span[data-required="true"]::before { content: '* '; color: #d20532; }
 .canvas-field > input, .canvas-field > select, .canvas-field > textarea { width: 100%; min-width: 0; height: 32px; background: #f4f4f4; border: 0; border-radius: 3px; padding: 5px 12px; font: inherit; font-size: 14px; color: #242424; }
 .canvas-field > textarea { height: 64px; resize: vertical; }
-.canvas-field > input:focus, .canvas-field > select:focus, .canvas-field > textarea:focus { outline: 1px solid #0078d4; outline-offset: -1px; }
+/* A canvas modern `TextInput` with focus: no outline box, only its blue bottom line (`FocusedBorderColor`), as the canvas
+   panels show it (Contracts margin, Add Costs months — 12 Nov 2026). */
+.canvas-field > input:focus, .canvas-field > select:focus, .canvas-field > textarea:focus { outline: none; box-shadow: inset 0 -1px 0 #006eb9; }
 /* A Fluent control dropped into a `.canvas-field` still has to fill it. `DatePicker` merges
    `fui-DatePicker` onto an `Input` root, so it is that root — not a wrapper — that needs the
    width; its calendar glyph is a `contentAfter` and lays itself out inside. */
@@ -369,7 +380,7 @@
 /* `img_Contracts_List_CardHeaderRadioSelection` — 18 px at `X: =10`. */
 .canvas-contract-head > input[type="radio"] { accent-color: #006eb9; width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
 /* `lbl_Contracts_List_CardHeader_Description` at `X: =36`; Semibold only while selected. */
-.canvas-contract-title { flex: 1; min-width: 0; height: 100%; margin-left: 8px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-contract-title { flex: 1; min-width: 0; height: 100%; margin-left: 8px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11pt; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .canvas-contract-card[data-selected="true"] .canvas-contract-title { font-weight: 600; }
 /* `ico_…_CardHeader_Down` / `_Up` — 20 x 18, `X: =Parent.Width-Self.Width-6`. */
 .canvas-contract-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin-right: 6px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
@@ -381,17 +392,59 @@
  * `LayoutWrap: =true`, each column 320 wide with a 20 gap (measured: the first field box
  * runs x 251-570, the second column's label starts at 591).
  */
-.canvas-contract-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 320px)); gap: 10px 20px; }
+/* `con_…_Card_Body_Columns`: wrapping columns, each a fifth of the card (min 150 px). Every field is a 32 px classic
+   `Label` (11 pt, normal weight) over a 32 px box, 10 px between fields. Column 1's boxes run to
+   `Parent.Width-10`; the other columns' captions and boxes sit at `X: =10`, `Parent.Width-Self.X*2` wide. */
+.canvas-contract-fields { display: flex; flex-wrap: wrap; align-items: flex-start; }
+.canvas-contract-col { width: 20%; min-width: 150px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; padding: 0 10px; }
+.canvas-contract-col-first { padding: 0 10px 0 0; }
+.canvas-contract-col .canvas-field { gap: 0; }
+.canvas-contract-col .canvas-field > span:first-child { display: flex; align-items: center; height: 32px; font-size: 11pt; font-weight: 400; }
+/* `txt_…_Card_Body_Fields_*.FontSize: =13`. */
+.canvas-contract-col .canvas-field > input { height: 32px; font-size: 13px; }
 /* The card samples a hair lighter than the panel: #f5f5f5 against #f4f4f4 (measured at
    x 251-570, y 203-234 on the expanded-contract screenshot). */
 .canvas-contract-body .canvas-field > input:disabled { background: #f5f5f5; }
+/* A panel caption the canvas leaves at normal weight (Contracts: Margin Fixed Value). The wrapper takes no layout. */
+.canvas-label-regular { display: contents; }
+/* Contracts panels (Development/Construction, Project Rights, Payment Target): the captions are classic `Label`s at
+   `gblAppSizes.Font.Medium` (11 pt), and each `*_Required` star is its own `AutoHeight` label placed just LEFT of the
+   caption (`X: =caption.X - Self.Width`) at its top — not an inline "* " prefix (screenshots 12 Nov 2026). */
+.contract-canvas-panel .canvas-field > span:first-child,
+.contract-canvas-panel .canvas-radio-group legend > span { position: relative; font-size: 11pt; }
+.contract-canvas-panel .canvas-field > span[data-required="true"]::before,
+.contract-canvas-panel .canvas-radio-group legend > span[data-required="true"]::before {
+  content: '*'; position: absolute; left: -10px; top: -3px; line-height: 20px; color: #d20532; font-weight: 600;
+}
+/* The form column clips overflow-x, which cut the hanging star off; give it a 12 px gutter it takes back with a
+   negative margin so the captions stay where they were. */
+.contract-canvas-panel .canvas-panel-column:first-child { padding-left: 12px; margin-left: -12px; }
+/* CAPEX Add/Edit Costs panel: each caption sits at `gblAppSizes.Position.X`, flush with its box, and the
+   `*_Asterisk` label (`X: =5`) hangs in the gutter to its left — the caption does not move for the star. The radio
+   circle sits 3 px in from the caption with its option text 11 px after it (screenshots 12 Nov 2026). */
+.capex-canvas-panel .canvas-field > span:first-child,
+.capex-canvas-panel .canvas-radio-group legend > span { position: relative; }
+.capex-canvas-panel .canvas-radio-group legend { padding: 0; }
+.capex-canvas-panel .canvas-field > span[data-required="true"]::before,
+.capex-canvas-panel .canvas-radio-group legend > span[data-required="true"]::before {
+  content: '*'; position: absolute; left: -8px; top: 0; color: #d20532;
+}
+.capex-canvas-panel .canvas-radio-group label { gap: 11px; }
+.capex-canvas-panel .canvas-radio-group input { margin: 0 0 0 3px; }
+.canvas-contract-comment { margin-top: 20px; }
+.canvas-contract-comment textarea { resize: none; }
+.canvas-label-regular .canvas-field > span:first-child { font-weight: 400; }
 
 /* The Contracts command bar: `CommandBar` has no inset (21 Oct 2026), so its first icon is
    placed over the cards' radio (`img_…_CardHeaderRadioSelection`, X 10) by this wrapper. */
 .canvas-contract-commandbar { padding-left: 10px; }
 .canvas-contract-targets-head { display: flex; flex-direction: column; gap: 4px; }
 .canvas-contract-targets-bar { display: flex; align-items: center; }
-.canvas-contract-targets-bar button { color: #006eb9; font-size: 14px; }
+/* The PowerCAT command bar: enabled commands in the dark label colour, disabled ones grey (canvas, 12 Nov 2026). */
+.canvas-contract-targets-bar button { color: #242424; font-size: 14px; }
+.canvas-contract-targets-bar button:disabled { color: #a19f9d; }
+/* `lbl_…_Card_Body_PaymentTargets`: Semibold, `gblAppSizes.Font.Medium` (11 pt). */
+.canvas-contract-targets-head > .fui-Text:first-child { font-size: 11pt; }
 
 /*
  * `con_Contracts_List_Card_Body_PaymentTargetsHeader` — `Fill: =Grayscale40`, `Height: =34`,
@@ -461,15 +514,17 @@
  * `gal_Contracts_RightPanel_NewEdit_DevCoCosts` — level-1 cards, `TemplateSize: =32`. The
  * whole list scrolls; the canvas grows the gallery instead, which a panel cannot do.
  */
-.canvas-devco { background: #fff; --devco-check: 18px; }
-.canvas-devco-card { background: #fff; }
+/* Measured against the canvas panel (12 Nov 2026): a 14 px checkbox box. */
+.canvas-devco { background: #fff; --devco-check: 16px; }
+/* `con_…_DevCoCosts_Card`: `Width: =Parent.Width-10`, a GroupContainer with the default light drop shadow. */
+.canvas-devco-card { background: #fff; margin-right: 10px; margin-bottom: 2px; box-shadow: rgba(0, 0, 0, 0.14) 0 1px 2px, rgba(0, 0, 0, 0.12) 0 0 2px; }
 /* `con_…_DevCoCosts_CardHeader` — `Height: =32`, description at `X: =20`. */
 .canvas-devco-head { position: relative; display: flex; align-items: center; height: 32px; padding-left: 20px; }
 /* `rec_…_DevCoCosts_Selected` — a 3 px akzent1 stripe on the row that is unfolded. */
 .canvas-devco-card[data-open="true"] .canvas-devco-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #469bd7; }
 /* `shp_…_DevCoCosts_BottomLine` — `Visible: =ThisItem.IsFolded`. */
 .canvas-devco-card:not([data-open="true"]) .canvas-devco-head { border-bottom: 1px solid #e3e3e3; }
-.canvas-devco-title { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-devco-title { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11pt; font-weight: 600; color: #242424; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* `img_Contracts_DevCoCosts_ParentCheckbox` — 32 wide at `X: =Parent.Width-Self.Width-40`,
    so the checkbox column clears the 20 px chevron and its 6 px gutter. */
 .canvas-devco-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; }
@@ -483,7 +538,9 @@
 .canvas-devco-check svg { display: block; width: calc(var(--devco-check) * 24 / 22); height: calc(var(--devco-check) * 24 / 22); }
 /* `ico_…_DevCoCosts_Down` / `_Up` — 20 x 18 at `X: =Parent.Width-Self.Width-6`. The 14 on
    its left is what puts the checkbox before it at `Parent.Width-32-40`. */
-.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin: 0 6px 0 14px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 18px; }
+.canvas-devco-chevron { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; height: 100%; margin: 0 6px 0 14px; padding: 0; border: 0; background: none; cursor: pointer; color: #006eb9; font-size: 30px; }
+/* `ico_…_DevCoCosts_*Down/Up`: a classic `Icon.ChevronDown` at 20 x 18 with no padding — a ~15 x 8 px chevron. */
+.canvas-devco-chevron > * { width: 30px; height: 30px; flex-shrink: 0; }
 
 /* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, inset `X: =10`. It has no
    height cap in the canvas; the panel column it sits in is what bounds it, so one is set
@@ -510,13 +567,17 @@
    (`palette.Error`, #B22727) 10 px LEFT of the caption so the caption stays aligned with its box.
    Every field block is 32 px caption + 32 px box, 76 px apart. */
 .opex-canvas-panel .canvas-field { gap: 0; }
+/* The two columns scroll on their own (`LayoutOverflowY: Scroll` on each); the body itself does not (OpexScreen `panelColumns`). */
+.opex-canvas-panel .canvas-panel-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+@media (max-width: 899px) { .opex-canvas-panel .canvas-panel-body { overflow: auto; } }
 .opex-canvas-panel .canvas-field > span:first-child {
   position: relative; display: flex; align-items: center; height: 32px;
   font-size: 11pt; font-weight: 400; color: #000;
 }
 .opex-canvas-panel .canvas-field > span[data-required="true"]::before {
-  content: '*'; position: absolute; left: -10px; top: 0; height: 32px;
-  display: flex; align-items: center; font-weight: 600; color: #B22727;
+  /* `AutoHeight` asterisk at the row's top: raised, not centred on the caption. */
+  content: '*'; position: absolute; left: -10px; top: 0; height: auto; line-height: 20px;
+  display: block; font-weight: 600; color: #B22727;
 }
 /* The modern controls in `DisplayMode.Disabled` keep their own look on the canvas: a white box with
    a light grey outline and grey text (Description, Start Date, Currency, Inflation Start Year and
@@ -534,6 +595,9 @@
    with no else, so on an ordinary row it falls back to the picker's pale default: the same white
    outlined box and grey text as the disabled fields. A standard start date stays blue italic. */
 .opex-canvas-panel .fui-DatePicker { background: #fff; border: 1px solid #e0e0e0; }
+/* A STANDARD start date (`locIsStartDateStandardAssumption`) keeps the picker's own filled look: grey fill, no outline,
+   blue italic text (screenshot 12 Nov 2026). */
+.opex-canvas-panel [data-standard-start] > .fui-DatePicker { background: #f5f5f5; border-color: transparent; }
 .opex-canvas-panel :not([data-standard-start]) > .fui-DatePicker input { color: #bdbdbd; -webkit-text-fill-color: #bdbdbd; }
 .opex-canvas-panel .fui-DatePicker svg { color: #bdbdbd; }/* A disabled `Toggle@1.1.5` or `Radio@0.0.25` greys its own label too. */
 .opex-canvas-panel .fui-Switch:has(input:disabled) ~ .fui-Text,

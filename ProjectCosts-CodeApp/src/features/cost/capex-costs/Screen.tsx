@@ -19,10 +19,10 @@
  */
 import { useMemo, useRef, useState } from "react";
 import {
-  Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, tokens,
+  Button, Checkbox, Dropdown, Input, Option, Switch, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  AddRegular, ArrowLeftRegular, ArrowRightRegular, WarningRegular,
+  AddRegular, ArrowLeftRegular, ArrowRightRegular, InfoRegular, WarningRegular,
 } from "@fluentui/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -71,7 +71,7 @@ import {
   formatSummaryAmount, frequencyLabel, initialCostValue, isSummaryTab, newCostLine, panelTitle,
   linkToMilestoneVisible, milestoneOptions, milestoneRelinkResetNeeded,
   needsClusterLinkageConfirmation,
-  proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
+  paymentsAsPercent, proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
   applyDescriptionChange, describeDescriptionError, paidToggleNeedsConfirmation,
   monthAmountErrors, validateMonthAmount,
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
@@ -115,13 +115,27 @@ const useStyles = makeStyles({
   panelColumns: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-    columnGap: space.xl,
+    // No gap: the canvas body splits the panel in half with the 1 px `Rectangle1_1` divider at the
+    // centre (`con_…_PvModuleType_Context_2` `Width`, `X: =Parent.Width/2`), and each half carries its
+    // own padding below.
+    columnGap: "0",
     rowGap: space.xl,
     // Left as `stretch` on purpose: it is what carries the year column's divider the full
     // height of the panel body, as the reference shows.
     "@media (max-width: 899px)": { gridTemplateColumns: "minmax(0, 1fr)" },
   },
-  formColumn: { display: "flex", flexDirection: "column", gap: space.l, minWidth: "0" },
+  /**
+   * `con_…_PvModuleType_Fields_3`: `PaddingLeft: =10`; each field sits at `gblAppSizes.Position.X` (20) and is
+   * `Parent.Width - Self.X*2` wide, so the boxes end well short of the divider. The labels of the radio groups
+   * are separate canvas `lbl_…` controls that never take the group's `DisplayMode`, so they stay #242424 when
+   * Distribution / Distribution Scheme lock on an existing contract — only the options grey out.
+   */
+  formColumn: {
+    display: "flex", flexDirection: "column", gap: space.l, minWidth: "0",
+    paddingLeft: "9px", paddingRight: "37px",
+    "& .canvas-radio-group legend > span": { color: "#242424" },
+    "@media (max-width: 899px)": { paddingRight: "0" },
+  },
   /**
    * `con_Warning_OnEditFromPCF` (`:12426-12500`): `Fill: RGBA(245, 145, 30, 0.5)`, `Height: 80`, 10 px padding, a horizontal
    * layout centred vertically, a 40 x 40 warning image, then the `HtmlViewer` text at 11 pt (14.7 px).
@@ -135,7 +149,8 @@ const useStyles = makeStyles({
     display: "flex", flexDirection: "column", minWidth: "0",
     borderLeftWidth: "1px", borderLeftStyle: "solid",
     borderLeftColor: tokens.colorNeutralStroke2,
-    paddingLeft: space.xl,
+    // `con_…_Fields_4` `PaddingLeft: =10` + `gal_IndividualCost_Items_1` `X: =10` + the year label's `X: =10`.
+    paddingLeft: "28px",
     "@media (max-width: 899px)": {
       borderLeftStyle: "none", paddingLeft: "0", paddingTop: space.l,
     },
@@ -145,10 +160,36 @@ const useStyles = makeStyles({
   clusterList: { display: "flex", flexDirection: "column", gap: "0" },
   /** `labelPosition="before"` already lays the row out; this only keeps it flush left. */
   toggle: { alignSelf: "flex-start", marginLeft: "0" },
+  /**
+   * `tgl_…_ApplyVAT_1` / `tgl_…_Depreciation_1` are both `Width: =200` with the label inside, so the two
+   * switches line up in one column whatever the label length (the reference: both at the same x).
+   */
+  toggleLabel: { width: "128px", boxSizing: "border-box" },
+  /**
+   * The Depreciation row: its container is `Height: =60` with the toggle at `Y: =(Parent.Height-Self.Height)/2-10`
+   * under the 40 px Apply VAT row, i.e. the two switches sit ~38 px apart, not a full field gap.
+   */
+  toggleTight: { marginTop: "-10px" },
+  footerError: {
+    display: "flex", alignItems: "center", columnGap: "14px",
+    color: "#d20532", fontSize: "12px", lineHeight: "14px",
+  },
+  footerErrorIcon: { fontSize: "16px", flexShrink: 0 },
+  /** The component's text box is narrow and centred, so "Total percentage is below 100%" breaks onto two lines. */
+  footerErrorText: { maxWidth: "150px", textAlign: "center" },
+  /** The canvas `DisplayMode.Disabled` look (`canvas.css`, `.canvas-field[data-display="disabled"]`). */
+  disabledLook: {
+    "& .canvas-field > input:disabled": {
+      backgroundColor: "#ffffff", borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px",
+      borderLeftWidth: "1px", borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid",
+      borderLeftStyle: "solid", borderTopColor: "#e3e3e3", borderRightColor: "#e3e3e3", borderBottomColor: "#e3e3e3",
+      borderLeftColor: "#e3e3e3", color: "#a19f9d", WebkitTextFillColor: "#a19f9d",
+    },
+  },
 
   /* ── the year gallery ────────────────────────────────────────────────── */
   yearRow: {
-    display: "flex", alignItems: "center", gap: space.s, width: "100%",
+    display: "flex", alignItems: "center", gap: "0", width: "100%",
     minHeight: "42px", textAlign: "left", cursor: "pointer", fontFamily: "inherit",
     paddingTop: space.s, paddingBottom: space.s, paddingLeft: "0", paddingRight: space.s,
     backgroundColor: "transparent",
@@ -156,26 +197,37 @@ const useStyles = makeStyles({
     borderBottomStyle: "none", borderLeftStyle: "none",
     ":hover": { backgroundColor: palette.Grayscale40 },
   },
+  /**
+   * `lbl_Production_CardHeader_LabelWithDescription_3`: bold, `gblAppSizes.Font.Large` (12 pt), `Width: =45` —
+   * a fixed cell, so `Allocated Cost:` (`…_4`, `X: =year.X + year.Width`) starts at the same place on every row.
+   */
   yearNumber: {
-    fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400,
-    color: tokens.colorNeutralForeground1,
+    fontWeight: tokens.fontWeightBold, fontSize: tokens.fontSizeBase400,
+    color: tokens.colorNeutralForeground1, width: "45px", flexShrink: 0,
   },
-  yearAllocated: { fontSize: tokens.fontSizeBase300, color: tokens.colorNeutralForeground1 },
+  /** `…_LabelWithDescription_4`: `gblAppSizes.Font.Medium` = 11 pt (14.7 px). */
+  yearAllocated: { fontSize: "14.7px", color: tokens.colorNeutralForeground1 },
   yearChevron: {
     marginLeft: "auto", display: "flex", alignItems: "center",
     color: palette.themePrimary, fontSize: tokens.fontSizeBase500,
   },
+  /** The month rows sit ~40 px apart in the canvas (measured 12 Nov 2026): the 30 px Fluent box plus 10 px. */
   monthList: {
-    display: "flex", flexDirection: "column", gap: space.xs, paddingBottom: space.m,
+    display: "flex", flexDirection: "column", gap: "10px", paddingBottom: space.m,
   },
-  monthRow: { display: "flex", alignItems: "flex-start", gap: space.m, minHeight: "34px" },
+  monthRow: { display: "flex", alignItems: "flex-start", gap: "0", minHeight: "32px" },
+  /**
+   * `lbl_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_*`: `Width: =gblAppSizes.Form.Label200Width`
+   * (150), `Size: =gblAppSizes.Font.Medium` (11 pt = 14.7 px); the box starts right after it and takes the rest
+   * (`Width: =Parent.Width - label.X*2 - label.Width`).
+   */
   monthLabel: {
-    flexGrow: 1, flexShrink: 1, minWidth: "0",
-    fontSize: tokens.fontSizeBase300, color: tokens.colorNeutralForeground1,
+    flexGrow: 0, flexShrink: 0, width: "150px", lineHeight: "32px",
+    fontSize: "14.7px", color: tokens.colorNeutralForeground1,
   },
   monthField: {
     display: "flex", flexDirection: "column", gap: space.xxs,
-    flexGrow: 0, flexShrink: 0, width: "50%", minWidth: "0",
+    flexGrow: 1, flexShrink: 1, minWidth: "0",
   },
   monthInput: { width: "100%", minWidth: "0" },
 });
@@ -283,8 +335,9 @@ export default function CapexCostsScreen() {
   const [costValue, setCostValue] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [commentFor, setCommentFor] = useState<string | null>(null);
-  /** Exactly one year's months are visible at a time — the reference shows no second one. */
-  const [openYear, setOpenYear] = useState<number | null>(null);
+  // Every year folds on its own (`ThisItem.IsFolded` per gallery row, `ico_Production_CardHeader_Down_3` /
+  // `_Up_3`), so several years can be open at once, as in the canvas.
+  const [openYears, setOpenYears] = useState<ReadonlySet<number>>(() => new Set());
   /** What the `MM/YYYY` boxes hold while the user is still typing. */
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
@@ -296,6 +349,11 @@ export default function CapexCostsScreen() {
    * disabled on a contract that is merely opened. It is not undone by reverting a change, as in the canvas.
    */
   const [touched, setTouched] = useState(false);
+  /**
+   * `rad_…_DistributionScheme_1.OnChange` rebuilds `colNewEditPanelCost` with every month `Blank()`: the typed months are
+   * dropped and each box shows its "0.00" placeholder instead of the opening 0.
+   */
+  const [monthsBlank, setMonthsBlank] = useState(false);
   /** A standard contract's live duplicate check is in flight: a second click meanwhile is ignored (CAPEX-135, D90). */
   const standardChecking = useRef(false);
   /** The Canvas error strip shown when Save is clicked on an Individual contract whose months do not add up (CAPEX-105, D91). */
@@ -498,23 +556,24 @@ export default function CapexCostsScreen() {
     // A cluster below the project's start cluster is not offered, so it must not be carried
     // either — the canvas serialises a ticked-but-disabled cluster as `false`.
     const next = line
-      ? { ...structuredClone(line), clusters: enabledClusters(line.clusters, startClusterNo) }
+      ? paymentsAsPercent({ ...structuredClone(line), clusters: enabledClusters(line.clusters, startClusterNo) })
       : newCostLine(accountId, crypto.randomUUID(), book.accounts.find(a => a.id === accountId)?.defaultPayer);
     setEdit(next);
     setTouched(false);
     setContractError(null);
     setMonthText({});
+    setMonthsBlank(false);
     setStartText(isoToMonthYear(next.startDate));
     setEndText(isoToMonthYear(next.endDate));
     setOriginalDescription(line ? line.description : null);
-    setOpenYear(null);
+    setOpenYears(new Set());
     // `locShowClusterLinkageConfirmation: false` on both the Add and the Edit trigger
     // (`CapexScreenCode.txt:7156`, `:7192`) — a dialog dismissed on the last contract must not
     // reappear over the next one.
     setLinkConfirmOpen(false);
   };
 
-  const closePanel = () => { setEdit(null); setOpenYear(null); setLinkConfirmOpen(false); setContractError(null); };
+  const closePanel = () => { setEdit(null); setOpenYears(new Set()); setLinkConfirmOpen(false); setContractError(null); };
 
   /*
    * ── the standard-contract cluster timeline ───────────────────────────────────────────────
@@ -897,9 +956,18 @@ export default function CapexCostsScreen() {
     await persist();
   };
 
+  /**
+   * What the year gallery shows. The canvas gallery is `colNewEditPanelCost`, built when the panel opens; an Equal
+   * Distribution is only spread on Save, so the gallery keeps the opening figures — 0 for a new contract, the stored
+   * months for an existing one — instead of previewing the split (there is no Recalculate button in that mode).
+   */
+  const galleryPayments = edit?.distribution === "equal" ? edit.payments : rawProposed;
+
   /** The year gallery's `Allocated Cost:` figure — percent rows show what was TYPED. */
   const allocatedLabel = (y: number) => allocatedCostLabel(
-    edit?.distributionScheme === "percent"
+    edit?.distribution === "equal"
+      ? allocatedForYear(galleryPayments, y)
+      : edit?.distributionScheme === "percent"
       ? allocatedForYear(rawProposed, y)
       : allocatedForYear(proposed, y),
     edit?.distributionScheme ?? "absolute",
@@ -943,10 +1011,21 @@ export default function CapexCostsScreen() {
     </>}
 
     <FormPanel centerClose open={!!edit} width="cost" onDismiss={closePanel}
-      {...(contractError ? { messages: { error: contractError } } : {})}
+      // Canvas label / radio geometry for this panel only (canvas.css `.capex-canvas-panel`).
+      panelClassName="capex-canvas-panel"
       title={panelTitle(isEdit, book.accounts.find(a => a.id === edit?.accountId)?.name ?? "")}
       footer={<PanelButtons onSave={() => { void commit(); }} onCancel={closePanel}
         disabled={!valid || writesDisabled}
+        /*
+         * `cmp_ShowErrorInContract` (a `cmp_Information_Button_PCF`) sits at the FOOTER's left edge, not over the form:
+         * a red info icon and the red `ErrorTitle` text wrapped in a narrow box.
+         */
+        hint={contractError ? (
+          <span className={styles.footerError} role="alert">
+            <InfoRegular className={styles.footerErrorIcon} aria-hidden="true" />
+            <span className={styles.footerErrorText}>{contractError}</span>
+          </span>
+        ) : undefined}
         saveTestId="btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save"
         cancelTestId="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_2"
         /*
@@ -957,7 +1036,9 @@ export default function CapexCostsScreen() {
         extra={recalculateVisible(edit) ? (
           <PanelExtraButton label={RECALCULATE_ALLOCATED_COST}
             testId="btn_Right_Panel_Add_Contract_Calculate_Allocated_Cost"
-            disabled={busy || !recalculateEnabled({ line: edit, costValue, saveEnabled: valid })}
+            // `locEditSaveButtonEnabled` is the canvas DIRTY flag (set `true` by every field's OnChange), not the Save gate:
+            // Recalculate is live once anything is edited, even while Save is still disabled (e.g. no Description).
+            disabled={busy || !recalculateEnabled({ line: edit, costValue, saveEnabled: touched })}
             onClick={() => {
               if (!edit) return;
               // The boxes show the rounded figures, not the text that was typed (D93/D90). Text that could not be read
@@ -999,9 +1080,16 @@ export default function CapexCostsScreen() {
             disabled={distributionLocked(isEdit)}
             value={edit.distribution === "equal" ? "Equal Distribution" : "Individual Distribution"}
             options={["Equal Distribution", "Individual Distribution"]}
-            onChange={v => update({
-              distribution: v.startsWith("Equal") ? "equal" : "individual", payments: proposed,
-            })} />
+            // `rad_…_DistributionType_1.OnChange`: `Reset()` the scheme (back to % Values) and Equal Distribution (back to
+            // By Cluster), then rebuild `colNewEditPanelCost` with every month `Blank()` — nothing is carried across.
+            onChange={v => {
+              setMonthText({});
+              setMonthsBlank(true);
+              update({
+                distribution: v.startsWith("Equal") ? "equal" : "individual",
+                distributionScheme: "percent", equalMode: "cluster", payments: [],
+              });
+            }} />
           {edit.distribution === "individual" ? <>
             {/*
               * `required` because `lbl_…_Fields_Label_Asterisk` next to the Distribution Scheme
@@ -1013,10 +1101,14 @@ export default function CapexCostsScreen() {
             <Choices label="Distribution Scheme" name="rad_AddContract_RightPanel_DistributionScheme_1"
               required disabled={distributionLocked(isEdit)}
               value={edit.distributionScheme === "percent" ? "% Values" : "Absolute Values"}
-              options={["Absolute Values", "% Values"]}
-              onChange={v => update({
-                distributionScheme: v === "% Values" ? "percent" : "absolute",
-              })} />
+              // `Items: =colContractDistributionScheme` = `Choices('Distribution Scheme')` (App OnStart):
+              // option-set order, % Values (952850000) first, then Absolute Values (952850001).
+              options={["% Values", "Absolute Values"]}
+              onChange={v => {
+                setMonthText({});
+                setMonthsBlank(true);
+                update({ distributionScheme: v === "% Values" ? "percent" : "absolute", payments: [] });
+              }} />
             {edit.distributionScheme === "percent" ? (
               <CostField label={costLabel("Total Costs", { isoCurrencyCode })}
                 name="txt_AddContract_RightPanel_TotalCost_1" required
@@ -1095,18 +1187,21 @@ export default function CapexCostsScreen() {
               value={frequencyLabel(edit.frequency)}
               options={FREQUENCY_OPTIONS.map(frequencyLabel)}
               onChange={v => update({ frequency: parseInt(v, 10) })} />
-            <CostField label={costLabel("Average Amount per Payment", { isoCurrencyCode })}
-              name="txt_AddContract_RightPanel_AverageAmountPerPayment_1"
-              value={totalCostError ? "" : averagePaymentText(costValue, proposed.length, locale)} disabled />
+            {/* `txt_AddContract_RightPanel_AverageAmountPerPayment_1` is `DisplayMode.Disabled` (not View): white box, light outline, grey text. */}
+            <div className={styles.disabledLook}>
+              <CostField label={costLabel("Average Amount per Payment", { isoCurrencyCode })}
+                name="txt_AddContract_RightPanel_AverageAmountPerPayment_1"
+                value={totalCostError ? "" : averagePaymentText(costValue, proposed.length, locale)} disabled />
+            </div>
           </> : null}
           <Choices label="Cost Paid By" name="rad_AddContract_RightPanel_CostPaidBy_1" standard={edit.standard}
             value={edit.payer} options={["DevCo", "SPV"]}
             onChange={v => update({ payer: v as CostLine["payer"] })} />
           {/* Label LEFT of the toggle, as the reference shows. */}
-          <Switch className={styles.toggle} labelPosition="before" label={{ children: "Apply VAT", className: standardClass(edit.standard) }}
+          <Switch className={styles.toggle} labelPosition="before" label={{ children: "Apply VAT", className: mergeClasses(styles.toggleLabel, standardClass(edit.standard)) }}
             aria-label="Apply VAT" data-testid="tgl_AddContract_RightPanel_ApplyVAT_1"
             checked={edit.vat} onChange={(_, d) => update({ vat: d.checked })} />
-          <Switch className={styles.toggle} labelPosition="before" label={{ children: "Depreciation", className: standardClass(edit.standard) }}
+          <Switch className={mergeClasses(styles.toggle, styles.toggleTight)} labelPosition="before" label={{ children: "Depreciation", className: mergeClasses(styles.toggleLabel, standardClass(edit.standard)) }}
             aria-label="Depreciation" data-testid="tgl_AddContract_RightPanel_Depreciation_1"
             checked={edit.depreciation}
             onChange={(_, d) => update({ depreciation: d.checked })} />
@@ -1117,7 +1212,7 @@ export default function CapexCostsScreen() {
           {panelYears(project ?? {}, allowedStart.year, [
             ...edit.payments.map(p => p.year), ...proposed.map(p => p.year),
           ]).map(y => {
-            const expanded = openYear === y;
+            const expanded = openYears.has(y);
             return <div key={y}>
               {/*
                 * The name is given explicitly: the two spans are inline, so the computed
@@ -1127,7 +1222,11 @@ export default function CapexCostsScreen() {
               <button type="button" className={styles.yearRow} aria-expanded={expanded}
                 aria-label={`${y} ${allocatedLabel(y)}`}
                 data-testid={`btn_Production_CardHeader_TransparentButton_3-${y}`}
-                onClick={() => setOpenYear(expanded ? null : y)}>
+                onClick={() => setOpenYears(current => {
+                  const next = new Set(current);
+                  if (next.has(y)) next.delete(y); else next.add(y);
+                  return next;
+                })}>
                 <span className={styles.yearNumber}>{y}</span>
                 <span className={styles.yearAllocated}>{allocatedLabel(y)}</span>
                 <span className={styles.yearChevron} aria-hidden="true">
@@ -1137,7 +1236,7 @@ export default function CapexCostsScreen() {
               {expanded ? (
                 <div className={styles.monthList}>{MONTH_NUMBERS.map(month => {
                   const label = monthYearLabel(month, y);
-                  const stored = rawProposed.find(p => p.year === y && p.month === month);
+                  const stored = galleryPayments.find(p => p.year === y && p.month === month);
                   const monthError = monthErrors.get(`${y}-${month}`);
                   return <div key={month} className={styles.monthRow}>
                     <span className={styles.monthLabel}>{label}</span>
@@ -1146,8 +1245,14 @@ export default function CapexCostsScreen() {
                         aria-label={label}
                         data-testid={`txt_Costs_RightPanel_EditCostsInSubaccount_BodyContent_FirstMonth_${23 + month}-${y}`}
                         aria-invalid={monthError ? true : undefined}
-                        disabled={edit.distribution !== "individual"}
-                        value={monthText[`${y}-${month}`] ?? (stored === undefined ? "" : String(stored.amount))}
+                        // `DisplayMode.View` for an Equal Distribution: read-only, but drawn in normal dark text, not greyed.
+                        readOnly={edit.distribution !== "individual"}
+                        // `Value: =ThisItem.MarUI`: a NEW contract's rows start at 0 and an absolute month is `Round(mX, 0)`, so both
+                        // show "0"; an existing % month with no cost is Blank(), which shows the "0.00" placeholder.
+                        placeholder="0.00"
+                        value={monthText[`${y}-${month}`] ?? (stored === undefined
+                          ? (monthsBlank || (isEdit && edit.distributionScheme === "percent") ? "" : "0")
+                          : String(stored.amount))}
                         onChange={(_, d) => {
                           setMonthText(t => ({ ...t, [`${y}-${month}`]: d.value }));
                           // What the model holds: the parsed number, 0 for blank or unreadable text (the canvas sums `Value()`).
