@@ -52,6 +52,7 @@ import {
 import { useSession } from "@/app/SessionContext";
 import { palette } from "@/theme/tokens";
 import { parseNumber } from "@/domain/numeric";
+import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
 import { DataError } from "@/platform/errors";
@@ -86,6 +87,8 @@ import { costRowsForAccounts } from "@/data/costRepository";
 
 /** `StartOfWeek.Monday` — Fluent's `DayOfWeek.Monday` (as `components/DateField.tsx`). */
 const MONDAY = 1;
+/** `dtp_..._ClosingDate` has no `Format`, so it shows the control's default: "Tue, Nov 24, 2026". */
+const formatClosingDate = (d: Date | null | undefined) => formatCanvasDate(d, DATE_PICKER_FORMAT, "en-US");
 
 /* ─────────────────────────────────────────────────────────────────── styles */
 
@@ -938,7 +941,9 @@ export default function ContractsScreen() {
                 // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:4124`).
                 firstDayOfWeek={MONDAY}
                 initialPickerDate={project?.startDate}
-                value={form.closingDate ?? null}
+                // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
+            formatDate={formatClosingDate}
+            value={form.closingDate ?? null}
                 onSelectDate={(date: Date | null | undefined) => updateForm({ closingDate: date ?? undefined }, true)}
               />
               {errorFor("closingDate") ? (
@@ -1175,6 +1180,8 @@ export default function ContractsScreen() {
             // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:3450`).
             firstDayOfWeek={MONDAY}
             initialPickerDate={project?.startDate}
+            // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
+            formatDate={formatClosingDate}
             value={form.closingDate ?? null}
             onSelectDate={(date: Date | null | undefined) => {
               touch("closingDate");
