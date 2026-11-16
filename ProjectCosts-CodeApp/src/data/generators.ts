@@ -44,6 +44,7 @@ import {
 } from "@/features/pm/generators/rules";
 import { registerDefaultBulkBackend } from "./bulkBackend";
 import { fetchAll, fetchPage } from "./client";
+import { mapLimit } from "./concurrency";
 import { createGeneratorsBulkBackend } from "./generatorsBulk";
 import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
 
@@ -592,26 +593,34 @@ export async function listOpexCostIds(projectId: string, deviceTypeId: string, a
   return rows.map((r) => String(r.vsb_opexprojectcostid));
 }
 
+/** Reads of `listOpexCostIdsForBridges` in flight at once (review F3 item 5; a project with many bridge rows is chunked at 40). */
+export const OPEX_READ_CONCURRENCY = 4;
+
 /**
  * The project's O&M costs of ALL the given bridge rows (DEL-3, S7): every `Opex Project Costs` row whose
  * `DeviceTypeInProject` is one of `bridgeIds` (any status, as `listOpexCostIds`), plus the chain members
  * of those rows — costs whose `vsb_parentcost` is one of them (a head's later periods). Server-filtered
  * (rule 2), `$select` of the id and `_vsb_parentcost_value` only (rule 1), the bridge and the head filters
  * chunked at `CHUNK` (40) ids. Ids are de-duplicated; heads first, then their chain members.
- * No bridge: no read, no ids.
+ * No bridge: no read, no ids. The chunk reads run through a pool of `OPEX_READ_CONCURRENCY` (4).
+ *
+ * DIVERGENCE: the canvas follows only `First(<type>.DeviceTypesInProjects)` (Y:65), the oldest bridge row, so the O&M costs of any
+ * further bridge row of the type are neither found nor deleted with it. This app returns the costs of ALL the given bridge rows
+ * (D116; delete hardening plan claim 2, scenario S7), so a type delete leaves no O&M cost pointing at a deleted bridge.
  */
 export async function listOpexCostIdsForBridges(projectId: string, bridgeIds: readonly string[]): Promise<string[]> {
   const bridges = [...new Set(bridgeIds)];
   if (bridges.length === 0) return [];
   const read = async (operation: string, column: string, ids: readonly string[]): Promise<Raw[]> => {
-    const pages = await Promise.all(chunk(ids).map((part) => fetchAll(
+    // Review F3 item 5: a bounded pool (never more than `OPEX_READ_CONCURRENCY` reads in flight), results in chunk order.
+    const pages = await mapLimit(chunk(ids), (part) => fetchAll(
       operation,
       (o) => Vsb_opexprojectcostsService.getAll(o),
       {
         select: ["vsb_opexprojectcostid", "_vsb_parentcost_value"],
         filter: and(lookupEq("vsb_project", projectId), lookupIn(column, part)),
       },
-    )));
+    ), OPEX_READ_CONCURRENCY);
     return raw(pages.flat());
   };
   const heads = await read("load the type's O&M costs", "vsb_devicetypeinproject", bridges);
@@ -641,6 +650,9 @@ async function hasActiveOpexCostOn(projectId: string, bridgeIds: readonly string
  * 1.21.753's O&M guard inputs (`capacityGuardReason`): an ACTIVE bridge of the type, and an ACTIVE
  * `Opex Project Costs` row of the project pointing at it. DEL-3: ANY active bridge, not only the first
  * (S7) — a dependency on the second active bridge blocks as well.
+ *
+ * DIVERGENCE: the canvas checks only the first bridge row of the type (`First(<type>.DeviceTypesInProjects)`, Y:65). This app checks
+ * ALL active bridge rows (D116; delete hardening plan claim 2, scenario S7), so the guard cannot be passed by a dependency on a later bridge.
  */
 export async function loadOpexDependency(
   projectId: string, typeId: string,
