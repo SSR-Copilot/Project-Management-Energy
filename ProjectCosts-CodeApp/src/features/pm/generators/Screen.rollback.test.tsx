@@ -89,9 +89,14 @@ const state = vi.hoisted(() => ({
   projectId: "11111111-1111-1111-1111-111111111111",
   jobs: [] as Job[],
   landed: [] as LandedRowRef[],
+  /** `lastMaybeLanded()` / `lastDeleted()` of the most recent job (DEL-5). */
+  maybe: [] as LandedRowRef[],
+  deleted: [] as LandedRowRef[],
   landedCalls: 0,
   /** What the job number `n` does: resolves the plan and `then` like the engine, then answers. */
-  exec: null as unknown as (job: Job, n: number) => Promise<{ outcome: Outcome; landed?: LandedRowRef[] }>,
+  exec: null as unknown as (job: Job, n: number) => Promise<{
+    outcome: Outcome; landed?: LandedRowRef[]; maybeLanded?: LandedRowRef[]; deleted?: LandedRowRef[];
+  }>,
   flows: {
     request: vi.fn(async () => ({ runid: "run-1", approvalid: "ap-1" })),
     cancel: vi.fn(async () => {}),
@@ -140,11 +145,17 @@ vi.mock("./hooks", async () => {
         const n = state.jobs.length - 1;
         setError(null);
         state.landed = [];
+        state.maybe = [];
+        state.deleted = [];
         setProgress(job.progress);
         try {
-          const { outcome, landed } = await state.exec(job, n);
+          const { outcome, landed, maybeLanded, deleted } = await state.exec(job, n);
           state.landed = landed ?? [];
-          if ("fail" in outcome) { setError(outcome.fail); return null; }
+          state.maybe = maybeLanded ?? [];
+          state.deleted = deleted ?? [];
+          // `usePlanWrite` builds the text through the job's own `errorText`. Only the rollback job's is run here: the
+          // save jobs' prefixes would change the original reason the older tests below compare against.
+          if ("fail" in outcome) { setError(job.progress === UNDO_PROGRESS && job.errorText ? job.errorText(outcome.fail) : outcome.fail); return null; }
           return outcome.ids;
         } finally {
           setProgress(null);
@@ -153,6 +164,8 @@ vi.mock("./hooks", async () => {
       return {
         run, progress, error, success: null, clear: () => setError(null), refreshing: state.refreshing,
         lastLanded: () => { state.landedCalls += 1; return state.landed; },
+        lastMaybeLanded: () => state.maybe,
+        lastDeleted: () => state.deleted,
       };
     },
     loadNewTypeInputs: async () => ({ typeName: "WTG-0099", hasDeviceType: false }),
@@ -236,6 +249,8 @@ beforeEach(() => {
   state.projectId = PROJECT_ID;
   state.jobs = [];
   state.landed = [];
+  state.maybe = [];
+  state.deleted = [];
   state.landedCalls = 0;
   state.flows.request.mockClear();
   state.flows.request.mockImplementation(async () => ({ runid: "run-1", approvalid: "ap-1" }));
@@ -556,6 +571,144 @@ describe("UT-GEN Screen rollback: the independent review's findings (plan §9.3)
     await waitFor(() => expect(errorBar()).not.toBeNull());
     expect(errorBar()!.textContent).toContain(`${REASON} ${NO_PROJECT_TEXT}`);
     expect(state.jobs).toHaveLength(1);
+    expect(retryButton()).toBeNull();
+  });
+});
+
+/**
+ * DEL-5: the rollback uses `lastDeleted()` and `lastMaybeLanded()`. Ids UT-GEN-1100 and up.
+ * The roll-up-failed text is the screen's local constant (to move to `rules.ts`), copied here to pin its wording.
+ */
+describe("UT-GEN Screen rollback: deleted rows are not left over, maybe-landed rows are undone (DEL-5)", () => {
+  const TOTALS_TEXT = "The generator rows of the failed save were removed, but the project totals could not be updated. Reload the page and check the generator totals.";
+  const MAYBE = [landedRow(TURBINE_TABLE, "nw3")];
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  /** The save fails with `LANDED_ALL` (+ `maybe`); undo job `u` answers `undo[u]`, which may also report `deleted`. */
+  function scriptWith(maybe: LandedRowRef[], undo: { outcome: Outcome; deleted?: LandedRowRef[] }[]) {
+    let u = 0;
+    state.exec = async (job, n) => {
+      if (n === 0) {
+        // Like the engine: the plan, then `then` (which reads the new type's autonumber name), then the failure.
+        await resolvePlan(job);
+        if (job.then) await job.then(FIRST, { setProgress: () => {} });
+        return { outcome: { fail: REASON }, landed: LANDED_ALL, maybeLanded: maybe };
+      }
+      if (isUndo(job)) return undo[Math.min(u++, undo.length - 1)]!;
+      return { outcome: { ids: [] } };
+    };
+  }
+  const deletedIds = (plan: WritePlan) => plan.writes.filter((w) => w.op === "delete").map((w) => w.id);
+
+  it("UT-GEN-1100 a failed rollback that deleted some rows lists only the rows it did not delete", async () => {
+    scriptWith([], [{ outcome: { fail: "delete refused" }, deleted: [landedRow(ALLOC_TABLE, "al1"), landedRow(TURBINE_TABLE, "nw1")] }]);
+    renderScreen();
+    await saveNewType();
+    await screen.findByTestId("generators-retry-cleanup");
+    const left = [landedRow(TURBINE_TABLE, "nw2"), landedRow(TYPE_TABLE, "new-type")];
+    const text = errorBar()!.textContent!;
+    expect(text).toContain(ROLLBACK_MSG.leftover(describeLeftovers(left, { typeName: "WTG-0099" })));
+    expect(text).toContain('generator type "WTG-0099", 1 generator, 0 land-lease allocations');
+    expect(text).not.toContain(LEFTOVER_ALL);
+  });
+
+  it("UT-GEN-1101 Retry cleanup then works on the reduced list only", async () => {
+    scriptWith([], [
+      { outcome: { fail: "delete refused" }, deleted: [landedRow(ALLOC_TABLE, "al1"), landedRow(TURBINE_TABLE, "nw1")] },
+      { outcome: { ids: [] } },
+    ]);
+    renderScreen();
+    await saveNewType();
+    fireEvent.click(await screen.findByTestId("generators-retry-cleanup"));
+    await waitFor(() => expect(state.jobs).toHaveLength(3));
+    const plan = await resolvePlan(state.jobs[2]!);
+    expect(deletedIds(plan)).toEqual(["nw2", "new-type"]);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+    expect(retryButton()).toBeNull();
+  });
+
+  it("UT-GEN-1102 maybe-landed rows of the failed save are in the undo plan, in their family's place", async () => {
+    scriptWith(MAYBE, [{ outcome: { ids: [] } }]);
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    const plan = await resolvePlan(state.jobs[1]!);
+    expect(deletedIds(plan)).toEqual(["al1", "nw1", "nw2", "nw3", "new-type"]);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+  });
+
+  it("UT-GEN-1103 a maybe-landed row is not reported as left over when the rollback fails", async () => {
+    scriptWith(MAYBE, [{ outcome: { fail: "delete refused" } }]);
+    renderScreen();
+    await saveNewType();
+    await screen.findByTestId("generators-retry-cleanup");
+    // Counted from the CERTAIN rows only: two generators, not three.
+    expect(errorBar()!.textContent).toContain(LEFTOVER_ALL);
+    expect(errorBar()!.textContent).toContain("2 generators");
+  });
+
+  it("UT-GEN-1104 only maybe-landed rows (nothing confirmed): the rollback still runs", async () => {
+    state.exec = async (job, n) => {
+      if (n === 0) { await resolvePlan(job); return { outcome: { fail: REASON }, landed: [], maybeLanded: MAYBE }; }
+      return { outcome: { ids: [] } };
+    };
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    expect(deletedIds(await resolvePlan(state.jobs[1]!))).toEqual(["nw3"]);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+  });
+
+  it("UT-GEN-1105 every row deleted but the roll-up failed: rows said to be removed, totals not updated, no Retry", async () => {
+    scriptWith([], [{ outcome: { fail: "roll-up refused" }, deleted: LANDED_ALL }]);
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(errorBar()!.textContent).toContain(TOTALS_TEXT));
+    expect(errorBar()!.textContent).not.toContain("Left behind");
+    expect(retryButton()).toBeNull();
+    // The rollback's own error follows.
+    expect(errorBar()!.textContent).toContain("roll-up refused");
+    expect(state.jobs).toHaveLength(2);
+  });
+
+  it("UT-GEN-1106 the rollback's own error text follows the leftover message", async () => {
+    scriptWith([], [{ outcome: { fail: "delete refused" } }]);
+    renderScreen();
+    await saveNewType();
+    await screen.findByTestId("generators-retry-cleanup");
+    expect(errorBar()!.textContent).toContain(`${LEFTOVER_ALL} delete refused`);
+  });
+
+  it("UT-GEN-1107 a long rollback error is cut to a short text", async () => {
+    scriptWith([], [{ outcome: { fail: "x".repeat(500) } }]);
+    renderScreen();
+    await saveNewType();
+    await screen.findByTestId("generators-retry-cleanup");
+    const text = errorBar()!.textContent!;
+    expect(text).toContain(`${"x".repeat(240)}...`);
+    expect(text).not.toContain("x".repeat(241));
+  });
+
+  it("UT-GEN-1108 every certain row deleted but a maybe-landed one not: Retry stays for the unconfirmed row only", async () => {
+    scriptWith(MAYBE, [{ outcome: { fail: "delete refused" }, deleted: LANDED_ALL }, { outcome: { ids: [] } }]);
+    renderScreen();
+    await saveNewType();
+    fireEvent.click(await screen.findByTestId("generators-retry-cleanup"));
+    await waitFor(() => expect(state.jobs).toHaveLength(3));
+    expect(deletedIds(await resolvePlan(state.jobs[2]!))).toEqual(["nw3"]);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+    await settle();
+    expect(retryButton()).toBeNull();
+  });
+
+  it("UT-GEN-1109 flag off: no rollback runs, today's error only", async () => {
+    state.flag = false;
+    scriptWith(MAYBE, [{ outcome: { ids: [] } }]);
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(errorBar()).not.toBeNull());
+    await settle();
+    expect(state.jobs).toHaveLength(1);
+    expect(errorBar()!.textContent).toContain(REASON);
     expect(retryButton()).toBeNull();
   });
 });
