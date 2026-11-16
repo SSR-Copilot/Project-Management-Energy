@@ -7196,3 +7196,113 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 **Code app before:** a native radio, which cannot be unchecked: the selection could move but never clear.
 **Now:** the circle toggles (its click stops there, so the row does not reselect); Ctrl / Cmd + click on the selected row deselects; a plain row click selects and never toggles. Arrow keys still move the selection.
 **Tests:** UT-OVUI-048.
+
+## D115 — Generators bulk programme: parallel status toggle, tiered deletes, create rollback and bulk Dataverse writes behind flags (16 Nov 2026)
+
+**Status:** implemented and merged on `integration/generators-bulk` (engine, transport, plan builders, screen rollback), **NOT product-approved, NOT run against DEV, every flag off**. Nothing is on `RounakDev1`, `master` or DEV.
+**Documents:** `GENERATORS-BULK-DATAVERSE-ANALYSIS-AND-PLAN.md` (findings, request counts, risk register), `GENERATORS-BULK-IMPLEMENTATION-PLAN.md` (phases, §9 the decisions of 16 Nov 2026), `GENERATORS-SCREEN-FUNCTIONAL-ANALYSIS.md` (the screen), `GENERATORS-BULK-DEV-TEST-PLAN.md` (the manual DEV test, GB-01 onward).
+**Report:** speed up the Generators screen's saves (Add type, Activate / Deactivate, apply to all, Delete, Replace) with Dataverse bulk actions; every number in the analysis is computed from the code, none was timed live.
+
+### 1. Scope
+
+| Phase | Content | Flag in `GENERATORS_BULK` | Built (merged on `integration/generators-bulk`) |
+|---|---|---|---|
+| 1 | Activate / Deactivate: the turbine `statecode` updates run as one `together()` group instead of one after another | none (payloads unchanged) | yes: `planToggleStatus` |
+| 1B | Tiered parallel deletes: leaf rows 16 at once, cascading deletes 4, children before parents | none | yes: leaf group of 16 for allocation, O&M, unit, bridge and turbine deletes; cascade group of 4 for land-lease cost and type deletes; a single bridge, unit or type delete stays a plain step (a group only when there are 2 or more) |
+| 1C | Roll back a failed create save, with Retry cleanup | `createRollback` | yes: pure builders and the screen wiring (see below) |
+| 2 | Bulk allocation creates (`vsb_landleaseallocationwtgs`) | `allocations` | yes: the plan builders |
+| 3 | Bulk status toggle and apply-to-all updates | `status`, `applyAll` | yes: the plan builders |
+| 4 | One `CreateMultiple` for the N new turbines | `turbines` | yes: the plan builders |
+| 5 | Replace Generator / PV composed from the above | `replace` | yes: the plan builders |
+
+Everything above is merged on the integration branch and **none of it is product-approved, run against DEV or switched on**: every flag is `false`.
+
+What exists (all in `ProjectCosts-CodeApp/src/`):
+- **Engine** (`data/writePlan.ts`, `data/executePlan.ts`, `data/concurrency.ts`, `data/usePlanWrite.ts`): `createMany` and `updateMany` plan steps (one step, counted per row, never part of a `together()` group); each `together()` call is its own group with its own in-flight limit (default 8), and adjacent groups never merge; `PlanResult.landed` / `PlanError.landed` list every row a create wrote, in landing order; `usePlanWrite` returns `lastLanded()` and a "rows gone" message.
+- **Transport** (`data/generatorsBulk.ts`, `data/bulkBackend.ts`): native `CreateMultiple` / `UpdateMultiple` for five tables (allocations and turbines may be created; O&M costs, generator types and PV types are update-only). It refuses before sending anything when a row has no id, a repeated id (case-insensitive), a reserved key (`@odata.type`, `@odata.id`, the primary key) or, for a create, no `owningbusinessunit@odata.bind`. `updateMany` first reads which ids still exist (one read per 40) and sends nothing if one is gone. A 501 on the first chunk of an action continues row by row (create: one POST per row with the same id; update: one PATCH per row) and is remembered in `sessionStorage` (`vsb.generators.createMultiple501`, `vsb.generators.updateMultiple501`). A 429, or a 503 with `Retry-After`, is retried up to three tries in all, waiting the header (at most 30 s); every other failure is never retried. A failure carries exact row counts. HTTP chunking: under 20 rows one request, from 20 rows chunks of 10 to 500 rows, at most 8 in parallel.
+- **Plan builders** (`features/pm/generators/rules.ts`, `data/newRowId.ts`): `planGeneratorTypeFollowUp`, `planSaveTurbine`, `planPvFollowUp`, `planToggleStatus`, `planCreateGeneratorType`, `planReplaceGeneratorType` (and its follow-up) and `planReplacePvType` (and its follow-up) take an optional last parameter `opts?: PlanBulkOptions { bulk?, newId? }`. A bulk path is used only when its flag is on (`opts.bulk.X ?? GENERATORS_BULK.X`); with the flags off a plan is exactly today's plan. Row ids of bulk creates come from `opts.newId`, else `newRowId()` (`crypto.randomUUID`, the one sanctioned impure default).
+- **Screen rollback** (`features/pm/generators/Screen.tsx`, behind `createRollback`): after a create job fails, if `rollbackApplies` is true (Add WTG type; an out-of-country type whose approval flow fails) and `lastLanded()` is not empty, a rollback job runs `planRollbackCreate` with the progress text "Undoing the failed save, please wait..." (new, `ROLLBACK_PROGRESS_TEXT`). In country the roll-up is recomputed from the remaining types (harmless if it never ran); out of country it is not. Success: the original reason plus `ROLLBACK_MSG.undone` in the error bar. Failure: `ROLLBACK_MSG.leftover(describeLeftovers(...))` plus a **Retry cleanup** button (`data-testid` `generators-retry-cleanup`, `aria-label` "Retry cleanup"), disabled while refreshing or writing; it re-runs the rollback over only the recorded rows, with no automatic retries. The leftover state is cleared by `clearWrites`, any new run and a project change. `rollbackApplies` is consulted after every create job (add turbine, PV type, simple type, inverter, substructure) and is false for them.
+- **Flags** (`data/generatorsBulkFlags.ts`): `allocations`, `status`, `applyAll`, `turbines`, `replace`, `createRollback`, all `false`.
+- **Tests:** UT-PLAN-* (`data/executePlan.bulk.test.ts`, `data/executePlan.test.ts`), UT-GENBULK-001...047, UT-CONC-001...016, UT-PLANWRITE-006...018, UT-GEN-123 (toggle), UT-GEN-170...186 (`rollback.test.ts`), UT-GEN-186...209 (`bulkPlans.test.ts`: tiers), 210...220 (`bulkAllocations`), 230...239 (`bulkUpdates`), 240...247 (`bulkTurbines`, including the `createdIds` contract), 250...263 (`bulkReplace`), UT-GEN-930...941 (`Screen.rollback.test.tsx`). Two existing rules tests changed shape with the tiers: UT-GEN-127 (PV delete order) and UT-GEN-138 (Replace follow-up).
+
+**Request model with the flags on (asserted in tests).** A plan **step** is one plan entry; a bulk step is one entry carrying many rows, and the transport decides the HTTP chunking. The engine counts the same rows flag off and flag on.
+
+| Save | Steps / writes today | Steps with the flag on |
+|---|---|---|
+| Add type, N turbines, L all-WTG costs: allocations (`allocations`) | N*L single creates | one `createMany` of N*L rows |
+| Add type: turbines (`turbines`) | N + 2 writes | 3 steps (type create, one `createMany` of N rows, roll-up) |
+| Status toggle (`status`) | N + 2 writes | 3 steps (type update, one `updateMany` of N rows, roll-up) |
+| Apply to all, S siblings (`applyAll`) | S + 3 writes | 4 steps (turbine, one `updateMany` of S siblings, type totals, roll-up); the turbine edit itself is not in the bulk |
+| Replace job 1, O O&M costs, 4 units, N turbines (`replace`, `turbines`) | O + 4 + 1 + 1 + 1 + N + 1 writes | (O>0?1:0) + 4 + 1 + 1 + 1 + 1 + 1 steps |
+| Replace job 2 (`replace`) | 1 + N*L + moves + 3 + removals writes | 1 + (creates>0?1:0) + 1 + 1 + removals steps; the old-row deletes stay single requests, as their own leaf group after the creates |
+
+### 2. Decisions of 16 Nov 2026 (product owner; `GENERATORS-BULK-IMPLEMENTATION-PLAN.md` §9.1)
+
+1. **Sizes and scope.** Real sizes are small today (up to 20 turbines, 0–3 all-WTG land-lease costs, so a save is about 4–43 requests); the full plan (phases 1, 1B, 1C and 2–5) is wanted for future scale.
+2. **Rollback of a failed create.** Roll back scenario **A** (Add WTG type: the type, its turbines, whatever landed of the device-type row and the allocations) and **B** (an out-of-country type whose Request Module Permission flow fails to start). **Not** apply-to-all (the old values would have to be captured, and a second failure leaves a mix) and **not possible for Replace** (its old rows are already deleted, so it reports what saved). If the cleanup fails, the error says exactly what is left and offers **Retry cleanup**, which deletes only the recorded ids. The project roll-up already ran in the first job (§9.2), so a rollback recomputes it after the deletes (one more project update and one more Fabric sync-job row).
+3. **Tiered parallel deletes.** Leaf rows 16 at once, cascading deletes (land-lease costs, types) 4; children before parents; the roll-up last. The numbers 16 and 4 are starting values; the timed DEV test (delete 100 and 1,000 allocation rows and a type with 200 turbines at 4, 8 and 16) sets the final ones.
+4. **Guarded bulk updates.** Before an `UpdateMultiple` chunk, read which ids still exist; if one is missing, send nothing and tell the user to reload (also for the per-row fallback).
+5. **Replace keeps delete and recreate** (canvas parity); no repointing. Its old-allocation deletes run as their own wave after the creates settle. Decision 3 of the analysis is closed.
+6. **Success criterion:** at least 50% faster than today, per phase, averaged over three runs, against a baseline timed first on the DEV test project. Single-row saves that cannot improve by 50% are out of the criterion. A phase that misses it is reported and the product owner decides.
+7. **No custom plug-ins exist** for these functionalities, so risk R9 and probes 9 and 10 are withdrawn. Flows stay in scope. The notification mail flow is not functional in PROD and is not a concern.
+8. **Flags** exist only so the old path stays switchable (CONVENTIONS rule 15), with both halves tested. All are `false` in code until the phase's DEV check has passed; flipping one is its own change, with the DEV result recorded here. No runtime switch and no rollout policy.
+
+### 3. DIVERGENCES from the canvas
+
+| # | Canvas | Code app (flag) |
+|---|---|---|
+| 1 | A save that fails part-way leaves what landed (a type without allocations, turbines without a device-type row) | **DIVERGENCE:** scenarios A and B delete what landed and recompute the roll-up (`createRollback`); a failed cleanup is reported with **Retry cleanup**. The texts are new (`ROLLBACK_MSG`) |
+| 2 | Every write is one request; "N of M changes saved" counts requests | **DIVERGENCE:** with a bulk flag on, rows land per chunk. A chunk lands whole or not at all, parallel chunks can land partly, and a failure is per request with the exact count of rows that landed. The sentence shape is kept; it counts rows |
+| 3 | Deletes one after another | **DIVERGENCE:** deletes run in parallel tiers (leaf 16, cascade 4). A failure among them lets the others of the group finish |
+| 4 | Replace deletes old allocations and creates new ones in one pass | **DIVERGENCE:** the deletes run as a wave after the creates settle (no overlap on the same parents) |
+| 5 | Turbine status updates one after another | **DIVERGENCE:** one parallel group (8 in flight); a failure lets the others of the group finish |
+| 6 | (not a canvas behaviour) `planSaveTurbine` and the PV follow-up put the allocations after the roll-up | **Kept on purpose, "do not reorder":** in those two plans the roll-up is not the last write. With the `turbines` flag on, Add type no longer wraps the device-type row in a group. Apply-to-all rows keep today's payload, including the owning-business-unit bind on sibling updates |
+
+### 4. New risks and mitigations (analysis §6; R9 stays withdrawn)
+
+| # | Risk | Score | Mitigation / verification |
+|---|---|---|---|
+| R1 | Orphans after a partial bulk delete or a failed replace: allocations with no turbine, O&M costs whose bridge is gone (they flip to "other" in totals). Deletes are not transactional | 16 | Children first, parent last; idempotent retries; a post-run orphan query; inject a failure in a later group and check |
+| R2 | Roll-up fan-out: each project update with a capacity column makes one flow run and one Fabric sync-job row | 15 | Exactly one roll-up per bulk operation, always last (a rollback adds one, §2.2); count sync-job rows after one save |
+| R3 | A bulk target without `owningbusinessunit@odata.bind` succeeds silently and the rows are hidden from other roles | 12 | The transport fails closed; read the first created row back during rollout |
+| R4 | DEV differs from the 1.21.709 export (newer solution, extra steps, flows outside the solution) | 12 | Check the DEV solution version, cascade configuration and flow state before building on it (analysis §9 item 13) |
+| R5 | Atomic chunk failure with no failing-row detail: one bad row rolls back a whole chunk | 12 | Client validation before sending; row-level counts; keep chunk size configurable |
+| R6 | Cascade amplification on a type with hundreds of turbines (audited RemoveLink updates, locks, timeout) | 9 | Delete turbines and allocations before the type; cascade-capable deletes at 4 in flight; measure a 200-turbine type |
+| R7 | Parent and child in one request is undocumented | 9 | Two requests: parents first, then children; ids pre-generated |
+| R8 | Polymorphic bind wrong, wrongly cased or unsupported in bulk | 8 | Keep the `PLANT_BIND` constants the only source; probe 3 rows and read back each lookup with its target table (GB-52) |
+| R9 | Withdrawn 16 Nov 2026: no custom plug-ins exist | — | — |
+| R10 | Autonumber and response shape: `CreateMultiple` may return ids only | 6 | The type create stays single; ids are pre-generated |
+| R11 | Throttling (52 concurrent per user, 20 minutes of execution per 5 minutes) | 6 | The transport retries a 429 after `Retry-After`; write concurrency stays capped; load-test 200+ rows (GB-34) |
+| R12 | Lock contention or deadlock: two users, or the approval flow and the app, on the same project row; overlapping deletes on one land-lease cost | 6 | One bulk operation per project at a time; no retry except for a 429 |
+| R13 | Stale overwrite or resurrection | 6 | Guarded `updateMany` (decision 4) |
+| R14 | Duplicate ids in one `UpdateMultiple` are silently ignored | 6 | The transport refuses a repeated id before sending |
+| R15 | Audit and change-tracking overhead on every row | 6 | Include in the timing tests |
+| R16 | The "first bridge only" gap and O&M chains | 6 | DEV query for O&M rows with a parent set and a null bridge |
+| R17 | Duplicate turbine names between concurrent users (existing, not new) | 4 | Out of scope; noted only |
+
+### 5. Verification still owed
+
+`GENERATORS-BULK-DEV-TEST-PLAN.md`: the baseline timing (three runs of five cases), the cases GB-01 onward per phase and flag, the cascade and orphan test, the polymorphic-bind read-back, the Fabric sync-job count, the timed delete test at 4, 8 and 16, and the 50%-faster acceptance table. Until it has been run: no flag is flipped, nothing is pushed to DEV, and no phase is called done.
+**Known limits of the rollback:** after a failed rollback the message lists every recorded row as left over even if some deletes landed (conservative; Retry is safe because a 404 counts as gone); a failed rollback's own error text is hidden behind the leftover message; there is no render test for a failed Add PV type. Not verifiable without DEV: the real delete order, the 404 handling, the cascade, the `[VSB]` lines and the browser UX.
+**Needs a live check:** everything above. In particular the bulk request time through the host (never measured under about 1 s in D51), whether the polymorphic, owning-business-unit, `null` and `statecode` binds work inside a bulk target, the response shape, and 429 behaviour.
+**Not changed:** the type create, the roll-ups, the device-type bridge create, the flow calls and every single-row save stay single requests.
+
+### 8. Independent review and its fixes (16 Nov 2026)
+
+An independent read-only review of the merged work found no blocker. These findings were fixed before merging into `RounakDev1`; each has a test:
+
+- **Out-of-country rollback after the approval request started** (UT-GEN-945 to 947). `DIVERGENCE (plan §9.3, review finding 1)`: when the Request Module Permission call has already succeeded and a later step fails, nothing is rolled back and the type stays saved with its pending approval, because deleting it would leave an open approval for a deleted type. The error bar keeps the original text. A failure of the flow call itself, and every in-country failure, still roll back. Product choice still open: cancel the approval and then roll back.
+- **Roll-up recompute** (UT-GEN-948, 949): it runs only when the first job of the save completed. A failure inside the first job produces a rollback with no project update.
+- **Retry cleanup edge cases** (UT-GEN-950 to 952): one rollback at a time; a result that arrives after a project change is dropped; a missing project shows a notice.
+- **"Row no longer exists" in the middle of a plan** keeps the "N of M changes had already been saved" sentence when something was saved. A refusal in the second job of a save reports the first job's saved count (UT-PLAN-150 upward, UT-PLANWRITE-020 upward).
+- **Records for rollback and messages**: `PlanError.maybeLanded` (ids of a failed bulk create that may have landed), `PlanResult/PlanError.deleted` (rows whose delete succeeded), and `lastMaybeLanded()` and `lastDeleted()` on `usePlanWrite`. **The screen does not use them yet**: after a failed rollback its leftover message still lists every recorded row (conservative; Retry is safe because a delete answering 404 counts as gone), and a rollback does not yet delete the maybe-landed ids. Wiring them is an open item.
+- **The Generators transport is no longer loaded by every screen**: `bulkBackend.ts` has `registerDefaultBulkBackend`, and `data/generators.ts` registers the Generators backend at load.
+- **The 501 per-row create fallback** checks that the id the service returns is the id sent. Row data that is missing is a validation error, not a TypeError.
+
+Known and still open, not fixed here:
+- The transport has **no bisection** of a failed chunk (plan §2.4 describes it): a bad row fails its whole chunk and the error is counted by rows only.
+- The per-save id cache of plan §2.5 is **not implemented**: a retry builds new ids.
+- A job that finishes after the user changes project can still put its error on the new project (an engine-wide gap in `usePlanWrite`, as before).
+- The two texts `ROLLBACK_PROGRESS_TEXT` and `ROLLBACK_NO_PROJECT_TEXT` live in `Screen.tsx` and belong in `rules.ts` `ROLLBACK_MSG`; `LandedRowRef` (rules) duplicates `LandedRow` (engine).
+- `knip` reports 37 unused files against the recorded baseline of 36; the extra file was not attributed.
+- **Nothing has run against DEV and every bulk flag is false.** The E2E parity suite was not run (the question was asked and not answered, so it is treated as declined).

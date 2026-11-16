@@ -10,6 +10,11 @@
  * Reused, not repeated: the FID price-inflation rows come from `data/milestones.ts`
  * (`loadPriceInflation`). Column names come from the generated models; the rules' column maps
  * (`GENERATOR_COL`, `GEN_TYPE_COL`, `GEN_INSTANCE_COL`, `PROJECT_PLANT_COL`) are the source.
+ *
+ * BULK TRANSPORT: this module registers `createGeneratorsBulkBackend` as the default bulk backend at module
+ * load (`registerDefaultBulkBackend`, `./bulkBackend.ts`). The write-plan engine never imports the transport
+ * itself, so only a build that loads the Generators data layer (the Generators screen always does) pays for
+ * the transport's generated services; the factory still runs lazily on the first bulk step.
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
@@ -37,8 +42,12 @@ import {
   type CatalogModel, type GeneratorTypeRow, type GeneratorsProject, type LandLeaseCostRow, type PlantSupplierOption, type ProjectPlanning,
   type PvModuleOption, type SimpleTypeRow, type TurbineRow,
 } from "@/features/pm/generators/rules";
+import { registerDefaultBulkBackend } from "./bulkBackend";
 import { fetchAll, fetchPage } from "./client";
+import { createGeneratorsBulkBackend } from "./generatorsBulk";
 import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+
+registerDefaultBulkBackend(createGeneratorsBulkBackend);
 
 type Raw = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);

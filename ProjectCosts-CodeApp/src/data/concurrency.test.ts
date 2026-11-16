@@ -7,7 +7,9 @@
  * Dataverse cuts a user off at 52 concurrent requests and there is no retry on the write path.
  */
 import { describe, expect, it } from "vitest";
-import { createGate, mapLimit, forEachLimit, WRITE_CONCURRENCY } from "./concurrency";
+import {
+  CASCADE_DELETE_CONCURRENCY, createGate, DELETE_CONCURRENCY, forEachLimit, LEAF_DELETE_CONCURRENCY, mapLimit, WRITE_CONCURRENCY,
+} from "./concurrency";
 
 /** Resolves on the next microtask, so tasks actually overlap. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -163,5 +165,20 @@ describe("createGate", () => {
     await Promise.all([held, more]);
     expect(observed).toBeLessThanOrEqual(2);
     expect(gate.peak()).toBe(2);
+  });
+
+  it("UT-CONC-015 the delete tiers: leaf 16 (as DELETE_CONCURRENCY), cascade 4, both under the default write limit's ceiling of 52 with room for reads", () => {
+    expect(LEAF_DELETE_CONCURRENCY).toBe(16);
+    expect(LEAF_DELETE_CONCURRENCY).toBe(DELETE_CONCURRENCY);
+    expect(CASCADE_DELETE_CONCURRENCY).toBe(4);
+    expect(WRITE_CONCURRENCY).toBe(8);
+  });
+
+  it("UT-CONC-016 a gate built with each tier limit never exceeds it (40 tasks)", async () => {
+    for (const limit of [LEAF_DELETE_CONCURRENCY, CASCADE_DELETE_CONCURRENCY]) {
+      const gate = createGate(limit);
+      await Promise.all(Array.from({ length: 40 }, () => gate(tick)));
+      expect(gate.peak()).toBe(limit);
+    }
   });
 });
