@@ -462,14 +462,23 @@ describe("bulk failures", () => {
     expect(err.landed).toEqual([{ entitySet: SET, id: "a" }]);
   });
 
-  it("UT-PLAN-126 no bulk backend installed is a clear programmer error (a PlanError naming it), not a crash", async () => {
+  it("UT-PLAN-126 a backend that cannot be used (it throws a plain Error) is a PlanError naming the cause, not a crash", async () => {
+    // Integration change: the transport package installs a real default backend lazily, so
+    // "no backend installed" no longer exists. The same engine path (a plain Error from the
+    // backend becomes a PlanError) is pinned with a backend that throws.
     const { client } = stubClient();
-    setBulkBackend(null);
+    setBulkBackend({
+      createMany: async () => {
+        throw new Error("No bulk backend is available");
+      },
+      updateMany: async () => ({ requests: 0 }),
+    });
     const plan = emptyPlan();
     plan.writes.push(createMany(SET, [row("a")], "allocations"));
     const err = (await executePlan(plan, "test", client).catch((e: unknown) => e)) as PlanError;
     expect(err).toBeInstanceOf(PlanError);
-    expect(err.message).toMatch(/No bulk backend is installed/);
+    expect(err.message).toMatch(/No bulk backend is available/);
+    setBulkBackend(null);
   });
 });
 
