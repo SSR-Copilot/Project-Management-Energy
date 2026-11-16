@@ -22,6 +22,26 @@ const useStyles = makeStyles({
    * classes, so this wins without `!important`.
    */
   dropdown: { minWidth: "0px", width: "100%" },
+  /*
+   * The canvas classic dropdown's open list (measured on the CAPEX panel): flush under the field,
+   * square, 1px #757575 border, no shadow, #f5f5f5 rows 30px tall, no check mark, and the
+   * selected value filled #1967d2 with white text.
+   */
+  listbox: {
+    padding: "0px", borderRadius: "0px", boxShadow: "none",
+    border: "1px solid #757575", backgroundColor: "#f5f5f5",
+  },
+  option: {
+    minHeight: "30px", padding: "0 12px", borderRadius: "0px", columnGap: "0px",
+    fontSize: "14px", color: "#242424", backgroundColor: "#f5f5f5",
+    "& .fui-Option__checkIcon": { display: "none" },
+    ":hover": { backgroundColor: "#e6e6e6", color: "#242424" },
+    ":active": { backgroundColor: "#e6e6e6", color: "#242424" },
+    "::after": { display: "none" },
+    "&[data-activedescendant-focusvisible]::after": { display: "none" },
+    '&[aria-selected="true"]': { backgroundColor: "#1967d2", color: "#ffffff" },
+    '&[aria-selected="true"]:hover': { backgroundColor: "#1967d2", color: "#ffffff" },
+  },
 
   /**
    * The panel footer's two constant buttons — `con_GeneratorData_RightPanel_Form_
@@ -160,7 +180,7 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
   return <label className="canvas-field" data-invalid={error ? true : undefined}>
     <span data-required={required} data-counter={counter ? true : undefined} title={labelTitle}>{label}
       {counter ? <em className="canvas-field-counter">{counter}</em> : null}</span>
-    {children ?? <input className={standardClass(standard)} type={type} inputMode={inputMode} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
+    {children ?? <input className={standardClass(standard)} data-standard={standardAttr(standard)} type={type} inputMode={inputMode} value={value ?? ""} aria-label={name ?? label} data-testid={name} aria-invalid={error ? true : undefined} onChange={e => onChange?.(e.target.value)} onBlur={onBlur} disabled={disabled} maxLength={maxLength} placeholder={placeholder} min={type === "number" ? 0 : undefined} step={type === "number" ? "any" : undefined} />}
     {error ? <span className="canvas-field-error" role="alert" title={errorTitle}>{error}</span> : null}
   </label>;
 }
@@ -172,6 +192,15 @@ export function CostField({ label, name, required, value, onChange, onBlur, type
  * label swallows the click that should open the listbox. The label is a sibling `<span>` with
  * the same `.canvas-field` styling and an `aria-label` on the control instead.
  */
+/**
+ * The same variant as a plain attribute, for `canvas.css`: its `.canvas-field > input` and
+ * `.canvas-radio-group label` rules (0,1,1) set `color` / `font: inherit` and out-rank the
+ * single Griffel class, which hid the standard blue italic on CAPEX Description, Total Costs
+ * and Cost Paid By. `[data-standard]` rules in `canvas.css` restore it.
+ */
+const standardAttr = (standard: StandardProp): string | undefined =>
+  !standard ? undefined : standard === true ? "standard" : standard;
+
 export function CostSelect({ label, value, options, onChange, required, error, testId, standard, ariaLabel }: {
   label: string; value: string | number; options: readonly (string | number)[];
   onChange: (value: string) => void; required?: boolean; error?: string;
@@ -188,8 +217,9 @@ export function CostSelect({ label, value, options, onChange, required, error, t
     <span data-required={required}>{label}</span>
     <Dropdown className={mergeClasses(styles.dropdown, standardClass(standard))} aria-label={ariaLabel ?? label} data-testid={testId} value={String(value)}
       selectedOptions={[String(value)]} appearance="filled-lighter"
+      listbox={{ className: styles.listbox }} positioning={{ position: "below", align: "start", offset: 0 }}
       onOptionSelect={(_, d) => { if (d.optionValue !== undefined) onChange(d.optionValue); }}>
-      {options.map(option => <Option key={option} value={String(option)}>{String(option)}</Option>)}
+      {options.map(option => <Option key={option} value={String(option)} className={styles.option}>{String(option)}</Option>)}
     </Dropdown>
     {error ? <span className="canvas-field-error" role="alert">{error}</span> : null}
   </div>;
@@ -227,7 +257,7 @@ export function Choices({ label, name, value, options, onChange, required, disab
      */
     aria-label={ariaLabel ?? name ?? (label || undefined)} data-testid={name}>
     {label || action ? <legend><span data-required={required} title={labelTitle}>{label}</span>{action}</legend> : null}
-    {options.map(option => <label key={option} className={standardClass(standard)}>
+    {options.map(option => <label key={option} className={standardClass(standard)} data-standard={standardAttr(standard)}>
       <input type="radio" value={option} checked={value === option} onChange={() => onChange(option)} aria-label={option}
         data-testid={name ? `${name}-${testIdPart(option)}` : undefined} />{option}</label>)}
   </fieldset>;
