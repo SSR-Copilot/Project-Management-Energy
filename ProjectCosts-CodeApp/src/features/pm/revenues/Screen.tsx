@@ -367,6 +367,10 @@ const useStyles = makeStyles({
     "&.canvas-panel .fui-Input:has(input:disabled)": {
       backgroundColor: "#ffffff", border: "1px solid #e0e0e0",
     },
+    // …except the German-FiT Tariff p50, which the canvas draws as the grey filled box, no outline.
+    '&.canvas-panel .fui-Input:has(input[data-testid="txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_TariffPrice_1"]:disabled)': {
+      backgroundColor: "#f5f5f5", border: "1px solid transparent",
+    },
     // Caption row 32 high, text at its foot 6 above the box; the `*` (`palette.Error`, Bold,
     // Medium) hangs 10 px left of the caption, raised to the caption's cap height.
     "&.canvas-panel .fui-Field": { rowGap: 0 },
@@ -1231,7 +1235,8 @@ export default function ProjectRevenuesScreen() {
                   name="txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_TariffPrice_1"
                   required
                   disabled={form.showsGermanFitBlock}
-                  standard={panelStd?.tariff}
+                  // Disabled (German FiT): the canvas `DisabledColor` greys the text, only `FontItalic` shows.
+                  standard={form.showsGermanFitBlock ? (panelStd?.tariff ? "italic" : false) : panelStd?.tariff}
                   value={form.tariff}
                   error={validateTariff(form.tariff, form.country, form.showsGermanFitBlock, lang).message}
                   onChange={(v) => change(editField(form, {
@@ -1245,7 +1250,7 @@ export default function ProjectRevenuesScreen() {
                     name="txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_TariffPrice_p90"
                     required
                     disabled
-                    standard={panelStd?.tariffP90}
+                    standard={panelStd?.tariffP90 ? "italic" : false}
                     value={form.tariffP90}
                   />
                 ) : null}

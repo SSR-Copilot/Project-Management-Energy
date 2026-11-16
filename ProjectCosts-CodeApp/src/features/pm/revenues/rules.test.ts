@@ -1720,6 +1720,30 @@ describe("PO validation audit — the contract panel's Power Fx, term for term (
     expect(fmtTwoDecimals(null)).toBe("");
   });
 
+  it("UT-REV-916 a new German FiT contract seeds the price through the live canvas lookup (1.21.753), not the COD-year price", () => {
+    // Outside Italy the canvas cannot hit the exact year (`country = locAreaWithRegion` is blank);
+    // its year-vs-price fallback (2034 > last price) returns the last row's price.
+    const curve = [row("price", "2033", "50", "40"), row("price", "2034", "52", "41"), row("price", "2035", "60", "42")];
+    const f = applyRevenueEngine({
+      project: project({ cod: d("2034-01-29") }), rows: [...curve, row("revenuetype", "", "fit", "fit")], region: null, label: "FiT",
+      productionExists: false, subaccountId: "sub-1", profiles: [],
+    });
+    expect(f.biddingPrice).toBe(priceForYearCanvasParity(curve, "Wind", 2034, "en-US", null)!.toFixed(2));
+    expect(f.biddingPrice).not.toBe(priceForYear(curve, "Wind", 2034)!.toFixed(2));
+    expect(f.tariff).toBe(f.biddingPrice);
+    expect(f.tariffP90).toBe(f.biddingPrice);
+  });
+
+  it("UT-REV-917 with no standard assumption for the type (PPA) the new contract's Tariff is blank, not the curve price", () => {
+    const curve = [row("price", "2034", "52", "41"), row("revenuetype", "", "fit", "fit")];
+    const f = applyRevenueEngine({
+      project: project({ cod: d("2034-12-01") }), rows: curve, region: null, label: "PPA",
+      productionExists: false, subaccountId: "sub-1", profiles: [],
+    });
+    expect(f.tariff).toBe("");
+    expect(f.tariffP90).toBe("");
+  });
+
   it("UT-REV-145 picking the years fills blank months with 0, and either picker un-standardises both", () => {
     const f = form({ durationYears: null, durationMonths: null, std: { ...NOTHING_STANDARD, contractDurationYears: true, contractDurationMonths: true } });
     const y = withTerm(f, { durationYears: 20 }, {});
@@ -1848,7 +1872,9 @@ describe("PO validation audit — the contract panel's Power Fx, term for term (
 describe("German and French numbers: Revenues writes and reads every box in the user's language", () => {
   const curve = [row("price", "2028", "65", "46")];
   const engine = (label: string, language: string) => localizeContractForm(applyRevenueEngine({
-    project: project(), rows: curve, region: null, label, productionExists: false,
+    // The standard assumption must exist for the label, or the canvas leaves the price blank.
+    project: project(), rows: [...curve, row("revenuetype", "", label.toLowerCase(), label.toLowerCase())],
+    region: null, label, productionExists: false,
     subaccountId: "sub-1", profiles: [], today: d("2026-10-20"), language,
   }), language);
 

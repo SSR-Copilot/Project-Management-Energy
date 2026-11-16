@@ -3220,8 +3220,19 @@ export function applyRevenueEngine(input: {
   const end = engineEndDate(start, dur.years, dur.months);
   const codYear = project.cod?.getFullYear() ?? (input.today ?? new Date()).getFullYear();
   const pricePool = pricePoolFor(rows, project.countryName, region);
-  const price = priceForYear(pricePool, tech, codYear, lang);
-  const priceP90 = p90Price(pricePool, tech, codYear, lang);
+  /*
+   * Canvas parity (D90, "follow the Canvas"): the live canvas (1.21.780) seeds a new contract's
+   * price through the 1.21.753 lookup — exact year only with `country = locAreaWithRegion` (blank
+   * outside Italy), then the year-vs-PRICE fallback — so it does NOT pick the COD-year price that
+   * `priceForYear` would (German FiT, COD 2034: canvas 52.00, `priceForYear` 60.00). Bidding Price,
+   * Tariff p50 and Tariff p90 all derive from this value.
+   */
+  //
+  // Both are gated on the standard assumption existing for this revenue type, as the canvas'
+  // `priceValue: Value(If(recStandardAssumptionExists, …, Blank()))` is: a PPA with no standard
+  // opens with a BLANK Tariff, not the curve price.
+  const price = exists ? priceForYearCanvasParity(pricePool, tech, codYear, lang, region ?? null) : null;
+  const priceP90 = exists && tech === "Wind" ? priceForYearCanvasParity(pricePool, tech, codYear, lang, region ?? null) : null;
   const infl = inflation(rows, tech, project, { standardAssumptionExists: exists, language: lang });
   const neg = negativePriceState(rows, tech, label, input.productionExists);
   const shows = showsGermanFitBlock(project.countryName, label, tech);

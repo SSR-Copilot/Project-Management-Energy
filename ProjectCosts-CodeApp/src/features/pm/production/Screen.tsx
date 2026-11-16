@@ -251,8 +251,13 @@ const useStyles = makeStyles({
    */
   totalRow: { gridTemplateRows: "20px 4px 32px auto", paddingLeft: "2px" },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
-  // `InfoButtonCanvas2`: 30 x 30, 10 right of the Irradiation input.
-  info: { display: "flex", alignItems: "flex-end", gap: "10px" },
+  // `InfoButtonCanvas2`: 30 x 30, 10 right of the Irradiation input, and NO `Y` — so it sits at the
+  // top of the field container, level with the caption, not beside the input box.
+  info: { display: "flex", alignItems: "flex-start", gap: "10px" },
+  infoButton: {
+    width: "30px", height: "30px", minWidth: "30px", padding: "0px", marginTop: "-6px",
+    "& .fui-Button__icon": { width: "20px", height: "20px", fontSize: "20px" },
+  },
   infoField: { flex: "0 1 calc(50% + 20px)", minWidth: 0, "& .fui-Input": { width: "100%" } },
 });
 
@@ -583,7 +588,7 @@ export default function ProductionScreen() {
                       onChange={(v) => set("irradiation", v)} testId="txt_ProductionDataPV_Irradation" ariaLabel="txt_ProductionDataPV_Irradation" />
                   </div>
                   <Tooltip content={UI.irradiationInfo} relationship="label" withArrow>
-                    <Button appearance="transparent" icon={<InfoRegular />} aria-label={UI.irradiationInfo} data-testid="InfoButtonCanvas2" />
+                    <Button appearance="transparent" className={s.infoButton} icon={<InfoRegular />} aria-label={UI.irradiationInfo} data-testid="InfoButtonCanvas2" />
                   </Tooltip>
                 </div>
               </>
