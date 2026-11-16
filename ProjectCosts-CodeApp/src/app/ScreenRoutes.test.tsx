@@ -42,7 +42,7 @@ vi.mock("@/data/generators", () => ({
   listPvModules: async () => [], listPvTypes: async () => [], listInverterTypes: async () => [],
   listSubstructureTypes: async () => [], listSimpleTypes: async () => [], listAllWtgLandLeaseCosts: async () => [],
   loadDeviceCosts: async () => ({ modules: null, inverter: null, mountingFix: null, mountingTracker: null }),
-  loadTypeName: async () => "", listDeviceTypes: async () => [], listOpexCostIds: async () => [],
+  loadTypeName: async () => "", listDeviceTypes: async () => [], listOpexCostIds: async () => [], listOpexCostIdsForBridges: vi.fn(async () => []),
   loadOpexDependency: async () => ({ hasActiveDeviceType: false, hasActiveOpexCost: false }),
   findPvUnit: async () => null, loadTurbineAllocations: async () => ({ allocations: [], countByCost: {} }),
 }));

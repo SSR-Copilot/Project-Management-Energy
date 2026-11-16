@@ -397,6 +397,9 @@ export async function loadReplaceInputs(projectId: string, typeId: string): Prom
     unitIds: units.map((u) => u.id),
     allocations: toReplaceAllocations({
       allocations: alloc.allocations, units, allWtgCostIds: new Set(landLeaseCosts.map((c) => c.id)),
+      // DEL-4: each allocation keeps its land-lease cost id, the `serialKey` of its delete (rules.ts reads it only when
+      // `GENERATORS_DELETE.parentOrder` is on; nothing else reads the rows).
+      keepCostIds: true,
     }),
     landLeaseCosts,
   };
