@@ -55,8 +55,13 @@ import {
 } from "@/domain/powerFxNumeric";
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
-import { createdRowRef, emptyPlan, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import {
+  createdRowRef, createMany, emptyPlan, refusePlan, together, type PlannedWrite, type WritePlan,
+} from "@/data/writePlan";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
+import { newRowId } from "@/data/newRowId";
+import type { BulkRow } from "@/data/bulkBackend";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 
@@ -3385,6 +3390,25 @@ function landLeaseCleanupWrites(
   }
   return { allocations, costs };
 }
+
+/**
+ * Optional last parameter of the plan builders that have a bulk path (Generators bulk programme, work package R2).
+ * A bulk path is used ONLY when its flag is on: `(opts.bulk.X ?? GENERATORS_BULK.X) === true`, so no caller has to
+ * change (a screen passes nothing, a test passes `{ bulk: { allocations: true }, newId }`). With every flag off (the
+ * default) a plan is EXACTLY today's plan. Row ids come from `opts.newId`, else `newRowId`: the single sanctioned
+ * impure default of `rules.ts` (`data/newRowId.ts`).
+ */
+export interface PlanBulkOptions {
+  /** Per-flag overrides of `GENERATORS_BULK` (same keys; `true` allowed, which the `as const` defaults cannot say). */
+  bulk?: { [K in keyof typeof GENERATORS_BULK]?: boolean };
+  /** Source of the pre-generated row ids of bulk creates. Tests inject a counter. */
+  newId?: () => string;
+}
+
+const bulkOn = (opts: PlanBulkOptions | undefined, flag: keyof typeof GENERATORS_BULK): boolean =>
+  (opts?.bulk?.[flag] ?? GENERATORS_BULK[flag]) === true;
+const rowIdSource = (opts: PlanBulkOptions | undefined): (() => string) => opts?.newId ?? newRowId;
+
 /*
  * Save performance (6 Nov 2026): `together` (`data/writePlan.ts`) marks writes that depend on nothing but
  * rows created BEFORE them (a type's turbines, the roll-up, the land-lease allocations, the apply-to-all
@@ -3417,6 +3441,37 @@ function allocationCreates(args: {
       [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, a.generatorInProjectId),
       ...owner(args.owningBusinessUnitId),
     }, `allocate land-lease cost to ${a.name}`));
+}
+
+/**
+ * The land-lease allocation rows as ONE bulk create (plan §3 phase 2, flag `GENERATORS_BULK.allocations`): the same rows
+ * `allocationCreates` makes one by one, in the same order (cost-major, then turbine), each with a pre-generated id
+ * (`newId`, plan §2.5) and the same data, owning-business-unit bind included (CONVENTIONS rule 4; the backend fails
+ * closed without it). A turbine id may be a `createdRowRef` placeholder; the engine resolves it per row.
+ */
+function allocationRows(args: Parameters<typeof allocationCreates>[0], newId: () => string): BulkRow[] {
+  return planTurbineAllocation({ costs: args.costs, turbines: args.turbines }).map((a) => ({
+    id: newId(),
+    data: {
+      vsb_name: a.name,
+      [PLANT_BIND.projectCost]: ref(ES_PLANT.landLeaseProjectCosts, a.costId),
+      [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, a.generatorInProjectId),
+      ...owner(args.owningBusinessUnitId),
+    },
+  }));
+}
+
+/**
+ * The allocation creates of a plan, as plan steps.
+ *  - flag off: today's single creates, as ONE `together()` group (default limit);
+ *  - flag on:  ONE `createMany` step (no step at all when there is nothing to allocate), never inside a group.
+ * DIVERGENCE: plan §3 phase 2 / §9.7: N x L single creates become one bulk request; a chunk lands whole or not at all
+ * (plan §2.4). The off path is today's plan, kept as the rollback (CONVENTIONS rule 15).
+ */
+function allocationStep(args: Parameters<typeof allocationCreates>[0], opts: PlanBulkOptions | undefined): PlannedWrite[] {
+  if (!bulkOn(opts, "allocations")) return together(allocationCreates(args));
+  const rows = allocationRows(args, rowIdSource(opts));
+  return rows.length > 0 ? [createMany(ES.landLeaseAllocationWtgs, rows, "the land-lease allocations of the new turbines")] : [];
 }
 
 /**
@@ -3519,7 +3574,7 @@ export function planGeneratorTypeFollowUp(args: {
   hasDeviceType: boolean;
   turbines: { id: string; name: string | null }[];
   landLeaseCosts: LandLeaseCostRow[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const writes: PlannedWrite[] = [];
   if (!args.hasDeviceType) {
     writes.push(deviceTypeShadow({
@@ -3527,9 +3582,15 @@ export function planGeneratorTypeFollowUp(args: {
       owningBusinessUnitId: args.project.owningBusinessUnitId,
     }));
   }
-  writes.push(...allocationCreates({
+  const allocation = {
     costs: args.landLeaseCosts, turbines: args.turbines, owningBusinessUnitId: args.project.owningBusinessUnitId,
-  }));
+  };
+  if (bulkOn(opts, "allocations")) {
+    // DIVERGENCE (plan §3 phase 2): the allocations are ONE `createMany` step. A bulk step is never part of a group,
+    // so the device-type row is a plain create before it (it has no allocation to wait for, and no one to wait for it).
+    return { writes: [...writes, ...allocationStep(allocation, opts)], log: [] };
+  }
+  writes.push(...allocationCreates(allocation));
   // The device-type row and the allocations bind only to rows that already exist: one parallel run.
   return { writes: together(writes), log: [] };
 }
@@ -3585,7 +3646,7 @@ export function planSaveTurbine(args: {
   landLeaseCosts: LandLeaseCostRow[];
   /** The user's language. Required: every box of the panel is typed in it. */
   lang: Lang;
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const { lang } = args;
   const name = `WTG ${args.project.shortName ?? ""}_${args.form.nameIndex.trim()}`;
   const capacity = valueOrNull(args.form.effectiveCapacity, lang);
@@ -3644,10 +3705,11 @@ export function planSaveTurbine(args: {
 
   // 5. a new turbine's AllWTG allocations — bound to the row step 1 created.
   if (!args.turbine) {
-    writes.push(...together(allocationCreates({
+    // Flag `allocations`: one `createMany` instead of the parallel run (plan §3 phase 2); the order is unchanged.
+    writes.push(...allocationStep({
       costs: args.landLeaseCosts, turbines: [{ id: createdRowRef(0), name }],
       owningBusinessUnitId: args.project.owningBusinessUnitId,
-    })));
+    }, opts));
   }
   // Canvas order between the steps: turbine → apply-to-all (parallel) → type totals → roll-up → allocations
   // (parallel). Only rows inside one step go together, so the project trigger and a failure stop as before.
@@ -3990,7 +4052,7 @@ export function planPvFollowUp(args: {
   isNew?: boolean;
   /** The project's `AllWTGAllocated = Yes` land-lease costs (G7). */
   landLeaseCosts?: LandLeaseCostRow[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const unit = {
     [GEN_INSTANCE_COL.name]: args.pvName,
     [PLANT_BIND.moduleTypePv]: ref(ES_PLANT.pvModuleTypeInProjects, args.pvId),
@@ -4003,10 +4065,10 @@ export function planPvFollowUp(args: {
     // G7 — bound to the unit this plan created (its first create), or the existing one. Save performance
     // (6 Nov 2026): independent rows, sent as one parallel run; the unit before them, the roll-up after.
     ...(args.isNew
-      ? together(allocationCreates({
+      ? allocationStep({
           costs: args.landLeaseCosts ?? [], turbines: [{ id: args.unitId ?? createdRowRef(0), name: args.pvName }],
           owningBusinessUnitId: args.project.owningBusinessUnitId,
-        }))
+        }, opts)
       : []),
     upd(ES.projects, args.project.id, {
       [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
@@ -4756,19 +4818,23 @@ export function planReplaceGeneratorTypeFollowUp(args: {
   /** The new units, ordered by index. */
   newUnits: { id: string; name: string | null }[];
   inputs: ReplaceInputs;
-}): ReplaceFollowUpPlan {
+}, opts?: PlanBulkOptions): ReplaceFollowUpPlan {
   const obu = args.project.owningBusinessUnitId;
   const writes: PlannedWrite[] = [];
   /** Save performance (6 Nov 2026): after the device-type row, every write here is an independent row. */
   const rows: PlannedWrite[] = [];
   /** Plan §9.4 (phase 1B): the old allocations' deletes are their own leaf group, AFTER the new rows were created. */
   const removals: PlannedWrite[] = [];
+  /** Flag `allocations`: the new allocations as ONE `createMany` step, before the run of moves and re-links. */
+  let bulkCreates: PlannedWrite[] = [];
   let bridge = args.existingBridgeId;
   if (!bridge) {
     writes.push(deviceTypeShadow({ family: "wtg", typeId: args.newTypeId, typeName: args.newTypeName, owningBusinessUnitId: obu }));
     bridge = createdRowRef(0);
   }
-  rows.push(...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu }));
+  const allocation = { costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu };
+  if (bulkOn(opts, "allocations")) bulkCreates = allocationStep(allocation, opts);
+  else rows.push(...allocationCreates(allocation));
   const ll = planReplaceLandLease({ allocations: args.inputs.allocations, newUnitCount: args.newUnits.length });
   for (const r of ll.repoint) {
     const unit = args.newUnits[r.newUnitPosition];
@@ -4784,7 +4850,7 @@ export function planReplaceGeneratorTypeFollowUp(args: {
   for (const id of args.inputs.opexCostIds) rows.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
   // One parallel run after the device-type row it may bind to (the moves, creates and re-links are disjoint rows), then
   // the removals as their own leaf group (plan §9.4: deletes and creates never contend; the D51 lesson).
-  writes.push(...together(rows), ...leafDeletes(removals));
+  writes.push(...bulkCreates, ...together(rows), ...leafDeletes(removals));
   return { writes, log: [], unmatchedCount: ll.unmatchedCount };
 }
 
@@ -4837,7 +4903,7 @@ export function planReplacePvTypeFollowUp(args: {
   pvRows: Pick<SimpleTypeRow, "capacity" | "cost">[];
   inverters: Pick<SimpleTypeRow, "cost">[];
   substructures: Pick<SimpleTypeRow, "cost">[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const obu = args.project.owningBusinessUnitId;
   const writes: PlannedWrite[] = [];
   let bridge = args.existingBridgeId;
@@ -4855,9 +4921,10 @@ export function planReplacePvTypeFollowUp(args: {
   const unit = createdRowRef(creates);
   // Save performance (6 Nov 2026): after the new unit, its allocation creates, moves and removals are disjoint
   // rows — one parallel run; the project's PV capacity / cost after them; then the O&M re-links, another run.
-  const landLease: PlannedWrite[] = [
-    ...allocationCreates({ costs: args.inputs.landLeaseCosts, turbines: [{ id: unit, name: args.newPvName }], owningBusinessUnitId: obu }),
-  ];
+  const allocation = { costs: args.inputs.landLeaseCosts, turbines: [{ id: unit, name: args.newPvName }], owningBusinessUnitId: obu };
+  // Flag `allocations`: the creates are ONE `createMany` step before the run of moves; off: they join that run (today).
+  const bulkCreates: PlannedWrite[] = bulkOn(opts, "allocations") ? allocationStep(allocation, opts) : [];
+  const landLease: PlannedWrite[] = bulkOn(opts, "allocations") ? [] : allocationCreates(allocation);
   const ll = planReplacePvLandLease(args.inputs.allocations);
   for (const id of ll.repoint) {
     landLease.push(upd(ES.landLeaseAllocationWtgs, id, {
@@ -4866,7 +4933,7 @@ export function planReplacePvTypeFollowUp(args: {
   }
   // Plan §9.4 (phase 1B): the old AllWTG allocations go as their own leaf group, after the creates and moves.
   const removals = ll.removeAllWtg.map((id) => del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced PV type"));
-  writes.push(...together(landLease), ...leafDeletes(removals));
+  writes.push(...bulkCreates, ...together(landLease), ...leafDeletes(removals));
   writes.push(upd(ES.projects, args.project.id, {
     [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
     [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),

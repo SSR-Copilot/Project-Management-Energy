@@ -8,90 +8,10 @@
 import { describe, it, expect } from "vitest";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY, WRITE_CONCURRENCY } from "@/data/concurrency";
-import type { PlannedWrite } from "@/data/writePlan";
 import * as R from "./rules";
-
-/* ═══════════════════════════════════════════════════════════════════ fixtures ═══ */
-
-const ALLOC = "vsb_landleaseallocationwtgs";
-const COST = "vsb_landleaseprojectcosts";
-const OPEX = "vsb_opexprojectcosts";
-const BRIDGE = "vsb_devicetypesinprojects";
-const TURBINE = "vsb_generatorinprojects";
-const TYPE = "vsb_generatortypeinprojects";
-const PVTYPE = "vsb_pvmoduletypeinprojects";
-const PROJECTS = "vsb_projects";
-
-const P: R.PlanProject = { id: "p1", shortName: "WPN", owningBusinessUnitId: "bu-1" };
-
-const genType = (over: Partial<R.GeneratorTypeRow> = {}): R.GeneratorTypeRow => ({
-  id: "t1", name: "WTG type", generatorId: "g1", generatorDisplayName: "Vestas V150-5.6", numberOfGenerators: 4,
-  costPerWtg: 900_000, generatorsCost: 3_600_000, generatorsCapacity: 22.4, requestPermissionState: null,
-  flowRunId: null, flowApprovalId: null, status: CHOICE_PLANT.status.active, specificCapacity: 5.6, ...over,
-});
-
-const turbine = (index: number, over: Partial<R.TurbineRow> = {}): R.TurbineRow => ({
-  id: `w${index}`, name: `WTG WPN_${index}`, typeId: "t1", index, effectiveCapacity: 5.6, effectiveHubHeight: null,
-  effectiveHubHeightChanged: false, foundationPlinth: 0, hubHeightExclPlinth: 148, totalHeight: 223,
-  status: CHOICE_PLANT.status.active, ...over,
-});
-
-const simple = (over: Partial<R.SimpleTypeRow> = {}): R.SimpleTypeRow => ({
-  id: "s1", name: "Row", supplier: "Acme", otherSupplier: null, capacity: null, cost: null, moduleLabel: null,
-  degradation1stYear: null, degradationRemainingYears: null, requestPermissionState: null, flowRunId: null,
-  flowApprovalId: null, status: CHOICE_PLANT.status.active, ...over,
-});
-
-const model = (over: Partial<R.CatalogModel> = {}): R.CatalogModel => ({
-  id: "g1", name: "V150", displayName: "Vestas V150-5.6", supplier: "Vestas", turbineType: "V150", hubHeight: 148,
-  rotorDiameter: 150, specificCapacity: 5.6, earliestPhaseout: "2035-01-01", countryAvailability: [1, 2],
-  foundationCostIncluded: true, additionalFoundationCost: 0, prices: [1_000_000, 950_000, 900_000, 850_000, 800_000],
-  totalHeight: 223, ...over,
-});
-
-const n = <T,>(count: number, make: (i: number) => T): T[] => Array.from({ length: count }, (_, i) => make(i + 1));
-const wtgUnits = (count: number) => n(count, (i) => turbine(i));
-const costs = (count: number): R.LandLeaseCostRow[] =>
-  n(count, (i) => ({ id: `c${i}`, landOwner: "M", description: `D${i}`, allWtgAllocated: true }));
-
-/** One step of a plan: a plain write, one `together()` group, or a bulk step. */
-interface Step {
-  kind: "single" | "group" | "bulk";
-  /** `op:entitySet` of the members (a bulk step: its op and entity set once). */
-  ops: string[];
-  /** A group's `concurrencyLimit` (undefined = the default, 8). */
-  limit?: number | undefined;
-  /** A bulk step's rows. */
-  rows?: readonly { id: string; data: Readonly<Record<string, unknown>> }[];
-  writes: PlannedWrite[];
-}
-
-const opOf = (w: PlannedWrite): string => `${w.op}:${w.entitySet}`;
-
-/** Splits a plan into steps the way `executePlan` runs them: groups by `concurrencyGroup`, bulk steps alone. */
-function steps(writes: readonly PlannedWrite[]): Step[] {
-  const out: Step[] = [];
-  for (let i = 0; i < writes.length;) {
-    const w = writes[i]!;
-    if (w.op === "createMany" || w.op === "updateMany") {
-      out.push({ kind: "bulk", ops: [opOf(w)], rows: w.rows ?? [], writes: [w] });
-      i += 1;
-    } else if (w.concurrent) {
-      let end = i;
-      while (end < writes.length && writes[end]!.concurrent && writes[end]!.concurrencyGroup === w.concurrencyGroup) end += 1;
-      const run = writes.slice(i, end);
-      out.push({ kind: "group", ops: run.map(opOf), limit: w.concurrencyLimit, writes: run });
-      i = end;
-    } else {
-      out.push({ kind: "single", ops: [opOf(w)], writes: [w] });
-      i += 1;
-    }
-  }
-  return out;
-}
-
-const idsOf = (s: Step): (string | undefined)[] => s.writes.map((w) => w.id);
-const reps = (op: string, count: number): string[] => Array.from({ length: count }, () => op);
+import {
+  ALLOC, BRIDGE, COST, OPEX, PROJECTS, PVTYPE, TURBINE, TYPE, P, costs, genType, idsOf, model, n, reps, simple, steps, turbine, wtgUnits,
+} from "./bulkPlans.testkit";
 
 /* ═════════════════════════════════════════════ phase 1B — tiered parallel deletes ═══ */
 
