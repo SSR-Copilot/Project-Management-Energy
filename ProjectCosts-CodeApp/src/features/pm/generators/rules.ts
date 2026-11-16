@@ -4778,10 +4778,11 @@ export function toReplaceAllocations(args: {
 }
 
 /** An O&M cost's device-type link — set, or cleared with `@odata.bind: null` (T2b / T2f). */
+const opexLinkData = (bridge: string | null): Record<string, unknown> => ({
+  [PLANT_BIND.deviceTypeInProject]: bridge ? ref(ES_PLANT.deviceTypesInProjects, bridge) : null,
+});
 const opexLink = (opexId: string, bridge: string | null, reason: string): PlannedWrite =>
-  upd(ES_PLANT.opexProjectCosts, opexId, {
-    [PLANT_BIND.deviceTypeInProject]: bridge ? ref(ES_PLANT.deviceTypesInProjects, bridge) : null,
-  }, reason);
+  upd(ES_PLANT.opexProjectCosts, opexId, opexLinkData(bridge), reason);
 
 /**
  * T2b Detach and T2c Delete, children first: O&M links cleared, units, device-type rows, the type.
@@ -4790,12 +4791,21 @@ const opexLink = (opexId: string, bridge: string | null, reason: string): Planne
  * The device-type rows are deleted one by one AFTER that run (a sequential write ends it), so every O&M cost
  * is detached before its device-type row goes and cannot be taken with it; the type last, as before.
  */
-function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: string): PlannedWrite[] {
+function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: string, opts?: PlanBulkOptions): PlannedWrite[] {
   // Tiers (plan §9.4, phase 1B): the detach is a group of UPDATES (default limit 8), the unit deletes a leaf group (16)
   // after it (they were one mixed group), the bridge rows a leaf group when there are several. The detach still runs
   // before every bridge-row delete. The type delete is one cascading request.
+  // DIVERGENCE (plan §3 phase 5; flag `replace`): the detach is ONE `updateMany` of `{ DeviceTypeInProject: null }` rows
+  // (a `null` bind clears the lookup and passes through the backend unchanged). It is still a step of its own BEFORE
+  // the unit and bridge-row deletes, so an O&M cost is never taken along with its bridge row.
+  const detach = bulkOn(opts, "replace")
+    ? (inputs.opexCostIds.length > 0
+      ? [updateMany(ES_PLANT.opexProjectCosts, uniqueRows(inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(null) }))),
+        "detach the O&M costs from the replaced type")]
+      : [])
+    : together(inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")));
   return [
-    ...together(inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type"))),
+    ...detach,
     ...leafDeletes(inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type"))),
     ...leafDeletesIfMany(inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row"))),
     del(typeSet, typeId, "the replaced type"),
@@ -4825,16 +4835,17 @@ export function planReplaceGeneratorType(args: {
   /** The turbines of every other type. */
   otherTurbines: Pick<TurbineRow, "index">[];
   inputs: ReplaceInputs;
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
+  // Flag `turbines` (phase 4) reaches the Add through `opts`: the new type is still created first, single.
   const add = planCreateGeneratorType({
     project: args.project, inCountry: args.inCountry, model: args.model,
     numberOfGenerators: Math.max(0, args.oldType.numberOfGenerators ?? 0), costPerWtg: args.costPerWtg,
     selectedHeight: args.selectedHeight, revisedHubHeight: args.revisedHubHeight,
     existingTypes: args.otherTypes, projectTurbines: args.otherTurbines,
-  });
+  }, opts);
   if (add.refusedReason) return add;
   return {
-    writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.generatorTypeInProjects, args.oldType.id), ...add.writes],
+    writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.generatorTypeInProjects, args.oldType.id, opts), ...add.writes],
     log: add.log,
   };
 }
@@ -4876,22 +4887,35 @@ export function planReplaceGeneratorTypeFollowUp(args: {
   const allocation = { costs: args.inputs.landLeaseCosts, turbines: args.newUnits, owningBusinessUnitId: obu };
   if (bulkOn(opts, "allocations")) bulkCreates = allocationStep(allocation, opts);
   else rows.push(...allocationCreates(allocation));
+  // Flag `replace` (plan §3 phase 5): the moves of the manual allocations and the O&M re-links are `updateMany` steps.
+  const replaceBulk = bulkOn(opts, "replace");
+  const moveRows: BulkRow[] = [];
+  const relinkRows: BulkRow[] = [];
   const ll = planReplaceLandLease({ allocations: args.inputs.allocations, newUnitCount: args.newUnits.length });
   for (const r of ll.repoint) {
     const unit = args.newUnits[r.newUnitPosition];
     if (unit) {
-      rows.push(upd(ES.landLeaseAllocationWtgs, r.allocationId, {
-        [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit.id),
-      }, `move a land-lease allocation to ${unit.name ?? "the new unit"}`));
+      const bind = { [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit.id) };
+      if (replaceBulk) moveRows.push({ id: r.allocationId, data: bind });
+      else rows.push(upd(ES.landLeaseAllocationWtgs, r.allocationId, bind, `move a land-lease allocation to ${unit.name ?? "the new unit"}`));
     }
   }
   for (const id of [...ll.removeSurplus, ...ll.removeAllWtg]) {
     removals.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced type"));
   }
-  for (const id of args.inputs.opexCostIds) rows.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
+  for (const id of args.inputs.opexCostIds) {
+    if (replaceBulk) relinkRows.push({ id, data: opexLinkData(bridge) });
+    else rows.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
+  }
   // One parallel run after the device-type row it may bind to (the moves, creates and re-links are disjoint rows), then
-  // the removals as their own leaf group (plan §9.4: deletes and creates never contend; the D51 lesson).
-  writes.push(...bulkCreates, ...together(rows), ...leafDeletes(removals));
+  // the removals as their own leaf group (plan §9.4: deletes and creates never contend; the D51 lesson). With the flag the
+  // moves and re-links are bulk steps after the creates (decision 3: delete and recreate, no repointing of old rows to new ones).
+  writes.push(
+    ...bulkCreates, ...together(rows),
+    ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new units")] : []),
+    ...(relinkRows.length > 0 ? [updateMany(ES_PLANT.opexProjectCosts, uniqueRows(relinkRows), "re-link the O&M costs to the new type")] : []),
+    ...leafDeletes(removals),
+  );
   return { writes, log: [], unmatchedCount: ll.unmatchedCount };
 }
 
@@ -4909,13 +4933,13 @@ export function planReplacePvType(args: {
   inputs: ReplaceInputs;
   /** The user's language. Required: the "Replace to" boxes are typed in it. */
   lang: Lang;
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const add = planSavePvType({
     project: args.project, pv: null, form: args.form, deviceCostModules: args.deviceCostModules,
     otherSupplierChosen: args.otherSupplierChosen, lang: args.lang,
   });
   return {
-    writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.pvModuleTypeInProjects, args.oldPv.id), ...add.writes],
+    writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.pvModuleTypeInProjects, args.oldPv.id, opts), ...add.writes],
     log: add.log,
   };
 }
@@ -4967,19 +4991,33 @@ export function planReplacePvTypeFollowUp(args: {
   const bulkCreates: PlannedWrite[] = bulkOn(opts, "allocations") ? allocationStep(allocation, opts) : [];
   const landLease: PlannedWrite[] = bulkOn(opts, "allocations") ? [] : allocationCreates(allocation);
   const ll = planReplacePvLandLease(args.inputs.allocations);
+  // Flag `replace` (plan §3 phase 5): the moves and the O&M re-links are `updateMany` steps (each ONE bulk step, never in a group).
+  const replaceBulk = bulkOn(opts, "replace");
+  const moveBind = { [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit) };
+  const moveRows: BulkRow[] = [];
   for (const id of ll.repoint) {
-    landLease.push(upd(ES.landLeaseAllocationWtgs, id, {
-      [PLANT_BIND.generatorInProject]: ref(ES_PLANT.generatorInProjects, unit),
-    }, "move a land-lease allocation to the new PV unit"));
+    if (replaceBulk) moveRows.push({ id, data: moveBind });
+    else landLease.push(upd(ES.landLeaseAllocationWtgs, id, moveBind, "move a land-lease allocation to the new PV unit"));
   }
   // Plan §9.4 (phase 1B): the old AllWTG allocations go as their own leaf group, after the creates and moves.
   const removals = ll.removeAllWtg.map((id) => del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced PV type"));
-  writes.push(...bulkCreates, ...together(landLease), ...leafDeletes(removals));
+  writes.push(
+    ...bulkCreates, ...together(landLease),
+    ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new PV unit")] : []),
+    ...leafDeletes(removals),
+  );
   writes.push(upd(ES.projects, args.project.id, {
     [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
     [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.pvRows, inverters: args.inverters, substructures: args.substructures }),
   }, "the project's Plant PV Capacity / Cost"));
-  writes.push(...together(args.inputs.opexCostIds.map((id) => opexLink(id, bridge, "re-link an O&M cost to the new PV type"))));
+  if (replaceBulk) {
+    if (args.inputs.opexCostIds.length > 0) {
+      writes.push(updateMany(ES_PLANT.opexProjectCosts,
+        uniqueRows(args.inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(bridge) }))), "re-link the O&M costs to the new PV type"));
+    }
+  } else {
+    writes.push(...together(args.inputs.opexCostIds.map((id) => opexLink(id, bridge, "re-link an O&M cost to the new PV type"))));
+  }
   return { writes, log: [] };
 }
 
