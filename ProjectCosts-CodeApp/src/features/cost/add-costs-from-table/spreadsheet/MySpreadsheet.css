@@ -11,7 +11,9 @@
   color: black;
 }
 
+/* 400, not the PCF's 500: the canvas draws the contract rows at regular weight, and 500 renders
+   medium-bold in the code app's Segoe UI Variable (screenshots, 16 Nov 2026). */
 .empty-row {
   background-color: #ffffff;
-  font-weight: 500;
+  font-weight: 400;
 }

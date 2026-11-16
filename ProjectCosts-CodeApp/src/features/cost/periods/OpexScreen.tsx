@@ -92,9 +92,11 @@ import { canvasScrollbar } from "./canvasScrollbar";
  * currency's NAME. These two maps are the only translation needed, and the panel's rate labels
  * (`panelRateLabel`) switch on the CODE, not on the country.
  */
-const CURRENCY_NAME_BY_CODE: Record<string, string> = { EUR: "Euro", PLN: "Polish Zloty" };
+// PLN is "Złoty" (with the Polish ł) in Dataverse `Currencies.'Currency Name'` (what the canvas dropdown shows). The save resolves
+// the currency by this name (`resolveCurrencyId`), so "Polish Zloty" matched no row and saved no currency.
+const CURRENCY_NAME_BY_CODE: Record<string, string> = { EUR: "Euro", PLN: "Złoty" };
 const CURRENCY_CODE_BY_NAME: Record<string, string> = {
-  Euro: "EUR", "Polish Zloty": "PLN", "Czech Koruna": "CZK", "Romanian Leu": "RON",
+  Euro: "EUR", "Złoty": "PLN", Zloty: "PLN", "Polish Zloty": "PLN", "Czech Koruna": "CZK", "Romanian Leu": "RON",
 };
 const currencyCodeOf = (name: string | null): string =>
   CURRENCY_CODE_BY_NAME[name ?? ""] ?? "EUR";
@@ -356,9 +358,18 @@ const useStyles = makeStyles({
    * The right column's rows carry their own canvas heights, so its toggles sit 34 / 51 / 44 px apart as in the
    * canvas instead of an even 45. Other blocks (the inflation fields) keep the column's 12 px spacing.
    */
-  rightColumn: { gap: "0", "& > :not([data-toggle-row])": { marginBottom: space.m } },
-  /** `con_…_InflationToggles` row: `PaddingTop: =2`, a 32 px toggle. */
-  rowInflation: { minHeight: "34px", paddingTop: "2px", boxSizing: "border-box" },
+  /*
+   * The canvas boxes stop 20 px short of the panel's right edge (`Width: =Parent.Width-Self.X*2`; this column has no
+   * scrollbar to stand in for that margin), and each toggle starts 5 px further left than Fluent's Switch, whose
+   * indicator carries its own 4-5 px inset (screenshots, 16 Nov 2026).
+   */
+  rightColumn: {
+    gap: "0", paddingRight: "20px",
+    "& > :not([data-toggle-row])": { marginBottom: space.m },
+    "& .fui-Switch": { marginLeft: "-5px" },
+  },
+  /** `con_…_InflationToggles` row: the first toggle 3-4 px higher than a centred 32 px row puts it (measured). */
+  rowInflation: { minHeight: "34px", paddingBottom: "5px", boxSizing: "border-box" },
   /** `con_…_Threshold_Container`: `Height: = toggle.X + toggle.Height` (44), the toggle at its top. */
   rowThreshold: { minHeight: "44px", paddingBottom: "12px", boxSizing: "border-box" },
   /** `con_…_AlignWithProjectDuration`: `Height: =50`, the toggle centred. */
@@ -460,28 +471,20 @@ const useStyles = makeStyles({
    * `lbl_…_*Asterisk`: `AutoHeight: =true`, no padding, at the label row's top — so the star sits RAISED at the top-left
    * of the 32 px caption (which is vertically centred), not on the caption's middle line.
    */
+  // The canvas star measures ~6 x 5 px, twice an 11 pt one here: 20 px, raised to keep its top level (16 Nov 2026).
   required: {
-    position: "absolute", left: "-10px", top: 0, height: "auto", lineHeight: "20px",
+    position: "absolute", left: "-11px", top: "-2px", height: "auto", lineHeight: "20px", fontSize: "20px",
     display: "block",
     color: palette.Error, fontWeight: tokens.fontWeightSemibold,
   },
   /** `lbl_…_BodyContent_*` - a classic `Label`: `gblAppSizes.Font.Medium` (11 pt), normal, 32 px. */
   label: {
     position: "relative", display: "flex", alignItems: "center", height: "32px",
-    fontWeight: tokens.fontWeightRegular, fontSize: "11pt", color: palette.black,
+    // 11 pt Open Sans on the canvas measures ~7 % wider than 11 pt here (16 Nov 2026).
+    fontWeight: tokens.fontWeightRegular, fontSize: "15.75px", color: palette.black,
   },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
 
-  readOnly: {
-    backgroundColor: palette.Grayscale30, color: palette.Grayscale10,
-    paddingTop: space.xs, paddingBottom: space.xs,
-    paddingLeft: space.m, paddingRight: space.m,
-    borderTopLeftRadius: tokens.borderRadiusSmall,
-    borderTopRightRadius: tokens.borderRadiusSmall,
-    borderBottomLeftRadius: tokens.borderRadiusSmall,
-    borderBottomRightRadius: tokens.borderRadiusSmall,
-    fontSize: tokens.fontSizeBase200, minHeight: "22px",
-  },
   radioGroup: { display: "flex", flexDirection: "column" },
   // `rdg_…_Threshold` - a modern `Radio@0.0.25`: 14 px options, 32 px apart.
   radioRow: { display: "flex", alignItems: "center", gap: space.s, height: "32px", fontSize: "14px" },
@@ -1996,7 +1999,8 @@ function OpexPanel({
 
           {form.inflationOn ? (
             <>
-              <div className={styles.toggleRow}>
+              {/* No gap under it: Inflation Start Year's 32 px caption follows straight on (measured). */}
+              <div className={styles.toggleRow} data-toggle-row>
                 {star(required.countryInflationProfile)}
                 <Switch
                   checked={form.useCountryInflationProfile}
@@ -2063,9 +2067,15 @@ function OpexPanel({
                     : OPEX_PANEL_LABELS.customInflationProfile,
                 )}
                 {form.useCountryInflationProfile ? (
-                  <div className={styles.readOnly} data-testid="opex-inflation-country">
-                    {inflationProfileCountryText(project)}
-                  </div>
+                  // `txt_…_InflationProfileCountry`: a `TextInput@0.0.54` in `DisplayMode.Disabled` (`:7952`), the same
+                  // white box, thin grey border and grey 11 pt text as the disabled Currency dropdown above it.
+                  <Input
+                    className={styles.panelDropdown}
+                    value={inflationProfileCountryText(project)}
+                    disabled
+                    aria-label={OPEX_PANEL_LABELS.countryInflationProfile}
+                    data-testid="opex-inflation-country"
+                  />
                 ) : (
                   <>
                     <Input

@@ -138,14 +138,20 @@ export function useKfwTranches(): ScreenData<string[]> {
 /** `colFinancingInputInProject` — needs the categories for each row's `Order`. */
 export function useFinancingInputs(
   projectId: string | undefined, categories: readonly FinancingCategory[],
-): ScreenData<FinancingInputRow[]> {
+): ScreenData<FinancingInputRow[]> & { fresh: boolean } {
   const q = useQuery({
     queryKey: qk.finance(projectId ?? "", "inputs", categories.map((c) => c.id).join(",")),
     queryFn: () => listFinancingInputs(projectId!, categories),
     enabled: Boolean(projectId) && categories.length > 0,
     ...EVERY_VISIT,
   });
-  return out<FinancingInputRow[]>(q, []);
+  /*
+   * `fresh`: this visit's own read has landed. On a return visit the cached rows show at once
+   * (`isLoading` is false) while the refetch runs; seeding from them re-created a row made after
+   * that cache was filled (DuplicateRecordEntityKey on `UniqueKeyString`, 16 Nov 2026). The canvas
+   * `CountIf('Financing Inputs', …)` always reads Dataverse live.
+   */
+  return { ...out<FinancingInputRow[]>(q, []), fresh: q.isFetchedAfterMount && !q.isFetching };
 }
 
 /** `colRepaymentAmountInProject`. */

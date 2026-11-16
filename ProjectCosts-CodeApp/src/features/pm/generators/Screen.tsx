@@ -275,6 +275,11 @@ const useStyles = makeStyles({
     lineHeight: "20px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
     fontWeight: tokens.fontWeightSemibold,
   },
+  /**
+   * PV module card: `lbl_…_PvModule_CardDetails_*` is `Width: =Parent.Width-Self.X*2` while its box is a fixed
+   * `Width: =260`, so a long caption ("Degradation Remaining Years [% per annum]") runs on past the box in full.
+   */
+  detailLabelFull: { overflow: "visible", textOverflow: "clip" },
   /** The canvas read-only `TextInput` (the `.canvas-field > input` look). */
   detailValue: {
     display: "flex", alignItems: "center", minHeight: "32px", boxSizing: "border-box",
@@ -645,7 +650,7 @@ function Gallery({
                     ? <div key={`${i}-empty`} aria-hidden="true" />
                     : (
                       <div key={`${i}-${c}`} className={mergeClasses(s.detailCell, (layout !== undefined || detailColumn(i, columns.length, rowFlow) === 0) && s.detailCellFirst)}>
-                        <span className={s.detailLabel}>{c}</span>
+                        <span className={mergeClasses(s.detailLabel, layout === "pv" && s.detailLabelFull)}>{c}</span>
                         <div className={mergeClasses(s.detailValue, layout === undefined && isNumericValue(r.cells[i]) && s.detailValueNumeric)}>
                           {r.cells[i]}
                         </div>

@@ -159,14 +159,18 @@ describe("buildInitialSheet", () => {
       contract({ id: "c-1", name: "Supply" }),
       contract({ id: "c-2", name: "O&M" }),
     ];
-    const costs = [cost({ id: "k1", contractId: "c-1", year: 2026, month: 1 })];
+    const costs = [
+      cost({ id: "k1", contractId: "c-1", year: 2026, month: 1 }),
+      cost({ id: "k2", contractId: "c-2", year: 2026, month: 2 }),
+    ];
     const rows = buildInitialSheet({ subaccounts: subs, contracts, costs, currentYear: 2026 });
     expect(rows.map((r) => r.description).sort()).toEqual(["O&M", "Supply"]);
   });
 
   it("an inactive/None Cost Type reads as DevCo and booleans default to No", () => {
     const contracts = [contract({ id: "c-1", costType: null, depreciation: null, applyVat: null })];
-    const rows = buildInitialSheet({ subaccounts: subs, contracts, costs: [], currentYear: 2026 });
+    const costs = [cost({ id: "k1", contractId: "c-1", year: 2026, month: 1 })];
+    const rows = buildInitialSheet({ subaccounts: subs, contracts, costs, currentYear: 2026 });
     expect(rows[0]).toMatchObject({ costPaidBy: "DevCo", depreciation: "No", applyVat: "No" });
   });
 });
@@ -852,7 +856,11 @@ describe("the indexed rules match the scanning ones they replaced", () => {
     const payerDefaults = args.payerDefaults ?? new Map<string, string>();
     const rows: SheetRow[] = [];
     for (const sub of args.subaccounts) {
-      const subContracts = args.contracts.filter((c) => c.subaccountId === sub.id);
+      // Canvas order: by contract name, A to Z, case-insensitive (stable).
+      // Canvas: only contracts with cost records reach the sheet.
+      const subContracts = args.contracts.filter((c) => c.subaccountId === sub.id)
+        .filter((c) => args.costs.some((k) => k.contractId === c.id))
+        .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
       if (subContracts.length === 0) {
         rows.push({
           rowId: `new-${sub.id}`, accountNumber: sub.number, accountName: sub.name, description: "",
@@ -993,6 +1001,35 @@ describe("the indexed rules match the scanning ones they replaced", () => {
       };
       expect(buildInitialSheet(args), `seed ${seed}`).toEqual(oracleBuildInitialSheet(args));
     }
+  });
+
+  it("UT-ADDCOST-069 contracts list by name A to Z, case-insensitively, as the canvas SortByColumns", () => {
+    const sub = { id: "s1", number: "80000_0", name: "Turbine" };
+    const c = (id: string, name: string) => ({
+      id, name, subaccountId: "s1", costType: null, depreciation: true, applyVat: true,
+    }) as unknown as Parameters<typeof buildInitialSheet>[0]["contracts"][number];
+    const rows = buildInitialSheet({
+      subaccounts: [sub] as unknown as Parameters<typeof buildInitialSheet>[0]["subaccounts"],
+      contracts: [c("1", "test34"), c("2", "Total Cost"), c("3", "Full Data Test"), c("4", "Tesgdferx"), c("5", "New Contract")],
+      costs: ["1", "2", "3", "4", "5"].map((contractId) => ({ contractId, year: 2026, month: 1, cost: 1 })) as unknown as Parameters<typeof buildInitialSheet>[0]["costs"],
+      currentYear: 2026,
+    });
+    expect(rows.map((r) => r.description)).toEqual(["Full Data Test", "New Contract", "Tesgdferx", "test34", "Total Cost"]);
+  });
+
+  it("UT-ADDCOST-070 a contract with no cost record is not on the sheet, as the canvas (no 'must be assigned a cost' on open)", () => {
+    const sub = { id: "s1", number: "80000_0", name: "Turbine" };
+    const c = (id: string, name: string) => ({
+      id, name, subaccountId: "s1", costType: null, depreciation: true, applyVat: true,
+    }) as unknown as Parameters<typeof buildInitialSheet>[0]["contracts"][number];
+    const rows = buildInitialSheet({
+      subaccounts: [sub] as unknown as Parameters<typeof buildInitialSheet>[0]["subaccounts"],
+      contracts: [c("1", "Has cost"), c("2", "New Contract Cluster 1,5")],
+      costs: [{ contractId: "1", year: 2026, month: 3, cost: 500 }] as unknown as Parameters<typeof buildInitialSheet>[0]["costs"],
+      currentYear: 2026,
+    });
+    expect(rows.map((r) => r.description)).toEqual(["Has cost"]);
+    expect(validateSheet(rows)).toEqual([]);
   });
 
   it("UT-ADDCOST-068 planContractDeletions blocks, deletes and names exactly the same contracts", () => {

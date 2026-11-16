@@ -569,15 +569,20 @@
 .opex-canvas-panel .canvas-field { gap: 0; }
 /* The two columns scroll on their own (`LayoutOverflowY: Scroll` on each); the body itself does not (OpexScreen `panelColumns`). */
 .opex-canvas-panel .canvas-panel-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* `lbl_OpexCosts_RightPanel_NewEditCost_BodyHeader`: Open Sans Semibold at `gblAppSizes.Font.Large` (12 pt), which
+   measures ~7 % narrower than the shared 18 px title (screenshots, 16 Nov 2026). */
+.opex-canvas-panel .canvas-panel-header h2 { font-size: 17px; }
 @media (max-width: 899px) { .opex-canvas-panel .canvas-panel-body { overflow: auto; } }
 .opex-canvas-panel .canvas-field > span:first-child {
+  /* 11 pt Open Sans on the canvas measures ~7 % wider than 11 pt here, so the caption runs 15.75 px (16 Nov 2026). */
   position: relative; display: flex; align-items: center; height: 32px;
-  font-size: 11pt; font-weight: 400; color: #000;
+  font-size: 15.75px; font-weight: 400; color: #000;
 }
 .opex-canvas-panel .canvas-field > span[data-required="true"]::before {
   /* `AutoHeight` asterisk at the row's top: raised, not centred on the caption. */
-  content: '*'; position: absolute; left: -10px; top: 0; height: auto; line-height: 20px;
-  display: block; font-weight: 600; color: #B22727;
+  /* The canvas star measures ~6 x 5 px, twice the 11 pt one here: 20 px, raised to keep its top level. */
+  content: '*'; position: absolute; left: -11px; top: -2px; height: auto; line-height: 20px;
+  display: block; font-size: 20px; font-weight: 600; color: #B22727;
 }
 /* The modern controls in `DisplayMode.Disabled` keep their own look on the canvas: a white box with
    a light grey outline and grey text (Description, Start Date, Currency, Inflation Start Year and
@@ -668,10 +673,20 @@
    spreadsheet, so it does not scroll itself — the grid wrapper does, and the toolbar and error
    blocks stay in view above it. */
 .add-cost-table-panel .canvas-panel-body { padding: 0 10px; display: flex; flex-direction: column; overflow: hidden; }
+/* The canvas pop-up title measures ~12 % narrower than the shared 18 px panel title: 16 px (screenshots, 16 Nov 2026). */
+.add-cost-table-panel .canvas-panel-header h2 { font-size: 16px; }
 .add-cost-table { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .add-cost-table-toolbar { display: flex; align-items: center; gap: 5px; min-height: 50px; padding: 5px 0; flex-shrink: 0; }
 .add-cost-table .canvas-error { flex-shrink: 0; max-height: 25%; overflow: auto; }
 .add-cost-table-grid { flex: 1; min-height: 0; overflow: auto; }
+/* Spacing measured against the canvas pop-up (screenshots, 16 Nov 2026):
+   - its blue band is ~7 px shorter than the shared 48 px panel header;
+   - the grid starts ~18 px further below the command bar and sits ~9 px further in from each side;
+   - its rows are ~0.8 px shorter: the PCF inherited `line-height: normal` in Power Apps, but under
+     FluentProvider the cells inherit body1's 20 px (the same cause as `.pcf-budget-grid` above). */
+.add-cost-table-panel .canvas-panel-header { height: 41px; padding-top: 7px; padding-bottom: 7px; }
+.add-cost-table-grid { margin: 18px 9px 0; }
+.add-cost-table-grid .Spreadsheet { line-height: normal; }
 
 /* Every field's validation message as the canvas error labels draw it: semibold, in the
    canvas error red (`akzent5`), PO 27 Oct 2026. The app uses no warning / success messages. */

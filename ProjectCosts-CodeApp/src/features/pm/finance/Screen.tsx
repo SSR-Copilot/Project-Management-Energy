@@ -690,6 +690,8 @@ export default function ProjectFinanceScreen() {
     // Wait for the debt assumptions: the Senior Debt, DSRA/DSRF and Decommissioning seeds are built
     // from them (a failed read still lets Equity / VAT seed, `seedsAllowed`).
     if (assumptionsLoading) return;
+    // Seed only from this visit's own read of the inputs, never from the cache of an earlier visit.
+    if (!inputsQ.fresh) return;
     if (visited.current === projectId) return;
     visited.current = projectId;
     const optionPlan = planFinancingOptionOnVisit(project);
@@ -703,7 +705,7 @@ export default function ProjectFinanceScreen() {
       for (const job of seedJobs(seeds, project)) await writes.run(job);
     })();
     // The visit writes depend only on the loaded rows of this project.
-  }, [project, projectId, loading, loadError, categories, inputs, standard, dsraStandard, decStandard, tech, assumptionsConnected, assumptionsLoading, writes]);
+  }, [project, projectId, loading, loadError, categories, inputs, inputsQ.fresh, standard, dsraStandard, decStandard, tech, assumptionsConnected, assumptionsLoading, writes]);
 
   /* ─────────────────────────────────────────────────────────── local state ── */
 

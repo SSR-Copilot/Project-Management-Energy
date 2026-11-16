@@ -236,7 +236,7 @@ describe("Contracts screen: the busy indicators (D60)", () => {
     expect(screen.getByText("Could not complete that")).toBeInTheDocument();
   });
 
-  it("UT-CONTRACTS-BUSY-003 while loading it never reads 'No contracts yet', and the list replaces the spinner after", () => {
+  it("UT-CONTRACTS-BUSY-003 while loading it never reads 'No contracts yet', and an empty list shows nothing after", () => {
     state.contractsLoading = true;
     state.contracts = [];
     const view = mount();
@@ -249,7 +249,8 @@ describe("Contracts screen: the busy indicators (D60)", () => {
       </FluentProvider>,
     );
     expect(screen.queryByTestId("contracts-loading")).toBeNull();
-    expect(screen.getByText("No contracts yet")).toBeInTheDocument();
+    // The canvas shows an empty gallery: no "No contracts yet" message.
+    expect(screen.queryByText("No contracts yet")).toBeNull();
   });
 });
 

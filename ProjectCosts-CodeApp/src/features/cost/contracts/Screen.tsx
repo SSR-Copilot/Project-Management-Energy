@@ -767,13 +767,11 @@ export default function ContractsScreen() {
       </div>
 
       {loading ? (
-        // D60: an inline spinner while loading, and never "No contracts yet" before the data lands.
+        // D60: an inline spinner while loading; an empty list then shows nothing, as the canvas.
         <LoadingOverlay mode="inline" label="Loading contracts…" testId="contracts-loading" />
       ) : contracts.length === 0 ? (
-        <EmptyState
-          title="No contracts yet"
-          description="Use Add Development Contract, Add Construction Contract or Add Project Rights Contract to create one."
-        />
+        // `gal_Contracts_List` with no rows: the canvas shows an empty area under the command bar, no message.
+        null
       ) : (
         /*
          * `gal_Contracts_List` — a gallery of cards, each folded by its own `IsFolded`, so

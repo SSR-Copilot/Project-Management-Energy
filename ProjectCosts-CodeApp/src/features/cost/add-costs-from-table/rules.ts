@@ -362,7 +362,21 @@ export function buildInitialSheet(args: {
   const costsByContract = groupBy(args.costs, (c) => c.contractId);
 
   for (const sub of args.subaccounts) {
-    const subContracts = contractsBySub.get(sub.id) ?? [];
+    /*
+     * The canvas lists a sub-account's contracts by name, A to Z (`SortByColumns(…, "ContractName",
+     * SortOrder.Ascending)` before the `GroupBy(ContractID, vsb_year)`, `Capex Costs Screen.pa.yaml`
+     * :2638-2662), case-insensitively. They came in Dataverse's own order here. Stable: equal names keep it.
+     */
+    /*
+     * Only contracts that HAVE cost records: the canvas builds these rows from
+     * `colCapexCostsInSelectedContracts` (the costs, grouped by contract and year), so a contract with
+     * no cost record never reaches the sheet. Shown here as an empty row, it failed "Each cost item must
+     * be assigned a cost" the moment the sheet opened (16 Nov 2026). Leaving it out deletes nothing:
+     * Save only removes contracts that were on the sheet when it loaded (`planContractDeletions`).
+     */
+    const subContracts = (contractsBySub.get(sub.id) ?? [])
+      .filter((c) => (costsByContract.get(c.id)?.length ?? 0) > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 
     if (subContracts.length === 0) {
       rows.push({

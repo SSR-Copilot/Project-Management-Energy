@@ -66,6 +66,8 @@ const state = {
   projectId: "p-1" as string | undefined,
   project: baseProject as FinanceProject | null,
   inputs: inputs as FinancingInputRow[],
+  /** `useFinancingInputs().fresh`: false while only an earlier visit's cached rows are in. */
+  inputsFresh: true,
   error: undefined as unknown,
   debt: NO_DEBT,
   repayments: [] as { id: string; financingInputId: string; year: number; amount: number }[],
@@ -84,7 +86,7 @@ vi.mock("./hooks", () => ({
   useDebtAssumptions: () => state.debt,
   useBanks: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
   useKfwTranches: () => ({ data: [], isLoading: false, error: undefined, connected: false }),
-  useFinancingInputs: () => ok(state.inputs),
+  useFinancingInputs: () => ({ ...ok(state.inputs), fresh: state.inputsFresh }),
   useRepaymentAmounts: () => ok(state.repayments),
   useStepUpMargins: () => ok([]),
   useTotalDevexCapex: () => ok(1000),
@@ -111,6 +113,7 @@ beforeEach(() => {
   state.projectId = "p-1";
   state.project = baseProject;
   state.inputs = inputs;
+  state.inputsFresh = true;
   state.error = undefined;
   state.debt = NO_DEBT;
   state.repayments = [];
@@ -201,6 +204,24 @@ describe("UT-FIN Screen (connected)", () => {
     const plans = await Promise.all(run.mock.calls.map(([job]) => planOf(job)));
     expect(plans[0]!.writes[0]!.data).toEqual({ vsb_financingoptions: CHOICE_FINANCE.financingOptions.debtFinancing });
     expect(plans.slice(1).map((p) => p.writes[0]!.data?.vsb_name)).toEqual(["Windpark Nord-Equity", "Windpark Nord-VAT-Financing"]);
+  });
+
+  it("UT-FIN-916 a return visit does not seed from the cached rows; it waits for its own read", async () => {
+    // The cache predates the seeds made on the last visit: every input looks missing.
+    state.project = { ...baseProject, id: "p-1" };
+    state.inputs = [];
+    state.inputsFresh = false;
+    const view = renderScreen();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(run).not.toHaveBeenCalled();
+    // This visit's read lands with the rows already there: nothing to create.
+    state.inputs = inputs;
+    state.inputsFresh = true;
+    view.rerender(
+      <FluentProvider theme={vsbTheme}><MemoryRouter><ProjectFinanceScreen /></MemoryRouter></FluentProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("UT-FIN-914 Fabric connected: the visit waits for the debt rows, then seeds every missing input", async () => {

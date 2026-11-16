@@ -734,7 +734,7 @@ describe("OpexScreen", () => {
     expect(within(panel()).getByTestId("opex-inflation-profile")).toBeInTheDocument();
     fireEvent.click(within(panel()).getByTestId("opex-country-inflation"));
     expect(within(panel()).queryByTestId("opex-inflation-profile")).not.toBeInTheDocument();
-    expect(within(panel()).getByTestId("opex-inflation-country")).toHaveTextContent("Germany");
+    expect(within(panel()).getByTestId("opex-inflation-country")).toHaveValue("Germany");
   });
 
   it("UT-OPEXUI-022 seeds Add Period from the period it follows", () => {
@@ -1017,7 +1017,7 @@ describe("OpexScreen", () => {
         within(card("WTG V150-6.0")).getByTestId("opex-editOpexProjectCost"),
       );
       expect(within(panel()).getByTestId("opex-inflation-country"))
-        .toHaveTextContent("Italy - South");
+        .toHaveValue("Italy - South");
     } finally {
       project.countryName = "Germany";
       delete (project as { areaStateProvince?: string }).areaStateProvince;
