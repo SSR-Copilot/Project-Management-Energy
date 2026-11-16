@@ -56,10 +56,12 @@ import {
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 import {
-  createdRowRef, createMany, emptyPlan, refusePlan, together, updateMany, type PlannedWrite, type WritePlan,
+  CREATED_ROW_ID, createdRowRef, createMany, emptyPlan, hardenedDelete, refusePlan, together, updateMany, type PlannedWrite, type WritePlan,
 } from "@/data/writePlan";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
+import type { LandedRow } from "@/data/executePlan";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
+import { GENERATORS_DELETE, type DeleteFlagOverrides, type GeneratorsDeleteFlags } from "@/data/generatorsDeleteFlags";
 import { newRowId } from "@/data/newRowId";
 import type { BulkRow } from "@/data/bulkBackend";
 
@@ -1355,6 +1357,8 @@ export interface ReplaceAllocation {
   unitIndex: number;
   /** `'Project Cost'.AllWTGAllocated = Yes`. */
   allWtgAllocated: boolean;
+  /** The allocation's land-lease cost: the `serialKey` of its delete when `GENERATORS_DELETE.parentOrder` is on (DEL-4). Optional. */
+  costId?: string;
 }
 
 export interface ReplaceLandLeasePlan {
@@ -3356,11 +3360,19 @@ const upd = (entitySet: string, id: string, data: Record<string, unknown>, reaso
   ({ op: "update", entitySet, id, data, reason });
 const ins = (entitySet: string, data: Record<string, unknown>, reason: string): PlannedWrite =>
   ({ op: "create", entitySet, data, reason });
-const del = (entitySet: string, id: string, reason: string): PlannedWrite =>
-  ({ op: "delete", entitySet, id, reason });
+/**
+ * Every Generators delete is a HARDENED delete (delete hardening plan DEL-2, `hardenedDelete` in `data/writePlan.ts`): the
+ * engine retries it a bounded number of times and only counts 404 / `0x80040217` as "already gone". `confirm` marks the
+ * deletes of rows whose survival would matter most (types, land-lease costs, units): read back when
+ * `GENERATORS_DELETE.verifyDeletes` is on. `serialKey` orders deletes that share a parent row (DEL-4).
+ */
+const del = (entitySet: string, id: string, reason: string, o: { confirm?: boolean; serialKey?: string } = {}): PlannedWrite =>
+  hardenedDelete(entitySet, id, reason, o);
 
 /*
- * Tiered deletes (Generators bulk programme, plan §9.4, work package R2 phase 1B; no flag, concurrency only).
+ * Tiered deletes (Generators bulk programme, plan §9.4, work package R2 phase 1B; flag `GENERATORS_DELETE.tieredDeletes`
+ * since the delete hardening plan DEL-1: ON, the default, is the tiers below; OFF is ONE plain `together()` group at the
+ * default limit, the shape before the tiers).
  * Each call is its own `together()` group (`data/writePlan.ts`), so groups never overlap: one finishes before the
  * next starts, children before parents, the project roll-up last.
  *  - LEAF (16 in flight, `LEAF_DELETE_CONCURRENCY`): rows nothing hangs off: land-lease allocations, O&M costs, units,
@@ -3369,27 +3381,46 @@ const del = (entitySet: string, id: string, reason: string): PlannedWrite =>
  *    child rows (D51: 6-11 s per request when cascades overlapped).
  * Starting values; the timed DEV test (plan §9.4) sets the final numbers.
  */
-const leafDeletes = (writes: PlannedWrite[]): PlannedWrite[] => together(writes, { limit: LEAF_DELETE_CONCURRENCY });
-const cascadeDeletes = (writes: PlannedWrite[]): PlannedWrite[] => together(writes, { limit: CASCADE_DELETE_CONCURRENCY });
+const leafDeletes = (writes: PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  deleteFlagOn(opts, "tieredDeletes") ? together(writes, { limit: LEAF_DELETE_CONCURRENCY }) : together(writes);
+const cascadeDeletes = (writes: PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  deleteFlagOn(opts, "tieredDeletes") ? together(writes, { limit: CASCADE_DELETE_CONCURRENCY }) : together(writes);
 /**
  * Delete steps that were plain one-by-one steps before 1B (bridge rows, units, types): a tier only matters for two or
  * more requests, so a single delete stays the plain sequential step it always was (the plan shape the screen pins).
  */
-const leafDeletesIfMany = (writes: PlannedWrite[]): PlannedWrite[] => (writes.length > 1 ? leafDeletes(writes) : writes);
-const cascadeDeletesIfMany = (writes: PlannedWrite[]): PlannedWrite[] => (writes.length > 1 ? cascadeDeletes(writes) : writes);
+const leafDeletesIfMany = (writes: PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  (writes.length > 1 ? leafDeletes(writes, opts) : writes);
+const cascadeDeletesIfMany = (writes: PlannedWrite[], opts?: PlanBulkOptions): PlannedWrite[] =>
+  (writes.length > 1 ? cascadeDeletes(writes, opts) : writes);
 
-/** The land-lease clean-up steps of a turbine / type delete, as plan writes: the leaf rows and the cascading costs apart. */
+/**
+ * The land-lease clean-up steps of a turbine / type delete, as plan writes: the leaf rows and the cascading costs apart.
+ * DEL-4 (flag `parentOrder`): with it on, an allocation delete carries `serialKey = <its land-lease cost id>` (looked up in
+ * `costOf`, allocation id -> cost id), so two deletes on one cost never run together; off, no key. The cost delete confirms.
+ */
 function landLeaseCleanupWrites(
   steps: readonly TurbineDeletionStep[], reasons: { allocation: string; cost: string },
+  costOf: ReadonlyMap<string, string>, opts?: PlanBulkOptions,
 ): { allocations: PlannedWrite[]; costs: PlannedWrite[] } {
   const allocations: PlannedWrite[] = [];
   const costs: PlannedWrite[] = [];
   for (const step of steps) {
-    if (step.kind === "removeAllocation") allocations.push(del(ES.landLeaseAllocationWtgs, step.allocationId, reasons.allocation));
-    else costs.push(del(ES_PLANT.landLeaseProjectCosts, step.costId, reasons.cost));
+    if (step.kind === "removeAllocation") allocations.push(allocationDelete(step.allocationId, reasons.allocation, costOf, opts));
+    else costs.push(del(ES_PLANT.landLeaseProjectCosts, step.costId, reasons.cost, { confirm: true }));
   }
   return { allocations, costs };
 }
+
+/** One land-lease allocation delete; with `parentOrder` on and its cost known it carries `serialKey = <cost id>` (DEL-4). */
+const allocationDelete = (id: string, reason: string, costOf: ReadonlyMap<string, string>, opts: PlanBulkOptions | undefined): PlannedWrite => {
+  const cost = deleteFlagOn(opts, "parentOrder") ? costOf.get(id) : undefined;
+  return del(ES.landLeaseAllocationWtgs, id, reason, cost ? { serialKey: cost } : {});
+};
+
+/** Allocation id -> its land-lease cost id, for the `serialKey` of an allocation delete. */
+const costByAllocation = (allocations: readonly { id: string; costId?: string }[]): Map<string, string> =>
+  new Map(allocations.flatMap((a) => (a.costId ? [[a.id, a.costId] as const] : [])));
 
 /**
  * Optional last parameter of the plan builders that have a bulk path (Generators bulk programme, work package R2).
@@ -3401,12 +3432,24 @@ function landLeaseCleanupWrites(
 export interface PlanBulkOptions {
   /** Per-flag overrides of `GENERATORS_BULK` (same keys; `true` allowed, which the `as const` defaults cannot say). */
   bulk?: { [K in keyof typeof GENERATORS_BULK]?: boolean };
+  /**
+   * Per-flag overrides of `GENERATORS_DELETE` (delete hardening plan): `tieredDeletes` (DEL-1), `parentOrder` (DEL-4),
+   * `guardedUpdates` (DEL-7a). A flag is read as `opts.delete?.X ?? GENERATORS_DELETE.X`. `verifyDeletes` is an engine
+   * flag (`ExecutePlanOptions.deleteFlags`); the plans do not read it.
+   */
+  delete?: DeleteFlagOverrides;
   /** Source of the pre-generated row ids of bulk creates. Tests inject a counter. */
   newId?: () => string;
 }
 
 const bulkOn = (opts: PlanBulkOptions | undefined, flag: keyof typeof GENERATORS_BULK): boolean =>
   (opts?.bulk?.[flag] ?? GENERATORS_BULK[flag]) === true;
+function deleteFlagOn(opts: PlanBulkOptions | undefined, flag: keyof GeneratorsDeleteFlags): boolean {
+  return (opts?.delete?.[flag] ?? GENERATORS_DELETE[flag]) === true;
+}
+/** DEL-7(a): the write as a guarded update when `guardedUpdates` is on (never re-creates a row another user deleted), else as is. */
+const guardedIf = (w: PlannedWrite, opts: PlanBulkOptions | undefined): PlannedWrite =>
+  (deleteFlagOn(opts, "guardedUpdates") ? { ...w, guarded: true } : w);
 /** Bulk update rows without a repeated id (the first wins): `UpdateMultiple` refuses a duplicate (plan §3 phase 3, item 5). */
 const uniqueRows = (rows: readonly BulkRow[]): BulkRow[] => {
   const seen = new Set<string>();
@@ -3723,9 +3766,10 @@ export function planSaveTurbine(args: {
       ES_PLANT.generatorInProjects, uniqueRows(applyAll.map((w) => ({ id: w.id!, data: w.data! }))), "apply to all: the type's other turbines",
     ));
   } else {
-    writes.push(...together(applyAll));
+    // DEL-7(a): flag `guardedUpdates`: a sibling another user deleted is never re-created by the PATCH (the bulk form is guarded already).
+    writes.push(...together(applyAll.map((w) => guardedIf(w, opts))));
   }
-  writes.push(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"));
+  writes.push(guardedIf(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"), opts));
 
   // 4. the roll-up with the re-derived type.
   writes.push(projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === args.type.id
@@ -3760,25 +3804,26 @@ export function planDeleteTurbine(args: {
   allTypes: GeneratorTypeRow[];
   allocations: { id: string; costId: string }[];
   allocationCountByCost: Record<string, number>;
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   // Save performance (6 Nov 2026): the land-lease clean-up rows are independent; the turbine, the type totals and the
   // roll-up follow one by one, in the canvas order. Tiers (plan §9.4, phase 1B): the allocations are one leaf group (16),
   // then the land-lease costs one cascade group (4); each a group of its own, in that order.
   const cleanup = landLeaseCleanupWrites(planTurbineDeletion({
     allocations: args.allocations, siblingCountByCost: args.allocationCountByCost,
-  }), { allocation: "the turbine's land-lease allocation", cost: "the turbine's land-lease cost" });
-  const writes: PlannedWrite[] = [...leafDeletes(cleanup.allocations), ...cascadeDeletes(cleanup.costs)];
+  }), { allocation: "the turbine's land-lease allocation", cost: "the turbine's land-lease cost" }, costByAllocation(args.allocations), opts);
+  const writes: PlannedWrite[] = [...leafDeletes(cleanup.allocations, opts), ...cascadeDeletes(cleanup.costs, opts)];
   writes.push(del(ES_PLANT.generatorInProjects, args.turbine.id, `turbine ${args.turbine.name ?? ""}`));
   const remaining = args.typeTurbines.filter((t) => t.id !== args.turbine.id);
   const re = recomputeTypeFromChildren({ children: remaining, model: args.model, accumulatedIndex: args.accumulatedIndex });
-  writes.push(upd(ES_PLANT.generatorTypeInProjects, args.type.id, {
+  // DEL-7(a): flag `guardedUpdates`: when another user deleted the type meanwhile, this PATCH must not re-create it (S8).
+  writes.push(guardedIf(upd(ES_PLANT.generatorTypeInProjects, args.type.id, {
     [PLANT_BIND.project]: ref(ES.projects, args.project.id),
     [GEN_TYPE_COL.numberOfGenerators]: re.numberOfGenerators,
     [GEN_TYPE_COL.costPerWtg]: re.costPerWtg,
     [GEN_TYPE_COL.generatorsCost]: re.generatorsCost,
     [GEN_TYPE_COL.generatorsCapacity]: re.generatorsCapacity,
     ...owner(args.project.owningBusinessUnitId),
-  }, "the generator type's totals"));
+  }, "the generator type's totals"), opts));
   writes.push(projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === args.type.id
     ? { ...t, generatorsCapacity: re.generatorsCapacity, generatorsCost: re.generatorsCost } : t)));
   return { writes, log: [] };
@@ -3811,8 +3856,9 @@ export function planTypeLandLeaseCleanup(args: {
 
 /**
  * The WTG type delete (`cmp_…ConfirmationDeleteGeneratorType.OnConfirm`, Y:15626): the land-lease
- * clean-up (`planTypeLandLeaseCleanup`), the `'Opex Project Costs'` of the type's first
- * `DeviceTypesInProjects` row, `Remove(GeneratorTypeInProjects)`, the roll-up over the rest. A type
+ * clean-up (`planTypeLandLeaseCleanup`), the `'Opex Project Costs'` of the type's `DeviceTypesInProjects` rows (the canvas
+ * reads the first; DEL-3: the loader passes every bridge row's costs and their chain members), `Remove(GeneratorTypeInProjects)`,
+ * the roll-up over the rest. A type
  * with an open permission flow (`needsPermissionCancellation`) gets `Requestpermissioncancellation`
  * first — the screen runs it before this plan (D97; the canvas runs it between the O&M deletes and the
  * `Remove`, so a failed cancellation there left the type without its costs).
@@ -3824,20 +3870,22 @@ export function planDeleteGeneratorType(args: {
   allocations: { id: string; costId: string }[];
   allocationCountByCost: Record<string, number>;
   opexCostIds: string[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   // Save performance (6 Nov 2026): the land-lease clean-up and the O&M cost deletes are independent rows; the type
   // delete and the roll-up follow one by one, in the canvas order. Tiers (plan §9.4, phase 1B): the allocation and O&M
   // deletes are one leaf group (16), then the land-lease cost deletes one cascade group (4). They were one mixed group.
   const cleanup = landLeaseCleanupWrites(planTypeLandLeaseCleanup(args),
-    { allocation: "a land-lease allocation of the type", cost: "a land-lease cost of the type" });
+    { allocation: "a land-lease allocation of the type", cost: "a land-lease cost of the type" }, costByAllocation(args.allocations), opts);
   const writes: PlannedWrite[] = [
     ...leafDeletes([
       ...cleanup.allocations,
+      // DEL-4 scope: O&M head/period ordering is NOT handled here. The loader (`listOpexCostIdsForBridges`) returns plain ids
+      // (heads, then chain members) with no parent information, so these deletes carry no `serialKey`; only allocations do.
       ...args.opexCostIds.map((id) => del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the type")),
-    ]),
-    ...cascadeDeletes(cleanup.costs),
+    ], opts),
+    ...cascadeDeletes(cleanup.costs, opts),
   ];
-  writes.push(del(ES_PLANT.generatorTypeInProjects, args.type.id, "the generator type"));
+  writes.push(del(ES_PLANT.generatorTypeInProjects, args.type.id, "the generator type", { confirm: true }));
   writes.push(projectWtgRollup(args.project.id, args.allTypes.filter((t) => t.id !== args.type.id)));
   return { writes, log: [] };
 }
@@ -3854,7 +3902,8 @@ export function planToggleStatus(args: {
   allTypes: GeneratorTypeRow[];
 }, opts?: PlanBulkOptions): WritePlan {
   const p = planStatusToggle({ type: args.type, turbines: args.turbines });
-  const typeUpdate = upd(ES_PLANT.generatorTypeInProjects, p.typeId, { statecode: p.nextStatus }, "the generator type's status");
+  // DEL-7(a): flag `guardedUpdates`: a type another user deleted is not re-created by the status PATCH.
+  const typeUpdate = guardedIf(upd(ES_PLANT.generatorTypeInProjects, p.typeId, { statecode: p.nextStatus }, "the generator type's status"), opts);
   const rollup = projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === p.typeId ? { ...t, status: p.nextStatus } : t));
   if (bulkOn(opts, "status")) {
     // DIVERGENCE (plan §3 phase 3, §9.5; flag `status`): the N turbine `statecode` updates are ONE `updateMany` step. The
@@ -3882,12 +3931,34 @@ export function planToggleStatus(args: {
 /* ═══════════════════════════════════════════ rollback of a failed create save (plan §9.3) ════ */
 
 /**
- * One row a plan wrote, as the write executor reports it (landing order). Structurally identical to the
- * `LandedRow` `data/executePlan.ts` will export; unify the two when that lands.
+ * One row a plan wrote or deleted, as the write executor reports it (`PlanResult` / `PlanError` `.landed`, `.deleted`,
+ * `.maybeLanded`). The same type as the executor's `LandedRow` (DEL-5: unified), kept under its name here for the callers.
  */
-export interface LandedRowRef {
-  entitySet: string;
-  id: string;
+export type LandedRowRef = LandedRow;
+
+/** The identity of a row in a landed / deleted list: entity set + id, case-insensitive (a GUID may come back in either case). */
+const landedKey = (row: LandedRowRef): string => `${row.entitySet.toLowerCase()}|${row.id.toLowerCase()}`;
+
+/**
+ * The rows of `landed` that are NOT in `deleted` (DEL-5, `PlanError.deleted` of a rollback or a delete job), in the order
+ * of `landed`. Match is by entity set and id, case-insensitive. A pure list difference: what a retry still has to remove.
+ */
+export function remainingRows(landed: readonly LandedRowRef[], deleted: readonly LandedRowRef[]): LandedRowRef[] {
+  const gone = new Set(deleted.map(landedKey));
+  return landed.filter((row) => !gone.has(landedKey(row)));
+}
+
+/**
+ * Every delete write of a plan, in plan order, as `{ entitySet, id }` (DEL-5): what a delete job attempted, to set against
+ * `PlanError.deleted`. A delete whose id is a placeholder (`@created…`) or empty is skipped: it names no real row.
+ */
+export function plannedDeleteRows(plan: WritePlan): LandedRowRef[] {
+  const rows: LandedRowRef[] = [];
+  for (const w of plan.writes) {
+    if (w.op !== "delete" || !w.id || w.id.startsWith(CREATED_ROW_ID)) continue;
+    rows.push({ entitySet: w.entitySet, id: w.id });
+  }
+  return rows;
 }
 
 /** The landed rows by family. A PV type's unit is a turbine row (`vsb_generatorinprojects`) too. */
@@ -3931,7 +4002,8 @@ export const rollbackApplies = (scenario: RollbackScenario): boolean =>
   scenario === "addWtgType" || scenario === "outOfCountryApprovalFailed";
 
 /** The roll-back delete of one landed row. A 404 counts as already gone in the executor (`unwrapDelete`). */
-const undo = (row: LandedRowRef, what: string): PlannedWrite => del(row.entitySet, row.id, `undo: ${what}`);
+const undo = (row: LandedRowRef, what: string, confirm = false): PlannedWrite =>
+  del(row.entitySet, row.id, `undo: ${what}`, confirm ? { confirm: true } : {});
 
 /**
  * Deletes what a failed create save landed, children before parents (plan §9.3):
@@ -3943,10 +4015,15 @@ const undo = (row: LandedRowRef, what: string): PlannedWrite => del(row.entitySe
  *  6. only when `rollupRan`, the project roll-up recomputed WITHOUT the deleted type, last.
  * Nothing landed -> an empty plan. The roll-up uses `remainingTypes` (the project's types without the new one;
  * a type listed in `landed` is dropped from it as well) for a WTG type, or `remainingPv` for a PV type.
+ *
+ * DEL-5: `maybeLanded` (`PlanError.maybeLanded`: rows of a failed `createMany` the backend could not confirm) are undone
+ * too, de-duplicated against `landed` and ordered by the same families. The engine counts a 404 on a delete as already gone,
+ * so a row that never existed is harmless; `describeLeftovers` must NOT be given them as certainly landed.
  */
 export function planRollbackCreate(args: {
   project: PlanProject;
   landed: readonly LandedRowRef[];
+  maybeLanded?: readonly LandedRowRef[];
   rollupRan: boolean;
   remainingTypes: (Pick<GeneratorTypeRow, "requestPermissionState" | "status" | "generatorsCapacity" | "generatorsCost"> & { id?: string })[];
   remainingPv?: {
@@ -3954,21 +4031,30 @@ export function planRollbackCreate(args: {
     inverters: Pick<SimpleTypeRow, "cost">[];
     substructures: Pick<SimpleTypeRow, "cost">[];
   };
-}): WritePlan {
-  const g = groupLandedRows(args.landed.filter((r) => r.id));
+}, opts?: PlanBulkOptions): WritePlan {
+  const seen = new Set<string>();
+  const toUndo = [...args.landed, ...(args.maybeLanded ?? [])].filter((r) => {
+    if (!r.id) return false;
+    const key = landedKey(r);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const g = groupLandedRows(toUndo);
   const total = g.allocations.length + g.bridgeRows.length + g.turbines.length + g.types.length + g.pvTypes.length + g.others.length;
   if (total === 0) return emptyPlan();
   const writes: PlannedWrite[] = [
     // Tiers (plan §9.4, phase 1B): allocations, bridge rows and turbines are leaf groups (16 in flight; each its own
     // group, so they run one after the other); the types are the cascade tier (4), because a type's delete locks and
     // updates its children. A single bridge row or type stays a plain one-by-one step.
-    ...leafDeletes(g.allocations.map((r) => undo(r, "a land-lease allocation of the new type"))),
-    ...leafDeletesIfMany(g.bridgeRows.map((r) => undo(r, "the new type's device-type row"))),
-    ...leafDeletes(g.turbines.map((r) => undo(r, "a turbine of the new type"))),
+    // No `serialKey` on the allocations: a landed row carries no parent id (only entity set and id), so the cost is unknown here.
+    ...leafDeletes(g.allocations.map((r) => undo(r, "a land-lease allocation of the new type")), opts),
+    ...leafDeletesIfMany(g.bridgeRows.map((r) => undo(r, "the new type's device-type row")), opts),
+    ...leafDeletes(g.turbines.map((r) => undo(r, "a turbine of the new type")), opts),
     ...cascadeDeletesIfMany([
-      ...g.types.map((r) => undo(r, "the new generator type")),
-      ...g.pvTypes.map((r) => undo(r, "the new PV module type")),
-    ]),
+      ...g.types.map((r) => undo(r, "the new generator type", true)),
+      ...g.pvTypes.map((r) => undo(r, "the new PV module type", true)),
+    ], opts),
     ...g.others.map((r) => undo(r, "a row the failed save created")),
   ];
   if (args.rollupRan) {
@@ -4033,7 +4119,75 @@ export const ROLLBACK_MSG = {
   leftover: (d: RollbackLeftovers): string => leftoversMessage(d),
   /** NEW — no canvas equivalent (DIVERGENCE, plan §9.3). */
   retryButton: "Retry cleanup",
+  /** NEW — no canvas equivalent (DIVERGENCE, plan §9.3). The progress text of the rollback job (DEL-5: moved here from `Screen.tsx`, same wording). */
+  progress: "Undoing the failed save, please wait...",
+  /**
+   * NEW — no canvas equivalent (DIVERGENCE, plan §9.3, review finding 3c). Shown when a failed save should have been rolled
+   * back but the project is not loaded any more, so no rollback plan can be built (DEL-5: moved here, same wording).
+   */
+  noProject: "The failed save could not be undone automatically. Reload the page and check the generator types.",
 } as const;
+
+/* ═══════════════════ what a failed delete job did and did not remove (delete hardening plan DEL-5) ════ */
+
+/**
+ * The texts of a delete that failed part-way. NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5): the canvas
+ * shows one error and says nothing about what was already removed. A delete cannot be undone, so the user finishes it.
+ * Shape: `Removed: 1 generator type, 12 generators. Not removed: 3 land-lease allocations. Press Delete again to finish.`
+ */
+export const DELETE_PARTIAL_MSG = {
+  /** NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5). */
+  removed: "Removed:",
+  /** NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5). */
+  notRemoved: "Not removed:",
+  /** NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5). */
+  pressAgain: "Press Delete again to finish.",
+  /** NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5). A half with no parts is left out. */
+  text: (removed: readonly string[], notRemoved: readonly string[]): string => [
+    ...(removed.length > 0 ? [`${DELETE_PARTIAL_MSG.removed} ${removed.join(", ")}.`] : []),
+    ...(notRemoved.length > 0 ? [`${DELETE_PARTIAL_MSG.notRemoved} ${notRemoved.join(", ")}.`] : []),
+    DELETE_PARTIAL_MSG.pressAgain,
+  ].join(" "),
+} as const;
+
+/** The rows of one half of the partial-delete text, counted per family in a fixed order (types first). */
+function deleteFamilyParts(rows: readonly LandedRowRef[], typeName: string | null | undefined): string[] {
+  const g = groupLandedRows(rows.filter((r) => r.id));
+  const setOf = (r: LandedRowRef): string => r.entitySet.toLowerCase();
+  const costs = g.others.filter((r) => setOf(r) === ES_PLANT.landLeaseProjectCosts);
+  const opex = g.others.filter((r) => setOf(r) === ES_PLANT.opexProjectCosts);
+  const other = g.others.length - costs.length - opex.length;
+  const named = (n: number, one: string, many: string, kind: string): string =>
+    (typeName && n === 1 ? `${kind} "${typeName}"` : countOf(n, one, many));
+  const parts: [number, string][] = [
+    [g.types.length, named(g.types.length, "generator type", "generator types", "generator type")],
+    [g.pvTypes.length, named(g.pvTypes.length, "PV module type", "PV module types", "PV module type")],
+    [g.turbines.length, countOf(g.turbines.length, "generator", "generators")],
+    [g.allocations.length, countOf(g.allocations.length, "land-lease allocation", "land-lease allocations")],
+    [costs.length, countOf(costs.length, "land-lease cost", "land-lease costs")],
+    [opex.length, countOf(opex.length, "O&M cost", "O&M costs")],
+    [g.bridgeRows.length, countOf(g.bridgeRows.length, "device-type row", "device-type rows")],
+    [other, countOf(other, "other row", "other rows")],
+  ];
+  return parts.filter(([n]) => n > 0).map(([, text]) => text);
+}
+
+/**
+ * What a delete job that failed part-way removed and did not remove (DEL-5). `attempted` is `plannedDeleteRows(plan)`,
+ * `deleted` is `PlanError.deleted`. Null when every attempted row was deleted (nothing to tell). `typeName` names the one
+ * type row when there is exactly one in a half. NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5).
+ */
+export function deletePartialMessage(args: {
+  attempted: readonly LandedRowRef[];
+  deleted: readonly LandedRowRef[];
+  typeName?: string | null;
+}): string | null {
+  const notRemoved = remainingRows(args.attempted, args.deleted);
+  if (notRemoved.length === 0) return null;
+  const left = new Set(notRemoved.map(landedKey));
+  const removed = args.attempted.filter((r) => !left.has(landedKey(r)));
+  return DELETE_PARTIAL_MSG.text(deleteFamilyParts(removed, args.typeName), deleteFamilyParts(notRemoved, args.typeName));
+}
 
 /** `'Plant PV Cost [EUR]' = Σ PV cost + Σ inverter type cost + Σ substructure cost` (rule 16). */
 const projectPvCost = (projectId: string, pv: SimpleTypeRow[], inverters: SimpleTypeRow[], substructures: SimpleTypeRow[]): PlannedWrite =>
@@ -4149,7 +4303,7 @@ export function planDeletePvTypeCanvasParity(args: {
     }),
   }));
   const writes: PlannedWrite[] = [
-    del(ES_PLANT.pvModuleTypeInProjects, args.pv.id, "the PV module type"),
+    del(ES_PLANT.pvModuleTypeInProjects, args.pv.id, "the PV module type", { confirm: true }),
     upd(ES.projects, args.project.id, { [PROJECT_PLANT_COL.plantPvCapacity]: capacity }, "the project's Plant PV Capacity"),
     // Save performance (6 Nov 2026): independent rows, one parallel run between the capacity and the PV cost.
     ...together(substructures.map((s) => upd(ES_PLANT.substructureTypeInProjects, s.id, { vsb_substructurecost: s.cost }, "a substructure cost"))),
@@ -4169,7 +4323,7 @@ export function planDeletePvTypeCanvasParity(args: {
  * Now, children first, as the WTG type delete does:
  *  1. the land-lease clean-up of the PV unit(s) — the G1 rule (`planTypeLandLeaseCleanup`): a land-lease
  *     cost goes when all its allocations belong to the type, otherwise only the type's allocations go;
- *  2. the `'Opex Project Costs'` of the type's first `DeviceTypesInProjects` row (Y:15634, the WTG rule);
+ *  2. the `'Opex Project Costs'` of the type's `DeviceTypesInProjects` rows (Y:15634, the WTG rule; DEL-3: every bridge row);
  *  3. the PV unit(s) (`GeneratorInProjects`);
  *  4. the canvas body (`planDeletePvTypeCanvasParity`): the type, the capacity, the substructure costs,
  *     the PV cost. The device-type row goes with the type (cascade), as on the WTG type delete.
@@ -4179,21 +4333,23 @@ export function planDeletePvType(args: Parameters<typeof planDeletePvTypeCanvasP
   allocations: { id: string; costId: string }[];
   allocationCountByCost: Record<string, number>;
   opexCostIds: readonly string[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const canvas = planDeletePvTypeCanvasParity(args);
   if (canvas.refusedReason) return canvas;
   // Save performance (6 Nov 2026): the land-lease clean-up and the O&M deletes are independent rows; the unit(s)
   // follow (after them, as before), then the canvas body. Tiers (plan §9.4, phase 1B): the allocation and O&M deletes
   // are one leaf group (16), the land-lease costs one cascade group (4), the units a leaf group when there are several.
   const cleanup = landLeaseCleanupWrites(planTypeLandLeaseCleanup(args),
-    { allocation: "a land-lease allocation of the PV module type", cost: "a land-lease cost of the PV module type" });
+    { allocation: "a land-lease allocation of the PV module type", cost: "a land-lease cost of the PV module type" },
+    costByAllocation(args.allocations), opts);
   const children: PlannedWrite[] = [
     ...leafDeletes([
       ...cleanup.allocations,
+      // DEL-4 scope: O&M head/period ordering is not handled (plain ids from the loader); see `planDeleteGeneratorType`.
       ...args.opexCostIds.map((id) => del(ES_PLANT.opexProjectCosts, id, "an O&M cost of the PV module type")),
-    ]),
-    ...cascadeDeletes(cleanup.costs),
-    ...leafDeletesIfMany(args.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "the PV module type's unit"))),
+    ], opts),
+    ...cascadeDeletes(cleanup.costs, opts),
+    ...leafDeletesIfMany(args.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "the PV module type's unit", { confirm: true })), opts),
   ];
   return { writes: [...children, ...canvas.writes], log: canvas.log };
 }
@@ -4217,7 +4373,7 @@ export function planDeleteInverterOrSubstructure(args: {
   return {
     writes: [
       del(args.family === "inverter" ? ES_PLANT.inverterTypeInProjects : ES_PLANT.substructureTypeInProjects, args.row.id,
-        args.family === "inverter" ? "the inverter type" : "the substructure type"),
+        args.family === "inverter" ? "the inverter type" : "the substructure type", { confirm: true }),
       projectPvCost(args.project.id, args.pv, inverters, substructures),
     ],
     log: [],
@@ -4276,7 +4432,7 @@ export function planDeleteSimple(args: {
   const t = SIMPLE_TABLE[args.family];
   return {
     writes: [
-      del(t.set, args.row.id, args.row.name ?? ""),
+      del(t.set, args.row.id, args.row.name ?? "", { confirm: true }),
       upd(ES.projects, args.project.id, { [t.plant]: sumCapacity(args.rows.filter((r) => r.id !== args.row.id)) },
         "the project's plant capacity"),
     ],
@@ -4751,9 +4907,16 @@ export function planSaveSubstructure(args: {
 
 /** What a replace reads before its first job (T2a, "Identify"). */
 export interface ReplaceInputs {
-  /** The old type's `DeviceTypesInProjects` rows, oldest first — the first is the O&M bridge. */
+  /**
+   * EVERY `DeviceTypesInProjects` row of the old type, oldest first (DEL-3; the canvas used only the first as the O&M bridge).
+   * All of them are deleted.
+   */
   bridgeIds: string[];
-  /** The project's `'Opex Project Costs'` on the first bridge (any status). */
+  /**
+   * The project's `'Opex Project Costs'` on EVERY bridge row of the old type (any status), heads and their chain members
+   * (DEL-3). The detach clears each one's device-type link and the follow-up links each one to the new bridge: period rows
+   * carry the bridge bind like their head (`data/periodWrites.ts` re-binds it on every period save and import).
+   */
   opexCostIds: string[];
   /** The old type's units (`GeneratorInProjects`). */
   unitIds: string[];
@@ -4763,17 +4926,23 @@ export interface ReplaceInputs {
   landLeaseCosts: LandLeaseCostRow[];
 }
 
-/** T2a — the old units' allocations, each with its unit's index and its cost's AllWTG flag. */
+/**
+ * T2a — the old units' allocations, each with its unit's index and its cost's AllWTG flag. `keepCostIds` (DEL-4, opt-in so the
+ * default shape is unchanged) also keeps each allocation's land-lease cost id, the `serialKey` of its delete when
+ * `GENERATORS_DELETE.parentOrder` is on.
+ */
 export function toReplaceAllocations(args: {
   allocations: readonly { id: string; costId: string; turbineId: string }[];
   units: readonly Pick<TurbineRow, "id" | "index">[];
   allWtgCostIds: ReadonlySet<string>;
+  keepCostIds?: boolean;
 }): ReplaceAllocation[] {
   const indexOf = new Map(args.units.map((u) => [u.id, u.index]));
   return args.allocations.map((a) => ({
     id: a.id,
     unitIndex: indexOf.get(a.turbineId) ?? 0,
     allWtgAllocated: args.allWtgCostIds.has(a.costId),
+    ...(args.keepCostIds ? { costId: a.costId } : {}),
   }));
 }
 
@@ -4806,9 +4975,9 @@ function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: 
     : together(inputs.opexCostIds.map((id) => opexLink(id, null, "detach an O&M cost from the replaced type")));
   return [
     ...detach,
-    ...leafDeletes(inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type"))),
-    ...leafDeletesIfMany(inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row"))),
-    del(typeSet, typeId, "the replaced type"),
+    ...leafDeletes(inputs.unitIds.map((id) => del(ES_PLANT.generatorInProjects, id, "a unit of the replaced type", { confirm: true })), opts),
+    ...leafDeletesIfMany(inputs.bridgeIds.map((id) => del(ES_PLANT.deviceTypesInProjects, id, "the replaced type's O&M device-type row")), opts),
+    del(typeSet, typeId, "the replaced type", { confirm: true }),
   ];
 }
 
@@ -4900,12 +5069,14 @@ export function planReplaceGeneratorTypeFollowUp(args: {
       else rows.push(upd(ES.landLeaseAllocationWtgs, r.allocationId, bind, `move a land-lease allocation to ${unit.name ?? "the new unit"}`));
     }
   }
+  const costOf = costByAllocation(args.inputs.allocations);
   for (const id of [...ll.removeSurplus, ...ll.removeAllWtg]) {
-    removals.push(del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced type"));
+    removals.push(allocationDelete(id, "a land-lease allocation of the replaced type", costOf, opts));
   }
   for (const id of args.inputs.opexCostIds) {
     if (replaceBulk) relinkRows.push({ id, data: opexLinkData(bridge) });
-    else rows.push(opexLink(id, bridge, "re-link an O&M cost to the new type"));
+    // DEL-7(a): flag `guardedUpdates`: an O&M cost another user deleted since Identify is not re-created by the re-link PATCH.
+    else rows.push(guardedIf(opexLink(id, bridge, "re-link an O&M cost to the new type"), opts));
   }
   // One parallel run after the device-type row it may bind to (the moves, creates and re-links are disjoint rows), then
   // the removals as their own leaf group (plan §9.4: deletes and creates never contend; the D51 lesson). With the flag the
@@ -4914,7 +5085,7 @@ export function planReplaceGeneratorTypeFollowUp(args: {
     ...bulkCreates, ...together(rows),
     ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new units")] : []),
     ...(relinkRows.length > 0 ? [updateMany(ES_PLANT.opexProjectCosts, uniqueRows(relinkRows), "re-link the O&M costs to the new type")] : []),
-    ...leafDeletes(removals),
+    ...leafDeletes(removals, opts),
   );
   return { writes, log: [], unmatchedCount: ll.unmatchedCount };
 }
@@ -5000,11 +5171,12 @@ export function planReplacePvTypeFollowUp(args: {
     else landLease.push(upd(ES.landLeaseAllocationWtgs, id, moveBind, "move a land-lease allocation to the new PV unit"));
   }
   // Plan §9.4 (phase 1B): the old AllWTG allocations go as their own leaf group, after the creates and moves.
-  const removals = ll.removeAllWtg.map((id) => del(ES.landLeaseAllocationWtgs, id, "a land-lease allocation of the replaced PV type"));
+  const costOf = costByAllocation(args.inputs.allocations);
+  const removals = ll.removeAllWtg.map((id) => allocationDelete(id, "a land-lease allocation of the replaced PV type", costOf, opts));
   writes.push(
     ...bulkCreates, ...together(landLease),
     ...(moveRows.length > 0 ? [updateMany(ES.landLeaseAllocationWtgs, uniqueRows(moveRows), "move the land-lease allocations to the new PV unit")] : []),
-    ...leafDeletes(removals),
+    ...leafDeletes(removals, opts),
   );
   writes.push(upd(ES.projects, args.project.id, {
     [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.pvRows),
@@ -5016,7 +5188,8 @@ export function planReplacePvTypeFollowUp(args: {
         uniqueRows(args.inputs.opexCostIds.map((id) => ({ id, data: opexLinkData(bridge) }))), "re-link the O&M costs to the new PV type"));
     }
   } else {
-    writes.push(...together(args.inputs.opexCostIds.map((id) => opexLink(id, bridge, "re-link an O&M cost to the new PV type"))));
+    // DEL-7(a): flag `guardedUpdates`, as in the generator follow-up.
+    writes.push(...together(args.inputs.opexCostIds.map((id) => guardedIf(opexLink(id, bridge, "re-link an O&M cost to the new PV type"), opts))));
   }
   return { writes, log: [] };
 }
