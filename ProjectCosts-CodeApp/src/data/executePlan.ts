@@ -76,16 +76,33 @@
  * later, and invalidating a table nobody pages is a cheap no-op (a scan of a small Map).
  * It runs only once the server has accepted the write, so a failed, refused or guarded-gone step
  * keeps a cache that is still correct. Pinned by UT-PLAN-025..031.
+ *
+ * HARDENED DELETES (Generators delete hardening, DEL-2 and DEL-4; OPT-IN per write, `PlannedWrite.hardened`; every
+ * other delete is exactly as before, `unwrapDelete` included). A hardened delete:
+ *  - is retried up to 3 tries in all on 429, 503 with Retry-After, 500, 504 and a network error (`withDeleteRetry`,
+ *    one `[VSB] ACTION` warn line per retry); a delete is idempotent, so retrying an ambiguous failure is safe;
+ *  - treats ONLY HTTP 404 or the code 0x80040217 as "gone" (`unwrapDeleteStrict`); the free text "does not exist" fails;
+ *  - has every row that answered "gone" read back after its step (`verifyGone`, one read per 40 ids) and, with
+ *    `confirm: true` and `GENERATORS_DELETE.verifyDeletes`, every row it deleted too. A row still present stops the
+ *    plan with `PlanError` whose cause is a `DeleteNotConfirmedError` (count and entity set, never ids); such a row
+ *    is NOT in `deleted`, and `done` does not count it. A step is one sequential write, or one concurrent run.
+ *    A read that fails is treated the same way (unconfirmed), never as "gone".
+ * Inside a concurrent group, writes with the same `serialKey` run strictly one after another and other keys in
+ * parallel (the group's limit still bounds the requests in flight); `together(…, { stopOnFailure: true })` starts no
+ * new write after the first failure. `PlanError.failures` lists every failure a run saw, in plan order.
  */
 import { getClient } from "@microsoft/power-apps/data";
 import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo";
-import { isRecordGone, unwrap, unwrapDelete } from "@/platform/errors";
-import { logData } from "@/platform/requestLog";
+import { isRecordGone, unwrap, unwrapDelete, unwrapDeleteStrict } from "@/platform/errors";
+import { logAction, logData } from "@/platform/requestLog";
 import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
 import {
   BulkBackendValidationError, BulkBatchError, BulkRowsGoneError, getBulkBackend, type BulkRow,
 } from "./bulkBackend";
-import { createGate, WRITE_CONCURRENCY } from "./concurrency";
+import { createGate, createSerialRunner, WRITE_CONCURRENCY } from "./concurrency";
+import { GENERATORS_DELETE, type DeleteFlagOverrides, type GeneratorsDeleteFlags } from "./generatorsDeleteFlags";
+import { withDeleteRetry } from "./retry";
+import { DeleteNotConfirmedError, verifyGone, type VerifyClient } from "./verifyGone";
 import { changeCount, CREATED_ROW_ID, isBulkWrite, type PlannedWrite, type WritePlan } from "./writePlan";
 
 /** A row a create made: kept so a failed save can be rolled back (delete these, last first). The exact shape is a contract. */
@@ -126,6 +143,12 @@ export interface PlanResult {
   maybeLanded: LandedRow[];
 }
 
+/** One failed write of a step: the write's `reason` and what it threw. */
+export interface PlanFailure {
+  reason: string;
+  cause: unknown;
+}
+
 /** A plan that stopped part-way. `done` writes were sent before `failedReason` failed. */
 export class PlanError extends Error {
   readonly done: number;
@@ -143,11 +166,16 @@ export class PlanError extends Error {
   readonly maybeLanded: readonly LandedRow[];
   /** Rows whose `delete` write succeeded before the failure (404 = already gone included), in plan order. */
   readonly deleted: readonly LandedRow[];
+  /**
+   * Every failure the failing step saw, in plan order (a concurrent run lets its other writes finish and reports
+   * all of them). The first one is `failedReason` / `cause`. A single failure gives one entry.
+   */
+  readonly failures: readonly PlanFailure[];
 
   constructor(
     done: number, total: number, failedReason: string, cause: unknown, createdIds: readonly string[] = [],
     landed: readonly LandedRow[] = [],
-    extra: { maybeLanded?: readonly LandedRow[]; deleted?: readonly LandedRow[] } = {},
+    extra: { maybeLanded?: readonly LandedRow[]; deleted?: readonly LandedRow[]; failures?: readonly PlanFailure[] } = {},
   ) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.name = "PlanError";
@@ -159,6 +187,7 @@ export class PlanError extends Error {
     this.landed = landed;
     this.maybeLanded = extra.maybeLanded ?? [];
     this.deleted = extra.deleted ?? [];
+    this.failures = extra.failures ?? [{ reason: failedReason, cause }];
   }
 
   /** True when a bulk update found some of its rows gone (nothing was sent for that step). */
@@ -238,6 +267,19 @@ function targetIdOf(write: WritePlan["writes"][number], createdIds: readonly str
     : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
 }
 
+/** A row of a hardened delete that must be read back once its step is over (see the file header). */
+interface PendingConfirm {
+  entitySet: string;
+  id: string;
+  reason: string;
+}
+
+/** What a hardened delete needs from its run: the flags in force and the list that collects rows to read back. */
+interface DeleteContext {
+  flags: GeneratorsDeleteFlags;
+  pending: PendingConfirm[];
+}
+
 /**
  * Sends one write and resolves to the id it created (a create) or `undefined`. `createdIds` are the
  * ids created by the plan's EARLIER steps, for `CREATED_ROW_ID` and `createdRowRef(n)`.
@@ -249,9 +291,14 @@ async function sendWrite(
   createdIds: readonly string[],
   /** Collects each created row (as returned) by its id — `PlanResult.createdRows`. */
   createdRows?: Record<string, Readonly<Record<string, unknown>>>,
+  /** Hardened deletes only: the flags and the rows to read back. Absent = the flags' defaults and nothing is collected. */
+  deleteContext?: DeleteContext,
 ): Promise<string | undefined> {
   if (write.guarded && write.op !== "update") {
     throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
+  }
+  if ((write.hardened || write.confirm) && write.op !== "delete") {
+    throw new Error("only a delete can be hardened or confirmed (hardened / confirm on another operation is a bug in the plan)");
   }
   const id = targetIdOf(write, createdIds);
   if (write.id === CREATED_ROW_ID && !id) {
@@ -311,6 +358,20 @@ async function sendWrite(
     return undefined;
   }
   primaryKeyOf(write.entitySet);
+  if (write.hardened) {
+    // Bounded retry (a delete is idempotent) and a strict "gone"; the read-back happens after the step.
+    const outcome = await withDeleteRetry(
+      async () => unwrapDeleteStrict(await client.deleteRecordAsync(write.entitySet, id!), label),
+      { log: (line) => logAction(`${write.entitySet}: ${line}`, "warn") },
+    );
+    logged();
+    invalidatePageTokens(write.entitySet);
+    const flags = deleteContext?.flags ?? GENERATORS_DELETE;
+    if (deleteContext && (outcome === "gone" || (write.confirm === true && flags.verifyDeletes))) {
+      deleteContext.pending.push({ entitySet: write.entitySet, id: id!, reason: write.reason });
+    }
+    return undefined;
+  }
   // Already gone counts as deleted (`unwrapDelete`).
   unwrapDelete(await client.deleteRecordAsync(write.entitySet, id!), label);
   logged();
@@ -321,6 +382,9 @@ async function sendWrite(
 /** Throws (before anything is sent) for a bulk step that is marked concurrent / guarded or has no rows array. */
 function assertPlanShape(writes: readonly PlannedWrite[]): void {
   for (const w of writes) {
+    if ((w.hardened || w.confirm) && w.op !== "delete") {
+      throw new Error(`"${w.reason}": only a delete can be hardened or confirmed (programmer error in the plan)`);
+    }
     if (!isBulkWrite(w)) continue;
     if (w.concurrent) {
       throw new Error(`"${w.reason}": a bulk operation (${w.op}) cannot be part of a together() group (programmer error in the plan)`);
@@ -364,22 +428,81 @@ async function sendBulk(
   return rows.length;
 }
 
+/** Optional settings of a run; nothing here changes a plan that sets no hardened delete. */
+export interface ExecutePlanOptions {
+  /** Overrides of `GENERATORS_DELETE` for this run (tests, a caller that decided differently). */
+  deleteFlags?: DeleteFlagOverrides;
+}
+
+/** A write of a concurrent group that was never started because `stopOnFailure` had tripped. */
+const NOT_STARTED = Symbol("not started");
+
+const rowKeyOf = (r: { entitySet: string; id: string }): string => `${r.entitySet}|${r.id.toLowerCase()}`;
+
 export async function executePlan(
   plan: WritePlan,
   operation: string,
   client: PlanClient & Partial<GuardedPlanClient> = getClient(dataSourcesInfo),
+  options: ExecutePlanOptions = {},
 ): Promise<PlanResult> {
   if (plan.refusedReason) throw new PlanRefusedError(plan.refusedReason);
 
   const writes = plan.writes;
   assertPlanShape(writes);
+  const flags: GeneratorsDeleteFlags = { ...GENERATORS_DELETE, ...options.deleteFlags };
   const total = writes.reduce((n, w) => n + changeCount(w), 0);
   const createdIds: string[] = [];
   const createdRows: Record<string, Readonly<Record<string, unknown>>> = {};
   const landed: LandedRow[] = [];
   const deleted: LandedRow[] = [];
-  const extra = (maybeLanded: readonly LandedRow[] = []) => ({ maybeLanded, deleted: [...deleted] });
+  const extra = (maybeLanded: readonly LandedRow[] = [], failures?: readonly PlanFailure[]) =>
+    ({ maybeLanded, deleted: [...deleted], ...(failures ? { failures } : {}) });
   let done = 0;
+
+  /**
+   * Reads the rows of a step's hardened deletes back (see the file header). A row still present, or one that could
+   * not be read, leaves `deleted` and `done`. Resolves to the failure that must stop the plan, or undefined.
+   * A definite "still present" is preferred over a failed read as the reported cause.
+   */
+  const confirmDeletes = async (pending: readonly PendingConfirm[]): Promise<PlanFailure | undefined> => {
+    if (pending.length === 0) return undefined;
+    const byEntity = new Map<string, PendingConfirm[]>();
+    for (const p of pending) {
+      const list = byEntity.get(p.entitySet) ?? [];
+      list.push(p);
+      byEntity.set(p.entitySet, list);
+    }
+    const stillPresent: PendingConfirm[] = [];
+    const unreadable: PendingConfirm[] = [];
+    let readFailure: unknown;
+    for (const [entitySet, items] of byEntity) {
+      try {
+        if (typeof client.retrieveMultipleRecordsAsync !== "function") {
+          throw new Error(`${operation}: this client cannot read rows, so a hardened delete cannot be confirmed`);
+        }
+        const present = new Set(
+          (await verifyGone(client as VerifyClient, entitySet, items.map((i) => i.id))).map((id) => id.toLowerCase()),
+        );
+        stillPresent.push(...items.filter((i) => present.has(i.id.toLowerCase())));
+      } catch (error) {
+        readFailure ??= error;
+        unreadable.push(...items);
+      }
+    }
+    const unconfirmed = new Set([...stillPresent, ...unreadable].map(rowKeyOf));
+    for (let k = deleted.length - 1; k >= 0; k -= 1) {
+      if (unconfirmed.has(rowKeyOf(deleted[k]!))) {
+        deleted.splice(k, 1);
+        done -= 1;
+      }
+    }
+    if (stillPresent.length > 0) {
+      const sets = [...new Set(stillPresent.map((p) => p.entitySet))];
+      return { reason: stillPresent[0]!.reason, cause: new DeleteNotConfirmedError(sets.join(", "), stillPresent.length) };
+    }
+    if (unreadable.length > 0) return { reason: unreadable[0]!.reason, cause: readFailure };
+    return undefined;
+  };
   for (let i = 0; i < writes.length;) {
     const write = writes[i]!;
     if (isBulkWrite(write)) {
@@ -414,8 +537,9 @@ export async function executePlan(
       continue;
     }
     if (!write.concurrent) {
+      const pending: PendingConfirm[] = [];
       try {
-        const newId = await sendWrite(write, operation, client, createdIds, createdRows);
+        const newId = await sendWrite(write, operation, client, createdIds, createdRows, { flags, pending });
         if (newId !== undefined) {
           createdIds.push(newId);
           landed.push({ entitySet: write.entitySet, id: newId });
@@ -427,6 +551,10 @@ export async function executePlan(
         done += 1;
       } catch (cause) {
         throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed], extra());
+      }
+      const unconfirmed = await confirmDeletes(pending);
+      if (unconfirmed) {
+        throw new PlanError(done, total, unconfirmed.reason, unconfirmed.cause, [...createdIds], [...landed], extra());
       }
       i += 1;
       continue;
@@ -442,10 +570,24 @@ export async function executePlan(
     const run = writes.slice(i, end);
     const before = [...createdIds];
     const gate = createGate(limit);
-    const settled = await Promise.allSettled(run.map((w) => gate(() => sendWrite(w, operation, client, before, createdRows))));
-    let failure: { reason: string; cause: unknown } | undefined;
+    const serial = createSerialRunner();
+    const stopOnFailure = run.some((w) => w.stopOnFailure);
+    let stopped = false;
+    const pendingOf = run.map((): PendingConfirm[] => []);
+    // `serial` waits OUTSIDE the gate (a write queued behind its key holds no slot); no key = straight into the gate.
+    const settled = await Promise.allSettled(run.map((w, k) => serial(w.serialKey, () => gate(async () => {
+      if (stopOnFailure && stopped) return NOT_STARTED;
+      try {
+        return await sendWrite(w, operation, client, before, createdRows, { flags, pending: pendingOf[k]! });
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }))));
+    const failures: PlanFailure[] = [];
     settled.forEach((s, k) => {
       if (s.status === "fulfilled") {
+        if (s.value === NOT_STARTED) return;
         if (s.value !== undefined) {
           createdIds.push(s.value);
           landed.push({ entitySet: run[k]!.entitySet, id: s.value });
@@ -455,13 +597,23 @@ export async function executePlan(
           if (goneId) deleted.push({ entitySet: run[k]!.entitySet, id: goneId });
         }
         done += 1;
-      } else if (!failure) {
-        failure = { reason: run[k]!.reason, cause: s.reason };
+      } else {
+        failures.push({ reason: run[k]!.reason, cause: s.reason });
       }
     });
-    // Every write of the run was sent; `done` counts the ones that landed, and nothing after the
-    // run is sent — the same "N of M changes had already been saved" a sequential stop reports.
-    if (failure) throw new PlanError(done, total, failure.reason, failure.cause, [...createdIds], [...landed], extra());
+    // Read the run's hardened deletes back BEFORE reporting, so `deleted` and `done` are true either way.
+    const unconfirmed = await confirmDeletes(pendingOf.flat());
+    // Every write of the run was sent (unless `stopOnFailure` held the rest back); `done` counts the ones that
+    // landed, and nothing after the run is sent — the same "N of M changes had already been saved" a sequential
+    // stop reports. A write failure is reported before an unconfirmed delete.
+    const first = failures[0];
+    if (first) {
+      if (unconfirmed) failures.push(unconfirmed);
+      throw new PlanError(done, total, first.reason, first.cause, [...createdIds], [...landed], extra([], failures));
+    }
+    if (unconfirmed) {
+      throw new PlanError(done, total, unconfirmed.reason, unconfirmed.cause, [...createdIds], [...landed], extra());
+    }
     i = end;
   }
   return { done, createdIds, createdRows, landed, deleted, maybeLanded: [] };

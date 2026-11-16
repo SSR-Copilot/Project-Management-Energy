@@ -33,6 +33,33 @@ const SCHEMAS = path.join(APP, ".power/schemas/dataverse");
 const FLOW_SCHEMAS = path.join(APP, ".power/schemas/logicflows");
 const SERVICES = path.join(APP, "src/generated/services");
 
+/**
+ * The bulk Dataverse actions are routed through ONE `environment_<id>` entry of `power.config.json`
+ * (entity set "Environment"). When the actions are registered in `dataSourcesInfo.ts` but that
+ * entry is gone, nothing fails at build or in the unit suite: every bulk Save answers HTTP 501 and
+ * each browser tab then silently falls back to one request per row (about five times slower; the
+ * D51 incident of 27 Oct 2026). `pa app add dataverse-api` re-run or `pa app push` rewriting
+ * `power.config.json` can drop the entry, so this makes its absence a red gate.
+ *
+ * Pure so it can be tested: `registered` is the set of registered entity-set names, `sources` the
+ * `power.config.json` data sources keyed as in the file.
+ */
+export const BULK_ACTION_NAMES = ["createmultiple", "updatemultiple", "upsertmultiple"];
+
+export function bulkEnvironmentProblems(registered, sources) {
+  const actions = BULK_ACTION_NAMES.filter((n) => registered.has(n));
+  if (actions.length === 0) return [];
+  const hasEntry = Object.entries(sources ?? {}).some(
+    ([key, value]) => key.startsWith("environment_") && value?.entitySetName === "Environment",
+  );
+  if (hasEntry) return [];
+  return [
+    `power.config.json has no "environment_<id>" data source (entitySetName "Environment") but ${actions.join(", ")} ` +
+      `${actions.length === 1 ? "is" : "are"} registered: every bulk Save would answer HTTP 501 and fall back to one request per row ` +
+      `(D51). Restore the entry from git, or re-run: npx @microsoft/power-apps-cli app add dataverse-api --api-name CreateMultiple`,
+  ];
+}
+
 export function checkPowerSources() {
   const problems = [];
   if (!fs.existsSync(INFO)) {
@@ -52,6 +79,7 @@ export function checkPowerSources() {
     if (!registered.has(entitySetName)) problems.push(`${logicalName}: not in dataSourcesInfo.ts`);
     if (!fs.existsSync(path.join(SCHEMAS, `${key}.Schema.json`))) problems.push(`${logicalName}: no ${key}.Schema.json`);
   }
+  problems.push(...bulkEnvironmentProblems(registered, sources));
   // D81: `pa app add flow` registers a cloud flow as a `"Connector"` entry in dataSourcesInfo.ts, writes
   // `.power/schemas/logicflows/<Flow>.Schema.json` (the display name without spaces) and lists it in
   // `power.config.json` under a `shared_logicflows` connection reference with its flow id. `.power/` is

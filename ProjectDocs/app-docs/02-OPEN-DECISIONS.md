@@ -7306,3 +7306,86 @@ Known and still open, not fixed here:
 - The two texts `ROLLBACK_PROGRESS_TEXT` and `ROLLBACK_NO_PROJECT_TEXT` live in `Screen.tsx` and belong in `rules.ts` `ROLLBACK_MSG`; `LandedRowRef` (rules) duplicates `LandedRow` (engine).
 - `knip` reports 37 unused files against the recorded baseline of 36; the extra file was not attributed.
 - **Nothing has run against DEV and every bulk flag is false.** The E2E parity suite was not run (the question was asked and not answered, so it is treated as declined).
+- **The delete work that followed is D116** (hardened deletes, all-bridge clean-up, partial-delete and rollback messages, orphan script; `GENERATORS-DELETE-DEV-TEST-PLAN.md`).
+
+## D116 — Generators delete hardening: hardened deletes, all-bridge O&M clean-up, truthful partial-delete and rollback messages, behind flags (16 Nov 2026)
+
+**Status:** implemented and merged on `integration/generators-delete` (cut from the D115 integration work), **NOT product-approved, NOT run against DEV**. Nothing is on `RounakDev1`, `master` or DEV. Of the four `GENERATORS_DELETE` flags only `tieredDeletes` is `true`; the other three are `false`. The hardened delete path itself has no flag and is live for every Generators delete (section 3, item 1).
+**Documents:** `GENERATORS-DELETE-HARDENING-PLAN.md` (the claims, scenarios S1 to S11, work packages DEL-0 to DEL-9, the eight product questions), `GENERATORS-DELETE-DEV-TEST-PLAN.md` (the manual DEV test, DEL-0 and DT-01 onward). Companion: D115 (`GENERATORS-BULK-*`).
+**Report:** a Generators delete or rollback can leave rows behind (S1 to S9 of the plan), says nothing about what it removed, and counted a delete answering 404 as done without looking. This work makes deletes retry on transient failures, reads "gone" rows back, cleans up the O&M costs of every bridge row, and tells the user what a failed delete or rollback really removed. Every statement below is read from the code; nothing was timed or run live.
+
+### 1. Scope and what is built
+
+| Package | Content | Switch | Built (merged on `integration/generators-delete`) |
+|---|---|---|---|
+| DEL-1 | `GENERATORS_DELETE` flag file `data/generatorsDeleteFlags.ts`: `tieredDeletes: true`, `verifyDeletes: false`, `parentOrder: false`, `guardedUpdates: false`. `rules.ts` reads it through `PlanBulkOptions.delete`; `verifyDeletes` is read by the engine (`ExecutePlanOptions.deleteFlags`) | the flags | yes. `tieredDeletes` off means one `together()` group at the default limit 8, the shape before the tiers |
+| DEL-2 | Hardened deletes: `hardenedDelete` (`data/writePlan.ts`) sets `hardened` (and optionally `confirm`, `serialKey`). The engine sends a hardened delete through `withDeleteRetry` (`data/retry.ts`: 3 tries on 429, 503 with `Retry-After`, 500, 504 and an error with no HTTP status; never 400, 401, 403, 404, 409; wait = `Retry-After`, else 1 s then 2 s, at most 30 s; one `[VSB] ACTION ... warn` line per retry) and `unwrapDeleteStrict` (`platform/errors.ts`: only HTTP 404 or code `0x80040217` is "gone"; free text such as "does not exist" is a failure). After its step every row that answered "gone" is read back (`verifyGone`, `data/verifyGone.ts`: one read per 40 ids, `$select` of the key only, at most 4 reads in flight, a failed read is unconfirmed, never "gone"). A row with `confirm: true` that was deleted is read back only when `verifyDeletes` is on. A row still present stops the plan with `DeleteNotConfirmedError` (entity set and count, never ids) inside `PlanError` | `verifyDeletes` for `confirm` rows only; the rest has no flag | yes. **Live for every Generators delete with the default flags** (section 3) |
+| DEL-3 | `listOpexCostIdsForBridges` (`data/generators.ts`): every bridge row of the type, chain members one level deep (rows whose parent cost is a head), any `statecode`. The type delete, the PV delete and the Replace loaders use it, so Replace re-links all ids. `loadOpexDependency` checks every active bridge row, not only the first | none | yes |
+| DEL-4 (allocations only) | With `parentOrder` on, an allocation delete carries `serialKey` = its land-lease cost id. The engine (`createSerialRunner`, `data/concurrency.ts`) runs writes with the same key one after another inside a `together()` group and other keys in parallel, waiting outside the group's gate | `parentOrder` (off) | yes, for allocations. The O&M head-before-period order is **not** built. `stopOnFailure` exists in the engine (`together(..., { stopOnFailure: true })`); no plan uses it |
+| DEL-5 | The rollback also undoes `maybeLanded` rows (a 404 on a row that never existed is harmless) and reports only the rows really left: `remainingRows(landed, lastDeleted())` (`rules.ts`, `Screen.tsx` `runRollback`). A failed delete job shows `Removed: ... Not removed: ... Press Delete again to finish.` (`plannedDeleteRows`, `deletePartialMessage`, `DELETE_PARTIAL_MSG`, `Screen.tsx` `runDelete`). A rollback whose rows are all gone but whose roll-up failed gets its own text | none (the rollback itself still needs `createRollback`, D115) | yes |
+| DEL-7(a) | Generators updates that must not re-create a row another user deleted are marked `guarded` (`guardedIf`): the type totals in the turbine save and the turbine delete, the type update of the status toggle, the sibling updates of apply-to-all (single-request path), and the O&M re-link updates of the two Replace follow-ups | `guardedUpdates` (off) | yes |
+| DEL-8 | `scripts/generators-orphans.mjs`, `npm run orphans:generators`. Read-only by default; offline with `--input <snapshot.json>`; live with the shell variables `DATAVERSE_URL` and `DATAVERSE_TOKEN`. `--apply` needs `--class`, `--manifest` and `--yes-delete` (or `--dry-run`); it reads the manifest ids back, refuses the whole run if one is not in the class, writes a JSON backup before the first delete, deletes 4 at a time, reads every id back. B4 and B8 are report-only. `--project <guid>` skips B4, B5, B6 and scopes B1, B2, B8 through the project's costs | none | yes |
+| Gate | `check:power` fails when the bulk actions are registered but `power.config.json` has no `environment_<id>` entry (UT-POWERSRC-001..006, commit `c2ba9c2`, recorded as fixed in file 13) | none | yes, earlier on the branch |
+
+`confirm: true` is set on the deletes of: a generator type, a PV module type, a land-lease cost, a unit (PV type's units and Replace's units), an inverter type, a substructure type, and BESS, hydrogen and substation rows. It is **not** set on allocation, O&M cost, bridge-row or single-turbine deletes. Those are read back only when they answer 404.
+
+Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/errors.unwrapDeleteStrict.test.ts`), UT-PLAN-916..921 (`data/verifyGone.test.ts`), UT-PLAN-922..947 (`data/executePlan.hardened.test.ts`), UT-CONC-020..024 (`data/concurrency.serial.test.ts`), UT-DELFLAG-001..003, UT-GEN-953..998 (`deleteHardening.test.ts`, `deleteHardeningRows.test.ts`), UT-GENDATA-OPEX-001..023 (`data/generators.opex.test.ts`, `hooks.deleteLoaders.test.ts`), UT-GEN-1100..1109 (`Screen.rollback.test.tsx`), UT-GEN-1110..1153 (`Screen.delete.test.tsx`), UT-ORPH-001..043 (`test/generatorsOrphans.test.ts`), UT-POWERSRC-001..006.
+
+### 2. Decisions of 16 Nov 2026
+
+1. **Tiered limits stay live.** Leaf deletes 16, cascade deletes 4 (D115 section 2 item 3), with `tieredDeletes: true`. The final numbers still come from the timed DEV test (D115 GB-13). Every other `GENERATORS_DELETE` flag is `false` until its own DEV check passes; flipping one is its own change with the DEV result recorded here (the rule of D115 section 2 item 8).
+2. **Replace stays delete-and-recreate for now.** The create-first saga (DEL-6) is not built; it waits for the answers to product questions 1 and 6.
+3. **DEV-dependent items wait for the DEV session:** DEL-0 (the facts), the DEL-4 timing, the `verifyDeletes` and `guardedUpdates` checks.
+4. **The eight product questions of the plan (section 6) are open:**
+   1. Should the old out-of-country type stay until the approval of its replacement?
+   2. Is it intended that an inactive type with O&M contracts is deleted with its contracts, while an active one is blocked?
+   3. Should deleting the last turbine of a project with all-WTG land-lease contracts delete those contracts?
+   4. What happens to allocations with no turbine (delete, re-link, keep), and who signs off the orphan report?
+   5. Is "press Delete again to finish" acceptable after a half-finished type delete?
+   6. Is a new Replace type that is invisible (inactive) for a few seconds acceptable, with the old type kept on failure?
+   7. Is "your change was not saved, reload" (one extra read per update) acceptable, or must the second user's save win?
+   8. May the managed solution change (decline flow, relationship cascade)?
+
+### 3. DIVERGENCES from the canvas
+
+| # | Canvas | Code app (flag) |
+|---|---|---|
+| 1 | A delete is one request; an error is final; 404 or "does not exist" counts as done and nothing is read back | **DIVERGENCE (live, no flag, every Generators delete):** every delete goes through the hardened path with the default flags: up to 3 tries on 429, 503 with `Retry-After`, 500, 504 and network errors; only 404 or `0x80040217` counts as gone; every row that answered "gone" is read back (one read per 40 ids) and a row still present fails the plan. Extra requests exist only where a delete answered 404 (and, with `verifyDeletes` on, for `confirm` rows) |
+| 2 | A delete that fails part-way shows one error and says nothing about what was removed | **DIVERGENCE:** the delete jobs add `Removed: ... Not removed: ... Press Delete again to finish.` after the job's own error. The text is new (`DELETE_PARTIAL_MSG`); nothing is added when every attempted row went, the plan was refused or never ran |
+| 3 | A failed save leaves what landed and says nothing more | **DIVERGENCE (with D115 `createRollback`):** the rollback also undoes rows that may have landed, and when it fails it names only the rows really left (after its own deletes), shows its own error (cut at 240 characters), and keeps **Retry cleanup** on the reduced list. D115 listed this as an open limit; it is now wired |
+| 4 | Type delete and Replace clean the O&M costs of the first bridge row only (S7) | **DIVERGENCE:** all bridge rows and their chain members, any status. The canvas reads the first bridge row only (plan claim 2); the Replace loader re-links all of them |
+| 5 | Allocation deletes of one land-lease cost run one after another | **DIVERGENCE (`parentOrder`, off):** with it on, deletes of allocations that share a cost run one after another and other costs in parallel |
+| 6 | Updates patch without a version check (a PATCH without `If-Match` re-creates a deleted row) | **DIVERGENCE (`guardedUpdates`, off):** the listed updates read the row first and refuse when it is gone, with the existing "record gone" text |
+
+### 4. Risks and mitigations
+
+| # | Risk | Mitigation / verification |
+|---|---|---|
+| R1 | A hardened delete is live for every user with nothing run on DEV: the retry, the strict gone-check and the read-back have only been tested against mocks | DEL-0 and DT-01..DT-05 of the DEV test plan; the change is a code revert (no flag), so run those cases before the next DEV push |
+| R2 | A retry of a delete that already worked answers 404 and is read back as gone: correct, but a wrong entity set would answer 404 for every id | The read-back reads the same entity set; `verifyGone` throws for an unregistered set; DT-04 reads the 404 lines |
+| R3 | `Retry-After` may not reach the code on an SDK error (location unknown); a 429 then waits 1 s, 2 s | DEL-0 captures a real 429 or marks it Not observed |
+| R4 | The text of a lock timeout or deadlock is not captured, so it is not a retry class unless it arrives as 500, 504 or without a status | DEL-0 step 3 records it; add it to `retry.ts` only then |
+| R5 | `confirm: true` does nothing while `verifyDeletes` is off, so types and costs are read back only after a 404 | Decide the flag after DT-06 |
+| R6 | The orphan script's filters never ran: `eq null` on lookup columns, `or` chains of 40 ids, `vsb_allwtgallocated ne true` (B8) | DEL-0 step 1 runs it read-only first; `--apply` stays behind the guards of section 1 |
+| R7 | Whether deleting a type nulls the required allocation lookup is unknown (it decides whether S1 allocations can exist at all) | DEL-0 step 2 |
+| R8 | `parentOrder` may make shared-cost deletes slower | DT-07 times it before the flag changes |
+| R9 | Two users: the version check of DEL-7(b) is not built, so a stale save without the guard flag can still re-create a row | `guardedUpdates` after DT-16; the rest waits for question 7 |
+| R10 | The rollback of an out-of-country type after the approval request started is still not covered (D115 section 8) | unchanged |
+
+### 5. Verification still owed
+
+`GENERATORS-DELETE-DEV-TEST-PLAN.md`: DEL-0 (read-only queries B1 to B8, the HTTP result of deleting a type that has an allocation, the duplicate-bridge query, a captured 429 or lock text, `statecode` on create), then DT-01 onward (hardened retry, the gone read-back and `DeleteNotConfirmedError`, `serialKey` timing with 20 turbines and 3 shared costs, the tier limits 4, 8 and 16, all-bridge clean-up, the partial-delete message, rollback leftovers, guarded updates with two browsers, the orphan report and a guarded `--apply`). Until it has run: no flag is flipped, nothing goes to DEV, and no package is called done. The E2E parity suite was not run (not asked for this change).
+
+### 6. Not built and known limits
+
+- **Not built:** DEL-0 (needs the DEV session); DEL-6 (Replace create-first saga, needs the answers to questions 1 and 6); DEL-7(b) (the `versionnumber` check); DEL-9 (server-side options, needs the answer to question 8); O&M head and period ordering; ordering the rollback's allocation deletes by parent (a `LandedRow` has no parent id); any plan use of `stopOnFailure`; a roll-up-only retry.
+- **Texts moved (review fixes, 16 Nov 2026):** `ROLLBACK_MSG` in `rules.ts` now holds `progress`, `noProject`, `totalsFailed` and the new `maybeLeft` ("Some rows of the failed save may not have been removed. Press Retry cleanup to check and remove them.", NEW, no canvas equivalent), and `rules.ts` exports `ROLLBACK_DETAIL_MAX`. The leftover text follows the real counts of certain and maybe-landed rows.
+- **Wording (fixed):** `deletePartialMessage` and `describeLeftovers` name inverter, substructure, BESS, hydrogen and substation rows ("inverter type", "substructure type", "BESS row", "hydrogen row", "substation row"); only an unknown entity set stays "other row".
+- **Review fixes (independent review of 16 Nov 2026, no blocker):**
+  - A delete that fails with no HTTP status is retried once (2 tries in all). 429, 500, 504 and 503 with `Retry-After` keep 3 tries (`MAX_NO_STATUS_TRIES`).
+  - The "Removed ... Not removed ... Press Delete again to finish." text is added only when at least one row was really deleted; when nothing was deleted the original error stands (a 403 cannot be fixed by pressing again).
+  - `listOpexCostIdsForBridges` reads through a pool of 4. The loaders carry `DIVERGENCE:` comments for the all-bridge reads.
+  - The orphan script is fail-closed: a lookup column missing from a row is not an orphan (counted as unreadable); every request refuses redirects; the DELETE sends `If-Match` with the etag of the read-back when the row has one (a 412 is counted as "changed since check" and the row is not deleted, exit code 1); a phantom type (B7) that still has turbines or bridge rows is skipped.
+  - Still open from that review, accepted for now: a read-back that fails after a 404 reports the row as not deleted although it was removed (fail-closed); a row the user cannot read looks gone; a wrong but registered entity set would pass the gone check; `stopOnFailure` and `listOpexCostIds` have no production caller; `knip` reports 39 unused files against the recorded baseline of 36.
+- **Open from D115 section 8, still true:** the transport has no bisection of a failed chunk, and a job that finishes after a project change can still put its error on the new project.
+- **Nothing has run against DEV.** The tiered limits (live since D115) and the hardened path are therefore both unmeasured live.

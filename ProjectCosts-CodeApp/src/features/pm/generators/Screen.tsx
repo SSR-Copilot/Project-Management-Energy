@@ -84,7 +84,8 @@ import {
   pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
   selectedIn, selectionAfterAddPv, selectionAfterAddWtg, showsPermissionChip, simpleCardValues,
   simpleFormDefaults, simpleSaveProgressText, statusLabel,
-  ROLLBACK_MSG, describeLeftovers, planRollbackCreate, rollbackApplies, substructureCardValues,
+  ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
+  rollbackApplies, substructureCardValues,
   substructureCostNoteVisible, toggleExpanded, toggleSelection, turbineFormDefaults,
   turbineHeightBlocksSave, turbinePanelPrefix, turbinePanelTitle, turbinePanelTotalHeight,
   turbineSaveProgressText, typeFieldBlankMessage, typeFilterMessage, typeSaveLabel, typeSaveProgressText,
@@ -784,26 +785,21 @@ const SIMPLE_PANEL: Record<SimpleCapacityFamily, {
 
 const isActive = (status: number) => status === CHOICE_PLANT.status.active;
 
-/**
- * Progress text of the rollback job (plan §9.3). NEW - no canvas equivalent (DIVERGENCE: the canvas leaves a
- * partly-saved type behind). It sits here, not in `rules.ts`'s `ROLLBACK_MSG`, because that file belongs to
- * another work package; move it there when convenient.
- */
-const ROLLBACK_PROGRESS_TEXT = "Undoing the failed save, please wait...";
-/**
- * Shown when a failed save should have been rolled back but the project is not loaded any more, so no rollback
- * plan can be built (review finding 3c). NEW - no canvas equivalent; it belongs in `rules.ts`'s `ROLLBACK_MSG`
- * next to `ROLLBACK_PROGRESS_TEXT`.
- */
-const ROLLBACK_NO_PROJECT_TEXT = "The failed save could not be undone automatically. Reload the page and check the generator types.";
-
 /** The rows a failed create left behind and what the rollback needs to remove them again (plan §9.3). */
 interface RollbackTarget {
   /** The project the failed save was for: a late result or a Retry for another project is dropped (review finding 3b). */
   projectId: string | undefined;
   rows: LandedRowRef[];
+  /** Rows of a failed bulk create that may or may not exist (`writes.lastMaybeLanded()`); undone too, a 404 on them is harmless (DEL-5). */
+  maybeLanded: LandedRowRef[];
   rollupRan: boolean;
   typeName: string | null;
+}
+/** What a failed delete job removed and did not remove (DEL-5), shown after the job's own error text. */
+interface DeletePartialNotice {
+  /** The project the delete ran for; it never shows on another project. */
+  projectId: string | undefined;
+  text: string;
 }
 /** The outcome of a rollback; `leftover` is set when the cleanup failed and **Retry cleanup** is offered. */
 interface RollbackNotice {
@@ -850,10 +846,12 @@ export default function GeneratorsScreen() {
    */
   const [rollbackNotice, setRollbackNotice] = useState<RollbackNotice | null>(null);
   const [createFailure, setCreateFailure] = useState<RollbackTarget | null>(null);
+  /** DEL-5: "Removed: ...; Not removed: ..." of a delete job that failed part-way, appended to its error. */
+  const [deletePartial, setDeletePartial] = useState<DeletePartialNotice | null>(null);
   /** The autonumber the failed save's new type got (read from the create's response), for the leftover message. */
   const createdTypeName = useRef<string | null>(null);
   /** Every place that cleared the write messages also forgets a pending rollback / leftover. */
-  const clearWrites = () => { writes.clear(); setRollbackNotice(null); setCreateFailure(null); };
+  const clearWrites = () => { writes.clear(); setRollbackNotice(null); setCreateFailure(null); setDeletePartial(null); };
   // A new project starts with a clean slate (state adjusted while rendering, not in an effect). Flag off: untouched.
   const [rollbackProjectId, setRollbackProjectId] = useState(projectId);
   if (rollbackProjectId !== projectId) {
@@ -875,6 +873,8 @@ export default function GeneratorsScreen() {
   const permissionRequested = useRef(false);
   /** The rollback notice of THIS project only (review finding 3b). */
   const shownNotice = rollbackNotice?.projectId === projectId ? rollbackNotice : null;
+  /** The partial-delete text of THIS project only, and only while the job's own error is on the bar. */
+  const shownPartial = deletePartial && deletePartial.projectId === projectId ? deletePartial.text : null;
   const perms = SERVER_DECIDES;
 
   /** Every model a card or the panel needs — the types' own rows win over the orderable catalogue. */
@@ -1312,7 +1312,33 @@ export default function GeneratorsScreen() {
   const run = (job: Parameters<typeof writes.run>[0]) => {
     setRollbackNotice(null);
     setCreateFailure(null);
+    setDeletePartial(null);
     return writes.run(job);
+  };
+
+  /**
+   * A delete job (DEL-5). When it FAILS, the rows its plan tried to delete (`plannedDeleteRows`) are set against the rows
+   * `usePlanWrite` reports as deleted (`lastDeleted()`), and `deletePartialMessage` says what was removed and what was not.
+   * The text follows the job's own error, never replaces it; nothing is added when every attempted row went (for example
+   * only the final roll-up failed), when NONE went (review F3 item 2), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
+   */
+  const runDelete = async (job: Parameters<typeof writes.run>[0], typeName: string | null = null) => {
+    const box: { ran: WritePlan | null } = { ran: null };
+    const plan = job.plan;
+    const ids = await run({
+      ...job,
+      plan: typeof plan === "function" ? async () => { box.ran = await plan(); return box.ran; } : (box.ran = plan),
+    });
+    // A refused plan sent nothing: there is no partial state to describe.
+    // Review F3 item 2: and nothing when no row was deleted at all (the original error stands; "press again" would mislead).
+    if (ids === null && box.ran && !box.ran.refusedReason) {
+      const deleted = writes.lastDeleted();
+      const text = deleted.length > 0
+        ? deletePartialMessage({ attempted: plannedDeleteRows(box.ran), deleted, typeName })
+        : null;
+      if (text) setDeletePartial({ projectId, text });
+    }
+    return ids;
   };
 
   /**
@@ -1320,8 +1346,9 @@ export default function GeneratorsScreen() {
    * `writes.run` like any other, so it traces (rule 23) and blocks the commands while it runs. The engine treats a
    * delete answering 404 as already gone, so running it again over the same rows is safe.
    * Success: the original reason plus `ROLLBACK_MSG.undone`. Failure or refusal: `ROLLBACK_MSG.leftover`, which says
-   * what is left, and the **Retry cleanup** button. The engine does not report which deletes landed before a failure,
-   * so the leftover is every recorded row the cleanup was asked to delete (a row already gone is a 404 on retry).
+   * what is left, and the **Retry cleanup** button. DEL-5: the leftover is the recorded rows minus the ones the failed
+   * rollback did delete (`writes.lastDeleted()`), so Retry works on the reduced list; with nothing left but a failed
+   * roll-up the message says so and offers no retry.
    */
   const runRollback = async (target: RollbackTarget, reason: string | null) => {
     // A rollback is already running (double click, double effect): never start a second one.
@@ -1331,16 +1358,22 @@ export default function GeneratorsScreen() {
     if (!planProject) {
       setRollbackNotice({
         projectId: target.projectId, leftover: null,
-        text: reason ? `${reason} ${ROLLBACK_NO_PROJECT_TEXT}` : ROLLBACK_NO_PROJECT_TEXT,
+        text: reason ? `${reason} ${ROLLBACK_MSG.noProject}` : ROLLBACK_MSG.noProject,
       });
       return;
     }
     rollbackInFlight.current = true;
     setRollbackNotice(null);
     try {
+      // The rollback's own error text, caught as `usePlanWrite` builds it (the shared bar is only re-rendered later).
+      const own: { detail: string | null } = { detail: null };
       const done = await writes.run({
-        progress: ROLLBACK_PROGRESS_TEXT,
-        plan: planRollbackCreate({ project: planProject, landed: target.rows, rollupRan: target.rollupRan, remainingTypes: types }),
+        progress: ROLLBACK_MSG.progress,
+        errorText: (detail) => { own.detail = detail; return detail; },
+        plan: planRollbackCreate({
+          project: planProject, landed: target.rows, maybeLanded: target.maybeLanded, rollupRan: target.rollupRan,
+          remainingTypes: types,
+        }),
       });
       // The project changed while the rollback ran: its late result must not show on the new project.
       if (currentProjectId.current !== target.projectId) {
@@ -1348,13 +1381,29 @@ export default function GeneratorsScreen() {
         writes.clear();
         return;
       }
-      setRollbackNotice(done !== null
-        ? { projectId: target.projectId, text: reason ? `${reason} ${ROLLBACK_MSG.undone}` : ROLLBACK_MSG.undone, leftover: null }
-        : {
-          projectId: target.projectId,
-          text: ROLLBACK_MSG.leftover(describeLeftovers(target.rows, { typeName: target.typeName })),
-          leftover: { ...target, reason },
-        });
+      if (done !== null) {
+        setRollbackNotice({ projectId: target.projectId, text: reason ? `${reason} ${ROLLBACK_MSG.undone}` : ROLLBACK_MSG.undone, leftover: null });
+        return;
+      }
+      // DEL-5: the rows the failed rollback did delete are not left over; Retry cleanup works on what remains.
+      const deleted = writes.lastDeleted();
+      const rows = remainingRows(target.rows, deleted);
+      const maybeLanded = remainingRows(target.maybeLanded, deleted);
+      // Review F3 item 4: certain rows -> the full list; only maybe-landed rows -> "may not have been removed" (Retry stays);
+      // the totals text only when BOTH lists are empty (the roll-up alone failed).
+      const base = rows.length > 0
+        ? ROLLBACK_MSG.leftover(describeLeftovers(rows, { typeName: target.typeName }))
+        : maybeLanded.length > 0 ? ROLLBACK_MSG.maybeLeft : ROLLBACK_MSG.totalsFailed;
+      const detail = own.detail?.trim() ?? null;
+      const shownDetail = detail && detail !== base
+        ? (detail.length > ROLLBACK_DETAIL_MAX ? `${detail.slice(0, ROLLBACK_DETAIL_MAX)}...` : detail)
+        : null;
+      setRollbackNotice({
+        projectId: target.projectId,
+        text: shownDetail ? `${base} ${shownDetail}` : base,
+        // Unconfirmed rows still to undo keep the retry open; with nothing left to delete there is nothing to retry.
+        leftover: rows.length > 0 || maybeLanded.length > 0 ? { ...target, rows, maybeLanded, reason } : null,
+      });
     } finally {
       rollbackInFlight.current = false;
     }
@@ -1368,7 +1417,11 @@ export default function GeneratorsScreen() {
   const queueRollback = (scenario: RollbackScenario, ids: readonly string[] | null, rollupRan: boolean) => {
     if (ids !== null || !GENERATORS_BULK.createRollback || !rollbackApplies(scenario)) return;
     const rows = [...writes.lastLanded()];
-    if (rows.length > 0) setCreateFailure({ projectId, rows, rollupRan, typeName: createdTypeName.current });
+    // DEL-5: rows of a failed bulk create that may exist are undone as well (the engine treats a 404 on a delete as gone).
+    const maybeLanded = [...writes.lastMaybeLanded()];
+    if (rows.length > 0 || maybeLanded.length > 0) {
+      setCreateFailure({ projectId, rows, maybeLanded, rollupRan, typeName: createdTypeName.current });
+    }
   };
   useEffect(() => {
     if (!createFailure || writes.progress !== null || startedFailure.current === createFailure) return;
@@ -1733,7 +1786,7 @@ export default function GeneratorsScreen() {
       case "heightTurbine": await saveTurbine(true); return;
       case "deleteType": {
         const typeTurbines = turbinesByType.get(d.type.id) ?? [];
-        const ok = await run({
+        const ok = await runDelete({
           progress: WRITE_MSG.working, success: WRITE_MSG.typeDeleted, errorText: WRITE_ERROR.typeDelete,
           plan: async (): Promise<WritePlan> => {
             // D97 — `If(Not(IsBlank(FlowRunId)), Requestpermissioncancellation.Run(…))` (Y:15659), before any delete.
@@ -1744,14 +1797,14 @@ export default function GeneratorsScreen() {
               allocationCountByCost: inputs.countByCost, opexCostIds: inputs.opexCostIds,
             });
           },
-        });
+        }, d.type.name);
         if (ok) setSelection(defaultSelection(lists(), d.type.id));
         return;
       }
       case "deleteTurbine": {
         const type = types.find((t) => t.id === d.turbine.typeId);
         if (!type) return;
-        await run({
+        await runDelete({
           progress: WRITE_MSG.working, success: WRITE_MSG.turbineDeleted, errorText: WRITE_ERROR.turbineDelete,
           plan: async (): Promise<WritePlan> => {
             const alloc = await loadAllocations([d.turbine.id]);
@@ -1775,7 +1828,7 @@ export default function GeneratorsScreen() {
       case "deleteSimple": {
         const f = d.family;
         if (f === "pv") {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working, success: PV_MSG.deleted, errorText: pvDeleteErrorText,
             // G2 — the unit, its land lease and the O&M costs go first, as the confirmation says.
             plan: async (): Promise<WritePlan> => {
@@ -1789,10 +1842,10 @@ export default function GeneratorsScreen() {
                 allocations: inputs.allocations, allocationCountByCost: inputs.countByCost, opexCostIds: inputs.opexCostIds,
               });
             },
-          });
+          }, d.row.name);
           if (ok) setSelection(defaultSelection(lists(), d.row.id));
         } else if (f === "inverter" || f === "substructure") {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working,
             success: f === "inverter" ? WRITE_MSG.inverterDeleted : WRITE_MSG.substructureDeleted,
             errorText: f === "inverter" ? WRITE_ERROR.inverterDelete : WRITE_ERROR.substructureDelete,
@@ -1807,7 +1860,7 @@ export default function GeneratorsScreen() {
           });
           if (ok) setSelection(null);
         } else {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working,
             success: f === "storage" ? WRITE_MSG.storageDeleted : f === "hydrogen" ? WRITE_MSG.hydrogenDeleted : WRITE_MSG.substationDeleted,
             errorText: f === "storage" ? WRITE_ERROR.storageDelete : f === "hydrogen" ? WRITE_ERROR.hydrogenDelete : WRITE_ERROR.substationDelete,
@@ -2149,7 +2202,7 @@ export default function GeneratorsScreen() {
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
       </div>
 
-      <WriteFeedback progress={writes.progress} error={shownNotice?.text ?? writes.error} success={writes.success} testIdPrefix="generators" />
+      <WriteFeedback progress={writes.progress} error={shownNotice?.text ?? (writes.error && shownPartial ? `${writes.error} ${shownPartial}` : writes.error)} success={writes.success} testIdPrefix="generators" />
       {shownNotice?.leftover ? (
         // NEW - no canvas equivalent (DIVERGENCE, plan §9.3): the cleanup of a failed save did not finish.
         <Button

@@ -17,6 +17,7 @@
     "verify": "node scripts/check-power-sources.mjs && npm run typecheck && npm run lint && node scripts/check-control-labels.mjs && node scripts/check-canvas-identities.mjs && vitest run && npm run build",
     "check:canvas": "node scripts/check-canvas-identities.mjs",
     "check:power": "node scripts/check-power-sources.mjs",
+    "orphans:generators": "node scripts/generators-orphans.mjs",
     "e2e:auth:codeapp": "node e2e/auth.mjs codeapp",
     "e2e:auth:canvas": "node e2e/auth.mjs canvas",
     "e2e:codeapp": "playwright test --project=codeapp",
