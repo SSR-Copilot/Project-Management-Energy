@@ -1676,6 +1676,24 @@ describe("D27 — write plans", () => {
     ]);
     expect(plan.writes[0]!.data).toEqual({ statecode: CHOICE_PLANT.status.inactive });
     expect(plan.writes[3]!.data).toEqual({ vsb_plantwtgcapacity: 0, vsb_plantwtgcost: 0 });
+    // Phase 1 (16 Nov 2026): the turbine updates are one concurrent group; the type and the roll-up stay single steps.
+    expect(plan.writes.map((w) => Boolean(w.concurrent))).toEqual([false, true, true, false]);
+  });
+
+  it("UT-GEN-170 status toggle: for N turbines one concurrent group of N, the type update first, the roll-up last, payloads unchanged", () => {
+    const type = genType({ id: "t1", status: CHOICE_PLANT.status.inactive, generatorsCapacity: 22.4, generatorsCost: 9 });
+    const turbines = Array.from({ length: 20 }, (_, i) => turbine(i + 1));
+    const plan = R.planToggleStatus({ project: P, type, turbines, allTypes: [type] });
+    const w = plan.writes;
+    expect(w).toHaveLength(22);
+    expect(w[0]).toMatchObject({ op: "update", entitySet: "vsb_generatortypeinprojects", id: "t1", data: { statecode: CHOICE_PLANT.status.active } });
+    expect(w[0]!.concurrent).toBeFalsy();
+    const group = w.slice(1, 21);
+    expect(group.every((x) => x.concurrent === true && x.entitySet === "vsb_generatorinprojects")).toBe(true);
+    expect(group.map((x) => x.id)).toEqual(turbines.map((t) => t.id));
+    expect(group.every((x) => JSON.stringify(x.data) === JSON.stringify({ statecode: CHOICE_PLANT.status.active }))).toBe(true);
+    expect(w[21]).toMatchObject({ op: "update", entitySet: "vsb_projects", id: P.id, data: { vsb_plantwtgcapacity: 22.4, vsb_plantwtgcost: 9 } });
+    expect(w[21]!.concurrent).toBeFalsy();
   });
 
   it("UT-GEN-124 the PV save (W6) and its second job; the PV delete re-costs the substructures (W7)", () => {
