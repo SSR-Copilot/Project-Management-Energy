@@ -48,7 +48,19 @@
  *
  * LANDED ROWS (rollback record, plan 9.3): `PlanResult.landed` / `PlanError.landed` list every row a create
  * made (single or bulk) as `{ entitySet, id }`, in landing order. A bulk create whose failure reports no
- * `landedIds` contributes nothing (the ids are unknown to the engine; the caller pre-generated them).
+ * `landedIds` contributes nothing to `landed`.
+ *
+ * MAYBE-LANDED ROWS (review fix F2): a failed `createMany` step may have created rows the backend cannot confirm
+ * (a network error, a timeout or a 500 can fail a request after Dataverse processed it; `retryDelay` in
+ * `generatorsBulk.ts` never retries those for that reason). The row ids are pre-generated, so on any failure of
+ * a createMany step, other than a fail-closed refusal (nothing sent), every row id of that step that is NOT
+ * confirmed landed is reported as `PlanError.maybeLanded` (`PlanResult.maybeLanded` is always empty). A row
+ * is never in both `landed` and `maybeLanded`. A rollback that deletes a maybe-landed row MUST treat 404 as
+ * "already gone" (as `unwrapDelete` does): the row may never have existed. No bisection is done to find out.
+ *
+ * DELETED ROWS (review fix F2): `PlanResult.deleted` / `PlanError.deleted` list the rows whose `delete` write
+ * succeeded (an already-gone 404 counts as deleted), in plan order, also on a part-way failure, so a screen can
+ * name only the real leftovers after a failed rollback.
  *
  * DIVERGENCE (no canvas equivalent; P-1 stale skip tokens): every write Dataverse ACCEPTS drops
  * the cached `countedPage` walks for its table via `invalidatePageTokens(write.entitySet)`. A
@@ -108,6 +120,10 @@ export interface PlanResult {
   createdRows: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /** Every row the plan's creates made (single and bulk), in landing order. */
   landed: LandedRow[];
+  /** Rows whose `delete` write succeeded (404 = already gone included), in plan order. */
+  deleted: LandedRow[];
+  /** Always empty on success: a createMany step that succeeded confirmed all its rows (see `PlanError.maybeLanded`). */
+  maybeLanded: LandedRow[];
 }
 
 /** A plan that stopped part-way. `done` writes were sent before `failedReason` failed. */
@@ -120,10 +136,18 @@ export class PlanError extends Error {
   readonly createdIds: readonly string[];
   /** Every row that landed BEFORE the failure (single and bulk creates), in landing order: what a rollback deletes. */
   readonly landed: readonly LandedRow[];
+  /**
+   * Row ids of a FAILED createMany step that are not confirmed landed: they may or may not exist (see the file
+   * header). Never overlaps `landed`. Deleting one must treat 404 as gone.
+   */
+  readonly maybeLanded: readonly LandedRow[];
+  /** Rows whose `delete` write succeeded before the failure (404 = already gone included), in plan order. */
+  readonly deleted: readonly LandedRow[];
 
   constructor(
     done: number, total: number, failedReason: string, cause: unknown, createdIds: readonly string[] = [],
     landed: readonly LandedRow[] = [],
+    extra: { maybeLanded?: readonly LandedRow[]; deleted?: readonly LandedRow[] } = {},
   ) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.name = "PlanError";
@@ -133,6 +157,8 @@ export class PlanError extends Error {
     this.cause = cause;
     this.createdIds = createdIds;
     this.landed = landed;
+    this.maybeLanded = extra.maybeLanded ?? [];
+    this.deleted = extra.deleted ?? [];
   }
 
   /** True when a bulk update found some of its rows gone (nothing was sent for that step). */
@@ -205,6 +231,13 @@ const primaryKeyOf = (entitySet: string): string => {
   return info.primaryKey;
 };
 
+/** The id a single write targets, with `CREATED_ROW_ID` / `createdRowRef` resolved against `createdIds`. */
+function targetIdOf(write: WritePlan["writes"][number], createdIds: readonly string[]): string | undefined {
+  return write.id === CREATED_ROW_ID
+    ? createdIds[createdIds.length - 1]
+    : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
+}
+
 /**
  * Sends one write and resolves to the id it created (a create) or `undefined`. `createdIds` are the
  * ids created by the plan's EARLIER steps, for `CREATED_ROW_ID` and `createdRowRef(n)`.
@@ -220,9 +253,7 @@ async function sendWrite(
   if (write.guarded && write.op !== "update") {
     throw new Error("only an update can be guarded (guarded: true on a create or delete is a bug in the plan)");
   }
-  const id = write.id === CREATED_ROW_ID
-    ? createdIds[createdIds.length - 1]
-    : write.id === undefined ? undefined : resolveRefs(write.id, createdIds);
+  const id = targetIdOf(write, createdIds);
   if (write.id === CREATED_ROW_ID && !id) {
     throw new Error("a write refers to a created row, but no create preceded it");
   }
@@ -299,9 +330,13 @@ function assertPlanShape(writes: readonly PlannedWrite[]): void {
   }
 }
 
-/** Runs one bulk step. Pushes what landed into `createdIds` / `landed`; resolves to the number of rows that landed. */
+/**
+ * Runs one bulk step. Pushes what landed into `createdIds` / `landed`; resolves to the number of rows that landed.
+ * `stepIds` receives the step's resolved row ids as soon as they are known (before anything is sent), so a failure
+ * can name the rows it cannot confirm.
+ */
 async function sendBulk(
-  write: PlannedWrite, operation: string, createdIds: string[], landed: LandedRow[],
+  write: PlannedWrite, operation: string, createdIds: string[], landed: LandedRow[], stepIds: string[],
 ): Promise<number> {
   const rows = write.rows ?? [];
   if (rows.length === 0) return 0;
@@ -309,6 +344,7 @@ async function sendBulk(
     id: resolveRefs(r.id, createdIds),
     data: resolveData(r.data as Record<string, unknown>, createdIds),
   }));
+  stepIds.push(...resolved.map((r) => r.id));
   const backend = getBulkBackend();
   const label = write.label ?? `${operation}: ${write.reason}`;
   if (write.op === "createMany") {
@@ -341,12 +377,15 @@ export async function executePlan(
   const createdIds: string[] = [];
   const createdRows: Record<string, Readonly<Record<string, unknown>>> = {};
   const landed: LandedRow[] = [];
+  const deleted: LandedRow[] = [];
+  const extra = (maybeLanded: readonly LandedRow[] = []) => ({ maybeLanded, deleted: [...deleted] });
   let done = 0;
   for (let i = 0; i < writes.length;) {
     const write = writes[i]!;
     if (isBulkWrite(write)) {
+      const stepIds: string[] = [];
       try {
-        done += await sendBulk(write, operation, createdIds, landed);
+        done += await sendBulk(write, operation, createdIds, landed, stepIds);
       } catch (cause) {
         if (cause instanceof BulkBatchError) {
           done += cause.rowsLanded;
@@ -362,7 +401,14 @@ export async function executePlan(
         if (cause instanceof BulkBackendValidationError && done === 0 && landed.length === 0) {
           throw new PlanRefusedError(cause.message);
         }
-        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed]);
+        // A refusal of the rows or a missing-rows guard sent nothing; any other failure of a createMany is ambiguous.
+        const nothingSent = cause instanceof BulkBackendValidationError || cause instanceof BulkRowsGoneError;
+        const confirmed = new Set(landed.map((r) => `${r.entitySet}|${r.id.toLowerCase()}`));
+        const maybe = write.op === "createMany" && !nothingSent
+          ? stepIds.filter((id) => !confirmed.has(`${write.entitySet}|${id.toLowerCase()}`))
+            .map((id) => ({ entitySet: write.entitySet, id }))
+          : [];
+        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed], extra(maybe));
       }
       i += 1;
       continue;
@@ -374,9 +420,13 @@ export async function executePlan(
           createdIds.push(newId);
           landed.push({ entitySet: write.entitySet, id: newId });
         }
+        if (write.op === "delete") {
+          const goneId = targetIdOf(write, createdIds);
+          if (goneId) deleted.push({ entitySet: write.entitySet, id: goneId });
+        }
         done += 1;
       } catch (cause) {
-        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed]);
+        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed], extra());
       }
       i += 1;
       continue;
@@ -400,6 +450,10 @@ export async function executePlan(
           createdIds.push(s.value);
           landed.push({ entitySet: run[k]!.entitySet, id: s.value });
         }
+        if (run[k]!.op === "delete") {
+          const goneId = targetIdOf(run[k]!, before);
+          if (goneId) deleted.push({ entitySet: run[k]!.entitySet, id: goneId });
+        }
         done += 1;
       } else if (!failure) {
         failure = { reason: run[k]!.reason, cause: s.reason };
@@ -407,8 +461,8 @@ export async function executePlan(
     });
     // Every write of the run was sent; `done` counts the ones that landed, and nothing after the
     // run is sent — the same "N of M changes had already been saved" a sequential stop reports.
-    if (failure) throw new PlanError(done, total, failure.reason, failure.cause, [...createdIds], [...landed]);
+    if (failure) throw new PlanError(done, total, failure.reason, failure.cause, [...createdIds], [...landed], extra());
     i = end;
   }
-  return { done, createdIds, createdRows, landed };
+  return { done, createdIds, createdRows, landed, deleted, maybeLanded: [] };
 }

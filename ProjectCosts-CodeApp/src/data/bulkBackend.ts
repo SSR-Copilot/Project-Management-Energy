@@ -1,9 +1,11 @@
 /**
  * The interface contract between the write-plan engine (`executePlan.ts`) and the Generators
- * bulk transport. The engine only imports the types and calls `getBulkBackend()`; the real
- * transport is `createGeneratorsBulkBackend` in `./generatorsBulk.ts`, installed by default. The
- * error classes live in `./bulkTypes.ts` and are re-exported here, so the transport can import
- * them without an import cycle.
+ * bulk transport. The engine only imports the types and calls `getBulkBackend()`. This file does NOT
+ * import the real transport (`createGeneratorsBulkBackend`, `./generatorsBulk.ts`): that would make every
+ * `executePlan` / `usePlanWrite` consumer (all admin and PM screens) load five generated services, the bulk
+ * sender and read `sessionStorage` at module load. Instead the module that owns the transport registers it as
+ * the default with `registerDefaultBulkBackend` (`./generators.ts` does, at module load). The error classes
+ * live in `./bulkTypes.ts` and are re-exported here, so the transport can import them without an import cycle.
  *
  * Rules (decisions of 16 Nov 2026, ProjectDocs/app-docs/GENERATORS-BULK-IMPLEMENTATION-PLAN.md §2, §9):
  *  - One call targets ONE entity set. A standard-table bulk request lands whole or not at all;
@@ -20,8 +22,6 @@
  *  - Failures throw `BulkBatchError` carrying exact row counts; the engine turns them into the
  *    "N of M changes had already been saved" message at ROW level.
  */
-
-import { createGeneratorsBulkBackend } from "./generatorsBulk";
 
 /** One row of a bulk call. `id` is client-generated (creates) or the existing key (updates). */
 export interface BulkRow {
@@ -55,20 +55,41 @@ export {
 } from "./bulkTypes";
 
 let backend: BulkBackend | null = null;
-/** The Generators transport, created on first use and kept (see `getBulkBackend`). */
+/** The registered default's factory (`registerDefaultBulkBackend`), or null when none was registered. */
+let defaultFactory: (() => BulkBackend) | null = null;
+/** The default backend, created from `defaultFactory` on first use and kept. */
 let defaultBackend: BulkBackend | null = null;
 
-/** Tests install fakes here; `null` restores the default (the real Generators transport). */
+/**
+ * Registers the backend `getBulkBackend()` falls back to when none is installed. The factory runs lazily on
+ * first use and its result is kept; registering again replaces the factory and drops the kept instance.
+ * `./generators.ts` registers `createGeneratorsBulkBackend` at module load.
+ */
+export function registerDefaultBulkBackend(factory: () => BulkBackend): void {
+  defaultFactory = factory;
+  defaultBackend = null;
+}
+
+/** Tests install fakes here; `null` restores the registered default (the real Generators transport, once registered). */
 export function setBulkBackend(next: BulkBackend | null): void {
   backend = next;
 }
 
 /**
- * The installed backend, else the real transport (`createGeneratorsBulkBackend`, `./generatorsBulk.ts`),
- * created lazily on first use so importing this file costs nothing and no call order matters.
+ * The installed backend, else the registered default (created lazily on first use, so no call order matters).
+ * With neither, it throws: a plan with a bulk step ran in a build that never loaded the module that registers
+ * a backend (a programmer error, not a runtime condition).
  */
 export function getBulkBackend(): BulkBackend {
   if (backend !== null) return backend;
-  defaultBackend ??= createGeneratorsBulkBackend();
+  if (defaultBackend === null) {
+    if (defaultFactory === null) {
+      throw new Error(
+        "No bulk backend is installed. Import `@/data/generators` (it registers the Generators transport) or call "
+        + "setBulkBackend(...) before a plan with a createMany / updateMany step runs.",
+      );
+    }
+    defaultBackend = defaultFactory();
+  }
   return defaultBackend;
 }
