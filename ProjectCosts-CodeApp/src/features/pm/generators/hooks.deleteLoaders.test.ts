@@ -45,7 +45,7 @@ describe("The delete and replace loaders read the O&M costs of every bridge row 
     expect(out.bridgeIds).toEqual([B1, B2, B3]);
     expect(out.opexCostIds).toEqual(["c1", "c2", "c3", "c4"]);
     expect(out.unitIds).toEqual(["t1"]);
-    expect(out.allocations).toEqual([{ id: "a1", unitIndex: 1, allWtgAllocated: true }]);
+    expect(out.allocations).toEqual([{ id: "a1", unitIndex: 1, allWtgAllocated: true, costId: "k1" }]);
   });
 
   it("UT-GENDATA-OPEX-023 A failed O&M read fails the loader (no silent empty list)", async () => {
