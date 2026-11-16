@@ -1776,7 +1776,8 @@ describe("D27 — PO answers: PV delete (G2), PV back-fill (G7)", () => {
       allocations: [{ id: "a1", costId: "c1" }, { id: "a2", costId: "c2" }], allocationCountByCost: { c1: 1, c2: 3 },
     });
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}:${w.id ?? ""}`)).toEqual([
-      "delete:vsb_landleaseprojectcosts:c1", "delete:vsb_landleaseallocationwtgs:a2", "delete:vsb_opexprojectcosts:o1",
+      // Phase 1B tiers: the leaf group (allocation, O&M cost) first, then the cascading land-lease cost, then the unit.
+      "delete:vsb_landleaseallocationwtgs:a2", "delete:vsb_opexprojectcosts:o1", "delete:vsb_landleaseprojectcosts:c1",
       "delete:vsb_generatorinprojects:u1", "delete:vsb_pvmoduletypeinprojects:a",
       `update:vsb_projects:${P.id}`, `update:vsb_projects:${P.id}`,
     ]);
@@ -2012,11 +2013,12 @@ describe("D27 G6 — Replace Generator / PV Module Type write plans (1.21.753)",
     expect(plan.writes.map((w) => `${w.op}:${w.entitySet}:${w.id ?? ""}`)).toEqual([
       "create:vsb_devicetypesinprojects:", "create:vsb_landleaseallocationwtgs:", "create:vsb_landleaseallocationwtgs:",
       "update:vsb_landleaseallocationwtgs:m1", "update:vsb_landleaseallocationwtgs:m2",
-      "delete:vsb_landleaseallocationwtgs:m3", "delete:vsb_landleaseallocationwtgs:aw", "update:vsb_opexprojectcosts:o1",
+      // Phase 1B: the O&M re-link stays in the creates-and-moves run; the old allocations go as their own leaf group after it.
+      "update:vsb_opexprojectcosts:o1", "delete:vsb_landleaseallocationwtgs:m3", "delete:vsb_landleaseallocationwtgs:aw",
     ]);
     expect(plan.writes[3]!.data).toEqual({ "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(n1)" });
     expect(plan.writes[4]!.data).toEqual({ "vsb_GeneratorInProject@odata.bind": "/vsb_generatorinprojects(n2)" });
-    expect(plan.writes[7]!.data).toEqual({ "vsb_DeviceTypeInProject@odata.bind": "/vsb_devicetypesinprojects(@created#0)" });
+    expect(plan.writes[5]!.data).toEqual({ "vsb_DeviceTypeInProject@odata.bind": "/vsb_devicetypesinprojects(@created#0)" });
     expect(plan.unmatchedCount).toBe(1);
     const existing = R.planReplaceGeneratorTypeFollowUp({
       project: P, newTypeId: "tN", newTypeName: "x", existingBridgeId: "b9", newUnits: [], inputs: inputs(),
