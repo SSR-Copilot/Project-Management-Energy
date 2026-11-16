@@ -88,6 +88,23 @@ export async function forEachLimit<T>(
 export const DELETE_CONCURRENCY = 16;
 
 /**
+ * Tiered delete concurrency for a plan's `together(deletes, { limit })` group (Generators bulk programme, 1B).
+ *
+ * LEAF = deletes of rows nothing hangs off: land-lease allocations, O&M costs, units, bridge rows and turbines
+ * deleted one by one. 16 at once, as `DELETE_CONCURRENCY`.
+ *
+ * CASCADE = deletes whose cascade locks and updates child rows: land-lease costs and generator types. Held to 4
+ * at once, because overlapping cascades on the same parents measured 6-11 s per request in D51.
+ *
+ * Starting values; the timed DEV test (plan 9.4) sets the final numbers. Each group builds its own `createGate`,
+ * and `executePlan` runs groups one after another, so the figure is a per-group ceiling: a caller must not run two
+ * groups at the same time, or the in-flight total would be their sum (the 52-per-user limit still has headroom for
+ * 16 + reads, not for 16 + 16 + 8).
+ */
+export const LEAF_DELETE_CONCURRENCY = 16;
+export const CASCADE_DELETE_CONCURRENCY = 4;
+
+/**
  * A limit shared by several concurrent pools: `gate(task)` runs `task` once fewer than `limit`
  * gated tasks are in flight. `mapLimit` bounds ONE pool; a save that runs several pools at once
  * (Add Cost from Table, D51) needs one ceiling across all of them to stay under the 52-request
