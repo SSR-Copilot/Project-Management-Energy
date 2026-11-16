@@ -30,6 +30,26 @@
  * `WRITE_CONCURRENCY` (8) requests in flight (6 Nov 2026): a WTG type's turbines can number 200, and
  * Dataverse cuts a user off at 52 concurrent requests with no retry on the write path (`concurrency.ts`).
  *
+ * TIERED GROUPS (Generators bulk programme, 1B): `together(writes, { limit })` gives a group its own in-flight
+ * limit (default 8). Each `together()` call is its own group (`concurrencyGroup`): a run is the consecutive
+ * concurrent writes of ONE group (hand-built `concurrent` writes without a group merge as before), with its own
+ * gate. Adjacent groups never merge and run one after the other, so the limit is per run, never summed.
+ *
+ * BULK STEPS (plan 2.1): a `createMany` / `updateMany` write is ONE step in plan order, sent through
+ * `getBulkBackend()` (`data/bulkBackend.ts`; the backend logs each request, so the engine adds no `[VSB]` line).
+ * `createdRowRef` placeholders are substituted per row (in `data` string values and in the row `id`) from the
+ * ids created by EARLIER steps; the created ids are appended to `createdIds` in row order; the page-token cache
+ * of the entity set is invalidated once per bulk step. A bulk step inside a `together()` group (or marked
+ * `concurrent` / `guarded`) is a programmer error and throws BEFORE anything is sent. Counting is per ROW for
+ * bulk steps: `done` / `total` of `PlanResult` and `PlanError` are rows (a single write counts 1), so the
+ * "N of M changes had already been saved" sentence stays true. Failures: `BulkBatchError` -> `PlanError` (done
+ * grows by the rows that landed); `BulkRowsGoneError` -> `PlanError` whose `rowsGone` is true;
+ * `BulkBackendValidationError` -> `PlanRefusedError` when nothing at all had landed yet, else `PlanError`.
+ *
+ * LANDED ROWS (rollback record, plan 9.3): `PlanResult.landed` / `PlanError.landed` list every row a create
+ * made (single or bulk) as `{ entitySet, id }`, in landing order. A bulk create whose failure reports no
+ * `landedIds` contributes nothing (the ids are unknown to the engine; the caller pre-generated them).
+ *
  * DIVERGENCE (no canvas equivalent; P-1 stale skip tokens): every write Dataverse ACCEPTS drops
  * the cached `countedPage` walks for its table via `invalidatePageTokens(write.entitySet)`. A
  * paging cookie encodes the last row's sort key and primary key, so once a create, an update of a
@@ -50,8 +70,17 @@ import { dataSourcesInfo } from "../../.power/schemas/appschemas/dataSourcesInfo
 import { isRecordGone, unwrap, unwrapDelete } from "@/platform/errors";
 import { logData } from "@/platform/requestLog";
 import { invalidatePageTokens, updateRecordIfExists, type GuardedUpdateClient } from "./client";
+import {
+  BulkBackendValidationError, BulkBatchError, BulkRowsGoneError, getBulkBackend, type BulkRow,
+} from "./bulkBackend";
 import { createGate, WRITE_CONCURRENCY } from "./concurrency";
-import { CREATED_ROW_ID, type WritePlan } from "./writePlan";
+import { changeCount, CREATED_ROW_ID, isBulkWrite, type PlannedWrite, type WritePlan } from "./writePlan";
+
+/** A row a create made: kept so a failed save can be rolled back (delete these, last first). The exact shape is a contract. */
+export interface LandedRow {
+  entitySet: string;
+  id: string;
+}
 
 /** The three SDK calls a plan needs — the `getClient` shape, narrowed so tests can stub it. */
 export interface PlanClient {
@@ -67,7 +96,7 @@ export interface PlanClient {
 export type GuardedPlanClient = PlanClient & Pick<GuardedUpdateClient, "retrieveMultipleRecordsAsync">;
 
 export interface PlanResult {
-  /** Writes sent successfully. */
+  /** Changes sent successfully: one per single write, one per ROW of a bulk step. */
   done: number;
   /** The ids returned by the plan's creates, in order. */
   createdIds: string[];
@@ -77,6 +106,8 @@ export interface PlanResult {
    * so server-generated columns — an autonumber `vsb_name` — arrive with the create and need no read-back.
    */
   createdRows: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Every row the plan's creates made (single and bulk), in landing order. */
+  landed: LandedRow[];
 }
 
 /** A plan that stopped part-way. `done` writes were sent before `failedReason` failed. */
@@ -87,9 +118,12 @@ export class PlanError extends Error {
   override readonly cause: unknown;
   /** Ids the plan's creates returned BEFORE the failure (rows that exist although the plan failed). */
   readonly createdIds: readonly string[];
+  /** Every row that landed BEFORE the failure (single and bulk creates), in landing order: what a rollback deletes. */
+  readonly landed: readonly LandedRow[];
 
   constructor(
     done: number, total: number, failedReason: string, cause: unknown, createdIds: readonly string[] = [],
+    landed: readonly LandedRow[] = [],
   ) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.name = "PlanError";
@@ -98,6 +132,17 @@ export class PlanError extends Error {
     this.failedReason = failedReason;
     this.cause = cause;
     this.createdIds = createdIds;
+    this.landed = landed;
+  }
+
+  /** True when a bulk update found some of its rows gone (nothing was sent for that step). */
+  get rowsGone(): boolean {
+    let current: unknown = this.cause;
+    for (let depth = 0; depth < 5 && current; depth += 1) {
+      if (current instanceof BulkRowsGoneError) return true;
+      current = (current as { cause?: unknown }).cause;
+    }
+    return false;
   }
 
   /** True when the failed write was a guarded update whose row was gone (nothing was sent for it). */
@@ -181,11 +226,15 @@ async function sendWrite(
   if (write.id === CREATED_ROW_ID && !id) {
     throw new Error("a write refers to a created row, but no create preceded it");
   }
+  const kind = write.op;
+  if (kind === "createMany" || kind === "updateMany") {
+    throw new Error(`"${write.reason}": a bulk operation is not a single write (programmer error in the plan)`);
+  }
   const data = resolveData(write.data, createdIds);
   const label = write.label ?? `${operation}: ${write.reason}`;
   const t0 = performance.now();
   /** One DATA line per write (a guarded update logs itself inside `updateRecordIfExists`). */
-  const logged = () => logData({ kind: write.op, target: write.entitySet, rows: 1, ms: performance.now() - t0, ok: true });
+  const logged = () => logData({ kind, target: write.entitySet, rows: 1, ms: performance.now() - t0, ok: true });
   if (write.op === "create") {
     const key = primaryKeyOf(write.entitySet);
     const row = unwrap(
@@ -238,6 +287,47 @@ async function sendWrite(
   return undefined;
 }
 
+/** Throws (before anything is sent) for a bulk step that is marked concurrent / guarded or has no rows array. */
+function assertPlanShape(writes: readonly PlannedWrite[]): void {
+  for (const w of writes) {
+    if (!isBulkWrite(w)) continue;
+    if (w.concurrent) {
+      throw new Error(`"${w.reason}": a bulk operation (${w.op}) cannot be part of a together() group (programmer error in the plan)`);
+    }
+    if (w.guarded) throw new Error(`"${w.reason}": guarded does not apply to a bulk operation (updateMany is always guarded by the backend)`);
+    if (!Array.isArray(w.rows)) throw new Error(`"${w.reason}": a bulk operation needs its rows (programmer error in the plan)`);
+  }
+}
+
+/** Runs one bulk step. Pushes what landed into `createdIds` / `landed`; resolves to the number of rows that landed. */
+async function sendBulk(
+  write: PlannedWrite, operation: string, createdIds: string[], landed: LandedRow[],
+): Promise<number> {
+  const rows = write.rows ?? [];
+  if (rows.length === 0) return 0;
+  const resolved: BulkRow[] = rows.map((r) => ({
+    id: resolveRefs(r.id, createdIds),
+    data: resolveData(r.data as Record<string, unknown>, createdIds),
+  }));
+  const backend = getBulkBackend();
+  const label = write.label ?? `${operation}: ${write.reason}`;
+  if (write.op === "createMany") {
+    const result = await backend.createMany(write.entitySet, resolved, { label });
+    invalidatePageTokens(write.entitySet);
+    for (const id of result.ids) {
+      createdIds.push(id);
+      landed.push({ entitySet: write.entitySet, id });
+    }
+    if (result.ids.length !== rows.length || result.ids.some((id) => typeof id !== "string" || !id)) {
+      throw new CreatedIdMissingError(label);
+    }
+    return rows.length;
+  }
+  await backend.updateMany(write.entitySet, resolved, { label });
+  invalidatePageTokens(write.entitySet);
+  return rows.length;
+}
+
 export async function executePlan(
   plan: WritePlan,
   operation: string,
@@ -246,34 +336,70 @@ export async function executePlan(
   if (plan.refusedReason) throw new PlanRefusedError(plan.refusedReason);
 
   const writes = plan.writes;
+  assertPlanShape(writes);
+  const total = writes.reduce((n, w) => n + changeCount(w), 0);
   const createdIds: string[] = [];
   const createdRows: Record<string, Readonly<Record<string, unknown>>> = {};
+  const landed: LandedRow[] = [];
   let done = 0;
   for (let i = 0; i < writes.length;) {
     const write = writes[i]!;
-    if (!write.concurrent) {
+    if (isBulkWrite(write)) {
       try {
-        const newId = await sendWrite(write, operation, client, createdIds, createdRows);
-        if (newId !== undefined) createdIds.push(newId);
-        done += 1;
+        done += await sendBulk(write, operation, createdIds, landed);
       } catch (cause) {
-        throw new PlanError(done, writes.length, write.reason, cause, [...createdIds]);
+        if (cause instanceof BulkBatchError) {
+          done += cause.rowsLanded;
+          if (cause.rowsLanded > 0) invalidatePageTokens(write.entitySet);
+          if (write.op === "createMany") {
+            for (const id of cause.landedIds) {
+              createdIds.push(id);
+              landed.push({ entitySet: write.entitySet, id });
+            }
+          }
+        }
+        // Nothing at all reached Dataverse and the backend refused the rows (fail closed): a refusal, not a part-way stop.
+        if (cause instanceof BulkBackendValidationError && done === 0 && landed.length === 0) {
+          throw new PlanRefusedError(cause.message);
+        }
+        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed]);
       }
       i += 1;
       continue;
     }
-    // A run of consecutive `concurrent` writes: sent together, awaited as one step. Each one sees
-    // the ids created BEFORE the run; the run's own creates join `createdIds` in plan order.
+    if (!write.concurrent) {
+      try {
+        const newId = await sendWrite(write, operation, client, createdIds, createdRows);
+        if (newId !== undefined) {
+          createdIds.push(newId);
+          landed.push({ entitySet: write.entitySet, id: newId });
+        }
+        done += 1;
+      } catch (cause) {
+        throw new PlanError(done, total, write.reason, cause, [...createdIds], [...landed]);
+      }
+      i += 1;
+      continue;
+    }
+    // A run of consecutive `concurrent` writes with the same limit: sent together, awaited as one step. Each one
+    // sees the ids created BEFORE the run; the run's own creates join `createdIds` in plan order.
+    const limit = write.concurrencyLimit ?? WRITE_CONCURRENCY;
     let end = i;
-    while (end < writes.length && writes[end]!.concurrent) end += 1;
+    while (
+      end < writes.length && writes[end]!.concurrent && writes[end]!.concurrencyGroup === write.concurrencyGroup
+      && (writes[end]!.concurrencyLimit ?? WRITE_CONCURRENCY) === limit
+    ) end += 1;
     const run = writes.slice(i, end);
     const before = [...createdIds];
-    const gate = createGate(WRITE_CONCURRENCY);
+    const gate = createGate(limit);
     const settled = await Promise.allSettled(run.map((w) => gate(() => sendWrite(w, operation, client, before, createdRows))));
     let failure: { reason: string; cause: unknown } | undefined;
     settled.forEach((s, k) => {
       if (s.status === "fulfilled") {
-        if (s.value !== undefined) createdIds.push(s.value);
+        if (s.value !== undefined) {
+          createdIds.push(s.value);
+          landed.push({ entitySet: run[k]!.entitySet, id: s.value });
+        }
         done += 1;
       } else if (!failure) {
         failure = { reason: run[k]!.reason, cause: s.reason };
@@ -281,8 +407,8 @@ export async function executePlan(
     });
     // Every write of the run was sent; `done` counts the ones that landed, and nothing after the
     // run is sent — the same "N of M changes had already been saved" a sequential stop reports.
-    if (failure) throw new PlanError(done, writes.length, failure.reason, failure.cause, [...createdIds]);
+    if (failure) throw new PlanError(done, total, failure.reason, failure.cause, [...createdIds], [...landed]);
     i = end;
   }
-  return { done, createdIds, createdRows };
+  return { done, createdIds, createdRows, landed };
 }

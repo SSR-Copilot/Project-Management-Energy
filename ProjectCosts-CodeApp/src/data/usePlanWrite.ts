@@ -4,12 +4,24 @@
  *
  * Shared by the admin screens (Default Checklists, CAPEX Accounts, …) so each screen only decides
  * WHAT to write (`rules.ts`) and which canvas texts to show.
+ *
+ * LANDED ROWS (rollback record, Generators bulk programme 9.3): the hook returns `lastLanded()`, a function
+ * that reads the rows the MOST RECENT `run()` created, as `LandedRow[]` (`{ entitySet, id }`, in landing order,
+ * single and bulk creates, the job's `then` plan included). It is reset when a `run()` starts and set when the
+ * job settles, whether it succeeded or failed part-way, so a caller that gets `null` back from `run()` can read
+ * what to delete:
+ *
+ *     const ids = await run(job);
+ *     if (ids === null) await rollback(lastLanded());
+ *
+ * It is a ref read, not state: it never re-renders. `run()`'s own result and every message are unchanged.
  */
 import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { isRecordGone, RECORD_GONE_TEXT } from "@/platform/errors";
 import { permissionMessage } from "@/platform/privileges";
-import { executePlan, PlanError, type PlanResult } from "./executePlan";
+import { BulkRowsGoneError } from "./bulkBackend";
+import { executePlan, PlanError, type LandedRow, type PlanResult } from "./executePlan";
 import type { WritePlan } from "./writePlan";
 
 /** One write: a ready plan, or a function that reads what it needs and returns the plan. */
@@ -48,6 +60,12 @@ export function writeErrorMessage(error: unknown, action: string, prefix?: (deta
   if (denied) return denied;
   // Only a guarded update can raise this (no PM plan sets `guarded`), so PM texts are unchanged.
   if (isRecordGone(error)) return prefix ? prefix(RECORD_GONE_TEXT) : RECORD_GONE_TEXT;
+  // A bulk update found rows gone (Generators bulk programme): its own message, like the gone row above.
+  if (error instanceof BulkRowsGoneError) return prefix ? prefix(error.message) : error.message;
+  if (error instanceof PlanError && error.rowsGone) {
+    const gone = error.cause instanceof BulkRowsGoneError ? error.cause.message : error.message;
+    return prefix ? prefix(gone) : gone;
+  }
   let detail = error instanceof Error ? error.message : String(error);
   if (error instanceof PlanError) {
     const sent = error.done > 0 ? ` ${error.done} of ${error.total} changes had already been saved.` : "";
@@ -55,6 +73,9 @@ export function writeErrorMessage(error: unknown, action: string, prefix?: (deta
   }
   return prefix ? prefix(detail) : detail;
 }
+
+/** `PlanResult.landed`, tolerating an `executePlan` stand-in (a screen test's mock) that predates the field. */
+const landedOf = (r: PlanResult): readonly LandedRow[] => (r.landed as LandedRow[] | undefined) ?? [];
 
 export function usePlanWrite(opts: {
   /** Refreshed after every write, successful or not. */
@@ -78,6 +99,8 @@ export function usePlanWrite(opts: {
   const [refreshing, setRefreshing] = useState(false);
   /** Background reloads still running (two quick jobs can overlap). */
   const pendingRefreshes = useRef(0);
+  /** Rows the most recent `run()` created (see the file header). */
+  const landedRef = useRef<LandedRow[]>([]);
 
   const mutation = useMutation({
     mutationFn: async (job: PlanJob) => {
@@ -107,24 +130,37 @@ export function usePlanWrite(opts: {
   });
 
   async function runJob(job: PlanJob) {
-    const plan = typeof job.plan === "function" ? await job.plan() : job.plan;
-    const first = await executePlan(plan, job.progress);
-    if (!job.then) return { ...first, plan };
-    const next = await job.then(first, { setProgress });
-    if (!next) return { ...first, plan };
-    const second = await executePlan(next, job.progress);
-    return {
-      done: first.done + second.done,
-      createdIds: [...first.createdIds, ...second.createdIds],
-      createdRows: { ...first.createdRows, ...second.createdRows },
-      plan,
-    };
+    const landed: LandedRow[] = [];
+    try {
+      const plan = typeof job.plan === "function" ? await job.plan() : job.plan;
+      const first = await executePlan(plan, job.progress);
+      landed.push(...landedOf(first));
+      if (!job.then) return { ...first, plan };
+      const next = await job.then(first, { setProgress });
+      if (!next) return { ...first, plan };
+      const second = await executePlan(next, job.progress);
+      landed.push(...landedOf(second));
+      return {
+        done: first.done + second.done,
+        createdIds: [...first.createdIds, ...second.createdIds],
+        createdRows: { ...first.createdRows, ...second.createdRows },
+        landed: [...landed],
+        plan,
+      };
+    } catch (e) {
+      // A part-way failure still tells the caller what landed (the first plan's rows were pushed above).
+      if (e instanceof PlanError) landed.push(...(e.landed as readonly LandedRow[] | undefined ?? []));
+      throw e;
+    } finally {
+      landedRef.current = landed;
+    }
   }
 
   /** Runs one job; resolves to the created ids, or null when it was refused or failed. */
   const run = async (job: PlanJob): Promise<string[] | null> => {
     setError(null);
     setSuccess(null);
+    landedRef.current = [];
     setProgress(job.progress);
     try {
       const result = await mutation.mutateAsync(job);
@@ -140,5 +176,7 @@ export function usePlanWrite(opts: {
 
   // Stable across renders, so a screen can clear the messages from a timer effect.
   const clear = useCallback(() => { setError(null); setSuccess(null); }, []);
-  return { run, progress, error, success, clear, refreshing };
+  /** The rows the most recent `run()` created (also after a failure): see the file header. */
+  const lastLanded = useCallback((): readonly LandedRow[] => landedRef.current, []);
+  return { run, progress, error, success, clear, refreshing, lastLanded };
 }
