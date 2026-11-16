@@ -165,3 +165,41 @@ export type ExistingIdsReader = (table: BulkTableInfo, ids: readonly string[]) =
 
 /** Deletes one record and throws on refusal (the `deleteRecord` contract, CONVENTIONS rule 14). */
 export type RecordDeleter = (tableName: string, recordId: string) => Promise<void>;
+
+/* Errors of the Generators bulk backend (`./bulkBackend.ts` re-exports them; they live here so
+ * `./generatorsBulk.ts` can import them without an import cycle through `./bulkBackend.ts`). */
+
+/** Nothing was sent: the rows failed the fail-closed checks. */
+export class BulkBackendValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BulkBackendValidationError";
+  }
+}
+
+/** `updateMany` found that some rows no longer exist. Nothing was sent. */
+export class BulkRowsGoneError extends Error {
+  readonly missingIds: readonly string[];
+  constructor(missingIds: readonly string[]) {
+    super(`${missingIds.length} row(s) no longer exist. Reload the page and try again.`);
+    this.name = "BulkRowsGoneError";
+    this.missingIds = missingIds;
+  }
+}
+
+/** A bulk call failed after `rowsLanded` of `rowsTotal` rows were written. */
+export class BulkBatchError extends Error {
+  readonly rowsLanded: number;
+  readonly rowsTotal: number;
+  /** Ids known to have landed (creates), in input order; empty when none or unknown. */
+  readonly landedIds: readonly string[];
+  override readonly cause?: unknown;
+  constructor(message: string, args: { rowsLanded: number; rowsTotal: number; landedIds?: readonly string[]; cause?: unknown }) {
+    super(message);
+    this.name = "BulkBatchError";
+    this.rowsLanded = args.rowsLanded;
+    this.rowsTotal = args.rowsTotal;
+    this.landedIds = args.landedIds ?? [];
+    this.cause = args.cause;
+  }
+}
