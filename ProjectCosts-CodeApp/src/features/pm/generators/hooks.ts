@@ -37,7 +37,7 @@ import { cancelModulePermission, requestModulePermission, type FlowApprovalResul
 import {
   listAllWtgLandLeaseCosts, listGeneratorTypes, listGeneratorsByIds, listInverterTypes, listOrderableGenerators,
   listProjectTurbines, listPvModules, listPvTypes, listSimpleTypes, listSubstructureTypes, loadDeviceCosts,
-  findPvUnit, listDeviceTypes, listOpexCostIds, loadGeneratorsProject, loadOpexDependency, loadProjectPlanning,
+  findPvUnit, listDeviceTypes, listOpexCostIdsForBridges, loadGeneratorsProject, loadOpexDependency, loadProjectPlanning,
   listPlantSupplierCatalogue, loadTurbineAllocations, loadTypeName,
   type DeviceCosts, type GeneratorsProjectRow,
 } from "@/data/generators";
@@ -355,19 +355,27 @@ export async function loadPvFollowUpInputs(pvId: string): Promise<{ pvName: stri
 /** The land-lease allocations of some turbines and their costs' allocation counts. */
 export const loadAllocations = loadTurbineAllocations;
 
-/** The WTG type delete's inputs: its turbines' allocations, and the O&M costs of its first device type. */
+/**
+ * The WTG type delete's inputs: its turbines' allocations, and the O&M costs of ALL its device-type rows
+ * (DEL-3, S7), with their chain members. `opexCostIds` keeps its shape: one de-duplicated id list.
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
+ */
 export async function loadTypeDeleteInputs(projectId: string, typeId: string, turbineIds: readonly string[]): Promise<{
   allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
 }> {
   const [alloc, deviceTypes] = await Promise.all([loadTurbineAllocations(turbineIds), listDeviceTypes(typeId)]);
-  const first = deviceTypes[0];
-  const opexCostIds = first ? await listOpexCostIds(projectId, first.id) : [];
+  const opexCostIds = await listOpexCostIdsForBridges(projectId, deviceTypes.map((d) => d.id));
   return { allocations: alloc.allocations, countByCost: alloc.countByCost, opexCostIds };
 }
 
 /**
  * The PV delete's inputs (G2): the type's unit(s), their land-lease allocations with their costs'
- * allocation counts, and the O&M costs of the type's first device-type row.
+ * allocation counts, and the O&M costs of ALL the type's device-type rows (DEL-3).
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadPvDeleteInputs(projectId: string, pvId: string): Promise<{
   unitIds: string[]; allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
@@ -378,16 +386,18 @@ export async function loadPvDeleteInputs(projectId: string, pvId: string): Promi
 }
 
 /**
- * A replace's T2a "Identify" (G6): the old type's device-type rows and the O&M costs on the first, its
+ * A replace's T2a "Identify" (G6): the old type's device-type rows and the O&M costs on ALL of them (DEL-3), its
  * units, their land-lease allocations (with each cost's AllWTG flag) and the project's AllWTG costs.
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadReplaceInputs(projectId: string, typeId: string): Promise<ReplaceInputs> {
   const [deviceTypes, units, landLeaseCosts] = await Promise.all([
     listDeviceTypes(typeId), listProjectTurbines([typeId]), listAllWtgLandLeaseCosts(projectId),
   ]);
-  const first = deviceTypes[0];
   const [opexCostIds, alloc] = await Promise.all([
-    first ? listOpexCostIds(projectId, first.id) : Promise.resolve([] as string[]),
+    listOpexCostIdsForBridges(projectId, deviceTypes.map((d) => d.id)),
     loadTurbineAllocations(units.map((u) => u.id)),
   ]);
   return {
@@ -396,6 +406,9 @@ export async function loadReplaceInputs(projectId: string, typeId: string): Prom
     unitIds: units.map((u) => u.id),
     allocations: toReplaceAllocations({
       allocations: alloc.allocations, units, allWtgCostIds: new Set(landLeaseCosts.map((c) => c.id)),
+      // DEL-4: each allocation keeps its land-lease cost id, the `serialKey` of its delete (rules.ts reads it only when
+      // `GENERATORS_DELETE.parentOrder` is on; nothing else reads the rows).
+      keepCostIds: true,
     }),
     landLeaseCosts,
   };

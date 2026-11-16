@@ -10,6 +10,11 @@
  * Reused, not repeated: the FID price-inflation rows come from `data/milestones.ts`
  * (`loadPriceInflation`). Column names come from the generated models; the rules' column maps
  * (`GENERATOR_COL`, `GEN_TYPE_COL`, `GEN_INSTANCE_COL`, `PROJECT_PLANT_COL`) are the source.
+ *
+ * BULK TRANSPORT: this module registers `createGeneratorsBulkBackend` as the default bulk backend at module
+ * load (`registerDefaultBulkBackend`, `./bulkBackend.ts`). The write-plan engine never imports the transport
+ * itself, so only a build that loads the Generators data layer (the Generators screen always does) pays for
+ * the transport's generated services; the factory still runs lazily on the first bulk step.
  */
 import { Vsb_projectsService } from "@/generated/services/Vsb_projectsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
@@ -37,8 +42,13 @@ import {
   type CatalogModel, type GeneratorTypeRow, type GeneratorsProject, type LandLeaseCostRow, type PlantSupplierOption, type ProjectPlanning,
   type PvModuleOption, type SimpleTypeRow, type TurbineRow,
 } from "@/features/pm/generators/rules";
+import { registerDefaultBulkBackend } from "./bulkBackend";
 import { fetchAll, fetchPage } from "./client";
+import { mapLimit } from "./concurrency";
+import { createGeneratorsBulkBackend } from "./generatorsBulk";
 import { ACTIVE, and, chunk, eq, gtDate, guid, idIn, lookupEq, lookupIn, numberOf, or } from "./odata";
+
+registerDefaultBulkBackend(createGeneratorsBulkBackend);
 
 type Raw = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
@@ -583,17 +593,73 @@ export async function listOpexCostIds(projectId: string, deviceTypeId: string, a
   return rows.map((r) => String(r.vsb_opexprojectcostid));
 }
 
+/** Reads of `listOpexCostIdsForBridges` in flight at once (review F3 item 5; a project with many bridge rows is chunked at 40). */
+export const OPEX_READ_CONCURRENCY = 4;
+
+/**
+ * The project's O&M costs of ALL the given bridge rows (DEL-3, S7): every `Opex Project Costs` row whose
+ * `DeviceTypeInProject` is one of `bridgeIds` (any status, as `listOpexCostIds`), plus the chain members
+ * of those rows — costs whose `vsb_parentcost` is one of them (a head's later periods). Server-filtered
+ * (rule 2), `$select` of the id and `_vsb_parentcost_value` only (rule 1), the bridge and the head filters
+ * chunked at `CHUNK` (40) ids. Ids are de-duplicated; heads first, then their chain members.
+ * No bridge: no read, no ids. The chunk reads run through a pool of `OPEX_READ_CONCURRENCY` (4).
+ *
+ * DIVERGENCE: the canvas follows only `First(<type>.DeviceTypesInProjects)` (Y:65), the oldest bridge row, so the O&M costs of any
+ * further bridge row of the type are neither found nor deleted with it. This app returns the costs of ALL the given bridge rows
+ * (D116; delete hardening plan claim 2, scenario S7), so a type delete leaves no O&M cost pointing at a deleted bridge.
+ */
+export async function listOpexCostIdsForBridges(projectId: string, bridgeIds: readonly string[]): Promise<string[]> {
+  const bridges = [...new Set(bridgeIds)];
+  if (bridges.length === 0) return [];
+  const read = async (operation: string, column: string, ids: readonly string[]): Promise<Raw[]> => {
+    // Review F3 item 5: a bounded pool (never more than `OPEX_READ_CONCURRENCY` reads in flight), results in chunk order.
+    const pages = await mapLimit(chunk(ids), (part) => fetchAll(
+      operation,
+      (o) => Vsb_opexprojectcostsService.getAll(o),
+      {
+        select: ["vsb_opexprojectcostid", "_vsb_parentcost_value"],
+        filter: and(lookupEq("vsb_project", projectId), lookupIn(column, part)),
+      },
+    ), OPEX_READ_CONCURRENCY);
+    return raw(pages.flat());
+  };
+  const heads = await read("load the type's O&M costs", "vsb_devicetypeinproject", bridges);
+  const headIds = [...new Set(heads.map((r) => String(r.vsb_opexprojectcostid)))];
+  const members = headIds.length > 0 ? await read("load the type's O&M cost chains", "vsb_parentcost", headIds) : [];
+  return [...new Set([...headIds, ...members.map((r) => String(r.vsb_opexprojectcostid))])];
+}
+
+/** Does any ACTIVE O&M cost of the project point at one of these bridge rows? (`top: 1`, stops at the first hit.) */
+async function hasActiveOpexCostOn(projectId: string, bridgeIds: readonly string[]): Promise<boolean> {
+  for (const part of chunk(bridgeIds)) {
+    const rows = raw(await fetchPage(
+      "check the type's O&M costs",
+      (o) => Vsb_opexprojectcostsService.getAll(o),
+      {
+        select: ["vsb_opexprojectcostid"],
+        filter: and(lookupEq("vsb_project", projectId), lookupIn("vsb_devicetypeinproject", part), ACTIVE),
+        top: 1,
+      },
+    ));
+    if (rows.length > 0) return true;
+  }
+  return false;
+}
+
 /**
  * 1.21.753's O&M guard inputs (`capacityGuardReason`): an ACTIVE bridge of the type, and an ACTIVE
- * `Opex Project Costs` row of the project pointing at it.
+ * `Opex Project Costs` row of the project pointing at it. DEL-3: ANY active bridge, not only the first
+ * (S7) — a dependency on the second active bridge blocks as well.
+ *
+ * DIVERGENCE: the canvas checks only the first bridge row of the type (`First(<type>.DeviceTypesInProjects)`, Y:65). This app checks
+ * ALL active bridge rows (D116; delete hardening plan claim 2, scenario S7), so the guard cannot be passed by a dependency on a later bridge.
  */
 export async function loadOpexDependency(
   projectId: string, typeId: string,
 ): Promise<{ hasActiveDeviceType: boolean; hasActiveOpexCost: boolean }> {
-  const bridge = (await listDeviceTypes(typeId)).find((d) => d.active);
-  if (!bridge) return { hasActiveDeviceType: false, hasActiveOpexCost: false };
-  const costs = await listOpexCostIds(projectId, bridge.id, true);
-  return { hasActiveDeviceType: true, hasActiveOpexCost: costs.length > 0 };
+  const active = (await listDeviceTypes(typeId)).filter((d) => d.active);
+  if (active.length === 0) return { hasActiveDeviceType: false, hasActiveOpexCost: false };
+  return { hasActiveDeviceType: true, hasActiveOpexCost: await hasActiveOpexCostOn(projectId, active.map((d) => d.id)) };
 }
 
 /** The PV type's unit — `LookUp(GeneratorInProjects, ModuleTypeInProject = <PV type>)` (Y:8043). */
