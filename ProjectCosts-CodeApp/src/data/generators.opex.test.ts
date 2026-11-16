@@ -155,3 +155,45 @@ describe("loadOpexDependency (DEL-3: any active bridge)", () => {
     await expect(loadOpexDependency(PROJECT, guidOf(9))).rejects.toThrow(/failed/);
   });
 });
+
+describe("listOpexCostIdsForBridges: bounded reads (review F3 item 5)", () => {
+  it("UT-GENDATA-OPEX-100 1,000 bridge ids never have more than 4 reads in flight, and every id is read", async () => {
+    const bridges = Array.from({ length: 1000 }, (_, i) => guidOf(i + 1));
+    let inFlight = 0;
+    let peak = 0;
+    opexGetAll.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => { setTimeout(r, 2); });
+      inFlight -= 1;
+      return ok([]);
+    });
+    await listOpexCostIdsForBridges(PROJECT, bridges);
+    expect(opexGetAll).toHaveBeenCalledTimes(25);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(peak).toBeGreaterThan(1);
+  });
+
+  it("UT-GENDATA-OPEX-101 the chain-member reads are bounded too, and the ids keep their chunk order", async () => {
+    const heads = Array.from({ length: 400 }, (_, i) => guidOf(1000 + i));
+    const members = Array.from({ length: 400 }, (_, i) => guidOf(5000 + i));
+    let inFlight = 0;
+    let peak = 0;
+    opexGetAll.mockImplementation(async (o: unknown) => {
+      const filter = String((o as Query).filter);
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      // Later chunks answer first, so a pool that did not keep input order would be caught.
+      await new Promise((r) => { setTimeout(r, filter.includes("_vsb_parentcost_value") ? 1 : 2); });
+      inFlight -= 1;
+      if (filter.includes("_vsb_devicetypeinproject_value")) return ok(heads.map((h) => cost(h)));
+      const part = members.filter((_m, i) => filter.includes(heads[i]!));
+      return ok(part.map((m, i) => cost(m, heads[i])));
+    });
+    const ids = await listOpexCostIdsForBridges(PROJECT, [guidOf(1)]);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(ids.slice(0, 400)).toEqual(heads);
+    expect(ids.slice(400)).toEqual(members);
+    expect(opexGetAll).toHaveBeenCalledTimes(1 + 10);
+  });
+});

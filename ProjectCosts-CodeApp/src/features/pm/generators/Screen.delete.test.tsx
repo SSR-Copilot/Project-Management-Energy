@@ -221,7 +221,7 @@ describe("UT-GEN Screen: a failed delete job says what it removed (DEL-5)", () =
   FAMILIES.forEach((f, i) => {
     const base = 1110 + i * 4;
 
-    it(`UT-GEN-${base} ${f.name}: nothing deleted: the failure text stays and "Not removed" lists every attempted row`, async () => {
+    it(`UT-GEN-${base} ${f.name}: nothing deleted: only the failure text stays (F3 item 2: no "Not removed" / "press again" text)`, async () => {
       state.exec = { fail: DETAIL, pick: () => [] } satisfies Exec;
       renderScreen();
       await f.start();
@@ -230,13 +230,12 @@ describe("UT-GEN Screen: a failed delete job says what it removed (DEL-5)", () =
       expect(plan.refusedReason).toBeUndefined();
       const attempted = state.attempted as LandedRowRef[];
       expect(attempted.length).toBeGreaterThan(0);
-      const partial = deletePartialMessage({ attempted, deleted: [], typeName: f.typeName });
-      expect(partial).not.toBeNull();
-      // After the original error text, never instead of it.
-      expect(barText().endsWith(`${ownText()} ${partial}`)).toBe(true);
-      expect(errorBar()!.textContent).toContain(DELETE_PARTIAL_MSG.notRemoved);
+      expect(deletePartialMessage({ attempted, deleted: [], typeName: f.typeName })).toBeNull();
+      // The original error text alone: nothing is added after it.
+      expect(barText().endsWith(ownText())).toBe(true);
+      expect(errorBar()!.textContent).not.toContain(DELETE_PARTIAL_MSG.notRemoved);
       expect(errorBar()!.textContent).not.toContain(DELETE_PARTIAL_MSG.removed);
-      expect(errorBar()!.textContent).toContain(DELETE_PARTIAL_MSG.pressAgain);
+      expect(errorBar()!.textContent).not.toContain(DELETE_PARTIAL_MSG.pressAgain);
     });
 
     it(`UT-GEN-${base + 1} ${f.name}: part of the rows deleted: the text lists what was removed and what was not`, async () => {
@@ -251,7 +250,8 @@ describe("UT-GEN Screen: a failed delete job says what it removed (DEL-5)", () =
       expect(deleted).toHaveLength(keep);
       if (f.rows === "many") expect(attempted.length).toBeGreaterThan(1);
       const partial = deletePartialMessage({ attempted, deleted, typeName: f.typeName });
-      expect(barText().endsWith(`${ownText()} ${partial}`)).toBe(true);
+      // keep = 0 (a one-row plan, nothing deleted): the failure text alone (F3 item 2).
+      expect(barText().endsWith(partial ? `${ownText()} ${partial}` : ownText())).toBe(true);
       if (keep > 0) {
         expect(errorBar()!.textContent).toContain(DELETE_PARTIAL_MSG.removed);
         expect(errorBar()!.textContent).toContain(DELETE_PARTIAL_MSG.notRemoved);

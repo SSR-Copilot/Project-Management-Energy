@@ -16,6 +16,8 @@ export const realSleep: Sleeper = (ms) => new Promise((resolve) => { setTimeout(
 /** Tries per request (the first plus two retries) and the longest single wait. */
 export const MAX_BULK_TRIES = 3;
 export const MAX_RETRY_WAIT_MS = 30_000;
+/** Tries for a failure with no HTTP status (the first plus one retry). */
+export const MAX_NO_STATUS_TRIES = 2;
 
 function statusOf(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -109,8 +111,8 @@ const firstDefined = <T>(values: Iterable<T | undefined>): T | undefined => {
  * REASONING. Unlike a create or an update, a DELETE is idempotent: sending it twice leaves the same state, and
  * a second answer of 404 only means the first one worked ("gone", decided by the caller). So an AMBIGUOUS
  * failure (a dropped connection, a 500 or 504 after the server may have started work) is safe to retry here,
- * where `retryDelay` must refuse it for a bulk write. Retried: 429, 503 WITH `Retry-After`, 500, 504 and an error
- * with no status (the network). Never retried: 400, 401, 403, 404, 409 and every other status, because sending
+ * where `retryDelay` must refuse it for a bulk write. Retried: 429, 503 WITH `Retry-After`, 500, 504 (up to `maxTries`) and an error
+ * with no status (the network; at most ONE retry, `MAX_NO_STATUS_TRIES`). Never retried: 400, 401, 403, 404, 409 and every other status, because sending
  * the same request again cannot change the answer.
  *
  * Wait: the `Retry-After` header when there is one, else 1 s, then 2 s; never more than `MAX_RETRY_WAIT_MS`.
@@ -121,6 +123,9 @@ export function deleteRetryDelay(
   if (attempt >= maxTries) return undefined;
   const chain = chainOf(error);
   const status = firstDefined(chain.map(statusOf));
+  // An error with NO status is not recognisably a network error and may be deterministic: one retry at most (2 tries in all),
+  // so it cannot hold a gate slot for 1 s + 2 s. Statuses that are retryable keep every try.
+  if (status === undefined && attempt >= MAX_NO_STATUS_TRIES) return undefined;
   const header = firstDefined(chain.map((e) => retryAfterMs(e, now)));
   const retryable = status === undefined || status === 429 || status === 500 || status === 504
     || (status === 503 && header !== undefined);

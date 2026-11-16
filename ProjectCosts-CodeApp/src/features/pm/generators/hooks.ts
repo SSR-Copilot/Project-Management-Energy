@@ -358,6 +358,9 @@ export const loadAllocations = loadTurbineAllocations;
 /**
  * The WTG type delete's inputs: its turbines' allocations, and the O&M costs of ALL its device-type rows
  * (DEL-3, S7), with their chain members. `opexCostIds` keeps its shape: one de-duplicated id list.
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadTypeDeleteInputs(projectId: string, typeId: string, turbineIds: readonly string[]): Promise<{
   allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
@@ -370,6 +373,9 @@ export async function loadTypeDeleteInputs(projectId: string, typeId: string, tu
 /**
  * The PV delete's inputs (G2): the type's unit(s), their land-lease allocations with their costs'
  * allocation counts, and the O&M costs of ALL the type's device-type rows (DEL-3).
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadPvDeleteInputs(projectId: string, pvId: string): Promise<{
   unitIds: string[]; allocations: { id: string; costId: string }[]; countByCost: Record<string, number>; opexCostIds: string[];
@@ -382,6 +388,9 @@ export async function loadPvDeleteInputs(projectId: string, pvId: string): Promi
 /**
  * A replace's T2a "Identify" (G6): the old type's device-type rows and the O&M costs on ALL of them (DEL-3), its
  * units, their land-lease allocations (with each cost's AllWTG flag) and the project's AllWTG costs.
+ *
+ * DIVERGENCE: the canvas follows only the first bridge row (`First(<type>.DeviceTypesInProjects)`, Y:65), so the O&M costs of any
+ * further bridge row are left behind. This app takes ALL the bridge rows (D116; delete hardening plan claim 2, scenario S7).
  */
 export async function loadReplaceInputs(projectId: string, typeId: string): Promise<ReplaceInputs> {
   const [deviceTypes, units, landLeaseCosts] = await Promise.all([

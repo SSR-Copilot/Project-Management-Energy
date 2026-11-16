@@ -35,8 +35,13 @@
  *   1. reads every id of `--manifest` (a plain text file, one id per line, `#` starts a comment) back from Dataverse;
  *   2. REFUSES the whole run, deleting nothing, when any id is not currently in the chosen class (a 404 is "already gone");
  *   3. writes a JSON backup of the full rows into `--out` BEFORE the first delete;
- *   4. deletes 4 at a time (429/503 retried up to 3 tries, honouring Retry-After; 404 = already gone);
+ *   4. deletes 4 at a time (429/503 retried up to 3 tries, honouring Retry-After; 404 = already gone). Each DELETE sends
+ *      `If-Match: <@odata.etag>` of the read-back when the row carries one; a 412 means the row changed after the check, it is
+ *      NOT deleted and is counted as "changed since check". A row without an etag is deleted without the header;
  *   5. reads every id back and reports the ones still present.
+ * Fail-closed: a lookup column MISSING from a row is not null, so such a row is never an orphan (counted as "unreadable").
+ * Class B7 (phantom types) refuses a type that still has turbines or bridge rows ("has children, skipped").
+ * Every request is sent with `redirect: "error"`, so the bearer token is never forwarded by a redirect.
  * Tested offline in `src/test/generatorsOrphans.test.ts` (UT-ORPH-*), with an injected fetch, clock, file system and console.
  */
 import fs from "node:fs";
@@ -73,7 +78,29 @@ export const CLASSES = {
 export const CLASS_IDS = Object.keys(CLASSES);
 export const APPLY_CLASSES = CLASS_IDS.filter((c) => !CLASSES[c].reportOnly);
 
-const isNull = (v) => v === null || v === undefined || v === "";
+/** A value that reads as "no link": `null` or an empty string. `undefined` is NOT null (see `isNullCol`). */
+const isNull = (v) => v === null || v === "";
+/**
+ * FAIL-CLOSED null test of one lookup column of a row (review F3 item 7a): true only when the key is PRESENT and null. A column
+ * that is missing from the row (not selected, renamed, or a truncated row) says nothing about the link, so the row is NOT an orphan.
+ */
+const isNullCol = (row, key) => Object.prototype.hasOwnProperty.call(row, key) && isNull(row[key]);
+/** True when a column that names the row's link is absent: the row cannot be judged (counted as "unreadable"). */
+const hasCol = (row, key) => Object.prototype.hasOwnProperty.call(row, key);
+/** The lookup columns `rowInClass` needs to judge a class; a row missing any of them is "unreadable". */
+const REQUIRED_COLS = {
+  B1: ["_vsb_generatorinproject_value"],
+  B2: ["_vsb_projectcost_value"],
+  B3: ["_vsb_devicetypeinproject_value", "_vsb_subaccount_value"],
+  B5: ["_vsb_typeinprojectid_value"],
+  B6: ["_vsb_moduletypeinprojectid_value"],
+  B7: ["_vsb_generator_value", "_vsb_project_value"],
+};
+/** Whether a row of an applicable class lacks one of the columns its class predicate needs (never true for B4 and B8). */
+export function rowUnreadable(cls, row) {
+  if (!row || typeof row !== "object") return false;
+  return (REQUIRED_COLS[cls] ?? []).some((k) => !hasCol(row, k));
+}
 const asRows = (v) => (Array.isArray(v) ? v : []);
 
 /* ═══════════════════════════════════════════════════════════════ arguments ══ */
@@ -129,16 +156,20 @@ export function applyProblems(o) {
 
 /* ═════════════════════════════════════════════════════════ classification ══ */
 
-/** `class` membership of ONE row. `omIds` is the set of O&M sub-account ids (B3). Pure. */
+/**
+ * `class` membership of ONE row. `omIds` is the set of O&M sub-account ids (B3). Pure. FAIL-CLOSED (review F3 item 7a): a
+ * lookup column that is missing from the row is not null, so a row that lacks a column its class needs is never a member.
+ */
 export function rowInClass(cls, row, omIds) {
   if (!row || typeof row !== "object") return false;
   switch (cls) {
-    case "B1": return isNull(row._vsb_generatorinproject_value);
-    case "B2": return isNull(row._vsb_projectcost_value);
-    case "B3": return isNull(row._vsb_devicetypeinproject_value) && !isNull(row._vsb_subaccount_value) && (omIds ?? new Set()).has(String(row._vsb_subaccount_value).toLowerCase());
-    case "B5": return isNull(row._vsb_typeinprojectid_value);
-    case "B6": return isNull(row._vsb_moduletypeinprojectid_value);
-    case "B7": return isNull(row._vsb_generator_value) || isNull(row._vsb_project_value);
+    case "B1": return isNullCol(row, "_vsb_generatorinproject_value");
+    case "B2": return isNullCol(row, "_vsb_projectcost_value");
+    case "B3": return isNullCol(row, "_vsb_devicetypeinproject_value") && hasCol(row, "_vsb_subaccount_value") && !isNull(row._vsb_subaccount_value) && row._vsb_subaccount_value !== undefined && (omIds ?? new Set()).has(String(row._vsb_subaccount_value).toLowerCase());
+    case "B5": return isNullCol(row, "_vsb_typeinprojectid_value");
+    case "B6": return isNullCol(row, "_vsb_moduletypeinprojectid_value");
+    // Both columns must be readable: an OR over a missing column could otherwise hide a half-read row.
+    case "B7": return !rowUnreadable("B7", row) && (isNullCol(row, "_vsb_generator_value") || isNullCol(row, "_vsb_project_value"));
     default: return false;
   }
 }
@@ -161,8 +192,12 @@ export function classify(snapshot) {
     lookups: Object.fromEntries(CLASSES[cls].lookups.map((k) => [k, isNull(row[k]) ? "" : String(row[k]).toLowerCase()])),
     ...extra,
   });
+  // Rows that lack a column their class needs cannot be judged: never classified, only counted (F3 item 7a).
+  const unreadable = {};
   const simple = (cls, source) => {
     const seen = new Set();
+    unreadable[cls] = 0;
+    for (const r of asRows(snap[source ?? cls])) if (rowUnreadable(cls, r) && idOf(cls, r)) unreadable[cls]++;
     classes[cls] = asRows(snap[source ?? cls])
       .filter((r) => rowInClass(cls, r, omIds) && idOf(cls, r) && !seen.has(idOf(cls, r)) && seen.add(idOf(cls, r)))
       .map((r) => entry(cls, r));
@@ -218,7 +253,7 @@ export function classify(snapshot) {
 
   const counts = Object.fromEntries(CLASS_IDS.map((c) => [c, classes[c].length]));
   counts.B4 = groups.length; // types, not bridge rows
-  return { classes, counts, details: { B4Groups: groups, B4BridgeRows: classes.B4.length, B8NoAllocation: noAllocation, B8AllNullTurbine: allNullTurbine } };
+  return { classes, counts, details: { B4Groups: groups, B4BridgeRows: classes.B4.length, B8NoAllocation: noAllocation, B8AllNullTurbine: allNullTurbine, unreadable } };
 }
 
 /* ═══════════════════════════════════════════════════════════════════ CSV ══ */
@@ -265,27 +300,30 @@ export function readEnv(env) {
   return { ok: true, origin: u.origin, base: `${u.origin}${API_PATH}`, token };
 }
 
-/** Builds a request context: `request(method, url)` retries 429/503 (max 3 tries, Retry-After honoured) and times out. */
+/** Builds a request context: `request(method, url, extraHeaders?)` retries 429/503 (max 3 tries, Retry-After honoured) and times out. */
 export function makeContext({ env, fetchImpl, sleep, now, timeoutMs }) {
   const e = readEnv(env);
   if (!e.ok) return e;
   const doFetch = fetchImpl ?? globalThis.fetch;
   const wait = sleep ?? sleepDefault;
   const clock = now ?? (() => new Date());
-  const headersFor = (method) => ({
+  const headersFor = (method, extra) => ({
     Authorization: `Bearer ${e.token}`,
     Accept: "application/json",
     "OData-MaxVersion": "4.0",
     "OData-Version": "4.0",
     ...(method === "GET" ? { Prefer: "odata.maxpagesize=500" } : {}),
+    ...(extra ?? {}),
   });
-  async function request(method, url) {
+  /** `extraHeaders` (for example `If-Match` on a DELETE) are added to the standard ones. */
+  async function request(method, url, extraHeaders) {
     if (!String(url).startsWith(e.origin + "/")) throw new Error("refused: request to a different origin than DATAVERSE_URL");
     for (let attempt = 1; ; attempt++) {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), timeoutMs ?? REQUEST_TIMEOUT_MS);
       let res;
-      try { res = await doFetch(url, { method, headers: headersFor(method), signal: ctl.signal }); }
+      // `redirect: "error"` (F3 item 7b): a redirect would re-send the bearer token to wherever the answer points, so it is refused.
+      try { res = await doFetch(url, { method, headers: headersFor(method, extraHeaders), signal: ctl.signal, redirect: "error" }); }
       catch (err) { throw new Error(ctl.signal.aborted ? `${method} timed out` : `${method} failed (${err?.name ?? "error"})`); }
       finally { clearTimeout(timer); }
       if ((res.status === 429 || res.status === 503) && attempt < MAX_TRIES) {
@@ -453,7 +491,7 @@ export async function runReport(o, rawDeps) {
     source: o.input ? "snapshot" : "live",
     projectScoped: Boolean(o.project),
     counts: result.counts,
-    details: { B4BridgeRows: result.details.B4BridgeRows, B8NoAllocation: result.details.B8NoAllocation, B8AllNullTurbine: result.details.B8AllNullTurbine },
+    details: { B4BridgeRows: result.details.B4BridgeRows, B8NoAllocation: result.details.B8NoAllocation, B8AllNullTurbine: result.details.B8AllNullTurbine, unreadable: result.details.unreadable },
     truncated: snapshot.truncated ?? {},
     skipped: asRows(snapshot.skipped),
   };
@@ -465,6 +503,10 @@ export async function runReport(o, rawDeps) {
     g.log(`${cls} ${CLASSES[cls].label}: ${result.counts[cls]}${extra}${snapshot.truncated?.[cls] ? " [TRUNCATED at 50 pages]" : ""}`);
   }
   for (const s of asRows(snapshot.skipped)) g.log(`skipped: ${s}`);
+  const unreadableTotal = Object.values(result.details.unreadable).reduce((a, b) => a + b, 0);
+  if (unreadableTotal > 0) {
+    g.log(`unreadable (a lookup column missing from the row, never counted as an orphan): ${unreadableTotal} (${Object.entries(result.details.unreadable).filter(([, n]) => n > 0).map(([c, n]) => `${c} ${n}`).join(", ")})`);
+  }
   g.log(`files written to ${outDir}`);
   return 0;
 }
@@ -495,6 +537,25 @@ async function pool(items, limit, worker) {
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
   return results;
+}
+
+/**
+ * Whether a phantom type (B7) still has children: a turbine (`vsb_generatorinprojects`, by `_vsb_moduletypeinprojectid_value`) or a bridge
+ * row (`vsb_devicetypesinprojects`, by `_vsb_typeinprojectid_value`). One `$top=1` read each. Throws on any answer but 200 (fail-closed).
+ */
+export async function hasChildren(ctx, typeId) {
+  const probes = [
+    ["vsb_generatorinprojects", "vsb_generatorinprojectid", "_vsb_moduletypeinprojectid_value"],
+    ["vsb_devicetypesinprojects", "vsb_devicetypesinprojectid", "_vsb_typeinprojectid_value"],
+  ];
+  for (const [set, idCol, col] of probes) {
+    const url = `${ctx.base}${set}?$select=${idCol}&$filter=${encodeURIComponent(`${col} eq ${typeId}`)}&$top=1`;
+    const res = await ctx.request("GET", url);
+    if (res.status !== 200) throw new Error(`child read of ${set} failed with HTTP ${res.status}`);
+    const body = await res.json();
+    if (asRows(body?.value).length > 0) return true;
+  }
+  return false;
 }
 
 /** `--apply` / `--dry-run`. Returns the exit code. Deletes ONLY after every refusal check passed. */
@@ -531,24 +592,42 @@ export async function runApply(o, rawDeps) {
     const gone = reads.filter((r) => r.gone).length;
     const outside = present.filter((r) => !rowInClass(o.class, r.row, omIds)).length;
     if (outside > 0) {
-      g.err(`refused: ${outside} manifest id(s) are not currently in class ${o.class}. Nothing was deleted.`);
+      // F3 item 7a: a row that lacks a column its class needs is "unreadable", never an orphan, and is refused like any other outsider.
+      const unreadable = present.filter((r) => rowUnreadable(o.class, r.row)).length;
+      g.err(`refused: ${outside} manifest id(s) are not currently in class ${o.class}${unreadable ? ` (${unreadable} of them unreadable: a column is missing from the row)` : ""}. Nothing was deleted.`);
       return 2;
     }
+
+    // F3 item 7d: a phantom type (B7) that still has children (turbines of the type, or bridge rows of the type) is NOT deleted:
+    // the delete would cascade into them. Any failed child read refuses the run (fail-closed).
+    let withChildren = new Set();
+    if (o.class === "B7") {
+      const checks = await pool(present, DELETE_CONCURRENCY, async (r) => ({ id: r.id, children: await hasChildren(ctx, r.id) }));
+      const bad = checks.filter((c) => c.error).length;
+      if (bad > 0) { g.err(`read of the children of ${bad} type(s) failed. Nothing was deleted.`); return 1; }
+      withChildren = new Set(checks.filter((c) => c.children).map((c) => c.id));
+    }
+    const candidates = present.filter((r) => !withChildren.has(r.id));
+    const skippedNote = withChildren.size > 0 ? `, ${withChildren.size} has children, skipped` : "";
     if (o.dryRun) {
-      g.log(`dry run, class ${o.class}: ${present.length} row(s) would be deleted (4 at a time), ${gone} already gone; a backup would be written first. Nothing was changed.`);
+      g.log(`dry run, class ${o.class}: ${candidates.length} row(s) would be deleted (4 at a time), ${gone} already gone${skippedNote}; a backup would be written first. Nothing was changed.`);
       return 0;
     }
-    if (present.length === 0) { g.log(`class ${o.class}: nothing to delete (${gone} already gone).`); return 0; }
+    if (candidates.length === 0) { g.log(`class ${o.class}: nothing to delete (${gone} already gone${skippedNote}).`); return withChildren.size > 0 ? 1 : 0; }
 
     // 2. Backup BEFORE the first delete.
     const outDir = outDirFor(o, deps);
     deps.io.mkdirp(outDir);
     const backupFile = path.join(outDir, `backup-${o.class}-${stamp(deps.now())}.json`);
-    deps.io.writeFile(backupFile, `${JSON.stringify({ class: o.class, entitySet: meta.set, createdAt: deps.now().toISOString(), rows: present.map((r) => r.row) }, null, 2)}\n`);
+    deps.io.writeFile(backupFile, `${JSON.stringify({ class: o.class, entitySet: meta.set, createdAt: deps.now().toISOString(), rows: candidates.map((r) => r.row) }, null, 2)}\n`);
 
-    // 3. Delete, 4 at a time. 404 = already gone.
-    const deletes = await pool(present, DELETE_CONCURRENCY, async (r) => {
-      const res = await ctx.request("DELETE", rowUrl(r.id));
+    // 3. Delete, 4 at a time. 404 = already gone. F3 item 7c: the DELETE carries `If-Match: <@odata.etag>` of the read-back above, so a
+    //    row that changed after the class check is refused by the server (412) and is NOT deleted. A row read back without an
+    //    `@odata.etag` is deleted without the header (the class check is then the only guard); Dataverse rows normally carry one.
+    const deletes = await pool(candidates, DELETE_CONCURRENCY, async (r) => {
+      const etag = typeof r.row?.["@odata.etag"] === "string" && r.row["@odata.etag"] ? r.row["@odata.etag"] : undefined;
+      const res = await ctx.request("DELETE", rowUrl(r.id), etag ? { "If-Match": etag } : undefined);
+      if (res.status === 412) return { id: r.id, changed: true };
       if (res.status === 404) return { id: r.id, gone: true };
       if (res.status >= 200 && res.status < 300) return { id: r.id, deleted: true };
       return { id: r.id, error: `HTTP ${res.status}` };
@@ -556,9 +635,10 @@ export async function runApply(o, rawDeps) {
     const deleted = deletes.filter((d) => d.deleted).length;
     const goneNow = deletes.filter((d) => d.gone).length;
     const errors = deletes.filter((d) => d.error).length;
+    const changedIds = new Set(deletes.filter((d) => d.changed).map((d) => d.id));
 
-    // 4. Read every id back; report those still present.
-    const back = await pool(manifest.ids, DELETE_CONCURRENCY, async (id) => {
+    // 4. Read every id back (except the ones reported separately: skipped for children, changed since the check); report those still present.
+    const back = await pool(manifest.ids.filter((id) => !withChildren.has(id) && !changedIds.has(id)), DELETE_CONCURRENCY, async (id) => {
       const res = await ctx.request("GET", rowUrl(id));
       if (res.status === 404) return { id, gone: true };
       if (res.status === 200) return { id, stillPresent: true };
@@ -566,9 +646,9 @@ export async function runApply(o, rawDeps) {
     });
     const stillPresent = back.filter((b) => b.stillPresent).length;
     const unknown = back.filter((b) => b.error).length;
-    g.log(`class ${o.class}: deleted ${deleted}, already gone ${gone + goneNow}, delete errors ${errors}, still present after read-back ${stillPresent}${unknown ? `, read-back failed ${unknown}` : ""}.`);
-    g.log(`backup of ${present.length} row(s) written to ${backupFile}`);
-    return errors + stillPresent + unknown > 0 ? 1 : 0;
+    g.log(`class ${o.class}: deleted ${deleted}, already gone ${gone + goneNow}, delete errors ${errors}, still present after read-back ${stillPresent}${unknown ? `, read-back failed ${unknown}` : ""}${changedIds.size ? `, changed since check ${changedIds.size}` : ""}${skippedNote}.`);
+    g.log(`backup of ${candidates.length} row(s) written to ${backupFile}`);
+    return errors + stillPresent + unknown + changedIds.size + withChildren.size > 0 ? 1 : 0;
   } catch (err) {
     g.err(`apply stopped: ${err.message}`);
     return 1;

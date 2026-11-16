@@ -86,7 +86,7 @@ afterEach(() => setDeleteSleeper(null));
 
 describe("a hardened delete, sequential", () => {
   it("UT-PLAN-922 retries a 429 and a network error, then lands: 3 requests, counted as one deleted row", async () => {
-    const s = stub({ script: { [g(1)]: [429, "net", "ok"] } });
+    const s = stub({ script: { [g(1)]: ["net", 429, "ok"] } });
     const result = await run(planOf(hd(1)), s);
     expect(s.raw.deleteRecordAsync).toHaveBeenCalledTimes(3);
     expect(result.done).toBe(1);

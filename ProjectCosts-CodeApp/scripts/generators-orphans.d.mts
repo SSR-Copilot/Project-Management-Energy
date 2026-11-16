@@ -27,25 +27,27 @@ export interface Snapshot {
 export interface Classification {
   classes: Record<ClassId, ClassEntry[]>;
   counts: Record<ClassId, number>;
-  details: { B4Groups: { typeId: string; bridges: number }[]; B4BridgeRows: number; B8NoAllocation: number; B8AllNullTurbine: number };
+  details: { B4Groups: { typeId: string; bridges: number }[]; B4BridgeRows: number; B8NoAllocation: number; B8AllNullTurbine: number; unreadable: Record<string, number> };
 }
 export interface Io {
   readFile(p: string): string; writeFile(p: string, text: string): void; mkdirp(p: string): void; tmpdir(): string;
 }
 export interface FetchResponseLike { status: number; headers?: { get(name: string): string | null }; json(): Promise<unknown> }
-export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; signal?: AbortSignal }) => Promise<FetchResponseLike>;
+export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; signal?: AbortSignal; redirect?: string }) => Promise<FetchResponseLike>;
 export interface Deps {
   env?: Record<string, string | undefined>;
   fetchImpl?: FetchLike; sleep?: (ms: number) => Promise<void>; now?: () => Date; timeoutMs?: number;
   io?: Io; log?: (line: string) => void; err?: (line: string) => void;
 }
 export interface Context {
-  ok: true; base: string; origin: string; request(method: string, url: string): Promise<FetchResponseLike>;
+  ok: true; base: string; origin: string; request(method: string, url: string, extraHeaders?: Record<string, string>): Promise<FetchResponseLike>;
 }
 
 export function isGuid(v: unknown): boolean;
 export function parseArgs(argv: string[]): Options;
 export function applyProblems(o: Pick<Options, "class" | "manifest" | "dryRun" | "yesDelete">): string[];
+export function rowUnreadable(cls: string, row: unknown): boolean;
+export function hasChildren(ctx: Context, typeId: string): Promise<boolean>;
 export function rowInClass(cls: string, row: unknown, omIds?: ReadonlySet<string>): boolean;
 export function classify(snapshot: Snapshot | undefined): Classification;
 export function csvCell(v: unknown): string;

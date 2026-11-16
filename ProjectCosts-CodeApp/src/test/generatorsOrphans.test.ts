@@ -200,9 +200,14 @@ describe("UT-ORPH — classification of B1 to B8 from a snapshot", () => {
     expect(classify(undefined).counts).toEqual(Object.fromEntries(CLASS_IDS.map((c) => [c, 0])));
   });
 
-  it("UT-ORPH-007 a null, missing or empty lookup all count as null", () => {
-    const r = classify({ B6: [{ vsb_generatorinprojectid: gid(1), vsb_name: "a" }, { vsb_generatorinprojectid: gid(2), _vsb_moduletypeinprojectid_value: "" }] });
+  it("UT-ORPH-007 a null or empty lookup counts as null; a MISSING column does not (F3 item 7a, fail-closed)", () => {
+    const r = classify({ B6: [
+      { vsb_generatorinprojectid: gid(1), vsb_name: "a" },
+      { vsb_generatorinprojectid: gid(2), _vsb_moduletypeinprojectid_value: "" },
+      { vsb_generatorinprojectid: gid(3), _vsb_moduletypeinprojectid_value: null },
+    ] });
     expect(r.counts.B6).toBe(2);
+    expect(r.details.unreadable.B6).toBe(1);
   });
 });
 

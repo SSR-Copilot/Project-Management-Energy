@@ -84,7 +84,7 @@ import {
   pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
   selectedIn, selectionAfterAddPv, selectionAfterAddWtg, showsPermissionChip, simpleCardValues,
   simpleFormDefaults, simpleSaveProgressText, statusLabel,
-  ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
+  ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
   rollbackApplies, substructureCardValues,
   substructureCostNoteVisible, toggleExpanded, toggleSelection, turbineFormDefaults,
   turbineHeightBlocksSave, turbinePanelPrefix, turbinePanelTitle, turbinePanelTotalHeight,
@@ -785,16 +785,6 @@ const SIMPLE_PANEL: Record<SimpleCapacityFamily, {
 
 const isActive = (status: number) => status === CHOICE_PLANT.status.active;
 
-/**
- * Shown when a failed save's rollback removed every generator row but the project roll-up (its last write) failed, so
- * nothing is left to retry (DEL-5). NEW - no canvas equivalent (DIVERGENCE, plan §9.3); it belongs in `rules.ts`'s
- * `ROLLBACK_MSG` next to `leftover`, and sits here only because that file belongs to another work package.
- */
-const ROLLBACK_TOTALS_FAILED_TEXT =
-  "The generator rows of the failed save were removed, but the project totals could not be updated. Reload the page and check the generator totals.";
-/** The longest rollback error detail shown beside the leftover message (the bar must stay readable). */
-const ROLLBACK_DETAIL_MAX = 240;
-
 /** The rows a failed create left behind and what the rollback needs to remove them again (plan §9.3). */
 interface RollbackTarget {
   /** The project the failed save was for: a late result or a Retry for another project is dropped (review finding 3b). */
@@ -1330,7 +1320,7 @@ export default function GeneratorsScreen() {
    * A delete job (DEL-5). When it FAILS, the rows its plan tried to delete (`plannedDeleteRows`) are set against the rows
    * `usePlanWrite` reports as deleted (`lastDeleted()`), and `deletePartialMessage` says what was removed and what was not.
    * The text follows the job's own error, never replaces it; nothing is added when every attempted row went (for example
-   * only the final roll-up failed), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
+   * only the final roll-up failed), when NONE went (review F3 item 2), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
    */
   const runDelete = async (job: Parameters<typeof writes.run>[0], typeName: string | null = null) => {
     const box: { ran: WritePlan | null } = { ran: null };
@@ -1340,8 +1330,12 @@ export default function GeneratorsScreen() {
       plan: typeof plan === "function" ? async () => { box.ran = await plan(); return box.ran; } : (box.ran = plan),
     });
     // A refused plan sent nothing: there is no partial state to describe.
+    // Review F3 item 2: and nothing when no row was deleted at all (the original error stands; "press again" would mislead).
     if (ids === null && box.ran && !box.ran.refusedReason) {
-      const text = deletePartialMessage({ attempted: plannedDeleteRows(box.ran), deleted: writes.lastDeleted(), typeName });
+      const deleted = writes.lastDeleted();
+      const text = deleted.length > 0
+        ? deletePartialMessage({ attempted: plannedDeleteRows(box.ran), deleted, typeName })
+        : null;
       if (text) setDeletePartial({ projectId, text });
     }
     return ids;
@@ -1395,9 +1389,11 @@ export default function GeneratorsScreen() {
       const deleted = writes.lastDeleted();
       const rows = remainingRows(target.rows, deleted);
       const maybeLanded = remainingRows(target.maybeLanded, deleted);
+      // Review F3 item 4: certain rows -> the full list; only maybe-landed rows -> "may not have been removed" (Retry stays);
+      // the totals text only when BOTH lists are empty (the roll-up alone failed).
       const base = rows.length > 0
         ? ROLLBACK_MSG.leftover(describeLeftovers(rows, { typeName: target.typeName }))
-        : ROLLBACK_TOTALS_FAILED_TEXT;
+        : maybeLanded.length > 0 ? ROLLBACK_MSG.maybeLeft : ROLLBACK_MSG.totalsFailed;
       const detail = own.detail?.trim() ?? null;
       const shownDetail = detail && detail !== base
         ? (detail.length > ROLLBACK_DETAIL_MAX ? `${detail.slice(0, ROLLBACK_DETAIL_MAX)}...` : detail)

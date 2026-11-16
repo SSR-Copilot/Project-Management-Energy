@@ -4079,7 +4079,10 @@ export interface RollbackLeftovers {
   turbines: number;
   allocations: number;
   bridgeRows: number;
+  /** Rows of an unknown entity set (the named kinds below are not counted here). */
   other: number;
+  /** Inverter, substructure, BESS, hydrogen and substation rows, with their nouns; absent when there are none (review F3 item 3). */
+  otherKinds?: { one: string; many: string; count: number }[];
   total: number;
 }
 
@@ -4087,18 +4090,41 @@ export interface RollbackLeftovers {
 export function describeLeftovers(landed: readonly LandedRowRef[], names: { typeName?: string | null }): RollbackLeftovers {
   const g = groupLandedRows(landed.filter((r) => r.id));
   const types = g.types.length + g.pvTypes.length;
+  const kinds = splitOtherKinds(g.others);
   return {
     ...(names.typeName && types > 0 ? { typeName: names.typeName } : {}),
     types,
     turbines: g.turbines.length,
     allocations: g.allocations.length,
     bridgeRows: g.bridgeRows.length,
-    other: g.others.length,
+    other: kinds.unknown,
+    ...(kinds.named.length > 0 ? { otherKinds: kinds.named } : {}),
     total: types + g.turbines.length + g.allocations.length + g.bridgeRows.length + g.others.length,
   };
 }
 
 const countOf = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Readable nouns for the type rows a failed save or delete can leave that have no family of their own in `groupLandedRows`
+ * (review F3 item 3), keyed by entity set, in the order they are listed. Only an unknown set is called "other row".
+ * NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5).
+ */
+const OTHER_KIND_NOUNS: readonly { set: string; one: string; many: string }[] = [
+  { set: ES_PLANT.inverterTypeInProjects, one: "inverter type", many: "inverter types" },
+  { set: ES_PLANT.substructureTypeInProjects, one: "substructure type", many: "substructure types" },
+  { set: ES_PLANT.storageTypeInProjects, one: "BESS row", many: "BESS rows" },
+  { set: ES_PLANT.hydrogenTypeInProjects, one: "hydrogen row", many: "hydrogen rows" },
+  { set: ES_PLANT.substationTypeInProjects, one: "substation row", many: "substation rows" },
+];
+
+/** The rows of `others` split into the named kinds (in `OTHER_KIND_NOUNS` order, empty kinds left out) and the unknown rest. */
+function splitOtherKinds(others: readonly LandedRowRef[]): { named: { one: string; many: string; count: number }[]; unknown: number } {
+  const named = OTHER_KIND_NOUNS
+    .map((k) => ({ one: k.one, many: k.many, count: others.filter((r) => r.entitySet.toLowerCase() === k.set).length }))
+    .filter((k) => k.count > 0);
+  return { named, unknown: others.length - named.reduce((sum, k) => sum + k.count, 0) };
+}
 
 /** The text of a failed rollback: says exactly what is left. Turbines and allocations are always listed. */
 export function leftoversMessage(d: RollbackLeftovers): string {
@@ -4107,6 +4133,7 @@ export function leftoversMessage(d: RollbackLeftovers): string {
   parts.push(countOf(d.turbines, "generator", "generators"));
   parts.push(countOf(d.allocations, "land-lease allocation", "land-lease allocations"));
   if (d.bridgeRows > 0) parts.push(countOf(d.bridgeRows, "device-type row", "device-type rows"));
+  for (const k of d.otherKinds ?? []) parts.push(countOf(k.count, k.one, k.many));
   if (d.other > 0) parts.push(countOf(d.other, "other row", "other rows"));
   return `This save failed and could not be fully undone. Left behind: ${parts.join(", ")}. Press ${ROLLBACK_MSG.retryButton} to remove them.`;
 }
@@ -4126,7 +4153,21 @@ export const ROLLBACK_MSG = {
    * back but the project is not loaded any more, so no rollback plan can be built (DEL-5: moved here, same wording).
    */
   noProject: "The failed save could not be undone automatically. Reload the page and check the generator types.",
+  /**
+   * NEW — no canvas equivalent (DIVERGENCE, plan §9.3). Shown when a failed save's rollback removed every generator row but the
+   * project roll-up (its last write) failed, so nothing is left to retry (DEL-5; review F3 item 4: moved here from `Screen.tsx`, same wording).
+   */
+  totalsFailed:
+    "The generator rows of the failed save were removed, but the project totals could not be updated. Reload the page and check the generator totals.",
+  /**
+   * NEW — no canvas equivalent (DIVERGENCE, plan §9.3). Shown when no row is certainly left, but some rows of a failed bulk
+   * create may exist (`maybeLanded`): the Retry cleanup button stays (review F3 item 4).
+   */
+  maybeLeft: `Some rows of the failed save may not have been removed. Press Retry cleanup to check and remove them.`,
 } as const;
+
+/** The longest rollback error detail shown beside the leftover message (the bar must stay readable). */
+export const ROLLBACK_DETAIL_MAX = 240;
 
 /* ═══════════════════ what a failed delete job did and did not remove (delete hardening plan DEL-5) ════ */
 
@@ -4156,7 +4197,9 @@ function deleteFamilyParts(rows: readonly LandedRowRef[], typeName: string | nul
   const setOf = (r: LandedRowRef): string => r.entitySet.toLowerCase();
   const costs = g.others.filter((r) => setOf(r) === ES_PLANT.landLeaseProjectCosts);
   const opex = g.others.filter((r) => setOf(r) === ES_PLANT.opexProjectCosts);
-  const other = g.others.length - costs.length - opex.length;
+  const rest = g.others.filter((r) => setOf(r) !== ES_PLANT.landLeaseProjectCosts && setOf(r) !== ES_PLANT.opexProjectCosts);
+  const kinds = splitOtherKinds(rest);
+  const other = kinds.unknown;
   const named = (n: number, one: string, many: string, kind: string): string =>
     (typeName && n === 1 ? `${kind} "${typeName}"` : countOf(n, one, many));
   const parts: [number, string][] = [
@@ -4167,6 +4210,7 @@ function deleteFamilyParts(rows: readonly LandedRowRef[], typeName: string | nul
     [costs.length, countOf(costs.length, "land-lease cost", "land-lease costs")],
     [opex.length, countOf(opex.length, "O&M cost", "O&M costs")],
     [g.bridgeRows.length, countOf(g.bridgeRows.length, "device-type row", "device-type rows")],
+    ...kinds.named.map((k): [number, string] => [k.count, countOf(k.count, k.one, k.many)]),
     [other, countOf(other, "other row", "other rows")],
   ];
   return parts.filter(([n]) => n > 0).map(([, text]) => text);
@@ -4174,7 +4218,8 @@ function deleteFamilyParts(rows: readonly LandedRowRef[], typeName: string | nul
 
 /**
  * What a delete job that failed part-way removed and did not remove (DEL-5). `attempted` is `plannedDeleteRows(plan)`,
- * `deleted` is `PlanError.deleted`. Null when every attempted row was deleted (nothing to tell). `typeName` names the one
+ * `deleted` is `PlanError.deleted`. Null when every attempted row was deleted (nothing to tell) AND when none was (review F3
+ * item 2: the job's own error stands and a "press again" hint would mislead). `typeName` names the one
  * type row when there is exactly one in a half. NEW — no canvas equivalent (DIVERGENCE, delete hardening plan DEL-5).
  */
 export function deletePartialMessage(args: {
@@ -4186,6 +4231,9 @@ export function deletePartialMessage(args: {
   if (notRemoved.length === 0) return null;
   const left = new Set(notRemoved.map(landedKey));
   const removed = args.attempted.filter((r) => !left.has(landedKey(r)));
+  // Review F3 item 2: a "press Delete again" hint is only true when the job really made progress. With nothing deleted the
+  // original error stands alone (after a 403 pressing again would fail the same way).
+  if (removed.length === 0) return null;
   return DELETE_PARTIAL_MSG.text(deleteFamilyParts(removed, args.typeName), deleteFamilyParts(notRemoved, args.typeName));
 }
 

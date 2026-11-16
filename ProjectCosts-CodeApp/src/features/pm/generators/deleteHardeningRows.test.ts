@@ -103,23 +103,22 @@ describe("DEL-5: deletePartialMessage and DELETE_PARTIAL_MSG", () => {
     expect(text).toBe("Removed: 1 generator type, 12 generators. Not removed: 3 land-lease allocations. Press Delete again to finish.");
   });
 
-  it("UT-GEN-990 an empty half is left out: nothing removed, or only the roll-up-free rows left", () => {
-    expect(R.deletePartialMessage({ attempted: [row(ALLOC, "a1")], deleted: [] }))
-      .toBe("Not removed: 1 land-lease allocation. Press Delete again to finish.");
+  it("UT-GEN-990 an empty half is left out: nothing is said when nothing was removed (F3 item 2), and only the rows left when some were", () => {
+    expect(R.deletePartialMessage({ attempted: [row(ALLOC, "a1")], deleted: [] })).toBeNull();
     expect(R.deletePartialMessage({ attempted: [row(ALLOC, "a1"), row(TYPE, "t1")], deleted: [row(ALLOC, "a1")] }))
       .toBe("Removed: 1 land-lease allocation. Not removed: 1 generator type. Press Delete again to finish.");
   });
 
   it("UT-GEN-991 every family has its own wording: PV type, device-type rows, other rows; a single type uses its name when given", () => {
     const text = R.deletePartialMessage({
-      attempted: [row(PVTYPE, "p1"), row(BRIDGE, "b1"), row(BRIDGE, "b2"), row("vsb_other", "x1")],
-      deleted: [],
+      attempted: [row(PVTYPE, "p1"), row(BRIDGE, "b1"), row(BRIDGE, "b2"), row("vsb_other", "x1"), row(ALLOC, "a1")],
+      deleted: [row(ALLOC, "a1")],
     });
-    expect(text).toBe("Not removed: 1 PV module type, 2 device-type rows, 1 other row. Press Delete again to finish.");
+    expect(text).toBe("Removed: 1 land-lease allocation. Not removed: 1 PV module type, 2 device-type rows, 1 other row. Press Delete again to finish.");
     expect(R.deletePartialMessage({ attempted: [row(TYPE, "t1"), row(ALLOC, "a1")], deleted: [row(ALLOC, "a1")], typeName: "WTG 12" }))
       .toBe('Removed: 1 land-lease allocation. Not removed: generator type "WTG 12". Press Delete again to finish.');
-    expect(R.deletePartialMessage({ attempted: [row(TYPE, "t1"), row(TYPE, "t2")], deleted: [], typeName: "WTG 12" }))
-      .toBe("Not removed: 2 generator types. Press Delete again to finish.");
+    expect(R.deletePartialMessage({ attempted: [row(TYPE, "t1"), row(TYPE, "t2"), row(ALLOC, "a1")], deleted: [row(ALLOC, "a1")], typeName: "WTG 12" }))
+      .toBe("Removed: 1 land-lease allocation. Not removed: 2 generator types. Press Delete again to finish.");
   });
 
   it("UT-GEN-992 the pieces are exported (DELETE_PARTIAL_MSG) and a half with no parts is left out of text()", () => {
