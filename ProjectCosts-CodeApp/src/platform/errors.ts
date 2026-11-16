@@ -76,6 +76,27 @@ export function unwrapDelete(result: IOperationResult<unknown>, operation: strin
 }
 
 /**
+ * The strict form of `unwrapDelete`, for a hardened delete (`PlannedWrite.hardened`, Generators delete hardening
+ * DEL-2). `"deleted"` = the server removed the row; `"gone"` = it was already absent; anything else throws a
+ * `DataError`.
+ *
+ * "Gone" is ONLY HTTP 404 or the Dataverse code `0x80040217` in the error. The free-text match of `unwrapDelete`
+ * ("does not exist" anywhere in the error text) is NOT accepted here: a 400 that names another missing object
+ * would otherwise pass as "this row is gone". The caller reads a "gone" row back (`data/verifyGone.ts`) to be
+ * sure. `unwrapDelete` is untouched, so every other caller behaves as before.
+ */
+export function unwrapDeleteStrict(result: IOperationResult<unknown>, operation: string): "deleted" | "gone" {
+  if (result.success) return "deleted";
+  const status = statusOf(result.error);
+  let detail = "";
+  try { detail = typeof result.error === "string" ? result.error : JSON.stringify(result.error) ?? ""; } catch { detail = String(result.error); }
+  // A real `Error` stringifies to "{}", so its message is read as well.
+  const message = result.error instanceof Error ? result.error.message : "";
+  if (status === 404 || /0x80040217/i.test(`${message} ${detail}`)) return "gone";
+  throw new DataError(operation, result.error, status);
+}
+
+/**
  * For reads where "the caller may not see this" is a legitimate answer rather than an error —
  * a 403 yields the fallback, anything else still throws.
  *

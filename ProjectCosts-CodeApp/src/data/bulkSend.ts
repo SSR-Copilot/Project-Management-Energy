@@ -226,7 +226,7 @@ function bulkTransport(
  * throwing, so the entry takes ok / failed from the result, and counts rows only when it landed.
  * Counts and the table name only, never row values. The result is returned untouched.
  */
-async function loggedBulkRequest(
+export async function loggedBulkRequest(
   kind: BulkAction, target: string, rows: number, send: () => Promise<IOperationResult<unknown>>,
 ): Promise<IOperationResult<unknown>> {
   const t0 = performance.now();
@@ -311,7 +311,7 @@ export function isBulkUnavailable(action: BulkAction): boolean {
 }
 
 /** A per-tab flag in `sessionStorage`; false when storage is blocked. */
-function readSessionFlag(key: string): boolean {
+export function readSessionFlag(key: string): boolean {
   try {
     return globalThis.sessionStorage?.getItem(key) === "1";
   } catch {
@@ -319,7 +319,7 @@ function readSessionFlag(key: string): boolean {
   }
 }
 
-function writeSessionFlag(key: string): void {
+export function writeSessionFlag(key: string): void {
   try {
     globalThis.sessionStorage?.setItem(key, "1");
   } catch {

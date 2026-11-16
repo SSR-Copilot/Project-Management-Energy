@@ -88,6 +88,50 @@ export async function forEachLimit<T>(
 export const DELETE_CONCURRENCY = 16;
 
 /**
+ * Tiered delete concurrency for a plan's `together(deletes, { limit })` group (Generators bulk programme, 1B).
+ *
+ * LEAF = deletes of rows nothing hangs off: land-lease allocations, O&M costs, units, bridge rows and turbines
+ * deleted one by one. 16 at once, as `DELETE_CONCURRENCY`.
+ *
+ * CASCADE = deletes whose cascade locks and updates child rows: land-lease costs and generator types. Held to 4
+ * at once, because overlapping cascades on the same parents measured 6-11 s per request in D51.
+ *
+ * Starting values; the timed DEV test (plan 9.4) sets the final numbers. Each group builds its own `createGate`,
+ * and `executePlan` runs groups one after another, so the figure is a per-group ceiling: a caller must not run two
+ * groups at the same time, or the in-flight total would be their sum (the 52-per-user limit still has headroom for
+ * 16 + reads, not for 16 + 16 + 8).
+ */
+export const LEAF_DELETE_CONCURRENCY = 16;
+export const CASCADE_DELETE_CONCURRENCY = 4;
+
+/**
+ * Runs tasks that share a key strictly one after another, and tasks with different keys (or no key) independently
+ * (Generators delete hardening DEL-4, `PlannedWrite.serialKey`).
+ *
+ * `run(key, task)` starts `task` once every task given earlier with the SAME non-empty key has settled (a failure
+ * of the earlier task does not stop the later one: failure policy belongs to the caller). A task with no key (or
+ * an empty one) starts at once, exactly as if this helper were not there. Order within a key is the call order.
+ *
+ * Use it OUTSIDE a `createGate` slot: `serial(key, () => gate(send))`. A task that waits for its predecessor then
+ * holds no slot, so a long queue on one key cannot starve the other keys, and the gate's limit still bounds the
+ * requests in flight. The chain keeps only the tail promise per key and never rejects.
+ */
+export type SerialRunner = <T>(key: string | undefined, task: () => Promise<T>) => Promise<T>;
+
+export function createSerialRunner(): SerialRunner {
+  const tails = new Map<string, Promise<unknown>>();
+  return <T>(key: string | undefined, task: () => Promise<T>): Promise<T> => {
+    if (!key) return task();
+    const previous = tails.get(key) ?? Promise.resolve();
+    const result = previous.then(task);
+    const tail = result.then(() => undefined, () => undefined);
+    tails.set(key, tail);
+    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
+    return result;
+  };
+}
+
+/**
  * A limit shared by several concurrent pools: `gate(task)` runs `task` once fewer than `limit`
  * gated tasks are in flight. `mapLimit` bounds ONE pool; a save that runs several pools at once
  * (Add Cost from Table, D51) needs one ceiling across all of them to stay under the 52-request

@@ -38,7 +38,7 @@
  * sub-menus, so they render flat, right after "Add Others" (`commandBarOrder`), and "Add Others" itself
  * does nothing — it has no `Switch` arm in the canvas `OnSelect` (D15c, D27).
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface,
   DialogTitle, Dropdown, MessageBar, MessageBarBody, Option, Radio, Switch,
@@ -57,6 +57,7 @@ import {
 } from "@/components";
 import { useSession } from "@/app/SessionContext";
 import { CHOICE_PLANT } from "@/data/dataverseNames";
+import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
 import { media, palette, space } from "@/theme/tokens";
 import {
   CANCEL_REQUEST, COMMAND_BAR_LABEL, DIALOG_LABELS, DIALOG_TEXT, GENERATORS_PAGE_SIZE, PERMISSION_MSG,
@@ -82,7 +83,9 @@ import {
   planSavePvType, planSaveSimple, planSaveTurbine, planToggleStatus, projectCatalog, pvCardValues,
   pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
   selectedIn, selectionAfterAddPv, selectionAfterAddWtg, showsPermissionChip, simpleCardValues,
-  simpleFormDefaults, simpleSaveProgressText, statusLabel, substructureCardValues,
+  simpleFormDefaults, simpleSaveProgressText, statusLabel,
+  ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
+  rollbackApplies, substructureCardValues,
   substructureCostNoteVisible, toggleExpanded, toggleSelection, turbineFormDefaults,
   turbineHeightBlocksSave, turbinePanelPrefix, turbinePanelTitle, turbinePanelTotalHeight,
   turbineSaveProgressText, typeFieldBlankMessage, typeFilterMessage, typeSaveLabel, typeSaveProgressText,
@@ -98,6 +101,7 @@ import {
   substructureFormDefaults, substructureNeedsPvCapacity, substructurePanelTitle,
   substructureSaveProgressText, validateInverterForm, validateSubstructureForm,
   type CapacityGuardReason, type CatalogModel, type GeneratorCommandKey, type GeneratorTypeRow,
+  type LandedRowRef, type RollbackScenario,
   type InverterFormState, type PlanProject, type PlantFamily, type PvTypeFormState, type ReplaceInputs,
   type ReplaceWtgForm, type SelectedRow, type SimpleCapacityFamily, type SimpleFormState,
   type SimpleTypeRow, type SubstructureFormState, type TurbineFormState, type TurbineRow, type TypeFormState,
@@ -786,6 +790,30 @@ const SIMPLE_PANEL: Record<SimpleCapacityFamily, {
 
 const isActive = (status: number) => status === CHOICE_PLANT.status.active;
 
+/** The rows a failed create left behind and what the rollback needs to remove them again (plan §9.3). */
+interface RollbackTarget {
+  /** The project the failed save was for: a late result or a Retry for another project is dropped (review finding 3b). */
+  projectId: string | undefined;
+  rows: LandedRowRef[];
+  /** Rows of a failed bulk create that may or may not exist (`writes.lastMaybeLanded()`); undone too, a 404 on them is harmless (DEL-5). */
+  maybeLanded: LandedRowRef[];
+  rollupRan: boolean;
+  typeName: string | null;
+}
+/** What a failed delete job removed and did not remove (DEL-5), shown after the job's own error text. */
+interface DeletePartialNotice {
+  /** The project the delete ran for; it never shows on another project. */
+  projectId: string | undefined;
+  text: string;
+}
+/** The outcome of a rollback; `leftover` is set when the cleanup failed and **Retry cleanup** is offered. */
+interface RollbackNotice {
+  /** The project the notice belongs to; it never shows on another project (review finding 3b). */
+  projectId: string | undefined;
+  text: string;
+  leftover: (RollbackTarget & { reason: string | null }) | null;
+}
+
 /* ──────────────────────────────────────────────────────────────────── screen */
 
 export default function GeneratorsScreen() {
@@ -816,6 +844,42 @@ export default function GeneratorsScreen() {
   const entraObjectId = useEntraObjectId();
   const writes = useGeneratorWrites(projectId);
   const permissionFlows = useModulePermissionFlows();
+  /*
+   * DIVERGENCE (plan §9.3, flag `GENERATORS_BULK.createRollback`, false today): the canvas leaves a partly-saved
+   * WTG type behind when its save fails. With the flag on, the rows that landed are deleted again, and when that
+   * fails too the screen says what is left and offers "Retry cleanup". All of it is inert while the flag is off.
+   */
+  const [rollbackNotice, setRollbackNotice] = useState<RollbackNotice | null>(null);
+  const [createFailure, setCreateFailure] = useState<RollbackTarget | null>(null);
+  /** DEL-5: "Removed: ...; Not removed: ..." of a delete job that failed part-way, appended to its error. */
+  const [deletePartial, setDeletePartial] = useState<DeletePartialNotice | null>(null);
+  /** The autonumber the failed save's new type got (read from the create's response), for the leftover message. */
+  const createdTypeName = useRef<string | null>(null);
+  /** Every place that cleared the write messages also forgets a pending rollback / leftover. */
+  const clearWrites = () => { writes.clear(); setRollbackNotice(null); setCreateFailure(null); setDeletePartial(null); };
+  // A new project starts with a clean slate (state adjusted while rendering, not in an effect). Flag off: untouched.
+  const [rollbackProjectId, setRollbackProjectId] = useState(projectId);
+  if (rollbackProjectId !== projectId) {
+    setRollbackProjectId(projectId);
+    if (GENERATORS_BULK.createRollback) clearWrites();
+  }
+  /** The failed save whose rollback has been started (an effect must not set state to say so). */
+  const startedFailure = useRef<RollbackTarget | null>(null);
+  /** A rollback job is running: a double click or a double effect must not start a second one (review finding 3a). */
+  const rollbackInFlight = useRef(false);
+  /** The project shown now, for a rollback that finishes after the user moved on (review finding 3b). */
+  const currentProjectId = useRef(projectId);
+  useEffect(() => { currentProjectId.current = projectId; }, [projectId]);
+  /**
+   * Per save: the first plan (it ends with the roll-up) has finished once `then` starts, and the approval flow
+   * call has resolved once `request` returned (review findings 2 and 1). Reset at the start of every save.
+   */
+  const firstPlanDone = useRef(false);
+  const permissionRequested = useRef(false);
+  /** The rollback notice of THIS project only (review finding 3b). */
+  const shownNotice = rollbackNotice?.projectId === projectId ? rollbackNotice : null;
+  /** The partial-delete text of THIS project only, and only while the job's own error is on the bar. */
+  const shownPartial = deletePartial && deletePartial.projectId === projectId ? deletePartial.text : null;
   const perms = SERVER_DECIDES;
 
   /** Every model a card or the panel needs — the types' own rows win over the orderable catalogue. */
@@ -1158,7 +1222,7 @@ export default function GeneratorsScreen() {
   };
 
   const onCommand = (key: string) => {
-    writes.clear();
+    clearWrites();
     switch (key as GeneratorCommandKey) {
       case "addWTGType":
         setSelection(selectionAfterAddWtg(selection));
@@ -1241,7 +1305,7 @@ export default function GeneratorsScreen() {
   };
 
   const openTurbine = (type: GeneratorTypeRow, turbine: TurbineRow | null) => {
-    writes.clear();
+    clearWrites();
     setSelection({ family: "wtg", id: type.id });
     setApplyAll({ capacity: false, plinth: false, hubHeight: false });
     setTurbineForm(turbineFormDefaults({ turbine, model: modelOf(type), nextIndex: nextTurbineIndex(turbinesQ.data), lang }));
@@ -1249,7 +1313,132 @@ export default function GeneratorsScreen() {
   };
 
   /* ── the writes ── */
-  const run = (job: Parameters<typeof writes.run>[0]) => writes.run(job);
+  // A new write command forgets an earlier rollback notice and its leftover rows (rollback jobs call `writes.run` directly).
+  const run = (job: Parameters<typeof writes.run>[0]) => {
+    setRollbackNotice(null);
+    setCreateFailure(null);
+    setDeletePartial(null);
+    return writes.run(job);
+  };
+
+  /**
+   * A delete job (DEL-5). When it FAILS, the rows its plan tried to delete (`plannedDeleteRows`) are set against the rows
+   * `usePlanWrite` reports as deleted (`lastDeleted()`), and `deletePartialMessage` says what was removed and what was not.
+   * The text follows the job's own error, never replaces it; nothing is added when every attempted row went (for example
+   * only the final roll-up failed), when NONE went (review F3 item 2), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
+   */
+  const runDelete = async (job: Parameters<typeof writes.run>[0], typeName: string | null = null) => {
+    const box: { ran: WritePlan | null } = { ran: null };
+    const plan = job.plan;
+    const ids = await run({
+      ...job,
+      plan: typeof plan === "function" ? async () => { box.ran = await plan(); return box.ran; } : (box.ran = plan),
+    });
+    // A refused plan sent nothing: there is no partial state to describe.
+    // Review F3 item 2: and nothing when no row was deleted at all (the original error stands; "press again" would mislead).
+    if (ids === null && box.ran && !box.ran.refusedReason) {
+      const deleted = writes.lastDeleted();
+      const text = deleted.length > 0
+        ? deletePartialMessage({ attempted: plannedDeleteRows(box.ran), deleted, typeName })
+        : null;
+      if (text) setDeletePartial({ projectId, text });
+    }
+    return ids;
+  };
+
+  /**
+   * Runs the rollback job (plan §9.3) for `target` and reports the outcome in the error bar. A job through
+   * `writes.run` like any other, so it traces (rule 23) and blocks the commands while it runs. The engine treats a
+   * delete answering 404 as already gone, so running it again over the same rows is safe.
+   * Success: the original reason plus `ROLLBACK_MSG.undone`. Failure or refusal: `ROLLBACK_MSG.leftover`, which says
+   * what is left, and the **Retry cleanup** button. DEL-5: the leftover is the recorded rows minus the ones the failed
+   * rollback did delete (`writes.lastDeleted()`), so Retry works on the reduced list; with nothing left but a failed
+   * roll-up the message says so and offers no retry.
+   */
+  const runRollback = async (target: RollbackTarget, reason: string | null) => {
+    // A rollback is already running (double click, double effect): never start a second one.
+    if (rollbackInFlight.current) return;
+    // The target belongs to another project than the one shown: recomputing with this project's data would be wrong.
+    if (target.projectId !== projectId) return;
+    if (!planProject) {
+      setRollbackNotice({
+        projectId: target.projectId, leftover: null,
+        text: reason ? `${reason} ${ROLLBACK_MSG.noProject}` : ROLLBACK_MSG.noProject,
+      });
+      return;
+    }
+    rollbackInFlight.current = true;
+    setRollbackNotice(null);
+    try {
+      // The rollback's own error text, caught as `usePlanWrite` builds it (the shared bar is only re-rendered later).
+      const own: { detail: string | null } = { detail: null };
+      const done = await writes.run({
+        progress: ROLLBACK_MSG.progress,
+        errorText: (detail) => { own.detail = detail; return detail; },
+        plan: planRollbackCreate({
+          project: planProject, landed: target.rows, maybeLanded: target.maybeLanded, rollupRan: target.rollupRan,
+          remainingTypes: types,
+        }),
+      });
+      // The project changed while the rollback ran: its late result must not show on the new project.
+      if (currentProjectId.current !== target.projectId) {
+        // `writes.run` has just put the rollback's own error on the shared bar: take it off the new project again.
+        writes.clear();
+        return;
+      }
+      if (done !== null) {
+        setRollbackNotice({ projectId: target.projectId, text: reason ? `${reason} ${ROLLBACK_MSG.undone}` : ROLLBACK_MSG.undone, leftover: null });
+        return;
+      }
+      // DEL-5: the rows the failed rollback did delete are not left over; Retry cleanup works on what remains.
+      const deleted = writes.lastDeleted();
+      const rows = remainingRows(target.rows, deleted);
+      const maybeLanded = remainingRows(target.maybeLanded, deleted);
+      // Review F3 item 4: certain rows -> the full list; only maybe-landed rows -> "may not have been removed" (Retry stays);
+      // the totals text only when BOTH lists are empty (the roll-up alone failed).
+      const base = rows.length > 0
+        ? ROLLBACK_MSG.leftover(describeLeftovers(rows, { typeName: target.typeName }))
+        : maybeLanded.length > 0 ? ROLLBACK_MSG.maybeLeft : ROLLBACK_MSG.totalsFailed;
+      const detail = own.detail?.trim() ?? null;
+      const shownDetail = detail && detail !== base
+        ? (detail.length > ROLLBACK_DETAIL_MAX ? `${detail.slice(0, ROLLBACK_DETAIL_MAX)}...` : detail)
+        : null;
+      setRollbackNotice({
+        projectId: target.projectId,
+        text: shownDetail ? `${base} ${shownDetail}` : base,
+        // Unconfirmed rows still to undo keep the retry open; with nothing left to delete there is nothing to retry.
+        leftover: rows.length > 0 || maybeLanded.length > 0 ? { ...target, rows, maybeLanded, reason } : null,
+      });
+    } finally {
+      rollbackInFlight.current = false;
+    }
+  };
+
+  /**
+   * Consulted after EVERY create job (plan §9.3): `rollbackApplies` says whether the save is rolled back. Only the WTG
+   * type scenarios are, and only with the flag on; nothing landed means nothing to undo (today's error only). The
+   * rollback itself starts from the effect below, once the screen has the failed save's error text in hand.
+   */
+  const queueRollback = (scenario: RollbackScenario, ids: readonly string[] | null, rollupRan: boolean) => {
+    if (ids !== null || !GENERATORS_BULK.createRollback || !rollbackApplies(scenario)) return;
+    const rows = [...writes.lastLanded()];
+    // DEL-5: rows of a failed bulk create that may exist are undone as well (the engine treats a 404 on a delete as gone).
+    const maybeLanded = [...writes.lastMaybeLanded()];
+    if (rows.length > 0 || maybeLanded.length > 0) {
+      setCreateFailure({ projectId, rows, maybeLanded, rollupRan, typeName: createdTypeName.current });
+    }
+  };
+  useEffect(() => {
+    if (!createFailure || writes.progress !== null || startedFailure.current === createFailure) return;
+    startedFailure.current = createFailure;
+    void runRollback(createFailure, writes.error);
+  }, [createFailure, writes.progress]); // eslint-disable-line react-hooks/exhaustive-deps -- starts once per failure
+
+  /** **Retry cleanup**: the same rollback over only the recorded leftover rows. No automatic retries. */
+  const retryCleanup = () => {
+    const left = rollbackNotice && rollbackNotice.projectId === projectId ? rollbackNotice.leftover : null;
+    if (left) void runRollback(left, left.reason);
+  };
   const lists = () => ({
     wtg: types, pv: pvQ.data, hydrogen: hydrogenQ.data, storage: storageQ.data, substation: substationQ.data,
   });
@@ -1262,6 +1451,9 @@ export default function GeneratorsScreen() {
     const requesting = requiresPermissionRequest(inCountry);
     const progress = typeSaveProgressText(model.displayName, inCountry);
     const names = buildTurbineNames({ shortName: planProject.shortName, existing: turbinesQ.data, count: n });
+    createdTypeName.current = null;
+    firstPlanDone.current = false;
+    permissionRequested.current = false;
     close();
     /*
      * Save performance (6 Nov 2026): ONE job. The queued second step (the device-type row and the AllWTG
@@ -1278,10 +1470,17 @@ export default function GeneratorsScreen() {
         existingTypes: types, projectTurbines: turbinesQ.data,
       }),
       then: async (first: PlanResult): Promise<WritePlan | null> => {
+        // The first plan, which ends with the roll-up, has completed once `then` runs (review finding 2).
+        firstPlanDone.current = true;
         const typeId = first.createdIds[0];
         if (!typeId) return null;
+        const landedName = first.createdRows?.[typeId]?.["vsb_name"];
+        createdTypeName.current = typeof landedName === "string" && landedName !== "" ? landedName : null;
         // D97 — out of country: `RequestModulePermission` for the new type instead of the roll-up (Y:15214, Y:16514).
-        if (requesting) await permissionFlows.request(buildGeneratorPermissionPayload(header, typeId, model.id));
+        if (requesting) {
+          await permissionFlows.request(buildGeneratorPermissionPayload(header, typeId, model.id));
+          permissionRequested.current = true;
+        }
         /*
          * Save performance (6 Nov 2026): the create returned the new row, its autonumber `vsb_name` included
          * (`PlanResult.createdRows`), so the name needs no read-back; and a type this save has just created has
@@ -1301,6 +1500,20 @@ export default function GeneratorsScreen() {
     });
     const typeId = ids?.[0];
     if (typeId) setSelection({ family: "wtg", id: typeId });
+    /*
+     * In country the first job's roll-up counted the new type, so the rollback recomputes it (harmless when the
+     * failure came before it: the totals are rebuilt from the rows that remain). Out of country the roll-up does not
+     * run (the permission request replaces it), so the rollback leaves the totals alone.
+     * The roll-up counts as run only once the first plan finished (`firstPlanDone`): a failure while creating the
+     * type or a turbine never reached it, so the rollback must not write the project (and its Fabric sync row).
+     *
+     * DIVERGENCE (plan §9.3, review finding 1): once the approval flow call has resolved, a real
+     * `RequestModulePermission` approval (mail, Teams card, run id) is open for the type, so a failing follow-up
+     * must NOT delete the type and its turbines. Nothing is rolled back; the error bar keeps the save's error.
+     */
+    if (!permissionRequested.current) {
+      queueRollback(inCountry ? "addWtgType" : "outOfCountryApprovalFailed", ids, inCountry && firstPlanDone.current);
+    }
   };
 
   const saveTurbine = async (fromPopup: boolean) => {
@@ -1316,7 +1529,7 @@ export default function GeneratorsScreen() {
       }),
     };
     close();
-    await run(job);
+    queueRollback(panelTurbine ? "editTurbine" : "addTurbine", await run(job), false);
   };
 
   const savePv = async () => {
@@ -1361,6 +1574,7 @@ export default function GeneratorsScreen() {
     });
     const pvId = editing?.id ?? ids?.[0];
     if (ids && pvId) setSelection({ family: "pv", id: pvId });
+    if (!editing) queueRollback("addPvType", ids, false);
   };
 
   /**
@@ -1389,7 +1603,9 @@ export default function GeneratorsScreen() {
     };
     close();
     // The canvas blanks `locSelectedInverterTypeEntity` after the save.
-    if (await run(job)) setSelection(null);
+    const ids = await run(job);
+    if (ids) setSelection(null);
+    if (!editing) queueRollback("saveInverter", ids, false);
   };
 
   /**
@@ -1418,7 +1634,9 @@ export default function GeneratorsScreen() {
       } : {}),
     };
     close();
-    if (await run(job)) setSelection(null);
+    const ids = await run(job);
+    if (ids) setSelection(null);
+    if (!editing) queueRollback("saveSubstructure", ids, false);
   };
 
   /**
@@ -1544,6 +1762,7 @@ export default function GeneratorsScreen() {
     const ids = await run(job);
     const id = row?.id ?? ids?.[0];
     if (ids && id) setSelection({ family, id });
+    if (!row) queueRollback("saveSimple", ids, false);
   };
 
   const onTypeSave = () => {
@@ -1572,7 +1791,7 @@ export default function GeneratorsScreen() {
       case "heightTurbine": await saveTurbine(true); return;
       case "deleteType": {
         const typeTurbines = turbinesByType.get(d.type.id) ?? [];
-        const ok = await run({
+        const ok = await runDelete({
           progress: WRITE_MSG.working, success: WRITE_MSG.typeDeleted, errorText: WRITE_ERROR.typeDelete,
           plan: async (): Promise<WritePlan> => {
             // D97 — `If(Not(IsBlank(FlowRunId)), Requestpermissioncancellation.Run(…))` (Y:15659), before any delete.
@@ -1583,14 +1802,14 @@ export default function GeneratorsScreen() {
               allocationCountByCost: inputs.countByCost, opexCostIds: inputs.opexCostIds,
             });
           },
-        });
+        }, d.type.name);
         if (ok) setSelection(defaultSelection(lists(), d.type.id));
         return;
       }
       case "deleteTurbine": {
         const type = types.find((t) => t.id === d.turbine.typeId);
         if (!type) return;
-        await run({
+        await runDelete({
           progress: WRITE_MSG.working, success: WRITE_MSG.turbineDeleted, errorText: WRITE_ERROR.turbineDelete,
           plan: async (): Promise<WritePlan> => {
             const alloc = await loadAllocations([d.turbine.id]);
@@ -1614,7 +1833,7 @@ export default function GeneratorsScreen() {
       case "deleteSimple": {
         const f = d.family;
         if (f === "pv") {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working, success: PV_MSG.deleted, errorText: pvDeleteErrorText,
             // G2 — the unit, its land lease and the O&M costs go first, as the confirmation says.
             plan: async (): Promise<WritePlan> => {
@@ -1628,10 +1847,10 @@ export default function GeneratorsScreen() {
                 allocations: inputs.allocations, allocationCountByCost: inputs.countByCost, opexCostIds: inputs.opexCostIds,
               });
             },
-          });
+          }, d.row.name);
           if (ok) setSelection(defaultSelection(lists(), d.row.id));
         } else if (f === "inverter" || f === "substructure") {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working,
             success: f === "inverter" ? WRITE_MSG.inverterDeleted : WRITE_MSG.substructureDeleted,
             errorText: f === "inverter" ? WRITE_ERROR.inverterDelete : WRITE_ERROR.substructureDelete,
@@ -1646,7 +1865,7 @@ export default function GeneratorsScreen() {
           });
           if (ok) setSelection(null);
         } else {
-          const ok = await run({
+          const ok = await runDelete({
             progress: WRITE_MSG.working,
             success: f === "storage" ? WRITE_MSG.storageDeleted : f === "hydrogen" ? WRITE_MSG.hydrogenDeleted : WRITE_MSG.substationDeleted,
             errorText: f === "storage" ? WRITE_ERROR.storageDelete : f === "hydrogen" ? WRITE_ERROR.hydrogenDelete : WRITE_ERROR.substationDelete,
@@ -1858,7 +2077,7 @@ export default function GeneratorsScreen() {
                       data-testid={`generators-turbine-delete-${t.id}`}
                       disabled={!actionsOpen || !isActive(type.status)}
                       onClick={() => {
-                        writes.clear();
+                        clearWrites();
                         setSelection({ family: "wtg", id: type.id });
                         guardThen("wtg", t.effectiveCapacity, { active: isActive(type.status), name: t.name },
                           () => setDialog({ kind: "deleteTurbine", turbine: t }));
@@ -1988,7 +2207,16 @@ export default function GeneratorsScreen() {
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
       </div>
 
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="generators" />
+      <WriteFeedback progress={writes.progress} error={shownNotice?.text ?? (writes.error && shownPartial ? `${writes.error} ${shownPartial}` : writes.error)} success={writes.success} testIdPrefix="generators" />
+      {shownNotice?.leftover ? (
+        // NEW - no canvas equivalent (DIVERGENCE, plan §9.3): the cleanup of a failed save did not finish.
+        <Button
+          appearance="primary" aria-label={ROLLBACK_MSG.retryButton} data-testid="generators-retry-cleanup"
+          disabled={writes.refreshing || writes.progress !== null} onClick={retryCleanup}
+        >
+          {ROLLBACK_MSG.retryButton}
+        </Button>
+      ) : null}
 
       {loading ? <LoadingOverlay mode="inline" /> : null}
 
