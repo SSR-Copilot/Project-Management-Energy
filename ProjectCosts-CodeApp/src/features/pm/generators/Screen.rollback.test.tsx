@@ -4,10 +4,10 @@
  * `./hooks` is mocked, with a STATEFUL `useGeneratorWrites` that behaves like `usePlanWrite` (the error is set
  * before `run` resolves to null, `run` clears it first, `lastLanded()` is what the job landed), so the screen's
  * own state machine runs for real. The flag `GENERATORS_BULK.createRollback` is switched per test.
- * Ids continue the Screen.test.tsx block (UT-GEN-930 and up).
+ * Ids continue the Screen.test.tsx block (UT-GEN-930 and up; 945 and up: the independent review's findings).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -82,6 +82,10 @@ const REASON = "“Add the new type” failed: boom. 1 of 4 changes had already 
 const state = vi.hoisted(() => ({
   flag: true,
   refreshing: false,
+  /** The project row the screen reads; null = not loaded (review finding 3c). */
+  project: null as unknown,
+  /** When set, a rollback job waits for it before answering (a rollback still running). */
+  gate: null as Promise<void> | null,
   projectId: "11111111-1111-1111-1111-111111111111",
   jobs: [] as Job[],
   landed: [] as LandedRowRef[],
@@ -111,7 +115,7 @@ vi.mock("./hooks", async () => {
       canEdit: true, editPermission: true, pvEditPermission: true,
       deletePermission: { wtg: true, pv: true, inverter: true, substructure: true, storage: true, hydrogen: true, substation: true },
     },
-    useGeneratorsProject: () => ok(baseProject),
+    useGeneratorsProject: () => ok(state.project),
     useProjectPlanning: () => ok({ isHeightLimitationForWtg: false, heightLimitation: null }),
     useGeneratorTypes: () => ok([TYPE]),
     useModulePermissionFlows: () => state.flows,
@@ -185,7 +189,10 @@ function script(saveLanded: LandedRowRef[], undo: Outcome[]) {
   let u = 0;
   state.exec = async (job, n) => {
     if (n === 0) return driveSave(job, REASON, saveLanded);
-    if (isUndo(job)) return { outcome: undo[Math.min(u++, undo.length - 1)]! };
+    if (isUndo(job)) {
+      if (state.gate) await state.gate;
+      return { outcome: undo[Math.min(u++, undo.length - 1)]! };
+    }
     return { outcome: { ids: [] } };
   };
 }
@@ -224,6 +231,8 @@ const LEFTOVER_ALL = ROLLBACK_MSG.leftover(describeLeftovers(LANDED_ALL, { typeN
 beforeEach(() => {
   state.flag = true;
   state.refreshing = false;
+  state.project = baseProject;
+  state.gate = null;
   state.projectId = PROJECT_ID;
   state.jobs = [];
   state.landed = [];
@@ -413,6 +422,140 @@ describe("UT-GEN Screen rollback of a failed create save (plan §9.3)", () => {
     // `rollbackApplies` said no before the landed rows were even read.
     expect(state.landedCalls).toBe(0);
     expect(errorBar()!.textContent).not.toContain(ROLLBACK_MSG.undone);
+    expect(retryButton()).toBeNull();
+  });
+});
+
+describe("UT-GEN Screen rollback: the independent review's findings (plan §9.3)", () => {
+  const NO_PROJECT_TEXT = "The failed save could not be undone automatically. Reload the page and check the generator types.";
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  const thenCalled = { n: 0 };
+  beforeEach(() => { thenCalled.n = 0; });
+
+  it("UT-GEN-945 out of country: the approval flow resolved, then the follow-up failed: NO rollback job, no Retry; the type stays saved", async () => {
+    // The default flow mock resolves, so a real approval is open for the type. Rows landed, the follow-up then fails.
+    script(LANDED_ALL.slice(0, 3), [{ ids: [] }]);
+    renderScreen();
+    await saveNewType(true);
+    await waitFor(() => expect(errorBar()).not.toBeNull());
+    await settle();
+    expect(state.flows.request).toHaveBeenCalledTimes(1);
+    expect(state.jobs).toHaveLength(1);
+    expect(state.jobs.some(isUndo)).toBe(false);
+    // The rollback was never even consulted, and the save's own error stays.
+    expect(state.landedCalls).toBe(0);
+    expect(errorBar()!.textContent).toContain(REASON);
+    expect(errorBar()!.textContent).not.toContain(ROLLBACK_MSG.undone);
+    expect(retryButton()).toBeNull();
+  });
+
+  it("UT-GEN-946 out of country: the approval flow call itself failed: the rollback runs as designed", async () => {
+    state.flows.request.mockImplementation(async () => { throw new Error("flow refused"); });
+    script(LANDED_ALL.slice(0, 3), [{ ids: [] }]);
+    renderScreen();
+    await saveNewType(true);
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    expect(isUndo(state.jobs[1]!)).toBe(true);
+    expect(state.landedCalls).toBeGreaterThan(0);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+    expect(retryButton()).toBeNull();
+  });
+
+  it("UT-GEN-947 in country: a failing follow-up still rolls back, with no approval flow involved", async () => {
+    script(LANDED_ALL, [{ ids: [] }]);
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    expect(state.flows.request).not.toHaveBeenCalled();
+    expect(isUndo(state.jobs[1]!)).toBe(true);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+  });
+
+  it("UT-GEN-948 a failure inside the first plan (type or turbine create): the rollback has NO roll-up, so the project is not written", async () => {
+    // The engine fails the first plan, so `then` never runs.
+    state.exec = async (job, n) => {
+      if (n === 0) {
+        await resolvePlan(job);
+        return { outcome: { fail: REASON }, landed: [landedRow(TYPE_TABLE, "new-type"), landedRow(TURBINE_TABLE, "nw1")] };
+      }
+      return { outcome: { ids: [] } };
+    };
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    const plan = await resolvePlan(state.jobs[1]!);
+    expect(shape(plan)).toEqual([`delete:${TURBINE_TABLE}`, `delete:${TYPE_TABLE}`]);
+    expect(plan.writes.some((w) => w.entitySet === "vsb_projects")).toBe(false);
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+  });
+
+  it("UT-GEN-949 a failure in the follow-up after the first plan finished: the rollback recomputes the roll-up", async () => {
+    state.exec = async (job, n) => {
+      if (n === 0) {
+        await resolvePlan(job);
+        await job.then!(FIRST, { setProgress: () => {} });
+        thenCalled.n += 1;
+        return { outcome: { fail: REASON }, landed: LANDED_ALL };
+      }
+      return { outcome: { ids: [] } };
+    };
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    expect(thenCalled.n).toBe(1);
+    const plan = await resolvePlan(state.jobs[1]!);
+    expect(shape(plan).at(-1)).toBe("update:vsb_projects");
+  });
+
+  it("UT-GEN-950 a double click on Retry cleanup starts ONE rollback", async () => {
+    script(LANDED_ALL, [{ fail: "delete refused" }, { ids: [] }]);
+    renderScreen();
+    await saveNewType();
+    const retry = await screen.findByTestId("generators-retry-cleanup");
+    let release: () => void = () => {};
+    state.gate = new Promise<void>((r) => { release = r; });
+    // Both clicks reach the same handler before the screen re-renders.
+    act(() => { retry.click(); retry.click(); });
+    await waitFor(() => expect(state.jobs).toHaveLength(3));
+    await settle();
+    expect(state.jobs).toHaveLength(3);
+    release();
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.undone));
+    expect(state.jobs).toHaveLength(3);
+  });
+
+  it("UT-GEN-951 the project changes while a rollback runs: its late failure does not show on the new project", async () => {
+    let release: () => void = () => {};
+    state.gate = new Promise<void>((r) => { release = r; });
+    script(LANDED_ALL, [{ fail: "delete refused" }]);
+    const view = renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(state.jobs).toHaveLength(2));
+    state.projectId = "22222222-2222-2222-2222-222222222222";
+    view.rerender(wrap(<GeneratorsScreen />));
+    release();
+    await settle();
+    // No leftover text and no Retry button on the new project; Retry would otherwise recompute with its data.
+    expect(retryButton()).toBeNull();
+    expect(errorBar()).toBeNull();
+    expect(state.jobs).toHaveLength(2);
+  });
+
+  it("UT-GEN-952 the project is not loaded when the rollback should start: a notice says so instead of silence", async () => {
+    state.exec = async (job, n) => {
+      if (n === 0) {
+        await resolvePlan(job);
+        // The project row disappears (e.g. a failed reload) before the screen can start the rollback.
+        state.project = null;
+        return { outcome: { fail: REASON }, landed: LANDED_ALL };
+      }
+      return { outcome: { ids: [] } };
+    };
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(errorBar()).not.toBeNull());
+    expect(errorBar()!.textContent).toContain(`${REASON} ${NO_PROJECT_TEXT}`);
+    expect(state.jobs).toHaveLength(1);
     expect(retryButton()).toBeNull();
   });
 });
