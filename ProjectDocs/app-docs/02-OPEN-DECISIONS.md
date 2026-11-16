@@ -7286,3 +7286,23 @@ What exists (all in `ProjectCosts-CodeApp/src/`):
 **Known limits of the rollback:** after a failed rollback the message lists every recorded row as left over even if some deletes landed (conservative; Retry is safe because a 404 counts as gone); a failed rollback's own error text is hidden behind the leftover message; there is no render test for a failed Add PV type. Not verifiable without DEV: the real delete order, the 404 handling, the cascade, the `[VSB]` lines and the browser UX.
 **Needs a live check:** everything above. In particular the bulk request time through the host (never measured under about 1 s in D51), whether the polymorphic, owning-business-unit, `null` and `statecode` binds work inside a bulk target, the response shape, and 429 behaviour.
 **Not changed:** the type create, the roll-ups, the device-type bridge create, the flow calls and every single-row save stay single requests.
+
+### 8. Independent review and its fixes (16 Nov 2026)
+
+An independent read-only review of the merged work found no blocker. These findings were fixed before merging into `RounakDev1`; each has a test:
+
+- **Out-of-country rollback after the approval request started** (UT-GEN-945 to 947). `DIVERGENCE (plan §9.3, review finding 1)`: when the Request Module Permission call has already succeeded and a later step fails, nothing is rolled back and the type stays saved with its pending approval, because deleting it would leave an open approval for a deleted type. The error bar keeps the original text. A failure of the flow call itself, and every in-country failure, still roll back. Product choice still open: cancel the approval and then roll back.
+- **Roll-up recompute** (UT-GEN-948, 949): it runs only when the first job of the save completed. A failure inside the first job produces a rollback with no project update.
+- **Retry cleanup edge cases** (UT-GEN-950 to 952): one rollback at a time; a result that arrives after a project change is dropped; a missing project shows a notice.
+- **"Row no longer exists" in the middle of a plan** keeps the "N of M changes had already been saved" sentence when something was saved. A refusal in the second job of a save reports the first job's saved count (UT-PLAN-150 upward, UT-PLANWRITE-020 upward).
+- **Records for rollback and messages**: `PlanError.maybeLanded` (ids of a failed bulk create that may have landed), `PlanResult/PlanError.deleted` (rows whose delete succeeded), and `lastMaybeLanded()` and `lastDeleted()` on `usePlanWrite`. **The screen does not use them yet**: after a failed rollback its leftover message still lists every recorded row (conservative; Retry is safe because a delete answering 404 counts as gone), and a rollback does not yet delete the maybe-landed ids. Wiring them is an open item.
+- **The Generators transport is no longer loaded by every screen**: `bulkBackend.ts` has `registerDefaultBulkBackend`, and `data/generators.ts` registers the Generators backend at load.
+- **The 501 per-row create fallback** checks that the id the service returns is the id sent. Row data that is missing is a validation error, not a TypeError.
+
+Known and still open, not fixed here:
+- The transport has **no bisection** of a failed chunk (plan §2.4 describes it): a bad row fails its whole chunk and the error is counted by rows only.
+- The per-save id cache of plan §2.5 is **not implemented**: a retry builds new ids.
+- A job that finishes after the user changes project can still put its error on the new project (an engine-wide gap in `usePlanWrite`, as before).
+- The two texts `ROLLBACK_PROGRESS_TEXT` and `ROLLBACK_NO_PROJECT_TEXT` live in `Screen.tsx` and belong in `rules.ts` `ROLLBACK_MSG`; `LandedRowRef` (rules) duplicates `LandedRow` (engine).
+- `knip` reports 37 unused files against the recorded baseline of 36; the extra file was not attributed.
+- **Nothing has run against DEV and every bulk flag is false.** The E2E parity suite was not run (the question was asked and not answered, so it is treated as declined).
