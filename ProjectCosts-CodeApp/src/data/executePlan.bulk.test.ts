@@ -408,8 +408,10 @@ describe("bulk failures", () => {
     expect(err.rowsGone).toBe(true);
     expect(err.cause).toBe(gone);
     expect([err.done, err.total]).toEqual([1, 3]);
-    expect(writeErrorMessage(err, "save")).toBe("2 row(s) no longer exist. Reload the page and try again.");
-    expect(writeErrorMessage(err, "save", (d) => `Failed: ${d}`)).toBe("Failed: 2 row(s) no longer exist. Reload the page and try again.");
+    // Mid-plan (1 of 3 changes already sent): the saved-count sentence follows the rows-gone text (F2, finding 1).
+    const saved = "2 row(s) no longer exist. Reload the page and try again. 1 of 3 changes had already been saved.";
+    expect(writeErrorMessage(err, "save")).toBe(saved);
+    expect(writeErrorMessage(err, "save", (d) => `Failed: ${d}`)).toBe(`Failed: ${saved}`);
     expect(writeErrorMessage(gone, "save")).toBe("2 row(s) no longer exist. Reload the page and try again.");
   });
 

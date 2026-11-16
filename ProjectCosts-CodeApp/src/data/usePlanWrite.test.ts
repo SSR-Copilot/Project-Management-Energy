@@ -51,8 +51,11 @@ describe("writeErrorMessage", () => {
     const gone = new BulkRowsGoneError(["a", "b", "c"]);
     const text = "3 row(s) no longer exist. Reload the page and try again.";
     expect(writeErrorMessage(gone, "save")).toBe(text);
-    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save")).toBe(text);
-    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save", (d) => `Failed: ${d}`)).toBe(`Failed: ${text}`);
+    // With changes already saved (done > 0) the saved-count sentence follows (F2, finding 1); with none, the text is bare.
+    const mid = `${text} 2 of 9 changes had already been saved.`;
+    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save")).toBe(mid);
+    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save", (d) => `Failed: ${d}`)).toBe(`Failed: ${mid}`);
+    expect(writeErrorMessage(new PlanError(0, 9, "status", gone), "save")).toBe(text);
   });
 
   it("UT-PLANWRITE-014 a PlanError counted in rows keeps the same sentence: N of M changes had already been saved", () => {
