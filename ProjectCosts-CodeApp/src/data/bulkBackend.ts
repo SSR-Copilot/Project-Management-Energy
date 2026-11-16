@@ -1,8 +1,9 @@
 /**
  * The interface contract between the write-plan engine (`executePlan.ts`) and the Generators
- * bulk transport. THIS FILE IS A STUB WRITTEN BY THE ORCHESTRATOR so two agents can build in
- * parallel: the transport owner replaces the body (keeping every exported name and shape), the
- * engine owner only imports the types and calls `getBulkBackend()`.
+ * bulk transport. The engine only imports the types and calls `getBulkBackend()`; the real
+ * transport is `createGeneratorsBulkBackend` in `./generatorsBulk.ts`, installed by default. The
+ * error classes live in `./bulkTypes.ts` and are re-exported here, so the transport can import
+ * them without an import cycle.
  *
  * Rules (decisions of 16 Nov 2026, ProjectDocs/app-docs/GENERATORS-BULK-IMPLEMENTATION-PLAN.md §2, §9):
  *  - One call targets ONE entity set. A standard-table bulk request lands whole or not at all;
@@ -19,6 +20,8 @@
  *  - Failures throw `BulkBatchError` carrying exact row counts; the engine turns them into the
  *    "N of M changes had already been saved" message at ROW level.
  */
+
+import { createGeneratorsBulkBackend } from "./generatorsBulk";
 
 /** One row of a bulk call. `id` is client-generated (creates) or the existing key (updates). */
 export interface BulkRow {
@@ -47,51 +50,25 @@ export interface BulkBackend {
   updateMany(entitySet: string, rows: readonly BulkRow[], opts?: BulkCallOptions): Promise<BulkUpdateResult>;
 }
 
-/** Nothing was sent: the rows failed the fail-closed checks. */
-export class BulkBackendValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "BulkBackendValidationError";
-  }
-}
-
-/** `updateMany` found that some rows no longer exist. Nothing was sent. */
-export class BulkRowsGoneError extends Error {
-  readonly missingIds: readonly string[];
-  constructor(missingIds: readonly string[]) {
-    super(`${missingIds.length} row(s) no longer exist. Reload the page and try again.`);
-    this.name = "BulkRowsGoneError";
-    this.missingIds = missingIds;
-  }
-}
-
-/** A bulk call failed after `rowsLanded` of `rowsTotal` rows were written. */
-export class BulkBatchError extends Error {
-  readonly rowsLanded: number;
-  readonly rowsTotal: number;
-  /** Ids known to have landed (creates), in input order; empty when none or unknown. */
-  readonly landedIds: readonly string[];
-  readonly cause?: unknown;
-  constructor(message: string, args: { rowsLanded: number; rowsTotal: number; landedIds?: readonly string[]; cause?: unknown }) {
-    super(message);
-    this.name = "BulkBatchError";
-    this.rowsLanded = args.rowsLanded;
-    this.rowsTotal = args.rowsTotal;
-    this.landedIds = args.landedIds ?? [];
-    this.cause = args.cause;
-  }
-}
+export {
+  BulkBackendValidationError, BulkBatchError, BulkRowsGoneError,
+} from "./bulkTypes";
 
 let backend: BulkBackend | null = null;
+/** The Generators transport, created on first use and kept (see `getBulkBackend`). */
+let defaultBackend: BulkBackend | null = null;
 
-/** The transport owner installs the real backend here (module init); tests install fakes. */
+/** Tests install fakes here; `null` restores the default (the real Generators transport). */
 export function setBulkBackend(next: BulkBackend | null): void {
   backend = next;
 }
 
+/**
+ * The installed backend, else the real transport (`createGeneratorsBulkBackend`, `./generatorsBulk.ts`),
+ * created lazily on first use so importing this file costs nothing and no call order matters.
+ */
 export function getBulkBackend(): BulkBackend {
-  if (backend === null) {
-    throw new Error("No bulk backend is installed. This is a programming error: install one with setBulkBackend().");
-  }
-  return backend;
+  if (backend !== null) return backend;
+  defaultBackend ??= createGeneratorsBulkBackend();
+  return defaultBackend;
 }
