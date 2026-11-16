@@ -249,6 +249,7 @@ function validate(t: GeneratorsTable, rows: readonly BulkRow[], action: BulkActi
   const seen = new Set<string>();
   rows.forEach((row, index) => {
     if (typeof row.id !== "string" || row.id.trim() === "") throw refuse(`row ${index} has no id.`);
+    if (row.data === null || typeof row.data !== "object") throw refuse(`row ${index} has no data.`);
     const key = row.id.toLowerCase();
     if (seen.has(key)) throw refuse(`row ${index} repeats an id of an earlier row.`);
     seen.add(key);
@@ -351,9 +352,28 @@ async function sendBulk(
 }
 
 /**
+ * A per-row create must land under the CLIENT key (the engine, the rollback record and the bound child rows
+ * all refer to `row.id`). The SDK sends every create with `Prefer: return=representation`, and the generated
+ * create result is the row model, which carries the primary key (the engine's own single-create path reads it
+ * the same way), so the id Dataverse used is checked against the one sent (GUIDs compare case-insensitively).
+ * A response without that key cannot be checked and is accepted: it is unverifiable, not wrong. A different
+ * key means the row exists under another id (an orphan the caller cannot name), so the row is NOT counted as landed
+ * and the failure surfaces as the usual `BulkBatchError` (exact `rowsLanded`) of `sendPerRow`.
+ */
+function assertKeyHonoured(t: GeneratorsTable, row: BulkRow, created: unknown, label: string): void {
+  const returned = created && typeof created === "object" ? (created as Record<string, unknown>)[t.primaryKey] : undefined;
+  if (typeof returned !== "string" || returned === "") return;
+  if (returned.toLowerCase() === row.id.toLowerCase()) return;
+  throw new Error(
+    `${label}: ${t.entitySetName}: the client key was not honoured: row ${row.id} was created as ${returned}. `
+    + `That row exists under the other id and is not part of the saved rows.`,
+  );
+}
+
+/**
  * Row by row after a 501: one request each through the gate, each logged. Not atomic, so every row
  * is counted: a failure stops the rows not yet started, and the error carries the exact number
- * that landed. `send` returns the SDK result of one row.
+ * that landed. `send` returns the SDK result of one row; a create is checked with `assertKeyHonoured`.
  */
 async function sendPerRow(
   t: GeneratorsTable, action: BulkAction, rows: readonly BulkRow[], label: string,
@@ -365,8 +385,9 @@ async function sendPerRow(
     if (failure) return;
     counter.sent += 1;
     try {
-      await gatedWrite(() => loggedCall(action, t.entitySetName,
+      const created = await gatedWrite(() => loggedCall(action, t.entitySetName,
         async () => unwrap(await send(row) as IOperationResult<unknown>, `${label} (${action})`), () => 1));
+      if (action === "create") assertKeyHonoured(t, row, created, label);
       landed.add(row.id);
     } catch (cause) {
       failure ??= { cause };

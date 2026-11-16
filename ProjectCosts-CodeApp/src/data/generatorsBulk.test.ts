@@ -24,6 +24,8 @@ const fx = vi.hoisted(() => ({
   /** Decides each per-row write by its 0-based index; default success. */
   rowScript: null as null | ((i: number) => boolean),
   rowCount: 0,
+  /** What a per-row create answers as its row (default `{}`: no id); receives the sent body. */
+  rowCreateData: null as null | ((body: Record<string, unknown>) => Record<string, unknown>),
 }));
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -57,7 +59,7 @@ const rowService = (es: string) => ({
     const ok = fx.rowScript?.(fx.rowCount++) ?? true;
     if (!ok) return { success: false, error: new Error("row create refused") };
     fx.rowCreates.push({ es, body });
-    return { success: true, data: {} };
+    return { success: true, data: fx.rowCreateData?.(body) ?? {} };
   },
   update: async (id: string, fields: Record<string, unknown>) => {
     const ok = fx.rowScript?.(fx.rowCount++) ?? true;
@@ -86,7 +88,7 @@ vi.mock("./client", async (original) => ({
 }));
 
 const { flushDataLog, resetRequestLog } = await import("@/platform/requestLog");
-const { getBulkBackend, setBulkBackend } = await import("./bulkBackend");
+const { getBulkBackend, registerDefaultBulkBackend, setBulkBackend } = await import("./bulkBackend");
 const {
   BulkBackendValidationError, BulkBatchError, BulkRowsGoneError,
 } = await import("./bulkTypes");
@@ -125,6 +127,7 @@ beforeEach(() => {
   fx.script.create = null;
   fx.script.update = null;
   fx.rowScript = null;
+  fx.rowCreateData = null;
   fx.rowCount = 0;
   sleeps = [];
   sessionStore = new Map();
@@ -551,6 +554,8 @@ describe("429: Retry-After retry, inside the backend only", () => {
 
 describe("the default backend and the [VSB] lines", () => {
   it("UT-GENBULK-044 getBulkBackend lazily returns the real backend, setBulkBackend overrides it, null restores the same default", async () => {
+    // The engine does not import the transport (F2): the module that owns it registers it (`./generators.ts` does).
+    registerDefaultBulkBackend(createGeneratorsBulkBackend);
     const first = getBulkBackend();
     expect(getBulkBackend()).toBe(first);
     const rows = createRows(2);
@@ -592,5 +597,38 @@ describe("the rollout flags", () => {
     expect(GENERATORS_BULK).toEqual({
       allocations: false, status: false, applyAll: false, turbines: false, replace: false, createRollback: false,
     });
+  });
+});
+
+describe("review fix F2 (per-row create key, row data)", () => {
+  const notImplemented = (): Outcome => ({ ok: false, status: 501, message: "not implemented" });
+
+  it("UT-GENBULK-100 a per-row create that Dataverse answers under ANOTHER id is a BulkBatchError saying the client key was not honoured, with the exact rows landed", async () => {
+    fx.script.create = () => notImplemented();
+    const rows = createRows(3);
+    fx.rowCreateData = (body) => ({ vsb_landleaseallocationwtgid: body["vsb_landleaseallocationwtgid"] === rows[0]!.id ? guid(999) : body["vsb_landleaseallocationwtgid"] });
+    const error = await backend().createMany(LL, rows).catch((e: unknown) => e) as InstanceType<typeof BulkBatchError>;
+    expect(error).toBeInstanceOf(BulkBatchError);
+    expect(error.message).toMatch(/client key was not honoured/);
+    expect(error.message).toContain(guid(999));
+    expect([error.rowsLanded, error.rowsTotal]).toEqual([2, 3]);
+    expect(error.landedIds).toEqual([rows[1]!.id, rows[2]!.id]);
+  });
+
+  it("UT-GENBULK-101 a per-row create answered under the same id (any letter case) or with no id in the answer is accepted", async () => {
+    fx.script.create = () => notImplemented();
+    const rows = createRows(2);
+    fx.rowCreateData = (body) => ({ vsb_landleaseallocationwtgid: String(body["vsb_landleaseallocationwtgid"]).toUpperCase() });
+    await expect(backend().createMany(LL, rows)).resolves.toMatchObject({ ids: rows.map((r) => r.id) });
+    fx.rowCreateData = null; // the answer carries no id at all: unverifiable, accepted
+    await expect(backend().createMany(LL, createRows(2, 10))).resolves.toMatchObject({ ids: createRows(2, 10).map((r) => r.id) });
+  });
+
+  it("UT-GENBULK-102 a row without data is refused with BulkBackendValidationError (not a TypeError), and nothing is sent", async () => {
+    const bad = [{ id: guid(1) } as unknown as BulkRow];
+    await expect(backend().createMany(LL, bad)).rejects.toBeInstanceOf(BulkBackendValidationError);
+    await expect(backend().updateMany(GI, bad)).rejects.toBeInstanceOf(BulkBackendValidationError);
+    await expect(backend().createMany(LL, [{ id: guid(1), data: null } as unknown as BulkRow])).rejects.toThrow(/has no data/);
+    expect(sentRequests()).toBe(0);
   });
 });
