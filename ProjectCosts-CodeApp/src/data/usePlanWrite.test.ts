@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { DataError, RECORD_GONE_TEXT, RecordGoneError } from "@/platform/errors";
+import { BulkRowsGoneError } from "./bulkBackend";
 import { PlanError, PlanRefusedError } from "./executePlan";
 import { writeErrorMessage } from "./usePlanWrite";
 
@@ -44,5 +45,18 @@ describe("writeErrorMessage", () => {
     expect(writeErrorMessage(gone, "save")).toBe(RECORD_GONE_TEXT);
     expect(writeErrorMessage(new PlanError(1, 2, "second", gone), "save")).toBe(RECORD_GONE_TEXT);
     expect(writeErrorMessage(gone, "save", (d) => `Failed: ${d}`)).toBe(`Failed: ${RECORD_GONE_TEXT}`);
+  });
+
+  it("UT-PLANWRITE-013 a bulk step's rows-gone failure reads as its own message, bare or inside a PlanError, wrapped by the prefix when given", () => {
+    const gone = new BulkRowsGoneError(["a", "b", "c"]);
+    const text = "3 row(s) no longer exist. Reload the page and try again.";
+    expect(writeErrorMessage(gone, "save")).toBe(text);
+    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save")).toBe(text);
+    expect(writeErrorMessage(new PlanError(2, 9, "status", gone), "save", (d) => `Failed: ${d}`)).toBe(`Failed: ${text}`);
+  });
+
+  it("UT-PLANWRITE-014 a PlanError counted in rows keeps the same sentence: N of M changes had already been saved", () => {
+    const error = new PlanError(37, 52, "allocations", new Error("chunk 2 of 3 failed"));
+    expect(writeErrorMessage(error, "save")).toBe(`${LQ}allocations${RQ} failed: chunk 2 of 3 failed. 37 of 52 changes had already been saved.`);
   });
 });
