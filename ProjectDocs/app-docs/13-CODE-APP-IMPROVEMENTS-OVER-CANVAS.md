@@ -47,6 +47,7 @@ Live performance is unmeasured (R-11), and the two latest DEV pushes had no smok
 | A record deleted by someone else | `recordGone` and `updateRecordIfExists` give a defined outcome |
 | A save that fails part-way leaves what it wrote (Generators: a type without its allocations) | **Proposed (not approved), D115:** Add WTG type and an out-of-country type are rolled back when they fail, with **Retry cleanup** if the cleanup fails; flag `createRollback`, off until its DEV check. Replace and apply-to-all are not covered |
 | A bulk write without the owning business unit succeeds and hides the rows | **Proposed (not approved), D115:** the Generators bulk transport refuses a target without `owningbusinessunit@odata.bind`, with an empty or repeated id, or with a reserved key, before anything is sent; bulk updates are guarded by an existence read |
+| The canvas had no bulk Dataverse actions, so no such failure existed | **Fixed (build gate), D115:** `check:power` now fails when the bulk actions are registered but `power.config.json` has no `environment_<id>` entry. Losing that entry (a CLI rewrite) answered HTTP 501 to every bulk Save and silently dropped each tab to one request per row (D51, 27 Oct 2026). Tests UT-POWERSRC-001..006 |
 
 ### 1.4 Logic, traceability and release control
 | Canvas challenge | Code app |
