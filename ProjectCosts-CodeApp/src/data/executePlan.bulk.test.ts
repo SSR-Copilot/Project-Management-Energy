@@ -146,11 +146,73 @@ describe("tiered together() groups", () => {
     expect(events.indexOf("casc")).toBe(20);
   });
 
-  it("UT-PLAN-105 two adjacent groups with the same limit still form one run", async () => {
-    const { client } = stubClient();
+  it("UT-PLAN-105 two adjacent together() calls are two groups even with the same limit: the second starts after the first finished", async () => {
+    const { client, raw } = stubClient();
+    const live = { a: 0, b: 0 };
+    const peaks = { a: 0, b: 0 };
+    let bStartedWhileAOpen = false;
+    raw.deleteRecordAsync.mockImplementation(async (_t: string, id: string) => {
+      const g = id.startsWith("a-") ? "a" : "b";
+      live[g] += 1;
+      peaks[g] = Math.max(peaks[g], live[g]);
+      if (g === "b" && live.a > 0) bStartedWhileAOpen = true;
+      await new Promise((r) => setTimeout(r, 5));
+      live[g] -= 1;
+      return ok(undefined) as never;
+    });
     const plan = emptyPlan();
-    plan.writes.push(...together(deletes(6), { limit: 3 }), ...together(deletes(6).map((w) => ({ ...w, id: `x-${w.id}` })), { limit: 3 }));
+    plan.writes.push(
+      ...together(deletes(6).map((w) => ({ ...w, id: `a-${w.id}` })), { limit: 3 }),
+      ...together(deletes(6).map((w) => ({ ...w, id: `b-${w.id}` })), { limit: 3 }),
+    );
     await expect(executePlan(plan, "test", client)).resolves.toMatchObject({ done: 12 });
+    expect(bStartedWhileAOpen).toBe(false);
+    expect(peaks).toEqual({ a: 3, b: 3 });
+  });
+
+  it("UT-PLAN-107 adjacent groups 16 then 4 peak at 16 then 4 in order, and a failure in the first group stops before the second", async () => {
+    const { client, raw } = stubClient();
+    const live = { leaf: 0, casc: 0 };
+    const peaks = { leaf: 0, casc: 0 };
+    const order: string[] = [];
+    raw.deleteRecordAsync.mockImplementation(async (_t: string, id: string) => {
+      const tier = id.startsWith("leaf-") ? "leaf" : "casc";
+      live[tier] += 1;
+      peaks[tier] = Math.max(peaks[tier], live[tier]);
+      order.push(tier);
+      await new Promise((r) => setTimeout(r, 5));
+      live[tier] -= 1;
+      if (id === "leaf-d-3") return { success: false as const, data: undefined, error: { message: "boom", status: 500 } } as never;
+      return ok(undefined) as never;
+    });
+    const build = () => {
+      const plan = emptyPlan();
+      plan.writes.push(
+        ...together(deletes(40).map((w) => ({ ...w, id: `leaf-${w.id}` })), { limit: LEAF_DELETE_CONCURRENCY }),
+        ...together(deletes(40).map((w) => ({ ...w, id: `casc-${w.id}` })), { limit: CASCADE_DELETE_CONCURRENCY }),
+      );
+      return plan;
+    };
+    // First, with the failing leaf delete: the cascade group never starts.
+    const err = (await executePlan(build(), "test", client).catch((e: unknown) => e)) as PlanError;
+    expect(err).toBeInstanceOf(PlanError);
+    expect(order.includes("casc")).toBe(false);
+    // Then a clean run: 16 then 4, in order.
+    raw.deleteRecordAsync.mockImplementation(async (_t: string, id: string) => {
+      const tier = id.startsWith("leaf-") ? "leaf" : "casc";
+      live[tier] += 1;
+      peaks[tier] = Math.max(peaks[tier], live[tier]);
+      order.push(tier);
+      await new Promise((r) => setTimeout(r, 5));
+      live[tier] -= 1;
+      return ok(undefined) as never;
+    });
+    order.length = 0;
+    peaks.leaf = 0;
+    peaks.casc = 0;
+    await executePlan(build(), "test", client);
+    expect(peaks).toEqual({ leaf: 16, casc: 4 });
+    expect(order.indexOf("casc")).toBe(40);
   });
 
   it("UT-PLAN-106 a limit that is not a whole number of at least 1 is a programmer error", () => {

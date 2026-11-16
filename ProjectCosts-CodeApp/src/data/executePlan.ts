@@ -31,8 +31,9 @@
  * Dataverse cuts a user off at 52 concurrent requests with no retry on the write path (`concurrency.ts`).
  *
  * TIERED GROUPS (Generators bulk programme, 1B): `together(writes, { limit })` gives a group its own in-flight
- * limit (default 8). Consecutive concurrent writes with the SAME limit form one run, with its own gate; a run
- * ends where the limit changes. Runs are sequential, so the limit is per run, never summed.
+ * limit (default 8). Each `together()` call is its own group (`concurrencyGroup`): a run is the consecutive
+ * concurrent writes of ONE group (hand-built `concurrent` writes without a group merge as before), with its own
+ * gate. Adjacent groups never merge and run one after the other, so the limit is per run, never summed.
  *
  * BULK STEPS (plan 2.1): a `createMany` / `updateMany` write is ONE step in plan order, sent through
  * `getBulkBackend()` (`data/bulkBackend.ts`; the backend logs each request, so the engine adds no `[VSB]` line).
@@ -384,7 +385,10 @@ export async function executePlan(
     // sees the ids created BEFORE the run; the run's own creates join `createdIds` in plan order.
     const limit = write.concurrencyLimit ?? WRITE_CONCURRENCY;
     let end = i;
-    while (end < writes.length && writes[end]!.concurrent && (writes[end]!.concurrencyLimit ?? WRITE_CONCURRENCY) === limit) end += 1;
+    while (
+      end < writes.length && writes[end]!.concurrent && writes[end]!.concurrencyGroup === write.concurrencyGroup
+      && (writes[end]!.concurrencyLimit ?? WRITE_CONCURRENCY) === limit
+    ) end += 1;
     const run = writes.slice(i, end);
     const before = [...createdIds];
     const gate = createGate(limit);

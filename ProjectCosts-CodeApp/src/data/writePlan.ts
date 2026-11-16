@@ -49,7 +49,15 @@ export interface PlannedWrite extends WriteOp {
    * `CASCADE_DELETE_CONCURRENCY` in `data/concurrency.ts` for the two tiers deletes use.
    */
   concurrencyLimit?: number;
+  /**
+   * Set by `together()`: the id of the group this write belongs to. Writes of different groups never share a run,
+   * so two adjacent `together()` calls are two groups that run one after the other, each with its own limit. A
+   * hand-built `concurrent` write without it merges with its neighbours as before (UT-PLAN-032..036).
+   */
+  concurrencyGroup?: number;
 }
+
+let groupCounter = 0;
 
 /** True for a `createMany` / `updateMany` step (one bulk request sequence, counted per row). */
 export const isBulkWrite = (w: Pick<WriteOp, "op">): boolean => w.op === "createMany" || w.op === "updateMany";
@@ -72,18 +80,21 @@ export interface TogetherOptions {
  * BEFORE them and whose relative order no server automation depends on.
  *
  * A bulk operation (`createMany` / `updateMany`) cannot be in a group: this throws, as a programmer error.
- * Consecutive groups with different limits stay separate steps.
+ * EACH CALL IS ITS OWN GROUP (`concurrencyGroup`): adjacent `together()` calls never merge, whatever their limits;
+ * a group finishes before the next one starts.
  */
 export const together = (writes: readonly PlannedWrite[], opts?: TogetherOptions): PlannedWrite[] => {
   const limit = opts?.limit;
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
     throw new Error(`together(): the limit must be a whole number of at least 1 (got ${String(limit)})`);
   }
+  groupCounter += 1;
+  const group = groupCounter;
   return writes.map((w) => {
     if (isBulkWrite(w)) {
       throw new Error(`together(): "${w.reason}" is a bulk operation (${w.op}); a bulk operation is its own plan step and cannot be part of a concurrent group`);
     }
-    return { ...w, concurrent: true, ...(limit === undefined ? {} : { concurrencyLimit: limit }) };
+    return { ...w, concurrent: true, concurrencyGroup: group, ...(limit === undefined ? {} : { concurrencyLimit: limit }) };
   });
 };
 
