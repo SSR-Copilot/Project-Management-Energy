@@ -2,6 +2,8 @@
 
 Status: **draft, 16 Nov 2026.** The code is merged on `integration/generators-bulk`, **not product-approved, not run against DEV, every flag off**. Decision record: `02-OPEN-DECISIONS.md` **D115**. Analysis and plan: `GENERATORS-BULK-DATAVERSE-ANALYSIS-AND-PLAN.md` (request model §2.2, risks §6, probes §9) and `GENERATORS-BULK-IMPLEMENTATION-PLAN.md` (phases §3, decisions §9).
 
+The delete-hardening work (D116) has its own test plan: `GENERATORS-DELETE-DEV-TEST-PLAN.md` (DEL-0 facts, then DT-01 onward).
+
 This plan has two halves:
 - **Part A** is automated and runs in `npm run verify`.
 - **Part B** is a manual test against **VSBCloud_Dev** on the DEV test project, which only a person with a signed-in browser can run.

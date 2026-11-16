@@ -11,6 +11,32 @@
 
 ---
 
+## Status (16 Nov 2026)
+
+The work packages below were built on `integration/generators-delete` and are recorded in decision **D116**. **Not product-approved, not run against DEV.** Test plan: `GENERATORS-DELETE-DEV-TEST-PLAN.md`.
+
+| Package | State |
+|---|---|
+| DEL-1 flag file | Built and merged: `GENERATORS_DELETE { tieredDeletes: true, verifyDeletes: false, parentOrder: false, guardedUpdates: false }` |
+| DEL-2 retry, strict gone-check, read-back | Built and merged. The hardened path has no flag: **every Generators delete is hardened with the default flags** (live). `confirm: true` is set on type, PV type, land-lease cost, unit, inverter, substructure, BESS, hydrogen and substation deletes and acts only when `verifyDeletes` is on; rows answering 404 are always read back |
+| DEL-3 all bridges | Built and merged |
+| DEL-4 parent order | Built for **allocations only** (`serialKey` = the land-lease cost id, flag `parentOrder`, off). O&M head and period ordering is not built; `stopOnFailure` exists in the engine and no plan uses it |
+| DEL-5 truthful messages | Built and merged: the rollback undoes `maybeLanded` rows and reports only rows really left; delete jobs show `Removed: ... Not removed: ... Press Delete again to finish.` |
+| DEL-7(a) guarded updates | Built and merged behind `guardedUpdates` (off). DEL-7(b), the version check, is not built |
+| DEL-8 orphan script | Built and merged: `scripts/generators-orphans.mjs`, `npm run orphans:generators` (its filters have never run against DEV) |
+| `check:power` gate | Built earlier on the branch (UT-POWERSRC-001..006) |
+| **Waiting** | DEL-0 (needs the DEV session); DEL-6 (needs the answers to questions 1 and 6 below); DEL-7(b); DEL-9 (needs the answer to question 8); O&M head and period ordering; rollback allocation ordering by parent (a `LandedRow` has no parent id); a readable noun for inverter, substructure, storage, hydrogen and substation rows in the partial-delete text ("other row"); a roll-up-only retry; moving `ROLLBACK_TOTALS_FAILED_TEXT` and `ROLLBACK_DETAIL_MAX` from `Screen.tsx` into `rules.ts` |
+
+Risks still open:
+- Nothing was run against DEV. The OData filters of the orphan script (`eq null` on lookups, `or` chains of 40 ids, `vsb_allwtgallocated ne true`) have never run.
+- Whether deleting a type nulls the required allocation lookup is unknown until DEL-0.
+- The location of `Retry-After` on SDK errors is unknown; the text of a lock timeout or deadlock is not captured.
+- `confirm: true` acts only when `verifyDeletes` is on.
+- The hardened delete is live for every user, with no flag to switch it off.
+
+---
+
+
 ## 1. Corrections to what was said earlier
 
 The first answer on delete behaviour was written before the code was checked. Compared with the code:
