@@ -310,6 +310,17 @@ Do these in order for each phase branch:
 
 ## 9. Decisions recorded on 16 Nov 2026 (they override anything earlier in this document)
 
+> **Correction note, 16 Nov 2026 (after the packages were merged on `integration/generators-bulk`).** The text below and sections 2 and 3 are kept as written. Where the merged code shows a statement to be wrong or different, this is what is true:
+> 1. **Allocation requests.** "30 rows in 1 request" (section 3, phase 2 DEV check) and "1-2 requests" for 500 rows are wrong at the merged chunking. A bulk step is one plan entry, but the transport sends under 20 rows as one request and from 20 rows in chunks of 10 to 500 rows, at most 8 in parallel: **30 rows are 3 requests of 10, 200 rows are 8 requests of 25, 500 rows are 8 requests of 63.**
+> 2. **Flags.** Section 2.6 names `GENERATORS_BULK_ALLOCATIONS`, `GENERATORS_BULK_STATUS` and so on. The code has one object, `GENERATORS_BULK` in `data/generatorsBulkFlags.ts`, with the keys `allocations`, `status`, `applyAll`, `turbines`, `replace` and `createRollback`, all `false`. Phases 1 and 1B have no flag.
+> 3. **No bisection.** Section 2.4 plans to halve a failed chunk down to single rows. It is not implemented. A failure reports exact row counts (`BulkBatchError`), the plan stops, and a retry re-sends the same ids.
+> 4. **Delete concurrency is per group, not one shared gate.** Section 9.4 says the shared gate keeps the total under the per-user limit. In the code each `together()` call is its own group with its own gate and its own limit, and groups run one after another, so the limit is a per-group ceiling. A caller must not run two groups at the same time.
+> 5. **Rollback roll-up.** Section 9.3 recomputes the roll-up only if the first job's roll-up ran. The screen passes `rollupRan` true in country and false out of country, so in country the roll-up is always recomputed from the remaining types (harmless if it never ran).
+> 6. **Order in two plans.** `planSaveTurbine` and the PV follow-up keep the canvas order, allocations after the roll-up, so the roll-up is not the last write there. With the `turbines` flag on, Add type no longer wraps the device-type row in a group.
+> 7. **Apply to all.** The turbine edit itself is not part of the bulk `updateMany`; only the siblings are. Sibling rows keep today's payload, including the owning-business-unit bind (phase 3, item 4 left open by the plan).
+> 8. **Tiered deletes** are implemented (leaf group 16, cascade group 4; a single bridge, unit or type delete stays a plain step), and the Replace O&M detach (8 in flight) and unit deletes are now two groups.
+> 9. **Not covered by the rollback.** `rollbackApplies` is false for add turbine, PV type, simple types, inverter and substructure, as section 9.3 says; after a failed rollback the message lists every recorded row as left over even if some deletes landed.
+
 ### 9.1 Answers and their effect
 
 | Topic | Answer | Effect on the plan |
