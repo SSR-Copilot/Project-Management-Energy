@@ -167,6 +167,10 @@ const useStyles = makeStyles({
       [media.belowMd]: { overflowY: "auto" },
     },
     "&.canvas-panel .canvas-panel-footer": { height: "45px", borderTopColor: "transparent" },
+    // Every `lbl_ProductionData{PV|WTG}_*` caption is `Weight: Semibold` (Description, Irradiation, Gross
+    // Yield, …). canvas.css `.canvas-panel .fui-Field label { font-weight: 400 }` (0,2,1) outranked
+    // `.pm-canvas-panel .fui-Field__label`'s 600 (0,2,0), so they showed regular (17 Nov 2026).
+    "&.canvas-panel .fui-Field label.fui-Field__label": { fontWeight: tokens.fontWeightSemibold },
     "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
     "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
       outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent",
@@ -251,9 +255,18 @@ const useStyles = makeStyles({
    */
   totalRow: { gridTemplateRows: "20px 4px 32px auto", paddingLeft: "2px" },
   error: { color: palette.Error, fontSize: tokens.fontSizeBase200 },
-  // `InfoButtonCanvas2`: 30 x 30, 10 right of the Irradiation input.
-  info: { display: "flex", alignItems: "flex-end", gap: "10px" },
+  /*
+   * `InfoButtonCanvas2`: 30 x 30 at `X: =txt_…_Irradation.X + .Width + 10` with no `Y`, so Y 0 of the
+   * 70-high container — level with the caption row, not beside the box (25 down). The canvas (i)
+   * circle is ~20 px across; Fluent's `InfoRegular` draws its circle at 16/20 of the glyph, so 24 px.
+   */
+  info: { display: "flex", alignItems: "flex-start", gap: "10px" },
   infoField: { flex: "0 1 calc(50% + 20px)", minWidth: 0, "& .fui-Input": { width: "100%" } },
+  infoButton: {
+    flexShrink: 0, width: "30px", height: "30px", minWidth: "30px",
+    paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0, color: "#000",
+    "& .fui-Button__icon": { fontSize: "24px", width: "24px", height: "24px", color: "#000" },
+  },
 });
 
 /* ────────────────────────────────────────────────────────────────── helpers */
@@ -583,7 +596,7 @@ export default function ProductionScreen() {
                       onChange={(v) => set("irradiation", v)} testId="txt_ProductionDataPV_Irradation" ariaLabel="txt_ProductionDataPV_Irradation" />
                   </div>
                   <Tooltip content={UI.irradiationInfo} relationship="label" withArrow>
-                    <Button appearance="transparent" icon={<InfoRegular />} aria-label={UI.irradiationInfo} data-testid="InfoButtonCanvas2" />
+                    <Button appearance="transparent" className={s.infoButton} icon={<InfoRegular />} aria-label={UI.irradiationInfo} data-testid="InfoButtonCanvas2" />
                   </Tooltip>
                 </div>
               </>

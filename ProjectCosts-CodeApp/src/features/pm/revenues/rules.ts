@@ -36,7 +36,9 @@
  * SOURCE DEFECTS — each is commented at its rule, canvas behaviour kept reachable:
  *  1. ambiguity 1 — the price-curve clamp/nearest fallback compares PRICES to YEARS.
  *     `priceForYear` implements the intended nearest-*year* selection;
- *     `priceForYearCanvasParity` reproduces the shipped comparison verbatim.
+ *     `priceForYearCanvasParity` reproduces the shipped comparison verbatim. The engine seeds
+ *     with the CANVAS-PARITY one (user, 17 Nov 2026: Add Revenue Contract showed 60.00 where
+ *     the canvas shows 52.00); `priceForYear` stays for when the source is fixed.
  *  2. ambiguity 4 — Shift of COD bounds disagree between message (exclusive 0…24) and
  *     visibility (inclusive). `validateShiftOfCod` ports the visibility rule;
  *     `shiftOfCodMessageRuleCanvasParity` reproduces the message rule.
@@ -841,14 +843,23 @@ export function priceForYearCanvasParity(
 /**
  * Rule 13 — the p90 price only exists for wind. `locRevenuePriceP90` is a
  * `Switch(recTechnologyType, Technology.Wind, …, Blank())` with NO PV branch, so PV
- * projects get blank and the p90 field is not rendered.
+ * projects get blank and the p90 field is not rendered. Its lookup (L6394-6461) is the p50 one,
+ * so it shares the canvas-parity fallback and `exactRegion` (see `priceForYearCanvasParity`).
  */
 export function p90Price(
   rows: readonly AssumptionRow[], tech: Technology, codYear: number, language: Lang = "en-US",
+  exactRegion?: string | null,
 ): number | null {
   if (tech !== "Wind") return null;
-  return priceForYear(rows, tech, codYear, language);
+  return priceForYearCanvasParity(rows, tech, codYear, language, exactRegion);
 }
+
+/**
+ * `locAreaWithRegion` as the 1.21.753 exact-year price lookup reads it: the Italian price zone,
+ * BLANK for every other country — so outside Italy the canvas always takes the fallback.
+ */
+export const priceExactRegion = (countryName: string | null, region: string | null): string | null =>
+  countryName === "Italy" ? region : null;
 
 /**
  * Rule 14 — correction factors are seeded `{Value: 1, StandardAssumptionValue: 1,
@@ -3220,8 +3231,14 @@ export function applyRevenueEngine(input: {
   const end = engineEndDate(start, dur.years, dur.months);
   const codYear = project.cod?.getFullYear() ?? (input.today ?? new Date()).getFullYear();
   const pricePool = pricePoolFor(rows, project.countryName, region);
-  const price = priceForYear(pricePool, tech, codYear, lang);
-  const priceP90 = p90Price(pricePool, tech, codYear, lang);
+  // Canvas parity (SOURCE DEFECT 1, kept on purpose — user, 17 Nov 2026): outside Italy this is the
+  // LAST price row, as the live canvas seeds it.
+  const exactRegion = priceExactRegion(project.countryName, region);
+  // `priceValue: Value(If(recStandardAssumptionExists, …, Blank()))` (L5996-6391, p90 L6394-6461):
+  // a type with no standard (e.g. PPA on a German project) opens with a BLANK Tariff / Price — the
+  // live canvas, 17 Nov 2026; this app had seeded it from the curve regardless.
+  const price = exists ? priceForYearCanvasParity(pricePool, tech, codYear, lang, exactRegion) : null;
+  const priceP90 = exists ? p90Price(pricePool, tech, codYear, lang, exactRegion) : null;
   const infl = inflation(rows, tech, project, { standardAssumptionExists: exists, language: lang });
   const neg = negativePriceState(rows, tech, label, input.productionExists);
   const shows = showsGermanFitBlock(project.countryName, label, tech);
