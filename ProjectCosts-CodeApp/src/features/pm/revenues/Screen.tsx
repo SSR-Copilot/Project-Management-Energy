@@ -367,6 +367,11 @@ const useStyles = makeStyles({
     "&.canvas-panel .fui-Input:has(input:disabled)": {
       backgroundColor: "#ffffff", border: "1px solid #e0e0e0",
     },
+    // …except Tariff / Price p50, a `ModernTextInput@1.1.1` (p90 is a `TextInput@0.0.54`): Disabled,
+    // it keeps the grey filled box with no outline (live canvas, 17 Nov 2026).
+    "&.canvas-panel .fui-Input:has(input:disabled[data-testid='txt_ProjectRevenues_RightPanel_NewEditCost_BodyContent_TariffPrice_1'])": {
+      backgroundColor: "#f5f5f5", border: "1px solid transparent",
+    },
     // Caption row 32 high, text at its foot 6 above the box; the `*` (`palette.Error`, Bold,
     // Medium) hangs 10 px left of the caption, raised to the caption's cap height.
     "&.canvas-panel .fui-Field": { rowGap: 0 },
@@ -503,6 +508,10 @@ function TextInputField({
   const controlClass = useFieldControlClass();
   // `DisplayMode.Disabled` stays greyed; a field without an `onChange` is read-only (View).
   const mode = disabled ? "disabled" : onChange ? "edit" : "view";
+  // A Disabled canvas input (`TextInput@0.0.54`, `ModernTextInput@1.1.1`) paints its value in the
+  // disabled grey whatever its `FontColor` / `Color`; only the italic survives (live canvas,
+  // Tariff / Price p50 + p90 on a German FiT contract, 17 Nov 2026).
+  const standardLook = disabled && standard === true ? "italic" : standard;
   return (
     <Field
       className={skin.field}
@@ -513,7 +522,7 @@ function TextInputField({
     >
       <Input
         appearance={FIELD_APPEARANCE}
-        className={controlClass(mode, standardClass(standard))}
+        className={controlClass(mode, standardClass(standardLook))}
         type={type}
         value={value}
         placeholder={placeholder}

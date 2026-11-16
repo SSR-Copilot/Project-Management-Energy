@@ -1543,7 +1543,7 @@ Reproduced and documented: the hard-coded `true` start-date flag (ambiguity 5); 
 2. **Fabric SQL:** until `Assumptions Revenues SQL` is reachable, every contract is typed by hand and nothing is marked standard. Acceptable, or keep Add Contract disabled until then?
 3. **Balancing owner:** confirm binding the project's business unit on a new balancing price (fix 2), where the canvas leaves the creating user's.
 4. **Custom-inflation flag:** confirm writing the field's own standardness (fix 1).
-5. **Price fallback:** nearest year (this app) or the canvas year-vs-price comparison, once prices flow?
+5. ~~**Price fallback:** nearest year (this app) or the canvas year-vs-price comparison, once prices flow?~~ — **answered 17 Nov 2026: canvas parity.** The live canvas seeded a German wind FiT contract at 52.00 where this app showed 60.00. `applyRevenueEngine` now seeds Bidding Price / Tariff p50 / p90 with `priceForYearCanvasParity` and the 1.21.753 exact-year rule (`priceExactRegion`: the zone in Italy, blank elsewhere), so outside Italy it is the LAST price row. `priceForYear` (nearest year) is kept, unused.
 6. **Individual volumes:** they are regenerated — and typed values lost — on every start / duration / Reset-to-COD change, as the canvas. Keep?
 7. ~~**Layout**~~ — **answered (V6): rebuild the card gallery, implemented.**
 

@@ -30,7 +30,7 @@ import {
   revenueCurrencyCode, assumptionEngineCurrencyCode,
   contractStartDate, contractDuration, contractEndDate, endDateWithGuard, endDateIsStandard,
   durationYearOptions, durationMonthOptions,
-  priceForYear, priceForYearCanvasParity, p90Price, correctionFactorDefault,
+  priceForYear, priceForYearCanvasParity, p90Price, priceExactRegion, correctionFactorDefault,
   showsGermanFitBlock, germanFitTariff, tariffDisplay, tariffIsStandard,
   inflation, inflationStartYearFrom, countryInflationValue, applyCountryInflation,
   negativePriceState, flipNegativePrice,
@@ -484,6 +484,39 @@ describe("price curve (rule 11 / source ambiguity 1)", () => {
   it("UT-REV-018 the p90 price is blank for PV", () => {
     expect(p90Price(curve, "PV", 2028)).toBeNull();
     expect(p90Price(curve, "Wind", 2028)).toBe(65);
+  });
+
+  it("the Add panel seeds with the CANVAS fallback: outside Italy the last price row, even with an exact COD row (17 Nov 2026)", () => {
+    // Live canvas: a German wind FiT contract opened with Bidding Price 52.00 where this app showed
+    // 60.00 (the COD-year row). 1.21.753 matches the exact year only on `country = locAreaWithRegion`,
+    // blank outside Italy, so the canvas falls through to the year-vs-price fallback: the LAST row.
+    // `label` is made the country's standard type (`valuetype = "revenuetype"`), or nothing is seeded.
+    const engine = (label: string) => applyRevenueEngine({
+      project: project(), rows: [row("revenuetype", "", label.toLowerCase(), null), ...curve], region: null, label,
+      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-10-20"),
+    });
+    expect(priceForYear(curve, "Wind", 2028)).toBe(65); // the intended rule, kept but not used
+    expect(engine("PPA").tariff).toBe("75.00");
+    expect(engine("PPA").tariffP90).toBe("75.00");
+    const fit = engine("FiT");
+    expect(fit.biddingPrice).toBe("75.00");
+    expect(fit.tariff).toBe("75.00");
+    expect(fit.tariffP90).toBe("75.00");
+    // Italy still matches its own zone's COD-year row exactly.
+    expect(priceExactRegion("Italy", "Italy_North")).toBe("Italy_North");
+    expect(priceExactRegion("Germany", "Italy_North")).toBeNull();
+  });
+
+  it("a type with no standard assumption opens with a BLANK Tariff / Price, curve or not (PPA on a FiT country, 17 Nov 2026)", () => {
+    // Live canvas: Germany's standard type is FiT; Add → PPA showed blank durations, Hedged Volume and Tariff / Price.
+    const f = applyRevenueEngine({
+      project: project(), rows: [row("revenuetype", "", "fit", "fit"), ...curve], region: null, label: "PPA",
+      productionExists: false, subaccountId: "sub-1", profiles: [], today: d("2026-10-20"),
+    });
+    expect(f.isStandardContract).toBe(false);
+    expect(f.tariff).toBe("");
+    expect(f.tariffP90).toBe("");
+    expect(f.std.price).toBe(false);
   });
 
   it("an empty curve yields null rather than a First() on an empty table", () => {
@@ -1847,8 +1880,10 @@ describe("PO validation audit — the contract panel's Power Fx, term for term (
  */
 describe("German and French numbers: Revenues writes and reads every box in the user's language", () => {
   const curve = [row("price", "2028", "65", "46")];
+  // The label is the country's standard type, so the price is seeded (`If(recStandardAssumptionExists, …)`).
+  const standardFor = (label: string) => row("revenuetype", "", label.toLowerCase(), label.toLowerCase());
   const engine = (label: string, language: string) => localizeContractForm(applyRevenueEngine({
-    project: project(), rows: curve, region: null, label, productionExists: false,
+    project: project(), rows: [standardFor(label), ...curve], region: null, label, productionExists: false,
     subaccountId: "sub-1", profiles: [], today: d("2026-10-20"), language,
   }), language);
 
