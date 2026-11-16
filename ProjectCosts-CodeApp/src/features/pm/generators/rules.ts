@@ -3507,7 +3507,7 @@ export function planCreateGeneratorType(args: {
   revisedHubHeight: number | null;
   existingTypes: GeneratorTypeRow[];
   projectTurbines: Pick<TurbineRow, "index">[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const n = args.numberOfGenerators;
   const cost = pfxRound(args.costPerWtg, 2);
   const totals = generatorTypeTotals({ count: n, costPerWtg: cost, specificCapacity: args.model.specificCapacity });
@@ -3516,26 +3516,39 @@ export function planCreateGeneratorType(args: {
     catalogHubHeight: args.model.hubHeight, rotorDiameter: args.model.rotorDiameter,
   });
   const names = buildTurbineNames({ shortName: args.project.shortName, existing: args.projectTurbines, count: n });
-  const writes: PlannedWrite[] = [
-    ins(ES_PLANT.generatorTypeInProjects, {
-      [PLANT_BIND.project]: ref(ES.projects, args.project.id),
-      [PLANT_BIND.generator]: ref(ES_PLANT.generators, args.model.id),
-      [GEN_TYPE_COL.numberOfGenerators]: n,
-      [GEN_TYPE_COL.costPerWtg]: cost,
-      [GEN_TYPE_COL.generatorsCost]: totals.generatorsCost,
-      [GEN_TYPE_COL.generatorsCapacity]: totals.generatorsCapacity,
-      ...owner(args.project.owningBusinessUnitId),
-    }, "the generator type"),
-    // The type is created first (every turbine binds to it); then the turbines go together; the roll-up last.
-    ...together(names.map((name) => ins(ES_PLANT.generatorInProjects, {
-      [GEN_INSTANCE_COL.name]: name,
-      [PLANT_BIND.moduleTypeWtg]: ref(ES_PLANT.generatorTypeInProjects, createdRowRef(0)),
-      [GEN_INSTANCE_COL.effectiveCapacity]: args.model.specificCapacity ?? null,
-      ...owner(args.project.owningBusinessUnitId),
-      [GEN_INSTANCE_COL.totalHeight]: heights.totalHeight,
-      [GEN_INSTANCE_COL.hubHeightExclPlinth]: heights.hubHeightExclPlinth,
-    }, `turbine ${name}`))),
-  ];
+  /** One turbine row's data: the same for a single create and for a bulk row (the bind resolves to the type created first). */
+  const turbineData = (name: string): Record<string, unknown> => ({
+    [GEN_INSTANCE_COL.name]: name,
+    [PLANT_BIND.moduleTypeWtg]: ref(ES_PLANT.generatorTypeInProjects, createdRowRef(0)),
+    [GEN_INSTANCE_COL.effectiveCapacity]: args.model.specificCapacity ?? null,
+    ...owner(args.project.owningBusinessUnitId),
+    [GEN_INSTANCE_COL.totalHeight]: heights.totalHeight,
+    [GEN_INSTANCE_COL.hubHeightExclPlinth]: heights.hubHeightExclPlinth,
+  });
+  const typeCreate = ins(ES_PLANT.generatorTypeInProjects, {
+    [PLANT_BIND.project]: ref(ES.projects, args.project.id),
+    [PLANT_BIND.generator]: ref(ES_PLANT.generators, args.model.id),
+    [GEN_TYPE_COL.numberOfGenerators]: n,
+    [GEN_TYPE_COL.costPerWtg]: cost,
+    [GEN_TYPE_COL.generatorsCost]: totals.generatorsCost,
+    [GEN_TYPE_COL.generatorsCapacity]: totals.generatorsCapacity,
+    ...owner(args.project.owningBusinessUnitId),
+  }, "the generator type");
+  // The type is ALWAYS created first, as a single request (its autonumber name comes back in the response and feeds the
+  // device-type row, plan §2.5); every turbine binds to it via `createdRowRef(0)`.
+  let turbines: PlannedWrite[];
+  if (bulkOn(opts, "turbines")) {
+    // DIVERGENCE (plan §3 phase 4; flag `turbines`): the N turbines are ONE `createMany` with pre-generated ids instead of
+    // N single creates in a parallel run. The engine returns `createdIds` in row order, so the screen's contract is
+    // unchanged: [the type, then the turbines in `names` order]. No step at all for 0 turbines; never inside a group.
+    const newId = rowIdSource(opts);
+    const rows: BulkRow[] = names.map((name) => ({ id: newId(), data: turbineData(name) }));
+    turbines = rows.length > 0 ? [createMany(ES_PLANT.generatorInProjects, rows, "the new generator type's turbines")] : [];
+  } else {
+    // Today: the turbines go together; the roll-up last.
+    turbines = together(names.map((name) => ins(ES_PLANT.generatorInProjects, turbineData(name), `turbine ${name}`)));
+  }
+  const writes: PlannedWrite[] = [typeCreate, ...turbines];
   if (requiresPermissionRequest(args.inCountry)) return { writes, log: [`Generator type with ${n} turbines`] };
   // After every turbine, as in the canvas: `LoadDevexCapexCostTotalCapacityTrigger` fires on these project
   // columns, and a failed turbine stops the plan before the project totals change.
