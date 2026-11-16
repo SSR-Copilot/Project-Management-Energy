@@ -790,15 +790,25 @@ const isActive = (status: number) => status === CHOICE_PLANT.status.active;
  * another work package; move it there when convenient.
  */
 const ROLLBACK_PROGRESS_TEXT = "Undoing the failed save, please wait...";
+/**
+ * Shown when a failed save should have been rolled back but the project is not loaded any more, so no rollback
+ * plan can be built (review finding 3c). NEW - no canvas equivalent; it belongs in `rules.ts`'s `ROLLBACK_MSG`
+ * next to `ROLLBACK_PROGRESS_TEXT`.
+ */
+const ROLLBACK_NO_PROJECT_TEXT = "The failed save could not be undone automatically. Reload the page and check the generator types.";
 
 /** The rows a failed create left behind and what the rollback needs to remove them again (plan §9.3). */
 interface RollbackTarget {
+  /** The project the failed save was for: a late result or a Retry for another project is dropped (review finding 3b). */
+  projectId: string | undefined;
   rows: LandedRowRef[];
   rollupRan: boolean;
   typeName: string | null;
 }
 /** The outcome of a rollback; `leftover` is set when the cleanup failed and **Retry cleanup** is offered. */
 interface RollbackNotice {
+  /** The project the notice belongs to; it never shows on another project (review finding 3b). */
+  projectId: string | undefined;
   text: string;
   leftover: (RollbackTarget & { reason: string | null }) | null;
 }
@@ -852,6 +862,19 @@ export default function GeneratorsScreen() {
   }
   /** The failed save whose rollback has been started (an effect must not set state to say so). */
   const startedFailure = useRef<RollbackTarget | null>(null);
+  /** A rollback job is running: a double click or a double effect must not start a second one (review finding 3a). */
+  const rollbackInFlight = useRef(false);
+  /** The project shown now, for a rollback that finishes after the user moved on (review finding 3b). */
+  const currentProjectId = useRef(projectId);
+  useEffect(() => { currentProjectId.current = projectId; }, [projectId]);
+  /**
+   * Per save: the first plan (it ends with the roll-up) has finished once `then` starts, and the approval flow
+   * call has resolved once `request` returned (review findings 2 and 1). Reset at the start of every save.
+   */
+  const firstPlanDone = useRef(false);
+  const permissionRequested = useRef(false);
+  /** The rollback notice of THIS project only (review finding 3b). */
+  const shownNotice = rollbackNotice?.projectId === projectId ? rollbackNotice : null;
   const perms = SERVER_DECIDES;
 
   /** Every model a card or the panel needs — the types' own rows win over the orderable catalogue. */
@@ -1301,18 +1324,40 @@ export default function GeneratorsScreen() {
    * so the leftover is every recorded row the cleanup was asked to delete (a row already gone is a 404 on retry).
    */
   const runRollback = async (target: RollbackTarget, reason: string | null) => {
-    if (!planProject) return;
-    setRollbackNotice(null);
-    const done = await writes.run({
-      progress: ROLLBACK_PROGRESS_TEXT,
-      plan: planRollbackCreate({ project: planProject, landed: target.rows, rollupRan: target.rollupRan, remainingTypes: types }),
-    });
-    setRollbackNotice(done !== null
-      ? { text: reason ? `${reason} ${ROLLBACK_MSG.undone}` : ROLLBACK_MSG.undone, leftover: null }
-      : {
-        text: ROLLBACK_MSG.leftover(describeLeftovers(target.rows, { typeName: target.typeName })),
-        leftover: { ...target, reason },
+    // A rollback is already running (double click, double effect): never start a second one.
+    if (rollbackInFlight.current) return;
+    // The target belongs to another project than the one shown: recomputing with this project's data would be wrong.
+    if (target.projectId !== projectId) return;
+    if (!planProject) {
+      setRollbackNotice({
+        projectId: target.projectId, leftover: null,
+        text: reason ? `${reason} ${ROLLBACK_NO_PROJECT_TEXT}` : ROLLBACK_NO_PROJECT_TEXT,
       });
+      return;
+    }
+    rollbackInFlight.current = true;
+    setRollbackNotice(null);
+    try {
+      const done = await writes.run({
+        progress: ROLLBACK_PROGRESS_TEXT,
+        plan: planRollbackCreate({ project: planProject, landed: target.rows, rollupRan: target.rollupRan, remainingTypes: types }),
+      });
+      // The project changed while the rollback ran: its late result must not show on the new project.
+      if (currentProjectId.current !== target.projectId) {
+        // `writes.run` has just put the rollback's own error on the shared bar: take it off the new project again.
+        writes.clear();
+        return;
+      }
+      setRollbackNotice(done !== null
+        ? { projectId: target.projectId, text: reason ? `${reason} ${ROLLBACK_MSG.undone}` : ROLLBACK_MSG.undone, leftover: null }
+        : {
+          projectId: target.projectId,
+          text: ROLLBACK_MSG.leftover(describeLeftovers(target.rows, { typeName: target.typeName })),
+          leftover: { ...target, reason },
+        });
+    } finally {
+      rollbackInFlight.current = false;
+    }
   };
 
   /**
@@ -1323,7 +1368,7 @@ export default function GeneratorsScreen() {
   const queueRollback = (scenario: RollbackScenario, ids: readonly string[] | null, rollupRan: boolean) => {
     if (ids !== null || !GENERATORS_BULK.createRollback || !rollbackApplies(scenario)) return;
     const rows = [...writes.lastLanded()];
-    if (rows.length > 0) setCreateFailure({ rows, rollupRan, typeName: createdTypeName.current });
+    if (rows.length > 0) setCreateFailure({ projectId, rows, rollupRan, typeName: createdTypeName.current });
   };
   useEffect(() => {
     if (!createFailure || writes.progress !== null || startedFailure.current === createFailure) return;
@@ -1333,7 +1378,7 @@ export default function GeneratorsScreen() {
 
   /** **Retry cleanup**: the same rollback over only the recorded leftover rows. No automatic retries. */
   const retryCleanup = () => {
-    const left = rollbackNotice?.leftover;
+    const left = rollbackNotice && rollbackNotice.projectId === projectId ? rollbackNotice.leftover : null;
     if (left) void runRollback(left, left.reason);
   };
   const lists = () => ({
@@ -1349,6 +1394,8 @@ export default function GeneratorsScreen() {
     const progress = typeSaveProgressText(model.displayName, inCountry);
     const names = buildTurbineNames({ shortName: planProject.shortName, existing: turbinesQ.data, count: n });
     createdTypeName.current = null;
+    firstPlanDone.current = false;
+    permissionRequested.current = false;
     close();
     /*
      * Save performance (6 Nov 2026): ONE job. The queued second step (the device-type row and the AllWTG
@@ -1365,12 +1412,17 @@ export default function GeneratorsScreen() {
         existingTypes: types, projectTurbines: turbinesQ.data,
       }),
       then: async (first: PlanResult): Promise<WritePlan | null> => {
+        // The first plan, which ends with the roll-up, has completed once `then` runs (review finding 2).
+        firstPlanDone.current = true;
         const typeId = first.createdIds[0];
         if (!typeId) return null;
         const landedName = first.createdRows?.[typeId]?.["vsb_name"];
         createdTypeName.current = typeof landedName === "string" && landedName !== "" ? landedName : null;
         // D97 — out of country: `RequestModulePermission` for the new type instead of the roll-up (Y:15214, Y:16514).
-        if (requesting) await permissionFlows.request(buildGeneratorPermissionPayload(header, typeId, model.id));
+        if (requesting) {
+          await permissionFlows.request(buildGeneratorPermissionPayload(header, typeId, model.id));
+          permissionRequested.current = true;
+        }
         /*
          * Save performance (6 Nov 2026): the create returned the new row, its autonumber `vsb_name` included
          * (`PlanResult.createdRows`), so the name needs no read-back; and a type this save has just created has
@@ -1394,8 +1446,16 @@ export default function GeneratorsScreen() {
      * In country the first job's roll-up counted the new type, so the rollback recomputes it (harmless when the
      * failure came before it: the totals are rebuilt from the rows that remain). Out of country the roll-up does not
      * run (the permission request replaces it), so the rollback leaves the totals alone.
+     * The roll-up counts as run only once the first plan finished (`firstPlanDone`): a failure while creating the
+     * type or a turbine never reached it, so the rollback must not write the project (and its Fabric sync row).
+     *
+     * DIVERGENCE (plan §9.3, review finding 1): once the approval flow call has resolved, a real
+     * `RequestModulePermission` approval (mail, Teams card, run id) is open for the type, so a failing follow-up
+     * must NOT delete the type and its turbines. Nothing is rolled back; the error bar keeps the save's error.
      */
-    queueRollback(inCountry ? "addWtgType" : "outOfCountryApprovalFailed", ids, inCountry);
+    if (!permissionRequested.current) {
+      queueRollback(inCountry ? "addWtgType" : "outOfCountryApprovalFailed", ids, inCountry && firstPlanDone.current);
+    }
   };
 
   const saveTurbine = async (fromPopup: boolean) => {
@@ -2089,8 +2149,8 @@ export default function GeneratorsScreen() {
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
       </div>
 
-      <WriteFeedback progress={writes.progress} error={rollbackNotice?.text ?? writes.error} success={writes.success} testIdPrefix="generators" />
-      {rollbackNotice?.leftover ? (
+      <WriteFeedback progress={writes.progress} error={shownNotice?.text ?? writes.error} success={writes.success} testIdPrefix="generators" />
+      {shownNotice?.leftover ? (
         // NEW - no canvas equivalent (DIVERGENCE, plan §9.3): the cleanup of a failed save did not finish.
         <Button
           appearance="primary" aria-label={ROLLBACK_MSG.retryButton} data-testid="generators-retry-cleanup"
