@@ -56,7 +56,7 @@ import {
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 import {
-  createdRowRef, createMany, emptyPlan, refusePlan, together, type PlannedWrite, type WritePlan,
+  createdRowRef, createMany, emptyPlan, refusePlan, together, updateMany, type PlannedWrite, type WritePlan,
 } from "@/data/writePlan";
 import { CASCADE_DELETE_CONCURRENCY, LEAF_DELETE_CONCURRENCY } from "@/data/concurrency";
 import { GENERATORS_BULK } from "@/data/generatorsBulkFlags";
@@ -3407,6 +3407,11 @@ export interface PlanBulkOptions {
 
 const bulkOn = (opts: PlanBulkOptions | undefined, flag: keyof typeof GENERATORS_BULK): boolean =>
   (opts?.bulk?.[flag] ?? GENERATORS_BULK[flag]) === true;
+/** Bulk update rows without a repeated id (the first wins): `UpdateMultiple` refuses a duplicate (plan §3 phase 3, item 5). */
+const uniqueRows = (rows: readonly BulkRow[]): BulkRow[] => {
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+};
 const rowIdSource = (opts: PlanBulkOptions | undefined): (() => string) => opts?.newId ?? newRowId;
 
 /*
@@ -3696,7 +3701,17 @@ export function planSaveTurbine(args: {
     [GEN_TYPE_COL.generatorsCost]: re.generatorsCost,
     [GEN_TYPE_COL.generatorsCapacity]: re.generatorsCapacity,
   };
-  writes.push(...together(applyAll));
+  if (bulkOn(opts, "applyAll") && applyAll.length > 0) {
+    // DIVERGENCE (plan §3 phase 3, §9.5; flag `applyAll`): the sibling patches are ONE `updateMany` step with today's
+    // per-row payloads (each sibling's own total height, the owning-business-unit bind as today's single updates carry
+    // it; the backend lets bind keys through on update). The backend's guarded read refuses the WHOLE step, sending
+    // nothing, when a sibling is gone (`BulkRowsGoneError`: the user reloads).
+    writes.push(updateMany(
+      ES_PLANT.generatorInProjects, uniqueRows(applyAll.map((w) => ({ id: w.id!, data: w.data! }))), "apply to all: the type's other turbines",
+    ));
+  } else {
+    writes.push(...together(applyAll));
+  }
   writes.push(upd(ES_PLANT.generatorTypeInProjects, args.type.id, typeFields, "the generator type's totals"));
 
   // 4. the roll-up with the re-derived type.
@@ -3824,16 +3839,29 @@ export function planToggleStatus(args: {
   type: GeneratorTypeRow;
   turbines: Pick<TurbineRow, "id">[];
   allTypes: GeneratorTypeRow[];
-}): WritePlan {
+}, opts?: PlanBulkOptions): WritePlan {
   const p = planStatusToggle({ type: args.type, turbines: args.turbines });
+  const typeUpdate = upd(ES_PLANT.generatorTypeInProjects, p.typeId, { statecode: p.nextStatus }, "the generator type's status");
+  const rollup = projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === p.typeId ? { ...t, status: p.nextStatus } : t));
+  if (bulkOn(opts, "status")) {
+    // DIVERGENCE (plan §3 phase 3, §9.5; flag `status`): the N turbine `statecode` updates are ONE `updateMany` step. The
+    // backend guards it: when a turbine is gone it sends nothing and the step fails with `BulkRowsGoneError`, so a row
+    // another user deleted is never re-created (SDK PATCH is an upsert). Order unchanged: the type first, the turbines,
+    // the roll-up last. A repeated id is dropped here (a duplicate in `UpdateMultiple` is refused).
+    const rows = uniqueRows(p.turbineIds.map((id) => ({ id, data: { statecode: p.nextStatus } })));
+    return {
+      writes: [typeUpdate, ...(rows.length > 0 ? [updateMany(ES_PLANT.generatorInProjects, rows, "the turbines' status")] : []), rollup],
+      log: [],
+    };
+  }
   const writes: PlannedWrite[] = [
-    upd(ES_PLANT.generatorTypeInProjects, p.typeId, { statecode: p.nextStatus }, "the generator type's status"),
+    typeUpdate,
     // Save performance (phase 1, 16 Nov 2026): the turbines' `statecode` updates are independent rows, sent as one
     // parallel run (`together`, 8 at a time). Order unchanged: the type first, the turbine group, the roll-up last.
     // Tier: these are UPDATES (`statecode`), not deletes, so the group keeps the default limit (8); the delete tiers
     // (plan §9.4) do not apply.
     ...together(p.turbineIds.map((id) => upd(ES_PLANT.generatorInProjects, id, { statecode: p.nextStatus }, "a turbine's status"))),
-    projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === p.typeId ? { ...t, status: p.nextStatus } : t)),
+    rollup,
   ];
   return { writes, log: [] };
 }
