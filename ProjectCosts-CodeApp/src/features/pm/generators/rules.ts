@@ -55,7 +55,7 @@ import {
 } from "@/domain/powerFxNumeric";
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
-import { createdRowRef, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { createdRowRef, emptyPlan, refusePlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
 
@@ -3729,11 +3729,167 @@ export function planToggleStatus(args: {
   const p = planStatusToggle({ type: args.type, turbines: args.turbines });
   const writes: PlannedWrite[] = [
     upd(ES_PLANT.generatorTypeInProjects, p.typeId, { statecode: p.nextStatus }, "the generator type's status"),
-    ...p.turbineIds.map((id) => upd(ES_PLANT.generatorInProjects, id, { statecode: p.nextStatus }, "a turbine's status")),
+    // Save performance (phase 1, 16 Nov 2026): the turbines' `statecode` updates are independent rows, sent as one
+    // parallel run (`together`, 8 at a time). Order unchanged: the type first, the turbine group, the roll-up last.
+    // TIER: leaf group (16) once `executePlan` takes a per-group concurrency.
+    ...together(p.turbineIds.map((id) => upd(ES_PLANT.generatorInProjects, id, { statecode: p.nextStatus }, "a turbine's status"))),
     projectWtgRollup(args.project.id, args.allTypes.map((t) => t.id === p.typeId ? { ...t, status: p.nextStatus } : t)),
   ];
   return { writes, log: [] };
 }
+
+/* ═══════════════════════════════════════════ rollback of a failed create save (plan §9.3) ════ */
+
+/**
+ * One row a plan wrote, as the write executor reports it (landing order). Structurally identical to the
+ * `LandedRow` `data/executePlan.ts` will export; unify the two when that lands.
+ */
+export interface LandedRowRef {
+  entitySet: string;
+  id: string;
+}
+
+/** The landed rows by family. A PV type's unit is a turbine row (`vsb_generatorinprojects`) too. */
+export interface LandedGroups {
+  allocations: LandedRowRef[];
+  bridgeRows: LandedRowRef[];
+  turbines: LandedRowRef[];
+  types: LandedRowRef[];
+  pvTypes: LandedRowRef[];
+  others: LandedRowRef[];
+}
+
+/** Sorts what a failed save wrote into its families, keeping the landing order inside each. */
+export function groupLandedRows(landed: readonly LandedRowRef[]): LandedGroups {
+  const g: LandedGroups = { allocations: [], bridgeRows: [], turbines: [], types: [], pvTypes: [], others: [] };
+  for (const row of landed) {
+    switch (row.entitySet) {
+      case ES.landLeaseAllocationWtgs: g.allocations.push(row); break;
+      case ES_PLANT.deviceTypesInProjects: g.bridgeRows.push(row); break;
+      case ES_PLANT.generatorInProjects: g.turbines.push(row); break;
+      case ES_PLANT.generatorTypeInProjects: g.types.push(row); break;
+      case ES_PLANT.pvModuleTypeInProjects: g.pvTypes.push(row); break;
+      default: g.others.push(row);
+    }
+  }
+  return g;
+}
+
+/**
+ * Which saves are rolled back when they fail part-way (plan §9.3): A, Add WTG type; B, an out-of-country type
+ * whose Request Module Permission flow fails to start. Every other save keeps today's behaviour. NEW — no
+ * canvas equivalent (DIVERGENCE, plan §9.3).
+ */
+export type RollbackScenario =
+  | "addWtgType" | "outOfCountryApprovalFailed"
+  | "addPvType" | "addTurbine" | "editTurbine" | "applyToAll"
+  | "replaceGeneratorType" | "replacePvType" | "deleteGeneratorType" | "deletePvType"
+  | "toggleStatus" | "saveSimple" | "saveInverter" | "saveSubstructure";
+
+export const rollbackApplies = (scenario: RollbackScenario): boolean =>
+  scenario === "addWtgType" || scenario === "outOfCountryApprovalFailed";
+
+/** The roll-back delete of one landed row. A 404 counts as already gone in the executor (`unwrapDelete`). */
+const undo = (row: LandedRowRef, what: string): PlannedWrite => del(row.entitySet, row.id, `undo: ${what}`);
+
+/**
+ * Deletes what a failed create save landed, children before parents (plan §9.3):
+ *  1. the allocations (one parallel run; deleting a turbine only unlinks them, so they go explicitly),
+ *  2. the device-type bridge rows,
+ *  3. the turbines (one parallel run; the type's cascade would remove them, deleted so a refusal shows),
+ *  4. the type(s),
+ *  5. any other landed row (unknown family: after its possible parents),
+ *  6. only when `rollupRan`, the project roll-up recomputed WITHOUT the deleted type, last.
+ * Nothing landed -> an empty plan. The roll-up uses `remainingTypes` (the project's types without the new one;
+ * a type listed in `landed` is dropped from it as well) for a WTG type, or `remainingPv` for a PV type.
+ */
+export function planRollbackCreate(args: {
+  project: PlanProject;
+  landed: readonly LandedRowRef[];
+  rollupRan: boolean;
+  remainingTypes: (Pick<GeneratorTypeRow, "requestPermissionState" | "status" | "generatorsCapacity" | "generatorsCost"> & { id?: string })[];
+  remainingPv?: {
+    pv: Pick<SimpleTypeRow, "capacity" | "cost">[];
+    inverters: Pick<SimpleTypeRow, "cost">[];
+    substructures: Pick<SimpleTypeRow, "cost">[];
+  };
+}): WritePlan {
+  const g = groupLandedRows(args.landed.filter((r) => r.id));
+  const total = g.allocations.length + g.bridgeRows.length + g.turbines.length + g.types.length + g.pvTypes.length + g.others.length;
+  if (total === 0) return emptyPlan();
+  const writes: PlannedWrite[] = [
+    // TIER: leaf group (16) for the allocations and again for the turbines, once `executePlan` takes it.
+    ...together(g.allocations.map((r) => undo(r, "a land-lease allocation of the new type"))),
+    ...g.bridgeRows.map((r) => undo(r, "the new type's device-type row")),
+    ...together(g.turbines.map((r) => undo(r, "a turbine of the new type"))),
+    // TIER: cascade tier (4): a type's delete locks and updates its children.
+    ...g.types.map((r) => undo(r, "the new generator type")),
+    ...g.pvTypes.map((r) => undo(r, "the new PV module type")),
+    ...g.others.map((r) => undo(r, "a row the failed save created")),
+  ];
+  if (args.rollupRan) {
+    if (g.pvTypes.length > 0) {
+      if (!args.remainingPv) return refusePlan("The PV roll-up needs the remaining PV rows.");
+      writes.push(upd(ES.projects, args.project.id, {
+        [PROJECT_PLANT_COL.plantPvCapacity]: plantPvCapacity(args.remainingPv.pv),
+        [PROJECT_PLANT_COL.plantPvCost]: plantPvCost({ pv: args.remainingPv.pv, inverters: args.remainingPv.inverters, substructures: args.remainingPv.substructures }),
+      }, "the project's Plant PV Capacity / Cost, without the undone type"));
+    } else {
+      const gone = new Set(g.types.map((r) => r.id));
+      writes.push(projectWtgRollup(args.project.id, args.remainingTypes.filter((t) => !(t.id && gone.has(t.id)))));
+    }
+  }
+  return { writes, log: [`Undo of ${total} landed rows`] };
+}
+
+/** What a failed rollback left behind, counted. `types` counts landed type rows (generator or PV). */
+export interface RollbackLeftovers {
+  typeName?: string;
+  types: number;
+  turbines: number;
+  allocations: number;
+  bridgeRows: number;
+  other: number;
+  total: number;
+}
+
+/** Counts the rows to clean up. `names.typeName` is the type's name (an autonumber the screen reads back). */
+export function describeLeftovers(landed: readonly LandedRowRef[], names: { typeName?: string | null }): RollbackLeftovers {
+  const g = groupLandedRows(landed.filter((r) => r.id));
+  const types = g.types.length + g.pvTypes.length;
+  return {
+    ...(names.typeName && types > 0 ? { typeName: names.typeName } : {}),
+    types,
+    turbines: g.turbines.length,
+    allocations: g.allocations.length,
+    bridgeRows: g.bridgeRows.length,
+    other: g.others.length,
+    total: types + g.turbines.length + g.allocations.length + g.bridgeRows.length + g.others.length,
+  };
+}
+
+const countOf = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** The text of a failed rollback: says exactly what is left. Turbines and allocations are always listed. */
+export function leftoversMessage(d: RollbackLeftovers): string {
+  const parts: string[] = [];
+  if (d.types > 0) parts.push(d.typeName ? `generator type "${d.typeName}"` : countOf(d.types, "generator type", "generator types"));
+  parts.push(countOf(d.turbines, "generator", "generators"));
+  parts.push(countOf(d.allocations, "land-lease allocation", "land-lease allocations"));
+  if (d.bridgeRows > 0) parts.push(countOf(d.bridgeRows, "device-type row", "device-type rows"));
+  if (d.other > 0) parts.push(countOf(d.other, "other row", "other rows"));
+  return `This save failed and could not be fully undone. Left behind: ${parts.join(", ")}. Press ${ROLLBACK_MSG.retryButton} to remove them.`;
+}
+
+/** The roll-back texts. All three are NEW — no canvas equivalent (DIVERGENCE, plan §9.3). */
+export const ROLLBACK_MSG = {
+  /** NEW — no canvas equivalent (DIVERGENCE, plan §9.3). */
+  undone: "This save failed and was undone. Nothing was kept.",
+  /** NEW — no canvas equivalent (DIVERGENCE, plan §9.3). */
+  leftover: (d: RollbackLeftovers): string => leftoversMessage(d),
+  /** NEW — no canvas equivalent (DIVERGENCE, plan §9.3). */
+  retryButton: "Retry cleanup",
+} as const;
 
 /** `'Plant PV Cost [EUR]' = Σ PV cost + Σ inverter type cost + Σ substructure cost` (rule 16). */
 const projectPvCost = (projectId: string, pv: SimpleTypeRow[], inverters: SimpleTypeRow[], substructures: SimpleTypeRow[]): PlannedWrite =>
