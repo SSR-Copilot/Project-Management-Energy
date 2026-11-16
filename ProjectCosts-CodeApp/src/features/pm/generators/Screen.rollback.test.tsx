@@ -700,6 +700,27 @@ describe("UT-GEN Screen rollback: deleted rows are not left over, maybe-landed r
     expect(retryButton()).toBeNull();
   });
 
+  it("UT-GEN-1209 (F3 item 4) every certain row deleted but a maybe-landed one left: 'may not have been removed' and Retry, not the totals text", async () => {
+    scriptWith(MAYBE, [{ outcome: { fail: "delete refused" }, deleted: LANDED_ALL }]);
+    renderScreen();
+    await saveNewType();
+    await screen.findByTestId("generators-retry-cleanup");
+    const text = errorBar()!.textContent!;
+    expect(text).toContain(ROLLBACK_MSG.maybeLeft);
+    expect(text).not.toContain(ROLLBACK_MSG.totalsFailed);
+    expect(text).not.toContain("Left behind");
+    expect(text).toContain("delete refused");
+  });
+
+  it("UT-GEN-1210 (F3 item 4) the totals text is shown only when both lists are empty", async () => {
+    scriptWith(MAYBE, [{ outcome: { fail: "roll-up refused" }, deleted: [...LANDED_ALL, ...MAYBE] }]);
+    renderScreen();
+    await saveNewType();
+    await waitFor(() => expect(errorBar()!.textContent).toContain(ROLLBACK_MSG.totalsFailed));
+    expect(errorBar()!.textContent).not.toContain(ROLLBACK_MSG.maybeLeft);
+    expect(retryButton()).toBeNull();
+  });
+
   it("UT-GEN-1109 flag off: no rollback runs, today's error only", async () => {
     state.flag = false;
     scriptWith(MAYBE, [{ outcome: { ids: [] } }]);
