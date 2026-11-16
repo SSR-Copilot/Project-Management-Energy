@@ -332,6 +332,8 @@ export default function CapexCostsScreen() {
   const [showPlanned, setShowPlanned] = useState(false);
   const [payer, setPayer] = useState<string>(PAYER_FILTERS[0]);
   const [edit, setEdit] = useState<CostLine | null>(null);
+  /** `locInitialCostPaidBy` — the payer the panel opened with (Add: the mapping default). */
+  const [initialPayer, setInitialPayer] = useState<CostLine["payer"] | null>(null);
   const [costValue, setCostValue] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [commentFor, setCommentFor] = useState<string | null>(null);
@@ -559,6 +561,9 @@ export default function CapexCostsScreen() {
       ? paymentsAsPercent({ ...structuredClone(line), clusters: enabledClusters(line.clusters, startClusterNo) })
       : newCostLine(accountId, crypto.randomUUID(), book.accounts.find(a => a.id === accountId)?.defaultPayer);
     setEdit(next);
+    // `locInitialCostPaidBy` (`Capex Costs Screen.pa.yaml:3461`, `:7303`) — set on BOTH Add and
+    // Edit: the stored 'Cost Type', else the account's SPV/DevCo mapping default.
+    setInitialPayer(next.payer);
     setTouched(false);
     setContractError(null);
     setMonthText({});
@@ -812,8 +817,9 @@ export default function CapexCostsScreen() {
    */
   const linkageChanged = clusterLinkageChanged(selectedMilestone, storedLine?.linkedClusterName);
   // `locCostPaidByChanged: locInitialCostPaidBy <> Self.Selected.Value` (`:12127`), where
-  // `locInitialCostPaidBy` is the coalesced payer the panel opened with — our `CostLine.payer`.
-  const costPaidByChanged = Boolean(storedLine) && edit?.payer !== storedLine?.payer;
+  // `locInitialCostPaidBy` is the coalesced payer the panel opened with — captured in `open()`
+  // for Add as well as Edit, so switching the payer on a NEW cost also asks for confirmation.
+  const costPaidByChanged = edit !== null && initialPayer !== null && edit.payer !== initialPayer;
   const relinkResetNeeded = edit !== null && milestoneRelinkResetNeeded({
     selectedName: selectedMilestone,
     storedName: storedLine?.linkedClusterName,

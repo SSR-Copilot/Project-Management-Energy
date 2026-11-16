@@ -739,3 +739,9 @@
 .finance-form .finance-row-error { display: block; height: 16px; margin-top: -16px; line-height: 16px; }
 /* Every Finance year / month pair (the tranche's too): the two boxes are 10 apart, `X: YY.X + YY.Width + 10`. */
 .finance-canvas-panel .finance-ym-pair { column-gap: 10px; }
+
+/* Standard-assumption pair (CONVENTIONS rule 20) — last in the file so it out-ranks every #242424 / #000 / font: inherit field rule above. */
+.canvas-field > input[data-standard="standard"], .canvas-field > input[data-standard="blue"],
+.canvas-radio-group label[data-standard="standard"], .canvas-radio-group label[data-standard="blue"] { color: #006eb9; -webkit-text-fill-color: #006eb9; }
+.canvas-field > input[data-standard="standard"], .canvas-field > input[data-standard="italic"],
+.canvas-radio-group label[data-standard="standard"], .canvas-radio-group label[data-standard="italic"] { font-style: italic; }
