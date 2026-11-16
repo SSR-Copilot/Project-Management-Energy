@@ -22,6 +22,7 @@ import { Vsb_pvmoduletypeinprojectsService } from "@/generated/services/Vsb_pvmo
 import { DataError, unwrap } from "@/platform/errors";
 import { logAction, loggedCall } from "@/platform/requestLog";
 import { fetchAll } from "./client";
+import { realSleep, retryDelay, type Sleeper } from "./retry";
 import { forEachLimit } from "./concurrency";
 import { ES_PLANT } from "./dataverseNames";
 import { chunk, idIn, OWNING_BU_BIND } from "./odata";
@@ -104,9 +105,7 @@ export function setGeneratorsBulkChunking(next: GeneratorsChunking | null): void
   chunkingOverride = next;
 }
 
-/** Waits `ms`; injected in tests so a retry never sleeps for real. */
-export type Sleeper = (ms: number) => Promise<void>;
-const realSleep: Sleeper = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+export type { Sleeper };
 let sleeperOverride: Sleeper | null = null;
 
 export function setGeneratorsBulkSleeper(next: Sleeper | null): void {
@@ -117,72 +116,11 @@ export interface GeneratorsBulkOptions extends GeneratorsChunking {
   sleep?: Sleeper;
 }
 
-/** Tries per bulk request (the first plus two retries) and the longest single wait. */
-export const MAX_BULK_TRIES = 3;
-export const MAX_RETRY_WAIT_MS = 30_000;
-
 /* ══════════════════════════════════════════════════════════ retry ══ */
 
-function statusOf(error: unknown): number | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const e = error as Record<string, unknown>;
-  const status = e["status"] ?? e["statusCode"];
-  return typeof status === "number" ? status : undefined;
-}
-
-function headerOf(error: unknown, name: string): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const e = error as { headers?: unknown; response?: { headers?: unknown }; retryAfter?: unknown };
-  if (name === "retry-after" && typeof e.retryAfter === "number") return String(e.retryAfter);
-  for (const headers of [e.headers, e.response?.headers]) {
-    if (!headers || typeof headers !== "object") continue;
-    const getter = (headers as { get?: unknown }).get;
-    if (typeof getter === "function") {
-      const value = (getter as (n: string) => unknown).call(headers, name);
-      if (typeof value === "string") return value;
-    } else {
-      for (const [key, value] of Object.entries(headers)) {
-        if (key.toLowerCase() === name && (typeof value === "string" || typeof value === "number")) return String(value);
-      }
-    }
-  }
-  return undefined;
-}
-
-/**
- * The `Retry-After` header of a failed request in milliseconds (seconds, or an HTTP date), or
- * undefined when absent or unreadable. Pure given `now`.
- */
-export function retryAfterMs(error: unknown, now: number = Date.now()): number | undefined {
-  const raw = headerOf(error, "retry-after")?.trim();
-  if (!raw) return undefined;
-  if (/^\d+(\.\d+)?$/.test(raw)) return Math.round(Number(raw) * 1000);
-  const at = Date.parse(raw);
-  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
-}
-
-/**
- * How long to wait before the next try of a bulk request that failed, or undefined for "do not
- * retry". `attempt` is the number of tries made so far.
- *
- * REASONING. Re-sending a write is only safe when the server certainly did not process it, and a
- * bulk request is never idempotent here (a repeated `CreateMultiple` of ids that landed fails, a
- * repeated `UpdateMultiple` can overwrite a newer edit). So:
- *  - 429 (service protection) is answered BEFORE the request is processed: retry, waiting the
- *    `Retry-After` header (default 1 s x attempt), at most `MAX_RETRY_WAIT_MS`;
- *  - 503 only when it carries a `Retry-After` (the platform's explicit "not processed, come
- *    back" signal); a bare 503 may be a gateway that dropped the reply after processing;
- *  - every other status (4xx, 500, 501, a network failure without a status) is NEVER retried, as
- *    the request may have partly landed or can never succeed. 501 has its own per-row fallback.
- */
-export function retryDelay(error: unknown, attempt: number, now: number = Date.now()): number | undefined {
-  if (attempt >= MAX_BULK_TRIES) return undefined;
-  const status = statusOf(error);
-  const header = retryAfterMs(error, now);
-  if (status !== 429 && !(status === 503 && header !== undefined)) return undefined;
-  return Math.min(header ?? 1000 * attempt, MAX_RETRY_WAIT_MS);
-}
-
+// `retryAfterMs`, `retryDelay`, `MAX_BULK_TRIES` and `MAX_RETRY_WAIT_MS` moved to `./retry.ts` (shared with the
+// delete retry, Generators delete hardening DEL-2). Re-exported so every existing import keeps working.
+export { MAX_BULK_TRIES, MAX_RETRY_WAIT_MS, retryAfterMs, retryDelay } from "./retry";
 /* ═══════════════════════════════════════════════════════ 501 flags ══ */
 
 /** Own key names (not Add Cost's): a 501 there says nothing about these routes. */
