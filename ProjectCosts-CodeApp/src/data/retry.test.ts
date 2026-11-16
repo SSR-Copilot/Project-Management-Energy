@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataError } from "@/platform/errors";
 import * as bulk from "./generatorsBulk";
 import {
-  deleteRetryDelay, MAX_BULK_TRIES, MAX_RETRY_WAIT_MS, retryAfterMs, retryDelay, setDeleteSleeper, withDeleteRetry,
+  deleteRetryDelay, MAX_BULK_TRIES, MAX_NO_STATUS_TRIES, MAX_RETRY_WAIT_MS, retryAfterMs, retryDelay, setDeleteSleeper, withDeleteRetry,
 } from "./retry";
 
 const http = (status: number, headers?: Record<string, string>) =>
@@ -151,6 +151,33 @@ describe("withDeleteRetry", () => {
     expect(deleteRetryDelay(http(502), 1)).toBeUndefined();
     expect(deleteRetryDelay(undefined, 1)).toBe(1000);
     expect(deleteRetryDelay(http(404), 1)).toBeUndefined();
+  });
+
+  it("UT-RETRY-100 an error with NO status is retried at most once (2 tries in all)", async () => {
+    const h = harness();
+    const last = new TypeError("boom");
+    const op = flaky([new TypeError("first"), last, new TypeError("third")]);
+    await expect(withDeleteRetry(op, h.o)).rejects.toBe(last);
+    expect(op).toHaveBeenCalledTimes(MAX_NO_STATUS_TRIES);
+    expect(h.waits).toEqual([1000]);
+    expect(h.lines).toHaveLength(1);
+  });
+
+  it("UT-RETRY-101 an error WITH a retryable status keeps 3 tries (429, 500, 504, 503 with Retry-After)", async () => {
+    for (const error of [http(429), http(500), http(504), http(503, { "retry-after": "1" })]) {
+      const h = harness();
+      const op = flaky([error, error, error, error]);
+      await expect(withDeleteRetry(op, h.o)).rejects.toBe(error);
+      expect(op).toHaveBeenCalledTimes(3);
+    }
+  });
+
+  it("UT-RETRY-102 deleteRetryDelay: no status stops at attempt 2, a status does not", () => {
+    expect(deleteRetryDelay(undefined, 1)).toBe(1000);
+    expect(deleteRetryDelay(undefined, 2)).toBeUndefined();
+    expect(deleteRetryDelay(new TypeError("x"), 2)).toBeUndefined();
+    expect(deleteRetryDelay(http(500), 2)).toBe(2000);
+    expect(deleteRetryDelay(new DataError("d", new TypeError("x"), undefined), 2)).toBeUndefined();
   });
 });
 
