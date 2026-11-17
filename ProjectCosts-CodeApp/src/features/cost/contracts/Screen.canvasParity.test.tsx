@@ -7,7 +7,7 @@
  * description, Cancel, the Dirty flag, and what a save leaves behind.
  */
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -51,7 +51,7 @@ vi.mock("@/platform/privileges", async (importOriginal) => ({
 }));
 
 vi.mock("./hooks", () => {
-  const query = (d: unknown) => ({ data: d, isLoading: false, error: null });
+  const query = (d: unknown) => ({ data: d, isLoading: false, error: null, isSuccess: true, isError: false, isPlaceholderData: false });
   const trees = new Map<string, unknown>();
   return {
     useContracts: () => query((globalThis as { __D__?: Data }).__D__!.contracts),
@@ -60,7 +60,7 @@ vi.mock("./hooks", () => {
       for (const t of (globalThis as { __D__?: Data }).__D__!.targets) {
         byContract.set(t.contractId, [...(byContract.get(t.contractId) ?? []), t]);
       }
-      return { byContract };
+      return { byContract, isSuccess: true, isError: false, isPlaceholderData: false, data: [] };
     },
     useCapexAccounts: () => query([]),
     useDevCoCapexContracts: () => query([]),
@@ -424,5 +424,112 @@ describe("Project Rights panel (CONTR-056/079/090/091)", () => {
     mount();
     expand("c-2");
     expect(byId("txt_Contracts_List_Card_Body_Fields_TotalCosts_RC")).toHaveValue("5,000");
+  });
+});
+
+describe("a failed contract save (D120 §1, D120 §3)", () => {
+  const DESCRIPTION = "txt_Contracts_RightPanel_NewEdit_Description";
+
+  /** Opens "Add Development Contract" and fills the four things Save needs. */
+  async function fillNewContract() {
+    mount();
+    fireEvent.click(byId("command-newDevContarct"));
+    const description = await screen.findByTestId(DESCRIPTION);
+    fireEvent.change(description, { target: { value: "New grid works" } });
+    // Pick a day in the calendar the picker opens (typing into the input is not parsed in jsdom).
+    fireEvent.click(screen.getByLabelText("Contract Closing Date"));
+    const days = await screen.findAllByRole("gridcell");
+    fireEvent.click(within(days[10] as HTMLElement).getByRole("button"));
+    fireEvent.click(byId("btn_Contracts_RightPanel_NewEdit_DevCoCosts_TransparentButton-p1"));
+    fireEvent.click(byId("chb_Contracts_RightPanel_NewEdit_CostssRow-l1"));
+    await waitFor(() => expect(byId("panel-save")).toBeEnabled());
+  }
+
+  it("UT-CONTR-187 links failing after the create reopens the panel with the input, and the retry updates the saved contract", async () => {
+    const { ContractLinksError } = await import("@/data/contracts");
+    const { DataError } = await import("@/platform/errors");
+    data().contracts = [];
+    data().saveContract = vi.fn()
+      .mockRejectedValueOnce(new ContractLinksError("c-new", new DataError("create DevCo cost link", "boom", 500)))
+      .mockResolvedValueOnce({ id: "c-new" });
+    await fillNewContract();
+    fireEvent.click(byId("panel-save"));
+    // The banner says what happened and the panel is open again, with what the user typed.
+    expect(await screen.findByText(/The contract itself was saved, but its DevCo cost accounts were not/)).toBeInTheDocument();
+    expect(await screen.findByTestId(DESCRIPTION)).toHaveValue("New grid works");
+    expect((data().saveContract.mock.calls[0]![0] as { write: { id?: string } }).write.id).toBeUndefined();
+    // Save again: the SAME contract is updated (an id), not created a second time.
+    await waitFor(() => expect(byId("panel-save")).toBeEnabled());
+    fireEvent.click(byId("panel-save"));
+    await waitFor(() => expect(data().saveContract).toHaveBeenCalledTimes(2));
+    expect((data().saveContract.mock.calls[1]![0] as { write: { id?: string } }).write.id).toBe("c-new");
+  });
+
+  it("UT-CONTR-188 a refused save (not 'gone') reopens the panel; a deleted row does not", async () => {
+    const { RecordGoneError } = await import("@/platform/errors");
+    data().saveContract = vi.fn().mockRejectedValue(new Error("boom"));
+    mount();
+    select("c-1");
+    fireEvent.click(byId("command-editContarct"));
+    await screen.findByTestId("panel-save");
+    fireEvent.change(byId("contract-comment"), { target: { value: "note" } });
+    fireEvent.click(byId("panel-save"));
+    expect(await screen.findByText("Error: BoP Contract could not be saved correctly.")).toBeInTheDocument();
+    expect(await screen.findByTestId("panel-save")).toBeInTheDocument();
+
+    data().saveContract = vi.fn().mockRejectedValue(new RecordGoneError("update BoP contract", "vsb_bopprojectscontractses", "c-1"));
+    fireEvent.click(byId("panel-save"));
+    expect(await screen.findByText(/deleted by someone else/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("panel-save")).toBeNull());
+  });
+
+  it("UT-CONTR-189 an Edit whose contract left the list is refused with nothing sent, never saved as a new contract", async () => {
+    mount();
+    select("c-1");
+    fireEvent.click(byId("command-editContarct"));
+    await screen.findByTestId("panel-save");
+    data().contracts = [];
+    fireEvent.change(byId("contract-comment"), { target: { value: "note" } });
+    await waitFor(() => expect(byId("panel-save")).toBeEnabled());
+    fireEvent.click(byId("panel-save"));
+    expect(await screen.findByText(/deleted by someone else/)).toBeInTheDocument();
+    expect(data().saveContract).not.toHaveBeenCalled();
+  });
+});
+
+describe("the three panels close only through their X and Cancel (D120 §5)", () => {
+  const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
+
+  it("UT-CONTR-199 a click on the scrim keeps the contract panel open with what was typed; Cancel still closes it", async () => {
+    mount();
+    select("c-1");
+    fireEvent.click(byId("command-editContarct"));
+    await screen.findByTestId("panel-save");
+    fireEvent.change(byId("contract-comment"), { target: { value: "typed" } });
+    expect(backdrop()).not.toBeNull();
+    fireEvent.click(backdrop()!);
+    expect(screen.getByTestId("panel-save")).toBeInTheDocument();
+    expect(byId("contract-comment")).toHaveValue("typed");
+    fireEvent.click(byId("panel-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("panel-save")).toBeNull());
+  });
+
+  it("UT-CONTR-200 the same for the Project Rights panel and the payment-target panel", async () => {
+    data().contracts = [{ ...DEV }, { ...RIGHTS }];
+    mount();
+    select("c-2");
+    fireEvent.click(byId("command-editContarct"));
+    await screen.findByTestId("txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts");
+    fireEvent.click(backdrop()!);
+    expect(screen.getByTestId("txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts")).toBeInTheDocument();
+    fireEvent.click(byId("panel-cancel"));
+    await waitFor(() => expect(screen.queryByTestId("panel-save")).toBeNull());
+
+    select("c-1");
+    expand("c-1");
+    fireEvent.click(byId("contracts-add-target-c-1"));
+    await screen.findByTestId("txt_Contracts_RightPanel_NewEdit_PaymentTarget_PaymentDate");
+    fireEvent.click(backdrop()!);
+    expect(screen.getByTestId("txt_Contracts_RightPanel_NewEdit_PaymentTarget_PaymentDate")).toBeInTheDocument();
   });
 });

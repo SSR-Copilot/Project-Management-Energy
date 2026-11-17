@@ -77,6 +77,8 @@ export interface ReplaceDevCoLinksArgs {
   isNewContract: boolean;
   owningBusinessUnitId?: string;
   accounts: readonly { id: string; name: string }[];
+  /** The level-3 accounts the picker showed; a stored link to any other account is left alone (D120 §2). */
+  visibleAccountIds?: readonly string[];
 }
 
 export interface CostRepository {

@@ -571,3 +571,23 @@ The canvas ran about 40 sequential statements in `App.OnStart` before the first 
 | The next project page is fetched 1.5 s after the page is on screen | The start-up reads no longer share the line with a 540 kB page the user may never open | **new**, behind `nextPagePrefetchDelayMs`; the pager's arithmetic and the blank-tail probe are untouched (UT-PROJPAGE-*, UT-OVUI-042..045) |
 | Application Insights loads on demand | About 270 kB less decoded JavaScript (95 kB less gzip) before the first screen | **new** (no switch; revert to roll back) |
 | Gate | `*.har` is git-ignored (a browser capture holds request headers) | **new** |
+
+## Contracts screen: failed saves, loading, deleted rows, panels and smaller fixes (17 Nov 2026, D120) — fixed / new (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Contracts | A save that fails after the contract was written no longer leaves the list stale or creates a duplicate on retry; the panel reopens with the typed input (the canvas closes and resets it) | **fixed** (DIVERGENCE) |
+| Contracts | DevCo links: only the difference is written (an unchanged selection is one read, a +2/-1 edit is 4 requests, before 1 + D + C), deletes tolerate "already gone" | **new** (improvement over the canvas `RemoveIf` + `Patch`) |
+| Contracts | A link to an account the picker cannot show (inactive) survives a save | **new** (DIVERGENCE, safer than the canvas) |
+| Contracts | Add and Edit wait for the cost rows, DevCo contracts, links and targets; a form can no longer save zero totals or an Edit delete the links before they loaded | **fixed** (a canvas-style gate on every collection) |
+| Contracts | A failed secondary read shows a banner; a failed background refresh keeps the screen and an open panel | **new** (rule 19) |
+| Contracts | Editing a contract or payment target another user deleted reports "gone" instead of re-creating it | **fixed** (a canvas-equivalent upsert risk removed; not tested on DEV) |
+| Contracts | The three panels ignore an outside click, as the canvas overlays | **fixed** (parity) |
+| Contracts | The screen resets when the project changes | **new** |
+| Contracts | The margin seed runs once per panel and never over a typed margin; both assumptions are preloaded as in the canvas | **fixed** |
+| Contracts | A failed delete says "could not be deleted correctly" (the canvas shows nothing) | **new** (NEW TEXT) |
+| Contracts | "Total cost of contract" hidden for a Fixed Value margin, Payment Date right-aligned, number grouping in es / it / pl / pt-PT | **fixed** (parity) |
+| Contracts | Cost sums cannot overflow on very large projects; the standard-assumption pick is deterministic; a create without an owning business unit is traced | **new** |
+| Contracts | Comment-only DIVERGENCE tags (LD-11, 12, 14, 15, 16) and strings moved into `MSG` | **new** (traceability) |
+| Contracts | The standard-assumption lookup is not cleared on Edit as the canvas does (WR-3); the card date locale, Payment Description gating, test-id names and raw error text were left | **proposed (not approved)**, see D120 §7 |
+| Contracts | Payment targets, DevCo links, DevCo CAPEX contracts and CAPEX cost rows keep `statecode eq 0` (the canvas has no state filter) | **proposed (not approved)**, joins D101 |

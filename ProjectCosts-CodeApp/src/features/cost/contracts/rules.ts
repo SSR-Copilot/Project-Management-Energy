@@ -9,7 +9,7 @@
  * `control.Property`, so a reviewer can diff against the `.pa.yaml`.
  */
 import { isDecimal, isInteger, inRange, orZero, parseNumber, round, roundUp, sum } from "@/domain/numeric";
-import { dateFormat, localeInfo, numberFormat } from "@/domain/locale";
+import { canvasNumberText, dateFormat, localeInfo, numberFormat } from "@/domain/locale";
 
 /* ══════════════════════════════════════════════════════════════ option sets */
 
@@ -201,6 +201,59 @@ export const MSG = {
   saveErrorContract: "Error: BoP Contract could not be saved correctly.",
   /** The `Notify(...)` prefix of the payment-target save (`:3126`). */
   saveErrorPaymentTarget: "Error: BoP Contract payment target could not be saved correctly.",
+  /**
+   * NEW TEXT, no canvas source (D120 §1): the contract row was written, its DevCo cost accounts were not.
+   * The panel is open again with the user's input; Save repeats the missing part and does not create a second contract.
+   */
+  savedButLinksFailed:
+    "The contract itself was saved, but its DevCo cost accounts were not. Your input is still in the panel: press Save to try again.",
+  /** NEW TEXT, no canvas source (D120 §4): a read the forms need failed, so Add and Edit are off. */
+  supportingDataUnavailable:
+    "Some of this project's cost data could not be loaded, so contracts cannot be added or edited. Reload the page to try again.",
+  /*
+   * NEW TEXT (D120 §8): the canvas delete confirmations (`:7751-7770`, `:7787-7814`) have no `IfError`,
+   * so there is no canvas string. A failed delete showed the SAVE text; these two say "deleted", worded after the
+   * canvas save prefixes above and the Admin screens' "could not be deleted correctly" (`admin-cost/constants.ts`).
+   */
+  deleteErrorContract: "Error: BoP Contract could not be deleted correctly.",
+  deleteErrorPaymentTarget: "Error: BoP Contract payment target could not be deleted correctly.",
+
+  /*
+   * The two delete confirmations (RB-7: these were inline literals of `Screen.tsx`, rule 7). Verbatim.
+   */
+  /** `cmp_Contracts_PopUpConfirmation_DeleteContracts.Title` (`:7817`). */
+  deleteContractTitle: "Delete Contract?",
+  /** `cmp_Contracts_PopUpConfirmation_DeletePaymentTarget.Title` (`:7773`). */
+  deletePaymentTargetTitle: "Delete Payment Target?",
+
+  /**
+   * The Yes / No options of `rad_Contracts_RightPanel_NewEdit_Margin` (`Items: =Choices('Margin (BoP Projects Contracts)')`,
+   * `:5952`) and the Percentage / Fixed Value options of `rad_…_MarginType` (`Choices('Contract Margin Type')`, `:5890`).
+   * They are the Dataverse choice labels, hard-coded because this app does not read `Choices(...)`.
+   */
+  marginYes: "Yes",
+  marginNo: "No",
+  marginTypePercentage: "Percentage",
+  marginTypeFixedValue: "Fixed Value",
+
+  /** NEW TEXT, no canvas source: appended to the accessible name of a DevCo account another contract has claimed. */
+  usedByAnotherContractSuffix: " (used by another contract)",
+  /** NEW TEXT, no canvas source: the title of the red banner above the list (the canvas used a transient `Notify`). */
+  failureBannerTitle: "Could not complete that",
+
+  /*
+   * NEW TEXT, no canvas source: the states the canvas never had (no deep link, a project the caller cannot read, a failed
+   * read). The canvas substituted a hard-coded test project instead (A-2). "Loading contracts…" is the inline spinner (D60).
+   */
+  noProjectTitle: "No project selected",
+  noProjectDescription: "Pick a project from the overview and use Edit Costs to open its costs.",
+  projectNotFoundTitle: "That project could not be opened",
+  projectNotFoundDescription:
+    "It may have been deleted, or it may belong to a business unit your account cannot see. Ask your administrator if you believe you should have access.",
+  goToProjects: "Go to Projects",
+  costDataUnavailableTitle: "Cost data is unavailable",
+  costDataUnavailableDescription: "This project's Cost data could not be loaded.",
+  loadingContracts: "Loading contracts…",
 } as const;
 
 /**
@@ -543,6 +596,36 @@ export function selectedLeafAccounts(tree: readonly AccountNode[]): AccountNode[
   return tree.filter((n) => n.level === 3 && n.selected);
 }
 
+/**
+ * What a Save must change so a contract's stored DevCo links equal the ticked accounts (DIVERGENCE, see
+ * `replaceDevCoLinks`; the canvas deleted every link and re-created the ticked ones).
+ *
+ * `create`: ticked accounts with no stored link, once each, in ticked order. `remove`: the stored link rows to delete,
+ * that is every row of an account no longer ticked plus any second row of the same account. The rest stays untouched.
+ *
+ * `visibleAccountIds` (D120 §2, N1): the level-3 accounts the picker can show. A stored link whose account is
+ * NOT in it (the account is inactive, so the read `statecode eq 0` left it out of the tree) could never be ticked or
+ * unticked by the user, so it is never removed: "not ticked" would only mean "not shown". The canvas read every
+ * account state, so it kept such a tick. Omitted = every link counts as visible (the earlier behaviour).
+ */
+export function planDevCoLinks(
+  existing: readonly { id: string; accountId: string }[],
+  accounts: readonly { id: string; name: string }[],
+  visibleAccountIds?: readonly string[],
+): { create: { id: string; name: string }[]; remove: string[] } {
+  const wanted = new Map<string, { id: string; name: string }>();
+  for (const account of accounts) if (!wanted.has(account.id)) wanted.set(account.id, account);
+  const visible = visibleAccountIds ? new Set(visibleAccountIds) : undefined;
+  const kept = new Set<string>();
+  const remove: string[] = [];
+  for (const row of existing) {
+    if (visible && !visible.has(row.accountId)) continue; // an account the picker cannot show: leave its link alone
+    if (wanted.has(row.accountId) && !kept.has(row.accountId)) kept.add(row.accountId);
+    else remove.push(row.id);
+  }
+  return { create: [...wanted.values()].filter((account) => !kept.has(account.id)), remove };
+}
+
 /* ════════════════════════════════════ the DevCo picker's rows and checkboxes */
 
 /**
@@ -656,11 +739,19 @@ export interface ClosingSplitArgs {
 export function costsUntilClosing({ closingDate, costs }: ClosingSplitArgs): number {
   const y = closingDate.getFullYear();
   const m = closingDate.getMonth() + 1;
-  const upToYear = sum(...costs.filter((c) => c.year <= y).map((c) => c.cost));
-  const laterInYear = sum(
-    ...costs.filter((c) => c.month > m && c.year === y).map((c) => c.cost),
-  );
+  const upToYear = sumCosts(costs, (c) => c.year <= y);
+  const laterInYear = sumCosts(costs, (c) => c.month > m && c.year === y);
   return upToYear - laterInYear;
+}
+
+/**
+ * `Sum(Filter(costs, …), vsb_cost)` — blanks skipped. A loop, not `sum(...rows)`: spreading more than about 120,000
+ * rows into call arguments throws a RangeError (V8; fewer in Safari), and it would do so inside a state updater.
+ */
+function sumCosts(costs: readonly CapexCostRow[], keep: (row: CapexCostRow) => boolean): number {
+  let total = 0;
+  for (const row of costs) if (keep(row)) total += orZero(row.cost);
+  return total;
 }
 
 /**
@@ -670,10 +761,8 @@ export function costsUntilClosing({ closingDate, costs }: ClosingSplitArgs): num
 export function costsAfterClosing({ closingDate, costs }: ClosingSplitArgs): number {
   const y = closingDate.getFullYear();
   const m = closingDate.getMonth() + 1;
-  const laterYears = sum(...costs.filter((c) => c.year > y).map((c) => c.cost));
-  const laterInYear = sum(
-    ...costs.filter((c) => c.month > m && c.year === y).map((c) => c.cost),
-  );
+  const laterYears = sumCosts(costs, (c) => c.year > y);
+  const laterInYear = sumCosts(costs, (c) => c.month > m && c.year === y);
   return laterYears + laterInYear;
 }
 
@@ -872,7 +961,14 @@ export function formatThousands(value: number, locale = "de-DE"): string {
   return numberFormat(locale, { maximumFractionDigits: 0 }).format(value);
 }
 
-/** `lbl_..._Description_ErrorMessage.Text` — `IsBlank(Trim(value))`. */
+/**
+ * `lbl_..._Description_ErrorMessage.Text` — `IsBlank(Trim(value))`.
+ *
+ * DIVERGENCE (D-4, D120 §9): the canvas label's `Visible` is `Not(IsBlank(Trim(...)))` (`:3996`), which
+ * is inverted for this message: a blank Description shows NO message in the canvas, and Save stays disabled. This app
+ * shows `RESX.inputBlank` ("Input must not be blank") for it, so a greyed-out Save always says why. Save is disabled in
+ * both apps; only the message is new.
+ */
 export function validateDescription(raw: string): FieldError | undefined {
   return raw.trim() === ""
     ? { field: "description", message: RESX.inputBlank }
@@ -1048,6 +1144,9 @@ export function contractErrors(
       : validateMarginFixedValue(form.marginFixedValue, locale));
   }
   if (selectedLeafAccounts(tree).length === 0) {
+    // DIVERGENCE (D-4, D120 §9): the canvas has no message for "no DevCo account ticked" (the text
+    // `Input must not be blank` appears only on the payment-target labels, `:2354`, `:2551`); it only keeps Save
+    // disabled. The message is this app's, so a greyed-out Save says why. It shows once the field was touched (D61).
     errors.push({ field: "devCoCosts", message: RESX.inputBlank });
   }
   return errors;
@@ -1065,6 +1164,31 @@ export const NO_FIELDS_TOUCHED: TouchedFields = new Set<string>();
 export function touchFields(touched: TouchedFields, fields: readonly string[]): TouchedFields {
   const added = fields.filter((f) => !touched.has(f));
   return added.length === 0 ? touched : new Set([...touched, ...added]);
+}
+
+/** The form fields the margin seed writes; a patch that carries one of them is the user (or Reset) editing the margin. */
+const MARGIN_FORM_KEYS = ["margin", "marginType", "marginPercentage", "marginFixedValue"] as const;
+
+/** True when a form patch writes any margin field (D120 §7). */
+export function patchEditsMargin(patch: Readonly<Record<string, unknown>>): boolean {
+  return MARGIN_FORM_KEYS.some((key) => key in patch);
+}
+
+/**
+ * Whether the standard assumption may seed a NEW contract's margin now (D120 §7).
+ *
+ * The canvas seeds once, synchronously, in the command's `OnSelect` (`:583-602`) from collections `OnVisible` already
+ * loaded. Here the assumption arrives from a query, possibly after the panel opened, so the seed runs at most ONCE per
+ * opened panel (`seeded`) and never after the user (or Reset) has written a margin field (`marginTouched`): a late
+ * arrival, or a refetch that returns equal data in a new object, must not overwrite what is on screen.
+ */
+export function shouldSeedMargin(args: {
+  panel: string;
+  editing: boolean;
+  seeded: boolean;
+  marginTouched: boolean;
+}): boolean {
+  return args.panel === "contract" && !args.editing && !args.seeded && !args.marginTouched;
 }
 
 /**
@@ -1093,6 +1217,33 @@ export function visibleFieldErrorPanelWide(
   field: string,
 ): string | undefined {
   return panelTouched ? errors.find((e) => e.field === field)?.message : undefined;
+}
+
+/* ═══════════════════════════════════════════════ what a form needs loaded */
+
+/**
+ * Which reads have answered, as the screen's two kinds of write need them (D120 §4).
+ *
+ * `contractForm`: everything a contract form calculates from or saves against: the contract and account lists, the
+ * DevCo CAPEX contracts and cost rows (the Plan figures), the links (what Edit ticks, which accounts are taken) and the
+ * payment targets. `targets`: what the payment-target panel needs (the remaining percentage, the next description).
+ * The links and targets reads are disabled while the project has no contract, so with none they count as ready.
+ */
+export function queriesReady(a: {
+  contractCount: number;
+  contractsLoaded: boolean;
+  accountsLoaded: boolean;
+  costRowsLoaded: boolean;
+  devCoContractsLoaded: boolean;
+  linksLoaded: boolean;
+  targetsLoaded: boolean;
+}): { contractForm: boolean; targets: boolean } {
+  const none = a.contractCount === 0;
+  const targets = a.contractsLoaded && (none || a.targetsLoaded);
+  return {
+    targets,
+    contractForm: targets && a.accountsLoaded && a.costRowsLoaded && a.devCoContractsLoaded && (none || a.linksLoaded),
+  };
 }
 
 /* ═══════════════════════════════════════════════ payment-target validation */
@@ -1181,10 +1332,9 @@ export function validateTargetPercent(
 
 /** Power Fx `Text(n, "###,###0.0")`. */
 export function formatOneDecimal(value: number, locale = "de-DE"): string {
-  return numberFormat(locale, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }).format(value);
+  // `canvasNumberText` (D117): the pattern groups by three in EVERY language, as `Text(n, "###,###0.0")` does; plain
+  // `Intl` leaves 1234.5 ungrouped in es, it, pl and pt-PT ("min2" grouping).
+  return canvasNumberText(value, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 export function paymentTargetErrors(args: {
@@ -1230,9 +1380,13 @@ export function contractName(projectIdCode: string, description: string): string
  * `Name: $"BoP RC-{gblSelectedProject.'Project ID'}-{txt_Contracts_RightPanel_NewEdit_Description.Value}"`
  * (`:3752`) — the Project Rights Save.
  *
- * SOURCE DEFECT (reproduced, CONTR-091): the suffix reads the Development/Construction panel's
- * Description box, not the rights panel's own, so on a Project Rights contract it is normally empty
- * and the name is `BoP RC-<Project ID>-`. The prefix differs from the other contract types' `BoP-`.
+ * SOURCE DEFECT (CONTR-091, D100): the suffix reads the Development/Construction panel's Description box, not the
+ * rights panel's own. That box's `Value` is `locSelectedContract.Description` (`:4010-4020`), so in the canvas the suffix
+ * is EMPTY when a rights contract is created, and the STORED description when one is edited (`BoP RC-<Project ID>-<old
+ * description>`). This app always writes the empty-suffix name `BoP RC-<Project ID>-`: reproduced for a create, a
+ * deliberate simplification for an edit (the name is a display string; the description is its own column). Exact
+ * parity would be `rightsContractName(projectIdCode, editing ? storedDescription : "")` behind a `…CanvasParity` twin;
+ * not built, product question open. The prefix differs from the other contract types' `BoP-`.
  */
 export function rightsContractName(projectIdCode: string): string {
   return `BoP RC-${projectIdCode}-`;
@@ -1389,9 +1543,12 @@ export function sortContracts(contracts: readonly BopContract[]): BopContract[] 
  * setting a "needs recalculating" flag and reacting to it in an effect — which would render
  * twice for every keystroke on a radio.
  *
- * Returns the form unchanged when there is no closing date, because both halves of the split
- * are `If(Not(IsBlank(closingDate)), …)` in the canvas source and therefore `Blank()` without
- * one.
+ * Returns the form unchanged when there is no closing date.
+ *
+ * DIVERGENCE (D120 §9, display only): without a closing date the canvas still recalculates
+ * (`:7655-7690`): the Actual halves and the Overwrite total are summed from their boxes, and the two Plan halves come
+ * out as 0. This app leaves every figure as it was, so nothing is shown that depends on a date the user has not given.
+ * Nothing wrong can be saved either way: Save needs a closing date (`canSaveContract`).
  */
 export function recalculateForm(
   form: ContractForm,
@@ -1453,7 +1610,8 @@ export function inputDecimalText(value: number | null | undefined, locale?: stri
 }
 
 export function wholeNumberText(value: number | undefined, locale?: string): string {
-  return numberFormat(locale ?? "de-DE", { maximumFractionDigits: 0 }).format(orZero(value));
+  // Same reason as `formatOneDecimal`: `Text(1234, "###,##0")` is "1,234" whatever the language (D117).
+  return canvasNumberText(orZero(value), locale ?? "de-DE", { maximumFractionDigits: 0 });
 }
 
 /** Power Fx `Text(n, "###,##0.0")` — one decimal, grouped. */
@@ -1662,6 +1820,27 @@ export function marginChangePatch(
   };
 }
 
+/**
+ * Whether the "Total cost of contract" box of the Development / Construction panel is shown.
+ *
+ * Canvas `con_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Height` (`:6126`):
+ * `If(rad_…_MarginType.Selected.Value = 'Contract Margin Type'.Percentage, 80, 0)`; a zero height clips the box, there
+ * is no `Visible`. What that radio has selected (`DefaultSelectedItems`, `:5890-5905`):
+ *   - a contract whose stored Margin Type is blank, or a NEW contract: Percentage by default, then whatever the user
+ *     picked (`form.marginType`; flipping Margin resets it to Percentage);
+ *   - an EDIT of a contract with a stored, non-blank Margin Type and Margin = No: NOTHING (the formula's `If` has no
+ *     else branch), so the box is hidden; with Margin = Yes: the stored (or chosen) type.
+ * The total is still computed and saved when the box is hidden (a Fixed Value margin shows no total, as in the canvas).
+ */
+export function showTotalCostOfContract(
+  form: Pick<ContractForm, "margin" | "marginType">,
+  storedMarginType: MarginType | undefined,
+  editing: boolean,
+): boolean {
+  if (editing && storedMarginType !== undefined && !form.margin) return false;
+  return form.marginType === MARGIN_TYPE.Percentage;
+}
+
 /** `rad_…_MarginType.OnChange` (`:5911`): both boxes become 0 and the standard flag clears. */
 export function marginTypeChangePatch(type: MarginType): Partial<ContractForm> {
   return {
@@ -1687,5 +1866,50 @@ export function saveErrorText(
   kind: "contract" | "paymentTarget", detail: string | undefined,
 ): string {
   const prefix = kind === "paymentTarget" ? MSG.saveErrorPaymentTarget : MSG.saveErrorContract;
+  return detail ? `${prefix} ${detail}` : prefix;
+}
+
+/**
+ * `cmp_Contracts_PopUpConfirmation_DeleteContracts.Description` (`:7781`):
+ * `"Are you sure that you want to permanently delete """ & locSelectedContract.Description & """ contract?"`.
+ */
+export function confirmDeleteContractDescription(description: string | undefined): string {
+  return `Are you sure that you want to permanently delete "${description ?? ""}" contract?`;
+}
+
+/**
+ * `cmp_Contracts_PopUpConfirmation_DeletePaymentTarget.Description` (`:7745`):
+ * `"Are you sure that you want to permanently delete """ & locSelectedContractPaymentTarget.Description & """ payment target?"`.
+ */
+export function confirmDeletePaymentTargetDescription(description: string | undefined): string {
+  return `Are you sure that you want to permanently delete "${description ?? ""}" payment target?`;
+}
+
+/**
+ * `lbl_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts.Text` (`:3619`):
+ * `"Total Costs Contract [" & If(Not(IsBlank(country.'ISO Currency Code')), country.'ISO Currency Code', "EUR") & "]"`.
+ */
+export function rightsTotalLabel(currency: string | undefined): string {
+  const code = currency?.trim();
+  return `Total Costs Contract [${code ? code : "EUR"}]`;
+}
+
+/**
+ * The card's field captions: `lbl_Contracts_List_Card_Body_Fields_CostsUntilClosing.Text` (`:899`),
+ * `…_Margins` (`:976`, `$"Margin [{If(ThisItem.'Margin Type' = Percentage, "%", currency)}]"`), `…_CostsAfterClosing`
+ * (`:1266`) and `…_TotalCosts` (`:1361`).
+ */
+export const CARD_LABEL = {
+  costsUntilClosing: (currency: string) => `Costs Until Closing [${currency}]`,
+  margin: (unit: string) => `Margin [${unit}]`,
+  costsAfterClosing: (currency: string) => `Costs After Closing [${currency}]`,
+  totalCosts: (currency: string) => `Total Costs [${currency}]`,
+} as const;
+
+/** The text of a failed DELETE (D120 §8): the same shape as `saveErrorText`, with the "deleted" prefixes. */
+export function deleteErrorText(
+  kind: "contract" | "paymentTarget", detail: string | undefined,
+): string {
+  const prefix = kind === "paymentTarget" ? MSG.deleteErrorPaymentTarget : MSG.deleteErrorContract;
   return detail ? `${prefix} ${detail}` : prefix;
 }

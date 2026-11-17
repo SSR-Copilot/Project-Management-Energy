@@ -7490,3 +7490,59 @@ Business rules, filters, sorts, the page arithmetic (`named ++ blank`, `RoundUp(
 - **Env vars read at click time.** Generators' approval flows read `vsb_ProjectManagementAppID` and `vsb_PrimarilyApprovalGroupID` when clicked and refuse when missing. With S1 a click in the first second after the shell appears, before the environment variables land, would meet an empty value. Switch `envVarsBlockFirstPaint` back to `true` if that matters.
 - **Role names by name.** S3 compares the five names server side without regard to case, and the client still compares them exactly (UT-CU-105 pins that a role differing only in case never counts, as before). A sixth role the badge starts to read must be added to `BADGE_ROLE_NAMES`.
 - **Not done, proposed:** (a) the user's `vsb_countries` read and the Project Overview's country list are two reads of one small table; (b) the cost screens' start-up was not looked at; (c) `odata.include-annotations=*` (F6) is the largest remaining payload and needs an SDK change or a different transport; (d) a persisted cache of the user's roles would save the three round trips on a repeat visit, but it would show a stale permission, so it is not proposed without a product decision.
+
+## D120 — Contracts screen: failed and partial saves, loading and read errors, deleted rows, panels, and 15 smaller fixes (17 Nov 2026)
+
+**Status:** implemented in the working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run against DEV**. Type: ANALYSIS then BUG/OPTIMIZE (product owner: "in depth analysis and testing of the Contracts screen", then "proceed for fixing these issues"). Tests UT-CONTR-160..265.
+**How the issues were found:** four read-only reviews (canvas load and display, canvas write paths, a test and coverage audit, a robustness and rules review), then a fix-planning pass that re-checked every item against the code (38 items: 23 confirmed, 13 partly, 2 refuted). Nothing was reproduced live; the Contracts screen was not exercised on DEV. The earlier "Run 3" results (D100) were a static review plus unit tests ("Local (mock)"), not a live run.
+
+### 1. Failed or partial save (the main fix)
+
+| # | Before | Now |
+|---|---|---|
+| 1 | The caches were refreshed only after a fully successful save. When the contract was created and the DevCo links then failed, the list stayed stale, the contract was invisible, and a retry created a duplicate | Refreshed on every outcome (`onSettled`). A failure after the contract was written keeps its id, so the retry updates the same row. The link step reports `ContractLinksError` |
+| 2 | The panel closed before the save (D58/D60), so a failure lost everything typed | **DIVERGENCE:** the panel reopens with the typed values after a failed save. The canvas closes and resets it. Reverts by removing the reopen in `saveContractNow` |
+
+### 2. DevCo links: only the difference is written (§2)
+
+Before: read the old links, delete all of them, create all the selected ones (1 + D + C requests, unbounded in parallel; one failed delete stopped the creates and left the contract with no links). Now `planDevCoLinks` deletes the removed links and creates the added ones (an unchanged selection is 1 read; a +2/-1 edit is 4 requests), through the concurrency gate, and a 404 on a link delete counts as already gone. **A link whose account the picker cannot show (an inactive account) is left alone** (N1): the earlier code deleted it on any save. The canvas `RemoveIf` removes every row of the contract; this is a **DIVERGENCE** (safer). Deletes stay one request each: Dataverse has no `DeleteMultiple` for standard tables (`GENERATORS-BULK-DATAVERSE-ANALYSIS-AND-PLAN.md`). `CreateMultiple` for the added links was not built (needs a DEV probe).
+
+### 3. Editing a row somebody else deleted (§3)
+
+The SDK sends an update as a PATCH without `If-Match`, which Dataverse treats as an upsert, so Save on an Edit panel re-created a contract or payment target that another user had deleted, without the owning business unit (rule 4 shape). `saveContract` and `savePaymentTarget` now use `updateRecordIfExists` and report `RecordGoneError` ("record gone" text). If the contract left the list while its Edit panel was open, the save no longer turns into a create. **NEEDS-LIVE-CHECK:** the upsert behaviour on a deleted row was read from the SDK source and `client.ts`, not tested on DEV.
+
+### 4. The screen waits for its data; errors are shown (§4, rule 19)
+
+The contract Add and Edit commands stay off until the contracts, accounts, cost rows, DevCo contracts, DevCo links and payment targets have all answered (the payment-target commands wait only for the targets), and the form recalculates when the rows arrive (before, a form opened early saved zero totals, and an Edit opened early deleted the old links). The links and targets queries no longer lose their data when the contract count changes. A failed secondary read shows a banner (`contracts-data-unavailable`, **NEW TEXT**) and keeps Add and Edit off. The full-screen error appears only when the contracts failed with no data, so a failed background refresh no longer unmounts an open panel.
+
+### 5. Panels (§5), project switch (§6), margin seed (§7), delete text (§8)
+
+- The three panels ignore an outside click, as the canvas overlays do (`keepOpenOnOutsideClick`). Escape and ✕ still close.
+- The screen is keyed by the project, so going back to an already loaded project no longer carries over the other project's open panel or form.
+- The standard-assumption margin seed: both assumptions are read on mount (the canvas preloads them), the margin is seeded once per panel and never over a margin the user touched or when a refetch brings equal data.
+- A failed delete says "could not be deleted correctly" (**NEW TEXT**, modelled on the Admin Cost screens); it said "saved" before. The canvas delete has no error text at all.
+
+### 6. Smaller fixes
+
+| Item | Change |
+|---|---|
+| LD-1 | The "Total cost of contract" box is hidden for a Fixed Value margin and for an Edit of a stored Margin = No contract with a stored margin type, as the canvas clips it (height 0). The total is still computed and saved |
+| LD-6 | The Payment Date column is right-aligned, as the canvas |
+| LD-8 | Four-digit numbers keep their separator in es, it, pl and pt-PT (`canvasNumberText`, as D117) |
+| RB-12(b) | The cost sum no longer spreads an array (it threw above about 120,000 rows) |
+| TS-13 | The standard-assumption read takes the oldest match, so two matching rows give one seed |
+| RB-7 | The inline canvas strings of `Screen.tsx` are in `MSG` (bytes unchanged); the card captions, empty-state and loading texts are marked NEW TEXT where the canvas has none |
+| RB-14 | A create with no owning business unit prints a `[VSB]` warning; stale demo-build comments rewritten |
+| LD-11, 12, 14, 15, 16 (§9) | Comment-only `DIVERGENCE` tags: the read-only Calculated box, Recalculate without a closing date, the blank-Description and no-account messages (D-4), the picker start (`vsb_projectstartdate`), a stored closing type "None" shown as Plan. WR-7 and TS-12 comments describe the canvas behaviour; the code is unchanged |
+| Tests | 106 new test ids. The four save and delete hooks, the contract reads and the save gate (`canSaveContract` equals "no errors" over 3,000 seeded forms) run as real functions; before, the screen tests mocked `./hooks` and `data/contracts.ts` was at 24% coverage |
+
+### 7. Not built (decision or live check needed)
+
+- **WR-3, the standard-assumption lookup.** The canvas writes `'BoP Standard Assumption Contract': Blank()` on every save (`Contracts Screen.pa.yaml:7342`); this app does not, so an edited seeded contract stays linked to its assumption. A null bind patch was written and checked but **not applied**: nobody has tested that Dataverse accepts it on this table, and a refusal would fail every contract edit. Product question: clear it as the canvas does? Test on DEV first.
+- LD-7 (card date locale, needs a live look), RB-10 (a Payment Description that cannot be fixed, needs a decision), RB-8 (aria-labels with record names and the generic panel test ids: renaming risks Tosca modules), RB-6 (raw error text is canvas parity), RB-12(a) (`fetchAll` cap, shared code), the weak tests TS-6..TS-8.
+- **D101 extension (LD-9):** payment targets, DevCo links, DevCo CAPEX contracts and CAPEX cost rows also keep `statecode eq 0` where the canvas has no state filter. Only contracts and accounts were recorded; the same product question applies to these four.
+- A lookup join filter and `$apply` aggregates for the load chain were not tried (live check). Request counts above are derived from the code, not measured.
+
+### 8. Verification
+
+`npm run verify` on the working tree (17 Nov 2026, on top of `1706b7e`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning (the one `set-state-in-effect` warning in `contracts/Screen.tsx` is the seed effect, present in the committed file too), the control-label and canvas-identity gates clean, **277 test files, 6,133 tests passed, 3 todo**, build OK. **Not run:** knip, the E2E parity suite, any check on DEV or against live Dataverse; the null-bind, the upsert-of-a-deleted-row and the lookup-join questions of §3 and §7 are open until a DEV test.

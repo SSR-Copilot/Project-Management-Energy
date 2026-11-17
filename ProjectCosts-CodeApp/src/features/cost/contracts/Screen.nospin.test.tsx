@@ -33,6 +33,12 @@ const CONTRACT_2 = {
 interface State {
   contractsLoading: boolean;
   contractsError: unknown;
+  /** The contracts read failed on a REFETCH: the rows it already has stay (D120 §4). */
+  contractsStale: boolean;
+  /** D120 §4: reads the forms need that have not answered yet, or failed. */
+  costRowsPending: boolean;
+  costRowsError: boolean;
+  targetsPending: boolean;
   /** Which mutation is pending, if any. */
   pending: "none" | "saveContract" | "deleteContract" | "saveTarget" | "deleteTarget";
   /** The contract cards the screen lists. */
@@ -60,18 +66,30 @@ vi.mock("@/platform/privileges", async (importOriginal) => ({
 }));
 
 vi.mock("./hooks", () => {
-  const query = (data: unknown, isLoading = false, error: unknown = null) => ({ data, isLoading, error });
+  const query = (data: unknown, isLoading = false, error: unknown = null) => ({
+    data, isLoading, error, isSuccess: !isLoading && !error, isError: Boolean(error), isPlaceholderData: false,
+  });
+  /** A read that has not answered (pending) or failed on its first try: no data, not success. */
+  const unanswered = (failed: boolean) => ({
+    data: undefined, isLoading: !failed, error: failed ? new Error("500") : null, isSuccess: false, isError: failed,
+    isPlaceholderData: false,
+  });
   const mutation = (key: State["pending"]) => () => ({
     mutateAsync: vi.fn(() => state.gate ?? Promise.resolve()), isPending: state.pending === key,
   });
   return {
-    useContracts: () => query(state.contractsLoading ? undefined : state.contracts, state.contractsLoading, state.contractsError),
-    usePaymentTargets: () => ({ byContract: new Map([["c-1", [TARGET]]]) }),
+    useContracts: () => query(
+      state.contractsLoading || (state.contractsError && !state.contractsStale) ? undefined : state.contracts,
+      state.contractsLoading, state.contractsError,
+    ),
+    usePaymentTargets: () => state.targetsPending
+      ? { ...unanswered(false), byContract: new Map() }
+      : { byContract: new Map([["c-1", [TARGET]]]), data: [TARGET], isSuccess: true, isError: false, isPlaceholderData: false },
     useCapexAccounts: () => query([]),
     useDevCoCapexContracts: () => query([]),
     useDevCoLinks: () => query([]),
     useProjectExtras: () => query({}),
-    useCapexCostRows: () => query([]),
+    useCapexCostRows: () => (state.costRowsPending || state.costRowsError ? unanswered(state.costRowsError) : query([])),
     useAccountTree: () => [],
     useBopStandardAssumption: () => query(undefined),
     useSaveContract: mutation("saveContract"),
@@ -110,7 +128,10 @@ function selectAndExpand() {
 }
 
 beforeEach(() => {
-  state = { contractsLoading: false, contractsError: null, pending: "none", contracts: [CONTRACT], writeInFlight: false, gate: null };
+  state = {
+    contractsLoading: false, contractsError: null, contractsStale: false, costRowsPending: false, costRowsError: false,
+    targetsPending: false, pending: "none", contracts: [CONTRACT], writeInFlight: false, gate: null,
+  };
 });
 
 describe("Contracts screen without spinners (D58)", () => {
@@ -293,5 +314,95 @@ describe("Contracts screen: CA-15 and CA-17", () => {
     await settle();
     expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).not.toBeChecked();
     expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-2")).not.toBeChecked();
+  });
+});
+
+describe("Contracts screen: Add and Edit wait for the reads a form needs (D120 §4)", () => {
+  it("UT-CONTR-190 while the cost rows have not answered: contract commands off, list shown, payment-target bar still on", () => {
+    state.costRowsPending = true;
+    mount();
+    selectAndExpand();
+    for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).toBeInTheDocument();
+    expect(screen.getByTestId("contracts-add-target-c-1")).not.toBeDisabled();
+    expect(screen.queryByTestId("contracts-data-unavailable")).toBeNull();
+  });
+
+  it("UT-CONTR-191 while the payment targets have not answered: Add Period is off too (the remaining percentage is unknown)", () => {
+    state.targetsPending = true;
+    mount();
+    selectAndExpand();
+    for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
+    expect(screen.getByTestId("contracts-add-target-c-1")).toBeDisabled();
+  });
+
+  it("UT-CONTR-192 a form read that FAILED keeps Add and Edit off and says why, the list stays", () => {
+    state.costRowsError = true;
+    mount();
+    expect(screen.getByTestId("contracts-data-unavailable")).toHaveTextContent(MSG.supportingDataUnavailable);
+    for (const key of COMMAND_KEYS) expect(command(key)).toBeDisabled();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).toBeInTheDocument();
+  });
+
+  it("UT-CONTR-193 a failed REFETCH of the contracts keeps the rows on screen instead of the error state (rule 19, RB-4)", () => {
+    state.contractsError = new Error("network");
+    state.contractsStale = true;
+    mount();
+    expect(screen.queryByText("Cost data is unavailable")).toBeNull();
+    expect(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1")).toBeInTheDocument();
+  });
+});
+
+describe("Contracts screen: a failed delete says 'deleted' (D120 §8)", () => {
+  /** A write that rejects, already handled so the test runner sees no unhandled rejection. */
+  const failing = () => {
+    const rejected = Promise.reject(new Error("HTTP 403"));
+    rejected.catch(() => undefined);
+    return rejected as Promise<void>;
+  };
+
+  it("UT-CONTR-226 a failed contract delete shows the delete text, not the save text", async () => {
+    state.gate = failing();
+    mount();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1"));
+    fireEvent.click(command("deleteContarct"));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+    });
+    expect(screen.getByText(MSG.deleteErrorContract)).toBeInTheDocument();
+    expect(screen.queryByText(MSG.saveErrorContract)).toBeNull();
+  });
+
+  it("UT-CONTR-227 a failed payment-target delete shows the delete text, not the save text", async () => {
+    state.gate = failing();
+    mount();
+    selectAndExpand();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_Card_Body_PaymentTargetsRow_RadioSelection-t-1"));
+    fireEvent.click(screen.getByTestId("contracts-delete-target-c-1"));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByTestId("confirm-dialog-confirm"));
+    });
+    expect(screen.getByText(MSG.deleteErrorPaymentTarget)).toBeInTheDocument();
+    expect(screen.queryByText(MSG.saveErrorPaymentTarget)).toBeNull();
+  });
+});
+
+describe("Contracts screen: payment-target table alignment (LD-6)", () => {
+  it("UT-CONTR-234 the Payment Date header and cells are right-aligned like the canvas labels (Align.Right, :1552, :1730)", () => {
+    mount();
+    selectAndExpand();
+    expect(screen.getByRole("columnheader", { name: MSG.paymentDate })).toHaveClass("numeric");
+    expect(screen.getByRole("cell", { name: TARGET.paymentDate })).toHaveClass("numeric");
+  });
+});
+
+describe("Contracts screen: the delete confirmation texts come from rules.ts (RB-7)", () => {
+  it("UT-CONTR-265 the contract delete dialog shows the canvas title and the quoted description, byte for byte", () => {
+    mount();
+    fireEvent.click(screen.getByTestId("img_Contracts_List_CardHeaderRadioSelection-c-1"));
+    fireEvent.click(command("deleteContarct"));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Delete Contract?");
+    expect(dialog).toHaveTextContent('Are you sure that you want to permanently delete "Grid works" contract?');
   });
 });

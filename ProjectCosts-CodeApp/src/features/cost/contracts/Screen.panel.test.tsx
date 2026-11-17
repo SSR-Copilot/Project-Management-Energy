@@ -46,7 +46,7 @@ vi.mock("@/platform/privileges", async (importOriginal) => ({
 }));
 
 vi.mock("./hooks", () => {
-  const query = (data: unknown) => ({ data, isLoading: false, error: null });
+  const query = (data: unknown) => ({ data, isLoading: false, error: null, isSuccess: true, isError: false, isPlaceholderData: false });
   const mutation = () => ({ mutateAsync: vi.fn(() => Promise.resolve()), isPending: false });
   // One array per selection, so the screen's memoised values keep their identity between renders.
   const trees = new Map<string, unknown>();
@@ -54,7 +54,7 @@ vi.mock("./hooks", () => {
     useContracts: () => query([{
       id: "c-1", description: "Grid works", contractType: 1, margin: false, isMarginStandardAssumption: false,
     }]),
-    usePaymentTargets: () => ({ byContract: new Map() }),
+    usePaymentTargets: () => ({ byContract: new Map(), isSuccess: true, isError: false, isPlaceholderData: false, data: [] }),
     useCapexAccounts: () => query([]),
     useDevCoCapexContracts: () => query([]),
     useDevCoLinks: () => query([]),

@@ -28,13 +28,17 @@ import type { Vsb_bopcontractsdevcocostses } from "@/generated/models/Vsb_bopcon
 import type { Vsb_bopcontractsstandardassumptionses } from "@/generated/models/Vsb_bopcontractsstandardassumptionsesModel";
 import type { Vsb_capexaccountlists } from "@/generated/models/Vsb_capexaccountlistsModel";
 import type { Vsb_capexprojectcontracts } from "@/generated/models/Vsb_capexprojectcontractsModel";
-import { unwrap } from "@/platform/errors";
-import { deleteRecord, fetchAll } from "./client";
+import { DataError, unwrap } from "@/platform/errors";
+import { logAction, loggedCall } from "@/platform/requestLog";
+import { trace } from "@/platform/telemetry";
+import { deleteRecord, fetchAll, updateRecordIfExists } from "./client";
+import { DELETE_CONCURRENCY, WRITE_CONCURRENCY, mapLimit } from "./concurrency";
 import { ACTIVE, and, chunk, dateOnly, eq, lookupEq, lookupIn, numberOf } from "./odata";
 import {
   COST_TYPE, CLOSING_DATE_TYPE, CONTRACT_TYPE, TOTAL_COSTS_TYPE, MARGIN_TYPE,
   type AccountRow, type BopContract, type CapexCostRow, type CapexProjectContract,
   type ClosingDateType,
+  planDevCoLinks,
   type ContractType, type MarginType, type PaymentTarget, type TotalCostsType,
 } from "@/features/cost/contracts/rules";
 
@@ -348,6 +352,8 @@ export async function findBopStandardAssumption(args: {
         eq("vsb_contracttypes", args.contractType),
         ACTIVE,
       ),
+      // Deterministic when two rows match (a data-quality slip): the OLDEST one, not whichever the server returns first.
+      orderBy: ["createdon asc"],
       top: 1,
     },
   );
@@ -355,6 +361,19 @@ export async function findBopStandardAssumption(args: {
 }
 
 /* ══════════════════════════════════════════════════════════════════ writes */
+
+/**
+ * CONVENTIONS rule 4: a create on a project-scoped table writes `owningbusinessunit@odata.bind`. Leaving it out never
+ * errors; Dataverse then owns the row by the CALLER's business unit and a colleague of another unit cannot see it. The
+ * write still goes ahead (the canvas wrote what it had), but it is traced, so the gap is visible in the console
+ * (`[VSB] ACTION`, warn) and in the trace buffer (RB-14). Counts and names only.
+ */
+function warnNoOwningBusinessUnit(entitySet: string): void {
+  const text = `create on ${entitySet} has no owning business unit: the row will be owned by the caller's unit (CONVENTIONS rule 4)`;
+  trace("warning", text);
+  logAction(text, "warn");
+}
+
 
 export interface ContractWrite {
   id?: string;
@@ -478,62 +497,113 @@ export async function saveContract(w: ContractWrite): Promise<BopContract> {
   const payload = w.contractType === CONTRACT_TYPE.ProjectRights
     ? rightsContractPayload(w)
     : contractPayload(w);
-  const result = w.id
-    ? await Vsb_bopprojectscontractsesService.update(w.id, payload as never)
-    : await Vsb_bopprojectscontractsesService.create(payload as never);
-  return toContract(unwrap(result, w.id ? "update BoP contract" : "create BoP contract"));
+  if (!w.id && !w.owningBusinessUnitId) warnNoOwningBusinessUnit(ES.bopContracts);
+  if (w.id) {
+    // An UPDATE reads the row by primary key first (`updateRecordIfExists`): the SDK sends the PATCH without
+    // `If-Match`, so against a contract another user deleted it would CREATE a new row holding only these columns,
+    // without the owning business unit (rule 4). A deleted row now fails with `RecordGoneError`, nothing sent.
+    return toContract(
+      await updateRecordIfExists<typeof payload, Vsb_bopprojectscontractses>(
+        "update BoP contract", ES.bopContracts, w.id, payload,
+      ),
+    );
+  }
+  const result = await loggedCall(
+    "create", ES.bopContracts,
+    async () => unwrap(await Vsb_bopprojectscontractsesService.create(payload as never), "create BoP contract"),
+    () => 1,
+  );
+  return toContract(result);
+}
+
+/**
+ * A row that is already gone is the outcome a delete wanted (another user deleted it, or the list was stale), so
+ * HTTP 404 and Dataverse's `0x80040217` ("Does Not Exist") count as done, as `unwrapDeleteStrict` reads them. The
+ * canvas `RemoveIf` on a missing row raised nothing either. Any other failure still throws.
+ */
+export function isAlreadyGone(error: unknown): boolean {
+  return error instanceof DataError && (error.status === 404 || /0x80040217/i.test(error.message));
+}
+
+/** `deleteRecord` (rule 14) that treats an already-deleted row as deleted. */
+async function deleteIfExists(operation: string, entitySet: string, id: string): Promise<void> {
+  try {
+    await deleteRecord(operation, entitySet, id);
+  } catch (error) {
+    if (!isAlreadyGone(error)) throw error;
+  }
 }
 
 /** Through `deleteRecord` (rule 14, CA-27): the generated `delete()` returns nothing, so a refusal looked like success. */
 export async function deleteContract(id: string): Promise<void> {
-  await deleteRecord("delete BoP contract", ES.bopContracts, id);
+  await deleteIfExists("delete BoP contract", ES.bopContracts, id);
 }
 
 /**
- * Replaces a contract's DevCo-cost links.
+ * The contract was saved, but its DevCo links were not (all of them). Carries the saved contract's id so a retry
+ * UPDATES that contract instead of creating a second one (the form still has no id after a create).
+ */
+export class ContractLinksError extends DataError {
+  readonly contractId: string;
+
+  constructor(contractId: string, cause: unknown) {
+    super("save the DevCo cost links", cause, cause instanceof DataError ? cause.status : undefined);
+    this.name = "ContractLinksError";
+    this.contractId = contractId;
+  }
+}
+
+/**
+ * Brings a contract's DevCo-cost links to the ticked set.
  *
  * The canvas Save deletes every row for the contract and re-creates the selected set:
  *
  *   RemoveIf('BoP Contracts DevCo Costs', 'BoP Contract'.… = locSelectedContract.…);
  *   Patch('BoP Contracts DevCo Costs', colContractsDevCoCostsToUpdate)
  *
- * The delete-then-create shape is preserved because a DevCo link carries no state of its own
- * — but note it is NOT transactional here any more than it was there: these are individual
- * requests, so an interrupted save can leave a contract with fewer links than it had. That is
- * unchanged from the canvas app and is called out rather than silently inherited.
+ * DIVERGENCE (D120 §2, proposed): this app writes only the DIFFERENCE (`planDevCoLinks`). A link that is
+ * ticked and already stored is left alone, a stored link that is no longer ticked is deleted, and a ticked account
+ * with no link gets one. The end state is the canvas's (one link per ticked account). An unchanged selection costs
+ * one read and no write instead of N deletes and N creates, and a link row keeps its id and its created-on.
+ * The creates run FIRST, so a failure part-way leaves the contract with its old links (plus some new ones), never
+ * with none; pressing Save again repeats the same difference and finishes it. A delete that finds the row already
+ * gone counts as done. Writes run in bounded pools (`WRITE_CONCURRENCY`, `DELETE_CONCURRENCY`) and the call returns
+ * only after every started request has settled, so a second Save can never overlap the first.
  *
- * One real fix: the canvas version runs `RemoveIf(… = locSelectedContract.…)` even when
- * CREATING, where `locSelectedContract` is Blank — so it issues a delete filtered on a blank
- * lookup. Here the delete is skipped entirely when there is no existing contract.
+ * Still NOT transactional, as the canvas was: separate requests (no changeset on the SDK).
+ *
+ * One real fix over the canvas: its `RemoveIf(… = locSelectedContract.…)` also runs when CREATING, where
+ * `locSelectedContract` is Blank. Here nothing is read or deleted for a new contract.
  */
 export async function replaceDevCoLinks(args: {
   contractId: string;
   isNewContract: boolean;
   owningBusinessUnitId?: string;
   accounts: readonly { id: string; name: string }[];
+  /** The level-3 accounts the picker showed; a stored link to any other account is left alone (D120 §2, N1). */
+  visibleAccountIds?: readonly string[];
 }): Promise<void> {
-  if (!args.isNewContract) {
-    const existing = await listDevCoLinks([args.contractId]);
-    await Promise.all(
-      existing.map((row) => deleteRecord("delete a contract's DevCo-cost link", ES.devCoCosts, row.id)),
-    );
-  }
+  const existing = args.isNewContract ? [] : await listDevCoLinks([args.contractId]);
+  const { create, remove } = planDevCoLinks(existing, args.accounts, args.visibleAccountIds);
+  if (create.length > 0 && !args.owningBusinessUnitId) warnNoOwningBusinessUnit(ES.devCoCosts);
   // The SDK never throws on a refusal: every create is checked (CONVENTIONS rule 3, CONTR-081), so
   // a refused link reaches the save's error banner like the canvas `IfError(... Notify(...))`.
-  await Promise.all(
-    args.accounts.map(async (account) =>
-      unwrap(
-        await Vsb_bopcontractsdevcocostsesService.create({
-          vsb_name: account.name,
-          "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
-          "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
-          ...(args.owningBusinessUnitId
-            ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
-            : {}),
-        } as never),
-        "create DevCo cost link",
-      ),
-    ),
+  await mapLimit(create, (account) =>
+    loggedCall("create", ES.devCoCosts, async () => unwrap(
+      await Vsb_bopcontractsdevcocostsesService.create({
+        vsb_name: account.name,
+        "vsb_BoPContract@odata.bind": `/${ES.bopContracts}(${args.contractId})`,
+        "vsb_Account@odata.bind": `/${ES.capexAccounts}(${account.id})`,
+        ...(args.owningBusinessUnitId
+          ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${args.owningBusinessUnitId})` }
+          : {}),
+      } as never),
+      "create DevCo cost link",
+    ), () => 1), WRITE_CONCURRENCY);
+  await mapLimit(
+    remove,
+    (id) => deleteIfExists("delete a contract's DevCo-cost link", ES.devCoCosts, id),
+    DELETE_CONCURRENCY,
   );
 }
 
@@ -562,14 +632,23 @@ export async function savePaymentTarget(w: PaymentTargetWrite): Promise<PaymentT
       ? { "owningbusinessunit@odata.bind": `/${ES.businessUnits}(${w.owningBusinessUnitId})` }
       : {}),
   };
-  const result = w.id
-    ? await Vsb_bopcontractspaymenttargetsesService.update(w.id, payload as never)
-    : await Vsb_bopcontractspaymenttargetsesService.create(payload as never);
-  return toPaymentTarget(
-    unwrap(result, w.id ? "update payment target" : "create payment target"),
+  if (!w.id && !w.owningBusinessUnitId) warnNoOwningBusinessUnit(ES.paymentTargets);
+  if (w.id) {
+    // Same upsert guard as `saveContract`: never re-create a payment target another user deleted.
+    return toPaymentTarget(
+      await updateRecordIfExists<typeof payload, Vsb_bopcontractspaymenttargetses>(
+        "update payment target", ES.paymentTargets, w.id, payload,
+      ),
+    );
+  }
+  const result = await loggedCall(
+    "create", ES.paymentTargets,
+    async () => unwrap(await Vsb_bopcontractspaymenttargetsesService.create(payload as never), "create payment target"),
+    () => 1,
   );
+  return toPaymentTarget(result);
 }
 
 export async function deletePaymentTarget(id: string): Promise<void> {
-  await deleteRecord("delete payment target", ES.paymentTargets, id);
+  await deleteIfExists("delete payment target", ES.paymentTargets, id);
 }

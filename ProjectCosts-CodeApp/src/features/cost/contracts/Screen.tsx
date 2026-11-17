@@ -55,7 +55,8 @@ import { parseNumber } from "@/domain/numeric";
 import { DATE_PICKER_FORMAT, formatCanvasDate } from "@/domain/canvasDate";
 import { costWriteStatusLabel, writeCommandsDisabled } from "@/domain/writeGuard";
 import { useCostWriteInFlight, useWriteFailureReport } from "@/features/cost/costing/useCostWriteFlight";
-import { DataError } from "@/platform/errors";
+import { DataError, RECORD_GONE_TEXT, isRecordGone } from "@/platform/errors";
+import { ContractLinksError } from "@/data/contracts";
 import { permissionMessage, serverEnforcedProvider } from "@/platform/privileges";
 import {
   CLOSING_DATE_TYPE, CONTRACT_TYPE, COMMENT_MAX_LENGTH, MARGIN_TYPE, MSG,
@@ -73,8 +74,10 @@ import {
   costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
-  contractTotalFromForm, selectedLeafAccounts, toggleParentAccounts,
-  NO_FIELDS_TOUCHED, touchFields, visibleFieldError, type TouchedFields,
+  contractTotalFromForm, selectedLeafAccounts, toggleParentAccounts, deleteErrorText,
+  CARD_LABEL, confirmDeleteContractDescription, confirmDeletePaymentTargetDescription, rightsTotalLabel,
+  NO_FIELDS_TOUCHED, touchFields, visibleFieldError, queriesReady, type TouchedFields,
+  patchEditsMargin, shouldSeedMargin, showTotalCostOfContract,
   type AccountNode, type BopContract, type CapexCostRow, type ContractForm,
   type ContractType, type ParentCheckState, type PaymentTarget, type PaymentTargetForm,
 } from "./rules";
@@ -158,6 +161,9 @@ function formFromContract(c: BopContract, locale?: string): ContractForm {
     description: c.description ?? "",
     contractType: c.contractType,
     closingDate: c.closingDate,
+    // DIVERGENCE (D120 §9): a stored closing type of None (a row this screen never wrote), for BOTH the until- and after-closing halves, opens as Plan.
+    // The canvas radio selects nothing for it (`:4529-4545`); here Save would then be blocked, because neither radio
+    // is chosen. Contracts saved by either app always carry Plan or Actual.
     costsUntilClosingType:
       c.costsUntilClosingType === CLOSING_DATE_TYPE.None
         ? CLOSING_DATE_TYPE.Plan : c.costsUntilClosingType,
@@ -182,7 +188,10 @@ function formFromContract(c: BopContract, locale?: string): ContractForm {
     comment: c.comment ?? "",
     // `locIsStandardAssumtions: If(locSelectedContract.'Is Standard Contract', true, false)` (`:673`) —
     // the flag the margin boxes' blue italic reads on Edit comes from 'Is Standard Contract', not from
-    // the stored 'Is Margin Standard Assumption?' (CONTR-055).
+    // the stored 'Is Margin Standard Assumption?' (CONTR-055). Canvas parity, recorded in D100: `Is Standard Contract` is
+    // written false on every save (`:7415`, `contractPayload`), so after a re-save this flag opens false in BOTH apps even
+    // when the margin still equals the standard. Seeding from the stored `isMarginStandardAssumption` instead would be an
+    // improvement; not built, product question open.
     isMarginStandardAssumption: marginIsStandard({ isMarginStandardAssumption: c.isStandardContract }),
   };
 }
@@ -195,7 +204,18 @@ const EMPTY_TARGET_FORM: PaymentTargetForm = {
 
 type PanelKind = "none" | "contract" | "rights" | "target";
 
+/**
+ * One screen instance PER PROJECT (D120 §6). The route element is the same component for every
+ * `?projectId=`, and the cost gate does not unmount it while the next project is already cached (browser Back/Forward),
+ * so an open panel, a selection and a half-typed form of project A would stay mounted over project B: Save would then
+ * write A's input into B, as a NEW contract. Keying by the project id gives each project a fresh state.
+ */
 export default function ContractsScreen() {
+  const { projectId } = useSession();
+  return <ContractsScreenBody key={projectId ?? "none"} />;
+}
+
+function ContractsScreenBody() {
   const navigate = useNavigate();
   const { project, projectId, projectNotFound, locale } = useSession();
 
@@ -238,6 +258,18 @@ export default function ContractsScreen() {
   /** Which `locContractSpinnerInformationText` the write-status line is showing, or `null` for none. */
   const [savingLabel, setSavingLabel] = useState<string | null>(null);
   const [banner, setBanner] = useState<string>();
+  /**
+   * The id of a contract whose row was saved but whose DevCo links were not (`ContractLinksError`). The form has no id
+   * after a CREATE, so without this the retry would create a second contract. Cleared whenever a panel opens.
+   */
+  const retryContractId = useRef<string | undefined>(undefined);
+  /**
+   * D120 §7: the standard assumption has seeded the margin of the panel that is open (cleared in
+   * `openNewContract`), and whether a margin field was written since it opened. Together they stop a late or repeated
+   * arrival of the assumption from overwriting what the user has on screen (`shouldSeedMargin`).
+   */
+  const marginSeeded = useRef(false);
+  const marginEdited = useRef(false);
 
   const selectedContract = contracts.find((c) => c.id === selectedContractId);
   const contractTargets = selectedContractId
@@ -252,11 +284,23 @@ export default function ContractsScreen() {
     selectedAccountIds,
   });
 
-  const standardAssumption = useBopStandardAssumption({
+  /*
+   * Both standard assumptions are read as soon as the project's country and technology are known (D120 §7),
+   * as the canvas does in `OnVisible` (`:80-89`), so the seed of a new contract's margin is ready at the click and does
+   * not arrive later over what the user typed. The panel's own type picks which one seeds.
+   */
+  const developmentAssumption = useBopStandardAssumption({
     countryId: extras.data?.countryId,
     technology: extras.data?.technology,
-    contractType: panel === "contract" ? form.contractType : undefined,
+    contractType: CONTRACT_TYPE.Development,
   });
+  const constructionAssumption = useBopStandardAssumption({
+    countryId: extras.data?.countryId,
+    technology: extras.data?.technology,
+    contractType: CONTRACT_TYPE.Construction,
+  });
+  const standardAssumption =
+    form.contractType === CONTRACT_TYPE.Construction ? constructionAssumption : developmentAssumption;
 
   const saveContractMutation = useSaveContract(projectId);
   const deleteContractMutation = useDeleteContract(projectId);
@@ -265,6 +309,26 @@ export default function ContractsScreen() {
 
   /** The first read of the contracts and the CAPEX accounts has not answered yet. */
   const loading = contractsQuery.isLoading || accountsQuery.isLoading;
+  /**
+   * DIVERGENCE (D120 §4, proposed): the write commands also wait for every read a form or a save depends on.
+   * The canvas loaded all of it in `OnVisible` behind its spinner, so a form never saw a half-loaded screen. Here the
+   * cost rows, the DevCo contracts, the links and the payment targets load apart from the list; a form opened before
+   * they answered calculated zero totals, ticked nothing on Edit, and saved both. `isSuccess` (not "not loading") is
+   * what counts: a query that FAILED never becomes ready, and `supportingFailed` says so. A query with no ids to ask
+   * about is disabled, so it is ready when there are no contracts.
+   */
+  const ready = queriesReady({
+    contractCount: contracts.length,
+    contractsLoaded: contractsQuery.isSuccess,
+    accountsLoaded: accountsQuery.isSuccess,
+    costRowsLoaded: capexCostRows.isSuccess,
+    devCoContractsLoaded: devCoContractsQuery.isSuccess,
+    linksLoaded: devCoLinksQuery.isSuccess && !devCoLinksQuery.isPlaceholderData,
+    targetsLoaded: targets.isSuccess && !targets.isPlaceholderData,
+  });
+  /** A read other than the list failed on its first try: Add and Edit stay off, and the screen says why. */
+  const supportingFailed = [accountsQuery, devCoContractsQuery, capexCostRows, devCoLinksQuery, targets]
+    .some((q) => q.isError && q.data === undefined);
   const busy =
     saveContractMutation.isPending || deleteContractMutation.isPending ||
     saveTargetMutation.isPending || deleteTargetMutation.isPending;
@@ -273,7 +337,9 @@ export default function ContractsScreen() {
   /** CA-15 — the banner while this screen is mounted, the error toast once it has been left. */
   const reportFailure = useWriteFailureReport("Contracts");
   /** `writeCommandsDisabled` (D58): the interaction guard that replaced the spinner overlay. */
-  const writesDisabled = writeCommandsDisabled({ loading, writePending: busy, writeInFlight });
+  const writesDisabled = writeCommandsDisabled({ loading: loading || !ready.contractForm, writePending: busy, writeInFlight });
+  /** The payment-target commands need only the targets (the remaining percentage and the next description). */
+  const targetWritesDisabled = writeCommandsDisabled({ loading: loading || !ready.targets, writePending: busy, writeInFlight });
 
   /**
    * The selection as of the LATEST render, for a delete that settles later (CA-17): the user may
@@ -302,9 +368,12 @@ export default function ContractsScreen() {
   // from outside React, which is the case the rule exempts. The suppression comment does not
   // take on this rule in oxlint 1.x, so the warning is expected in `npm run lint`.
   useEffect(() => {
-    if (panel !== "contract" || editing) return;
+    if (!shouldSeedMargin({
+      panel, editing, seeded: marginSeeded.current, marginTouched: marginEdited.current,
+    })) return;
     const a = standardAssumption.data;
     if (!a) return;
+    marginSeeded.current = true;
     /*
      * DIVERGENCE (data source only, D2/D54): the canvas seeds BOTH boxes from the one Fabric column
      * `marginvalue` (`:594-595`) and a NEW contract's type radio defaults to Percentage whatever the
@@ -425,6 +494,7 @@ export default function ContractsScreen() {
       touches: readonly string[] = Object.keys(patch),
     ) => {
       touch(...touches);
+      if (patchEditsMargin(patch)) marginEdited.current = true;
       setForm((f) => {
         const next = { ...f, ...patch };
         return thenRecalculate ? recalculateForm(next, capexCosts, locale) : next;
@@ -519,6 +589,9 @@ export default function ContractsScreen() {
   }, [privileges, selectedContract, writesDisabled]);
 
   const openNewContract = (contractType: ContractType, kind: PanelKind) => {
+    retryContractId.current = undefined;
+    marginSeeded.current = false;
+    marginEdited.current = false;
     setEditing(false);
     setSelectedContractId(undefined);
     setSelectedAccountIds([]);
@@ -531,6 +604,7 @@ export default function ContractsScreen() {
 
   const openEditContract = () => {
     if (!selectedContract) return;
+    retryContractId.current = undefined;
     setEditing(true);
     setForm(formFromContract(selectedContract, locale));
     setSelectedAccountIds(
@@ -572,15 +646,39 @@ export default function ContractsScreen() {
   /* ── saves ──────────────────────────────────────────────────────────── */
 
   /** The banner text, or (CA-15) the toast's detail once the screen has been left. */
-  const handleError = (error: unknown, action: string, kind: "contract" | "paymentTarget" = "contract") => {
+  const handleError = (
+    error: unknown,
+    action: string,
+    kind: "contract" | "paymentTarget" | "contractDelete" | "paymentTargetDelete" = "contract",
+  ) => {
     const message = permissionMessage(error, action);
     if (message) { reportFailure(message, setBanner); return; }
+    // NEW TEXT (no canvas source): the row was deleted by someone else, so nothing was written (D120 §3).
+    if (isRecordGone(error)) { reportFailure(RECORD_GONE_TEXT, setBanner); return; }
+    // NEW TEXT: the contract row landed and its DevCo links did not (D120 §1).
+    if (error instanceof ContractLinksError) {
+      reportFailure(`${MSG.saveErrorContract} ${MSG.savedButLinksFailed}`, setBanner);
+      return;
+    }
+    const detail = error instanceof DataError ? error.message : undefined;
+    // A failed delete says "deleted", not "saved" (D120 §8; NEW TEXT, the canvas deletes have no IfError).
+    if (kind === "contractDelete" || kind === "paymentTargetDelete") {
+      reportFailure(deleteErrorText(kind === "contractDelete" ? "contract" : "paymentTarget", detail), setBanner);
+      return;
+    }
     // `Notify("Error: BoP Contract [payment target ]could not be saved correctly. ...")` (`:3126`, `:7487`).
-    reportFailure(saveErrorText(kind, error instanceof DataError ? error.message : undefined), setBanner);
+    reportFailure(saveErrorText(kind, detail), setBanner);
   };
 
   const saveContractNow = async () => {
     if (!project || !projectId) return;
+    // The contract vanished from the list while Edit was open (another user deleted it, and the list refetched).
+    // Saving would send no id and CREATE a duplicate, and skip the link replacement (`isNewContract`). Refuse instead.
+    if (editing && !selectedContract) {
+      setPanel("none");
+      reportFailure(RECORD_GONE_TEXT, setBanner);
+      return;
+    }
     const leaves = selectedLeafAccounts(tree);
     const num = (raw: string) => parseNumber(raw, locale);
     /*
@@ -602,7 +700,9 @@ export default function ContractsScreen() {
     try {
       const saved = await saveContractMutation.mutateAsync({
         write: {
-          ...(editing && selectedContract ? { id: selectedContract.id } : {}),
+          ...(editing && selectedContract
+            ? { id: selectedContract.id }
+            : retryContractId.current ? { id: retryContractId.current } : {}),
           projectId,
           owningBusinessUnitId: project.owningBusinessUnitId,
           name: contractNameFor(form.contractType, project.projectIdCode, form.description),
@@ -629,12 +729,15 @@ export default function ContractsScreen() {
           isMarginStandardAssumption: form.isMarginStandardAssumption,
         },
         accounts: leaves.map((n) => ({ id: n.id, name: devCoCostName(n) })),
+        // D120 §2 (N1): a stored link to an account the picker cannot show is never removed by this save.
+        visibleAccountIds: tree.filter((n) => n.level === 3).map((n) => n.id),
       });
       /*
        * After the save the canvas leaves the card EXPANDED (`IsFolded: false`, `:7452-7475`, `:3764`) and a
        * Development/Construction contract DESELECTED (`locSelectedContract: Blank()`, `:7496`); an edited
        * Project Rights contract stays selected (`:3789`) (CONTR-079, CONTR-082).
        */
+      retryContractId.current = undefined;
       const savedId = saved?.id ?? (editing ? selectedContract?.id : undefined);
       if (savedId) setExpanded((prev) => (prev.includes(savedId) ? prev : [...prev, savedId]));
       if (!rights) {
@@ -642,7 +745,15 @@ export default function ContractsScreen() {
         setSelectedTargetId(undefined);
       }
     } catch (error) {
+      if (error instanceof ContractLinksError) retryContractId.current = error.contractId;
       handleError(error, "save this contract");
+      /*
+       * DIVERGENCE (D120 §1, proposed): after a failed save the panel OPENS AGAIN with everything the user
+       * entered, instead of staying closed with the form lost. The canvas closed the panel and reset every control on
+       * failure too (`:7490-7515`, `Select(but_..._Reset)` runs after the `IfError`), so its user retyped it all. Nothing
+       * is reopened when the row is gone (a retry could only fail the same way).
+       */
+      if (!isRecordGone(error)) setPanel(rights ? "rights" : "contract");
     } finally {
       setSavingLabel(null);
     }
@@ -680,21 +791,18 @@ export default function ContractsScreen() {
   if (!projectId) {
     return (
       <EmptyState
-        title="No project selected"
-        description="Pick a project from the overview and use Edit Costs to open its costs."
-        action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
+        title={MSG.noProjectTitle}
+        description={MSG.noProjectDescription}
+        action={{ label: MSG.goToProjects, onClick: () => navigate("/projects") }}
       />
     );
   }
   if (projectNotFound) {
     return (
       <EmptyState
-        title="That project could not be opened"
-        description={
-          "It may have been deleted, or it may belong to a business unit your account " +
-          "cannot see. Ask your administrator if you believe you should have access."
-        }
-        action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
+        title={MSG.projectNotFoundTitle}
+        description={MSG.projectNotFoundDescription}
+        action={{ label: MSG.goToProjects, onClick: () => navigate("/projects") }}
       />
     );
   }
@@ -707,11 +815,13 @@ export default function ContractsScreen() {
    * yet", because nothing is known yet.
    */
   // A failed read must not look like a project with no contracts (same state as Capex / Opex).
-  if (!loading && (contractsQuery.error || accountsQuery.error)) {
+  // D120 §4: only a read with nothing to show replaces the screen. A background refetch that failed (focus,
+  // invalidation) keeps the rows it has, and an accounts-only failure is the banner below, not a blank screen.
+  if (!loading && contractsQuery.isError && contractsQuery.data === undefined) {
     return (
       <EmptyState
-        title="Cost data is unavailable"
-        description="This project's Cost data could not be loaded."
+        title={MSG.costDataUnavailableTitle}
+        description={MSG.costDataUnavailableDescription}
       />
     );
   }
@@ -741,10 +851,15 @@ export default function ContractsScreen() {
 
   return (
     <div className="canvas-contract-screen">
+      {supportingFailed ? (
+        <MessageBar intent="error" data-testid="contracts-data-unavailable">
+          <MessageBarBody>{MSG.supportingDataUnavailable}</MessageBarBody>
+        </MessageBar>
+      ) : null}
       {banner ? (
         <MessageBar intent="error">
           <MessageBarBody>
-            <MessageBarTitle>Could not complete that</MessageBarTitle>
+            <MessageBarTitle>{MSG.failureBannerTitle}</MessageBarTitle>
             {banner}
           </MessageBarBody>
         </MessageBar>
@@ -768,7 +883,7 @@ export default function ContractsScreen() {
 
       {loading ? (
         // D60: an inline spinner while loading; an empty list then shows nothing, as the canvas.
-        <LoadingOverlay mode="inline" label="Loading contracts…" testId="contracts-loading" />
+        <LoadingOverlay mode="inline" label={MSG.loadingContracts} testId="contracts-loading" />
       ) : contracts.length === 0 ? (
         // `gal_Contracts_List` with no rows: the canvas shows an empty area under the command bar, no message.
         null
@@ -855,7 +970,7 @@ export default function ContractsScreen() {
                       targets={targets.byContract.get(contract.id) ?? []}
                       selectedTargetId={selectedTargetId}
                       isSelectedContract={selectedContractId === contract.id}
-                      writesDisabled={writesDisabled}
+                      writesDisabled={targetWritesDisabled}
                       onSelectTarget={(targetId) => clickTargetRow(contract.id, targetId)}
                       onAddTarget={() => {
                         setSelectedContractId(contract.id);
@@ -897,6 +1012,9 @@ export default function ContractsScreen() {
 
       {/* ── the Development / Construction contract panel ───────────────── */}
       <FormPanel centerClose
+        // D120 §5: a click on the scrim does not close the panel and drop what was typed. The canvas overlay
+        // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
+        keepOpenOnOutsideClick
         open={panel === "contract"}
         // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
         panelClassName="contract-canvas-panel"
@@ -914,7 +1032,7 @@ export default function ContractsScreen() {
         footer={<PanelButtons
           onSave={() => { void saveContractNow(); }}
           onCancel={() => setPanel("none")}
-          disabled={!canSaveContract({ form, tree, recalculated, locale }) || busy} />}
+          disabled={!canSaveContract({ form, tree, recalculated, locale }) || busy || !ready.contractForm} />}
       >
         <div className="canvas-panel-columns">
           <div className="canvas-panel-column">
@@ -937,6 +1055,9 @@ export default function ContractsScreen() {
                 data-testid="dtp_Contracts_RightPanel_NewEdit_ContractClosingDate"
                 placeholder={MSG.closingDatePlaceholder}
                 // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:4124`).
+                // DIVERGENCE (D120 §9): `project.startDate` is `vsb_projectstartdate ?? vsb_startdate`
+                // (`data/project.ts`, a documented fix: `vsb_startdate` is blank on real rows). The canvas passes
+                // 'Start Date' only; the payment-date check uses 'Project Start Date' in both apps (`:2545`).
                 firstDayOfWeek={MONDAY}
                 initialPickerDate={project?.startDate}
                 // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
@@ -995,7 +1116,10 @@ export default function ContractsScreen() {
               }, true, [])}
             />
             {form.totalCostsType === TOTAL_COSTS_TYPE.Calculated ? (
-              // `txt_…_TotalCosts_Calculated` is what Recalculate writes, so it is read-only.
+              // DIVERGENCE (D120 §9): the canvas Calculated box has no `DisplayMode` (`:5320-5352`), so
+              // it is editable there and its `OnChange` recalculates; a typed value was overwritten by the next Recalculate
+              // anyway. Here it is read-only, because it is what Recalculate writes. (The canvas Plan boxes ARE
+              // `DisplayMode.View`, `:4436`.)
               <CostField label={MSG.calculated} labelTitle={MSG.calculated}
                 name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Calculated"
                 required disabled value={form.totalCostsCalculated} />
@@ -1025,10 +1149,10 @@ export default function ContractsScreen() {
               label={MSG.margin}
               labelTitle={MSG.margin}
               name="rad_Contracts_RightPanel_NewEdit_Margin"
-              value={form.margin ? "Yes" : "No"}
-              options={["Yes", "No"]}
+              value={form.margin ? MSG.marginYes : MSG.marginNo}
+              options={[MSG.marginYes, MSG.marginNo]}
               onChange={(v) => updateForm(
-                marginChangePatch(v === "Yes", editing ? selectedContract : undefined), true, [],
+                marginChangePatch(v === MSG.marginYes, editing ? selectedContract : undefined), true, [],
               )}
               action={
                 <button
@@ -1049,10 +1173,10 @@ export default function ContractsScreen() {
                 <Choices
                   label=""
                   name="rad_Contracts_RightPanel_NewEdit_MarginType"
-                  value={form.marginType === MARGIN_TYPE.Percentage ? "Percentage" : "Fixed Value"}
-                  options={["Percentage", "Fixed Value"]}
+                  value={form.marginType === MARGIN_TYPE.Percentage ? MSG.marginTypePercentage : MSG.marginTypeFixedValue}
+                  options={[MSG.marginTypePercentage, MSG.marginTypeFixedValue]}
                   onChange={(v) => updateForm(marginTypeChangePatch(
-                    v === "Percentage" ? MARGIN_TYPE.Percentage : MARGIN_TYPE.FixedValue,
+                    v === MSG.marginTypePercentage ? MARGIN_TYPE.Percentage : MARGIN_TYPE.FixedValue,
                   ), true, [])}
                 />
                 {form.marginType === MARGIN_TYPE.Percentage ? (
@@ -1093,14 +1217,21 @@ export default function ContractsScreen() {
               </>
             ) : null}
 
-            <CostField
-              label={costLabel("Total cost of contract", project ?? {})}
-              name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract"
-              disabled
-              labelTitle={costLabel("Total cost of contract", project ?? {})}
-              // `Text(RoundUp(…, 0), "###,##0")` (`:6167`).
-              value={wholeNumberText(contractTotal, locale)}
-            />
+            {/*
+              * `con_Contracts_RightPanel_NewEdit_TotalCosts_Contract.Height: =If(rad_…_MarginType.Selected.Value = Percentage, 80, 0)`
+              * (`:6126`): the box is clipped away unless the type radio selects Percentage (`showTotalCostOfContract`). The
+              * total is computed and saved either way.
+              */}
+            {showTotalCostOfContract(form, editing ? selectedContract?.marginType : undefined, editing) ? (
+              <CostField
+                label={costLabel("Total cost of contract", project ?? {})}
+                name="txt_Contracts_RightPanel_NewEdit_TotalCosts_Contract"
+                disabled
+                labelTitle={costLabel("Total cost of contract", project ?? {})}
+                // `Text(RoundUp(…, 0), "###,##0")` (`:6167`).
+                value={wholeNumberText(contractTotal, locale)}
+              />
+            ) : null}
           </div>
 
           <div className="canvas-panel-column">
@@ -1146,6 +1277,9 @@ export default function ContractsScreen() {
 
       {/* ── the Project Rights contract panel ───────────────────────────── */}
       <FormPanel centerClose
+        // D120 §5: a click on the scrim does not close the panel and drop what was typed. The canvas overlay
+        // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
+        keepOpenOnOutsideClick
         open={panel === "rights"}
         // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
         panelClassName="contract-canvas-panel"
@@ -1157,7 +1291,7 @@ export default function ContractsScreen() {
           onCancel={() => setPanel("none")}
           // `canSaveRightsContract` (`:3708`), not `errorFor`: whether Save is allowed must not depend
           // on which errors the user has touched into view (D61).
-          disabled={busy || !canSaveRightsContract(form)} />}
+          disabled={busy || !ready.contractForm || !canSaveRightsContract(form)} />}
       >
         <CostField
           label={MSG.description}
@@ -1176,6 +1310,8 @@ export default function ContractsScreen() {
             data-testid="dtp_Contracts_RightPanel_NewEdit_RightsContract_Content_ClosingDate"
             placeholder={MSG.closingDatePlaceholder}
             // `StartOfWeek: Monday`, `StartDate: gblSelectedProject.'Start Date'` (`:3450`).
+            // DIVERGENCE (D120 §9): `project.startDate` is `vsb_projectstartdate ?? vsb_startdate`, see the
+            // Development / Construction picker above.
             firstDayOfWeek={MONDAY}
             initialPickerDate={project?.startDate}
             // The canvas DatePicker shows its date as "Tue, Nov 24, 2026" (LongAbbreviated).
@@ -1193,8 +1329,8 @@ export default function ContractsScreen() {
           ) : null}
         </div>
         <CostField
-          label={`Total Costs Contract [${currency}]`}
-          labelTitle={`Total Costs Contract [${currency}]`}
+          label={rightsTotalLabel(currency)}
+          labelTitle={rightsTotalLabel(currency)}
           name="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts"
           required
           value={form.totalCostsOverwrite}
@@ -1209,6 +1345,9 @@ export default function ContractsScreen() {
 
       {/* ── the payment-target panel ────────────────────────────────────── */}
       <FormPanel centerClose
+        // D120 §5: a click on the scrim does not close the panel and drop what was typed. The canvas overlay
+        // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
+        keepOpenOnOutsideClick
         open={panel === "target"}
         // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
         panelClassName="contract-canvas-panel"
@@ -1218,7 +1357,7 @@ export default function ContractsScreen() {
         footer={<PanelButtons
           onSave={() => { void saveTargetNow(); }}
           onCancel={cancelTargetPanel}
-          disabled={busy || !canSavePaymentTarget({
+          disabled={busy || !ready.targets || !canSavePaymentTarget({
             form: targetForm,
             projectStart: project?.startDate,
             targets: contractTargets,
@@ -1299,8 +1438,8 @@ export default function ContractsScreen() {
         */}
       <ConfirmDialog
         open={confirm === "contract"}
-        title="Delete Contract?"
-        description={`Are you sure that you want to permanently delete "${selectedContract?.description ?? ""}" contract?`}
+        title={MSG.deleteContractTitle}
+        description={confirmDeleteContractDescription(selectedContract?.description)}
         confirmText={MSG.delete}
         confirmIcon="delete"
         cancelText={MSG.cancel}
@@ -1316,7 +1455,7 @@ export default function ContractsScreen() {
             // CA-17: a card picked while the delete ran is kept; the deleted one is not.
             clearDeletedSelection({ contractId: deletedId });
           } catch (error) {
-            handleError(error, "delete this contract");
+            handleError(error, "delete this contract", "contractDelete");
           } finally {
             setSavingLabel(null);
           }
@@ -1325,10 +1464,10 @@ export default function ContractsScreen() {
 
       <ConfirmDialog
         open={confirm === "target"}
-        title="Delete Payment Target?"
-        description={`Are you sure that you want to permanently delete "${
-          contractTargets.find((t) => t.id === selectedTargetId)?.description ?? ""
-        }" payment target?`}
+        title={MSG.deletePaymentTargetTitle}
+        description={confirmDeletePaymentTargetDescription(
+          contractTargets.find((t) => t.id === selectedTargetId)?.description,
+        )}
         confirmText={MSG.delete}
         confirmIcon="delete"
         cancelText={MSG.cancel}
@@ -1344,7 +1483,7 @@ export default function ContractsScreen() {
             // CA-17: a target picked while the delete ran is kept; the deleted one is not.
             clearDeletedSelection({ targetId: deletedId });
           } catch (error) {
-            handleError(error, "delete this payment target");
+            handleError(error, "delete this payment target", "paymentTargetDelete");
           } finally {
             setSavingLabel(null);
           }
@@ -1394,8 +1533,8 @@ function ClosingHalf(props: {
         )}
       />
       {isPlan ? (
-        // The Plan figure is what Recalculate writes, so it is read-only here — the canvas
-        // left it editable and then overwrote whatever was typed on the next Recalculate.
+        // The Plan figure is what Recalculate writes, so it is read-only: the canvas Plan box is `DisplayMode.View` too
+        // (`:4436`), the same as here. Only the Total Costs "Calculated" box differs (D120 §9).
         <CostField label={MSG.plan} labelTitle={MSG.plan} name={props.planName} required disabled
           value={props.planValue} error={props.planError} />
       ) : (
@@ -1571,7 +1710,7 @@ function DevCoAccountPicker({
                       checked={leaf.selected || leaf.used}
                       disabled={!leafSelectable(leaf)}
                       aria-label={`${leaf.number} ${leaf.name}${
-                        leaf.used ? " (used by another contract)" : ""}`}
+                        leaf.used ? MSG.usedByAnotherContractSuffix : ""}`}
                       title={leaf.used
                         ? usedInContractTooltip(contractDescriptionById.get(leaf.usedByContractId ?? ""))
                         : undefined}
@@ -1672,10 +1811,10 @@ function ContractCardBody({
         {showsClosingCosts ? (
           <>
             <div className="canvas-contract-col canvas-contract-col-first">
-              <CostField label={`Costs Until Closing [${currency}]`}
+              <CostField label={CARD_LABEL.costsUntilClosing(currency)}
                 name="txt_Contracts_List_Card_Body_Fields_CostsUntilClosing"
                 disabled value={wholeNumberText(untilClosing, locale)} />
-              <CostField label={`Margin [${marginUnit}]`}
+              <CostField label={CARD_LABEL.margin(marginUnit)}
                 name="txt_Contracts_List_Card_Body_Fields_Margins"
                 // `FontColor` / `FontItalic: ThisItem.'Is Margin Standard Assumption?'` (`:925`, rule 20).
                 standard={marginIsStandard(contract)}
@@ -1686,12 +1825,12 @@ function ContractCardBody({
               {totalField}
             </div>
             <div className="canvas-contract-col">
-              <CostField label={`Costs After Closing [${currency}]`}
+              <CostField label={CARD_LABEL.costsAfterClosing(currency)}
                 name="txt_Contracts_List_Card_Body_Fields_CostsAfterClosing"
                 disabled value={wholeNumberText(afterClosing, locale)} />
             </div>
             <div className="canvas-contract-col">
-              <CostField label={`Total Costs [${currency}]`}
+              <CostField label={CARD_LABEL.totalCosts(currency)}
                 name="txt_Contracts_List_Card_Body_Fields_TotalCosts"
                 disabled value={wholeNumberText(totalCosts, locale)} />
             </div>
@@ -1757,7 +1896,7 @@ function ContractCardBody({
             <tr>
               <th aria-label="Selection" />
               <th>{MSG.period}</th>
-              <th>{MSG.paymentDate}</th>
+              <th className="numeric">{MSG.paymentDate}</th>
               <th className="numeric">{MSG.percentOfTotalCosts}</th>
               <th>{MSG.notes}</th>
             </tr>
@@ -1784,7 +1923,7 @@ function ContractCardBody({
                   />
                 </td>
                 <td>{t.description ?? ""}</td>
-                <td>{t.paymentDate ?? ""}</td>
+                <td className="numeric">{t.paymentDate ?? ""}</td>
                 <td className="numeric">{targetPercentText(t.totalCostsContract, locale)}</td>
                 <td title={t.note}>{t.note ?? ""}</td>
               </tr>

@@ -6,15 +6,15 @@
  * with its own cache key, so switching to Land Lease and back costs nothing, and a save
  * invalidates only what it actually changed.
  *
- * Every call goes through `costRepository()` rather than `@/data/contracts` directly, so the
- * demo build talks to demo storage and only the live build reaches Dataverse. See
- * `src/data/costRepository.ts`.
+ * Every call goes through `costRepository()` (`src/data/costRepository.ts`), the one implementation that reads and
+ * writes Dataverse, rather than `@/data/contracts` directly, so a test can replace the whole data layer in one place.
+ * There is no demo build any more.
  */
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk, contractInvalidations } from "@/data/keys";
 import { costRepository } from "@/data/costRepository";
-import type { ContractWrite, PaymentTargetWrite } from "@/data/contracts";
+import { ContractLinksError, type ContractWrite, type PaymentTargetWrite } from "@/data/contracts";
 import { loadProjectExtras } from "@/data/project";
 import { costWriteKey } from "@/domain/writeGuard";
 import {
@@ -101,9 +101,10 @@ export function useDevCoLinks(projectId: string | undefined, contracts: BopContr
 /**
  * The project's monthly DevCo CAPEX cost rows.
  *
- * Contracts recalculation sums these. On the live path the repository returns `[]` because
- * `vsb_capexcosts` is not a declared data source yet; in the demo build they are derived from
- * the same cost book the CAPEX screen edits, so a CAPEX change moves a contract's Plan figures.
+ * Contracts recalculation sums these: the monthly `vsb_capexcosts` rows of the project's DevCo CAPEX contracts, read in
+ * two hops (`listCapexCostRows`: the DevCo CAPEX contracts, then their cost rows in chunks). The screen waits for this
+ * read before it opens a form (`queriesReady`, D120 §4), because a form calculated against no rows would
+ * save zero totals.
  */
 export function useCapexCostRows(projectId: string | undefined) {
   return useQuery({
@@ -175,6 +176,11 @@ export interface SaveContractArgs {
   write: ContractWrite;
   /** The level-3 accounts to link, replacing whatever the contract had. */
   accounts: readonly { id: string; name: string }[];
+  /**
+   * The level-3 account ids of the picker's tree (D120 §2, N1). A stored link to an account that is not in
+   * the tree (an inactive account) could not be seen or unticked, so the save leaves it alone instead of removing it.
+   */
+  visibleAccountIds?: readonly string[];
 }
 
 /**
@@ -191,28 +197,29 @@ export function useSaveContract(projectId: string | undefined) {
   return useMutation({
     // CA-15: counted by `useCostWriteInFlight` even after the Contracts screen is gone.
     mutationKey: costWriteKey(projectId, "contracts"),
-    mutationFn: async ({ write, accounts }: SaveContractArgs) => {
+    mutationFn: async ({ write, accounts, visibleAccountIds }: SaveContractArgs) => {
       const repo = costRepository();
       const saved = await repo.saveContract(write);
       // The Project Rights Save writes no DevCo rows and removes none (`:3744-3801`).
       if (write.contractType !== CONTRACT_TYPE.ProjectRights) {
-        await repo.replaceDevCoLinks(write.projectId, {
-          contractId: saved.id,
-          isNewContract: !write.id,
-          owningBusinessUnitId: write.owningBusinessUnitId,
-          accounts,
-        });
+        try {
+          await repo.replaceDevCoLinks(write.projectId, {
+            contractId: saved.id,
+            isNewContract: !write.id,
+            owningBusinessUnitId: write.owningBusinessUnitId,
+            accounts,
+            visibleAccountIds,
+          });
+        } catch (error) {
+          // The contract row exists now. Say so, with its id, so the screen retries it as an UPDATE (no duplicate).
+          throw new ContractLinksError(saved.id, error);
+        }
       }
       return saved;
     },
-    onSuccess: async () => {
-      if (!projectId) return;
-      await Promise.all(
-        contractInvalidations(projectId).map((key) =>
-          queryClient.invalidateQueries({ queryKey: key }),
-        ),
-      );
-    },
+    // `onSettled`, not `onSuccess`: a save that fails after the contract row landed (its links did not) has still
+    // changed Dataverse, and the list must show what is really there (D100 retest note: no onError invalidation).
+    onSettled: () => invalidateContractCaches(queryClient, projectId),
   });
 }
 
@@ -221,14 +228,7 @@ export function useDeleteContract(projectId: string | undefined) {
   return useMutation({
     mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (id: string) => costRepository().deleteContract(projectId as string, id),
-    onSuccess: async () => {
-      if (!projectId) return;
-      await Promise.all(
-        contractInvalidations(projectId).map((key) =>
-          queryClient.invalidateQueries({ queryKey: key }),
-        ),
-      );
-    },
+    onSettled: () => invalidateContractCaches(queryClient, projectId),
   });
 }
 
@@ -238,7 +238,7 @@ export function useSavePaymentTarget(projectId: string | undefined) {
     mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (write: PaymentTargetWrite) =>
       costRepository().savePaymentTarget(projectId as string, write),
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: qk.paymentTargets(projectId ?? "none") }),
   });
 }
@@ -249,7 +249,18 @@ export function useDeletePaymentTarget(projectId: string | undefined) {
     mutationKey: costWriteKey(projectId, "contracts"), // CA-15
     mutationFn: (id: string) =>
       costRepository().deletePaymentTarget(projectId as string, id),
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: qk.paymentTargets(projectId ?? "none") }),
   });
+}
+
+/** Refetches everything a contract write can change; resolves when the refetches are done. */
+async function invalidateContractCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string | undefined,
+): Promise<void> {
+  if (!projectId) return;
+  await Promise.all(
+    contractInvalidations(projectId).map((key) => queryClient.invalidateQueries({ queryKey: key })),
+  );
 }
