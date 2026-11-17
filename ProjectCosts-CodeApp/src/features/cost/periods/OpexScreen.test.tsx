@@ -1337,4 +1337,107 @@ describe("OpexScreen", () => {
     const omRow = screen.getByTestId("opex-select-om-1").closest("tr") as HTMLElement;
     expect(omRow.querySelector("td[title]")).not.toBeNull();
   });
+
+  /* ── D123: the canvas-parity fixes ──────────────────────────────────────── */
+
+  it("UT-OPEXUI-055 Escape and a click outside keep the panel open; only ✕ / Cancel close it (D123)", () => {
+    openEditOm1();
+    fireEvent.keyDown(panel().querySelector("input") as HTMLElement, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const backdrop = document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
+    expect(backdrop).not.toBeNull();
+    fireEvent.click(backdrop!);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(within(panel()).getByTestId("panel-close"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("UT-OPEXUI-056 Add Period then Cancel leaves no row selected, so one click selects it again (D123)", () => {
+    // `newOpexProjectCost`: `locSelectedOpexCost: Blank()` (`:3031`); Cancel never restores it.
+    render(<Harness><OpexScreen mode="om" /></Harness>);
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    const scope = within(card("WTG V150-6.0"));
+    fireEvent.click(scope.getByTestId("opex-newOpexProjectCost"));
+    fireEvent.click(within(panel()).getByText("Cancel"));
+    expect(screen.getByTestId("opex-select-om-2")).not.toBeChecked();
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("opex-select-om-2"));
+    expect(screen.getByTestId("opex-select-om-2")).toBeChecked();
+    expect(scope.getByTestId("opex-editOpexProjectCost")).toBeEnabled();
+  });
+
+  it("UT-OPEXUI-057 the Inflation Start Year follows the Start Date when its default depends on it (D123)", () => {
+    // A stored blank year (0) on a root dated 2030: the box shows Year(2030) + 1; resetting the date to COD
+    // (30 Aug 2027) moves it to 2028, as the canvas `Value` (`:7583-7594`) re-evaluates.
+    book = makeBook([period({
+      id: "other-1", mode: "other", group: "Insurance", description: "All-Risk Insurance",
+      startDate: "2030-01-01", inflationYear: 0, periodIndex: 1, contractId: "other-1",
+    })]);
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    fireEvent.click(screen.getByTestId("opex-select-other-1"));
+    fireEvent.click(within(card("Insurance")).getByTestId("opex-editOpexProjectCost"));
+    const year = () => within(panel()).getByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_InflationStartYear");
+    expect(year()).toHaveValue("2031");
+    fireEvent.click(within(panel()).getByTestId("opex-reset-start"));
+    expect(year()).toHaveValue("2028");
+  });
+
+  it("UT-OPEXUI-058 switching the threshold back to Individual shows the stored figure again (D123)", () => {
+    // `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` resets to its Default, the edited row's value.
+    book = makeBook([period({
+      id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Initialized O&M Contract",
+      periodIndex: 1, contractId: "om-1", threshold: true, thresholdType: 952850002, thresholdIndividual: 2.5,
+    })]);
+    openEditOm1();
+    const scope = within(panel());
+    const individual = () => scope.queryByTestId("txt_OpexCosts_RightPanel_NewEditCost_BodyContent_Threshold_Individual");
+    expect(individual()).toHaveValue("2.5");
+    fireEvent.click(scope.getByTestId(`opex-threshold-${952850000}`));
+    expect(individual()).not.toBeInTheDocument();
+    fireEvent.click(scope.getByTestId(`opex-threshold-${952850002}`));
+    expect(individual()).toHaveValue("2.5");
+  });
+
+  it("UT-OPEXUI-059 a stored Custom Inflation of 0.0 % opens as 0.0, not empty (D123)", () => {
+    book = makeBook([period({
+      id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Initialized O&M Contract",
+      periodIndex: 1, contractId: "om-1", inflation: true, countryInflation: false, inflationPercent: 0,
+    })]);
+    openEditOm1();
+    expect(within(panel()).getByTestId("opex-inflation-profile")).toHaveValue("0.0");
+  });
+
+  it("UT-OPEXUI-060 a blank Duration and Distribution Frequency show empty cells, not 0 years / 1 (D123)", () => {
+    book = makeBook([period({
+      id: "other-1", mode: "other", group: "Insurance", description: "All-Risk Insurance",
+      years: null, months: null, frequency: null, periodIndex: 1, contractId: "other-1",
+    })]);
+    render(<Harness><OpexScreen mode="other" /></Harness>);
+    open("Insurance");
+    const row = screen.getByTestId("opex-select-other-1").closest("tr") as HTMLElement;
+    expect(row.textContent).not.toMatch(/years|months/);
+    const cells = row.querySelectorAll("td");
+    expect(cells[cells.length - 1]?.textContent).toBe("");
+  });
+
+  it("UT-OPEXUI-061 an Italian Edit saves the project's own area, never the row's stored one (D123)", async () => {
+    const before = { country: project.countryName, area: (project as Record<string, unknown>).areaStateProvince };
+    project.countryName = "Italy";
+    (project as Record<string, unknown>).areaStateProvince = "Lombardia"; // → zone "North"
+    try {
+      book = makeBook([period({
+        id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Initialized O&M Contract",
+        periodIndex: 1, contractId: "om-1", inflation: true, countryInflation: true, inflationCountryArea: "Sicily",
+      })]);
+      openEditOm1();
+      await act(async () => { fireEvent.click(within(panel()).getByRole("button", { name: "Save" })); });
+      const sent = save.mutateAsync.mock.calls[0]?.[0] as CostBook | undefined;
+      const saved = sent?.periods.find((p) => p.id === "om-1");
+      expect(saved?.inflationCountryArea).toBe("North");
+    } finally {
+      project.countryName = before.country;
+      (project as Record<string, unknown>).areaStateProvince = before.area;
+    }
+  });
 });

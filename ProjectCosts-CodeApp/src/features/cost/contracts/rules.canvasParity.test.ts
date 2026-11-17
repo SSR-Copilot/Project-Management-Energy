@@ -10,7 +10,7 @@ import {
   canAddPaymentTarget, canChangePaymentTarget, canSaveRightsContract, cardClosingFigure,
   cardContractTotalText, cardMarginFigure, cardRightsTotalText, cardTotalCostsFigure,
   closingTypePatch, commentCounter, contractErrors, contractNameFor, contractTotalFromForm,
-  devCoLeafCostByAccount, marginChangePatch, marginIsStandard, marginTypeChangePatch,
+  devCoLeafCostByAccount, devCoLeafTotalText, marginChangePatch, marginIsStandard, marginTypeChangePatch,
   newPeriodDescription, nextPeriodDescription, oneDecimalText, periodDescriptionLocked,
   recalculateForm, rightsContractName, rightsTotalOutOfRange, saveErrorText,
   selectionAfterHeaderClick, selectionAfterTargetClick, sortPaymentTargets, targetPercentText,
@@ -101,7 +101,7 @@ describe("card figures and formats (CONTR-020/021/022/023/024/028/058)", () => {
     expect(targetPercentText(undefined, L)).toBe("");
   });
 
-  it("UT-CONTR-009 the DevCo leaf amount sums the monthly CAPEX costs of that account's contracts; none shows 0 (CONTR-058)", () => {
+  it("UT-CONTR-009 the DevCo leaf amount sums the monthly CAPEX costs of that account's contracts; none shows \"-\" (CONTR-058, D124)", () => {
     const contracts = [
       { id: "k1", accountId: "a1", totalCost: 999 },
       { id: "k2", accountId: "a1", totalCost: 999 },
@@ -115,7 +115,12 @@ describe("card figures and formats (CONTR-020/021/022/023/024/028/058)", () => {
     const byAccount = devCoLeafCostByAccount(contracts, costs);
     expect(byAccount.get("a1")).toBe(300.5);
     expect(byAccount.get("a2")).toBeUndefined();
-    expect(wholeNumberText(byAccount.get("a2"), L)).toBe("0");
+    // `Coalesce(Text(Sum(<no rows>)), "-")`: the canvas Sum of an empty table is Blank, so the cell shows "-"
+    // (canvas screenshot, 17 Nov 2026); cost rows that add up to 0 show "0".
+    expect(devCoLeafTotalText(byAccount, "a2", L)).toBe("-");
+    expect(devCoLeafTotalText(byAccount, "a1", L)).toBe(wholeNumberText(300.5, L));
+    const zero = devCoLeafCostByAccount(contracts, [{ contractId: "k3", year: 2026, month: 1, cost: 0 }]);
+    expect(devCoLeafTotalText(zero, "a2", L)).toBe("0");
   });
 });
 

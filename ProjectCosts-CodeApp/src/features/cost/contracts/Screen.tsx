@@ -17,8 +17,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Button, MessageBar, MessageBarBody, MessageBarTitle, Text, mergeClasses,
+  Button, MessageBar, MessageBarBody, MessageBarTitle, Text, makeStyles, mergeClasses,
 } from "@fluentui/react-components";
+// The canvas classic scrollbar (10 px), shared with Land Lease and OPEX — the DevCo leaf list uses it too (D124).
+import { canvasScrollbar } from "@/features/cost/periods/canvasScrollbar";
 // The v9 date picker ships separately from the core package.
 import { DatePicker } from "@fluentui/react-datepicker-compat";
 import {
@@ -34,6 +36,7 @@ import {
   EmptyState,
   FormPanel,
   PanelButtons,
+  useCommandBarStyles,
   useCommandRowStyles,
   ExpandChevron,
   LoadingOverlay,
@@ -70,7 +73,7 @@ import {
   closingTypePatch, commentCounter, contractNameFor, devCoLeafCostByAccount, marginChangePatch,
   marginIsStandard, marginTypeChangePatch, newPeriodDescription, oneDecimalText,
   periodDescriptionLocked, saveErrorText, selectionAfterHeaderClick, selectionAfterTargetClick,
-  targetPercentText, usedInContractTooltip, wholeNumberText, inputDecimalText,
+  targetPercentText, usedInContractTooltip, wholeNumberText, inputDecimalText, devCoLeafTotalText,
   costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
@@ -1281,8 +1284,9 @@ function ContractsScreenBody() {
         // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
         keepOpenOnOutsideClick
         open={panel === "rights"}
-        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
-        panelClassName="contract-canvas-panel"
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`);
+        // `.contract-rights-panel`: the canvas 78 / 84 / 80-high field containers (17 Nov 2026).
+        panelClassName="contract-canvas-panel contract-rights-panel"
         title={panelTitle(editing, CONTRACT_TYPE.ProjectRights)}
         width="narrow"
         onDismiss={() => setPanel("none")}
@@ -1349,14 +1353,18 @@ function ContractsScreenBody() {
         // (`con_Contracts_RightPanel_NewEdit*`, 70% scrim, no `OnSelect`) closes only through its X and Cancel.
         keepOpenOnOutsideClick
         open={panel === "target"}
-        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
-        panelClassName="contract-canvas-panel"
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`);
+        // `.contract-target-panel`: the 78-high field containers and the Disabled Description (17 Nov 2026).
+        panelClassName="contract-canvas-panel contract-target-panel"
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"
         onDismiss={cancelTargetPanel}
         footer={<PanelButtons
           onSave={() => { void saveTargetNow(); }}
           onCancel={cancelTargetPanel}
+          // `pcf_…_PaymentTarget_Buttons_Save` is a PowerCAT `ActionButton` with `IconColor: If(Disabled, black, white)`
+          // (`:3048-3077`): disabled, a transparent "✓ Save", not Fluent's grey filled button.
+          subtleWhenDisabled
           disabled={busy || !ready.targets || !canSavePaymentTarget({
             form: targetForm,
             projectStart: project?.startDate,
@@ -1634,6 +1642,13 @@ function ParentCheckbox({
  * `btn_…_DevCoCosts_TransparentButton.OnSelect` folds EVERY row before unfolding the one
  * clicked, so at most one stands open — hence a single `expandedId`, not a set.
  */
+/**
+ * `gal_Contracts_RightPanel_NewEdit_Costs`' vertical scrollbar: the canvas classic 10 px bar. Its gutter is
+ * reserved (`.canvas-devco-leaves`), so the leaf checkboxes stay under the header's whether the list scrolls
+ * or not, as on the canvas (D124).
+ */
+const useDevcoStyles = makeStyles({ leaves: { ...canvasScrollbar } });
+
 function DevCoAccountPicker({
   tree, locale, leafCosts, contractDescriptionById, expandedId, onExpand, onToggleLeaf, onToggleParent,
 }: {
@@ -1649,6 +1664,7 @@ function DevCoAccountPicker({
   onToggleParent: (parentId: string) => void;
 }) {
   const parents = devCoParents(tree);
+  const devco = useDevcoStyles();
   return (
     <div className="canvas-devco" role="group" aria-label={MSG.devCoCostsFrom}>
       {parents.map((parent) => {
@@ -1689,13 +1705,14 @@ function DevCoAccountPicker({
             </div>
 
             {open ? (
-              <div className="canvas-devco-leaves" id={`devco-leaves-${parent.id}`}>
+              <div className={mergeClasses("canvas-devco-leaves", devco.leaves)} id={`devco-leaves-${parent.id}`}>
                 {leaves.map((leaf) => (
                   <div key={leaf.id} className="canvas-devco-row" data-used={leaf.used}>
                     <span className="canvas-devco-name">{`${leaf.number} ${leaf.name}`}</span>
-                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`; 0 shows "0". */}
+                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`:
+                        "-" with no cost row, "0" when they add up to 0 (D124). */}
                     <span className="canvas-devco-total">
-                      {wholeNumberText(leafCosts.get(leaf.id), locale)}
+                      {devCoLeafTotalText(leafCosts, leaf.id, locale)}
                     </span>
                     {/*
                       * `chb_…_CostssRow`: `Checked: =Or(ThisItem.Selected, ThisItem.Used)` and
@@ -1716,6 +1733,16 @@ function DevCoAccountPicker({
                         : undefined}
                       onChange={(e) => onToggleLeaf(leaf.id, e.target.checked)}
                     />
+                    {/* `rec_…_CostssRow_Used` (`:6421-6433`): a 20 x 20 Warning-bordered square with a 12 % Warning
+                        fill over the checkbox, `Visible: =ThisItem.Used`, carrying the "Used in contract" tooltip. */}
+                    {leaf.used ? (
+                      <span
+                        className="canvas-devco-used"
+                        aria-hidden="true"
+                        data-testid={`rec_Contracts_RightPanel_NewEdit_CostssRow_Used-${leaf.id}`}
+                        title={usedInContractTooltip(contractDescriptionById.get(leaf.usedByContractId ?? ""))}
+                      />
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1749,6 +1776,9 @@ function ContractCardBody({
   // The payment-target bar: no button inset, so its `+` sits on the card body's 20 px edge,
   // over the targets table and under "Payment Targets" (21 Oct 2026).
   const commandRow = useCommandRowStyles();
+  // `pcf_…_Card_Body_PaymentTargets_CommandBar` is a PowerCAT CommandBar (`Theme: =gblAppThemeJson`, Y:1398):
+  // the screen bar's skin, so its icons are the theme blue and #c8c6c4 once disabled (17 Nov 2026).
+  const commandSkin = useCommandBarStyles();
   // Every card figure follows its canvas `Text(…, "###,##0")` (CONTR-020/021/022/024): a blank is 0, the
   // figure is whole and grouped; the Plan figure is read ONLY when the type is Plan.
   const untilClosing = cardClosingFigure(
@@ -1854,14 +1884,14 @@ function ContractCardBody({
         <Text weight="semibold">{MSG.paymentTargets}</Text>
         <div className={mergeClasses("canvas-contract-targets-bar", commandRow.row)}>
           <Button aria-label={MSG.addPeriod} data-testid={`contracts-add-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (writesDisabled || !canAdd) && commandSkin.disabled)}
             appearance="transparent" icon={<AddRegular />} disabled={writesDisabled || !canAdd} onClick={onAddTarget}>
             {MSG.addPeriod}
           </Button>
           <Button
             aria-label={MSG.edit}
             data-testid={`contracts-edit-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (!canChange || writesDisabled) && commandSkin.disabled)}
             appearance="transparent"
             icon={<EditRegular />}
             disabled={!canChange || writesDisabled}
@@ -1872,7 +1902,7 @@ function ContractCardBody({
           <Button
             aria-label={MSG.delete}
             data-testid={`contracts-delete-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (!canChange || writesDisabled) && commandSkin.disabled)}
             appearance="transparent"
             icon={<DeleteRegular />}
             disabled={!canChange || writesDisabled}

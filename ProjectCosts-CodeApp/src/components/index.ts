@@ -2,7 +2,7 @@ export { AppHeader, environmentBadge, versionLabel, ERROR_TOOLTIP } from "./AppH
 export type { AppHeaderProps } from "./AppHeader";
 export { AppShell } from "./AppShell";
 export { pmHeaderTitle, projectPermissionLabel } from "./headerRules";
-export { CommandBar } from "./CommandBar";
+export { CommandBar, useCommandBarStyles } from "./CommandBar";
 export { useCommandRowStyles } from "./commandRow";
 export { CommandSlot, CommandSlotProvider } from "./CommandSlot";
 export type { Command, CommandIcon } from "./CommandBar";
@@ -16,7 +16,7 @@ export type { PanelButtonsProps } from "./CanvasFields";
 export { NumericField, ReadOnlyField, TextAreaField, TextField } from "./Fields";
 export type { NumericFieldProps, ReadOnlyFieldProps, TextAreaFieldProps, TextFieldProps } from "./Fields";
 export { DateField, DateInput } from "./DateField";
-export { ChoiceField } from "./ChoiceField";
+export { ChoiceField, useCanvasListStyles } from "./ChoiceField";
 export type { ChoiceFieldProps, ChoiceOption } from "./ChoiceField";
 export type { DateFieldProps, DateInputProps } from "./DateField";
 export { FIELD_APPEARANCE, useCanvasRequiredMark, useFieldControlClass, useFieldSkin, useNoInvalidOutline } from "./fieldSkin";
@@ -37,7 +37,7 @@ export { WriteStatus } from "./WriteStatus";
 export { UnsavedChangesGuard } from "./UnsavedChangesGuard";
 export { isLeaving } from "./leaveGuard";
 export type { LeaveDialogText } from "./leaveGuard";
-export { useStandardValueClass, useStandardValueStyles } from "./standardValue";
+export { useStandardListboxStyles, useStandardValueClass, useStandardValueStyles } from "./standardValue";
 export type { StandardProp, StandardVariant } from "./standardValue";
 export type { NotConnectedNoticeProps } from "./NotConnectedNotice";
 // Shared components added with the Application Settings screens (generic building blocks used

@@ -163,6 +163,67 @@ describe("Project Production Screen (connected)", () => {
     expect(req.seasonality.on).toBe(false);
   });
 
+  it("UT-PROD-905a the Add WTG panel lists Each turbine before Whole plant and keeps the typed Gross Yield", async () => {
+    renderScreen();
+    fireEvent.click(command("Add Production WTG"));
+    const allocation = await screen.findByTestId("rad_ProductionDataWTG_Allocation");
+    const radios = within(allocation).getAllByRole("radio") as HTMLInputElement[];
+    expect(radios.map((r) => r.closest("label, .fui-Radio")?.textContent?.trim())).toEqual(["Each turbine", "Whole plant"]);
+    expect(radios.map((r) => r.checked)).toEqual([false, true]);
+    const gross = screen.getByTestId("txt_ProductionDataWTG_GrossYield") as HTMLInputElement;
+    expect(gross.disabled).toBe(false);
+    fireEvent.change(gross, { target: { value: "43" } });
+    expect(gross.value).toBe("43");
+  });
+
+  it("UT-PROD-905c Uncertainty: empty in 'Input Net Yield p75/p90'; an empty one in 'Input Uncertainty' gives p75 = p90 = p50 (Add and Edit)", async () => {
+    const value = (id: string) => (screen.getByTestId(id) as HTMLInputElement).value;
+    const radio = (group: string, name: string) => within(screen.getByTestId(group)).getByRole("radio", { name });
+    const unc = "txt_ProductionDataWTG_Uncertainty";
+    // Add: the radio's `locUncertaintyValue: Blank()` + `Reset(…)` (Y:3551-3560) empties the box both ways.
+    renderScreen();
+    fireEvent.click(command("Add Production WTG"));
+    expect((await screen.findByTestId(unc) as HTMLInputElement).value).toBe("10.0");
+    fireEvent.change(screen.getByTestId("txt_ProductionDataWTG_GrossYield"), { target: { value: "12000" } });
+    fireEvent.click(radio("rad_ProductionDataWTG_UncertaintyNet", "Input Net Yield p75/p90"));
+    expect(value(unc)).toBe("");
+    expect((screen.getByTestId(unc) as HTMLInputElement).readOnly).toBe(true);
+    fireEvent.change(screen.getByTestId("txt_ProductionDataWTG_NetYieldP75"), { target: { value: "9000" } });
+    fireEvent.change(screen.getByTestId("txt_ProductionDataWTG_NetYieldP90"), { target: { value: "8000" } });
+    expect(value(unc)).toBe("");
+    fireEvent.click(radio("rad_ProductionDataWTG_UncertaintyNet", "Input Uncertainty"));
+    expect([value(unc), value("txt_ProductionDataWTG_NetYieldP75"), value("txt_ProductionDataWTG_NetYieldP90")]).toEqual(["", "10,200", "10,200"]);
+    cleanup();
+
+    // Edit, a p75/p90 yield saved with no uncertainty: the box stays empty (`Text(locUncertaintyValue)`).
+    renderScreen(baseProject, [yieldRow({ productionUncertainty: true, uncertainty: null }), SOUTH]);
+    fireEvent.click(command("Edit"));
+    expect((await screen.findByTestId(unc) as HTMLInputElement).value).toBe("");
+    expect(value("txt_ProductionDataWTG_NetYieldP75")).toBe("9,512");
+    cleanup();
+
+    // Edit, an "Input Uncertainty" yield whose box is cleared: p75 = p90 = p50, as on Add.
+    renderScreen();
+    fireEvent.click(command("Edit"));
+    fireEvent.change(await screen.findByTestId(unc), { target: { value: "" } });
+    expect([value("txt_ProductionDataWTG_NetYieldP75"), value("txt_ProductionDataWTG_NetYieldP90")]).toEqual(["10,200", "10,200"]);
+  });
+
+  it("UT-PROD-905b the derived boxes are canvas `DisplayMode.View` — read-only in black text, not disabled", async () => {
+    renderScreen();
+    fireEvent.click(command("Add Production WTG"));
+    const input = async (id: string) => (await screen.findByTestId(id)) as HTMLInputElement;
+    // "Input losses" + "Input Uncertainty" (the Add defaults): p50, p75 and p90 are derived.
+    for (const id of ["txt_ProductionDataWTG_NetYieldP50", "txt_ProductionDataWTG_NetYieldP75", "txt_ProductionDataWTG_NetYieldP90"]) {
+      const el = await input(id);
+      expect([el.readOnly, el.disabled]).toEqual([true, false]);
+    }
+    for (const id of ["txt_ProductionDataWTG_GrossYield", "txt_ProductionDataWTG_TotalLosses", "txt_ProductionDataWTG_Uncertainty"]) {
+      const el = await input(id);
+      expect([el.readOnly, el.disabled]).toEqual([false, false]);
+    }
+  });
+
   it("UT-PROD-906 Edit locks the modes and the assessment, and restores the stored values", async () => {
     renderScreen();
     fireEvent.click(command("Edit"));
@@ -238,6 +299,24 @@ describe("Project Production Screen (connected)", () => {
     expect(screen.queryByText("Unsaved data")).toBeNull();
   });
 
+  it("UT-PROD-907a Add PV: Input Irradiation shows 0.0 with an EMPTY Gross; Input Net Yield p50 keeps 0.0 (canvas)", async () => {
+    renderScreen();
+    fireEvent.click(command("Add Production PV"));
+    const allocation = await screen.findByTestId("rad_ProductionDataPV_Allocation");
+    fireEvent.click(within(allocation).getByRole("radio", { name: "Input Irradiation" }));
+    const irradiation = () => screen.getByTestId("txt_ProductionDataPV_Irradation") as HTMLInputElement;
+    const gross = () => screen.getByTestId("txt_ProductionDataPV_GrossYield") as HTMLInputElement;
+    expect(irradiation().value).toBe("0.0");
+    expect(gross().value).toBe("");
+    // Typing derives the gross: plant PV capacity 5 × 1000.
+    fireEvent.change(irradiation(), { target: { value: "1000" } });
+    expect(gross().value).toBe("5,000");
+    // `Reset(txt_ProductionDataPV_Irradation)` puts back `Text(locIrradation)` = "0.0"; the gross is blanked.
+    fireEvent.click(within(screen.getByTestId("rad_ProductionDataPV_Lossessp50")).getByRole("radio", { name: "Input Net Yield p50" }));
+    expect(irradiation().value).toBe("0.0");
+    expect(gross().value).toBe("");
+  });
+
   it("UT-PROD-908 Delete of the last active yield shows the prevent popup, never the confirmation", () => {
     renderScreen({ ...baseProject, netYieldP50: 10_200 }, [NORTH]);
     fireEvent.click(command("Delete"));
@@ -268,10 +347,15 @@ describe("Project Production Screen (connected)", () => {
     renderScreen();
     fireEvent.click(command("Delete"));
     expect(await screen.findByText(DELETE_DIALOG.description("North"))).toBeTruthy();
-    fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+    // The PM `cmp_PopUp_Confirmation`: a 128-wide "✓ Delete" (`Width: =128`, `IconName: ="CheckMark"`).
+    const canvasConfirm = () => screen.getByTestId("confirm-dialog-confirm") as HTMLButtonElement;
+    expect(canvasConfirm().style.width).toBe("128px");
+    expect(canvasConfirm().textContent).toBe("Delete");
+    fireEvent.click(canvasConfirm());
     await waitFor(() => expect(state.deleteYield).toHaveBeenCalledWith(NORTH));
     fireEvent.click(command("Deactivate Production"));
     expect(await screen.findByText("Are you sure you want to deactivate: North?")).toBeTruthy();
+    expect(canvasConfirm().style.width).toBe("128px");
     fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
     await waitFor(() => expect(state.changeStatus).toHaveBeenCalledWith(NORTH));
   });

@@ -20,7 +20,7 @@ import {
 } from "@/generated/models/Vsb_opexlandleasestandardassumptionsesModel";
 import {
   pageLock, isPageLocked, commandBarState, selectedYield, onCardHeader, blocksLastYieldRemoval,
-  derivedP75, derivedP90, totalLossesPct, deriveNetP50, grossFromIrradiation, deriveYieldView, fieldModes,
+  derivedP75, derivedP90, totalLossesPct, deriveNetP50, grossFromIrradiation, changeIrradiation, deriveYieldView, fieldModes,
   newYieldForm, formFromRow, modesFromRow, changeLossesMode, changeUncertaintyMode, changeAllocationMode,
   buildYieldPayload, supersededInternalYields, projectYieldTotals, planRollUp,
   buildSeasonalityRows, seasonalityFromStored, applyMonthEdit, seasonalityTotal, isSeasonalityValid,
@@ -87,8 +87,8 @@ const form = (over: Partial<YieldFormState> = {}): YieldFormState => ({
   ...over,
 });
 
-const viewOf = (f: YieldFormState, tech: "WTG" | "PV" = "WTG", cap: number | null = 5) =>
-  deriveYieldView(f, tech, { plantPvCapacity: cap, lang: "en-US" });
+const viewOf = (f: YieldFormState, tech: "WTG" | "PV" = "WTG") =>
+  deriveYieldView(f, tech, { lang: "en-US" });
 
 const inputs = (over: Partial<GenerationInputs> = {}): GenerationInputs => ({
   project: project(), assumptions: [assumption()], existing: { landLease: 0, otherOpex: 0, oAndM: 0 },
@@ -205,11 +205,31 @@ describe("derived fields", () => {
     expect(v.netP75).toBe("9,512");
     expect(v.netP90).toBe("8,893");
   });
+  it("UT-PROD-014a an EMPTY uncertainty derives p75 = p90 = p50 (canvas `Blank / 100` = 0), and Save stays blocked", () => {
+    const f = form({ grossYield: "", lossesInput: "Input Net Yield p50", netP50: "10400", totalLosses: "", uncertainty: "" });
+    for (const tech of ["WTG", "PV"] as const) {
+      const v = viewOf(f, tech);
+      expect([v.uncertainty, v.netP75, v.netP90]).toEqual(["", "10,400", "10,400"]);
+      expect(canSaveYield({ form: f, view: v, technology: tech, seasonality: [], negativePrices: [] })).toBe(false);
+    }
+    // No p50 yet: still nothing to derive.
+    expect(viewOf(form({ grossYield: "", uncertainty: "" })).netP75).toBe("");
+  });
   it("UT-PROD-015 PV 'Input Irradiation' derives Gross = Round(capacity × irradiation, 0)", () => {
     expect(grossFromIrradiation(5.2, 1_000.4)).toBe(5_202);
-    const v = viewOf(form({ allocationInput: "Input Irradiation", irradiation: "1000", grossYield: "" }), "PV", 5);
+    const f = changeIrradiation(form({ allocationInput: "Input Irradiation", grossYield: "" }), "1000", 5, "en-US");
+    const v = viewOf(f, "PV");
     expect(v.grossYield).toBe("5,000");
     expect(v.netP50).toBe("4,250");
+    // A keypress that clears the box is `Value("")` = blank → Round(5 × blank, 0) = 0.
+    expect(changeIrradiation(f, "", 5, "en-US").grossYield).toBe("0");
+    // In "Input Gross Yield" the irradiation keypress leaves the gross alone (the `If` at Y:5790).
+    expect(changeIrradiation(form({ grossYield: "700" }), "1000", 5, "en-US").grossYield).toBe("700");
+  });
+  it("UT-PROD-015a picking 'Input Irradiation' seeds 0.0 but leaves Gross EMPTY until the user types (canvas)", () => {
+    const seeded = changeAllocationMode(form({ grossYield: "" }), "Input Irradiation");
+    expect(seeded.irradiation).toBe("0.0");
+    expect(viewOf(seeded, "PV").grossYield).toBe("");
   });
   it("UT-PROD-081 'Input Net Yield p50' derives the losses in both technologies (SOURCE DEFECT 8)", () => {
     const f = form({ lossesInput: "Input Net Yield p50", netP50: "9000", totalLosses: "" });
@@ -227,7 +247,12 @@ describe("derived fields", () => {
   it("UT-PROD-112 the radio changes reset the fields the canvas resets", () => {
     const f = form({ netP50: "1", irradiation: "5" });
     expect(changeLossesMode(f, "Input Net Yield p50", "WTG")).toMatchObject({ totalLosses: "", netP50: "", grossYield: "", irradiation: "5" });
-    expect(changeLossesMode(f, "Input Net Yield p50", "PV").irradiation).toBe("");
+    // PV `Reset(txt_ProductionDataPV_Irradation)` → `Text(locIrradation)`: "0.0" once Input Irradiation
+    // was picked (even over a typed value), blank before that.
+    expect(changeLossesMode(f, "Input Net Yield p50", "PV").irradiation).toBe("0.0");
+    const typed = form({ allocationInput: "Input Irradiation", irradiation: "1000" });
+    expect(changeLossesMode(typed, "Input Net Yield p50", "PV")).toMatchObject({ irradiation: "0.0", grossYield: "" });
+    expect(changeLossesMode(form({ irradiation: "" }), "Input Net Yield p50", "PV").irradiation).toBe("");
     expect(changeUncertaintyMode(f, "Input Net Yield p75/p90")).toMatchObject({ uncertainty: "", netP75: "", netP90: "" });
     expect(changeAllocationMode(f, "Input Irradiation").irradiation).toBe("0.0");
     expect(changeAllocationMode(f, "Input Gross Yield").grossYield).toBe("0");
@@ -257,7 +282,7 @@ describe("the yield payload", () => {
     expect(p[BIND.owner]).toBe("/businessunits(bu-1)");
   });
   it("UT-PROD-013b PV writes irradiation and the allocation mode, never wind or allocation", () => {
-    const f = form({ allocationInput: "Input Irradiation", irradiation: "1000" });
+    const f = changeIrradiation(form({ allocationInput: "Input Irradiation" }), "1000", 5, "en-US");
     const p = buildYieldPayload({ form: f, view: viewOf(f, "PV"), technology: "PV", project: project() });
     expect(p[YIELD_COL.irradiation]).toBe(1000);
     expect(p[YIELD_COL.productionAllocation]).toBe(false);

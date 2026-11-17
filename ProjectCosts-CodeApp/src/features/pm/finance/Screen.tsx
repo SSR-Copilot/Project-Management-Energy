@@ -37,11 +37,12 @@ import {
 } from "@fluentui/react-components";
 import {
   AddRegular, ArrowClockwiseRegular, CalendarAddRegular, CheckmarkCircleRegular, CircleRegular, RadioButtonFilled,
-  DeleteRegular, DismissCircleRegular, EditRegular, LockClosedRegular,
+  DeleteFilled, DismissCircleRegular, EditRegular, LockClosedRegular,
 } from "@fluentui/react-icons";
 import {
   type Command, CommandBar, ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, FormPanel, LoadingOverlay,
-  PanelButtons, ReadOnlyField, TextField, WriteFeedback, useFieldControlClass, useStandardValueClass,
+  PanelButtons, ReadOnlyField, TextField, WriteFeedback, useCanvasListStyles, useFieldControlClass, useStandardListboxStyles,
+  useStandardValueClass,
   ExpandChevron,
 } from "@/components";
 import { DATE_PICKER_FORMAT, dateFromIso, type CanvasDateFormat } from "@/domain/canvasDate";
@@ -317,7 +318,57 @@ const useStyles = makeStyles({
   },
   dsraEdit: { minWidth: "80px" },
   dsraToggle: { minWidth: "110px" },
-  buttons: { display: "flex", gap: space.s, flexWrap: "wrap" },
+  // `con_SeniorDebtData_StepUp_Bank_Margin` (Y:12986-13131): one 340 x 70 gallery row, placed as the canvas places it —
+  // the `*` at X 5 (beside the YEAR caption, not Margin), "Year n to" (70 wide, Semibold) at X 20 centred, the year
+  // DropDown (100 wide) at X 90, the Margin box (100 wide) at X 210 under its caption, and the margin message on one
+  // line, right-aligned at Y 54. The gallery sits at X 5 of the column (`PaddingLeft 5`): 20 px left of the fields' X 25.
+  stepUpRow: { position: "relative", flexShrink: 0, width: "340px", height: "70px", marginLeft: "-20px" },
+  stepUpRequired: {
+    position: "absolute", left: "10px", top: "36px", lineHeight: 1, fontSize: "14px", fontWeight: 400, color: palette.akzent5,
+  },
+  stepUpYear: {
+    position: "absolute", left: "20px", top: "30px", width: "70px",
+    lineHeight: "20px", fontSize: "14px", fontWeight: tokens.fontWeightSemibold, color: "#242424",
+  },
+  stepUpYearBox: {
+    position: "absolute", left: "90px", top: "24px", width: "100px",
+    // `.pm-canvas-panel .canvas-field` is a 70-high cell; here it would hang over the buttons below.
+    "& .canvas-field.canvas-field": { height: "auto" },
+  },
+  stepUpMarginBox: { position: "absolute", left: "210px", top: 0, width: "100px", "& .fui-Input": { width: "100px", minWidth: 0 } },
+  stepUpMarginError: {
+    position: "absolute", left: "20px", right: "20px", top: "54px", height: "16px", boxSizing: "border-box", paddingRight: "10px",
+    lineHeight: "16px", fontSize: "12px", textAlign: "right", whiteSpace: "nowrap", overflowX: "hidden", color: palette.akzent5,
+  },
+  // `lbl_SeniorDebtData_SUB_ErrorMessage_1`: `Color: gblAppColors.Warning`, `Size: 9` — orange, not the error red.
+  stepUpWarning: { display: "block", fontSize: "12px", lineHeight: "16px", color: palette.Warning },
+  // `con_SeniorDebtData_BankMargin_Add_StepUp_Bank_Margin`: 130 high, no `Visible` — shown whatever the toggle,
+  // Add at Y 8 then Remove under it, the duration warning under Remove (Y:13132-13291).
+  stepUpButtons: {
+    display: "flex", flexDirection: "column", alignItems: "flex-start",
+    minHeight: "130px", paddingTop: "8px", boxSizing: "border-box",
+  },
+  // `Button@0.0.45` `Appearance: Outline` + `BorderStyle: None`, `Align: Left`, 200 wide, themePrimary text and a
+  // filled icon; Disabled greys label and icon (canvas screenshot, 17 Nov 2026).
+  stepUpButton: {
+    width: "200px", minWidth: "200px", height: "32px", justifyContent: "flex-start",
+    paddingLeft: "0", paddingRight: "0", fontWeight: tokens.fontWeightSemibold,
+    color: palette.themePrimary, backgroundColor: "transparent",
+    borderTopColor: "transparent", borderRightColor: "transparent",
+    borderBottomColor: "transparent", borderLeftColor: "transparent",
+    "& .fui-Button__icon": { color: palette.themePrimary },
+    "&:enabled:hover, &:enabled:active, &:enabled:hover:active": {
+      color: palette.themePrimary, backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+    },
+    ":disabled": {
+      color: tokens.colorNeutralForegroundDisabled, backgroundColor: "transparent",
+      borderTopColor: "transparent", borderRightColor: "transparent",
+      borderBottomColor: "transparent", borderLeftColor: "transparent",
+      "& .fui-Button__icon": { color: tokens.colorNeutralForegroundDisabled },
+    },
+  },
   panel: { display: "flex", flexDirection: "column", gap: space.m, minWidth: 0 },
   pair: { display: "flex", gap: "20px", alignItems: "flex-end" },
   // The tranche panel columns `InpForm_1` / `_2` (Individual only) / `_3`: 350 / 340 / 350 wide with
@@ -417,7 +468,10 @@ const baseRateChoices = (country: string | null) =>
 
 /**
  * A radio group — the canvas `Radio@0.0.25`. `aria-label` and `data-testid` are the control name.
- * `readOnly` is `DisplayMode.View` (not changeable, normal text); `disabled` is `DisplayMode.Disabled`.
+ * `readOnly` is `DisplayMode.View`, `disabled` is `DisplayMode.Disabled`. The live canvas draws a View
+ * radio exactly like a Disabled one — grey options, grey dot (Edit Tranche on Standard Assumption,
+ * canvas screenshot 17 Nov 2026), whatever its `FontColor` says — so its options are disabled too;
+ * the group keeps `aria-readonly` and its caption.
  */
 function RadioChoice({ caption, testId, value, choices, onChange, disabled, required, readOnly }: {
   caption: string; testId: string; value: number | null;
@@ -433,7 +487,7 @@ function RadioChoice({ caption, testId, value, choices, onChange, disabled, requ
         <label key={c.value}>
           <input
             type="radio" checked={value === c.value} aria-label={c.name}
-            value={c.value} data-testid={`${testId}-${c.value}`} disabled={disabled}
+            value={c.value} data-testid={`${testId}-${c.value}`} disabled={disabled || readOnly === true}
             onClick={readOnly ? (e) => e.preventDefault() : undefined}
             onChange={() => { if (!readOnly) onChange(c.value); }}
           />
@@ -458,6 +512,8 @@ function SelectChoice({ caption, testId, value, choices, onChange, disabled, req
 }) {
   const s = useStyles();
   const standardClass = useStandardValueClass();
+  const standardList = useStandardListboxStyles();
+  const canvasList = useCanvasListStyles();
   const controlClass = useFieldControlClass();
   const ariaLabel = testId; // the canvas AccessibleLabel is the control name
   const selected = choices.find((c) => String(c.value) === String(value));
@@ -467,6 +523,11 @@ function SelectChoice({ caption, testId, value, choices, onChange, disabled, req
       <Dropdown
         className={mergeClasses(s.dropdown, controlClass(disabled ? "disabled" : "edit",
           mergeClasses(standardClass(standard), combo && s.comboUnderline)))}
+        // A `ComboBox@0.0.51`'s `FontColor` / `FontItalic` reach its open list too (17 Nov 2026).
+        {...(combo && standard ? { listbox: { className: standardList.standard } } : {})}
+        // A `DropDown@0.0.45` (`drp_…`) opens the canvas list the other PM screens' `ChoiceField` opens: no
+        // check-mark, one square row white on #1967d2 (17 Nov 2026). It was Fluent's grey hover and rounded ring.
+        {...(combo ? {} : { listbox: { className: canvasList.canvasList } })}
         appearance={FIELD_APPEARANCE} aria-label={ariaLabel} data-testid={testId} placeholder={placeholder}
         disabled={disabled} value={selected?.name ?? ""}
         selectedOptions={selected ? [String(selected.value)] : []}
@@ -1592,10 +1653,13 @@ export default function ProjectFinanceScreen() {
                     const from = prev === null ? 1 : prev === form.fixedInterestRateYears ? "" : prev + 1;
                     const caption = `${FIN_LABEL.stepUpYearPrefix}${from}${FIN_LABEL.stepUpYearSuffix}`;
                     return (
-                      <div key={r.id} className={s.pair}>
-                        <div className={s.pairItem}>
+                      <div key={r.id} className={s.stepUpRow} data-testid="con_SeniorDebtData_StepUp_Bank_Margin">
+                        {/* `lbl_SeniorDebtData_StepUp_Bank_Margin_Required`: X 5, beside the year caption. */}
+                        <span className={s.stepUpRequired} aria-hidden="true">*</span>
+                        <Text className={s.stepUpYear}>{caption}</Text>
+                        <div className={s.stepUpYearBox}>
                           <SelectChoice
-                            caption={caption} testId="drp_SeniorDebtData_StepUp_Bank_Margin_YY"
+                            caption={caption} hideCaption required testId="drp_SeniorDebtData_StepUp_Bank_Margin_YY"
                             value={r.durationYY} disabled={busy}
                             choices={stepUpYearOptions(prev, form.fixedInterestRateYears)
                               .map((y) => ({ value: y, name: durationOptionName(y, "year") }))}
@@ -1607,12 +1671,11 @@ export default function ProjectFinanceScreen() {
                             }}
                           />
                         </div>
-                        <div className={s.pairItem}>
+                        <div className={s.stepUpMarginBox}>
                           <TextField
-                            label={FIN_LABEL.margin} required testId="txt_SeniorDebtData_StepUp_Bank_Margin_Percentage"
+                            label={FIN_LABEL.margin} testId="txt_SeniorDebtData_StepUp_Bank_Margin_Percentage"
                             ariaLabel="txt_SeniorDebtData_StepUp_Bank_Margin_Percentage" maxLength={PANEL_MAX_LENGTH.other} counter={false}
                             value={r.margin} disabled={busy}
-                            error={r.valid ? undefined : MSG.stepUpMargin} // `Visible: Not(ThisItem.Valid)` — a new row shows it
                             onChange={(v) => {
                               const next = [...stepUpRows];
                               next[i] = { ...r, margin: v, valid: validateStepUpMargin(v, lang).valid };
@@ -1621,38 +1684,43 @@ export default function ProjectFinanceScreen() {
                             }}
                           />
                         </div>
+                        {/* `lbl_SeniorDebtData_StepUp_Bank_Margin_ErrorMessage.Visible: Not(ThisItem.Valid)` — a new row shows it. */}
+                        {r.valid ? null : <Text className={s.stepUpMarginError} role="alert">{MSG.stepUpMargin}</Text>}
                       </div>
                     );
                   })}
-                  <div className={s.buttons}>
-                    <Button
-                      appearance="outline" icon={<DeleteRegular />} aria-label="btn_SeniorDebt_BankMargin_Remove_StepUp_LastPeriod"
-                      data-testid="btn_SeniorDebt_BankMargin_Remove_StepUp_LastPeriod"
-                      disabled={busy || !stepUpRemoveEnabled(stepUpRows, isStd)}
-                      onClick={() => {
-                        if (!stepUpPeriodChangeAllowed(form.fixedInterestRateYears, form.fixedInterestRateMonths)) return;
-                        setStepUpRows(stepUpRows.slice(0, -1)); patchTranche({});
-                      }}
-                    >
-                      {FIN_LABEL.removeLastPeriod}
-                    </Button>
-                    <Button
-                      appearance="outline" icon={<AddRegular />} aria-label="btn_SeniorDebt_BankMargin_Add_StepUp_Period_1"
-                      data-testid="btn_SeniorDebt_BankMargin_Add_StepUp_Period_1"
-                      disabled={busy || !stepUpAddEnabled(stepUpRows, form.fixedInterestRateYears, isStd)}
-                      onClick={() => {
-                        if (!stepUpPeriodChangeAllowed(form.fixedInterestRateYears, form.fixedInterestRateMonths)) return;
-                        setStepUpRows([...stepUpRows, { id: stepUpRows.length + 1, durationYY: null, margin: "", valid: false }]);
-                        patchTranche({});
-                      }}
-                    >
-                      {FIN_LABEL.addStepUpPeriod}
-                    </Button>
-                  </div>
-                  {!stepUpScheduleValid(stepUpRows, form.fixedInterestRateYears)
-                    ? <Text className={s.error} role="alert">{MSG.stepUpDuration}</Text> : null}
                 </>
               ) : null}
+              {/* The buttons' container has no `Visible`: they show on every status and with the toggle off,
+                  disabled by their own `DisplayMode` (Standard Assumption, no row to add after / remove). */}
+              <div className={s.stepUpButtons}>
+                <Button
+                  appearance="transparent" className={s.stepUpButton} icon={<AddRegular />}
+                  aria-label="btn_SeniorDebt_BankMargin_Add_StepUp_Period_1" data-testid="btn_SeniorDebt_BankMargin_Add_StepUp_Period_1"
+                  disabled={busy || !stepUpAddEnabled(stepUpRows, form.fixedInterestRateYears, isStd)}
+                  onClick={() => {
+                    if (!stepUpPeriodChangeAllowed(form.fixedInterestRateYears, form.fixedInterestRateMonths)) return;
+                    setStepUpRows([...stepUpRows, { id: stepUpRows.length + 1, durationYY: null, margin: "", valid: false }]);
+                    patchTranche({});
+                  }}
+                >
+                  {FIN_LABEL.addStepUpPeriod}
+                </Button>
+                <Button
+                  appearance="transparent" className={s.stepUpButton} icon={<DeleteFilled />}
+                  aria-label="btn_SeniorDebt_BankMargin_Remove_StepUp_LastPeriod" data-testid="btn_SeniorDebt_BankMargin_Remove_StepUp_LastPeriod"
+                  disabled={busy || !stepUpRemoveEnabled(stepUpRows, isStd)}
+                  onClick={() => {
+                    if (!stepUpPeriodChangeAllowed(form.fixedInterestRateYears, form.fixedInterestRateMonths)) return;
+                    setStepUpRows(stepUpRows.slice(0, -1)); patchTranche({});
+                  }}
+                >
+                  {FIN_LABEL.removeLastPeriod}
+                </Button>
+                {/* `lbl_SeniorDebtData_SUB_ErrorMessage_1.Visible: … && tgl_SeniorDebtData_Step_Up_Bank_Margin.Checked` */}
+                {form.stepUpEnabled && !stepUpScheduleValid(stepUpRows, form.fixedInterestRateYears)
+                  ? <Text className={s.stepUpWarning} role="alert">{MSG.stepUpDuration}</Text> : null}
+              </div>
               <Switch
                 label={FIN_LABEL.swapAfterFixedPeriod} aria-label="tgl_SeniorDebt_Data_Swap_After_Fixed_Period"
                 data-testid="tgl_SeniorDebt_Data_Swap_After_Fixed_Period" checked={form.swapAfterFixedPeriod}

@@ -1263,7 +1263,9 @@ export function inflationColumnText(
     }
     return project.countryName ?? "";
   }
-  return formatOneDecimalPercent(cost.inflationProfile);
+  // O-9 (reproduced): the cell shows a stored 0.0 % as empty, like "no inflation". The panel, which reads the same
+  // value, opens a stored 0 as "0.0" (D123) — only this cell blanks it.
+  return formatOneDecimalPercent(cost.inflationProfile === 0 ? null : cost.inflationProfile);
 }
 
 /** Power Fx `Text(n, "###,###,###.0 %")`. Blank in, blank out. */
@@ -1293,14 +1295,15 @@ export function formatRevenuePercent(value: number | null | undefined, locale?: 
  */
 export function thresholdColumnText(
   cost: Pick<OpexCost, "threshold" | "thresholdType" | "thresholdIndividual">,
+  locale?: string,
 ): string {
   if (!cost.threshold) return "";
   if (cost.thresholdType === THRESHOLD_TYPE.netYieldP75) return "p75";
   if (cost.thresholdType === THRESHOLD_TYPE.netYieldP90) return "p90";
   if (cost.thresholdIndividual === null || cost.thresholdIndividual === undefined) return "";
-  return numberFormat("en-GB", {
-    minimumFractionDigits: 1, maximumFractionDigits: 1,
-  }).format(cost.thresholdIndividual);
+  // `Text(individual, "###,###.0")` follows the user's language like the other grid cells (D117); this cell was the
+  // one left in en-GB (D123). No locale means the browser's, as the screen reads its boxes.
+  return canvasNumberText(cost.thresholdIndividual, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 /** `recCODYear = Year('Operations start date (COD)') + 1` (`:664`, `:3051`). */
@@ -1327,6 +1330,26 @@ export function inflationStartYearDefault(args: {
   if (selected !== null && selected.inflationStartYear) return selected.inflationStartYear;
   const d = toDate(startDate);
   return d === null ? null : d.getFullYear() + 1;
+}
+
+/**
+ * D123: the start-year box follows the Start Date. Its `Value` (`:7583-7594`) reads
+ * `dte_…_StartDate.SelectedDate`, and a modern `TextInput` re-takes its `Value` whenever that formula's result
+ * changes — so on a new cost type (and on an edited row with no stored year) picking another year's date moves
+ * the box to `Year(date) + 1`. While adding a period (the parent's year) or editing a row that has its own year,
+ * the formula does not depend on the date and the box is left alone. Returns the year to show, or `undefined`
+ * to keep what the box holds (which may be a year the user typed).
+ */
+export function inflationStartYearOnDateChange(args: {
+  selected: OpexCost | null;
+  parent: OpexCost | null;
+  before: string | Date | null;
+  after: string | Date | null;
+}): number | null | undefined {
+  const { selected, parent } = args;
+  const was = inflationStartYearDefault({ selected, parent, startDate: args.before });
+  const now = inflationStartYearDefault({ selected, parent, startDate: args.after });
+  return now === was ? undefined : now;
 }
 
 /**
@@ -3277,4 +3300,16 @@ export function toggleRowSelection(args: {
     candidateDescription: nextPeriodDescription(row.description),
     parentCostId: row.parentCostId,
   };
+}
+
+/**
+ * The selection once Add Contract Type / Add Period has opened the panel (D123): the canvas blanks the selected
+ * row — `locSelectedOpexCost: Blank()` in `newOpexProjectCostType` (`:593`), `newOpexProjectCost` (`:625`) and
+ * the O&M `newOpexProjectCost` (`:3031`) — and makes the card the selection's owner (`locSelectedSubaccount` /
+ * `locSelectedDeviceTypeInProject: ThisItem`). Nothing restores the row on Cancel / ✕, so the radio is empty
+ * afterwards and the card's commands follow the "nothing selected" rules (Add Contract Type and an empty card's
+ * Add Period on, Edit / Delete off). The panel keeps what it opened with; it does not read the selection.
+ */
+export function selectionOnAdd(cardScopeId: string): RowSelection {
+  return { selectedId: null, scopeId: cardScopeId, candidateDescription: "", parentCostId: null };
 }
