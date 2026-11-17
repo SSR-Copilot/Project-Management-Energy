@@ -38,7 +38,6 @@ import {
   ConfirmDialog, DateField, EmptyState, FIELD_APPEARANCE, LoadingOverlay, UnsavedChangesGuard, WriteFeedback,
   useCanvasRequiredMark, useFieldControlClass, useFieldSkin, useNoInvalidOutline, useStandardValueClass,
 } from "@/components";
-import { DATE_PICKER_FORMAT, MODERN_DATE_PICKER_FORMAT, type CanvasDateFormat } from "@/domain/canvasDate";
 import type { Lang } from "@/domain/powerFxNumeric";
 import { useSession } from "@/app/SessionContext";
 import { palette, space } from "@/theme/tokens";
@@ -52,7 +51,7 @@ import {
   isRecalculateVisible, milestoneMeta, needsPlantCostRecalculation, nextDirtyKeys,
   operationalLifetime, planSaveMilestones, recalculateMilestone, repriceGenerators,
   requiredFieldsContent, resetShareOfFarmdown, sameDate, validateMilestones,
-  LEAVE_DIALOG, shouldConfirmLeave,
+  LEAVE_DIALOG, shouldConfirmLeave, isModernPicker, milestoneDateFormat,
   type MilestoneKey, type MilestonesForm, type RecalcKey,
 } from "./rules";
 import {
@@ -105,18 +104,15 @@ const PLACEHOLDER: Partial<Record<DateKey, string>> = {
 };
 
 /**
- * Each picker's canvas control and so its box text (modern controls sweep, 20 Oct 2026): Project
- * Start and Cluster 3 are `ModernDatePicker@1.0.1` with no `Format` (the long date), the others
- * `DatePicker@0.0.46` with no `Format` (LongAbbreviated). Every one has `IsEditable: true` and
- * `StartOfWeek` Monday.
+ * Each picker's canvas control (modern controls sweep, 20 Oct 2026): Project Start and Cluster 3 are
+ * `ModernDatePicker@1.0.1`, the others `DatePicker@0.0.46`. Every one has `IsEditable: true` and `StartOfWeek`
+ * Monday. The box TEXT is one format for all eleven (D128, SOURCE DEFECT: the canvas shows the two modern
+ * ones as the long date and the rest LongAbbreviated; `milestoneDateFormatCanvasParity` keeps that); the box
+ * STYLING still follows the control.
  */
-const FORMAT: Partial<Record<DateKey, CanvasDateFormat>> = {
-  StartDate: MODERN_DATE_PICKER_FORMAT,
-  ApplicationSubmitted: MODERN_DATE_PICKER_FORMAT,
-};
-const formatOf = (k: DateKey): CanvasDateFormat => FORMAT[k] ?? DATE_PICKER_FORMAT;
+const formatOf = milestoneDateFormat;
 /** The pickers that are the classic `DatePicker@0.0.46` (everything not a `ModernDatePicker`). */
-const isClassicPicker = (k: DateKey): boolean => FORMAT[k] === undefined;
+const isClassicPicker = (k: DateKey): boolean => !isModernPicker(k);
 
 /** The classic controls' default outline / placeholder greys (Fluent UI v8 `neutralSecondaryAlt` …). */
 const CLASSIC_BORDER = "#8A8886";

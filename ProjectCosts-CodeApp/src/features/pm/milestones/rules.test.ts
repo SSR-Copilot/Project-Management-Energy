@@ -20,10 +20,12 @@ import {
   recalculateMilestoneCanvasParity, isRecalculateEnabled, needsPlantCostRecalculationCanvasParity,
   cancelMilestones, cancelMilestonesCanvasParity, formatFarmdown, formatShortDateTime24,
   revenueSeedWouldRun, sameDate, HEDGE_TYPE_INDIVIDUAL_VOLUMES, FABRIC_JOB_STATUS, RECALC_SOURCE,
+  milestoneDateFormat, milestoneDateFormatCanvasParity, isModernPicker, MODERN_PICKER_KEYS,
   type MilestoneDates, type MilestoneProject, type MilestonesForm, type MilestoneAssumptionRow,
   type RevenueAssumptionRow, type ProjectGenerator, type MilestoneKey,
 } from "./rules";
 import { LEAVE_DIALOG as MS_LEAVE_DIALOG } from "./rules";
+import { formatCanvasDate } from "@/domain/canvasDate";
 import { Vsb_projectrevenuesvsb_hedgetype, Vsb_projectrevenuesvsb_label } from "@/generated/models/Vsb_projectrevenuesModel";
 import { Vsb_fabricsyncjobsvsb_jobstatuscode } from "@/generated/models/Vsb_fabricsyncjobsModel";
 import { Vsb_projectsvsb_technology } from "@/generated/models/Vsb_projectsModel";
@@ -1033,5 +1035,28 @@ describe("UT-MSTONE footer, notices and pinned option values (D26)", () => {
 describe("D35 — the shared leave guard", () => {
   it("UT-MSTONE-910 the leave dialog texts are the canvas ones, verbatim", () => {
     expect(MS_LEAVE_DIALOG).toEqual({ title: "Unsaved data", description: "You have unsaved data. Do you really want to leave current form without saving?", confirm: "Yes", cancel: "Cancel" });
+  });
+});
+
+describe("D128 — the date picker box text", () => {
+  const MODERN = ["StartDate", "ApplicationSubmitted"] as const;
+  it("UT-MSTONE-081 every milestone date box uses one format, LongAbbreviated", () => {
+    for (const k of MILESTONE_KEYS) expect(milestoneDateFormat(k)).toBe("LongAbbreviated");
+  });
+  it("UT-MSTONE-082 the canvas twin: Project Start and Cluster 3 show the long date, the other nine LongAbbreviated", () => {
+    for (const k of MILESTONE_KEYS) {
+      expect(milestoneDateFormatCanvasParity(k)).toBe((MODERN as readonly string[]).includes(k) ? "LongDate" : "LongAbbreviated");
+    }
+  });
+  it("UT-MSTONE-083 the reported case: 10 May 2018 reads 'Thu, May 10, 2018' (canvas twin: 'Thursday, May 10, 2018')", () => {
+    const d = new Date(2018, 4, 10);
+    expect(formatCanvasDate(d, milestoneDateFormat("StartDate"))).toBe("Thu, May 10, 2018");
+    expect(formatCanvasDate(d, milestoneDateFormatCanvasParity("StartDate"))).toBe("Thursday, May 10, 2018");
+    // Cluster 3: the second modern picker in the same screenshot ("Tuesday, May 10, 2022").
+    expect(formatCanvasDate(new Date(2022, 4, 10), milestoneDateFormat("ApplicationSubmitted"))).toBe("Tue, May 10, 2022");
+  });
+  it("UT-MSTONE-084 the control still decides the box styling: exactly Project Start and Cluster 3 are the modern pickers", () => {
+    expect([...MODERN_PICKER_KEYS]).toEqual(["StartDate", "ApplicationSubmitted"]);
+    for (const k of MILESTONE_KEYS) expect(isModernPicker(k)).toBe((MODERN as readonly string[]).includes(k));
   });
 });

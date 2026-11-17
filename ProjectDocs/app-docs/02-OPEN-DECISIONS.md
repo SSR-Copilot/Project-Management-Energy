@@ -7796,3 +7796,30 @@ The cancel flow was called with `appId ?? ""` after the tracking had already bee
 ### 11. Verification
 
 `npm run verify` on the sub-branch worktree (17 Nov 2026, on top of `c1a292d`, run alone with no other test run active): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning in a touched file, the control-label and canvas-identity gates clean, **290 test files, 6,304 tests passed, 3 todo**, build OK. After `master` gained decisions D123 to D126 (OPEX, Contracts, Finance, Production and Generators UI fixes from the `fixes` and `tanyadev` branches), this decision was renumbered from D123 to D127 and `master` (`55d51e5`) was merged into `RounakDev1`; the full gate on the merged tree: exit 0, **291 test files, 6,338 tests passed, 3 todo**, build OK, `check:power` 96/0. **Not run:** the E2E parity suite, any check on DEV or in a browser (focus rings and the localised date were not seen), and the two checklist approval flows (D81) against live Dataverse. The merged tree is not deployed to DEV (DEV holds `2e18043`).
+
+## D128 — Milestones: every date box shows the same short date style (18 Nov 2026)
+
+**Status:** implemented in the working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run against DEV, not seen in a browser**. Type: BUG (product owner, with a screenshot of the Milestones date section, 18 Nov 2026: "Project Start Date is in long format which does not match with other date fields in the same screen").
+**What the screenshot showed:** Project Start read "Thursday, May 10, 2018" and Cluster 3: Permitting "Tuesday, May 10, 2022", while the other nine boxes read "Fri, May 10, 2019".
+
+### 1. Cause (CHECKED in the canvas YAML and the code)
+
+A **SOURCE DEFECT of the canvas, reproduced faithfully** by the "modern controls sweep" of 20 Oct 2026: in `Project General Milestones Screen.pa.yaml`, Project Start (`dtp_…_StartDate`, line 1576) and Cluster 3 (`dtp_…_Cluster3`, line 2024) are `ModernDatePicker@1.0.1`, the other nine are `DatePicker@0.0.46`, and none sets a `Format`. The modern control then shows the LONG date, the classic one LongAbbreviated, so the canvas itself mixes two styles on one page. The code app copied that on purpose (`Screen.tsx` comment, `domain/canvasDate.ts`).
+
+### 2. What changed
+
+| # | Canvas | This app |
+|---|---|---|
+| 1 | Project Start and Cluster 3: "Thursday, May 10, 2018" (`DateTimeFormat.LongDate`); the other nine: "Thu, May 10, 2018" | **DIVERGENCE (SOURCE DEFECT fixed):** all eleven boxes show LongAbbreviated, "Thu, May 10, 2018". The pure rule is `milestoneDateFormat` (`rules.ts`); the canvas behaviour is kept as the twin `milestoneDateFormatCanvasParity`, so the decision is reversible by switching one function |
+| 2 | The control type also decides the box styling when the page is locked (the modern boxes stay the filled grey box, the classic ones become white with a grey outline) | Unchanged: `isModernPicker` / `MODERN_PICKER_KEYS` (Project Start and Cluster 3) still decide the styling; only the text format moved |
+
+Tests: UT-MSTONE-081 (all eleven keys LongAbbreviated), 082 (the canvas twin: LongDate for the two modern pickers), 083 (the reported dates: "Thu, May 10, 2018" and "Tue, May 10, 2022", twin "Thursday, May 10, 2018"), 084 (only Project Start and Cluster 3 are modern pickers), and the screen test UT-MSTONE-911 (all eleven rendered boxes match the short pattern). One existing assertion changed on purpose: UT-MSTONE-901 expected "Thursday, January 1, 2026" and "Tuesday, June 1, 2027" for the two boxes; it now expects "Thu, Jan 1, 2026" and "Tue, Jun 1, 2027".
+
+### 3. Not changed
+
+- **General Data** also shows long dates (the Acquisition Date box and the date field in the cluster-change panel, `ModernDatePicker@1.0.1` in the canvas). They are not mixed with short dates in one view there, so they were left as the canvas has them. Say if the long style should go there too.
+- Typing a date still accepts both the long and the short text (`parseCanvasDate`).
+
+### 4. Verification
+
+`npm run verify` on the working tree (18 Nov 2026, on top of `a66d8cf`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint clean in the Milestones folder, the control-label and canvas-identity gates clean, **291 test files, 6,343 tests passed, 3 todo**, build OK. **Not run:** `knip`, the E2E parity suite, a browser or DEV check of the Milestones screen (the date text was checked by the rendered-screen test UT-MSTONE-901 / 911, not by eye), and DEV still runs the build from before this change.

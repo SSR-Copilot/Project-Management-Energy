@@ -100,10 +100,11 @@ describe("UT-MSTONE Screen (connected, D26)", () => {
       expect(screen.getByText(caption)).toBeTruthy();
     }
     const end = screen.getByTestId(dtp("EndDate")) as HTMLInputElement;
-    // `DatePicker@0.0.46` (no Format): LongAbbreviated; `ModernDatePicker@1.0.1`: the long date.
+    // D128: one date style for all eleven boxes (LongAbbreviated). The canvas shows Project Start and Cluster 3 (the two
+    // `ModernDatePicker@1.0.1`) as the long date; `milestoneDateFormatCanvasParity` keeps that, UT-MSTONE-082.
     expect(end.value).toBe("Wed, Dec 31, 2059");
-    expect((screen.getByTestId(dtp("StartDate")) as HTMLInputElement).value).toBe("Thursday, January 1, 2026");
-    expect((screen.getByTestId(dtp("Cluster3")) as HTMLInputElement).value).toBe("Tuesday, June 1, 2027");
+    expect((screen.getByTestId(dtp("StartDate")) as HTMLInputElement).value).toBe("Thu, Jan 1, 2026");
+    expect((screen.getByTestId(dtp("Cluster3")) as HTMLInputElement).value).toBe("Tue, Jun 1, 2027");
     expect((screen.getByTestId(dtp("Cluster1")) as HTMLInputElement).value).toBe("Mon, Jun 1, 2026");
     // Rule 16: the canvas AccessibleLabel is the control name.
     expect(end.getAttribute("aria-label")).toBe(dtp("EndDate"));
@@ -124,6 +125,15 @@ describe("UT-MSTONE Screen (connected, D26)", () => {
     expect(screen.queryByTestId("con_Milestones_Page_LockMessage")).toBeNull();
   });
 
+  it("UT-MSTONE-911 every date box shows the same short date style, Project Start and Cluster 3 included (D128)", () => {
+    renderScreen();
+    const segments = ["StartDate", "Cluster1", "Cluster2", "Cluster3", "Cluster4", "FiD", "Cluster5", "Cluster6",
+      "Sales_StartDate", "Sales_CompletionDate", "EndDate"];
+    const texts = segments.map((s) => (screen.getByTestId(dtp(s)) as HTMLInputElement).value);
+    // "Thu, Jan 1, 2026": a three-letter weekday, a three-letter month, no long names.
+    for (const v of texts) expect(v).toMatch(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+    expect(texts).toHaveLength(11);
+  });
   it("UT-MSTONE-902 Save is disabled until dirty, then runs the plan with the canvas texts", async () => {
     renderScreen();
     expect(screen.getByRole("button", { name: SAVE }).hasAttribute("disabled")).toBe(true);

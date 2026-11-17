@@ -41,6 +41,7 @@ import {
 import { addDays, addMonths, addYears } from "@/domain/dates";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 import { dateFormat } from "@/domain/locale";
+import { DATE_PICKER_FORMAT, MODERN_DATE_PICKER_FORMAT, type CanvasDateFormat } from "@/domain/canvasDate";
 import { ES, CHOICE, CHOICE_FINANCE } from "@/data/dataverseNames";
 import { dateOnly } from "@/data/odata";
 import type { PlannedWrite, WritePlan } from "@/data/writePlan";
@@ -1654,4 +1655,30 @@ export const revenueSeedWouldRun = (p: MilestoneProject | null, revenueRowCount:
 export function farmdownError(raw: string, language: Lang = "en-US"): string | null {
   if (isBlank(raw)) return MILESTONES_MSG.farmdownBlank;
   return validateFarmdown(raw, language) ? null : MILESTONES_MSG.farmdownFormat;
+}
+
+/* ═════════════════════════════════════════════════════ the date picker box text (D128) ════ */
+
+/**
+ * The two pickers that are the canvas `ModernDatePicker@1.0.1` (Project Start and Cluster 3). The other nine are the
+ * classic `DatePicker@0.0.46`. The control decides the box STYLING (the filled grey box versus the classic outlined
+ * one when the page is locked); it no longer decides the date TEXT (see `milestoneDateFormat`).
+ */
+export const MODERN_PICKER_KEYS: readonly MilestoneKey[] = ["StartDate", "ApplicationSubmitted"];
+export const isModernPicker = (key: MilestoneKey): boolean => MODERN_PICKER_KEYS.includes(key);
+
+/**
+ * The text format of a milestone date box. SOURCE DEFECT (D128): in the canvas the two `ModernDatePicker@1.0.1`
+ * boxes set no `Format` and so show the LONG date ("Thursday, May 10, 2018") while the other nine
+ * `DatePicker@0.0.46` boxes show "Thu, May 10, 2018", so one screen mixes two date styles. The code app shows
+ * every date as LongAbbreviated. The canvas behaviour is kept as `milestoneDateFormatCanvasParity`, so the decision
+ * stays reversible.
+ */
+export function milestoneDateFormat(_key: MilestoneKey): CanvasDateFormat {
+  return DATE_PICKER_FORMAT;
+}
+
+/** The canvas: the modern pickers show the long date, the classic ones LongAbbreviated (D128 twin). */
+export function milestoneDateFormatCanvasParity(key: MilestoneKey): CanvasDateFormat {
+  return isModernPicker(key) ? MODERN_DATE_PICKER_FORMAT : DATE_PICKER_FORMAT;
 }

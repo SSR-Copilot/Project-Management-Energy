@@ -660,3 +660,10 @@ The canvas apps had no Application Insights (`appinsightserrortracing: false`), 
 | Cluster Checklist | Keyboard focus moves with the date editor, focus rings are back, stepper cards and row buttons describe state and task to screen readers, the busy overlay has a name | **new** (no existing label or test id changed) |
 | Cluster Checklist | Real-function tests for the loaders, hooks and screen writes | **new** (test gate) |
 | Cluster Checklist | A resume step after a failed Move, re-creating missing tasks, the order of the cancel patch and flow, contrast colours, the cross-screen cache refresh | **proposed (not approved)**, see D127 §10 |
+
+## Milestones: one date style for all date boxes (18 Nov 2026, D128) — fixed (SOURCE DEFECT, not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Milestones | Project Start and Cluster 3 no longer show the long date ("Thursday, May 10, 2018"); all eleven date boxes show "Thu, May 10, 2018", as the canvas shows the other nine. The canvas mixes the two styles because it uses two different picker controls without a `Format` | **fixed** (DIVERGENCE, twin `milestoneDateFormatCanvasParity`) |
+| General Data | The Acquisition Date and the cluster-change panel date keep the long date, as the canvas | **proposed (not approved)**, see D128 §3 |
