@@ -7463,3 +7463,12 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
 **Code app before:** Finance draws its own dropdown (`SelectChoice`), which had Fluent's list on every control: a grey hover, a check-mark and a rounded black ring. The other PM screens' `ChoiceField` already drew the canvas list.
 **Now:** `ChoiceField` exports its list style (`useCanvasListStyles`) and `SelectChoice` puts it on every non-combo dropdown: Senior Debt KfW-Tranche (Y:9562), Tenor YY / MM, Start Repayment YY / MM, Frequency of Repayment, Commitment Fee Free Period YY / MM, Fixed Interest Rate YY / MM, the Step-Up year, and DSRA / DSRF Base Rate (Y:16062). The five `cmb_` combos (VAT Base Rate, Bank, Duration of Saving, the two DSRA durations) keep Fluent's list, and their standard-value list colour.
 **Tests:** UT-FIN-924.
+
+## D122 — Contracts: the Payment Targets bar icons are blue (17 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** "icon color should be blue, it is part of contract screen" (Payment Targets: Add Period, Edit, Delete).
+**Canvas:** `pcf_Contracts_List_Card_Body_PaymentTargets_CommandBar` (Contracts Screen Y:1398) is a `cat_PowerCAT.CommandBar` with `Theme: =gblAppThemeJson`, the same control as the screen bar `cmd_Contracts_CommandBar` (Y:436): an enabled command's icon is the theme blue, a disabled one's #c8c6c4.
+**Code app before:** the bar is built by hand and had only the shared row geometry (`useCommandRowStyles`), so its icons took Fluent's neutral colour; the screen bar (`CommandBar`) was already blue.
+**Now:** `CommandBar` exports its button skin (`useCommandBarStyles`) and the three period commands wear it: the blue icon, #c8c6c4 disabled, and the PowerCAT hover / pressed fills. The captions keep the colours sampled on 12 Nov 2026 (#242424, #a19f9d disabled; `canvas.css`), which outrank the skin's.
+**Tests:** UT-CONTR-152.

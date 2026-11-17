@@ -36,6 +36,7 @@ import {
   EmptyState,
   FormPanel,
   PanelButtons,
+  useCommandBarStyles,
   useCommandRowStyles,
   ExpandChevron,
   LoadingOverlay,
@@ -1149,8 +1150,9 @@ export default function ContractsScreen() {
       {/* ── the Project Rights contract panel ───────────────────────────── */}
       <FormPanel centerClose
         open={panel === "rights"}
-        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
-        panelClassName="contract-canvas-panel"
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`);
+        // `.contract-rights-panel`: the canvas 78 / 84 / 80-high field containers (17 Nov 2026).
+        panelClassName="contract-canvas-panel contract-rights-panel"
         title={panelTitle(editing, CONTRACT_TYPE.ProjectRights)}
         width="narrow"
         onDismiss={() => setPanel("none")}
@@ -1212,14 +1214,18 @@ export default function ContractsScreen() {
       {/* ── the payment-target panel ────────────────────────────────────── */}
       <FormPanel centerClose
         open={panel === "target"}
-        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`).
-        panelClassName="contract-canvas-panel"
+        // Canvas classic `Label` captions: 11 pt, the red `*` hanging left of the caption (canvas.css `.contract-canvas-panel`);
+        // `.contract-target-panel`: the 78-high field containers and the Disabled Description (17 Nov 2026).
+        panelClassName="contract-canvas-panel contract-target-panel"
         title={selectedTargetId ? MSG.editPeriod : MSG.addPeriod}
         width="narrow"
         onDismiss={cancelTargetPanel}
         footer={<PanelButtons
           onSave={() => { void saveTargetNow(); }}
           onCancel={cancelTargetPanel}
+          // `pcf_…_PaymentTarget_Buttons_Save` is a PowerCAT `ActionButton` with `IconColor: If(Disabled, black, white)`
+          // (`:3048-3077`): disabled, a transparent "✓ Save", not Fluent's grey filled button.
+          subtleWhenDisabled
           disabled={busy || !canSavePaymentTarget({
             form: targetForm,
             projectStart: project?.startDate,
@@ -1631,6 +1637,9 @@ function ContractCardBody({
   // The payment-target bar: no button inset, so its `+` sits on the card body's 20 px edge,
   // over the targets table and under "Payment Targets" (21 Oct 2026).
   const commandRow = useCommandRowStyles();
+  // `pcf_…_Card_Body_PaymentTargets_CommandBar` is a PowerCAT CommandBar (`Theme: =gblAppThemeJson`, Y:1398):
+  // the screen bar's skin, so its icons are the theme blue and #c8c6c4 once disabled (17 Nov 2026).
+  const commandSkin = useCommandBarStyles();
   // Every card figure follows its canvas `Text(…, "###,##0")` (CONTR-020/021/022/024): a blank is 0, the
   // figure is whole and grouped; the Plan figure is read ONLY when the type is Plan.
   const untilClosing = cardClosingFigure(
@@ -1736,14 +1745,14 @@ function ContractCardBody({
         <Text weight="semibold">{MSG.paymentTargets}</Text>
         <div className={mergeClasses("canvas-contract-targets-bar", commandRow.row)}>
           <Button aria-label={MSG.addPeriod} data-testid={`contracts-add-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (writesDisabled || !canAdd) && commandSkin.disabled)}
             appearance="transparent" icon={<AddRegular />} disabled={writesDisabled || !canAdd} onClick={onAddTarget}>
             {MSG.addPeriod}
           </Button>
           <Button
             aria-label={MSG.edit}
             data-testid={`contracts-edit-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (!canChange || writesDisabled) && commandSkin.disabled)}
             appearance="transparent"
             icon={<EditRegular />}
             disabled={!canChange || writesDisabled}
@@ -1754,7 +1763,7 @@ function ContractCardBody({
           <Button
             aria-label={MSG.delete}
             data-testid={`contracts-delete-target-${contract.id}`}
-            className={commandRow.command}
+            className={mergeClasses(commandRow.command, commandSkin.command, (!canChange || writesDisabled) && commandSkin.disabled)}
             appearance="transparent"
             icon={<DeleteRegular />}
             disabled={!canChange || writesDisabled}

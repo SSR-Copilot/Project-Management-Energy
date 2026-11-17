@@ -419,6 +419,30 @@
 /* The form column clips overflow-x, which cut the hanging star off; give it a 12 px gutter it takes back with a
    negative margin so the captions stay where they were. */
 .contract-canvas-panel .canvas-panel-column:first-child { padding-left: 12px; margin-left: -12px; }
+/* Contracts Add / Edit Period (`con_Contracts_RightPanel_NewEdit_PaymentTarget_Content_ColumnLeft`, Contracts Screen:2282-2970)
+   and Add / Edit Project Rights Contract (`con_…_RightsContract_Content_ColumnLeft`, :3263-3660): the column has
+   `PaddingTop: =10`; each field is its own container, 78 high unless noted — a 32-high caption label (text centred), the
+   32-high box at Y 32, the error label at Y 64. Period Notes is 130 high: its box 5 below the caption and 64 high, the
+   `n/55` counter right-aligned at Y 8 (so 8 px lower than the caption), no resize grip. The fields used to sit flush —
+   caption, 6 px, box, next caption (canvas screenshots, 17 Nov 2026). */
+:is(.contract-target-panel, .contract-rights-panel) .canvas-panel-body { padding-top: 10px; }
+:is(.contract-target-panel, .contract-rights-panel) .canvas-panel-body > .canvas-field { gap: 0; min-height: 78px; }
+/* Period: `con_…_TotalCosts.Height: =84`; `con_…_PaymentDate.Height: =If(<error>.Visible, 86, 78)`. */
+.contract-target-panel .canvas-panel-body > .canvas-field:has(> input[data-testid="txt_Contracts_Payment_Targets_RightPanel_TotalCosts"]) { min-height: 84px; }
+.contract-target-panel .canvas-panel-body > .canvas-field[data-invalid]:has(> input[data-testid="txt_Contracts_RightPanel_NewEdit_PaymentTarget_PaymentDate"]) { min-height: 86px; }
+/* Project Rights: `con_…_RightsContract_Content_ClosingDate.Height: =84`, `…_Content_TotalCosts.Height: =80` (the
+   copy-pasted `If(rad_…_TotalCosts = Calculated, 80, 0)` reads that panel's default, Calculated). */
+.contract-rights-panel .canvas-panel-body > .canvas-field:has([data-testid="dtp_Contracts_RightPanel_NewEdit_RightsContract_Content_ClosingDate"]) { min-height: 84px; }
+.contract-rights-panel .canvas-panel-body > .canvas-field:has(> input[data-testid="txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts"]) { min-height: 80px; }
+:is(.contract-target-panel, .contract-rights-panel) .canvas-panel-body > .canvas-field > span:first-child { display: flex; align-items: center; height: 32px; }
+.contract-target-panel .canvas-field-counter { position: relative; top: 8px; }
+.contract-target-panel .canvas-panel-body > .canvas-field:has(> textarea) { min-height: 130px; }
+.contract-target-panel .canvas-field > textarea { margin-top: 5px; resize: none; }
+/* `txt_…_PaymentTarget_Description.DisplayMode`: Disabled once the contract has a period (`:2365`) — the canvas
+   Disabled look (white box, light border, grey text), not the filled View look of `.canvas-field > input:disabled`. */
+.contract-target-panel .canvas-field > input:disabled {
+  background: #ffffff; border: 1px solid #e3e3e3; color: #a19f9d; -webkit-text-fill-color: #a19f9d;
+}
 /* CAPEX Add/Edit Costs panel: each caption sits at `gblAppSizes.Position.X`, flush with its box, and the
    `*_Asterisk` label (`X: =5`) hangs in the gutter to its left — the caption does not move for the star. The radio
    circle sits 3 px in from the caption with its option text 11 px after it (screenshots 12 Nov 2026). */
@@ -440,7 +464,8 @@
 .canvas-contract-commandbar { padding-left: 10px; }
 .canvas-contract-targets-head { display: flex; flex-direction: column; gap: 4px; }
 .canvas-contract-targets-bar { display: flex; align-items: center; }
-/* The PowerCAT command bar: enabled commands in the dark label colour, disabled ones grey (canvas, 12 Nov 2026). */
+/* The PowerCAT command bar: enabled commands in the dark label colour, disabled ones grey (canvas, 12 Nov 2026).
+   The icons are the shared `useCommandBarStyles` skin's: the theme blue, #c8c6c4 disabled (17 Nov 2026). */
 .canvas-contract-targets-bar button { color: #242424; font-size: 14px; }
 .canvas-contract-targets-bar button:disabled { color: #a19f9d; }
 /* `lbl_…_Card_Body_PaymentTargets`: Semibold, `gblAppSizes.Font.Medium` (11 pt). */

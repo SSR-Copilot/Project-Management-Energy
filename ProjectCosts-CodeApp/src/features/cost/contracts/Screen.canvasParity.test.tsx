@@ -7,7 +7,8 @@
  * description, Cancel, the Dirty flag, and what a save leaves behind.
  */
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { useCommandBarStyles } from "@/components/CommandBar";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -204,6 +205,23 @@ describe("the period bar and the selection (CONTR-017/029/030/031/032/046)", () 
     expect(byId("contracts-add-target-c-1")).toBeEnabled();
   });
 
+  it("UT-CONTR-152 the period bar wears the PowerCAT command skin: a blue icon, grey once disabled (17 Nov 2026)", () => {
+    // The shared classes (Griffel atomic names, `f…`). `disabled` replaces `command`'s colours, so each state is
+    // checked against its own class.
+    const atomic = (cls: string) => cls.split(" ").filter((c) => /^f/.test(c));
+    const skin = renderHook(() => useCommandBarStyles()).result.current;
+    const has = (id: string, cls: string) => atomic(cls).every((c) => byId(id).classList.contains(c));
+    mount();
+    expand("c-1");
+    expect(has("contracts-add-target-c-1", skin.disabled)).toBe(true);
+    select("c-1");
+    expect(has("contracts-add-target-c-1", skin.command)).toBe(true);
+    expect(has("contracts-add-target-c-1", skin.disabled)).toBe(false);
+    for (const id of ["contracts-edit-target-c-1", "contracts-delete-target-c-1"]) {
+      expect([id, has(id, skin.disabled)]).toEqual([id, true]);
+    }
+  });
+
   it("UT-CONTR-111 Add Period is disabled once the targets total 100 (CONTR-031)", () => {
     data().targets = [tgt("t-1", 60, "2026-01-01", "Advance"), tgt("t-2", 40, "2026-02-01", "Advance - 2")];
     mount();
@@ -292,6 +310,9 @@ describe("Add / Edit Period (CONTR-033/034/035/044)", () => {
     const box = await screen.findByTestId(DESCRIPTION);
     expect(box).toHaveValue("Advance");
     expect(box).toBeDisabled();
+    // Add and Edit are one panel: Edit gets the canvas 78-high field spacing and the Disabled (white, grey-text)
+    // Description of canvas.css `.contract-target-panel` too (17 Nov 2026).
+    expect(box.closest(".canvas-panel")?.classList.contains("contract-target-panel")).toBe(true);
   });
 
   it("UT-CONTR-123 a failed period save names the payment target (CONTR-044)", async () => {

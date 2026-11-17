@@ -105,7 +105,12 @@ export interface Command {
   disabledReason?: string;
 }
 
-const useStyles = makeStyles({
+/**
+ * The PowerCAT command-button skin (colours and states), exported for a hand-built row that dresses a
+ * `cat_PowerCAT.CommandBar` itself (Contracts' payment-target bar, 17 Nov 2026): `command` on each `Button`
+ * after `useCommandRowStyles().command`, and `disabled` while it is disabled.
+ */
+export const useCommandBarStyles = makeStyles({
   bar: {
     display: "flex", flexWrap: "wrap", alignItems: "center", rowGap: space.xs,
     minHeight: "40px",
@@ -169,7 +174,7 @@ export interface CommandBarProps {
 export function CommandBar({
   commands, onCommand, children, ariaLabel, testIdPrefix = "command", size, className,
 }: CommandBarProps) {
-  const styles = useStyles();
+  const styles = useCommandBarStyles();
   const row = useCommandRowStyles();
   const shown = commands.filter((c) => c.visible !== false);
   const childrenOf = (key: string) => shown.filter((c) => c.parentKey === key);
