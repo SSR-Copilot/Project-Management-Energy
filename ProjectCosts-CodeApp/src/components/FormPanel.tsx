@@ -92,6 +92,11 @@ export interface FormPanelProps {
    */
   keepOpenOnOutsideClick?: boolean;
   /**
+   * Opt-in (OPEX, D123): Escape does NOT close the panel either — the canvas panel has no keyboard dismissal, only its ✕
+   * and Cancel, so a stray Escape cannot throw away what was typed. ✕ and Cancel are unchanged.
+   */
+  keepOpenOnEscape?: boolean;
+  /**
    * Opt-in (the Cost panels, D88): centre the ✕ vertically in the header bar, as the canvas icon does
    * (`ico_…_Cancel`: `Y: =Parent.Height/2-Self.Height/2`, white, `Tooltip: "Cancel"`). Left off, the header keeps
    * Fluent's top-aligned row, which the Application Settings and PM panels were tuned against. Without it the ✕
@@ -105,7 +110,8 @@ export interface FormPanelProps {
 export function FormPanel({
   open, title, width = "wide", children, footer, onDismiss, closeTestId, closeLabel, closeTooltip, closeTooltipBox = false,
   busy = false, busyLabel, dirty = false, discardText, actions, messages, closePrompt, promptRequest, onPromptCancel,
-  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, centerClose = false, titleTooltip,
+  coverLabel, ariaLabel, panelClassName, keepOpenOnOutsideClick = false, keepOpenOnEscape = false, centerClose = false,
+  titleTooltip,
 }: FormPanelProps) {
   const locked = busy || busyLabel !== undefined;
   // Without `closePrompt`, `onDismiss` is called with no argument.
@@ -136,6 +142,7 @@ export function FormPanel({
         onOpenChange={(_, data) => {
           if (data.open) return;
           if (keepOpenOnOutsideClick && data.type === "backdropClick") return;
+          if (keepOpenOnEscape && data.type === "escapeKeyDown") return;
           requestClose("dismiss");
         }}
         {...(ariaLabel !== undefined ? { "aria-label": ariaLabel, "aria-labelledby": undefined } : {})}

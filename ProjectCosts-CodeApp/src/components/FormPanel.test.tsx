@@ -387,4 +387,21 @@ describe("FormPanel", () => {
     fireEvent.click(backdrop()!);
     expect(dismissed).toHaveBeenCalledTimes(1);
   });
+
+  it("UT-SETPANEL-025 keepOpenOnEscape (OPEX, D123): Escape and a backdrop click keep the panel open; ✕ still closes", async () => {
+    const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
+    const kept = vi.fn();
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <FormPanel open title="T" onDismiss={kept} keepOpenOnOutsideClick keepOpenOnEscape>
+          <input aria-label="Name" />
+        </FormPanel>
+      </FluentProvider>,
+    );
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name", hidden: true }), { key: "Escape" });
+    fireEvent.click(backdrop()!);
+    expect(kept).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Close panel", hidden: true }));
+    expect(kept).toHaveBeenCalledTimes(1);
+  });
 });

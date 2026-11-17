@@ -467,17 +467,30 @@ describe("mapOpexRow", () => {
       { vsb_opexprojectcostid: "bare" }, "Some Group", "om",
     );
     expect(period).toMatchObject({
-      description: "", startDate: "", years: 0, months: 0, currency: "",
+      // D123: the duration halves stay NULL as well — the canvas grid shows an empty cell, not "0 years".
+      description: "", startDate: "", years: null, months: null, currency: "",
       // The five MONEY columns default to NULL, not 0: `'Fix Costs': Value(txt.Value)` and
       // `Value("")` is `Blank()`, so an unset column means the user typed nothing.
       fixed: null, revenue: null, perMwh: null, perMw: null, perWtg: null,
-      aggregation: "SUM", frequency: 1,
-      inflation: false, countryInflation: false, inflationYear: 0, inflationPercent: 0,
+      // D123: a blank frequency is not "1", and a blank inflation % is not a stored 0.0 %.
+      aggregation: "SUM", frequency: null,
+      inflation: false, countryInflation: false, inflationYear: 0, inflationPercent: null,
       threshold: false, align: false, external: false, standard: false,
     });
     // O&M/Other OPEX periods never carry the Land Lease-only flags.
     expect(period.allWtgAllocated).toBeUndefined();
     expect(period.hasOneTimePayment).toBeUndefined();
+  });
+
+  it("UT-BOOK-077 D123: a blank duration, frequency or inflation % stays null; stored values, 0 included, pass through", () => {
+    const blank = mapOpexRow({ vsb_opexprojectcostid: "b" }, "g", "other");
+    expect([blank.years, blank.months, blank.frequency, blank.inflationPercent]).toEqual([null, null, null, null]);
+    const stored = mapOpexRow({
+      vsb_opexprojectcostid: "s", vsb_opexprojectdurationyears: 0, vsb_opexprojectdurationmonths: 6,
+      vsb_distributionfrequency: 3, vsb_inflationprofile: 0,
+    }, "g", "other");
+    // A stored 0.0 % is a value, not a blank: the panel opens it as "0.0".
+    expect([stored.years, stored.months, stored.frequency, stored.inflationPercent]).toEqual([0, 6, 3, 0]);
   });
 
   it("UT-BOOK-072 reads the MIN aggregation choice rather than collapsing it to SUM", () => {

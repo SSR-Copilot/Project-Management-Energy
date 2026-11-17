@@ -121,8 +121,12 @@ import {
 
 /* ────────────────────────────────────────────────────────────────── styles */
 
-/** `rec_…_Separator.Fill` — the 1-px rule under every card header. */
-const CARD_RULE = "rgb(0, 120, 212)";
+/**
+ * The 1-px rule under every card header. The extracted source gives `rec_…_Separator.Fill`
+ * RGBA(0, 120, 212, 1), but the live canvas draws it light grey: #e0e0e0, sampled from the canvas
+ * Generators screenshot (17 Nov 2026). Follow the canvas as it renders (D90).
+ */
+const CARD_RULE = "#e0e0e0";
 /** `ColorFade(ColorValue(gblAppTheme.palette.Warning), 60%)` — the Height Limitation tag. */
 const HEIGHT_TAG_FILL = "rgb(248, 212, 158)";
 /** `con_Milestones_Page_LockMessage_1.Fill` and its icon / text colour. */
@@ -369,6 +373,17 @@ const useStyles = makeStyles({
   heightTag: { backgroundColor: HEIGHT_TAG_FILL },
   expanded: { display: "flex", flexDirection: "column", gap: space.s, maxWidth: "850px", minWidth: 0, overflowX: "auto" },
   warning: { fontSize: tokens.fontSizeBase200, color: palette.Warning },
+  /**
+   * The turbine panel's "Apply to all" warning as the canvas draws it (canvas pair, 17 Nov 2026): an
+   * orange Information icon before the text, the pair tucked just under its checkbox.
+   */
+  applyAllWarning: {
+    // Smaller and tighter than `warning` (12/16 px): the canvas text is ~11 px on 11-px lines, so the two
+    // lines take ~half the height they did ("…of the selected" / "WTG type?" break kept).
+    display: "flex", alignItems: "flex-start", columnGap: "6px", marginTop: "-8px", width: "345px", maxWidth: "100%",
+    fontSize: "11px", lineHeight: "12px",
+    "& > svg": { flexShrink: 0, marginTop: "-1px" },
+  },
   note: { fontSize: tokens.fontSizeBase200, color: palette.Error },
   /**
    * `con_…GeneratorType_CardDetails_Pagination_Buttons` (Y:1885): a 24-high horizontal row, `LayoutGap: =5`,
@@ -962,6 +977,13 @@ function GeneratorsScreenBody() {
     setSelection((p) => toggleSelection(p, family, id));
     if (rowClickFolds(family)) setExpanded((p) => toggleExpanded(p, id));
   };
+  /**
+   * A row a save has just created opens unfolded: the canvas `Collect`s it into its gallery
+   * collection without `IsFolded` (blank = not folded), so the new card shows its details.
+   */
+  const expandCreated = (id: string | undefined) => {
+    if (id) setExpanded((p) => (p.has(id) ? p : new Set(p).add(id)));
+  };
   const onFold = (family: PlantFamily, id: string) => {
     if (family === "wtg") {
       setSelection(wtgFoldSelection(!expanded.has(id), id));
@@ -1553,6 +1575,7 @@ function GeneratorsScreenBody() {
     });
     const typeId = ids?.[0];
     if (typeId) setSelection({ family: "wtg", id: typeId });
+    expandCreated(typeId);
     /*
      * In country the first job's roll-up counted the new type, so the rollback recomputes it (harmless when the
      * failure came before it: the totals are rebuilt from the rows that remain). Out of country the roll-up does not
@@ -1628,6 +1651,7 @@ function GeneratorsScreenBody() {
     });
     const pvId = editing?.id ?? ids?.[0];
     if (ids && pvId) setSelection({ family: "pv", id: pvId });
+    if (!editing) expandCreated(ids?.[0]);
     if (!editing) queueRollback("addPvType", ids, false);
   };
 
@@ -1659,6 +1683,7 @@ function GeneratorsScreenBody() {
     // The canvas blanks `locSelectedInverterTypeEntity` after the save.
     const ids = await run(job);
     if (ids) setSelection(null);
+    if (!editing) expandCreated(ids?.[0]);
     if (!editing) queueRollback("saveInverter", ids, false);
   };
 
@@ -1690,6 +1715,7 @@ function GeneratorsScreenBody() {
     close();
     const ids = await run(job);
     if (ids) setSelection(null);
+    if (!editing) expandCreated(ids?.[0]);
     if (!editing) queueRollback("saveSubstructure", ids, false);
   };
 
@@ -1760,6 +1786,7 @@ function GeneratorsScreenBody() {
     });
     const newTypeId = ids?.[0];
     if (newTypeId) setSelection({ family: "wtg", id: newTypeId });
+    expandCreated(newTypeId);
   };
 
   /** G6 — Replace PV Module Type (1.21.753), as ONE job in the same two steps (save performance, 6 Nov 2026). */
@@ -1799,6 +1826,7 @@ function GeneratorsScreenBody() {
     });
     const newPvId = ids?.[0];
     if (newPvId) setSelection({ family: "pv", id: newPvId });
+    expandCreated(newPvId);
   };
 
   const saveSimple = async () => {
@@ -1816,6 +1844,7 @@ function GeneratorsScreenBody() {
     const ids = await run(job);
     const id = row?.id ?? ids?.[0];
     if (ids && id) setSelection({ family, id });
+    if (!row) expandCreated(ids?.[0]);
     if (!row) queueRollback("saveSimple", ids, false);
   };
 
@@ -2496,7 +2525,11 @@ function GeneratorsScreenBody() {
             checked={applyAll.capacity}
             onChange={(_, d) => applyAllChange("capacity", d.checked === true)}
           />
-          {applyAll.capacity ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
+          {applyAll.capacity ? (
+            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
+              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
+            </Text>
+          ) : null}
           <InputField
             label={TURBINE_PANEL_LABELS.foundationPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Foundation_Plinth"
             maxLength={256} value={turbineForm.foundationPlinth} className={s.turbineField}
@@ -2509,7 +2542,11 @@ function GeneratorsScreenBody() {
             checked={applyAll.plinth}
             onChange={(_, d) => applyAllChange("plinth", d.checked === true)}
           />
-          {applyAll.plinth ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
+          {applyAll.plinth ? (
+            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
+              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
+            </Text>
+          ) : null}
           <InputField
             // `lbl_…_Effective_HubHeight_Required.Visible: false` — no `*`, though the value is still checked.
             label={TURBINE_PANEL_LABELS.hubHeightExclPlinth} name="txt_GeneratorData_RightPanel_Form_Fields_Effective_HubHeight"
@@ -2523,7 +2560,11 @@ function GeneratorsScreenBody() {
             checked={applyAll.hubHeight}
             onChange={(_, d) => applyAllChange("hubHeight", d.checked === true)}
           />
-          {applyAll.hubHeight ? <Text className={s.warning}>{TURBINE_PANEL_LABELS.applyAllWarning}</Text> : null}
+          {applyAll.hubHeight ? (
+            <Text className={mergeClasses(s.warning, s.applyAllWarning)}>
+              <InfoRegular aria-hidden="true" fontSize={14} />{TURBINE_PANEL_LABELS.applyAllWarning}
+            </Text>
+          ) : null}
           <InputField
             label={TURBINE_PANEL_LABELS.totalHeight} name="txt_GeneratorData_RightPanel_Form_Fields_Total_Height"
             readOnly disabledLook className={s.turbineField}
@@ -2766,14 +2807,27 @@ function GeneratorsScreenBody() {
               onChange={() => {}}
             />
             {/* `cmb_Supplier_8` is a disabled combobox like the two above (chevron), showing the hub
-                height as stored — "169", not "169.00" (canvas screenshot, 3 Nov 2026). */}
-            <SelectField
-              label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required disabled
-              disabledLook
-              value={selectedTypeModel?.hubHeight != null ? "from" : null}
-              options={selectedTypeModel?.hubHeight != null ? [{ value: "from", label: fmtHubHeight(selectedTypeModel.hubHeight, lang) }] : []}
-              onChange={() => {}}
-            />
+                height as stored — "169", not "169.00" (canvas screenshot, 3 Nov 2026). A Dummy type has no
+                catalog height (0): the canvas shows a text box with the height typed for it — the first
+                turbine's hub height, as on the card (`wtgCardHubHeight`; canvas pair, 17 Nov 2026). */}
+            {isDummySupplier(selectedTypeModel?.supplier) ? (
+              <InputField
+                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required
+                readOnly disabledLook
+                value={(() => {
+                  const h = (selectedType ? turbinesByType.get(selectedType.id)?.[0]?.hubHeightExclPlinth : null) ?? null;
+                  return h === null ? "" : fmtHubHeight(h, lang);
+                })()}
+              />
+            ) : (
+              <SelectField
+                label={REPLACE_LABELS.hubHeight} name="cmb_Supplier_8" ariaLabel="cmb_Supplier_2" required disabled
+                disabledLook
+                value={selectedTypeModel?.hubHeight != null ? "from" : null}
+                options={selectedTypeModel?.hubHeight != null ? [{ value: "from", label: fmtHubHeight(selectedTypeModel.hubHeight, lang) }] : []}
+                onChange={() => {}}
+              />
+            )}
             <InputField
               label={REPLACE_LABELS.numberOfGenerators} name="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator_2"
               ariaLabel="txt_GeneratorData_RightPanel_Form_Fields_NumberOfGenerator" required

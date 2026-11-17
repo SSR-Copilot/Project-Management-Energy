@@ -9,6 +9,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { canvasScrollbar } from "@/features/cost/periods/canvasScrollbar";
 
 const css = readFileSync(new URL("../../../styles/canvas.css", import.meta.url), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "");
@@ -62,20 +63,33 @@ describe("DevCo checkbox size", () => {
     expect(source).toMatch(/<rect\s+x="1" y="1" width="22" height="22"/);
   });
 
-  it("UT-CONCHECK-004 both columns centre on the same line, 56 px from the row's right edge", () => {
+  it("UT-CONCHECK-004 both columns centre on the same line, 56 px from the card's right edge", () => {
     const size = px(rule(".canvas-devco")["--devco-check"]);
     // Parent: the button's centre, past the chevron's right gutter, width and left margin.
     const chevron = rule(".canvas-devco-chevron");
     const [, right = "", , left = ""] = (chevron["margin"] ?? "").split(/\s+/);
     const button = px(rule(".canvas-devco-check")["width"]);
     const parentCentre = px(right) + px(chevron["width"]) + px(left) + button / 2;
-    // Leaf: its right margin is `C - box / 2` and its box is `size` wide, so its centre is `C`.
+    // Leaf: its right margin is `C - box / 2` and its box is `size` wide, so its centre is `C` from the ROW's
+    // right edge. D124: the list is inset (`gal_…_Costs.X: =10`) and keeps a 10 px scrollbar gutter, so the
+    // row's edge is inset + gutter in from the card's.
     const leafMargin = leafRule()["margin"] ?? "";
-    const m = /^0 calc\((\d+)px - var\(--devco-check\) \/ 2\) 0 (\d+)px$/.exec(leafMargin);
+    const m = /^0 calc\((\d+)px - var\(--devco-check\) \/ 2\) 0 (?:auto|\d+px)$/.exec(leafMargin);
     expect(m, `leaf margin was: ${leafMargin}`).not.toBeNull();
-    const leafCentre = (Number(m![1]) - size / 2) + size / 2;
+    const leaves = rule(".canvas-devco-leaves");
+    const [, inset = ""] = (leaves["margin"] ?? "").split(/\s+/);
+    expect(leaves["scrollbar-gutter"]).toBe("stable");
+    const gutter = px(canvasScrollbar["::-webkit-scrollbar"].width);
+    const leafCentre = (Number(m![1]) - size / 2) + size / 2 + px(inset) + gutter;
     expect(parentCentre).toBe(56);
     expect(leafCentre).toBe(parentCentre);
+  });
+
+  it("UT-CONCHECK-006 the 'used' square centres on the leaf box, 20 x 20 (`rec_…_CostssRow_Used`, D124)", () => {
+    const used = rule(".canvas-devco-used");
+    expect([used["width"], used["height"], used["top"]]).toEqual(["20px", "20px", "5px"]);
+    const m = /^0 calc\((\d+)px/.exec(leafRule()["margin"] ?? "");
+    expect(px(used["right"]) + 10).toBe(Number(m![1]));
   });
 
   it("UT-CONCHECK-005 no other rule sets the size of the leaf checkbox or of the parent's SVG", () => {

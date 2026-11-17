@@ -7683,6 +7683,59 @@ The product owner supplied the browser console of the **deployed DEV app** (envi
 
 **Not done:** the CSP change itself (an administrator action in each environment); a console check on QA; a check against a real, unblocked ingestion endpoint.
 
+## D123 — OPEX (Operation & Maintenance, Other OPEX): 11 functional differences fixed to match the Canvas (17 Nov 2026)
+
+**Status:** uncommitted (working tree, branch `fixes`), not on DEV. (D118 is taken on `master` / `RounakDev1`.)
+**Report:** the OPEX comparison of 13 Nov 2026, re-checked against the code of 17 Nov ("check for all the bugs if something is fixed then give me new list"); "fix 11 changes" (the "fix now" group of the recommendations).
+
+| # (list of 17 Nov) | Canvas | Code app before | Now |
+|---|---|---|---|
+| 1 | The panel closes only through ✕ and Cancel: the backdrop has no OnSelect and there is no keyboard dismissal | Escape and a click on the backdrop closed it and dropped the form, with no warning | `FormPanel keepOpenOnOutsideClick keepOpenOnEscape` (the second is new, opt-in): both do nothing. ✕ and Cancel unchanged |
+| 13 | Add Contract Type / Add Period set `locSelectedOpexCost: Blank()` (`:593`, `:625`, O&M `:3031`) and make the card the selection's owner; Cancel / ✕ restore nothing | The row stayed selected; after Cancel every command was off and the row needed two clicks | `selectionOnAdd(card)`: no row selected, the card owns the selection. Edit → Cancel still keeps the row (as the Canvas) |
+| 3 | `txt_…_InflationStartYear.Value` (`:7583-7594`) reads the Start Date; a modern TextInput re-takes its Value when the result changes | Computed once on open; a new cost type moved to another year kept the old year (and the country % looked up with it) | `inflationStartYearOnDateChange` on a picked date and on the reset-to-COD icon: the box moves to `Year(date) + 1` only while its default depends on the date (not while adding a period, not on a row with its own year) |
+| 6 | The hidden Area dropdown defaults to the project's zone; the row's stored area is commented out of `DefaultSelectedItems` (`:7684-7719`) | The row's (or parent's) stored area won | Always `Substitute(gblAreaWithRegion, "Italy_", "")`, for the country % lookup and the Save. Non-Italian projects: blank, as before |
+| 5 | `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` resets to its Default, the edited row's figure (`:8317-8321`) | The box was emptied | The edited row's stored figure (empty on Add) |
+| 9 | `Text(stored, "0.0")` (`:7811-7822`): a stored 0.0 % opens as "0.0" | Opened empty (the book read a blank and 0 alike), so Save stayed off until retyped | Opens "0.0". The grid cell still shows a stored 0 as empty (O-9, reproduced) |
+| 19 | A blank duration / frequency is an empty cell (`:1992-2040`, `:1540`) | "0 years", "0 months", "1" | Empty cells. `CostPeriod.years / months / frequency / inflationPercent` are now nullable; the OPEX loader keeps a blank as null, Land Lease still reads `?? 0` / `?? 1`; the date arithmetic counts a blank as 0, as `DateAdd(…, Blank())` |
+| 21 | `Text(individual, "###,###.0")` in the user's language | en-GB (the D117 leftover) | `canvasNumberText`, as the other grid cells |
+| 23 | `OnVisible` re-reads the costs on every visit (`:118-124`) | The app-wide 30 s cache showed the previous visit's rows | `useCostBook(undefined, { everyVisit: true })` on the OPEX screen only: re-read on every visit. The cached rows show at once and the re-read runs behind them (no loader on a second visit); other Cost screens unchanged |
+| 24 | The device cards are rebuilt on every visit (`:76-117`) and after Add Standard Contract (`Refresh(DeviceTypesInProjects)`, `:3327-3407`) | 5-minute cache, not refreshed by the import | `useOpexDeviceTypes` re-reads on every visit; Add Standard Contract invalidates it |
+| 7 | `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'` in the unconditional Patch (`:8794`) | Written on create only | Bound on every save |
+
+**No new divergence:** every row now follows the Canvas. For #1, keyboard users close the panel by tabbing to ✕ or Cancel, as on the Canvas.
+**Not changed:** the other open items of the 17 Nov list (#2, #4, #8, #10-#12, #14-#18, #20, #22, #25, #26 and the UI items) — see the recommendations; #12 (D118) is not on this branch.
+**Tests:** UT-SETPANEL-025, UT-OPEX-135…138, UT-BOOK-077, UT-PWRITE-049, UT-OPEXLOAD-001…004, UT-OPEXUI-055…061; UT-BOOK-021 and UT-PWRITE-022 now expect a blank to read back as null.
+**Needs a live check:** Esc / backdrop on the OPEX panel; Add Period → Cancel; a new cost type whose Start Date moves to another year; an Italian project Edit; a second visit to O&M / Other OPEX (no loader, fresh rows); a generator added on the Generators screen showing on O&M.
+
+
+## D124 — Contracts, Add / Edit Development Contract: the opened DevCo account rows laid out as the Canvas (17 Nov 2026)
+
+**Status:** uncommitted (working tree, branch `fixes`), not on DEV.
+**Report:** "want same as canvas opening area checkbox alignment" (Edit Development Contract, an opened `10001 Development Expenses`, code app beside Canvas).
+**Canvas** (`gal_Contracts_RightPanel_NewEdit_Costs`, Contracts Screen Y:6294-6528): the leaf gallery is inset `X: =10` on both sides; each 30-high row has the name at `X: =40` (`lbl_Contracts_List_Card_Body_PaymentTargetsHeader_Name.X`), `Width: =Parent.Width/2`, 8 pt (`ExtraExtraSmall`), padding 6, no wrap; the 120-wide right-aligned 8 pt total right after it; the 32-wide checkbox at `Parent.Width-Self.Width-30`, its box under the header's checkbox; and, on a leaf another contract uses, `rec_…_CostssRow_Used`: a 20 x 20 square, 1 px `gblAppColors.Warning` border and a 12 % Warning fill, over the checked read-only box, with the "Used in contract" tooltip. The used leaf's caption is not greyed.
+**Code app before:** 14 px names from X 28 that ran to the total and were cut off with "…"; the total 22 px left of a checkbox column 15 px left of the header's (the browser scrollbar took the rest); a used leaf drawn as a native grey checkbox (its orange `accent-color` does not show on a disabled box) with a grey caption; no cost row showed "0".
+**Now:** `canvas.css` (D124 comments) places the name, total and checkbox as above, the list keeps a reserved 10 px canvas scrollbar (`canvasScrollbar`, shared with Land Lease / OPEX) so the column does not move when a group scrolls, and draws the orange square (`rec_Contracts_RightPanel_NewEdit_CostssRow_Used-<id>`, with the tooltip). The total is `devCoLeafTotalText`: **"-" when the account has no DevCo cost row**, as the canvas `Coalesce(Text(Sum(…)), "-")` shows it (the canvas `Sum` of an empty table is Blank — CONTR-058's reading that the dash is never reached was wrong); "0" when the rows add up to 0.
+**Not changed (recorded product decision CONTR-057):** inactive CAPEX accounts stay hidden from the picker (`listCapexAccounts` keeps `statecode eq 0`); the canvas lists all states. That is most likely why "81005_0 Land Survey / Land Measurement" (used by another contract, "-") shows on the Canvas and not in the code app — not checked against the data.
+**Tests:** UT-CONCHECK-004 (now with the inset and the gutter), UT-CONCHECK-006, UT-CONTR-009 (the dash), UT-CONPANEL-011, UT-CONPANEL-012. jsdom has no layout, so the positions need a look beside the Canvas.
+
+## D125 — Finance: the `drp_` dropdowns open the canvas list (17 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** "dropdown hover color is not same for Start Repayments month and year, KfW Tranche, Tenor, Commitment Fee period month and year".
+**Canvas:** every `drp_` / `Drp_` dropdown of the Finance panels is a `DropDown@0.0.45` with no list styling (it has no Selection / Hover properties): it opens the canvas list, no check-mark and one square row white on #1967d2 (the selected one, until the pointer or the keys move to another). The `cmb_` controls are `ComboBox@0.0.51` and open Fluent's list.
+**Code app before:** Finance draws its own dropdown (`SelectChoice`), which had Fluent's list on every control: a grey hover, a check-mark and a rounded black ring. The other PM screens' `ChoiceField` already drew the canvas list.
+**Now:** `ChoiceField` exports its list style (`useCanvasListStyles`) and `SelectChoice` puts it on every non-combo dropdown: Senior Debt KfW-Tranche (Y:9562), Tenor YY / MM, Start Repayment YY / MM, Frequency of Repayment, Commitment Fee Free Period YY / MM, Fixed Interest Rate YY / MM, the Step-Up year, and DSRA / DSRF Base Rate (Y:16062). The five `cmb_` combos (VAT Base Rate, Bank, Duration of Saving, the two DSRA durations) keep Fluent's list, and their standard-value list colour.
+**Tests:** UT-FIN-924.
+
+## D126 — Contracts: the Payment Targets bar icons are blue (17 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** "icon color should be blue, it is part of contract screen" (Payment Targets: Add Period, Edit, Delete).
+**Canvas:** `pcf_Contracts_List_Card_Body_PaymentTargets_CommandBar` (Contracts Screen Y:1398) is a `cat_PowerCAT.CommandBar` with `Theme: =gblAppThemeJson`, the same control as the screen bar `cmd_Contracts_CommandBar` (Y:436): an enabled command's icon is the theme blue, a disabled one's #c8c6c4.
+**Code app before:** the bar is built by hand and had only the shared row geometry (`useCommandRowStyles`), so its icons took Fluent's neutral colour; the screen bar (`CommandBar`) was already blue.
+**Now:** `CommandBar` exports its button skin (`useCommandBarStyles`) and the three period commands wear it: the blue icon, #c8c6c4 disabled, and the PowerCAT hover / pressed fills. The captions keep the colours sampled on 12 Nov 2026 (#242424, #a19f9d disabled; `canvas.css`), which outrank the skin's.
+**Tests:** UT-CONTR-152.
+
 ## D127 — Cluster Checklist screen: approvals and gates must be known before actions, failed refreshes, quiet cluster visits, stale clicks and 12 smaller fixes (17 Nov 2026)
 
 **Status:** implemented on the local sub-branch `sub/cluster-checklist-analysis` (from `master` at `c1a292d`), **NOT product-approved, not run against DEV**. Type: ANALYSIS then BUG/OPTIMIZE/ACCESSIBILITY (product owner: "in depth testing on the functional and non functional aspect ... on the Cluster Checklist screen", then "proceed for fixing these issues"). The screen need not translate the canvas YAML literally; its utility, function, non-functional quality and UI must be the same or better. Tests: UT-CHKLST-083..107 and 923..944, UT-CHKHOOK-001..017, UT-CHKDATA-001..016.
@@ -7742,4 +7795,4 @@ The cancel flow was called with `appId ?? ""` after the tracking had already bee
 
 ### 11. Verification
 
-`npm run verify` on the sub-branch worktree (17 Nov 2026, on top of `c1a292d`, run alone with no other test run active): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning in a touched file, the control-label and canvas-identity gates clean, **290 test files, 6,304 tests passed, 3 todo**, build OK. **Not run:** `knip` at this commit, the E2E parity suite, any check on DEV or in a browser (focus rings and the localised date were not seen), and the two checklist approval flows (D81) against live Dataverse.
+`npm run verify` on the sub-branch worktree (17 Nov 2026, on top of `c1a292d`, run alone with no other test run active): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning in a touched file, the control-label and canvas-identity gates clean, **290 test files, 6,304 tests passed, 3 todo**, build OK. After `master` gained decisions D123 to D126 (OPEX, Contracts, Finance, Production and Generators UI fixes from the `fixes` and `tanyadev` branches), this decision was renumbered from D123 to D127 and `master` (`55d51e5`) was merged into `RounakDev1`; the full gate on the merged tree: exit 0, **291 test files, 6,338 tests passed, 3 todo**, build OK, `check:power` 96/0. **Not run:** the E2E parity suite, any check on DEV or in a browser (focus rings and the localised date were not seen), and the two checklist approval flows (D81) against live Dataverse. The merged tree is not deployed to DEV (DEV holds `2e18043`).

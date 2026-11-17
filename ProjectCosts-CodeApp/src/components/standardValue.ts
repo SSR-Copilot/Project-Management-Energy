@@ -51,6 +51,17 @@ export const useStandardValueStyles = makeStyles({
 });
 
 /**
+ * The OPEN LIST of a canvas `ComboBox@0.0.51` (`cmb_…`) carrying the pair: its `FontColor` /
+ * `FontItalic` style every option too, not just the box (Finance Decommissioning "Duration of
+ * Saving", canvas screenshot 17 Nov 2026). Fluent renders the listbox in a portal, outside the
+ * field root, so it needs its own class on the `listbox` slot. `.x .fui-Option` (0,2,0) beats the
+ * option's own colour (0,1,0).
+ */
+export const useStandardListboxStyles = makeStyles({
+  standard: { "& .fui-Option": both },
+});
+
+/**
  * The `standard` prop the shared field primitives take: `true` = the full pair, a variant name =
  * that half only, `false`/absent = normal.
  */

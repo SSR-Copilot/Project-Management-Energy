@@ -5,7 +5,9 @@
  * rules are covered by `rules.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { useStandardListboxStyles, useStandardValueStyles } from "@/components/standardValue";
+import { useCanvasListStyles } from "@/components/ChoiceField";
 import { FluentProvider } from "@fluentui/react-components";
 import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
@@ -13,7 +15,7 @@ import { CHOICE_FINANCE } from "@/data/dataverseNames";
 import type { PlanJob } from "@/data/usePlanWrite";
 import type { WritePlan } from "@/data/writePlan";
 import {
-  FINANCE_SCREEN_TEXT, FIN_LABEL, INPUT_COL, MSG, SPINNER,
+  DEFAULT_DECOMMISSIONING_FLAGS, DEFAULT_DSRA_FLAGS, DEFAULT_VAT_FLAGS, FINANCE_SCREEN_TEXT, FIN_LABEL, INPUT_COL, MSG, SPINNER,
   type FinanceProject, type FinancingCategory, type FinancingInputRow,
 } from "./rules";
 
@@ -272,6 +274,122 @@ describe("UT-FIN Screen (connected)", () => {
     expect(data.vsb_isstandardvalue).toBe('[{"locIsStandardFreeEquity":false,"locIsStandardShareholderLoan":false}]');
   });
 
+  it("UT-FIN-906a a Fixed Value above the Total CAPEX shows the canvas message under the box and keeps Save off", async () => {
+    renderScreen();
+    unfold("c1");
+    fireEvent.click(within(card("c1")).getByRole("button", { name: "Edit Equity" }));
+    await screen.findByTestId("txt_EquityData_FreeEquityEUR");
+    fireEvent.click(within(screen.getByTestId("rad_EquityData_FreeEquity")).getByRole("radio", { name: "Fixed Value" }));
+    const field = screen.getByTestId("txt_EquityData_FreeEquityEUR");
+    // `useTotalDevexCapex` is mocked at 1000.
+    fireEvent.change(field, { target: { value: "2000" } });
+    expect(await screen.findByText(MSG.freeEquityAboveCapex)).toBeTruthy();
+    expect((screen.getByTestId("pcf_btn_GeneralData_RightPanel_Equity_Form_Buttons_Save") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "1000" } });
+    await waitFor(() => expect(screen.queryByText(MSG.freeEquityAboveCapex)).toBeNull());
+  });
+
+  it("UT-FIN-906b a standard `cmb_` combo is blue italic in its box AND its open list (DSRA, Decommissioning, VAT)", async () => {
+    // The shared classes (Griffel atomic names, `f…`): the box's on the Dropdown root, the list's on the listbox.
+    const atomic = (cls: string) => cls.split(" ").filter((c) => /^f/.test(c));
+    const box = atomic(renderHook(() => useStandardValueStyles()).result.current.standard);
+    const list = atomic(renderHook(() => useStandardListboxStyles()).result.current.standard);
+    const has = (el: Element, classes: string[]) => classes.every((c) => el.classList.contains(c));
+    // `data-testid` lands on the Dropdown's button; the className on its root, the button's parent.
+    const boxIsStandard = (testId: string) => has(screen.getByTestId(testId).parentElement!, box);
+    const listIsStandard = async (testId: string) => {
+      fireEvent.click(screen.getByTestId(testId));
+      const open = await screen.findByRole("listbox");
+      const result = has(open, list);
+      fireEvent.keyDown(screen.getByTestId(testId), { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+      return result;
+    };
+    const allTrue = (flags: object) => JSON.stringify([Object.fromEntries(Object.keys(flags).map((k) => [k, true]))]);
+    state.inputs = inputs.map((r) => r.id === "dsra"
+      ? { ...r, raw: { ...r.raw, [INPUT_COL.dsraStandardAssumptionsJson]: allTrue(DEFAULT_DSRA_FLAGS), [INPUT_COL.durationOfFutureDebtServiceMmyy]: "0001" } }
+      : r.id === "dec" ? { ...r, raw: { ...r.raw, [INPUT_COL.decommissioningStandardAssumptionJson]: allTrue(DEFAULT_DECOMMISSIONING_FLAGS) } }
+        : r.id === "vat" ? { ...r, raw: { ...r.raw, [INPUT_COL.isStandardValue]: allTrue(DEFAULT_VAT_FLAGS) } } : r);
+    const { unmount } = renderScreen();
+
+    // DSRA: Duration of Future Debt Service (`FontColor` / `FontItalic`, Y:16534-16588); Base Rate has none.
+    unfold("c4");
+    fireEvent.click(screen.getByTestId("con_DSRA_DSRF_Data_Edit"));
+    const durYY = "cmb_DSRA_DRSFData_Duration_of_furture_debt_service_YY";
+    await screen.findByTestId(durYY);
+    expect([boxIsStandard(durYY), boxIsStandard("cmb_DSRA_DRSFData_Duration_of_furture_debt_service_MM")]).toEqual([true, true]);
+    expect(await listIsStandard(durYY)).toBe(true);
+    expect(boxIsStandard("drp_DSRA_DRSFData_Base_Rate")).toBe(false);
+    expect(await listIsStandard("drp_DSRA_DRSFData_Base_Rate")).toBe(false);
+    // A pick clears the flag (`OnChange: …locIsStandardDurationoffuturedebtservice: false`): box and list go plain.
+    fireEvent.click(screen.getByTestId(durYY));
+    fireEvent.click(await screen.findByRole("option", { name: "2 years" }));
+    await waitFor(() => expect(boxIsStandard(durYY)).toBe(false));
+    expect(await listIsStandard(durYY)).toBe(false);
+    unmount();
+
+    // Decommissioning: Duration of Saving (Y:14913-14949).
+    renderScreen();
+    unfold("c5");
+    fireEvent.click(within(card("c5")).getByRole("button", { name: "Edit Decommissioning Costs" }));
+    const savYY = "cmb_DecommissioningData_Duration_of_Saving_YY_1";
+    await screen.findByTestId(savYY);
+    expect([boxIsStandard(savYY), boxIsStandard("cmb_DecommissioningData_Duration_of_Saving_MM_1")]).toEqual([true, true]);
+    expect(await listIsStandard("cmb_DecommissioningData_Duration_of_Saving_MM_1")).toBe(true);
+  });
+
+  it("UT-FIN-906c VAT-Financing: a standard Base Rate is blue italic in its box and its open list (Y:8250-8251)", async () => {
+    const atomic = (cls: string) => cls.split(" ").filter((c) => /^f/.test(c));
+    const box = atomic(renderHook(() => useStandardValueStyles()).result.current.standard);
+    const list = atomic(renderHook(() => useStandardListboxStyles()).result.current.standard);
+    state.inputs = inputs.map((r) => r.id === "vat"
+      ? { ...r, raw: { ...r.raw, [INPUT_COL.isStandardValue]: '[{"locIsStandardBaseRate":true,"locIsStandardBankMargin":true}]' } } : r);
+    renderScreen();
+    unfold("c2");
+    // Order 2's command reads "Edit Tranche" (`Switch(Order, 1, "Equity", 2, "Tranche", Name)`), as its panel title.
+    fireEvent.click(within(card("c2")).getByRole("button", { name: "Edit Tranche" }));
+    const baseRate = await screen.findByTestId("cmb_VATFinancingData_BaseRate");
+    expect(box.every((c) => baseRate.parentElement!.classList.contains(c))).toBe(true);
+    fireEvent.click(baseRate);
+    const open = await screen.findByRole("listbox");
+    expect(list.every((c) => open.classList.contains(c))).toBe(true);
+  });
+
+  it("UT-FIN-924 a `drp_` dropdown (DropDown@0.0.45) opens the canvas list, as ChoiceField; a `cmb_` combo keeps Fluent's", async () => {
+    // The shared class (Griffel atomic names, `f…`) the other PM screens' dropdowns put on their listbox.
+    const atomic = (cls: string) => cls.split(" ").filter((c) => /^f/.test(c));
+    const canvas = atomic(renderHook(() => useCanvasListStyles()).result.current.canvasList);
+    expect(canvas.length).toBeGreaterThan(0);
+    const opensCanvasList = async (testId: string) => {
+      fireEvent.click(screen.getByTestId(testId));
+      const open = await screen.findByRole("listbox");
+      const result = canvas.every((c) => open.classList.contains(c));
+      fireEvent.keyDown(screen.getByTestId(testId), { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+      return result;
+    };
+    const { unmount } = renderScreen();
+    unfold("c3");
+    fireEvent.click(screen.getByTestId("command-AddFinanceInput"));
+    fireEvent.click(await screen.findByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.termSheet}`));
+    for (const id of [
+      "Drp_SeniorDebtData_Tenor_YY", "drp_SeniorDebtData_Tenor_MM",
+      "Drp_SeniorDebtData_StartRepayment_YY", "Drp_SeniorDebtData_StartRepayment_MM",
+      "Drp_SeniorDebtData_Commitment_Fee_Free_Period_YY", "Drp_SeniorDebtData_Commitment_Fee_Free_Period_MM",
+      "drp_SeniorDebt_Data_Frequency_Of_Repayment",
+    ]) {
+      expect([id, await opensCanvasList(id)]).toEqual([id, true]);
+    }
+    unmount();
+
+    renderScreen();
+    unfold("c4");
+    fireEvent.click(screen.getByTestId("con_DSRA_DSRF_Data_Edit"));
+    await screen.findByTestId("drp_DSRA_DRSFData_Base_Rate");
+    expect(await opensCanvasList("drp_DSRA_DRSFData_Base_Rate")).toBe(true);
+    expect(await opensCanvasList("cmb_DSRA_DRSFData_Duration_of_furture_debt_service_YY")).toBe(false);
+  });
+
   it("UT-FIN-920 the narrow panels carry the canvas layout hooks: rows, 245-px boxes, Reload icons beside the box (D110)", async () => {
     renderScreen();
     unfold("c1");
@@ -352,18 +470,69 @@ describe("UT-FIN Screen (connected)", () => {
     renderScreen();
     unfold("c3");
     fireEvent.click(screen.getByTestId("command-AddFinanceInput"));
-    // Standard Assumption: Drawdown is `DisplayMode.View` — not greyed, not changeable.
+    // Standard Assumption: Drawdown, Energy Yield, Spot Curve, Gearing and Repayment Profile are `DisplayMode.View`
+    // — not changeable, and drawn GREY like the Disabled radios, as the live canvas draws them (17 Nov 2026).
     const pro = (await screen.findByTestId(`rad_SeniorDebt_Data_Drawdown-${CHOICE_FINANCE.drawdown.proRata}`)) as HTMLInputElement;
     const wasChecked = pro.checked;
     fireEvent.click(pro);
     expect(pro.checked).toBe(wasChecked);
-    expect(pro.disabled).toBe(false);
+    for (const group of ["rad_SeniorDebt_Data_Drawdown", "rad_SeniorDebt_Data_EnergyYield", "rad_SeniorDebt_Data_SpotCurve",
+      "rad_SeniorDebtData_Gearing", "rad_SeniorDebt_Data_RepaymentProfile"]) {
+      const fieldset = screen.getByTestId(group) as HTMLFieldSetElement;
+      expect(fieldset.getAttribute("aria-readonly")).toBe("true");
+      expect([...fieldset.querySelectorAll("input")].every((i) => i.disabled)).toBe(true);
+    }
     fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.termSheet}`));
+    // Term Sheet: the same groups are `DisplayMode.Edit` again — black and changeable.
+    expect(pro.disabled).toBe(false);
+    expect(screen.getByTestId("rad_SeniorDebt_Data_Drawdown").getAttribute("aria-readonly")).toBeNull();
     fireEvent.click(screen.getByTestId(`rad_SeniorDebtData_Gearing-${CHOICE_FINANCE.gearing.fixedAmount}`));
     expect(screen.getByTestId("rad_SeniorDebt_Fixed_Amount_Options")).toBeTruthy();
     expect(screen.queryByTestId("txt_SeniorDebtData_FixedAmountValue")).toBeNull();
     fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Fixed_Amount_Options-${CHOICE_FINANCE.fixedAmount.fixedValue}`));
     expect(screen.getByTestId("txt_SeniorDebtData_FixedAmountValue")).toBeTruthy();
+  });
+
+  it("UT-FIN-913a Add / Remove Step-Up Period show with the toggle off, on every status, disabled; Add sits above Remove (Y:13132-13291)", async () => {
+    renderScreen();
+    unfold("c3");
+    fireEvent.click(screen.getByTestId("command-AddFinanceInput"));
+    const add = () => screen.getByTestId("btn_SeniorDebt_BankMargin_Add_StepUp_Period_1") as HTMLButtonElement;
+    const remove = () => screen.getByTestId("btn_SeniorDebt_BankMargin_Remove_StepUp_LastPeriod") as HTMLButtonElement;
+    await screen.findByTestId("btn_SeniorDebt_BankMargin_Add_StepUp_Period_1");
+    for (const status of [CHOICE_FINANCE.trancheStatus.standardAssumption, CHOICE_FINANCE.trancheStatus.termSheet]) {
+      if (status !== CHOICE_FINANCE.trancheStatus.standardAssumption) {
+        fireEvent.click(screen.getByTestId(`rad_SeniorDebt_Data_TrancheStatus-${status}`));
+      }
+      expect((screen.getByTestId("tgl_SeniorDebtData_Step_Up_Bank_Margin") as HTMLInputElement).checked).toBe(false);
+      expect([add().disabled, remove().disabled]).toEqual([true, true]);
+      expect(add().compareDocumentPosition(remove()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // The duration warning needs the toggle on (`… && tgl_SeniorDebtData_Step_Up_Bank_Margin.Checked`).
+      expect(screen.queryByText(MSG.stepUpDuration)).toBeNull();
+    }
+  });
+
+  it("UT-FIN-913b a step-up row is the canvas row: `*` on the year caption, Margin not required, its message under the row (Y:12986-13131)", async () => {
+    renderScreen();
+    unfold("c3");
+    fireEvent.click(screen.getByTestId("command-AddFinanceInput"));
+    fireEvent.click(await screen.findByTestId(`rad_SeniorDebt_Data_TrancheStatus-${CHOICE_FINANCE.trancheStatus.termSheet}`));
+    await pick("drp_SeniorDebtData_Fixed_Interest_Rate_YY", "4 years");
+    await pick("drp_SeniorDebtData_Fixed_Interest_Rate_MM", "0 month");
+    fireEvent.click(screen.getByTestId("tgl_SeniorDebtData_Step_Up_Bank_Margin"));
+    const row = await screen.findByTestId("con_SeniorDebtData_StepUp_Bank_Margin");
+    expect(within(row).getByText("Year 1 to")).toBeTruthy();
+    expect(within(row).getByText("*")).toBeTruthy();
+    const margin = within(row).getByTestId("txt_SeniorDebtData_StepUp_Bank_Margin_Percentage");
+    const marginField = margin.closest(".fui-Field")!;
+    expect(marginField.querySelector(".fui-Label__required")).toBeNull();
+    // A new row is not valid yet: the one-line message sits in the row, not under the Margin box.
+    expect(within(row).getByText(MSG.stepUpMargin)).toBeTruthy();
+    expect(marginField.textContent).not.toContain(MSG.stepUpMargin);
+    // The row covers 1 year of the 4-year FIR: the orange duration warning shows under the buttons.
+    expect(screen.getByText(MSG.stepUpDuration)).toBeTruthy();
+    fireEvent.change(margin, { target: { value: "1.25" } });
+    await waitFor(() => expect(within(row).queryByText(MSG.stepUpMargin)).toBeNull());
   });
 });
 

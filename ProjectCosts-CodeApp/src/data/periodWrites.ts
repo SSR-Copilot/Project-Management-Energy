@@ -442,6 +442,11 @@ export async function saveOpexPeriod(
     ...(target.deviceTypeInProjectId
       ? { "vsb_DeviceTypeInProject@odata.bind": bind("vsb_devicetypesinprojects", target.deviceTypeInProjectId) }
       : {}),
+    // `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'` is in the same unconditional
+    // Patch (`:8794`), so an Edit re-binds it too and a cost follows its project's business unit (D123; it was
+    // written on create only).
+    ...(ctx.owningBusinessUnitId
+      ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
   };
 
   let savedId = period.id;
@@ -458,8 +463,6 @@ export async function saveOpexPeriod(
         ...(period.parentId
           ? { "vsb_ParentCost@odata.bind": bind("vsb_opexprojectcosts", period.parentId) }
           : {}),
-        ...(ctx.owningBusinessUnitId
-          ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),
       } as never),
       "create OPEX period",
     );
@@ -1167,7 +1170,7 @@ async function addOpexStandardContract(
         : x.order - y.order);
       const previous = periodNo === 1 || sorted.length === 0
         ? heads[0] : sorted[sorted.length - 1]?.period;
-      if (previous) startDate = addMonths(previous.startDate, previous.years * 12 + previous.months);
+      if (previous) startDate = addMonths(previous.startDate, (previous.years ?? 0) * 12 + (previous.months ?? 0));
     }
 
     const rawDescription = a.vsb_description ?? "";
@@ -1325,7 +1328,7 @@ async function addLandLeaseStandardContract(
   for (const [i, a] of assumptions.slice(0, LAND_LEASE_PERIOD_CHOICE.length).entries()) {
     const previous = out[out.length - 1];
     if (previous) {
-      startDate = addMonths(previous.startDate, previous.years * 12 + previous.months);
+      startDate = addMonths(previous.startDate, (previous.years ?? 0) * 12 + (previous.months ?? 0));
     }
     const period: CostPeriod = {
       id: "",
