@@ -90,17 +90,22 @@ const useStyles = makeStyles({
     "& input": { textAlign: "right" },
   },
   // `gal_Production_Items`: TemplatePadding 0, so the cards touch; each is `Parent.Width - 10` wide.
-  list: { display: "flex", flexDirection: "column", minWidth: 0, paddingTop: "20px" },
-  card: { width: "calc(100% - 10px)", backgroundColor: palette.white },
-  /** An expanded record is a raised card on the live screen (DropShadow, 4 px radius). */
-  cardOpen: {
-    borderRadius: "4px", marginTop: "4px", marginBottom: "8px",
-    boxShadow: "0 1.6px 3.6px rgba(0, 0, 0, 0.13), 0 0.3px 0.9px rgba(0, 0, 0, 0.11)",
+  // 10 px above the first card, not 20: the canvas card header sits 10 px higher (canvas pair, 17 Nov 2026).
+  list: { display: "flex", flexDirection: "column", minWidth: 0, paddingTop: "10px" },
+  /** Every record is a raised card on the live screen (DropShadow, 4 px radius) — folded too (canvas pair, 17 Nov 2026). */
+  card: {
+    width: "calc(100% - 10px)", backgroundColor: palette.white, borderRadius: "4px",
+    // Below and to the right only: the canvas card has no line above its header (canvas pair, 17 Nov 2026).
+    boxShadow: "0 2px 3px -1px rgba(0, 0, 0, 0.18), 1px 0 2px -1px rgba(0, 0, 0, 0.12)",
   },
+  cardOpen: { marginTop: "4px", marginBottom: "8px" },
   // `con_Production_CardHeader`: 42 high, Fill #fdffff, a 1 px Grayscale20 bottom line (`shp_Production_BottomLine`).
   cardHeader: {
     display: "flex", alignItems: "center", height: "42px", backgroundColor: "#fdffff",
     borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: palette.Grayscale20,
+    // `btn_Production_CardHeader_TransparentButton.HoverFill: ColorValue("#E3E3E322")` — the button fills the
+    // header, so the whole header takes the faint grey while the pointer is on it.
+    ":hover": { backgroundImage: "linear-gradient(#E3E3E322, #E3E3E322)" },
   },
   // `btn_Production_CardHeader_TransparentButton` fills the header; the radio image sits at X = 10
   // (18 px) and the label at X = 36, `gblAppSizes.Font.Medium` (11 pt).
@@ -109,6 +114,14 @@ const useStyles = makeStyles({
     justifyContent: "flex-start", paddingLeft: "10px", paddingRight: 0, fontWeight: tokens.fontWeightRegular,
     // The selection radio is the theme blue (Fluent Radio), as on the live screen.
     "& svg": { fontSize: "18px", color: palette.themePrimary },
+    // The canvas transparent button never recolours the label or draws a focus box (canvas pair,
+    // 17 Nov 2026): Fluent turned the text brand blue on hover / press and boxed the header after a click.
+    color: tokens.colorNeutralForeground1,
+    ":hover": { color: tokens.colorNeutralForeground1 },
+    ":hover:active": { color: tokens.colorNeutralForeground1 },
+    ":focus": { outlineStyle: "none" },
+    ":focus-visible": { outlineStyle: "none" },
+    "&[data-fui-focus-visible]": { outlineStyle: "none", borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent" },
   },
   cardLabel: {
     flexGrow: 1, minWidth: 0, textAlign: "left", fontSize: "14.67px",
@@ -142,7 +155,12 @@ const useStyles = makeStyles({
     borderTopColor: palette.Green, borderRightColor: palette.Green, borderBottomColor: palette.Green, borderLeftColor: palette.Green,
   },
   // `ico_Production_CardHeader_Down` / `_Up`: 40 x 30 at the right edge.
-  fold: { flex: "0 0 40px", minWidth: "40px", height: "30px" },
+  // No focus box after a click: the canvas chevron icon draws none (canvas pair, 17 Nov 2026).
+  fold: {
+    flex: "0 0 40px", minWidth: "40px", height: "30px",
+    ":focus": { outlineStyle: "none" }, ":focus-visible": { outlineStyle: "none" },
+    "&[data-fui-focus-visible]": { outlineStyle: "none", borderTopColor: "transparent", borderRightColor: "transparent", borderBottomColor: "transparent", borderLeftColor: "transparent" },
+  },
   // `con_ProductionDeatils_VerticalMain` (PaddingLeft 20, PaddingTop 10) holding
   // `con_ProductionDetails_VerticalAdjust`: a wrapping row of four 260-wide vertical columns.
   details: { display: "flex", flexWrap: "wrap", alignItems: "flex-start", paddingLeft: "20px", paddingTop: "10px", paddingBottom: "10px" },
@@ -581,7 +599,8 @@ export default function ProductionScreen() {
                   onChange={(v) => set("windSpeed", v)} testId="txt_ProductionDataWTG_WindSpeed" ariaLabel="txt_ProductionDataWTG_WindSpeed" />
                 {/* `rad_ProductionDataWTG_Allocation` — always `DisplayMode.View`, Whole plant (Y:3031). */}
                 <Choices label="" name="rad_ProductionDataWTG_Allocation" value="Whole plant"
-                  options={["Whole plant", "Each turbine"]} disabled onChange={() => undefined} />
+                  // `Items: Choices('Yield Allocation')` — the choice order: Each turbine, then Whole plant (canvas pair, 17 Nov 2026).
+                  options={["Each turbine", "Whole plant"]} disabled onChange={() => undefined} />
               </>
             ) : (
               <>
