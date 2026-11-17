@@ -431,6 +431,8 @@ describe("Project Rights panel (CONTR-056/079/090/091)", () => {
     select("c-2");
     fireEvent.click(byId("command-editContarct"));
     const total = await screen.findByTestId("txt_Contracts_RightPanel_NewEdit_RightsContract_Content_TotalCosts");
+    // The canvas 78 / 84 / 80-high field containers of canvas.css `.contract-rights-panel` (17 Nov 2026).
+    expect(total.closest(".canvas-panel")?.classList.contains("contract-rights-panel")).toBe(true);
     fireEvent.change(total, { target: { value: "7000" } });
     fireEvent.click(byId("panel-save"));
     await waitFor(() => expect(data().saveContract).toHaveBeenCalledTimes(1));
