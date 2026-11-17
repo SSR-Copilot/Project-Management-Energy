@@ -41,6 +41,22 @@ const useStyles = makeStyles({
    */
   dropdown: { minWidth: "0px", width: "100%" },
   /*
+   * A disabled canvas modern dropdown is NOT the filled grey box (canvas pair, Development Type,
+   * 17 Nov 2026): white, a 1-px light-grey outline all round, the text and chevron greyed. That is
+   * Fluent's own disabled look, which the shared skin's `disabled` (filled, no border) replaced.
+   */
+  disabledOutline: {
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderTopWidth: "1px", borderRightWidth: "1px", borderBottomWidth: "1px", borderLeftWidth: "1px",
+    borderTopStyle: "solid", borderRightStyle: "solid", borderBottomStyle: "solid", borderLeftStyle: "solid",
+    borderTopColor: tokens.colorNeutralStrokeDisabled, borderRightColor: tokens.colorNeutralStrokeDisabled,
+    borderBottomColor: tokens.colorNeutralStrokeDisabled, borderLeftColor: tokens.colorNeutralStrokeDisabled,
+    ":hover": {
+      borderTopColor: tokens.colorNeutralStrokeDisabled, borderRightColor: tokens.colorNeutralStrokeDisabled,
+      borderBottomColor: tokens.colorNeutralStrokeDisabled, borderLeftColor: tokens.colorNeutralStrokeDisabled,
+    },
+  },
+  /*
    * The button is a CSS grid (text, chevron), and its text a bare grid item that overflowed under the
    * chevron; wrapped in this span it is clipped at the chevron's column — plainly, with no "…", as the
    * canvas modern dropdown clips it ("Operating company with infrastruc", General Data, 3 Nov 2026).
@@ -54,16 +70,29 @@ const useStyles = makeStyles({
    * brand underline while focused) stay Fluent's: the canvas draws them so, open, closed or after a pick.
    */
   canvasList: {
-    padding: 0, rowGap: 0,
-    "& .fui-Option": { borderRadius: 0, paddingLeft: "12px", paddingRight: "12px" },
+    /*
+     * The browser's select frame (canvas pairs, SPV Legal Structure / Project Type, 17 Nov 2026):
+     * square, a 1-px #757575 border, no shadow, the box's #f5f5f5 behind the rows (30 px tall),
+     * flush under the box. The list is at least the box's width and grows to its longest option,
+     * so "Operating company with infrastructure" stays on one line (the style's
+     * `width: max-content` replaces Fluent's match-the-target width; this keeps it as a minimum).
+     */
+    padding: 0, rowGap: 0, borderRadius: 0, boxShadow: "none",
+    border: "1px solid #757575", backgroundColor: "#f5f5f5",
+    minWidth: "var(--fui-match-target-size)",
+    "& .fui-Option": {
+      borderRadius: 0, paddingLeft: "12px", paddingRight: "12px", minHeight: "30px",
+      whiteSpace: "nowrap",
+    },
     "& .fui-Option__checkIcon": { display: "none" },
     "& .fui-Option[aria-selected=\"true\"], & .fui-Option:hover, & .fui-Option[data-activedescendant-focusvisible]": {
       backgroundColor: CANVAS_LIST_HIGHLIGHT, color: palette.white,
     },
     "&:hover .fui-Option[aria-selected=\"true\"]:not(:hover):not([data-activedescendant-focusvisible])": notHighlighted,
     "&:has([data-activedescendant-focusvisible]) .fui-Option[aria-selected=\"true\"]:not([data-activedescendant-focusvisible]):not(:hover)": notHighlighted,
-    // Keyboard focus: the canvas list has no ring, so Fluent's 2-px ring stays, drawn inside the square row.
-    "& .fui-Option[data-activedescendant-focusvisible]::after": { top: 0, right: 0, bottom: 0, left: 0, borderRadius: 0 },
+    // The canvas list draws no ring round the highlighted row (Fluent drew a black one on open);
+    // the row's fill already marks the keyboard position.
+    "& .fui-Option::after": { display: "none" },
     // High contrast drops the fill, so there the selected row gets its check-mark back.
     "@media (forced-colors: active)": { "& .fui-Option__checkIcon": { display: "block" } },
   },
@@ -127,14 +156,17 @@ export function ChoiceField({
     >
       <Dropdown
         appearance={FIELD_APPEARANCE}
-        className={mergeClasses(s.dropdown, controlClass(mode, standardClass(standard)))}
+        className={mergeClasses(s.dropdown, controlClass(mode, standardClass(standard)), mode === "disabled" && s.disabledOutline)}
         aria-label={ariaLabel ?? label}
         aria-readonly={view || undefined}
         data-testid={testId}
         disabled={disabled}
         placeholder={placeholder}
         multiselect={multiselect}
-        listbox={{ className: listboxClassName ?? (multiselect ? undefined : s.canvasList) }}
+        listbox={listboxClassName || multiselect
+          ? { className: listboxClassName }
+          : { className: s.canvasList, style: { width: "max-content" } }}
+        positioning={{ position: "below", align: "start", offset: 0 }}
         {...(view ? { open: false, expandIcon: null } : {})}
         button={{ children: <span className={s.valueText}>{text || placeholder}</span> }}
         value={text}
