@@ -9,19 +9,23 @@
  */
 import { useCallback, useEffect, useMemo } from "react";
 import {
-  keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient,
+  keepPreviousData, useMutation, useQuery, useQueryClient,
 } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  deleteProject, listCountries, listCountryAreas, listProjectStates, loadProjectPage,
+  deleteProject, listCountryAreas,
   loadProjectStateOrder, searchProjectManagers, type ProjectPage,
 } from "@/data/projects";
+import { startupFlags } from "@/app/startupFlags";
 import { trace } from "@/platform/telemetry";
 import { useDebouncedValue } from "@/features/shared/useDebouncedValue";
 import {
   applyFilterPatch, applyOptimisticDelete, nextSortState, parseCriteria, serialiseCriteria,
   type Criteria, type ProjectFilter, type SortState,
 } from "./rules";
+import {
+  countriesQueryOptions, projectPageKey, projectPageOptions, projectStatesQueryOptions,
+} from "./queries";
 
 /* ═════════════════════════════════════════════════════ criteria in the URL */
 
@@ -104,43 +108,10 @@ export interface ProjectPageQuery {
   pageKey: readonly unknown[];
 }
 
-/** How long a fetched page counts as fresh — for the page on screen AND the prefetched next one. */
-const PROJECT_PAGE_STALE_MS = 30 * 1000;
-
-interface ProjectPageArgs {
-  /** The filter AS REQUESTED — i.e. with the debounced keyword, never the raw one. */
-  filter: ProjectFilter;
-  sort: SortState;
-  page: number;
-  scopeFilter?: string | undefined;
-  locale?: string | undefined;
-}
-
-/**
- * The one definition of a project page's cache key.
- *
- * The query on screen and the next-page prefetch both build their key here. A prefetch whose
- * key differs by anything — the raw keyword instead of the debounced one, a `null` scope instead
- * of `""` — lands under a key no observer ever reads, and the request is wasted.
+/*
+ * `projectPageKey` / `projectPageOptions` live in `./queries.ts` since D119: the boot
+ * prefetch (`app/bootPrefetch.ts`) builds the first page's query from them too.
  */
-function projectPageKey(args: ProjectPageArgs) {
-  return [
-    "projectPage",
-    args.filter, args.sort.col, args.sort.asc, args.page, args.scopeFilter ?? "",
-  ] as const;
-}
-
-/** Key, query function and freshness together, so the prefetch cannot drift from the query. */
-function projectPageOptions(args: ProjectPageArgs) {
-  return queryOptions({
-    queryKey: projectPageKey(args),
-    queryFn: () => loadProjectPage({
-      filter: args.filter, sort: args.sort, page: args.page,
-      scopeFilter: args.scopeFilter, locale: args.locale,
-    }),
-    staleTime: PROJECT_PAGE_STALE_MS,
-  });
-}
 
 export function useProjectPage(args: {
   criteria: Criteria;
@@ -199,8 +170,18 @@ export function useProjectPage(args: {
     // A failed prefetch is not the user's error: it leaves the query in its error state, and
     // the real Next click refetches it and surfaces any failure on screen. It is still traced,
     // so a prefetch that keeps failing is not invisible.
-    qc.query(projectPageOptions({ filter, sort, page: nextPage, scopeFilter, locale }))
+    const prefetch = () => qc.query(projectPageOptions({ filter, sort, page: nextPage, scopeFilter, locale }))
       .catch((error: unknown) => trace("warning", "prefetch project page failed", { page: nextPage, error }));
+    /*
+     * D119: the prefetch waits `nextPagePrefetchDelayMs` after the page is on screen, so
+     * its two requests (about the size of the page itself) do not run beside the rest of the start-up
+     * reads. The timer is cleared when anything it was set for changes (the user navigated or
+     * filtered), so a stale page is never fetched. 0 is the old behaviour: fetch at once.
+     */
+    const delay = startupFlags.nextPagePrefetchDelayMs;
+    if (delay <= 0) { void prefetch(); return; }
+    const timer = setTimeout(() => { void prefetch(); }, delay);
+    return () => clearTimeout(timer);
   }, [qc, nextPage, filter, sort, scopeFilter, locale]);
 
   return {
@@ -214,11 +195,7 @@ export function useProjectPage(args: {
 }
 
 export function useCountries() {
-  return useQuery({
-    queryKey: ["countries"] as const,
-    queryFn: listCountries,
-    staleTime: 30 * 60 * 1000,
-  });
+  return useQuery(countriesQueryOptions());
 }
 
 /** Area is dependent on Country — the canvas filtered `CountryAreas` by the chosen country. */
@@ -232,11 +209,7 @@ export function useCountryAreas(countryId: string | null) {
 }
 
 export function useProjectStates() {
-  return useQuery({
-    queryKey: ["projectStates"] as const,
-    queryFn: listProjectStates,
-    staleTime: 30 * 60 * 1000,
-  });
+  return useQuery(projectStatesQueryOptions());
 }
 
 /** The typeahead. Debounced, and silent below two characters. */

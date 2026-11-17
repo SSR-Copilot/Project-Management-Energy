@@ -11,8 +11,9 @@
  * project — see `ProjectDocs/app-docs/01-BUGS-FOUND.md` A-2.
  */
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
+import { startupFlags } from "./startupFlags";
 import { startAppInsights } from "@/appInsights";
 import { readSession, readProjectLink, type Session } from "@/platform/powerClient";
 import { loadEnvironmentVariables, loadProject, type EnvVars } from "@/data/project";
@@ -40,22 +41,38 @@ export interface AppSession {
 
 const SessionCtx = createContext<AppSession | undefined>(undefined);
 
+/*
+ * The session, the environment variables and the deep-linked project, as query options: the
+ * provider below and the boot prefetch (`app/bootPrefetch.ts`) both build their queries here, so a
+ * prefetch lands under exactly the key the provider reads.
+ */
+export const sessionQueryOptions = () => queryOptions({
+  queryKey: qk.session,
+  queryFn: readSession,
+  // The host context does not change for the life of the page.
+  staleTime: Infinity,
+  retry: 1,
+});
+
+export const environmentVariablesQueryOptions = () => queryOptions({
+  queryKey: qk.environmentVariables,
+  queryFn: loadEnvironmentVariables,
+  staleTime: 15 * 60 * 1000,
+});
+
+export const sessionProjectQueryOptions = (projectId: string) => queryOptions({
+  queryKey: qk.project(projectId),
+  // React Query reserves undefined for an absent query result; use null for not found.
+  queryFn: async () => (await loadProject(projectId)) ?? null,
+  staleTime: 5 * 60 * 1000,
+});
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
 
-  const sessionQuery = useQuery({
-    queryKey: qk.session,
-    queryFn: readSession,
-    // The host context does not change for the life of the page.
-    staleTime: Infinity,
-    retry: 1,
-  });
+  const sessionQuery = useQuery(sessionQueryOptions());
 
-  const envQuery = useQuery({
-    queryKey: qk.environmentVariables,
-    queryFn: loadEnvironmentVariables,
-    staleTime: 15 * 60 * 1000,
-  });
+  const envQuery = useQuery(environmentVariablesQueryOptions());
 
   // App Insights starts from `vsb_ApplicationInsightsConnectionString`; a failed load turns it off.
   useEffect(() => {
@@ -88,11 +105,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const projectId = needsProject && projectLink.status === "valid" ? projectLink.projectId : undefined;
 
   const projectQuery = useQuery({
-    queryKey: qk.project(projectId ?? "none"),
-    // React Query reserves undefined for an absent query result; use null for not found.
-    queryFn: async () => (await loadProject(projectId as string)) ?? null,
+    ...sessionProjectQueryOptions(projectId ?? "none"),
     enabled: Boolean(projectId) && sessionQuery.isSuccess,
-    staleTime: 5 * 60 * 1000,
   });
 
   const value = useMemo<AppSession>(() => {
@@ -111,7 +125,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }),
       loading:
         sessionQuery.isLoading ||
-        envQuery.isLoading ||
+        // D119: the environment variables no longer hold the first paint (`startupFlags`).
+        (startupFlags.envVarsBlockFirstPaint && envQuery.isLoading) ||
         (Boolean(projectId) && projectQuery.isLoading),
       // `loadProject` resolves to undefined for a project the caller cannot read, which is a
       // legitimate state and not an error.

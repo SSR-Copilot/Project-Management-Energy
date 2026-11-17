@@ -24,8 +24,9 @@ import { RolesService } from "@/generated/services/RolesService";
 import { SystemusersService } from "@/generated/services/SystemusersService";
 import { TeamsService } from "@/generated/services/TeamsService";
 import { Vsb_countriesService } from "@/generated/services/Vsb_countriesService";
+import { startupFlags } from "@/app/startupFlags";
 import { fetchAll } from "./client";
-import { chunk, eq, guid, or } from "./odata";
+import { and, chunk, eq, guid, or } from "./odata";
 
 export interface CurrentUser {
   /** `systemuser.fullname` — the canvas' `User().FullName`. */
@@ -141,6 +142,50 @@ export function languageLabel(locale: string | undefined): string | undefined {
   return `${tag}, [${short}]`;
 }
 
+/**
+ * The only role names `badgeScopeFromRoles` reads (the three flags and the two own-country roles).
+ * Every other role the user holds changes nothing the badge or the admin gate shows, so with
+ * `startupFlags.parallelUserLookups` the server returns just these instead of every role (106 rows,
+ * 46 kB in DEV). The comparison there stays exact (`===`); a server match that differs only in case
+ * is still dropped, exactly as before.
+ */
+export const BADGE_ROLE_NAMES: readonly string[] = [
+  ROLE_ALL_COUNTRIES, ROLE_APPLICATION_ADMINISTRATOR, ROLE_CONTROLLER_OWN_DATA, ...ROLE_OWN_COUNTRY,
+];
+
+/** The role query's `$filter`: the association the caller names, narrowed to the badge's roles when optimised. */
+export function badgeRolesFilter(association: string | undefined): string | undefined {
+  if (!startupFlags.parallelUserLookups) return association;
+  return and(or(...BADGE_ROLE_NAMES.map((n) => eq("name", n))), association);
+}
+
+const readUserRow = (entraObjectId: string) => fetchAll(
+  "look up the signed-in user",
+  (o) => SystemusersService.getAll(o),
+  {
+    select: ["systemuserid", "fullname", "internalemailaddress", "entityimage"],
+    filter: eq("azureactivedirectoryobjectid", entraObjectId),
+    top: 1,
+  },
+).catch(() => []);
+
+/*
+ * The badge degrades a row at a time. `aaduser` is a virtual table served from Graph: it can be
+ * slow, and it is not readable by every role. A failure there must cost the Home row only, not
+ * the name and the mail beside it — so it is caught separately rather than sharing a `try`.
+ */
+const readDirectoryEntry = (entraObjectId: string) => fetchAll(
+  "look up the signed-in user's directory entry",
+  (o) => AadusersService.getAll(o),
+  { select: ["aaduserid", "companyname"], filter: eq("id", entraObjectId), top: 1 },
+).catch(() => []);
+
+const readCountryBusinessUnits = () => fetchAll(
+  "read the country list for the user's business units",
+  (o) => Vsb_countriesService.getAll(o),
+  { select: ["vsb_name", "_vsb_businessunit_value"] },
+).catch(() => []);
+
 export async function loadCurrentUser(entraObjectId: string | undefined): Promise<CurrentUser> {
   if (!entraObjectId) {
     return {
@@ -149,27 +194,20 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
     };
   }
 
-  const users = await fetchAll(
-    "look up the signed-in user",
-    (o) => SystemusersService.getAll(o),
-    {
-      select: ["systemuserid", "fullname", "internalemailaddress", "entityimage"],
-      filter: eq("azureactivedirectoryobjectid", entraObjectId),
-      top: 1,
-    },
-  ).catch(() => []);
-
-  const row = users[0];
   /*
-   * The badge degrades a row at a time. `aaduser` is a virtual table served from Graph: it can be
-   * slow, and it is not readable by every role. A failure there must cost the Home row only, not
-   * the name and the mail beside it — so it is caught separately rather than sharing a `try`.
+   * D119. Of the five round trips this used to chain, only the roles and the teams
+   * need the user row's id. The directory entry and the country map depend on nothing, so with the
+   * switch on they start together with the user row (the chain is then user → teams → team roles,
+   * three deep instead of five). Every read still catches its own failure, so none can reject.
    */
-  const aad = await fetchAll(
-    "look up the signed-in user's directory entry",
-    (o) => AadusersService.getAll(o),
-    { select: ["aaduserid", "companyname"], filter: eq("id", entraObjectId), top: 1 },
-  ).catch(() => []);
+  const parallel = startupFlags.parallelUserLookups;
+  const userRead = readUserRow(entraObjectId);
+  const directoryRead = parallel ? readDirectoryEntry(entraObjectId) : undefined;
+  const countryRead = parallel ? readCountryBusinessUnits() : undefined;
+
+  const users = await userRead;
+  const row = users[0];
+  const aad = await (directoryRead ?? readDirectoryEntry(entraObjectId));
 
   /*
    * The user's EFFECTIVE roles — held directly, and through every team they belong to. The
@@ -182,7 +220,7 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
    */
   const userId = row?.systemuserid;
   const scope = userId
-    ? await loadBadgeScope(userId).catch(() => undefined)
+    ? await loadBadgeScope(userId, countryRead).catch(() => undefined)
     : undefined;
 
   return {
@@ -200,7 +238,10 @@ export async function loadCurrentUser(entraObjectId: string | undefined): Promis
 
 const ROLE_SELECT = ["roleid", "name", "_businessunitid_value"];
 
-async function loadBadgeScope(systemUserId: string) {
+async function loadBadgeScope(
+  systemUserId: string,
+  countryRead?: ReturnType<typeof readCountryBusinessUnits>,
+) {
   const id = guid(systemUserId);
 
   const direct = fetchAll(
@@ -208,7 +249,7 @@ async function loadBadgeScope(systemUserId: string) {
     (o) => RolesService.getAll(o),
     {
       select: ROLE_SELECT,
-      filter: `systemuserroles_association/any(o:o/systemuserid eq ${id})`,
+      filter: badgeRolesFilter(`systemuserroles_association/any(o:o/systemuserid eq ${id})`),
     },
   ).catch(() => []);
 
@@ -229,17 +270,13 @@ async function loadBadgeScope(systemUserId: string) {
         (o) => RolesService.getAll(o),
         {
           select: ROLE_SELECT,
-          filter: or(...ids.map((t) => `teamroles_association/any(o:o/teamid eq ${guid(t)})`)),
+          filter: badgeRolesFilter(or(...ids.map((t) => `teamroles_association/any(o:o/teamid eq ${guid(t)})`))),
         },
       ).catch(() => []),
     ),
   );
 
-  const countries = await fetchAll(
-    "read the country list for the user's business units",
-    (o) => Vsb_countriesService.getAll(o),
-    { select: ["vsb_name", "_vsb_businessunit_value"] },
-  ).catch(() => []);
+  const countries = await (countryRead ?? readCountryBusinessUnits());
 
   const countryByBusinessUnit = new Map<string, string>();
   for (const c of countries) {

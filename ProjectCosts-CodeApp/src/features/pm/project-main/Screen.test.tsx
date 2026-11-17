@@ -220,6 +220,8 @@ vi.mock("@microsoft/power-apps/data", () => ({
 import { resetPageTokens } from "@/data/client";
 import { vsbTheme } from "@/theme/fluent";
 import { SessionProvider } from "@/app/SessionContext";
+import { startupFlags } from "@/app/startupFlags";
+import { prefetchTarget } from "@/app/bootPrefetch";
 import ProjectOverviewScreen from "./Screen";
 import { DELETE_DIALOG } from "./rules";
 
@@ -230,10 +232,10 @@ import { DELETE_DIALOG } from "./rules";
  */
 const APP_GC_TIME = 5 * 60 * 1000;
 
-function Harness({ children, search = "", gcTime = 0 }: {
-  children: ReactNode; search?: string; gcTime?: number;
+function Harness({ children, search = "", gcTime = 0, client: given }: {
+  children: ReactNode; search?: string; gcTime?: number; client?: QueryClient;
 }) {
-  const [client] = useState(() => new QueryClient({
+  const [client] = useState(() => given ?? new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime } },
   }));
   return (
@@ -338,8 +340,15 @@ const blankQuery = () => calls
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("ProjectOverviewScreen", () => {
-  afterEach(() => vi.restoreAllMocks());
+  const delayAtStart = startupFlags.nextPagePrefetchDelayMs;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    startupFlags.nextPagePrefetchDelayMs = delayAtStart;
+  });
   beforeEach(() => {
+    // The prefetch tests below pin the page-on-screen-then-prefetch-at-once half (the old value of the
+    // switch). UT-OVUI-060/061 pin the delayed half (D119).
+    startupFlags.nextPagePrefetchDelayMs = 0;
     calls.length = 0;
     projectRows = [projectRow()];
     projectTotal = 1;
@@ -1098,6 +1107,54 @@ describe("ProjectOverviewScreen", () => {
     expect(requestsFor("P2")).toBe(1);
     projectGate = null;
     release();
+  });
+
+  it("UT-OVUI-060 waits the configured delay before it prefetches page 2, then does", async () => {
+    startupFlags.nextPagePrefetchDelayMs = 400;
+    projectTotal = 1129;
+    chainTokens = true;
+    render(<Harness gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    // The page is on screen and nothing has asked for page 2 yet.
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(requestsFor("P2")).toBe(0);
+    await waitFor(() => expect(requestsFor("P2")).toBe(1), { timeout: 2000 });
+    expect(requestsFor("P3")).toBe(0);
+  });
+
+  it("UT-OVUI-061 a Next click before the delay loads page 2 itself and the timer asks for nothing more", async () => {
+    startupFlags.nextPagePrefetchDelayMs = 400;
+    projectTotal = 1129;
+    chainTokens = true;
+    const user = userEvent.setup();
+    render(<Harness gcTime={APP_GC_TIME}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 2 from 6"));
+    expect(requestsFor("P2")).toBe(1);
+    // Let the old timer's moment pass: page 2 is not fetched twice, and page 3 is the new prefetch's.
+    await act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+    expect(requestsFor("P2")).toBe(1);
+  });
+
+  it("UT-OVUI-062 a page the boot prefetch already loaded is shown with no second request", async () => {
+    projectTotal = 1129;
+    chainTokens = true;
+    const warm = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: APP_GC_TIME } } });
+    // The same call `main.tsx` makes before the first render, for the same URL.
+    await prefetchTarget(warm, { kind: "projects", search: "" });
+    const before = namedCalls().length;
+    expect(before).toBe(1);
+    render(<Harness client={warm}><ProjectOverviewScreen /></Harness>);
+    await screen.findByText("Contr. Endpoint Testproject");
+    expect(screen.getByTestId("page-label")).toHaveTextContent("Page: 1 from 6");
+    // Page 1 came from the cache: the screen never asked for it again (page 2 may follow, from the next-page prefetch).
+
+    expect(requestsFor("P1")).toBe(0);
+    expect(namedCalls().filter((c) => c.options.skipToken === undefined)).toHaveLength(1);
   });
 
   it("UT-OVUI-044 does not prefetch when there is no next page", async () => {

@@ -41,8 +41,7 @@ import { loadMilestoneDurations } from "@/data/costBook";
 import { cancelGateApproval } from "@/data/flows";
 import { trace } from "@/platform/telemetry";
 import {
-  listCountryAreas, listGeneralDataCountries, listProjectStates, listShareholders,
-  listStateTrackings, listTerrainUtilizations, loadGeneralDataProject, lookupGermanTradeTaxRate,
+  loadGeneralDataProject, lookupGermanTradeTaxRate,
   searchFrenchMunicipalities, searchGermanMunicipalities,
   type AreaOption, type MunicipalityRow, type UtilizationOption,
 } from "@/data/generalData";
@@ -53,6 +52,11 @@ import {
   type CountryRef, type GeneralDataForm, type MunicipalityMode, type ProjectRow, type ProjectSnapshot,
   type ProjectStateRef, type ShareholdingEntity, type TrackingRow,
 } from "./rules";
+import {
+  generalDataAreasQueryOptions, generalDataCountriesQueryOptions, generalDataProjectQueryOptions,
+  generalDataProjectStatesQueryOptions, generalDataUtilizationsQueryOptions, shareholdersQueryOptions,
+  stateTrackingsQueryOptions, REFERENCE_STALE,
+} from "./queries";
 
 export type { AreaOption, MunicipalityRow, UtilizationOption } from "@/data/generalData";
 
@@ -71,7 +75,6 @@ export const TABLES: readonly string[] = [
   ES_ADMIN.milestonesStandardAssumptions,
 ];
 
-const REFERENCE_STALE = 30 * 60 * 1000;
 const out = <T>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
   ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
 
@@ -80,46 +83,39 @@ const NO_PEOPLE = new Map<string, Persona>();
 
 /** The project row (`gblRecordSelectedProject`); null for New Project. */
 export function useGeneralDataProject(projectId: string | undefined): ScreenData<ProjectRow | null> {
+  // Key and function: `./queries.ts`, shared with the boot prefetch (D119).
   const q = useQuery({
-    queryKey: qk.generalDataProject(projectId ?? ""),
-    queryFn: () => loadGeneralDataProject(projectId!),
+    ...generalDataProjectQueryOptions(projectId ?? ""),
     enabled: Boolean(projectId),
   });
   return out(q, null);
 }
 
 export function useCountries(): ScreenData<CountryRef[]> {
-  return out(useQuery({ queryKey: qk.generalDataCountries, queryFn: listGeneralDataCountries, staleTime: REFERENCE_STALE }), NONE as CountryRef[]);
+  return out(useQuery(generalDataCountriesQueryOptions()), NONE as CountryRef[]);
 }
 
 export function useProjectStates(): ScreenData<ProjectStateRef[]> {
-  return out(useQuery({ queryKey: qk.generalDataProjectStates, queryFn: listProjectStates, staleTime: REFERENCE_STALE }), NONE as ProjectStateRef[]);
+  return out(useQuery(generalDataProjectStatesQueryOptions()), NONE as ProjectStateRef[]);
 }
 
 /** One country's areas — the Area dropdown and the "has areas" half of the Area rule. */
 export function useCountryAreas(countryId: string | null | undefined): ScreenData<AreaOption[]> {
   const q = useQuery({
-    queryKey: qk.generalDataAreas(countryId ?? ""),
-    queryFn: () => listCountryAreas(countryId!),
+    ...generalDataAreasQueryOptions(countryId ?? ""),
     enabled: Boolean(countryId),
-    staleTime: REFERENCE_STALE,
   });
   return out(q, NONE as AreaOption[]);
 }
 
 export function useTerrainUtilizations(countryId: string | null | undefined): ScreenData<UtilizationOption[]> {
-  const q = useQuery({
-    queryKey: qk.generalDataUtilizations(countryId ?? ""),
-    queryFn: () => listTerrainUtilizations(countryId ?? null),
-    staleTime: REFERENCE_STALE,
-  });
+  const q = useQuery(generalDataUtilizationsQueryOptions(countryId ?? ""));
   return out(q, NONE as UtilizationOption[]);
 }
 
 export function useShareholders(projectId: string | undefined): ScreenData<ShareholdingEntity[]> {
   const q = useQuery({
-    queryKey: qk.shareholders(projectId ?? ""),
-    queryFn: () => listShareholders(projectId!),
+    ...shareholdersQueryOptions(projectId ?? ""),
     enabled: Boolean(projectId),
   });
   return out(q, NONE as ShareholdingEntity[]);
@@ -127,8 +123,7 @@ export function useShareholders(projectId: string | undefined): ScreenData<Share
 
 export function useStateTrackings(projectId: string | undefined): ScreenData<TrackingRow[]> {
   const q = useQuery({
-    queryKey: qk.stateTrackings(projectId ?? ""),
-    queryFn: () => listStateTrackings(projectId!),
+    ...stateTrackingsQueryOptions(projectId ?? ""),
     enabled: Boolean(projectId),
   });
   return out(q, NONE as TrackingRow[]);

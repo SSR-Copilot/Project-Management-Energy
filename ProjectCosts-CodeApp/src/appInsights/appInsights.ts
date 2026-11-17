@@ -16,26 +16,33 @@
  * The SDK's own fetch / XHR tracking is off: the platform's `networkRequest` metric already covers
  * every Dataverse call, and the SDK would record full query URLs.
  */
-import {
-  ApplicationInsights, SeverityLevel, type ITelemetryItem,
-} from "@microsoft/applicationinsights-web";
+import type { ApplicationInsights, ITelemetryItem } from "@microsoft/applicationinsights-web";
 import type { Metric } from "@microsoft/power-apps/telemetry";
 import { addSink, trace, type Severity, type TraceEntry } from "@/platform/telemetry";
 import { routeName, stripQuery, stripUrlQueries, toEventPayload } from "./sanitize";
 import { screenName } from "./screenNames";
 
-/** `undefined` = waiting for the connection string; `null` = off; otherwise running. */
+/** `undefined` = waiting for the connection string (or for the SDK to download); `null` = off; otherwise running. */
 let client: ApplicationInsights | null | undefined;
+/** True while the SDK chunk is downloading, so a second `startAppInsights` call does not start it again. */
+let starting = false;
+/** Settles when the last start has finished (or failed); `startAppInsights` itself returns at once. */
+let started: Promise<void> = Promise.resolve();
 /** What arrived before the connection string; bounded so a slow start cannot grow it forever. */
 const MAX_PENDING = 100;
 let pending: Array<(ai: ApplicationInsights) => void> = [];
 let removeSink: (() => void) | undefined;
 
-const SEVERITY: Record<Severity, SeverityLevel> = {
-  information: SeverityLevel.Information,
-  warning: SeverityLevel.Warning,
-  error: SeverityLevel.Error,
-  critical: SeverityLevel.Critical,
+/*
+ * The SDK's `SeverityLevel` values (Verbose 0, Information 1, Warning 2, Error 3, Critical 4) as plain
+ * numbers: importing the enum would pull the whole SDK into the entry bundle (D119), and
+ * the SDK is now fetched only when telemetry is on.
+ */
+const SEVERITY: Record<Severity, number> = {
+  information: 1,
+  warning: 2,
+  error: 3,
+  critical: 4,
 };
 
 /**
@@ -78,34 +85,55 @@ export function listenForTraces(): void {
  * `SessionProvider` once the environment variables have loaded (or failed to).
  */
 export function startAppInsights(connectionString: string | undefined): void {
-  if (client !== undefined) return;
-  const queued = pending;
-  pending = [];
+  if (client !== undefined || starting) return;
   if (!connectionString?.trim()) {
+    pending = [];
     client = null;
     return;
   }
-  try {
-    const ai = new ApplicationInsights({
-      config: {
-        connectionString: connectionString.trim(),
-        enableAutoRouteTracking: true,
-        disableAjaxTracking: true,
-        disableFetchTracking: true,
-      },
-    });
-    ai.loadAppInsights();
-    ai.addTelemetryInitializer(scrub);
-    ai.trackPageView();
-    client = ai;
-  } catch (e) {
-    // A bad connection string must not stop the app: telemetry just stays off.
-    client = null;
-    trace("warning", "Application Insights did not start", e);
-    return;
-  }
-  for (const action of queued) send(action);
+  /*
+   * D119: the SDK (about 1 MB of source, most of the entry bundle's `components` chunk)
+   * is fetched here, once, instead of being part of every page load. What arrives while it downloads
+   * queues exactly as it queued before the connection string was known, and is sent when it starts.
+   */
+  starting = true;
+  started = import("@microsoft/applicationinsights-web").then(
+    ({ ApplicationInsights: Sdk }) => {
+      try {
+        const ai = new Sdk({
+          config: {
+            connectionString: connectionString.trim(),
+            enableAutoRouteTracking: true,
+            disableAjaxTracking: true,
+            disableFetchTracking: true,
+          },
+        });
+        ai.loadAppInsights();
+        ai.addTelemetryInitializer(scrub);
+        ai.trackPageView();
+        client = ai;
+      } catch (e) {
+        // A bad connection string must not stop the app: telemetry just stays off.
+        client = null;
+        pending = [];
+        trace("warning", "Application Insights did not start", e);
+        return;
+      }
+      const queued = pending;
+      pending = [];
+      for (const action of queued) send(action);
+    },
+    (e: unknown) => {
+      // The chunk could not be fetched (offline, blocked): same answer, telemetry off.
+      client = null;
+      pending = [];
+      trace("warning", "Application Insights did not load", e);
+    },
+  ).finally(() => { starting = false; });
 }
+
+/** Settles when `startAppInsights` has finished starting the SDK (or failed to). For tests. */
+export const appInsightsStarted = (): Promise<void> => started;
 
 /** A platform metric (`sessionLoadSummary` / `networkRequest`) as a custom event of that name. */
 export function trackMetric(metric: Metric): void {
@@ -131,6 +159,8 @@ export function trackTraceEntry(entry: TraceEntry): void {
 /** Test-only: back to "waiting for the connection string", queue and trace listener cleared. */
 export function resetAppInsightsForTests(): void {
   client = undefined;
+  starting = false;
+  started = Promise.resolve();
   pending = [];
   removeSink?.();
   removeSink = undefined;

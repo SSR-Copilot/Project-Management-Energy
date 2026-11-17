@@ -558,3 +558,16 @@ Implemented and merged on `integration/generators-bulk`, not product-approved, n
 **D116 not built:** the create-first Replace saga (DEL-6), the version check (DEL-7(b)), the server-side options (DEL-9), O&M head and period ordering, the rollback's allocation ordering by parent, and a roll-up-only retry. Nothing of D116 has run against DEV (`GENERATORS-DELETE-DEV-TEST-PLAN.md`).
 
 **Kept as is:** in `planSaveTurbine` and the PV follow-up the allocations come after the roll-up (the canvas order, kept on purpose), so the roll-up is not the last write in those two plans. The type create stays a single request (its autonumber name feeds the device-type row), as do the roll-ups, the device-type bridge create, the flow calls and every single-row save; Replace keeps delete-and-recreate (no repointing).
+
+## Start-up of the Project Overview and Project General Data (17 Nov 2026, D119) — new (not approved, not measured on DEV)
+
+The canvas ran about 40 sequential statements in `App.OnStart` before the first screen. The code app already ran them in parallel (`SessionContext`); this pass shortens what was left.
+
+| Item | What | Status |
+|---|---|---|
+| First paint no longer waits for the environment variables | The shell and the first screen open when the session is known; the header labels fill in a moment later | **new**, behind `envVarsBlockFirstPaint` |
+| The first screen's chunk and reads start from the URL | Project list: page 1 and the two filter lists. General Data (also from Edit Project): the project row, lists, shareholders, state trackings, the country's areas and utilizations | **new**, behind `bootPrefetch` |
+| The user's role lookups | Five dependent round trips down to three; only the five roles the badge reads are requested (106 down to a handful of rows in DEV) | **new**, behind `parallelUserLookups`; the badge, the admin gate and the country scope are unchanged (UT-CU-105) |
+| The next project page is fetched 1.5 s after the page is on screen | The start-up reads no longer share the line with a 540 kB page the user may never open | **new**, behind `nextPagePrefetchDelayMs`; the pager's arithmetic and the blank-tail probe are untouched (UT-PROJPAGE-*, UT-OVUI-042..045) |
+| Application Insights loads on demand | About 270 kB less decoded JavaScript (95 kB less gzip) before the first screen | **new** (no switch; revert to roll back) |
+| Gate | `*.har` is git-ignored (a browser capture holds request headers) | **new** |

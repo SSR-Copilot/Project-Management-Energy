@@ -7449,3 +7449,44 @@ Tests: `periodChain.test.ts` UT-PCHAIN-001..011 and 020..025; `LandLeaseScreen.t
 - **Deleting a middle Land Lease period** leaves the next period's start unchanged (a gap). The canvas has no rule for it; OPEX does not re-chain on delete either.
 - **Existing misaligned rows** are repaired in the code app by the next save of an earlier period of the chain (Land Lease and OPEX). Editing a later period only repairs the periods after it; the saved period keeps its own stored start. Editing Period 1 repairs the whole chain.
 - **No data was repaired.** The QA rows (WTG-2613) were only read; nothing was written to DEV or QA.
+
+## D119 — Start-up of the Project Overview and Project General Data (17 Nov 2026)
+
+**Status:** implemented on branch `sub/startup-optimize`, **NOT product-approved, not run against DEV, no wall-clock measurement on DEV yet**. Type: OPTIMIZE (the product owner: "reduce the load time as far as possible", scope Project Overview and Project General Data start-up, pagination, role lookups).
+**Source:** a browser HAR of a first load of the deployed app (`apps.powerapps.com.har`, 17 Nov 2026, 85 entries). Its script hashes (`index-BnlhdaZv`, `components-BE8n0o2T`, `fluent-B4phQReT`, `Screen-Dc6nhaK_`) equal those of a build of `fa9281c`, so the HAR describes this source. The HAR is a 124 MB file with request headers in it: it is git-ignored now (`*.har`) and must never be committed.
+
+### 1. What the HAR and the code showed
+
+| # | Finding | Evidence |
+|---|---|---|
+| F1 | The shell showed "Please wait..." until BOTH environment-variable reads (two dependent round trips) had finished, though only header labels and click-time launch links read them | `SessionContext` `loading` included `envQuery.isLoading`; `App.tsx` blocks on `loading`. CONFIRMED (code) |
+| F2 | The screen's chunk and its first reads started only after F1, and on a Project Management route after the session project's 2 round trips as well: each step waited for the one before | `routes.tsx`, `SessionContext`. CONFIRMED (code) |
+| F3 | The signed-in user's lookups were a chain of five dependent round trips (user, directory entry, teams and direct roles, team roles, countries) and read every role the user holds (106 rows, 46 kB in DEV) though the badge reads five role names | `data/currentUser.ts`; HAR entry 25. CONFIRMED |
+| F4 | The next project page (about 540 kB decoded) was fetched the moment page 1 landed, with its own blank-tail probe, beside the other start-up reads | `useProjectPage`; HAR entries 32 to 34. CONFIRMED |
+| F5 | The Application Insights SDK (about 1 MB of source) sat in the entry bundle's `components` chunk though it starts only after the environment variable arrives | source map of `components-BE8n0o2T`. CONFIRMED |
+| F6 | Every Dataverse read carries `odata.include-annotations=*`, and the SDK query string has no `$expand` | `@microsoft/power-apps` 1.3.1 `dataverseDataOperationExecutor.js`, `stringQueryOptions.js`. CONFIRMED. **Not changeable here** (a library under `node_modules`) |
+
+### 2. What changed (each behind a switch in `src/app/startupFlags.ts`, the old value restores the old behaviour)
+
+| # | Change | Switch | Old value |
+|---|---|---|---|
+| S1 | The environment variables no longer hold the first paint | `envVarsBlockFirstPaint` | `true` |
+| S2 | `app/bootPrefetch.ts` (called from `main.tsx` before the first render) reads the URL (`app/bootPlan.ts`, pure) and starts the screen's chunk and first reads at once: the project list's page 1 and two filter lists; or, for General Data, the session project, the project row, the two lists, shareholders, state trackings and, when the row is in, its country's areas and utilizations. The screens read the same keys through shared query options (`project-main/queries.ts`, `general-data/queries.ts`, `SessionContext`) | `bootPrefetch` | `false` |
+| S3 | The directory entry and the country map start with the user row; the roles are asked for by the five names the badge reads, server side. Chain: five round trips down to three, six reads before and after (the duplicate country list was left in place on purpose) | `parallelUserLookups` | `false` |
+| S4 | The next-page prefetch waits 1,500 ms after the page is on screen. Next before then simply fetches the page, as it did without a prefetch | `nextPagePrefetchDelayMs` | `0` |
+| S5 | The Application Insights SDK is fetched on demand (a dynamic import in `startAppInsights`); what arrives while it downloads queues as it did before the connection string was known. `SeverityLevel` became its four numeric values. **No switch**: a static import cannot be switched off; roll back with `git revert` | none | static import |
+
+Business rules, filters, sorts, the page arithmetic (`named ++ blank`, `RoundUp(Total/200)`, `maxPageSize`, skip-token Next, the fresh blank probe per page view) and every write path are untouched.
+
+### 3. Measured, and not measured
+
+- **Measured (CONFIRMED, `npm run build`):** eager JS before (`index` + `tokens` + `fluent` + `components`): 1,532.8 kB decoded, 457.0 kB gzip. After (`index` + `fluent`): 1,261.1 kB decoded, 361.8 kB gzip (-17.7% and -20.8%). The Application Insights chunk (198.9 kB decoded, 77.2 kB gzip) is fetched after the environment variable arrives, off the first paint.
+- **Pinned by tests (CONFIRMED):** the round-trip depth of the user's lookups and the filters they send (UT-CU-100..106); the plan and prefetch behaviour and that a prefetched page is found by the screen with no second request (UT-BOOT-001..028, UT-OVUI-062); the delayed next-page prefetch and a Next click before it (UT-OVUI-060, 061); the loading state (UT-BOOT-040, 041); the SDK start while it downloads (UT-AI-019).
+- **NOT measured:** wall-clock load time on DEV, before or after. The HAR cannot be replayed. The expected effect is a shorter chain (F1, F2, F3), not a number: the product owner evaluates it with a new HAR of the same first load.
+
+### 4. Open points
+
+- **HAR order.** In the HAR, requests that depend on an earlier answer (the role reads need the user id, the page-2 request carries page 1's skip token) start within milliseconds of the first ones, which the source cannot do. The cause is not known (host-side timestamps, or a host that queues). The changes above follow the source's dependency chain and so are right either way; the measured gain should be judged on a new HAR.
+- **Env vars read at click time.** Generators' approval flows read `vsb_ProjectManagementAppID` and `vsb_PrimarilyApprovalGroupID` when clicked and refuse when missing. With S1 a click in the first second after the shell appears, before the environment variables land, would meet an empty value. Switch `envVarsBlockFirstPaint` back to `true` if that matters.
+- **Role names by name.** S3 compares the five names server side without regard to case, and the client still compares them exactly (UT-CU-105 pins that a role differing only in case never counts, as before). A sixth role the badge starts to read must be added to `BADGE_ROLE_NAMES`.
+- **Not done, proposed:** (a) the user's `vsb_countries` read and the Project Overview's country list are two reads of one small table; (b) the cost screens' start-up was not looked at; (c) `odata.include-annotations=*` (F6) is the largest remaining payload and needs an SDK change or a different transport; (d) a persisted cache of the user's roles would save the three round trips on a repeat visit, but it would show a stale permission, so it is not proposed without a product decision.

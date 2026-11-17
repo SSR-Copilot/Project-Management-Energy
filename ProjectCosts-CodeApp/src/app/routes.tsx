@@ -16,8 +16,10 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } 
 import { EmptyState, LoadingOverlay } from "@/components";
 import { useSession } from "./SessionContext";
 import { costLocation, launchCostPath, launchPmPath } from "./deepLinks";
+import { loadGeneralDataScreen, loadProjectOverviewScreen } from "./screenLoaders";
 
-const ProjectOverviewScreen = lazy(() => import("@/features/pm/project-main/Screen"));
+// The two screens the app usually opens on load through `screenLoaders.ts`, so `bootPrefetch.ts` can start them early.
+const ProjectOverviewScreen = lazy(loadProjectOverviewScreen);
 const ContractsScreen = lazy(() => import("@/features/cost/contracts/Screen"));
 const CapexCostsScreen = lazy(() => import("@/features/cost/capex-costs/Screen"));
 const OpexCostsScreen = lazy(() => import("@/features/cost/opex-costs/Screen"));
@@ -28,7 +30,7 @@ const AddCostsFromTableScreen = lazy(() => import("@/features/cost/add-costs-fro
  * Project Management — each screen's `hooks.ts` says what it reads and writes; anything not wired
  * yet is listed in `data/notConnected.ts`.
  */
-const GeneralDataScreen = lazy(() => import("@/features/pm/general-data/Screen"));
+const GeneralDataScreen = lazy(loadGeneralDataScreen);
 const MilestonesScreen = lazy(() => import("@/features/pm/milestones/Screen"));
 const GeneratorsScreen = lazy(() => import("@/features/pm/generators/Screen"));
 const ProductionScreen = lazy(() => import("@/features/pm/production/Screen"));
