@@ -20,6 +20,7 @@ import DropdownEditor from "./CostPaidBy";
 import YesNoEditor from "./YesNoDropDown";
 import { findNearestAccountHeaderRow } from "./util_dataset";
 import { fromView, toView, viewColumns } from "./viewColumns";
+import { useTrimmedGridPaste } from "./pasteTrim";
 
 export interface SheetCell extends CellBase<string> {
   value: string;
@@ -251,6 +252,9 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   const selectedRowIndexRef = React.useRef<number | null>(null);
   const selectedCtorRef = React.useRef<string>("");
   const hasMountedRef = React.useRef({ add: false, del: false, copy: false });
+  // Bug 15333: an Excel row pasted as one row, not as that row plus an empty one.
+  const gridRef = React.useRef<HTMLDivElement>(null);
+  useTrimmedGridPaste(gridRef);
 
   /*
    * Re-hydrate whenever the caller supplies a genuinely new initial grid (e.g. after load).
@@ -483,7 +487,7 @@ export const SpreadSheetComp: React.FC<ISpreadSheetProps> = ({
   }, [deleteRowToken]);
 
   return (
-    <div style={{ height: "100%", width: "100%", overflow: "auto" }}>
+    <div ref={gridRef} style={{ height: "100%", width: "100%", overflow: "auto" }}>
       <Spreadsheet key={columns ? "one-year" : "all-years"} data={viewData} onChange={handleChange} onSelect={handleSelect} />
     </div>
   );
