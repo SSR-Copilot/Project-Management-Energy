@@ -549,3 +549,26 @@ Implemented and merged on `integration/generators-bulk`, not product-approved, n
 **D116 not built:** the create-first Replace saga (DEL-6), the version check (DEL-7(b)), the server-side options (DEL-9), O&M head and period ordering, the rollback's allocation ordering by parent, and a roll-up-only retry. Nothing of D116 has run against DEV (`GENERATORS-DELETE-DEV-TEST-PLAN.md`).
 
 **Kept as is:** in `planSaveTurbine` and the PV follow-up the allocations come after the roll-up (the canvas order, kept on purpose), so the roll-up is not the last write in those two plans. The type create stays a single request (its autonumber name feeds the device-type row), as do the roll-ups, the device-type bridge create, the flow calls and every single-row save; Replace keeps delete-and-recreate (no repointing).
+
+## OPEX: 11 functional differences fixed to match the Canvas (17 Nov 2026, D119) — fixed
+
+| Screen | Change | Status |
+|---|---|---|
+| O&M, Other OPEX panel | Escape and a click on the dark backdrop no longer close the Add/Edit panel and throw away the form; only ✕ and Cancel close it, as on the Canvas (`FormPanel keepOpenOnEscape`, new and opt-in). UT-SETPANEL-025, UT-OPEXUI-055 | fixed (a data-loss bug removed) |
+| O&M, Other OPEX | After Add Contract Type / Add Period and Cancel, no row stays selected, so the commands follow the "nothing selected" rules and one click selects a row again; the row used to stay selected with every command off. UT-OPEX-135, UT-OPEXUI-056 | fixed |
+| O&M, Other OPEX panel | Inflation Start Year follows a Start Date moved to another year on a new cost type (and on a row with no stored year), so the year and the country % saved are right. UT-OPEX-136, UT-OPEXUI-057 | fixed (wrong saved values removed) |
+| O&M, Other OPEX panel | Italian projects: the hidden Area is always the project's zone, as the Canvas; an Edit no longer keeps an old stored area the user cannot see. UT-OPEXUI-061 | fixed |
+| O&M panel | Switching the threshold option back to Individual shows the stored figure again instead of an empty box. UT-OPEXUI-058 | fixed |
+| O&M, Other OPEX panel | A stored Custom Inflation of 0.0 % opens as "0.0", so Save is not off for no visible reason; the grid cell still shows it empty (O-9). UT-OPEX-138, UT-OPEXUI-059 | fixed |
+| O&M, Other OPEX | A blank Duration or Distribution Frequency shows an empty cell, not "0 years 0 months" / "1" (`CostPeriod` keeps the blank). UT-BOOK-077, UT-OPEXUI-060 | fixed |
+| O&M | The Individual Threshold cell uses the user's language, like the other grid cells (the last en-GB cell). UT-OPEX-137 | fixed |
+| O&M, Other OPEX | The costs and the O&M device cards are re-read on every visit, as `OnVisible`; a second visit shows the cached rows at once with no loader and refreshes them behind. Add Standard Contract also refreshes the device cards. UT-OPEXLOAD-001…004 | fixed (stale data removed) |
+| O&M, Other OPEX | Every Save re-binds the owning business unit to the project's, as the Canvas Patch; it was set on create only. UT-PWRITE-049 | fixed |
+
+## Contracts: the opened DevCo account rows laid out as the Canvas (17 Nov 2026, D120) — reproduced
+
+| Screen | Change | Status |
+|---|---|---|
+| Contracts, Add / Edit Development Contract | The opened account's rows use the Canvas layout: the list inset 10 px, names at X 40 in 8 pt (no longer cut off), the 120-wide 8 pt total right after them, and the checkbox column under the header's checkbox, also while the list scrolls (a reserved 10 px canvas scrollbar). UT-CONCHECK-004, UT-CONCHECK-006 | reproduced |
+| Contracts, Add / Edit Development Contract | A leaf another contract uses shows the Canvas orange square over its checked box, with the "Used in contract" tooltip, and its caption is no longer greyed. UT-CONPANEL-012 | reproduced |
+| Contracts, Add / Edit Development Contract | An account with no DevCo cost row shows "-", as the Canvas `Coalesce(Text(Sum(…)), "-")`; it showed "0". UT-CONTR-009, UT-CONPANEL-011 | fixed |

@@ -542,21 +542,31 @@
 /* `ico_…_DevCoCosts_*Down/Up`: a classic `Icon.ChevronDown` at 20 x 18 with no padding — a ~15 x 8 px chevron. */
 .canvas-devco-chevron > * { width: 30px; height: 30px; flex-shrink: 0; }
 
-/* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, inset `X: =10`. It has no
-   height cap in the canvas; the panel column it sits in is what bounds it, so one is set
-   here rather than letting a 40-account group push Comment off the panel. */
-.canvas-devco-leaves { max-height: 330px; overflow-y: auto; padding-bottom: 10px; border-bottom: 1px solid #e3e3e3; }
-/* `con_…_CostssRow` — `Height: =30`; name at `X: =40` of the inset gallery, a 120-wide
-   right-aligned total, then the checkbox, and finally the 40 px the header spends on its
-   chevron so the two checkbox columns line up. */
-.canvas-devco-row { display: flex; align-items: center; height: 30px; padding-left: 28px; }
-.canvas-devco-name { flex: 1; min-width: 0; font-size: 14px; color: #242424; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.canvas-devco-total { flex-shrink: 0; width: 120px; margin-right: 22px; text-align: right; font-size: 14px; color: #242424; font-variant-numeric: tabular-nums; }
-.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: var(--devco-check); height: var(--devco-check); margin: 0 calc(56px - var(--devco-check) / 2) 0 8px; accent-color: #0078d4; }
-/* `chb_…_CostssRow.FontColor: =If(ThisItem.Used, gblAppColors.Warning, Blank())` — a leaf
-   another contract has claimed reads as taken, not as merely unavailable. */
-.canvas-devco-row[data-used="true"] input[type="checkbox"] { accent-color: #ee940c; opacity: 1; }
-.canvas-devco-row[data-used="true"] .canvas-devco-name { color: #6c6c6c; }
+/* `gal_…_Costs` — `Height: =If(IsFolded, 0, ChildsCount*32+10)`, `X: =10`, `Width: =Parent.Width-Self.X*2`: inset
+   10 px on both sides, so its scrollbar sits inside the card. It has no height cap in the canvas; the panel column
+   it sits in is what bounds it, so one is set here rather than letting a 40-account group push Comment off the
+   panel. The 10 px canvas scrollbar (`canvasScrollbar`, applied in Screen.tsx) keeps its gutter reserved, so the
+   leaf checkboxes do not move when a long group starts to scroll (D120). The line under an open card is the
+   card's own (it used to be the list's, which the inset would shorten). */
+.canvas-devco-leaves { max-height: 330px; overflow-y: auto; margin: 0 10px; padding-bottom: 10px; scrollbar-gutter: stable; }
+.canvas-devco-card[data-open="true"] { border-bottom: 1px solid #e3e3e3; }
+/* `con_…_CostssRow` — `Height: =30`, as wide as the inset gallery (W). D120, measured against the canvas panel
+   (user screenshots, 17 Nov 2026):
+   - `lbl_…_CostssRow_Name`: `X: =40` (`lbl_Contracts_List_Card_Body_PaymentTargetsHeader_Name.X`), `Width: =W/2`,
+     PaddingLeft/Right 6, `Size: =gblAppSizes.Font.ExtraExtraSmall` (8 pt), no wrap. `calc(50% + 25px)` is W/2 out of
+     the row's content box (W minus the 40 px offset and the 10 px scrollbar gutter).
+   - `lbl_…_CostssRow_TotalCosts`: right after it, 120 wide, right-aligned, padding 6, 8 pt.
+   - `chb_…_CostssRow`: 32 wide at `X: =W-Self.Width-30`, its box centred under the header's checkbox: 36 px from the
+     row's right edge + the 10 px gutter + the 10 px inset = the parent's 56 from the card's edge. */
+.canvas-devco-row { position: relative; display: flex; align-items: center; height: 30px; padding-left: 40px; }
+.canvas-devco-name { flex: 0 0 calc(50% + 25px); min-width: 0; box-sizing: border-box; padding: 0 6px; font-size: 8pt; color: #242424; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-devco-total { flex: 0 0 120px; box-sizing: border-box; padding: 0 6px; text-align: right; font-size: 8pt; color: #242424; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.canvas-devco-row input[type="checkbox"] { flex-shrink: 0; width: var(--devco-check); height: var(--devco-check); margin: 0 calc(36px - var(--devco-check) / 2) 0 auto; accent-color: #0078d4; }
+/* `rec_…_CostssRow_Used` (`:6421-6433`): a 20 x 20 square at the checkbox's `X + 8`, `Y + 5`, `BorderColor:
+   gblAppColors.Warning`, `Fill: ColorValue(Warning & "20")` (#EE940C at 12.5 %), over the checked, read-only box of a
+   leaf another contract has claimed. Its caption is NOT greyed on the canvas. Centred on the box: 36 - 10 = 26 from
+   the right edge. */
+.canvas-devco-used { position: absolute; top: 5px; right: 26px; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid #ee940c; background: rgba(238, 148, 12, 0.125); }
 /* `Choices horizontal` — a radio group with `Layout: Horizontal` (e.g. the Planning permit
    Plan / Actual): the options on one line under the caption. */
 .canvas-radio-horizontal > label { display: inline-flex; margin-right: 24px; }

@@ -48,8 +48,9 @@ vi.mock("@/platform/privileges", async (importOriginal) => ({
 vi.mock("./hooks", () => {
   const query = (data: unknown) => ({ data, isLoading: false, error: null });
   const mutation = () => ({ mutateAsync: vi.fn(() => Promise.resolve()), isPending: false });
-  // One array per selection, so the screen's memoised values keep their identity between renders.
-  const trees = new Map<string, unknown>();
+  // One array per selection AND per base tree, so the screen's memoised values keep their identity between
+  // renders, and a case that swaps `__BASE_TREE__` (UT-CONPANEL-012) is not served an earlier case's tree.
+  const treesByBase = new WeakMap<object, Map<string, unknown>>();
   return {
     useContracts: () => query([{
       id: "c-1", description: "Grid works", contractType: 1, margin: false, isMarginStandardAssumption: false,
@@ -61,10 +62,12 @@ vi.mock("./hooks", () => {
     useProjectExtras: () => query({}),
     useCapexCostRows: () => query([]),
     useAccountTree: (args: { selectedAccountIds: readonly string[] }) => {
+      const base = (globalThis as { __BASE_TREE__?: AccountNode[] }).__BASE_TREE__!;
+      let trees = treesByBase.get(base);
+      if (!trees) { trees = new Map(); treesByBase.set(base, trees); }
       const key = args.selectedAccountIds.join(",");
       if (!trees.has(key)) {
-        trees.set(key, (globalThis as { __BASE_TREE__?: AccountNode[] }).__BASE_TREE__!
-          .map((n) => ({ ...n, selected: args.selectedAccountIds.includes(n.id) })));
+        trees.set(key, base.map((n) => ({ ...n, selected: args.selectedAccountIds.includes(n.id) })));
       }
       return trees.get(key);
     },
@@ -231,6 +234,26 @@ describe("Add Period panel: the same rule (D61)", () => {
     const percentField = screen.getByTestId("txt_Contracts_Payment_Targets_RightPanel_TotalCosts")
       .closest(".canvas-field") as HTMLElement;
     expect(percentField.querySelector(".canvas-field-error")).not.toBeNull();
+  });
+});
+
+describe("DevCo leaf rows as the canvas draws them (D120)", () => {
+  it("UT-CONPANEL-011 an account with no DevCo cost row shows \"-\", not 0", async () => {
+    await openNewDevelopmentContract();
+    fireEvent.click(screen.getByTestId("btn_Contracts_RightPanel_NewEdit_DevCoCosts_TransparentButton-p1"));
+    const row = screen.getByTestId("chb_Contracts_RightPanel_NewEdit_CostssRow-l1").closest(".canvas-devco-row") as HTMLElement;
+    expect(row.querySelector(".canvas-devco-total")?.textContent).toBe("-");
+  });
+
+  it("UT-CONPANEL-012 a leaf another contract uses gets the orange square with the 'Used in contract' tooltip; its name is not greyed", async () => {
+    (globalThis as { __BASE_TREE__?: AccountNode[] }).__BASE_TREE__ = BASE_TREE.map((n) => (n.id === "l2"
+      ? { ...n, used: true, usedByContractId: "c-1" } : n));
+    await openNewDevelopmentContract();
+    fireEvent.click(screen.getByTestId("btn_Contracts_RightPanel_NewEdit_DevCoCosts_TransparentButton-p1"));
+    const used = screen.getByTestId("rec_Contracts_RightPanel_NewEdit_CostssRow_Used-l2");
+    expect(used).toHaveAttribute("title", 'Used in contract "Grid works"');
+    expect(screen.getByTestId("chb_Contracts_RightPanel_NewEdit_CostssRow-l2")).toBeChecked();
+    expect(screen.queryByTestId("rec_Contracts_RightPanel_NewEdit_CostssRow_Used-l1")).toBeNull();
   });
 });
 

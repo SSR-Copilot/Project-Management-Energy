@@ -1519,8 +1519,9 @@ export function targetPercentText(value: number | undefined, locale?: string): s
 
 /**
  * The DevCo leaf's amount (`:6464`): the sum of the project's monthly DevCo CAPEX COST rows
- * (`colSelectedProjectCapexContractsCosts`) of the CAPEX contracts filed under that account. Zero is
- * shown as `0` (`Text(0, …)` is `"0"`, so the canvas `Coalesce(…, "-")` never reaches the dash).
+ * (`colSelectedProjectCapexContractsCosts`) of the CAPEX contracts filed under that account. An account
+ * with NO cost row has no entry here: the canvas `Sum` over an empty table is Blank, so its
+ * `Coalesce(Text(…), "-")` shows "-" (canvas screenshot, 17 Nov 2026, D120) — see `devCoLeafTotalText`.
  */
 export function devCoLeafCostByAccount(
   devCoContracts: readonly CapexProjectContract[],
@@ -1535,6 +1536,19 @@ export function devCoLeafCostByAccount(
     out.set(account, orZero(out.get(account)) + orZero(row.cost));
   }
   return out;
+}
+
+/**
+ * `lbl_Contracts_RightPanel_NewEdit_CostssRow_TotalCosts.Text` (`:6464-6488`):
+ * `Coalesce(Text(Sum(<the account's cost rows>, vsb_cost), "###,###,###,##0"), "-")`. No cost row → `Sum` is Blank →
+ * "-"; cost rows that add up to 0 → "0" (D120; this used to show "0" for both).
+ */
+export function devCoLeafTotalText(
+  costs: ReadonlyMap<string, number>,
+  accountId: string,
+  locale?: string,
+): string {
+  return costs.has(accountId) ? wholeNumberText(costs.get(accountId), locale) : "-";
 }
 
 /* ═══════════════════════════════════════════════ selection and the period bar */

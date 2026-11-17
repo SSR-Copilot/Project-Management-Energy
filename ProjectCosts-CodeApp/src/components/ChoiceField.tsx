@@ -46,6 +46,13 @@ const useStyles = makeStyles({
    * canvas modern dropdown clips it ("Operating company with infrastruc", General Data, 3 Nov 2026).
    */
   valueText: { minWidth: 0, overflowX: "hidden", textOverflow: "clip", whiteSpace: "nowrap", textAlign: "left" },
+});
+
+/**
+ * The canvas `DropDown@0.0.45` open list, for a screen that draws its own single-select `Dropdown` (Finance's
+ * `SelectChoice`, 17 Nov 2026): `canvasList` on its `listbox` slot. A `ComboBox@0.0.51` keeps Fluent's list.
+ */
+export const useCanvasListStyles = makeStyles({
   /*
    * The open list as the canvas draws it, every `DropDown@0.0.45` alike (the modern control has no
    * Selection / Hover / Chevron properties): no check-mark, and ONE row highlighted, full width and
@@ -108,6 +115,7 @@ export function ChoiceField({
   onSelect, placeholder, standard, multiselect, values, onSelectMany, className, listboxClassName,
 }: ChoiceFieldProps) {
   const s = useStyles();
+  const list = useCanvasListStyles();
   const skin = useFieldSkin();
   const controlClass = useFieldControlClass();
   const standardClass = useStandardValueClass();
@@ -134,7 +142,7 @@ export function ChoiceField({
         disabled={disabled}
         placeholder={placeholder}
         multiselect={multiselect}
-        listbox={{ className: listboxClassName ?? (multiselect ? undefined : s.canvasList) }}
+        listbox={{ className: listboxClassName ?? (multiselect ? undefined : list.canvasList) }}
         {...(view ? { open: false, expandIcon: null } : {})}
         button={{ children: <span className={s.valueText}>{text || placeholder}</span> }}
         value={text}

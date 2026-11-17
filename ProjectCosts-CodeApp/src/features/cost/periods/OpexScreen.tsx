@@ -66,7 +66,7 @@ import {
   resetStartDateVisible, selectedAccount, showAtLeastOneFigureHint,
   showEurPerWtgField, showThresholdColumn, standardAssumptionFilter, startDateDefault,
   startDateFlagAfterPick, startDateFlagOnOpen, planFollowingPeriodStarts,
-  subaccountsForMode, thresholdToggleLabel, toOpexRow, toggleRowSelection, visibleCommands,
+  inflationStartYearOnDateChange, selectionOnAdd, subaccountsForMode, thresholdToggleLabel, toOpexRow, toggleRowSelection, visibleCommands,
   type CountryInflationProfile, type FieldMode, type OpexCommandKey, type OpexCost, type OpexForm,
   type OpexMode, type OpexProjectContext, type OpexSubaccount, type PanelContext,
   type RowSelection,
@@ -547,9 +547,6 @@ const NO_SELECTION: RowSelection = {
 
 /* ═════════════════════════════════════════════════════════════════ adapters ══ */
 
-/** `0` reads back from Dataverse where the canvas wrote `Blank()`; `Text(0, "###…")` is empty. */
-const blankZero = (value: number): number | null => (value === 0 ? null : value);
-
 /** `CostPeriod`'s aggregation union -> the option-set value the panel's dropdown compares. */
 const AGGREGATION_VALUE_OF: Record<CostPeriod["aggregation"], number> = {
   SUM: OPEX_AGGREGATION.sum,
@@ -621,7 +618,8 @@ function toOpexCost(
     thresholdIndividual: period.thresholdIndividual ?? null,
     useInflationProfile: period.inflation,
     useCountryInflationProfile: period.countryInflation,
-    inflationProfile: blankZero(period.inflationPercent),
+    // Null for a blank column, 0 for a stored 0.0 % (D119); only the grid cell blanks a 0 (O-9).
+    inflationProfile: period.inflationPercent,
     inflationStartYear: period.inflationYear || null,
     inflationCountryArea: period.inflationCountryArea || null,
     alignWithProjectDuration: period.align,
@@ -699,13 +697,14 @@ function seedForm(
     selected, parent, startDate: startDate,
   });
   // `LookUp('Country Inflation Profiles', country && year [&& area]).Inflation` (`:7822-7847`).
-  // For Italy the canvas adds the Area term; `gblAreaWithRegion` minus its `Italy_` prefix is
-  // what the Area dropdown would have preselected, so it is the fallback when the row carries
-  // no area of its own.
+  // For Italy the canvas adds the Area term, read from the hidden Area dropdown — whose default is
+  // ALWAYS the project's own zone (`gblAreaWithRegion` minus its `Italy_` prefix; the row's stored area
+  // is commented out of `DefaultSelectedItems`, `:7684-7708`). D119: the row's area no longer wins.
+  const projectArea = italyZone(areaRegion) || null;
   const countryProfile = countryInflationPercent(inflationRows, {
     year: inflationStartYear,
     countryName: project.countryName,
-    area: contractLevel?.inflationCountryArea ?? italyZone(areaRegion) ?? null,
+    area: projectArea,
   });
 
   return {
@@ -737,8 +736,9 @@ function seedForm(
       countryName: project.countryName,
       countryProfile,
     })),
-    // The hidden Area dropdown's `DefaultSelectedItems` is the project's own zone (`:7618-7628`).
-    inflationCountryArea: contractLevel?.inflationCountryArea || italyZone(areaRegion) || null,
+    // The hidden Area dropdown's `DefaultSelectedItems` is the project's own zone (`:7618-7628`), on Edit too: the
+    // canvas never preselects the row's stored area, and the Save writes the dropdown (D119).
+    inflationCountryArea: projectArea,
     alignWithProjectDuration: alignWithProjectDurationDefault({ selected, parent }),
     externalContract: externalContractDefault({
       selected, parent, mode, subaccountOrder: panel.card.subaccount.order,
@@ -758,7 +758,8 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const { project, projectId } = useSession();
   // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
   // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
-  const { data: book, isLoading: bookLoading, error, save } = useCostBook();
+  // D119: re-read on every visit, as `OnVisible`'s `ClearCollect(colOpexProjectCosts, …)` (`:118-124`).
+  const { data: book, isLoading: bookLoading, error, save } = useCostBook(undefined, { everyVisit: true });
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
   /** CA-15 — a Cost write of this project still running, from any screen or an earlier visit. */
@@ -981,6 +982,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
           command: "addContractType", mode, selected: null, parent: null, codDate: projectContext.codDate,
         }),
       });
+      setSelection(selectionOnAdd(card.id));
       return;
     }
 
@@ -1001,6 +1003,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
           command: "addPeriod", mode, selected: null, parent, codDate: projectContext.codDate,
         }),
       });
+      setSelection(selectionOnAdd(card.id));
       return;
     }
 
@@ -1079,7 +1082,15 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
    * chosen date.
    */
   const onStartDate = (value: string) => {
-    setForm((f) => (f ? { ...f, startDate: value } : f));
+    // D119: the Inflation Start Year box follows the date when its default depends on it (`:7583-7594`).
+    const year = panel
+      ? inflationStartYearOnDateChange({
+        selected: panel.selected, parent: panel.parent, before: form?.startDate ?? null, after: value === "" ? null : value,
+      })
+      : undefined;
+    setForm((f) => (f ? {
+      ...f, startDate: value, ...(year === undefined ? {} : { inflationStartYear: text(year) }),
+    } : f));
     setPanel((p) => (p ? {
       ...p,
       codDate: value,
@@ -1093,7 +1104,15 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   /** `ico_ResetStartDay_NewEditCost_OPEXCosts.OnChange` (`:5941-5955`). */
   const onResetStartDate = () => {
     const cod = projectContext.codDate;
-    setForm((f) => (f ? { ...f, startDate: cod } : f));
+    // D119: as a picked date — the start-year box follows when its default depends on the date.
+    const year = panel
+      ? inflationStartYearOnDateChange({
+        selected: panel.selected, parent: panel.parent, before: form?.startDate ?? null, after: cod,
+      })
+      : undefined;
+    setForm((f) => (f ? {
+      ...f, startDate: cod, ...(year === undefined ? {} : { inflationStartYear: text(year) }),
+    } : f));
     setPanel((p) => (p ? {
       ...p,
       codDate: cod,
@@ -1785,6 +1804,10 @@ function OpexPanel({
       // label and disabled-control colours (canvas.css), for this panel only.
       width={660}
       panelClassName="opex-canvas-panel"
+      // D119: `con_OpexCosts_RightPanel_NewEditCost` closes only through its ✕ and Cancel — the dark backdrop has no
+      // OnSelect and there is no keyboard dismissal — so a stray click outside or Escape no longer throws away the form.
+      keepOpenOnOutsideClick
+      keepOpenOnEscape
       onDismiss={onCancel}
       footer={
         // `lbl_…_BodyButtons_Hint` sits at the footer's left edge (`X: =20`), red; the PowerCAT
@@ -2133,8 +2156,10 @@ function OpexPanel({
                             data-testid={`opex-threshold-${o.value}`}
                             onChange={() => onChange({
                               thresholdType: o.value,
-                              // `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` (`:8313`).
-                              thresholdIndividual: "",
+                              // `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` (`:8313`). Reset goes back to the
+                              // box's Default, the EDITED row's `'Threshold individual'` (`:8317-8321`), not to empty:
+                              // on Edit, p75 → Individual shows the stored figure again; on Add it is empty (D119).
+                              thresholdIndividual: text(panel.selected?.thresholdIndividual),
                             })}
                           />
                           {o.label}

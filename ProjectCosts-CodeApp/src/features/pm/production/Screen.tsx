@@ -38,7 +38,7 @@ import {
   ACCESSIBLE_LABEL, COMMAND_BAR_LABEL, COMMAND_ICON, DELETE_DIALOG, MAX_LENGTH, MSG, PAGE_LOCK_TITLE,
   PREVENT_LAST_YIELD_DIALOG, PRODUCTION_COMMAND_KEYS, PRODUCTION_SCREEN_TEXT, SUMMARY_LABELS, UI,
   applyMonthEdit, applyReductionEdit, assessmentLabel, blocksLastYieldRemoval, buildNegativePriceRows,
-  buildSeasonalityRows, buildYieldPayload, canSaveYield, changeAllocationMode, changeLossesMode,
+  buildSeasonalityRows, buildYieldPayload, canSaveYield, changeAllocationMode, changeIrradiation, changeLossesMode,
   changeUncertaintyMode, commandBarState, deriveYieldView, detailValues, fieldModes, fmtPercentTotal,
   formFromRow, negativeRowsForEdit, newYieldForm, onCardHeader, pageLock, panelTitle, productionRowLabel,
   productionStatusLabel, resetNegativePriceRow, seasonalityFromStored, seasonalityTotal, seasonalityTotalError,
@@ -271,6 +271,12 @@ const useStyles = makeStyles({
 
 /* ────────────────────────────────────────────────────────────────── helpers */
 
+/** The PM `cmp_PopUp_Confirmation` look, as the Team delete pop-up renders it (see the dialogs below). */
+const PM_CONFIRMATION_POPUP = {
+  canvasFooter: true, footerDivider: false, darkScrim: true, confirmWidth: 128, classicPopUp: true,
+  confirmIcon: "checkmark", cancelIcon: "dismiss",
+} as const;
+
 const ASSESSMENT_OPTIONS = ["Internal", "External"] as const;
 const ALLOCATION_INPUT_OPTIONS: readonly AllocationInputMode[] = ["Input Irradiation", "Input Gross Yield"];
 const LOSSES_OPTIONS: readonly LossesInputMode[] = ["Input losses", "Input Net Yield p50"];
@@ -359,7 +365,7 @@ export default function ProductionScreen() {
     setForm((prev) => ({ ...prev, [field]: value }));
 
   /* ── the panel's derived fields, modes and errors. */
-  const view = deriveYieldView(form, technology, { plantPvCapacity: project?.plantPvCapacity ?? null, lang });
+  const view = deriveYieldView(form, technology, { lang });
   const modes = fieldModes(form, technology, panel?.editing != null);
   const errors = yieldErrors(view, form, technology, lang);
 
@@ -579,9 +585,11 @@ export default function ProductionScreen() {
                 <NumericField label={UI.panel.windSpeed} value={form.windSpeed} required maxLength={MAX_LENGTH.windSpeed} counter={false}
                   error={errors.windSpeed ?? undefined}
                   onChange={(v) => set("windSpeed", v)} testId="txt_ProductionDataWTG_WindSpeed" ariaLabel="txt_ProductionDataWTG_WindSpeed" />
-                {/* `rad_ProductionDataWTG_Allocation` — always `DisplayMode.View`, Whole plant (Y:3031). */}
+                {/* `rad_ProductionDataWTG_Allocation` — always `DisplayMode.View`, Whole plant (Y:3031). `Items:
+                    Choices('Yield Allocation')` lists in the option set's order — Each turbine (200) first, as
+                    `Vsb_energyyieldsvsb_allocation` and the live canvas show (17 Nov 2026). */}
                 <Choices label="" name="rad_ProductionDataWTG_Allocation" value="Whole plant"
-                  options={["Whole plant", "Each turbine"]} disabled onChange={() => undefined} />
+                  options={["Each turbine", "Whole plant"]} disabled onChange={() => undefined} />
               </>
             ) : (
               <>
@@ -591,9 +599,9 @@ export default function ProductionScreen() {
                 <div className={s.info}>
                   <div className={s.infoField}>
                     <NumericField label={UI.panel.irradiation} value={view.irradiation} required={modes.irradiationRequired}
-                      disabled={!modes.irradiationEditable} maxLength={MAX_LENGTH.irradiation} counter={false}
+                      readOnly={!modes.irradiationEditable} maxLength={MAX_LENGTH.irradiation} counter={false}
                       error={errors.irradiation ?? undefined}
-                      onChange={(v) => set("irradiation", v)} testId="txt_ProductionDataPV_Irradation" ariaLabel="txt_ProductionDataPV_Irradation" />
+                      onChange={(v) => setForm((prev) => changeIrradiation(prev, v, project?.plantPvCapacity ?? null, lang))} testId="txt_ProductionDataPV_Irradation" ariaLabel="txt_ProductionDataPV_Irradation" />
                   </div>
                   <Tooltip content={UI.irradiationInfo} relationship="label" withArrow>
                     <Button appearance="transparent" className={s.infoButton} icon={<InfoRegular />} aria-label={UI.irradiationInfo} data-testid="InfoButtonCanvas2" />
@@ -602,20 +610,22 @@ export default function ProductionScreen() {
               </>
             )}
 
+            {/* The mode-driven boxes are `DisplayMode.View` in the canvas, never `Disabled` (Y:3300, 3418,
+                3623, 3787, 3962, 5786, 5921, …): the value stays in normal BLACK text, not greyed (17 Nov 2026). */}
             <NumericField label={UI.panel.grossYield} value={view.grossYield} required={modes.grossRequired}
-              disabled={!modes.grossEditable} maxLength={MAX_LENGTH.grossYield} counter={false}
+              readOnly={!modes.grossEditable} maxLength={MAX_LENGTH.grossYield} counter={false}
               error={errors.grossYield ?? undefined}
               onChange={(v) => set("grossYield", v)} testId={`txt_${prefix}_GrossYield`} ariaLabel={`txt_${prefix}_GrossYield`} />
 
             <Choices label="" name={`rad_${prefix}_Lossessp50`} value={form.lossesInput}
               options={LOSSES_OPTIONS} disabled={modes.modesLocked}
-              onChange={(v) => setForm((prev) => changeLossesMode(prev, v as LossesInputMode, technology))} />
+              onChange={(v) => setForm((prev) => changeLossesMode(prev, v as LossesInputMode, technology, lang))} />
             <NumericField label={UI.panel.totalLosses} value={view.totalLosses} required={modes.lossesRequired}
-              disabled={!modes.lossesEditable} maxLength={MAX_LENGTH.totalLosses} counter={false}
+              readOnly={!modes.lossesEditable} maxLength={MAX_LENGTH.totalLosses} counter={false}
               error={errors.totalLosses ?? undefined}
               onChange={(v) => set("totalLosses", v)} testId={`txt_${prefix}_TotalLosses`} ariaLabel={`txt_${prefix}_TotalLosses`} />
             <NumericField label={UI.panel.netP50} value={view.netP50} required={modes.p50Required}
-              disabled={!modes.p50Editable} maxLength={MAX_LENGTH.netP50} counter={false}
+              readOnly={!modes.p50Editable} maxLength={MAX_LENGTH.netP50} counter={false}
               error={errors.netP50 ?? undefined}
               onChange={(v) => set("netP50", v)} testId={`txt_${prefix}_NetYieldP50`} ariaLabel={`txt_${prefix}_NetYieldP50`} />
 
@@ -623,15 +633,15 @@ export default function ProductionScreen() {
               options={UNCERTAINTY_OPTIONS} disabled={modes.modesLocked}
               onChange={(v) => setForm((prev) => changeUncertaintyMode(prev, v as UncertaintyInputMode))} />
             <NumericField label={UI.panel.uncertainty} value={view.uncertainty} required={modes.uncertaintyRequired}
-              disabled={!modes.uncertaintyEditable} maxLength={MAX_LENGTH.uncertainty} counter={false} placeholder="0.0"
+              readOnly={!modes.uncertaintyEditable} maxLength={MAX_LENGTH.uncertainty} counter={false} placeholder="0.0"
               error={errors.uncertainty ?? undefined}
               onChange={(v) => set("uncertainty", v)} testId={`txt_${prefix}_Uncertainty`} ariaLabel={`txt_${prefix}_Uncertainty`} />
             <NumericField label={UI.panel.netP75} value={view.netP75} required={modes.p75p90Required}
-              disabled={!modes.p75p90Editable} maxLength={MAX_LENGTH.netP75} counter={false}
+              readOnly={!modes.p75p90Editable} maxLength={MAX_LENGTH.netP75} counter={false}
               error={errors.netP75 ?? undefined}
               onChange={(v) => set("netP75", v)} testId={`txt_${prefix}_NetYieldP75`} ariaLabel={`txt_${prefix}_NetYieldP75`} />
             <NumericField label={UI.panel.netP90} value={view.netP90} required={modes.p75p90Required}
-              disabled={!modes.p75p90Editable} maxLength={MAX_LENGTH.netP90} counter={false}
+              readOnly={!modes.p75p90Editable} maxLength={MAX_LENGTH.netP90} counter={false}
               error={errors.netP90 ?? undefined}
               onChange={(v) => set("netP90", v)} testId={`txt_${prefix}_NetYieldP90`} ariaLabel={`txt_${prefix}_NetYieldP90`} />
 
@@ -729,14 +739,18 @@ export default function ProductionScreen() {
         </div>
       </FormPanel>
 
+      {/* `cmp_Delete_ProjectProd` / `cmp_ActivateDeactivate_ProjectProd` are the PM app's own
+          `cmp_PopUp_Confirmation` (Components/cmp_PopUp_Confirmation.pa.yaml): 490 x 260 on a 70 % black
+          scrim, a 40 px header with a 12-pt title, a themePrimary "✓ <confirm>" 128 wide, then "✕ Cancel".
+          The instances' `IconLeftButton` / `IconRightButton` ("CheckMark" / "Trash") are never read — the
+          component hard-codes CheckMark / Cancel — so Delete is NOT red with a bin (17 Nov 2026). */}
       <ConfirmDialog
         open={confirm?.kind === "delete"}
         title={DELETE_DIALOG.title}
         description={confirm?.kind === "delete" ? DELETE_DIALOG.description(confirm.row.description) : ""}
         confirmText={DELETE_DIALOG.confirm}
         cancelText={DELETE_DIALOG.cancel}
-        confirmIcon="delete"
-        destructive
+        {...PM_CONFIRMATION_POPUP}
         onConfirm={() => { if (confirm?.kind === "delete") onConfirmDelete(confirm.row); }}
         onCancel={() => setConfirm(null)}
       />
@@ -745,6 +759,7 @@ export default function ProductionScreen() {
         const d = statusDialog(confirm.row);
         return (
           <ConfirmDialog open title={d.title} description={d.description} confirmText={d.confirm} cancelText={d.cancel}
+            {...PM_CONFIRMATION_POPUP}
             onConfirm={() => onConfirmStatus(confirm.row)} onCancel={() => setConfirm(null)} />
         );
       })() : null}

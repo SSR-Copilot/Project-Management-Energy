@@ -2,7 +2,10 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    /* "DOM.Iterable" for the editor: TypeScript 6 (this project's) already has the NodeList / HTMLCollection
+       iterators in "DOM", but VS Code's built-in TypeScript 5 does not, so `[...document.querySelectorAll(…)]`
+       showed TS2488 in the editor only. In TS 6 the extra lib is an empty placeholder. */
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "esnext",
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,

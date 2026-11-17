@@ -17,8 +17,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Button, MessageBar, MessageBarBody, MessageBarTitle, Text, mergeClasses,
+  Button, MessageBar, MessageBarBody, MessageBarTitle, Text, makeStyles, mergeClasses,
 } from "@fluentui/react-components";
+// The canvas classic scrollbar (10 px), shared with Land Lease and OPEX — the DevCo leaf list uses it too (D120).
+import { canvasScrollbar } from "@/features/cost/periods/canvasScrollbar";
 // The v9 date picker ships separately from the core package.
 import { DatePicker } from "@fluentui/react-datepicker-compat";
 import {
@@ -69,7 +71,7 @@ import {
   closingTypePatch, commentCounter, contractNameFor, devCoLeafCostByAccount, marginChangePatch,
   marginIsStandard, marginTypeChangePatch, newPeriodDescription, oneDecimalText,
   periodDescriptionLocked, saveErrorText, selectionAfterHeaderClick, selectionAfterTargetClick,
-  targetPercentText, usedInContractTooltip, wholeNumberText, inputDecimalText,
+  targetPercentText, usedInContractTooltip, wholeNumberText, inputDecimalText, devCoLeafTotalText,
   costLabel, currencyCode, devCoCostName,
   devCoLeaves, devCoParents, leafSelectable, parentCheckHasChildren, parentCheckState,
   panelTitle, paymentTargetErrors, paymentTargetName, recalculateForm,
@@ -1495,6 +1497,13 @@ function ParentCheckbox({
  * `btn_…_DevCoCosts_TransparentButton.OnSelect` folds EVERY row before unfolding the one
  * clicked, so at most one stands open — hence a single `expandedId`, not a set.
  */
+/**
+ * `gal_Contracts_RightPanel_NewEdit_Costs`' vertical scrollbar: the canvas classic 10 px bar. Its gutter is
+ * reserved (`.canvas-devco-leaves`), so the leaf checkboxes stay under the header's whether the list scrolls
+ * or not, as on the canvas (D120).
+ */
+const useDevcoStyles = makeStyles({ leaves: { ...canvasScrollbar } });
+
 function DevCoAccountPicker({
   tree, locale, leafCosts, contractDescriptionById, expandedId, onExpand, onToggleLeaf, onToggleParent,
 }: {
@@ -1510,6 +1519,7 @@ function DevCoAccountPicker({
   onToggleParent: (parentId: string) => void;
 }) {
   const parents = devCoParents(tree);
+  const devco = useDevcoStyles();
   return (
     <div className="canvas-devco" role="group" aria-label={MSG.devCoCostsFrom}>
       {parents.map((parent) => {
@@ -1550,13 +1560,14 @@ function DevCoAccountPicker({
             </div>
 
             {open ? (
-              <div className="canvas-devco-leaves" id={`devco-leaves-${parent.id}`}>
+              <div className={mergeClasses("canvas-devco-leaves", devco.leaves)} id={`devco-leaves-${parent.id}`}>
                 {leaves.map((leaf) => (
                   <div key={leaf.id} className="canvas-devco-row" data-used={leaf.used}>
                     <span className="canvas-devco-name">{`${leaf.number} ${leaf.name}`}</span>
-                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`; 0 shows "0". */}
+                    {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`:
+                        "-" with no cost row, "0" when they add up to 0 (D120). */}
                     <span className="canvas-devco-total">
-                      {wholeNumberText(leafCosts.get(leaf.id), locale)}
+                      {devCoLeafTotalText(leafCosts, leaf.id, locale)}
                     </span>
                     {/*
                       * `chb_…_CostssRow`: `Checked: =Or(ThisItem.Selected, ThisItem.Used)` and
@@ -1577,6 +1588,16 @@ function DevCoAccountPicker({
                         : undefined}
                       onChange={(e) => onToggleLeaf(leaf.id, e.target.checked)}
                     />
+                    {/* `rec_…_CostssRow_Used` (`:6421-6433`): a 20 x 20 Warning-bordered square with a 12 % Warning
+                        fill over the checkbox, `Visible: =ThisItem.Used`, carrying the "Used in contract" tooltip. */}
+                    {leaf.used ? (
+                      <span
+                        className="canvas-devco-used"
+                        aria-hidden="true"
+                        data-testid={`rec_Contracts_RightPanel_NewEdit_CostssRow_Used-${leaf.id}`}
+                        title={usedInContractTooltip(contractDescriptionById.get(leaf.usedByContractId ?? ""))}
+                      />
+                    ) : null}
                   </div>
                 ))}
               </div>

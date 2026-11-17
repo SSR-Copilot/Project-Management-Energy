@@ -142,6 +142,7 @@ import {
   type PanelContext,
   matchesStandardAssumption,
   opexDecimalText, opexNumberOrNull,
+  inflationStartYearOnDateChange, selectionOnAdd,
 } from "./opexRules";
 // The shared D58 guard (rule 17); its own cases are in `src/domain/writeGuard.test.ts`.
 import { writeCommandsDisabled } from "@/domain/writeGuard";
@@ -1998,5 +1999,55 @@ describe("D117 OPEX grid cells in the user's language", () => {
     expect(formatWholeNumber(1_234_567, "en-GB")).toBe("1,234,567");
     expect(formatRevenuePercent(2.5, "de-DE")).toBe("2,50 %");
     expect(formatOneDecimalPercent(2.5, "de-DE")).toBe("2,5 %");
+  });
+});
+
+/* ═══════════════════════════════════════════════════════ D119 canvas parity ══ */
+
+describe("OPEX — D119: the canvas-parity fixes", () => {
+  it("UT-OPEX-135 Add Contract Type / Add Period leave no row selected, the card owning the selection", () => {
+    // `locSelectedOpexCost: Blank()` (`:593`, `:625`, `:3031`); Cancel / ✕ never restore it.
+    expect(selectionOnAdd("card-1")).toEqual({
+      selectedId: null, scopeId: "card-1", candidateDescription: "", parentCostId: null,
+    });
+  });
+
+  it("UT-OPEX-136 the Inflation Start Year follows the Start Date only while its default depends on the date", () => {
+    // A new cost type: `Year(StartDate) + 1` (`:7583-7594`).
+    expect(inflationStartYearOnDateChange({ selected: null, parent: null, before: "2028-01-01", after: "2031-06-01" }))
+      .toBe(2032);
+    // Same year: the formula's result does not change, so the box (perhaps a typed year) is left alone.
+    expect(inflationStartYearOnDateChange({ selected: null, parent: null, before: "2028-01-01", after: "2028-09-30" }))
+      .toBeUndefined();
+    // A cleared date: the formula has no else-branch, so the box goes blank.
+    expect(inflationStartYearOnDateChange({ selected: null, parent: null, before: "2028-01-01", after: null }))
+      .toBeNull();
+    // Adding a period takes the parent's year whatever the date.
+    const parent = cost({ id: "r", inflationStartYear: 2026 });
+    expect(inflationStartYearOnDateChange({ selected: null, parent, before: "2028-01-01", after: "2031-01-01" }))
+      .toBeUndefined();
+    // Editing a row with its own year keeps it; one with no stored year follows the date.
+    expect(inflationStartYearOnDateChange({
+      selected: cost({ id: "e", inflationStartYear: 2027 }), parent: null, before: "2028-01-01", after: "2031-01-01",
+    })).toBeUndefined();
+    expect(inflationStartYearOnDateChange({
+      selected: cost({ id: "n", inflationStartYear: null }), parent: null, before: "2028-01-01", after: "2031-01-01",
+    })).toBe(2032);
+  });
+
+  it("UT-OPEX-137 the Individual Threshold cell follows the user's language, like the other cells", () => {
+    const c = cost({ threshold: true, thresholdType: THRESHOLD_TYPE.individual, thresholdIndividual: 1234.5 });
+    expect(thresholdColumnText(c, "de-DE")).toBe("1.234,5");
+    expect(thresholdColumnText(c, "en-GB")).toBe("1,234.5");
+  });
+
+  it("UT-OPEX-138 the Inflation Profile cell still shows a stored 0.0 % as empty (O-9), a figure as before", () => {
+    const where = { countryName: "Germany", areaStateProvince: null };
+    expect(inflationColumnText(cost({ useInflationProfile: true, useCountryInflationProfile: false, inflationProfile: 0 }), where))
+      .toBe("");
+    expect(inflationColumnText(cost({ useInflationProfile: true, useCountryInflationProfile: false, inflationProfile: null }), where))
+      .toBe("");
+    expect(inflationColumnText(cost({ useInflationProfile: true, useCountryInflationProfile: false, inflationProfile: 2.5 }), where))
+      .toBe("2.5 %");
   });
 });

@@ -465,6 +465,17 @@ describe("saveOpexPeriod", () => {
     expect(fieldsOf(writes.find((w) => w.op === "update" && w.table === "opex")))
       .toHaveProperty("vsb_isstartdatestandardassumption", false);
   });
+  it("UT-PWRITE-049 an Edit re-binds the owning business unit, as the canvas' unconditional Patch (D119)", async () => {
+    // `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'` (`:8794`) — on every save.
+    await savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID }, false);
+    const upd = writes.find((w) => w.op === "update" && w.table === "opex" && w.id === HEAD_ID);
+    expect(fieldsOf(upd)["owningbusinessunit@odata.bind"]).toBe(`/businessunits(${BUSINESS_UNIT})`);
+    // Without a business unit in the context nothing is bound (no empty `@odata.bind`).
+    writes = [];
+    await savePeriod({ ...CTX, owningBusinessUnitId: undefined }, { ...OM_PERIOD, id: HEAD_ID }, false);
+    expect(fieldsOf(writes.find((w) => w.op === "update" && w.table === "opex")))
+      .not.toHaveProperty("owningbusinessunit@odata.bind");
+  });
   it("UT-PWRITE-023 defaults the threshold type to Individual only when the panel sent none", async () => {
     // 952850002 "Individual", measured in `stringmap` on 16 Sep — the value all 8 live rows hold.
     await savePeriod(
@@ -1350,9 +1361,10 @@ describe("period round trip", () => {
       description: "Broker fee",
       currency: "Euro",
       inflation: false, countryInflation: false,
-      // Inflation off means both numbers are cleared, so they round-trip as zero and not as
-      // whatever the row held before the toggle was turned off.
-      inflationPercent: 0, inflationYear: 0,
+      // Inflation off means both numbers are cleared, so they round-trip as blank and not as
+      // whatever the row held before the toggle was turned off. D119: a blank % now reads back as
+      // null (a stored 0.0 % stays 0); the start year still reads a blank as 0.
+      inflationPercent: null, inflationYear: 0,
       align: false,
     });
   });

@@ -111,7 +111,13 @@ export type PeriodMode = "om" | "land" | "other";
  */
 export interface CostPeriod {
   id: string; group: string; mode: PeriodMode; description: string;
-  startDate: string; years: number; months: number; currency: string;
+  /**
+   * `years` / `months` (and `frequency`, `inflationPercent` below) are NULLABLE for OPEX (D119): the OPEX
+   * columns are optional and a blank must stay blank — the canvas grid shows an empty cell, not "0 years" /
+   * "1", and the panel opens a stored 0.0 % as "0.0" rather than empty. Land Lease still reads them with
+   * `?? 0` / `?? 1`, so its periods always carry numbers.
+   */
+  startDate: string; years: number | null; months: number | null; currency: string;
   /**
    * OPEX only: the STORED `vsb_name`. The command bars' `locLastPeriod` sorts on it, and stored
    * names do not follow one pattern — migrated rows carry the bare description, rows the app
@@ -156,8 +162,8 @@ export interface CostPeriod {
    * write map turned MAX-or-else-SUM, so opening and saving one of them silently rewrote MIN to
    * SUM — and the panel's own dropdown offers all three (`Choices('Opex Aggregation')`, `:7023`).
    */
-  aggregation: "SUM" | "MAX" | "MIN"; frequency: number;
-  inflation: boolean; countryInflation: boolean; inflationYear: number; inflationPercent: number;
+  aggregation: "SUM" | "MAX" | "MIN"; frequency: number | null;
+  inflation: boolean; countryInflation: boolean; inflationYear: number; inflationPercent: number | null;
   threshold: boolean; align: boolean; external: boolean; standard: boolean;
   /**
    * `vsb_thresholdtype` — O&M only, and `undefined` whenever `threshold` is false.
@@ -324,7 +330,8 @@ export function periodEnd(p: Pick<CostPeriod, "startDate" | "years" | "months">)
   const start = new Date(p.startDate + "T12:00:00");
   if (Number.isNaN(+start)) return "";
   const day = start.getDate();
-  start.setDate(1); start.setMonth(start.getMonth() + p.years * 12 + p.months);
+  // A blank OPEX duration counts as 0, as `DateAdd(start, Blank())` does (D119 keeps the blank in the book).
+  start.setDate(1); start.setMonth(start.getMonth() + (p.years ?? 0) * 12 + (p.months ?? 0));
   const last = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
   start.setDate(Math.min(day, last)); start.setDate(start.getDate() - 1);
   return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;

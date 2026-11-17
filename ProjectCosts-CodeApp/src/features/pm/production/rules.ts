@@ -562,11 +562,20 @@ export function formFromRow(row: EnergyYieldRow, technology: Technology, lang: L
   };
 }
 
-/** The losses radio `OnChange` (Y:3214-3230, 6040-6061): losses, p50 and gross start again (PV also irradiation). */
-export function changeLossesMode(form: YieldFormState, mode: LossesInputMode, technology: Technology): YieldFormState {
+/**
+ * The losses radio `OnChange` (Y:3214-3230, 6040-6061): losses, p50 and gross start again. PV's
+ * `Reset(txt_ProductionDataPV_Irradation)` puts that box back to its `Value`, `Text(locIrradation,
+ * "##,##0.0")` — NOT blank: once "Input Irradiation" was picked, `locIrradation` is the radio's 0 seed
+ * (Y:5715), so the box reads "0.0" (a typed value goes back to "0.0" too); before that it is blank
+ * (17 Nov 2026). The radio is locked on Edit, so this only runs on Add, where nothing else sets it.
+ */
+export function changeLossesMode(
+  form: YieldFormState, mode: LossesInputMode, technology: Technology, lang: Lang = "en-US",
+): YieldFormState {
+  const irradiationSeeded = form.allocationInput === "Input Irradiation" || form.irradiation.trim() !== "";
   return {
     ...form, lossesInput: mode, totalLosses: "", netP50: "", grossYield: "",
-    ...(technology === "PV" ? { irradiation: "" } : {}),
+    ...(technology === "PV" ? { irradiation: irradiationSeeded ? pfxText(0, "##,##0.0", lang) : "" } : {}),
   };
 }
 
@@ -617,6 +626,21 @@ export function deriveNetP50(grossYield: number | null, totalLosses: number | nu
 export const grossFromIrradiation = (plantPvCapacity: number | null, irradiation: number | null): number =>
   pfxRound((plantPvCapacity ?? 0) * (irradiation ?? 0), 0);
 
+/**
+ * `txt_ProductionDataPV_Irradation.OnChange` (Y:5788-5792): a keypress in "Input Irradiation" sets
+ * `locGrossYield`, which the Gross box shows as `Text(locGrossYield, "##,##0")`. ONLY a keypress derives
+ * it: Add starts `locGrossYield` blank (Y:610) and the radio's `locIrradation: 0` seed (Y:5715) is no
+ * keypress, so the box stays EMPTY until the user types — not "0" (canvas parity, 17 Nov 2026). Clearing
+ * the field is a keypress too: `Value("")` is blank, so the box then reads "0", as in the canvas.
+ */
+export function changeIrradiation(
+  form: YieldFormState, irradiation: string, plantPvCapacity: number | null, lang: Lang = "en-US",
+): YieldFormState {
+  if (form.allocationInput !== "Input Irradiation") return { ...form, irradiation };
+  const gross = grossFromIrradiation(plantPvCapacity, valueOf(irradiation, lang));
+  return { ...form, irradiation, grossYield: pfxText(gross, "##,##0", lang) };
+}
+
 /** What each panel field shows — the typed text, or the value the canvas derives into it. */
 export interface YieldView {
   windSpeed: string;
@@ -631,18 +655,18 @@ export interface YieldView {
 
 /**
  * The derived fields of the open panel (the `OnChange` chains and `Value` formulas, Y:3107-4020,
- * 5788-6750), computed from the typed values rather than pushed through context variables.
+ * 5788-6750), computed from the typed values rather than pushed through context variables. The PV
+ * gross from irradiation is the one keypress-only derivation, so `changeIrradiation` writes it into
+ * the form instead (17 Nov 2026).
  */
 export function deriveYieldView(
   form: YieldFormState,
-  technology: Technology,
-  ctx: { plantPvCapacity: number | null; lang?: Lang },
+  // The PV / WTG formulas below are the same; kept so the call sites read as the canvas panels do.
+  _technology: Technology,
+  ctx: { lang?: Lang } = {},
 ): YieldView {
   const lang = ctx.lang ?? "en-US";
-  let grossYield = form.grossYield;
-  if (technology === "PV" && form.allocationInput === "Input Irradiation" && !isBlank(form.irradiation.trim())) {
-    grossYield = pfxText(grossFromIrradiation(ctx.plantPvCapacity, valueOf(form.irradiation, lang)), "##,##0", lang);
-  }
+  const grossYield = form.grossYield;
   let { totalLosses, netP50 } = form;
   if (form.lossesInput === "Input losses") {
     netP50 = isBlank(grossYield.trim()) && isBlank(totalLosses.trim())
@@ -654,8 +678,13 @@ export function deriveYieldView(
   }
   let { netP75, netP90 } = form;
   if (form.uncertaintyInput === "Input Uncertainty") {
-    const a = derivedP75(netP50, form.uncertainty, lang);
-    const b = derivedP90(netP50, form.uncertainty, lang);
+    // `Coalesce(txt_…_Uncertainty.Value / 100, locUncertaintyValue / 100)` (Y:3829-3832, 3998-4001,
+    // 6598-6601): an EMPTY box is `Blank / 100` = 0, which Coalesce keeps, so the canvas shows
+    // p75 = p90 = p50 under the grey "0.0" placeholder — never blank (canvas screenshot, 17 Nov 2026).
+    // Save still needs the box filled (`canSaveYield`).
+    const uncertainty = isBlank(form.uncertainty.trim()) ? 0 : form.uncertainty;
+    const a = derivedP75(netP50, uncertainty, lang);
+    const b = derivedP90(netP50, uncertainty, lang);
     netP75 = a === undefined ? "" : pfxText(a, "##,###", lang);
     netP90 = b === undefined ? "" : pfxText(b, "##,###", lang);
   }

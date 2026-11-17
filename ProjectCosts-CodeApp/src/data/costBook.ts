@@ -357,8 +357,10 @@ export function mapOpexRow(
     name: r.vsb_name ?? "",
     deviceId: r._vsb_devicetypeinproject_value || undefined,
     startDate: (r.vsb_startdate ?? "").slice(0, 10),
-    years: r.vsb_opexprojectdurationyears ?? 0,
-    months: r.vsb_opexprojectdurationmonths ?? 0,
+    // D119: a blank duration / frequency / inflation % stays null — the canvas grid shows an empty cell
+    // (`lbl_…_Duration`, `:1992-2040`; `lbl_…_DistributionFrequency`, `:1540`), not "0 years" / "1".
+    years: r.vsb_opexprojectdurationyears ?? null,
+    months: r.vsb_opexprojectdurationmonths ?? null,
     currency: currencyName,
     // `Value(txt.Value)` stores Blank for an empty box, so a missing column is null and NOT 0.
     fixed: money(r.vsb_fixcosts),
@@ -367,11 +369,12 @@ export function mapOpexRow(
     perMw: money(r.vsb_eurmw),
     perWtg: money(r.vsb_eurwtg),
     aggregation: readAggregation(r.vsb_aggregation),
-    frequency: r.vsb_distributionfrequency ?? 1,
+    frequency: r.vsb_distributionfrequency ?? null,
     inflation: r.vsb_useinflationprofile === true,
     countryInflation: r.vsb_usecountryinflationprofile === true,
     inflationYear: r.vsb_inflationstartyear ?? 0,
-    inflationPercent: r.vsb_inflationprofile ?? 0,
+    // A stored 0.0 % is not a blank: the panel opens it as "0.0" (`Text(x, "0.0")`, `:7811-7822`).
+    inflationPercent: r.vsb_inflationprofile ?? null,
     inflationCountryArea: r.vsb_inflationcountryarea ?? "",
     threshold: r.vsb_threshold === true,
     // Both columns were `$select`ed and then dropped on the floor, which is how a p75/p90 choice
