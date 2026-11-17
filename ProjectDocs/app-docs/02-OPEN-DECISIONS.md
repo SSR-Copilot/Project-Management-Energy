@@ -7418,3 +7418,34 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
 **Kept on purpose, unchanged** (documented earlier): Production PV Uncertainty 0–100, the PV Save check in both modes and the seasonality rounding (D28); the General Data Ownership % message; Grid Operator / Planning stored 0 shown as "0" (D31, D32); Generators apply-to-all heights (D27); the grid voltage in English.
 **Not changed, open:** 179 PM number helpers still fall back to en-US when a screen leaves the language out (Finance 60, Production 35, Revenues 31, Planning 22, Grid Operator 13, General Data 11, Milestones 7); Generators already requires it. French grouping in the Cost app (Intl, a narrow no-break space) against the PM screens (`forLanguage`, ".") is the D70 open point.
 **Tests:** UT-FIN-817, UT-PROD-132, UT-REV-163, UT-GDATA-089, UT-PLAN-064, UT-GEN-157, UT-CAPEXR-204, UT-OPEX-134, UT-LAND-146, UT-ADCOST-938; UT-FIN-204 now expects the canvas "10000000".
+
+
+## D118 — Land Lease and OPEX: a period after Period 1 starts the day after the previous one ends (17 Nov 2026)
+
+**Status:** implemented and pushed to `RounakDev1`, **NOT product-approved, not run against DEV**. Type: BUG (product owner's report, 17 Nov 2026).
+**Report:** on Land Lease, Other OPEX and Operation & Maintenance, the Start Date of a non-standard contract's later periods did not equal the previous period's End Date + 1 day. A screenshot of a code-app chain created in QA showed "OPTIMIZED - 2" starting 30.04.34, the end of "OPTIMIZED" (01.05.29 + 5 years), where the canvas shows 01.05.34.
+
+### 1. What was found (read from the code; nothing reproduced live)
+
+| Screen | Add Period default | Picker after Period 1 | Save re-chains followers |
+|---|---|---|---|
+| Other OPEX and O&M (one `OpexScreen`, `mode` prop) | previous end + 1 day (`nextStartDate`), unchanged since 21 Oct | disabled (`panelFieldModes.startDate`, since D98, 6 Nov 2026) | yes, when the start or the total months changed (`planFollowingPeriodStarts`, since D98) |
+| Land Lease | previous end + 1 day (`resolveStartDate`, "New" arm) | **editable** (the canvas sets no `DisplayMode`) | **no** |
+
+No OPEX write path was found that stores end instead of end + 1, and no `toISOString` or UTC conversion exists in the period modules. The QA chain is therefore most likely stored data from before D98 (a manually picked date, or an older build); the cause is **not determined**. The QA read (`VSBCloud_QA`, read-only, 17 Nov 2026) shows the chain WTG-2613, created 27 Oct 2026 by a build whose picker was editable on every period, with period 2-4 starts of 30 Apr 2034 / 2039 / 2044 and the standard-assumption flag `No` (typed by hand); the chain WTG-2642, created 6 Nov with the D98 build, is aligned. OPEX Add Period and the picker gate are pinned by UT-PCHAIN-020..022.
+
+### 2. What changed (Land Lease only)
+
+| # | Canvas | This app |
+|---|---|---|
+| 1 | `dte_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1` has no `DisplayMode` (LL:2336): editable on every period | **DIVERGENCE:** disabled unless the row is Period 1 or the contract is new (`startDateEditable`). Twin: `startDateEditableCanvasParity` (always `true`) |
+| 2 | Saving a period never touches the others | **DIVERGENCE:** an Edit save appends one `vsb_startdate` update per following period whose stored start differs from `previous start + previous duration` (`planFollowingLeaseStarts`, ordered by Period number). Saving an aligned contract writes nothing; saving any period heals following periods that drifted |
+| 3 | OPEX Save re-chains only when the saved period's start or total months changed (D98), so a hand-typed chain is never repaired | **DIVERGENCE:** an unchanged save also repairs the following periods whose stored start is not `previous start + previous duration` (only those; an aligned chain writes nothing; a changed save is as D98). `planFollowingPeriodStarts`, UT-PCHAIN-023..025 |
+
+Tests: `periodChain.test.ts` UT-PCHAIN-001..011 and 020..025; `LandLeaseScreen.test.tsx` UT-PCHAIN-030, 031. One existing assertion was changed on purpose: UT-LLUI-009 expected the picker enabled on Period 2 (the canvas); it now expects it disabled.
+
+### 3. Not built, product questions
+
+- **Deleting a middle Land Lease period** leaves the next period's start unchanged (a gap). The canvas has no rule for it; OPEX does not re-chain on delete either.
+- **Existing misaligned rows** are repaired in the code app by the next save of an earlier period of the chain (Land Lease and OPEX). Editing a later period only repairs the periods after it; the saved period keeps its own stored start. Editing Period 1 repairs the whole chain.
+- **No data was repaired.** The QA rows (WTG-2613) were only read; nothing was written to DEV or QA.

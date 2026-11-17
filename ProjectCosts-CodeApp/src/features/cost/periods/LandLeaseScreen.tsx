@@ -83,7 +83,7 @@ import {
   LeaseStepsError, allocationRequired, countryProfileFor, inflationProfileForSave,
   inflationProfileText, inflationUncheckPatch, leaseAreaDefault, leaseDecimalText, leaseHttpResponse, leaseStepFailureText,
   oneTimePaymentUncheckPatch, paymentBlockVisible, periodBlockRequired as periodBlockRequiredRule,
-  resolveLeaseCurrencyId, startDatePickPatch,
+  resolveLeaseCurrencyId, startDateEditable, startDatePickPatch,
   type GeneratorOption, type LandLeaseForm, type LeaseAllocationRow, type LeaseContract,
   type LeaseCostRow, type LeasePeriodRow, type LeaseProjectContext, type LeaseSubaccountCard,
 } from "./landLeaseRules";
@@ -980,6 +980,8 @@ export default function LandLeaseScreen() {
       generators,
       panelState: panel.state,
       locale,
+      // D118: an Edit save re-chains the periods after the saved one.
+      contractPeriods: panelContract?.periods,
     });
     /*
      * THE PANEL CLOSES FIRST, THEN THE SPINNER APPEARS — the canvas raises the spinner and
@@ -1566,11 +1568,14 @@ function LeasePanelBody({
               * `dte_…_StartDate_1` — a `DatePicker@0.0.46`, `Format: LongAbbreviated`
               * ("Wed, May 8, 2030"), `StartOfWeek: Monday`, `Width: =Parent.Width-Self.X*2-40`
               * to leave room for the reset icon (LL:2336). `FontItalic` / `FontColor` follow the
-              * standard-assumption flag (rule 20). It sets NO `DisplayMode`, so it stays
-              * editable on a later period too — the period's own start date — unlike the header
-              * fields `headerEditable` locks (canvas Add Period screenshot, 26 Oct 2026).
+              * standard-assumption flag (rule 20). The canvas sets NO `DisplayMode`, so it stays
+              * editable on a later period too (canvas Add Period screenshot, 26 Oct 2026).
+              * DIVERGENCE (D118, 17 Nov 2026): here it is disabled after Period 1 —
+              * `startDateEditable` — because those periods start the day after the previous one
+              * ends and the save re-chains them (`startDateEditableCanvasParity` is the canvas).
               */}
             <DateInput
+              disabled={!startDateEditable(panel.period, panel.cost)}
               value={startDate}
               format="LongAbbreviated"
               standard={startDateIsStandard(form.isStartDateStandardAssumption)}

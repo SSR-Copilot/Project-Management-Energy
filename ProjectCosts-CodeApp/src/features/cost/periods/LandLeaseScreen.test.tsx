@@ -306,14 +306,34 @@ describe("LandLeaseScreen", () => {
     fireEvent.click(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey"));
 
     // `headerEditable` — Period 2 cannot rewrite the contract, so Secured and the inflation
-    // toggle are disabled, and the reset icon is gone entirely. The start date is the PERIOD's
-    // own and stays editable: `dte_…_StartDate_1` sets no `DisplayMode` (LL:2336).
+    // toggle are disabled, and the reset icon is gone entirely. The start date is disabled too:
+    // the canvas `dte_…_StartDate_1` sets no `DisplayMode` (LL:2336), but D118
+    // (17 Nov 2026) makes every period after Period 1 start the day after the previous one ends.
     expect(screen.getByTestId("lease-secured")).toBeDisabled();
     expect(screen.getByTestId("lease-inflation")).toBeDisabled();
-    expect(screen.getByTestId("lease-start")).not.toBeDisabled();
+    expect(screen.getByTestId("lease-start")).toBeDisabled();
     expect(screen.queryByTestId("lease-reset-start")).not.toBeInTheDocument();
     // The period's own fields stay editable.
     expect(screen.getByTestId("lease-frequency")).not.toBeDisabled();
+  });
+
+  it("UT-PCHAIN-030 Edit Contract (Period 1) keeps the Start Date picker enabled", () => {
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    fireEvent.click(within(card("Locations")).getByTestId("lease-EditLandLeasePeriodKey"));
+    expect(screen.getByTestId("lease-start")).not.toBeDisabled();
+    expect(screen.getByTestId("lease-reset-start")).toBeInTheDocument();
+  });
+
+  it("UT-PCHAIN-031 Add Period shows the chained start and the picker is disabled", () => {
+    render(<Harness><LandLeaseScreen /></Harness>);
+    openCard("Locations");
+    fireEvent.click(screen.getByTestId("lease-select-p1"));
+    fireEvent.click(within(card("Locations")).getByTestId("lease-newLandLeasePeriodKey"));
+    expect(screen.getByTestId("lease-start")).toBeDisabled();
+    // Not blank: it continues the contract's last period (Parcel 12/4 - 2).
+    expect((screen.getByTestId("lease-start") as HTMLInputElement).value).not.toBe("");
   });
 
   it("UT-LLUI-010 hides BOTH allocation controls for a non-PV/Wind technology", () => {

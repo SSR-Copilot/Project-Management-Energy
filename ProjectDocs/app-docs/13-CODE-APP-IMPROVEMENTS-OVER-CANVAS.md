@@ -259,6 +259,15 @@ Found while porting about 6,100 canvas lines against the newer `.pa.yaml`: 13 de
     (`MODERN_TEXT`, shared with the toggle captions of D79); the delete pop-up title and description are the canvas 11 pt
     again (D49 §1 had enlarged them to 15.6 / 15.4 px).
   - **Fixed, shared:** the card toolbars' icon box and first-command offset (see the D80 entry below).
+- **Period start chain (17 Nov 2026, D118, fixed, awaiting approval):**
+  - **Fixed (divergence):** the Start Date picker is disabled on every period after Period 1, so a later period's start cannot
+    be typed off the previous period's End Date + 1 day (the canvas leaves it editable). `startDateEditable`,
+    canvas twin `startDateEditableCanvasParity`. Tests: UT-PCHAIN-001, 002, 030, 031 (UT-LLUI-009 updated).
+  - **Fixed (divergence):** saving a Land Lease period re-chains the periods after it, as OPEX already does
+    (`planFollowingLeaseStarts`, UT-PCHAIN-003..011); an aligned contract writes nothing.
+  - **Fixed (divergence):** an OPEX Save of an earlier period also repairs following periods whose stored start drifted (hand-typed
+    before the picker was disabled, D98); an aligned chain writes nothing. Other OPEX and Operation & Maintenance already
+    follow end + 1 on Add Period (UT-PCHAIN-020..025).
 
 ---
 

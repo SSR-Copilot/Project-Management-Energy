@@ -1334,6 +1334,61 @@ export const resetStartDateVisible = (
 ): boolean => headerEditable(selectedPeriod, selectedCost);
 
 /**
+ * DIVERGENCE (D118, product owner 17 Nov 2026): `dte_LandLease_RightPanel_NewEditCost_BodyContent_StartDate_1`
+ * sets no `DisplayMode` in the canvas (LL:2336), so it stays editable on every period. This app
+ * enables the picker only on Period 1 or a brand-new contract, like the OPEX picker
+ * (`panelFieldModes.startDate`): every later period starts the day after the previous one ends
+ * (`previous start + duration`), so it is derived, not typed. The canvas behaviour is kept as
+ * `startDateEditableCanvasParity` so the decision stays reversible.
+ */
+export const startDateEditable = (
+  selectedPeriod: Pick<LeasePeriodRow, "period"> | null | undefined,
+  selectedCost: { id: string } | null | undefined,
+): boolean => headerEditable(selectedPeriod, selectedCost);
+
+/** The canvas: the picker is never disabled (LL:2336). */
+export const startDateEditableCanvasParity = (): boolean => true;
+
+/**
+ * The periods that FOLLOW `saved` in its contract, with the start date each must have so the chain
+ * stays contiguous (`previous start + previous duration`, i.e. previous end + 1 day).
+ *
+ * DIVERGENCE (D118): the canvas never moves a following period; the code app's
+ * OPEX Save already does (`planFollowingPeriodStarts`). Land Lease needs it for the same reason
+ * once the picker is disabled after Period 1: with no way to type a date, an edit to Period 1's
+ * start or to any duration would leave gaps or overlaps. The chain order is the `Period` number
+ * (Period 1..9, a period without one last), not the start date, because a stored date may be the
+ * very thing that is wrong. Only periods whose stored start differs are returned, so saving an
+ * aligned contract writes nothing, and saving any period heals a chain whose stored starts drifted.
+ */
+export function planFollowingLeaseStarts(args: {
+  /** Every period of the contract as loaded before the save, the saved one included. */
+  periods: readonly LeasePeriodRow[];
+  saved: Pick<LeasePeriodRow, "id" | "startDate" | "durationYears" | "durationMonths">;
+}): { id: string; startDate: string }[] {
+  const { periods, saved } = args;
+  const ordered = [...periods].sort((a, b) =>
+    (a.period ?? Number.MAX_SAFE_INTEGER) - (b.period ?? Number.MAX_SAFE_INTEGER));
+  const at = ordered.findIndex((p) => p.id === saved.id);
+  if (at === -1 || !saved.startDate) return [];
+
+  const monthsOf = (p: Pick<LeasePeriodRow, "durationYears" | "durationMonths">): number =>
+    (p.durationYears ?? 0) * 12 + (p.durationMonths ?? 0);
+
+  const out: { id: string; startDate: string }[] = [];
+  let prevStart: string = saved.startDate;
+  let prevMonths = monthsOf(saved);
+  for (const row of ordered.slice(at + 1)) {
+    const start = addMonths(prevStart, prevMonths);
+    if (start === "") break;
+    if (start !== row.startDate) out.push({ id: row.id, startDate: start });
+    prevStart = start;
+    prevMonths = monthsOf(row);
+  }
+  return out;
+}
+
+/**
  * `ico_ResetStartDay_….OnChange` (LL:2501) — snap back to the project COD and re-stamp
  * `IsStartDateStandardAssumption`. Yes on Period 1 or on a brand-new contract, No otherwise.
  */
@@ -2776,6 +2831,11 @@ export function planLeaseSave(args: {
   panelState: "New" | "Edit";
   canvasParityPeriodWrap?: boolean;
   locale?: string;
+  /**
+   * Every period of the contract being edited, as loaded before the save. When given, an Edit
+   * save also re-chains the periods after the saved one (`planFollowingLeaseStarts`, D118).
+   */
+  contractPeriods?: readonly LeasePeriodRow[];
 }): LeaseSavePlan {
   const writes: LeaseWrite[] = [];
   const isNewContract = args.selectedCost === null;
@@ -2858,6 +2918,26 @@ export function planLeaseSave(args: {
     writes.push({
       op: "update", entitySet: LEASE_ENTITY_SET.period, id: selected.id, payload: periodPayload,
     });
+    // D118: the periods after this one keep starting the day after the previous ends.
+    if (args.contractPeriods) {
+      const years = periodPayload[LEASE_PERIOD_COL.durationYears];
+      const months = periodPayload[LEASE_PERIOD_COL.durationMonths];
+      const following = planFollowingLeaseStarts({
+        periods: args.contractPeriods,
+        saved: {
+          id: selected.id,
+          startDate: (periodPayload[LEASE_PERIOD_COL.startDate] as string | null) ?? null,
+          durationYears: typeof years === "number" ? years : null,
+          durationMonths: typeof months === "number" ? months : null,
+        },
+      });
+      for (const step of following) {
+        writes.push({
+          op: "update", entitySet: LEASE_ENTITY_SET.period, id: step.id,
+          payload: { [LEASE_PERIOD_COL.startDate]: step.startDate },
+        });
+      }
+    }
   }
 
   return { writes, writesHeader, createsPeriod };

@@ -2652,6 +2652,12 @@ const monthsOf = (p: Pick<ChainPeriod, "durationYears" | "durationMonths">): num
  * starts at the saved period's new start plus its new duration; each next one at the previous
  * one's new start plus the previous one's duration. A period whose new start equals its stored
  * start is still listed (the canvas Patches all of them).
+ *
+ * DIVERGENCE (D118, 17 Nov 2026): when the saved period's start and total months did
+ * NOT change, the canvas writes nothing. Here the following periods are still checked, and any whose
+ * stored start is not `previous start + previous duration` is returned (only those). That repairs
+ * a chain whose dates were typed by hand before the picker was disabled (D98): saving an earlier
+ * period of the chain corrects the rest. An aligned chain writes nothing, as before.
  */
 export function planFollowingPeriodStarts(args: {
   /** The chain as loaded before the save, the saved period included, in any order. */
@@ -2664,7 +2670,6 @@ export function planFollowingPeriodStarts(args: {
   if (previous === null) return [];
   const changed = !sameStartDate(saved.startDate, previous.startDate)
     || monthsOf(saved) !== monthsOf(previous);
-  if (!changed) return [];
 
   const keyOf = (p: ChainPeriod): string => toDate(p.startDate) === null ? "" : ymd(toDate(p.startDate)!);
   const ordered = chain
@@ -2680,11 +2685,14 @@ export function planFollowingPeriodStarts(args: {
   for (const row of ordered.slice(at + 1)) {
     if (prevStart === null) break;
     const start = addMonths(prevStart, prevMonths);
-    out.push({
-      id: row.id,
-      startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${
-        String(start.getDate()).padStart(2, "0")}`,
-    });
+    // Changed save: every follower, as the canvas. Unchanged save: only a drifted one (repair).
+    if (changed || !sameStartDate(row.startDate, start)) {
+      out.push({
+        id: row.id,
+        startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${
+          String(start.getDate()).padStart(2, "0")}`,
+      });
+    }
     prevStart = start;
     prevMonths = monthsOf(row);
   }
