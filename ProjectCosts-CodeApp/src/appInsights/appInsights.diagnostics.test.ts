@@ -119,14 +119,16 @@ describe("App Insights console lines", () => {
     const l = listener();
     l.eventsSent!([{}, {}]);
     l.eventsSent!([{}]);
-    expect(lines().filter((x) => x.includes("accepted the first 2 item(s)"))).toHaveLength(1);
+    // D122 addendum: "handed to the browser", never "accepted" / "telemetry is flowing" (a queued beacon is not delivery).
+    expect(lines().filter((x) => x.includes("SENT (not confirmed): the SDK handed the first 2 item(s)"))).toHaveLength(1);
+    expect(lines().join("\n")).not.toMatch(/accepted|telemetry is flowing/);
     for (let i = 0; i < 6; i += 1) l.eventsDiscarded!([{}], 1, 0);
-    const failed = lines().filter((x) => x.includes("FAILED"));
+    const failed = lines().filter((x) => x.includes(" FAILED: "));
     expect(failed).toHaveLength(4); // 3 batches + one "not logged" note
     expect(failed[0]).toContain("(status 0): no reply reached the browser: blocked by the Content Security Policy");
     expect(failed[3]).toContain("further discards are not logged");
     l.eventsDiscarded!([{}], 1, 401);
-    expect(lines().filter((x) => x.includes("FAILED"))).toHaveLength(4);
+    expect(lines().filter((x) => x.includes(" FAILED: "))).toHaveLength(4);
   });
 
   it("UT-AIDIAG-017 prints the browser's CSP refusal of the ingestion host once, and ignores other violations", async () => {
@@ -148,6 +150,15 @@ describe("App Insights console lines", () => {
     startAppInsights(CS);
     await appInsightsStarted();
     expect(instances()[0]!.config).toMatchObject({ connectionString: CS, loggingLevelConsole: 2 });
+  });
+
+  it("UT-AIDIAG-020 starts the SDK with the CDN config blocked and the unload event off", async () => {
+    startAppInsights(CS);
+    await appInsightsStarted();
+    expect(instances()[0]!.config).toMatchObject({
+      disablePageUnloadEvents: ["unload"],
+      extensionConfig: { AppInsightsCfgSyncPlugin: { blkCdnCfg: true } },
+    });
   });
 
   it("UT-AIDIAG-019 never sends the connection string back out as telemetry", async () => {

@@ -614,6 +614,10 @@ The canvas apps had no Application Insights (`appinsightserrortracing: false`), 
 |---|---|---|
 | Console shows the connection string in use | The complete value, the host it sends to, the app id and the exact Content Security Policy entry to allow, as `[VSB] ACTION Application Insights …` lines (console only, never sent as telemetry) | **new** |
 | Telemetry off is explained | Empty variable, failed read (with root cause), SDK not starting, SDK chunk blocked, malformed value: each prints its reason | **new** |
-| Delivery is reported | `OK` on the first accepted batch; `FAILED (status N)` with the meaning; `BLOCKED by the Content Security Policy` from the browser's own violation event; the SDK's warnings and errors in the console | **new** |
+| Delivery is reported | `SENT (not confirmed)` for the first batch handed to the browser; `FAILED (status N)` with the meaning; `BLOCKED by the Content Security Policy` from the browser's own violation event; the SDK's warnings and errors in the console | **new** |
 | A failed read no longer switches telemetry off for the page's life | A later successful read of the environment variables starts it | **fixed** |
 | Tests | `UT-AIDIAG-001…019` | **new** |
+| One host to allow, not two (D122 addendum) | The SDK no longer downloads its config from `js.monitor.azure.com`; a Content Security Policy needs only the ingestion host | **new** |
+| Quiet console in the player (D122 addendum) | The SDK no longer registers the `unload` event the player forbids (about ten Permissions-Policy violations per load) | **fixed** |
+| The "sent" line no longer claims delivery (D122 addendum) | `SENT (not confirmed)` replaces `OK … telemetry is flowing`, which printed for items the browser then blocked | **fixed** |
+| Tests | `UT-AISDK-001…003` (the real SDK, network stubbed), `UT-AIDIAG-020` | **new** |

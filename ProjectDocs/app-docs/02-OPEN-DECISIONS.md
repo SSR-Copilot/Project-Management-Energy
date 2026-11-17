@@ -7615,7 +7615,7 @@ DEV shows sessions and users in Azure Application Insights. In QA (10 testers) n
 |---|---|
 | The connection string is not in the build; it is read at run time from the Dataverse environment variable, then `startAppInsights` runs (`SessionContext.tsx:77-81`, `data/project.ts:46`) | **CONFIRMED** (code) |
 | Before this change telemetry went off silently, with no console line, when the value was empty, when the read failed, or when the SDK could not send; the first answer won for the life of the page | **CONFIRMED** (code) |
-| The SDK reports a refused batch to a notification listener with the HTTP status (`eventsDiscarded(items, 1, statusCode)`); an accepted batch calls `eventsSent` | **CONFIRMED** (SDK 3.4.5 source, `applicationinsights-channel-js.js` `_onError` / `_onSuccess`) |
+| The SDK reports a refused batch to a notification listener with the HTTP status (`eventsDiscarded(items, 1, statusCode)`); a batch the server accepts calls `eventsSent`, and so does a beacon the browser merely queued (see §7) | **CONFIRMED** (SDK 3.4.5 source, `applicationinsights-channel-js.js` `_onError` / `_onSuccess`) |
 | Code apps get a per-environment Content Security Policy, set in the Power Platform admin center (Environments > Settings > Product > Privacy + Security > Content security policy > App). Its default `connect-src` is `'none'`; Microsoft says an enforced CSP "might block" App Insights telemetry and to allow the endpoints | **CONFIRMED** (official docs: learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/content-security-policy and .../how-to/set-up-azure-app-insights) |
 | `VSBCloud_Dev` did not enforce a CSP on 6 Nov 2026 (`iscontentsecuritypolicyenabled = false`, `18-AZURE-MAPS-IN-THE-CODE-APP.md` §4). That column is the model-driven setting; the code-app setting is `PowerApps_CSPEnabledCodeApps` | **CONFIRMED** for the column, **PLAUSIBLE** that it also describes code apps |
 | QA enforces a CSP, so the ingestion host is blocked | **PLAUSIBLE** (fits "works in DEV, nothing in QA"; QA's setting was not read) |
@@ -7631,7 +7631,7 @@ DEV shows sessions and users in Azure Application Insights. In QA (10 testers) n
 ### 4. What changed (`src/appInsights/`, `src/app/SessionContext.tsx`)
 
 - Every start prints, to the browser console only, `[VSB] ACTION Application Insights …` lines: the **complete connection string** (product owner's request), the host it sends to, the app id, the exact CSP entry to add and where; or `OFF` with the reason (empty value, read failure with its root cause, SDK not starting, SDK chunk not downloading); a malformed value (quotes, missing or non-GUID key, non-https endpoint) is named.
-- After start: `OK` on the first batch the server accepts; `FAILED … (status N)` with the meaning of N for a refused batch (0 = no reply reached the browser: CSP, firewall, ad blocker; 401/403 = local authentication; 400 = key), capped at three lines plus one note; `BLOCKED by the Content Security Policy` once, from the browser's `securitypolicyviolation` event for the ingestion host.
+- After start: `SENT (not confirmed)` for the first batch handed to the browser (not proof of delivery, see §7); `FAILED … (status N)` with the meaning of N for a refused batch (0 = no reply reached the browser: CSP, firewall, ad blocker; 401/403 = local authentication; 400 = key), capped at three lines plus one note; `BLOCKED by the Content Security Policy` once, from the browser's `securitypolicyviolation` event for the ingestion host.
 - `loggingLevelConsole: 2` shows the SDK's own warnings and errors.
 - **Recovery:** if the environment-variable read fails, a later successful read now starts telemetry (before, the first answer won for the life of the page). An empty value is still a real answer, so `UT-AI-010` is unchanged.
 - The lines do not go through `trace()`: its sink would send the connection string out as telemetry (`UT-AIDIAG-019`). Cost: O(1) per event (two counters, one flag); no extra request.
@@ -7639,10 +7639,46 @@ DEV shows sessions and users in Azure Application Insights. In QA (10 testers) n
 
 ### 5. How to confirm on QA (manual, not done)
 
-Open the QA code app, DevTools > Console, filter `Application Insights`. Read the lines: `OFF …` names the cause directly; `BLOCKED …` or `FAILED … (status 0)` is cause 1; `FAILED … (status 401/403)` is cause 2; `OK …` means delivery works and the resource or filter in the Azure portal is the next place to look. Compare the printed connection string with the QA resource's.
+Open the QA code app, DevTools > Console, filter `Application Insights`. Read the lines: `OFF …` names the cause directly; `BLOCKED …` or `FAILED … (status 0)` is cause 1; `FAILED … (status 401/403)` is cause 2; `SENT (not confirmed)` alone, with no FAILED or BLOCKED line, does not prove delivery (see §7); then the resource or filter in the Azure portal is the next place to look. Compare the printed connection string with the QA resource's.
 
 ### 6. Not done / open
 
 - QA's CSP setting, the QA resource's Local Authentication and the testers' security role were not read (no QA access from here).
 - The new delivery lines were tested against a fake SDK only, not against a real ingestion endpoint.
 - No user identity is attached (`setAuthenticatedUserContext`); revisit only on the product owner's decision.
+
+### 7. Addendum (17 Nov 2026): what the DEV console showed, and the follow-up change
+
+The product owner supplied the browser console of the **deployed DEV app** (environment `be41add6-…`). It settles the root cause and corrects three statements above.
+
+**Evidence (all CONFIRMED from that log and the SDK 3.4.5 source):**
+
+| Finding | Basis |
+|---|---|
+| The environment variable was read, parsed and the SDK started; the full connection string printed, sending to `https://westeurope-5.in.applicationinsights.azure.com` | console lines |
+| The enforced Content Security Policy is `connect-src https://*.atlas.microsoft.com https://atlas.microsoft.com` (the Azure Maps allow-list of `18-AZURE-MAPS-IN-THE-CODE-APP.md` §4). Application Insights is not in it | violation text in the log |
+| The browser refused `…/v2/track` (`BLOCKED by the Content Security Policy`), and the SDK reported `Failed to send telemetry … Status:0` and `FAILED … (status 0)` for 2, 17 and 1 items | console lines |
+| A second host was refused: `https://js.monitor.azure.com/scripts/b/ai.config.1.cfg.json`, which SDK 3.4.5 requests by default (`AppInsightsCfgSyncPlugin`, `cfgUrl`) | log + `applicationinsights-web.js` |
+| `[Violation] Permissions policy violation: unload is not allowed` about ten times: the player forbids `unload`, which the SDK registers | log |
+| The `OK … accepted the first 2 item(s)` line was followed by `FAILED` for the same items. The SDK calls `eventsSent` when a beacon is only queued (`_onBeaconRetry`), so that line was wrong | log + SDK source |
+
+**Root cause: the policy blocks the ingestion host, so nothing reaches Azure and no sessions or users can appear.** The deployed DEV app is blocked as well, so this is not specific to QA.
+
+**Corrections to §2 to §5:**
+- "`VSBCloud_Dev` did not enforce a CSP" (from the Azure Maps doc) described the model-driven setting (`iscontentsecuritypolicyenabled`). The code-app policy is on in DEV, with the Maps hosts only.
+- Cause 1 (CSP) is now CONFIRMED for DEV and still PLAUSIBLE for QA (QA's policy was not captured). Cause 3 (no read access to the environment variables) is ruled out for the DEV user.
+- "DEV works" most likely means DEV was seen working from `pa app run` / `pac code run`, where the page is served from localhost with no policy (PLAUSIBLE, not confirmed). Check: in the DEV Application Insights logs, `pageViews | where timestamp > ago(30d) | summarize count(), max(timestamp) by host=tostring(parse_url(url).Host)` (not run). A host of `localhost` means it only came from local runs.
+
+**Required configuration (no code can bypass a policy; not part of the solution or `config_*.json`):** in the Power Platform admin center, for each environment (DEV, QA, Prod): Settings > Product > Privacy + Security > Content security policy > App, add that environment's own ingestion host to `connect-src` (DEV: `https://westeurope-5.in.applicationinsights.azure.com`; QA: the host in its `Application Insights sends to …` console line), and keep the Azure Maps entries. With the change below the policy needs **only** that one host. Add it to the QA and Prod release checklist.
+
+**Code change (`src/appInsights/appInsights.ts`, `SDK_CSP_FRIENDLY`):**
+- `extensionConfig.AppInsightsCfgSyncPlugin.blkCdnCfg: true`: the SDK no longer fetches `js.monitor.azure.com` (a second host to allow, and a call to a remote config this app does not use). Nothing else uses that config.
+- `disablePageUnloadEvents: ["unload"]`: no more Permissions-Policy violations. The SDK still flushes on `beforeunload`, `pagehide` and `visibilitychange`.
+- The first-batch line now reads `SENT (not confirmed)`: handed to the browser, not delivered. Delivery is shown by the absence of `FAILED` / `BLOCKED` and by the Azure portal.
+- Tests: `UT-AISDK-001…003` (the real SDK in jsdom with the network stubbed; 001 is the control: default settings DO request the CDN config and register `unload`), `UT-AIDIAG-020`; `UT-AIDIAG-016` now expects the new wording.
+
+**Noticed, not changed (outside this decision):**
+- `platform/powerClient.ts` treats every metric except `sessionLoadSummary` as a `networkRequest`. The host also sends `dataRequestsSummary`, which prints `[VSB] HTTP undefined undefined → undefined · NaN ms` and adds NaN to the open action's timings.
+- The DEV host's request metrics reach the log with `statusCode` undefined (`→ undefined`), so the `statusCode >= 400` error trace never fires there. Cause not determined.
+
+**Not done:** the CSP change itself (an administrator action in each environment); a console check on QA; a check against a real, unblocked ingestion endpoint.

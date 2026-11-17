@@ -35,6 +35,21 @@ const LOG = "Application Insights";
 /** Discard lines printed before one summary line; a dead endpoint would otherwise print one per batch. */
 const MAX_DISCARD_LINES = 3;
 
+/**
+ * SDK settings that keep a code app's Content Security Policy short and its console quiet (D122 addendum,
+ * from the DEV console of 17 Nov 2026):
+ *  - `blkCdnCfg`: by default the SDK downloads `https://js.monitor.azure.com/scripts/b/ai.config.1.cfg.json`
+ *    (its `AppInsightsCfgSyncPlugin`). That is a second host the policy would have to allow, for a remote
+ *    config this app never uses. Blocked, the only host `connect-src` needs is the ingestion endpoint.
+ *  - `disablePageUnloadEvents: ["unload"]`: the Power Apps player forbids the `unload` event
+ *    (Permissions-Policy), which printed a violation each time the SDK registered it. The SDK still flushes
+ *    on `beforeunload`, `pagehide` and `visibilitychange`.
+ */
+export const SDK_CSP_FRIENDLY = {
+  disablePageUnloadEvents: ["unload"],
+  extensionConfig: { AppInsightsCfgSyncPlugin: { blkCdnCfg: true } },
+};
+
 /** `undefined` = waiting for the connection string (or for the SDK to download); `null` = off; otherwise running. */
 let client: ApplicationInsights | null | undefined;
 /** True while the SDK chunk is downloading, so a second `startAppInsights` call does not start it again. */
@@ -104,8 +119,8 @@ function loadFailureText(error: unknown): string {
  * Console-only reporting of what the SDK does with the connection string (D122). These lines
  * deliberately do NOT go through `trace()`: that feeds this module's own sink and would send the
  * connection string back out as telemetry.
- *  - the first batch the server accepts, and every batch it refuses (with the HTTP status, which tells
- *    CSP / network (0) from auth (401/403) from a bad key (400));
+ *  - the first batch handed to the browser (not proof of delivery, see `eventsSent` below), and every batch
+ *    the SDK discards (with the HTTP status, which tells CSP / network (0) from auth (401/403) from a bad key (400));
  *  - the browser's own Content Security Policy refusal of the ingestion host, once.
  * O(1) per event: two counters and one flag.
  */
@@ -121,7 +136,15 @@ function watchDelivery(ai: ApplicationInsights, ingestionOrigin: string): void {
       eventsSent: (events) => {
         if (acceptedLogged) return;
         acceptedLogged = true;
-        logAction(`${LOG} OK: ${ingestionOrigin} accepted the first ${events.length} item(s); telemetry is flowing`);
+        /*
+         * D122 addendum: the SDK also calls `eventsSent` once a beacon is merely QUEUED by the browser
+         * (`_onBeaconRetry`), so a blocked host can print this line and then FAILED for the same items
+         * (seen on DEV, 17 Nov 2026). It says "handed over", never "delivered".
+         */
+        logAction(
+          `${LOG} SENT (not confirmed): the SDK handed the first ${events.length} item(s) for ${ingestionOrigin} to the browser. ` +
+            "Delivery is confirmed only by the absence of a later FAILED / BLOCKED line and by the Azure portal.",
+        );
       },
       eventsDiscarded: (events, _reason, statusCode) => {
         discardLines += 1;
@@ -198,6 +221,7 @@ export function startAppInsights(connectionString: string | undefined, loadError
             disableFetchTracking: true,
             // The SDK's own warnings and errors (e.g. "Failed to send telemetry.") reach the console too.
             loggingLevelConsole: 2,
+            ...SDK_CSP_FRIENDLY,
           },
         });
         ai.loadAppInsights();
