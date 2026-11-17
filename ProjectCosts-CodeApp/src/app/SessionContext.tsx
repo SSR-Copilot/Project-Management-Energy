@@ -77,7 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // App Insights starts from `vsb_ApplicationInsightsConnectionString`; a failed load turns it off.
   useEffect(() => {
     if (envQuery.isSuccess) startAppInsights(envQuery.data.vsb_ApplicationInsightsConnectionString);
-    else if (envQuery.isError) startAppInsights(undefined);
+    else if (envQuery.isError) startAppInsights(undefined, envQuery.error);
   }, [envQuery.isSuccess, envQuery.isError, envQuery.data]);
 
   /*

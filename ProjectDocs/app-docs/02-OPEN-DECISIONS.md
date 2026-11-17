@@ -7600,3 +7600,49 @@ D115 and D116 said "Nothing is on `RounakDev1`, `master` or DEV". Both are on `m
 ### 9. Verification
 
 `npm run verify` on the working tree (17 Nov 2026, on top of `255aaa8`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no warning in a file this change touched, the control-label and canvas-identity gates clean, **283 test files, 6,211 tests passed, 3 todo**, build OK. **Not run:** knip, the E2E parity suite, any check on DEV or against live Dataverse, the double-click case in a real browser (jsdom cannot send a same-tick double click), and the O&M guard against a slow or failing read. Existing tests changed on purpose: UT-PLANWRITE-008, 012 and 025 (the error text now carries the saved-rows note), UT-GEN-215 (a project with no unit now refuses instead of sending rows without the unit key), UT-GEN-914 renamed.
+
+## D122 — Application Insights sends nothing from QA: console diagnostics and a start-up that can recover (17 Nov 2026)
+
+**Status:** code on a branch, not approved, not run on QA. The root cause is NOT confirmed; the console lines below are how it gets confirmed.
+
+### 1. Symptom
+
+DEV shows sessions and users in Azure Application Insights. In QA (10 testers) nothing arrives. The QA environment variable `vsb_ApplicationInsightsConnectionString` was confirmed by the product owner to hold the correct QA connection string (DEV and QA use different resources, which is why the variable exists).
+
+### 2. Evidence
+
+| Claim | Basis |
+|---|---|
+| The connection string is not in the build; it is read at run time from the Dataverse environment variable, then `startAppInsights` runs (`SessionContext.tsx:77-81`, `data/project.ts:46`) | **CONFIRMED** (code) |
+| Before this change telemetry went off silently, with no console line, when the value was empty, when the read failed, or when the SDK could not send; the first answer won for the life of the page | **CONFIRMED** (code) |
+| The SDK reports a refused batch to a notification listener with the HTTP status (`eventsDiscarded(items, 1, statusCode)`); an accepted batch calls `eventsSent` | **CONFIRMED** (SDK 3.4.5 source, `applicationinsights-channel-js.js` `_onError` / `_onSuccess`) |
+| Code apps get a per-environment Content Security Policy, set in the Power Platform admin center (Environments > Settings > Product > Privacy + Security > Content security policy > App). Its default `connect-src` is `'none'`; Microsoft says an enforced CSP "might block" App Insights telemetry and to allow the endpoints | **CONFIRMED** (official docs: learn.microsoft.com/en-us/power-apps/developer/code-apps/how-to/content-security-policy and .../how-to/set-up-azure-app-insights) |
+| `VSBCloud_Dev` did not enforce a CSP on 6 Nov 2026 (`iscontentsecuritypolicyenabled = false`, `18-AZURE-MAPS-IN-THE-CODE-APP.md` §4). That column is the model-driven setting; the code-app setting is `PowerApps_CSPEnabledCodeApps` | **CONFIRMED** for the column, **PLAUSIBLE** that it also describes code apps |
+| QA enforces a CSP, so the ingestion host is blocked | **PLAUSIBLE** (fits "works in DEV, nothing in QA"; QA's setting was not read) |
+| The browser SDK cannot send to a resource with Local Authentication disabled (Microsoft lists it as unsupported for Entra-authenticated ingestion) | official docs for the SDK limitation; that QA's resource is configured so is **PLAUSIBLE** |
+
+### 3. Ranked causes (QA, given a correct variable value)
+
+1. **CSP blocks the ingestion host** (browser console: `Connecting to 'https://…in.applicationinsights.azure.com…' violates … connect-src`). Fix is configuration: allow the host in QA's CSP. Not fixable in code.
+2. **The QA resource has Local Authentication disabled** (the SDK's batches come back 401/403). Fix is on the Azure resource.
+3. **QA users cannot read Environment Variable Definition / Value**, so the read fails and telemetry stays off (and, before this change, stayed off after a later successful refetch).
+4. **"Users" stay low although events arrive** because the code deliberately attaches no user identity (`sanitize.ts`); not changed (product owner: no decision, recommended approach kept).
+
+### 4. What changed (`src/appInsights/`, `src/app/SessionContext.tsx`)
+
+- Every start prints, to the browser console only, `[VSB] ACTION Application Insights …` lines: the **complete connection string** (product owner's request), the host it sends to, the app id, the exact CSP entry to add and where; or `OFF` with the reason (empty value, read failure with its root cause, SDK not starting, SDK chunk not downloading); a malformed value (quotes, missing or non-GUID key, non-https endpoint) is named.
+- After start: `OK` on the first batch the server accepts; `FAILED … (status N)` with the meaning of N for a refused batch (0 = no reply reached the browser: CSP, firewall, ad blocker; 401/403 = local authentication; 400 = key), capped at three lines plus one note; `BLOCKED by the Content Security Policy` once, from the browser's `securitypolicyviolation` event for the ingestion host.
+- `loggingLevelConsole: 2` shows the SDK's own warnings and errors.
+- **Recovery:** if the environment-variable read fails, a later successful read now starts telemetry (before, the first answer won for the life of the page). An empty value is still a real answer, so `UT-AI-010` is unchanged.
+- The lines do not go through `trace()`: its sink would send the connection string out as telemetry (`UT-AIDIAG-019`). Cost: O(1) per event (two counters, one flag); no extra request.
+- Tests: `UT-AIDIAG-001…009` (`diagnostics.test.ts`, pure), `UT-AIDIAG-010…019` (`appInsights.diagnostics.test.ts`, with a fake SDK). No existing test was edited.
+
+### 5. How to confirm on QA (manual, not done)
+
+Open the QA code app, DevTools > Console, filter `Application Insights`. Read the lines: `OFF …` names the cause directly; `BLOCKED …` or `FAILED … (status 0)` is cause 1; `FAILED … (status 401/403)` is cause 2; `OK …` means delivery works and the resource or filter in the Azure portal is the next place to look. Compare the printed connection string with the QA resource's.
+
+### 6. Not done / open
+
+- QA's CSP setting, the QA resource's Local Authentication and the testers' security role were not read (no QA access from here).
+- The new delivery lines were tested against a fake SDK only, not against a real ingestion endpoint.
+- No user identity is attached (`setAuthenticatedUserContext`); revisit only on the product owner's decision.

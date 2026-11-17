@@ -605,3 +605,15 @@ The canvas ran about 40 sequential statements in `App.OnStart` before the first 
 | Generators | Degradation 1st Year opens with the stored value; the AllWTG back-fill also runs when an edit creates the missing PV unit; the pager counts the loaded turbines; Total Height shows 130.4; the screen resets on a project change | **fixed / new** |
 | Generators | The data loaders, the write hooks and the real `usePlanWrite` run in tests; permission chip labels and delete texts are pinned | **new** (test gate) |
 | Generators | A type left without its O&M row, refusing saves when the index or model is missing, the out-of-country Replace rollback and roll-up, the approval cancel for an Approved type, live reads at write time, retries and the UI parity items | **proposed (not approved)**, see D121 §7 |
+
+## Application Insights in QA: console diagnostics and a recoverable start-up (17 Nov 2026, D122) — new (not approved, not run on QA)
+
+The canvas apps had no Application Insights (`appinsightserrortracing: false`), so this is an improvement over the code app's own first build, not over a canvas rule.
+
+| Item | What | Status |
+|---|---|---|
+| Console shows the connection string in use | The complete value, the host it sends to, the app id and the exact Content Security Policy entry to allow, as `[VSB] ACTION Application Insights …` lines (console only, never sent as telemetry) | **new** |
+| Telemetry off is explained | Empty variable, failed read (with root cause), SDK not starting, SDK chunk blocked, malformed value: each prints its reason | **new** |
+| Delivery is reported | `OK` on the first accepted batch; `FAILED (status N)` with the meaning; `BLOCKED by the Content Security Policy` from the browser's own violation event; the SDK's warnings and errors in the console | **new** |
+| A failed read no longer switches telemetry off for the page's life | A later successful read of the environment variables starts it | **fixed** |
+| Tests | `UT-AIDIAG-001…019` | **new** |
