@@ -2106,7 +2106,11 @@ export function tariffP90Text(
 ): string {
   // The text comes back in the language it was read in, as `Text(..., "0.00")` follows `Language()` (A1,
   // 6 Nov 2026): an English "65.00" in a German form was read back by the save as 6500.
-  if (country === "Germany" && revenueTypeLabel === "FiT") {
+  // Germany + FiT + PV (D117): the FiT block is hidden for PV (`<> PV`), so its two boxes are blank here, while the
+  // canvas's hidden boxes keep their defaults, the standard price and a 1.000 correction factor: p90 is the p50 price.
+  // It was 0 x 0, so a new German FiT PV contract saved a p90 price of 0. (A German FiT WIND contract cannot be saved
+  // with both boxes blank, so this only ever applies to PV.)
+  if (country === "Germany" && revenueTypeLabel === "FiT" && !(isBlank(biddingPrice) && isBlank(correctionFactorP90))) {
     return germanFitTariffText(biddingPrice, correctionFactorP90, lang);
   }
   const t = parseNumber(tariff, lang);
@@ -2431,11 +2435,13 @@ export const inflationCellCaption = (useCountryProfile: boolean): string =>
 export function inflationCell(
   c: Pick<StoredRevenueContract, "useCountryInflationProfile" | "inflationProfile">,
   country: string | null, region: string | null,
+  /** `Text(…, "#0.00 ")` follows the user's language ("2,50 "). Corrected 13 Nov 2026 (D117): always "2.50 ". */
+  lang: Lang,
 ): string {
   if (c.useCountryInflationProfile) {
     return country === "Italy" ? ` Italy - ${bareRegion(region)}` : (country ?? "");
   }
-  return `${(c.inflationProfile ?? 0).toFixed(2)} `;
+  return `${forLanguage((c.inflationProfile ?? 0).toFixed(2), lang)} `;
 }
 
 /** The Area cell: Visible `And(Country.Name = "Italy", ThisItem.'Use Country Inflation Profile')` (L2544). */
@@ -2573,7 +2579,7 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
   }
   // `Text(Blank(), "#0.00 ")` is "": a contract with no custom profile value shows nothing.
   const inflationText = c.useCountryInflationProfile || c.inflationProfile !== null
-    ? inflationCell(c, ctx.country, ctx.region) : "";
+    ? inflationCell(c, ctx.country, ctx.region, ctx.language ?? "en-US") : "";
   out.push(field("inflationProfile", "CountryInflationProfile_1", inflationCellCaption(c.useCountryInflationProfile),
     [value("CountryInflationProfile_1", inflationText, cardTone(f.customInflationProfile, true))]));
   if (germany && c.useInflationProfile) {
@@ -2590,12 +2596,13 @@ export function contractCardFields(c: StoredRevenueContract, ctx: ContractCardCo
   }
   if (fitNotPv) {
     out.push(field("correctionFactor", "CorrectionFactor_1", correctionFactorCaption(fitWind),
-      [value("CorrectionFactor_1", c.correctionFactor === null ? "" : c.correctionFactor.toFixed(3),
+      // `Text(…, "#0.000")` (L2319) in the user's language: "1,000" (D117; it was always "1.000").
+      [value("CorrectionFactor_1", c.correctionFactor === null ? "" : forLanguage(c.correctionFactor.toFixed(3), ctx.language),
         cardTone(f.correctionFactor, true))]));
   }
   if (fitWind) {
     out.push(field("correctionFactorP90", "CorrectionFactor_p90", SCREEN_LABEL.correctionFactorP90,
-      [value("CorrectionFactor_p90", c.correctionFactorP90 === null ? "" : c.correctionFactorP90.toFixed(3),
+      [value("CorrectionFactor_p90", c.correctionFactorP90 === null ? "" : forLanguage(c.correctionFactorP90.toFixed(3), ctx.language),
         cardTone(f.correctionFactorP90, true))]));
   }
   out.push(field("tariffPrice", "TarifPrice_1", cardTariffPriceCaption(ctx.country, fitWind),

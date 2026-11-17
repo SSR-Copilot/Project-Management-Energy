@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { ES, CHOICE } from "@/data/dataverseNames";
 import { formatInteger, isSixDecimal } from "@/domain/powerFxNumeric";
+import { terrainSizeText } from "./rules";
 import { TECHNOLOGY_LABEL } from "@/domain/technology";
 // The pac-generated choice enums, imported as VALUES in the test only (D25, PO answer 9).
 import {
@@ -982,5 +983,23 @@ describe("German and French numbers: Acquisition Price in every language's group
     // Decimals are still refused, whatever the grouping.
     expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: "1 500 000,5" }, r: { language: "fr-FR" } })).acquisitionPrice)
       .toBe(acquisitionPriceShapeMessage("fr-FR"));
+  });
+});
+
+describe("D117 General Data: Terrain Size, Tax Factor and the Acquisition Price shape as the canvas", () => {
+  it("UT-GDATA-089 Terrain Size opens rounded to one decimal; Tax Factor in the language; '1..000' is not a price", () => {
+    expect(terrainSizeText(12.55, "de-DE")).toBe("12,6");
+    expect(terrainSizeText(12.55, "en-US")).toBe("12.6");
+    expect(terrainSizeText(34.6, "de-DE")).toBe("34,6");
+    expect(terrainSizeText(12, "de-DE")).toBe("12");
+    expect(terrainSizeText(0, "de-DE")).toBe("0");
+    expect(terrainSizeText(null, "de-DE")).toBe("");
+    expect(applyGermanMunicipality({ municipality: "Hamburg", tradetaxrate: 4.7 }, "de-DE").taxFactor).toBe("4,7");
+    const acq = { developmentType: CHOICE.developmentType.acquiredProject, startCluster: 2, acquisitionDate: "2026-01-01" };
+    for (const [language, bad] of [["de-DE", "1..000"], ["de-DE", "1.000."], ["en-US", "1,,000"], ["fr-FR", "1  000"]] as const) {
+      expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: bad }, r: { language } })).acquisitionPrice)
+        .toBe(acquisitionPriceShapeMessage(language));
+    }
+    expect(fieldErrors(ctx({ f: { ...acq, acquisitionPrice: "1.000" }, r: { language: "de-DE" } })).acquisitionPrice).toBeUndefined();
   });
 });

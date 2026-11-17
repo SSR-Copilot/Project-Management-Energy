@@ -1449,8 +1449,12 @@ export const shouldConfirmLeave = (form: PlanningForm, baseline: PlanningForm): 
   isDirty(form, baseline);
 
 /** The gallery's percentage cell — hidden (`""`) while `Required` is blank (`Visible`, Y:2164). */
-export const percentCell = (row: AquisitionStatusRow): string =>
-  row.required === null ? "" : String(storedPercentToDisplay(row.percentage, row.required));
+export const percentCell = (row: AquisitionStatusRow, language: Lang): string =>
+  row.required === null ? "" : forLanguage(String(storedPercentToDisplay(row.percentage, row.required)), language);
 
-/** `If(ThisItem.Secured >= 0, ThisItem.Secured, "")` and the same for Required. */
-export const countCell = (v: number | null): string => (v !== null && v >= 0 ? String(v) : "");
+/**
+ * `If(ThisItem.Secured >= 0, ThisItem.Secured, "")` and the same for Required: a number, shown in the user's language.
+ * Corrected 13 Nov 2026 (D117, with `percentCell`): a value with decimals showed in English.
+ */
+export const countCell = (v: number | null, language: Lang): string =>
+  (v !== null && v >= 0 ? forLanguage(String(v), language) : "");

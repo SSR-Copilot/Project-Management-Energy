@@ -2351,3 +2351,11 @@ describe("German and French numbers: Land Lease boxes open in the user's locale"
     expect(storedPayments({ amountOneTimePayment: 1500 } as never, "fr-FR").amount).toBe("1500,00");
   });
 });
+
+describe("D117 Land Lease range messages in the user's language", () => {
+  it("UT-LAND-146 the maximum in a range message uses the language's grouping and decimal", () => {
+    expect(validateLeaseNumber("fixedCosts", "2000000000", "de-DE")).toBe("Value must be between 0 and 1.000.000.000,0.");
+    expect(validateLeaseNumber("eurPerMw", "100000001", "en-GB")).toBe("Please select a value between 0 and 100,000,000.0.");
+    expect(validateLeaseNumber("percentOfRevenues", "20000", "de-DE")).toBe("Please select a value between 0 and 10.000,0.");
+  });
+});

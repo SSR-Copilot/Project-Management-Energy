@@ -16,7 +16,7 @@ import {
   CATEGORIES, total, type CostAccount, type CostLine, type Payment,
 } from "../costing/model";
 import { DISTRIBUTION_FREQUENCY } from "@/data/dataverseNames";
-import { localeInfo, numberFormat } from "@/domain/locale";
+import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
 import { distributionSchedule, equalDistributionAmounts } from "./distribution";
 
 /* ═══════════════════════════════════════════════════════════════ constants ══ */
@@ -100,10 +100,11 @@ export function resolveCategory(
 }
 
 /** Blank until the query lands, rather than flashing a `0` that is not a real figure. */
-export const formatSummaryAmount = (value: number | undefined): string =>
+export const formatSummaryAmount = (value: number | undefined, locale?: string): string =>
   value === undefined
     ? ""
-    : numberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
+    // In the user's language ("1.234.567" in German). Corrected 13 Nov 2026 (D117): always en-GB.
+    : canvasNumberText(value, locale, { maximumFractionDigits: 0 });
 
 /* ══════════════════════════════════════════════════════════════ the panel ══ */
 
@@ -577,11 +578,31 @@ export function validateMonthAmount(
  * A stored month amount as its box shows it: the user's decimal separator. The checks re-read `String(12.5)` = "12.5"
  * with a German locale and flagged every decimal % as "Value must be numeric upto one decimal" (6 Nov 2026).
  */
-const monthAmountText = (amount: number, locale?: string): string => {
+export const monthAmountText = (amount: number, locale?: string): string => {
   const sep = localeInfo(locale).decimalSeparator;
   const en = String(amount);
   return sep === "." ? en : en.replace(".", sep);
 };
+
+/**
+ * The month boxes the user cleared, or filled with text that is not a number (D117). The canvas reads such a box as
+ * `Blank()` (`JanUIv: If(IsBlank(box) || !IsNumeric(box), Blank(), Value(box))`, Capex Costs Screen.pa.yaml:12785), and
+ * its Save then DELETES that month's stored row (`capexWriteSet`: no cost with an id is a delete; without one, nothing).
+ * The panel's model keeps 0 for them, so its sums and checks match the canvas `Sum(Value())`; only the Save leaves them
+ * out. Before, a cleared month was saved as a 0-cost row (the D96 leftover).
+ */
+export function clearedMonthKeys(monthText: Readonly<Record<string, string>>, locale?: string): Set<string> {
+  const keys = new Set<string>();
+  for (const [key, text] of Object.entries(monthText)) {
+    const n = text.trim() === "" ? null : parseNumber(text, locale);
+    if (n === null || n === undefined || Number.isNaN(n)) keys.add(key);
+  }
+  return keys;
+}
+
+/** The schedule the Save reconciles, without the cleared months, so `reconcilePayments` deletes their stored rows. */
+export const withoutClearedMonths = (payments: readonly Payment[], cleared: ReadonlySet<string>): Payment[] =>
+  payments.filter((p) => !cleared.has(`${p.year}-${p.month}`));
 
 export function monthAmountErrors(
   payments: readonly { year: number; month: number; amount: number }[],

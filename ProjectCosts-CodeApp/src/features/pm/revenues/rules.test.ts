@@ -1556,9 +1556,9 @@ describe("D33 — grid formats", () => {
   });
 
   it("UT-REV-135 the inflation cell and its caption; the Area cell for Italy with the country profile", () => {
-    expect(inflationCell({ useCountryInflationProfile: false, inflationProfile: 2.1 }, "Germany", null)).toBe("2.10 ");
-    expect(inflationCell({ useCountryInflationProfile: true, inflationProfile: 0 }, "Germany", null)).toBe("Germany");
-    expect(inflationCell({ useCountryInflationProfile: true, inflationProfile: 0 }, "Italy", "Italy_South")).toBe(" Italy - South");
+    expect(inflationCell({ useCountryInflationProfile: false, inflationProfile: 2.1 }, "Germany", null, "en-US")).toBe("2.10 ");
+    expect(inflationCell({ useCountryInflationProfile: true, inflationProfile: 0 }, "Germany", null, "en-US")).toBe("Germany");
+    expect(inflationCell({ useCountryInflationProfile: true, inflationProfile: 0 }, "Italy", "Italy_South", "en-US")).toBe(" Italy - South");
     expect(inflationCellCaption(false)).toBe("Inflation Profile [%]");
     expect(showsAreaCell("Italy", { useCountryInflationProfile: true })).toBe(true);
     expect(showsAreaCell("Italy", { useCountryInflationProfile: false })).toBe(false);
@@ -1954,5 +1954,17 @@ describe("the balancing panel opens as the canvas: Shift 0, blank durations, End
     expect(balancingFormFor(stored(), "de-DE")).toEqual({ id: "b1", price: "-2,5", years: 1, months: 0, shift: "3" });
     expect(balancingFormFor(stored({ price: null, durationYears: null, durationMonths: null, shiftOfCodMonths: null }), "en-US"))
       .toEqual({ id: "b1", price: "", years: null, months: null, shift: "" });
+  });
+});
+
+describe("D117 Revenues card cells and the German FiT PV p90", () => {
+  it("UT-REV-163 card inflation and correction factors follow the language; German FiT PV p90 is the price, not 0", () => {
+    expect(inflationCell({ useCountryInflationProfile: false, inflationProfile: 2.5 }, "Germany", null, "de-DE")).toBe("2,50 ");
+    expect(inflationCell({ useCountryInflationProfile: false, inflationProfile: 2.5 }, "Germany", null, "en-US")).toBe("2.50 ");
+    // PV: the FiT boxes are hidden and blank, so p90 is the p50 price.
+    expect(tariffP90Text("Germany", "FiT", "", "", "65,00", "de-DE")).toBe("65,00");
+    expect(tariffP90Text("Germany", "FiT", "", "", "65.00", "en-US")).toBe("65.00");
+    // Wind keeps Bidding x Correction Factor p90.
+    expect(tariffP90Text("Germany", "FiT", "80,00", "0,900", "80,00", "de-DE")).toBe("72,00");
   });
 });

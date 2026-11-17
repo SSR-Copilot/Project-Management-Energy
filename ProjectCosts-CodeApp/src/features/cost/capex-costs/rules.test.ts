@@ -12,6 +12,7 @@ import {
   clusterLinkageConfirmation, clusterPayments, clustersHavingCost, contractSubLabel,
   describeDescriptionError,
   equalPayments, formatSummaryAmount, frequencyLabel, individualDistribution, initialCostValue,
+  clearedMonthKeys, withoutClearedMonths, monthAmountText,
   isSummaryTab, linkToMilestoneVisible, milestoneOptions, milestoneRelinkResetNeeded,
   needsClusterLinkageConfirmation,
   newCostLine, paidToggleNeedsConfirmation, panelTitle, parseByClusterJson,
@@ -1355,5 +1356,29 @@ describe("paymentsAsPercent — an existing % contract opens in percent, as the 
     expect(paymentsAsPercent(equal)).toBe(equal);
     const noTotal = { ...base, distributionScheme: "percent", totalCost: undefined } as typeof base;
     expect(paymentsAsPercent(noTotal)).toBe(noTotal);
+  });
+});
+
+describe("D117 CAPEX: cleared months, the summary and the month boxes as the canvas", () => {
+  it("UT-CAPEXR-204 a cleared or unreadable month box is left out of the Save; amounts show in the user's language", () => {
+    const cleared = clearedMonthKeys({ "2027-1": "", "2027-2": "abc", "2027-3": "12,5", "2027-4": " " }, "de-DE");
+    expect([...cleared].sort()).toEqual(["2027-1", "2027-2", "2027-4"]);
+    const payments = [
+      { year: 2027, month: 1, amount: 0, paid: false },
+      { year: 2027, month: 3, amount: 12.5, paid: false },
+    ];
+    expect(withoutClearedMonths(payments, cleared)).toEqual([{ year: 2027, month: 3, amount: 12.5, paid: false }]);
+    expect(formatSummaryAmount(1_234_567, "de-DE")).toBe("1.234.567");
+    expect(formatSummaryAmount(1_234_567, "en-GB")).toBe("1,234,567");
+    expect(monthAmountText(12.5, "de-DE")).toBe("12,5");
+    expect(monthAmountText(12.5, "en-GB")).toBe("12.5");
+  });
+});
+
+describe("D117 numbers group by three in every language, as the canvas pattern", () => {
+  it("UT-CAPEXR-205 en-IN shows 1,234,567 (not the lakh 12,34,567); German and French use their own characters", () => {
+    expect(formatSummaryAmount(1_234_567, "en-IN")).toBe("1,234,567");
+    expect(formatSummaryAmount(1_234_567, "de-DE")).toBe("1.234.567");
+    expect(formatSummaryAmount(1_234_567, "fr-FR").replace(/\s/g, " ")).toBe("1 234 567");
   });
 });

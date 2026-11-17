@@ -41,7 +41,7 @@
  * purpose — `@/features/cost/costing/model`'s `CostPeriod` is being changed concurrently.
  */
 import { inRange, isDecimal, parseNumber, round } from "@/domain/numeric";
-import { localeInfo, numberFormat } from "@/domain/locale";
+import { canvasNumberText, localeInfo, rangeMessageFor } from "@/domain/locale";
 import { bind } from "@/data/odata";
 
 /* ═════════════════════════════════════════════════════════════════ option sets ══ */
@@ -730,9 +730,8 @@ function formatGrouped(
   maxFrac: number,
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return numberFormat("en-GB", {
-    minimumFractionDigits: minFrac, maximumFractionDigits: maxFrac,
-  }).format(value);
+  // In the user's (browser) language, as `Text()` and as this screen reads its boxes (D117; always en-GB before).
+  return canvasNumberText(value, undefined, { minimumFractionDigits: minFrac, maximumFractionDigits: maxFrac });
 }
 
 /** `Text(ThisItem.'Fixed Costs', "###,###,###,###")` — LL:1332. No decimals. */
@@ -1932,10 +1931,11 @@ export function validateLeaseNumber(
   // `fn_Numeric.IsTwoDecimal` accepts a leading `-`; see PARITY NOTE 3 in @/domain/numeric.
   if (!isDecimal(value, { places: 2, allowNegative: true, locale })) return spec.decimalMessage;
   if (mode === "trimmed") {
-    return inRange(value, spec.min, spec.max, locale) ? null : spec.rangeMessage;
+    // `$"… between 0 and {Text(max, "#,###.0#")}."` follows the language (LL:2963 …); D117, it was always English.
+    return inRange(value, spec.min, spec.max, locale) ? null : rangeMessageFor(spec.rangeMessage, spec.max, locale);
   }
   const n = leaseNumber(value, locale, mode);
-  return n !== undefined && n >= spec.min && n <= spec.max ? null : spec.rangeMessage;
+  return n !== undefined && n >= spec.min && n <= spec.max ? null : rangeMessageFor(spec.rangeMessage, spec.max, locale);
 }
 
 /**

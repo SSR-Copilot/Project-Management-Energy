@@ -976,10 +976,14 @@ export const seasonalityTotalError = (rows: readonly SeasonalityRow[], lang: Lan
 export const seasonalityTotalErrorCanvasParity = (rows: readonly SeasonalityRow[], lang: Lang = "en-US"): boolean =>
   seasonalityTotal(rows, lang) !== 100;
 
-/** "Total Sum [%]" as the read-only cell shows it. */
-export function fmtPercentTotal(v: number): string {
+/**
+ * "Total Sum [%]" as the read-only cell shows it. `Default: =Sum(…)` (Y:4791) is a number, so the canvas shows it in the
+ * user's language ("99,5"); rounded to one decimal, as the label and the Save gate (SOURCE DEFECT 5). Corrected
+ * 13 Nov 2026 (D117): it was always en-US.
+ */
+export function fmtPercentTotal(v: number, lang: Lang): string {
   const r = Math.round(v * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", decimalSeparator(lang));
 }
 
 /** `'Standard Values JSON'` — `{"Jan":true,…}` built with `Text(bool)`, i.e. valid JSON. */

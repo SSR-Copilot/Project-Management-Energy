@@ -798,8 +798,8 @@ describe("display", () => {
     expect(pfxText(null, "0.0")).toBe("");
   });
   it("UT-PROD-060 the Total Sum [%] has no trailing .0", () => {
-    expect(fmtPercentTotal(100)).toBe("100");
-    expect(fmtPercentTotal(99.94)).toBe("99.9");
+    expect(fmtPercentTotal(100, "en-US")).toBe("100");
+    expect(fmtPercentTotal(99.94, "en-US")).toBe("99.9");
   });
   it("UT-PROD-061 panel and status dialog texts", () => {
     expect(panelTitle("WTG", null)).toBe("Add Production WTG");
@@ -870,5 +870,14 @@ describe("parseStandardAssumptions (Fabric SQL, connected 28 Oct 2026)", () => {
       { year: 2028, pv: 5, wind: 4.6 },
       { year: 2029, pv: 1.2, wind: 0 },
     ]);
+  });
+});
+
+describe("D117 the seasonality Total Sum in the user's language", () => {
+  it("UT-PROD-132 the total shows the language's decimal separator, rounded to one decimal", () => {
+    expect(fmtPercentTotal(99.5, "de-DE")).toBe("99,5");
+    expect(fmtPercentTotal(99.94, "fr-FR")).toBe("99,9");
+    expect(fmtPercentTotal(100, "de-DE")).toBe("100");
+    expect(fmtPercentTotal(99.5, "en-US")).toBe("99.5");
   });
 });

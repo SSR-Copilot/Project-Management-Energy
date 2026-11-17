@@ -38,7 +38,7 @@
  * so a reviewer can diff against the source.
  */
 import { inRange, isDecimal, isNumeric, orZero, parseNumber } from "@/domain/numeric";
-import { localeInfo, numberFormat } from "@/domain/locale";
+import { canvasNumberText, localeInfo, numberFormat } from "@/domain/locale";
 
 /* ═══════════════════════════════════════════════════════════════════ dates ══ */
 
@@ -1267,25 +1267,23 @@ export function inflationColumnText(
 }
 
 /** Power Fx `Text(n, "###,###,###.0 %")`. Blank in, blank out. */
-export function formatOneDecimalPercent(value: number | null | undefined): string {
+export function formatOneDecimalPercent(value: number | null | undefined, locale?: string): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return `${numberFormat("en-GB", {
-    minimumFractionDigits: 1, maximumFractionDigits: 1,
-  }).format(value)} %`;
+  // The grid cells follow the user's language, as `Text()` does (D117; they were always en-GB). No locale means the
+  // browser's, which is how this screen reads its boxes.
+  return `${canvasNumberText(value, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
 }
 
 /** `Text(n, "###,###,###,###")` — the five money columns. */
-export function formatWholeNumber(value: number | null | undefined): string {
+export function formatWholeNumber(value: number | null | undefined, locale?: string): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return numberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
+  return canvasNumberText(value, locale, { maximumFractionDigits: 0 });
 }
 
 /** `Text(n, "###,###,###,##0.00 %")` — `Share of Revenues` (`:1754`, `:4244`). */
-export function formatRevenuePercent(value: number | null | undefined): string {
+export function formatRevenuePercent(value: number | null | undefined, locale?: string): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return `${numberFormat("en-GB", {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(value)} %`;
+  return `${canvasNumberText(value, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
 }
 
 /**

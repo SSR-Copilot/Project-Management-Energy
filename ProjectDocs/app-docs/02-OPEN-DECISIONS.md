@@ -7389,3 +7389,32 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
   - Still open from that review, accepted for now: a read-back that fails after a 404 reports the row as not deleted although it was removed (fail-closed); a row the user cannot read looks gone; a wrong but registered entity set would pass the gone check; `stopOnFailure` and `listOpexCostIds` have no production caller; `knip` reports 39 unused files against the recorded baseline of 36.
 - **Open from D115 section 8, still true:** the transport has no bisection of a failed chunk, and a job that finishes after a project change can still put its error on the new project.
 - **Nothing has run against DEV.** The tiered limits (live since D115) and the hardened path are therefore both unmeasured live.
+
+## D117 — The numeric items left after the 5 Nov audit: fixed, or kept and recorded (13 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** the German-number audit's leftovers, re-checked against the code of 13 Nov 2026 ("can u list numeric validations left"; "yes" to fixing them).
+
+| # | Screen | Canvas | Code app before | Now |
+|---|---|---|---|---|
+| 1 | CAPEX, a cleared month box | `JanUIv: If(IsBlank(box) || !IsNumeric(box), Blank(), Value(box))` (CX:12785); a blank month with a stored row is DELETED | Saved as a 0-cost row (the D96 leftover) | The Save leaves cleared or unreadable months out (`clearedMonthKeys` / `withoutClearedMonths`), so `reconcilePayments` deletes the stored row; the panel's sums still count them as 0 |
+| 2 | CAPEX Summary | `Text()` in the user's language | en-GB | `formatSummaryAmount(v, locale)` |
+| 3 | CAPEX month boxes, reopened | the stored value in the user's language | `String(amount)` ("12.5") | `monthAmountText` ("12,5") |
+| 4 | OPEX grid money and % cells | `Text(n, "###,###,###,###")` etc. in the user's language | en-GB | the browser's language, as the screen reads its boxes |
+| 5 | Land Lease grid and range messages | `$"… between 0 and {Text(max, "#,###.0#")}."` (LL:2963 …) | en-GB grid; messages written out in English | the browser's language; `rangeMessageFor` (`@/domain/locale`) |
+| 6 | Production seasonality "Total Sum [%]" | `Default: =Sum(…)` (PR:4791) | en-US | `fmtPercentTotal(v, lang)`, still rounded to one decimal (D28 SOURCE DEFECT 5) |
+| 7 | Revenues balancing grid price; card inflation and correction factors | `ThisItem.'Balancing Price'` (RV:3424), `Text(…, "#0.00 ")`, `Text(…, "#0.000")` | English | the user's language |
+| 8 | General Data Tax Factor | `Default: =locTaxFactorPercentage` (GD:3826) | English decimal | the user's language |
+| 9 | Settings · Costs grids and three range messages | `Text()` and `$"… {Text(max, "#,###.0#")}."` (Admin Cost Screen:5777 …) | fixed en-US / English | the browser's language |
+| 10 | Planning gallery Secured / Required / % | the raw numbers (PL:2151-2163) | English decimals | the user's language |
+| 11 | Finance decommissioning range message | `$"Value must be in range 0 to {…10000000}"` (FI:14313), no separators | "10,000,000" | "10000000" |
+| 12 | General Data Terrain Size, opening | `Text(size, If(IsInteger, "#", "#0.0"))` (GD:4040-4048) | unrounded: a stored 12.55 opened "12,55" with the one-decimal error | `terrainSizeText`: "12,6"; a stored 0 still shows "0" (as D31/D32) |
+| 13 | General Data Acquisition Price | `fn_Numeric_With_Separtors.IsInteger`: digit groups joined by ONE separator (`\d+(\.\d+)*`) | every separator stripped first, so "1..000" saved 1000 | `groupedIntegerShape`: one separator between digit groups |
+| 14 | Revenues, Germany + FiT + PV, price p90 | `Text(Bidding × CF p90)`; the hidden boxes keep the standard price and 1.000 | 0 × 0 = 0 saved | the p50 price |
+| 15 | Generators turbine name "00" / "000" | the label's `Visible` fires on `Value(name) = 0` (GN:10645); its Text is the literal "true" | accepted | refused with "Value cannot be blank or '0'." (the canvas's own message, not its "true") |
+
+**Grouping (rows 2, 4, 5, 9):** the canvas `Text(n, "#,###")` groups by THREE in every language; only the separator characters follow the language. `canvasNumberText` (`@/domain/locale`) draws the en-US layout with the language's characters; `Intl` with the full locale would group en-IN in lakhs ("12,34,567").
+**Kept and recorded (#16, Planning):** an acquisition with Required = 0 saves 0 for the percentage; the canvas "in rem" save fails on `Value("N/A")/100` (PL:3868). The code app's behaviour is kept: it is a canvas failure, not a rule.
+**Kept on purpose, unchanged** (documented earlier): Production PV Uncertainty 0–100, the PV Save check in both modes and the seasonality rounding (D28); the General Data Ownership % message; Grid Operator / Planning stored 0 shown as "0" (D31, D32); Generators apply-to-all heights (D27); the grid voltage in English.
+**Not changed, open:** 179 PM number helpers still fall back to en-US when a screen leaves the language out (Finance 60, Production 35, Revenues 31, Planning 22, Grid Operator 13, General Data 11, Milestones 7); Generators already requires it. French grouping in the Cost app (Intl, a narrow no-break space) against the PM screens (`forLanguage`, ".") is the D70 open point.
+**Tests:** UT-FIN-817, UT-PROD-132, UT-REV-163, UT-GDATA-089, UT-PLAN-064, UT-GEN-157, UT-CAPEXR-204, UT-OPEX-134, UT-LAND-146, UT-ADCOST-938; UT-FIN-204 now expects the canvas "10000000".

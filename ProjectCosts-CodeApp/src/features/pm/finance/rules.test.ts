@@ -1541,9 +1541,9 @@ describe("D34 — verbatim validation texts", () => {
     expect(validateDecommissioningValue("1.5", CHOICE_FINANCE.costsOfDecommissioning.total, "Germany").message)
       .toBe("Numeric value must be integer without decimal.");
     expect(validateDecommissioningValue("20000000", CHOICE_FINANCE.costsOfDecommissioning.total, "Germany").message)
-      .toBe("Value must be in range 0 to 10,000,000");
+      .toBe("Value must be in range 0 to 10000000"); // the canvas interpolates the number, no separators (D117)
     expect(validateDecommissioningValue("2000000", CHOICE_FINANCE.costsOfDecommissioning.perTurbine, "Germany").message)
-      .toBe("Value must be in range 0 to 1,000,000");
+      .toBe("Value must be in range 0 to 1000000");
     expect(validateCostOfGuarantee("").message).toBe("Numeric value with maximum of one decimal in range 0 to 9.9");
     expect(validateCostOfGuarantee("10").valid).toBe(false);
     expect(validateCostOfGuarantee("9.9").valid).toBe(true);
@@ -2218,5 +2218,15 @@ describe("D111 Edit panels: Save stays off until something changed", () => {
     expect(formChanged({ end: day("2030-01-01") }, { end: day("2030-01-02") })).toBe(true);
     expect(formChanged({ end: null }, { end: day("2030-01-01") })).toBe(true);
     expect(formChanged(null, opened)).toBe(true);
+  });
+});
+
+describe("D117 the decommissioning range message as the canvas", () => {
+  it("UT-FIN-817 the cap is written without separators, as the canvas interpolates the number", () => {
+    const total = CHOICE_FINANCE.costsOfDecommissioning.total;
+    const perTurbine = CHOICE_FINANCE.costsOfDecommissioning.perTurbine;
+    expect(validateDecommissioningValue("20000000", total, "Germany").message).toBe("Value must be in range 0 to 10000000");
+    expect(validateDecommissioningValue("60000000", total, "Poland", "de-DE").message).toBe("Value must be in range 0 to 50000000");
+    expect(validateDecommissioningValue("2000000", perTurbine, "Germany").message).toBe("Value must be in range 0 to 1000000");
   });
 });

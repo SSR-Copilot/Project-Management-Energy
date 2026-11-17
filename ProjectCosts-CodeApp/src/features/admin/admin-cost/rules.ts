@@ -21,7 +21,7 @@
  * open; `fn_Numeric_CC` → `@/domain/numeric` (`isTwoDecimalCanvasParity` …).
  */
 import { inRange, isInteger, isOneDecimalCanvasParity, isTwoDecimalCanvasParity, parseNumber } from "@/domain/numeric";
-import { numberFormat } from "@/domain/locale";
+import { canvasNumberText, localeInfo, rangeMessageFor } from "@/domain/locale";
 import { formatFixed, formatStoredPercent, inRangeNumberInput, parseNumberInput } from "@/domain/numberInput";
 import { PICKER_COUNTRIES, scopeBreadcrumb, type CountryRow, type CountryTechnology } from "@/domain/countryPicker";
 import { isDirty } from "@/domain/form";
@@ -100,13 +100,16 @@ export function breadcrumbText(countryName: string, technology: CostTechnology):
 
 /* ═════════════════════════════════════════════════════════════ formatting ══ */
 
-/** The canvas `Text(n, "###,###")` rendered with the app language's separators (en). */
-const GRID_LOCALE = "en-US";
+/**
+ * The canvas `Text(n, "###,###")` renders with the app language's separators. Corrected 13 Nov 2026 (D117): this was a
+ * fixed "en-US", so a German user saw "1,234,567"; it is now the browser's language, as this screen's boxes are read.
+ */
+const gridLocale = (): string => localeInfo().tag;
 /** `"###,###,###,###"`. */
-export const fmtInteger = (n: number | undefined) => (n === undefined ? "" : formatFixed(n, 0, GRID_LOCALE));
+export const fmtInteger = (n: number | undefined) => (n === undefined ? "" : canvasNumberText(n, undefined, { maximumFractionDigits: 0 }));
 /** `"###,###,###,###.0#"`. */
 export const fmtOneOrTwo = (n: number | undefined) =>
-  (n === undefined ? "" : numberFormat(GRID_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(n));
+  (n === undefined ? "" : canvasNumberText(n, undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }));
 
 /**
  * Which percent display the grid uses. The stored `vsb_ofrevenues` /
@@ -127,7 +130,7 @@ export const PERCENT_DISPLAY: "stored" | "canvasScaled" = "stored";
  * (inflation: 2 → "2.0 %", 0.5 → "0.5 %").
  */
 export function fmtStoredPercent(n: number | undefined, pattern: "revenue" | "inflation"): string {
-  return formatStoredPercent(n, pattern === "revenue" ? 2 : 1, GRID_LOCALE);
+  return formatStoredPercent(n, pattern === "revenue" ? 2 : 1, gridLocale());
 }
 
 /** The grid's percent cell text (see `PERCENT_DISPLAY`). */
@@ -143,8 +146,8 @@ export function fmtGridPercent(n: number | undefined, pattern: "revenue" | "infl
 export function fmtCanvasPercent(n: number | undefined, pattern: "revenue" | "inflation"): string {
   if (n === undefined) return "";
   const scaled = n * 100;
-  if (pattern === "revenue") return `${formatFixed(scaled, 2, GRID_LOCALE)} %`;
-  const text = formatFixed(scaled, 1, GRID_LOCALE).replace(/^(-?)0\./, "$1.");
+  if (pattern === "revenue") return `${formatFixed(scaled, 2, gridLocale())} %`;
+  const text = formatFixed(scaled, 1, gridLocale()).replace(/^(-?)0\./, "$1.");
   return `${text} %`;
 }
 
@@ -1102,11 +1105,12 @@ export function validateOpexForm(
   const { locale } = ctx;
   const errors: OpexErrors = {};
   const set = (k: OpexFieldKey, v: string | undefined) => { if (v) errors[k] = v; };
-  set("fixCosts", decimalError(form.fixCosts, 1_000_000_000, MSG.fixCostsDecimals, MSG.fixCostsRange, locale));
-  set("ofRevenues", decimalError(form.ofRevenues, 10_000, MSG.revenueDecimals, MSG.revenueRange, locale));
-  set("eurMwh", decimalError(form.eurMwh, 100_000_000, MSG.perUnitDecimals, MSG.perUnitRange, locale));
-  set("eurMw", decimalError(form.eurMw, 100_000_000, MSG.perUnitDecimals, MSG.perUnitRange, locale));
-  set("eurWtg", decimalError(form.eurWtg, 100_000_000, MSG.perUnitDecimals, MSG.perUnitRange, locale));
+  // The range messages `$"… between 0 and {Text(max, "#,###.0#")}."` (Admin Cost Screen:5777 …) follow the language (D117).
+    set("fixCosts", decimalError(form.fixCosts, 1_000_000_000, MSG.fixCostsDecimals, rangeMessageFor(MSG.fixCostsRange, 1_000_000_000, locale), locale));
+  set("ofRevenues", decimalError(form.ofRevenues, 10_000, MSG.revenueDecimals, rangeMessageFor(MSG.revenueRange, 10_000, locale), locale));
+  set("eurMwh", decimalError(form.eurMwh, 100_000_000, MSG.perUnitDecimals, rangeMessageFor(MSG.perUnitRange, 100_000_000, locale), locale));
+  set("eurMw", decimalError(form.eurMw, 100_000_000, MSG.perUnitDecimals, rangeMessageFor(MSG.perUnitRange, 100_000_000, locale), locale));
+  set("eurWtg", decimalError(form.eurWtg, 100_000_000, MSG.perUnitDecimals, rangeMessageFor(MSG.perUnitRange, 100_000_000, locale), locale));
   if (form.years === 0 && form.months === 0) errors.duration = MSG.durationZero;
   // An untouched stored value is valid as stored (it may carry 2 dp, the column precision).
   if (!form.useCountryInflation && form.customInflation.trim() !== "" && form.customInflation !== ctx.hidden.pristineCustomInflation) {

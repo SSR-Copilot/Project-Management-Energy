@@ -682,7 +682,7 @@ export default function ProductionScreen() {
               </div>
               <div className={mergeClasses(s.cellRow, s.totalRow)}>
                 <Text className={s.cellCaption}>{UI.totalSum}</Text>
-                <Input readOnly value={fmtPercentTotal(seasonalityTotal(seasonRows, lang))}
+                <Input readOnly value={fmtPercentTotal(seasonalityTotal(seasonRows, lang), lang)}
                   appearance={FIELD_APPEARANCE}
                   className={mergeClasses(s.cellValue, controlClass("view"))}
                   aria-label={UI.totalSum}

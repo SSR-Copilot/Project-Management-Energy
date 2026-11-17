@@ -1471,7 +1471,9 @@ export function validateDecommissioningValue(
   if (isBlank(text)) return ok;
   if (!isInteger(text, lang)) return bad(MSG.decommissioningInteger);
   const cap = decommissioningCap(costType, country);
-  return inRange(text, 0, cap, lang) ? ok : bad(`${MSG.decommissioningRangePrefix}${capText(cap)}`);
+  // `$"Value must be in range 0 to {If(Poland, 50000000, 10000000)}"` (Y:14313): the number is interpolated as is, with
+  // no thousands separator, in every language. Corrected 13 Nov 2026 (D117): it showed "10,000,000".
+  return inRange(text, 0, cap, lang) ? ok : bad(`${MSG.decommissioningRangePrefix}${cap}`);
 }
 
 /**

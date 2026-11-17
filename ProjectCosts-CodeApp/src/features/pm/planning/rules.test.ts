@@ -715,20 +715,20 @@ describe("UT-PLAN the planning payload", () => {
 
 describe("UT-PLAN the screen cells and copy", () => {
   it("UT-PLAN-039 the gallery percentage cell: hidden, N/A, or the stored fraction × 100 (not rounded)", () => {
-    expect(percentCell(aqRow({ required: null, percentage: null }))).toBe("");
-    expect(percentCell(aqRow({ required: 0, percentage: 0.5 }))).toBe(PERCENT_NOT_APPLICABLE);
-    expect(percentCell(aqRow({ required: 4, secured: 1, percentage: 0.25 }))).toBe("25");
-    expect(percentCell(aqRow({ required: 100, percentage: 0.29 }))).toBe("29");
-    expect(percentCell(aqRow({ required: 3, percentage: 0.333 }))).toBe("33.3");
+    expect(percentCell(aqRow({ required: null, percentage: null }), "en-US")).toBe("");
+    expect(percentCell(aqRow({ required: 0, percentage: 0.5 }), "en-US")).toBe(PERCENT_NOT_APPLICABLE);
+    expect(percentCell(aqRow({ required: 4, secured: 1, percentage: 0.25 }), "en-US")).toBe("25");
+    expect(percentCell(aqRow({ required: 100, percentage: 0.29 }), "en-US")).toBe("29");
+    expect(percentCell(aqRow({ required: 3, percentage: 0.333 }), "en-US")).toBe("33.3");
     // `Value(Blank()) * 100` — a blank fraction shows 0 once Required is set.
     expect(storedPercentToDisplay(null, 5)).toBe(0);
   });
 
   it("UT-PLAN-040 the Secured/Required cells hide negatives and blanks; the columns are in the canvas order", () => {
-    expect(countCell(null)).toBe("");
-    expect(countCell(-1)).toBe("");
-    expect(countCell(0)).toBe("0");
-    expect(countCell(12)).toBe("12");
+    expect(countCell(null, "en-US")).toBe("");
+    expect(countCell(-1, "en-US")).toBe("");
+    expect(countCell(0, "en-US")).toBe("0");
+    expect(countCell(12, "en-US")).toBe("12");
     expect(Object.values(AQUISITION_GRID_COLUMNS)).toEqual(["Types", "Secured", "Required", "Aquisition Status [%]", ""]);
   });
 
@@ -786,5 +786,15 @@ describe("UT-PLAN-HEIGHT — the height field as the canvas shows it", () => {
   });
   it("a valid height passes", () => {
     expect(heightLimitValidity("120.5")).toEqual({ valid: true });
+  });
+});
+
+describe("D117 Planning gallery cells in the user's language", () => {
+  it("UT-PLAN-064 the Secured / Required / % cells show the language's decimal separator", () => {
+    expect(countCell(2.5, "de-DE")).toBe("2,5");
+    expect(countCell(12, "de-DE")).toBe("12");
+    expect(countCell(-1, "de-DE")).toBe("");
+    expect(percentCell(aqRow({ required: 3, percentage: 0.333 }), "de-DE")).toBe("33,3");
+    expect(percentCell(aqRow({ required: 3, percentage: 0.333 }), "en-US")).toBe("33.3");
   });
 });

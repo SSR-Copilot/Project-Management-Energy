@@ -386,6 +386,18 @@ export const formatOwnership = (fraction: number, language: Lang): string =>
   `${formatHashZeroDotZeroHash(fraction * 100, language)} %`;
 
 /**
+ * `txt_…_TerrainSize.Default` (Y:4040-4048): `Text(size, If(IsInteger(size), "#", "#0.0"))` — a whole number as is,
+ * anything else ROUNDED to one decimal, in the user's language: a stored 12.55 opens "12,6" and passes the one-decimal
+ * check. Corrected 13 Nov 2026 (D117): it opened unrounded ("12,55"), with the error. A stored 0 shows "0" rather than
+ * the canvas's blank, as Planning's and Grid Operator's boxes (D31, D32): a blank would be saved back as blank.
+ */
+export function terrainSizeText(size: number | null, language: Lang): string {
+  if (size === null) return "";
+  if (Number.isInteger(size)) return String(size);
+  return pfxRound(size, 1).toFixed(1).replace(".", decimalSeparator(language));
+}
+
+/**
  * `Text(Round(locChangedLatitude, 6), "#0.0#######")` — the Latitude / Longitude default
  * (Y:4155-4175). At least one decimal, no grouping, the player's decimal separator.
  */
@@ -648,10 +660,11 @@ export function toForm(
     municipalityGermany: countryName === "Germany" && !isBlank(row.municipality) ? row.municipality : null,
     municipalityFrance: countryName === "France" && !isBlank(row.municipality) ? row.municipality : null,
     utilizationId: row.utilizationId,
-    terrainSize: row.terrainSize === null ? "" : String(row.terrainSize).replace(".", decimalSeparator(language)),
+    terrainSize: terrainSizeText(row.terrainSize, language),
     latitude: coordinateText(row.latitude, language),
     longitude: coordinateText(row.longitude, language),
-    taxFactor: tax === null ? "" : String(tax),
+    // `Default: =locTaxFactorPercentage` (Y:3826), a number, so it shows in the user's language ("4,5"); D117.
+    taxFactor: tax === null ? "" : String(tax).replace(".", decimalSeparator(language)),
     technology: row.technology === null ? null : TECHNOLOGY_LABEL[row.technology] ?? null,
     developmentType,
     startCluster: acquired && row.startCluster !== null && row.startCluster !== 0 ? row.startCluster : null,
@@ -788,7 +801,7 @@ export function applyGermanMunicipality(
     : parseNumber(municipality.tradetaxrate ?? "", language);
   return {
     municipalityGermany: municipality.municipality,
-    taxFactor: Number.isNaN(rate) ? "" : String(rate),
+    taxFactor: Number.isNaN(rate) ? "" : String(rate).replace(".", decimalSeparator(language)),
   };
 }
 
@@ -1323,7 +1336,8 @@ export function fieldErrors(ctx: ValidationContext): Partial<Record<FieldKey, st
     if (isBlank(form.acquisitionPrice.trim())) {
       out.acquisitionPrice = MSG.acquisitionPriceBlank;
     } else if (
-      !isInteger(withoutGrouping(form.acquisitionPrice, lang), lang)
+      !groupedIntegerShape(form.acquisitionPrice, lang)
+      || !isInteger(withoutGrouping(form.acquisitionPrice, lang), lang)
       || !inRange(withoutGrouping(form.acquisitionPrice, lang), 0, 1_000_000_000, lang)
     ) {
       out.acquisitionPrice = acquisitionPriceShapeMessage(lang);
@@ -1348,6 +1362,17 @@ const withoutGrouping = (text: string, lang: Lang): string => {
   const group = localeInfo(lang).groupSeparator;
   if (group) t = t.split(group).join("");
   return t.replace(/[\s  '’]/g, "").split(groupSeparatorOf(lang)).join("");
+};
+
+/**
+ * `fn_Numeric_With_Separtors.IsInteger` (Components:226-243): digit groups joined by ONE separator —
+ * `^[+-]?\d+(\.\d+)*$`, or `,` in English — so "1..000", "1.000." and ".000" are not numbers. Stripping every separator
+ * first made "1..000" a valid 1000 (D117). The spaces and apostrophes `withoutGrouping` accepts count as separators too.
+ */
+const groupedIntegerShape = (text: string, lang: Lang): boolean => {
+  const seps = [groupSeparatorOf(lang), localeInfo(lang).groupSeparator ?? "", " ", " ", " ", "'", "’"];
+  const cls = [...new Set(seps.filter(Boolean))].map((c) => c.replace(/[\\\]^-]/g, "\\$&")).join("");
+  return new RegExp(`^[+-]?\\d+(?:[${cls}]\\d+)*$`).test(text.trim());
 };
 
 /** Every visible error label's text, in the canvas `ibtn` order. */

@@ -131,6 +131,32 @@ export function numberFormat(
   return format;
 }
 
+/**
+ * A canvas range message `$"… between 0 and {Text(max, "#,###.0#")}."` in the given language (D117): the maximum with
+ * the language's grouping and one decimal ("1.000.000.000,0" in German). `enMessage` is the English text the code keeps
+ * as its reference ("…1,000,000,000.0."); only its number is replaced. No locale means the browser's, as the Cost
+ * screens read their boxes.
+ */
+export function rangeMessageFor(enMessage: string, max: number, locale?: string): string {
+  const shown = canvasNumberText(max, locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  return enMessage.replace(/\d{1,3}(?:,\d{3})*\.0(?!\d)/, shown);
+}
+
+/**
+ * Power Fx `Text(n, "#,###.0#")` in a language (D117): the PATTERN decides where the separators go — groups of three
+ * digits, whatever the language — and the language only decides which characters they are ("1.234.567,5" in German,
+ * "1 234 567,5" in French, "1,234,567.5" in English). `Intl` with the full locale is not the same: en-IN groups in lakhs
+ * ("12,34,567"). No locale means the browser's, as the Cost screens read their boxes.
+ */
+export function canvasNumberText(
+  value: number, locale: string | undefined,
+  options: Pick<Intl.NumberFormatOptions, "minimumFractionDigits" | "maximumFractionDigits" | "useGrouping">,
+): string {
+  const { decimalSeparator, groupSeparator } = localeInfo(locale);
+  const en = numberFormat("en-US", options).format(value);
+  return en.replace(/[.,]/g, (c) => (c === "." ? decimalSeparator : groupSeparator));
+}
+
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
 
 /**

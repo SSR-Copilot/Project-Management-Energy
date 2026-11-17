@@ -1600,7 +1600,10 @@ export function validateTurbineName(
   lang: Lang = "en-US",
 ): string | null {
   const v = value.trim();
-  if (v === "" || v === "0") return MSG.turbineNameBlank;
+  // The label's `Visible` also fires on `Value(name) = 0` (Y:10645), so "00" and "000" block Save as "0" does; the canvas
+  // TEXT for them is the literal "true" (its If has no branch for it), so the blank-or-0 message is shown instead.
+  // Corrected 13 Nov 2026 (D117): "00" was accepted.
+  if (v === "" || v === "0" || (isInteger(v, lang) && parseNumber(v, lang) === 0)) return MSG.turbineNameBlank;
   if (!isInteger(v, lang)) return MSG.turbineNameNumeric;
   const current = args.currentIndex ?? -1;
   const entered = parseNumber(v, lang);

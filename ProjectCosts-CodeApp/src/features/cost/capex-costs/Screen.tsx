@@ -72,6 +72,7 @@ import {
   linkToMilestoneVisible, milestoneOptions, milestoneRelinkResetNeeded,
   needsClusterLinkageConfirmation,
   paymentsAsPercent, proposedPayments, reconcilePayments, resolveCategory, resolvedPayments,
+  clearedMonthKeys, withoutClearedMonths, monthAmountText,
   applyDescriptionChange, describeDescriptionError, paidToggleNeedsConfirmation,
   monthAmountErrors, validateMonthAmount,
   resolvePaidTarget, validateEndMonthYear, validateStartMonthYear, validateTotalCost,
@@ -931,7 +932,10 @@ export default function CapexCostsScreen() {
         line: { ...edit, totalCost: contractTotalToStore(edit.distribution, costValue, proposed) },
         accountId: edit.accountId,
         isNew: !isEdit,
-        payments: reconcilePayments(stored, proposed),
+        // A cleared (or unreadable) month box is left out, so its stored row is deleted, as the canvas Save does (D117).
+        payments: reconcilePayments(stored, edit.distribution === "individual"
+          ? withoutClearedMonths(proposed, clearedMonthKeys(monthText, locale))
+          : proposed),
         // The dialog's third bullet is a promise; `saveCostLine` keeps it.
         resetPaidAndPaymentDateComments: relinkResetNeeded,
         // Lets the bulk path skip a month whose amount did not change (D56 §3).
@@ -994,13 +998,13 @@ export default function CapexCostsScreen() {
           {categoryNames.map((name, i) => (
             <tr key={name}>
               <td>{name}</td>
-              <td>{formatSummaryAmount(totals.data?.find(t => t.category === i)?.total)} {currency}</td>
+              <td>{formatSummaryAmount(totals.data?.find(t => t.category === i)?.total, locale)} {currency}</td>
             </tr>
           ))}
           <tr>
             <td>Total CAPEX</td>
             <td>
-              {formatSummaryAmount((totals.data ?? []).reduce((sum, t) => sum + t.total, 0))}
+              {formatSummaryAmount((totals.data ?? []).reduce((sum, t) => sum + t.total, 0), locale)}
               {" "}{currency}
             </td>
           </tr>
@@ -1258,7 +1262,8 @@ export default function CapexCostsScreen() {
                         placeholder="0.00"
                         value={monthText[`${y}-${month}`] ?? (stored === undefined
                           ? (monthsBlank || (isEdit && edit.distributionScheme === "percent") ? "" : "0")
-                          : String(stored.amount))}
+                          // The stored month in the user's language ("12,5"), as the box is read (D117).
+                          : monthAmountText(stored.amount, locale))}
                         onChange={(_, d) => {
                           setMonthText(t => ({ ...t, [`${y}-${month}`]: d.value }));
                           // What the model holds: the parsed number, 0 for blank or unreadable text (the canvas sums `Value()`).

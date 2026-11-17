@@ -2318,3 +2318,14 @@ describe("German and French numbers: the Generators saves and checks read the us
     expect(replaceWtgSaveable({ form: dummy, inProgress: false, heightBlocked: false, lang: "fr-FR" })).toBe(true);
   });
 });
+
+describe("D117 Generators: a name that is 0 in any spelling is refused", () => {
+  it("UT-GEN-157 '00' and '000' are refused like '0'; '01' is index 1", () => {
+    for (const lang of ["en-US", "de-DE"]) {
+      expect(validateTurbineName("00", { existingIndices: [] }, lang)).toBe(MSG.turbineNameBlank);
+      expect(validateTurbineName("000", { existingIndices: [] }, lang)).toBe(MSG.turbineNameBlank);
+      expect(validateTurbineName("0", { existingIndices: [] }, lang)).toBe(MSG.turbineNameBlank);
+      expect(validateTurbineName("01", { existingIndices: [] }, lang)).toBeNull();
+    }
+  });
+});

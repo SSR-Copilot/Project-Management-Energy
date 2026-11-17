@@ -483,6 +483,11 @@ describe("Canvas parity fixes", () => {
     expect(v({ customInflation: "101." }).errors.customInflation).toBe(MSG.inflationRange);
     expect(v({ fixCosts: "1.." }).errors.fixCosts).toBe(MSG.fixCostsDecimals);
   });
+  it("UT-ADCOST-938 the range messages show the maximum in the user's language (D117)", () => {
+    expect(v({ fixCosts: "2000000000" }, DE).errors.fixCosts).toBe("Value must be between 0 and 1.000.000.000,0.");
+    expect(v({ eurMw: "200000000" }, DE).errors.eurMw).toBe("Please select a value between 0 and 100.000.000,0.");
+    expect(v({ fixCosts: "2000000000" }).errors.fixCosts).toBe(MSG.fixCostsRange);
+  });
   it("UT-ADCOST-056 '1.' is written as 1", () => {
     const panel: OpexPanelContext = { mode: "newContract", type: CONTRACT_TYPE.oAndM, subaccount: { id: "s", name: "S", order: 1 }, decimalSeparator: "." };
     const w = opexWriteFromForm({ ...valid, fixCosts: "12.", customInflation: "3." }, { panel, selection: germanyWind, currencies: FX_CURRENCIES, hidden, locale: EN });

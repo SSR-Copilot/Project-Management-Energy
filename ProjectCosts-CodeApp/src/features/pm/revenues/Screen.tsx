@@ -67,7 +67,7 @@ import {
   planSaveContract, planSaveBalancing, saveContractJob, deleteContractJob, saveBalancingJob,
   deleteBalancingJob, SPINNER,
   type RevenueTab, type HedgeType, type RevenueFormState, type StoredRevenueContract,
-  type BalancingPeriod, type BalancingForm, balancingFormFor,
+  type BalancingPeriod, type BalancingForm, balancingFormFor, balancingPriceText,
   revenuePanelStandard, touchField, editFieldIfValid, resetStartToCod, negativePriceDisplayMode,
   showsCountryInflationToggle, hedgePercentForCheck,
 } from "./rules";
@@ -1032,7 +1032,8 @@ export default function ProjectRevenuesScreen() {
                         <TableCell>{fmtCardDate(p.startDate)}</TableCell>
                         <TableCell>{balancingDurationText(p.durationYears, p.durationMonths)}</TableCell>
                         <TableCell>{fmtCardDate(p.endDate)}</TableCell>
-                        <TableCell>{p.price === null ? "" : String(p.price)}</TableCell>
+                        {/* `Text: =ThisItem.'Balancing Price [EUR/PLN]'` (L3424): the number in the user's language (D117). */}
+                        <TableCell>{balancingPriceText(p.price, lang)}</TableCell>
                         <TableCell>
                           <div className={s.rowActions}>
                             <Tooltip content={SCREEN_LABEL.balancingRowTooltip} relationship="description">

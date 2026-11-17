@@ -590,9 +590,9 @@ export default function PlanningScreen() {
               {rows.map((r) => (
                 <TableRow key={r.id} className={s.aqRow}>
                   <TableCell className={s.colName} title={r.typeName ?? ""}>{r.typeName ?? ""}</TableCell>
-                  <TableCell className={s.colCount}>{countCell(r.secured)}</TableCell>
-                  <TableCell className={s.colCount}>{countCell(r.required)}</TableCell>
-                  <TableCell className={s.colPercent}>{percentCell(r)}</TableCell>
+                  <TableCell className={s.colCount}>{countCell(r.secured, lang)}</TableCell>
+                  <TableCell className={s.colCount}>{countCell(r.required, lang)}</TableCell>
+                  <TableCell className={s.colPercent}>{percentCell(r, lang)}</TableCell>
                   <TableCell className={s.colAction}>
                     <Button
                       appearance="subtle"

@@ -1991,3 +1991,12 @@ describe("German and French numbers: OPEX boxes are written and read in the user
     expect(opexNumberOrNull("abc", "de-DE")).toBeNull();
   });
 });
+
+describe("D117 OPEX grid cells in the user's language", () => {
+  it("UT-OPEX-134 the money and % cells use the language's grouping and decimals", () => {
+    expect(formatWholeNumber(1_234_567, "de-DE")).toBe("1.234.567");
+    expect(formatWholeNumber(1_234_567, "en-GB")).toBe("1,234,567");
+    expect(formatRevenuePercent(2.5, "de-DE")).toBe("2,50 %");
+    expect(formatOneDecimalPercent(2.5, "de-DE")).toBe("2,5 %");
+  });
+});
