@@ -23,6 +23,34 @@ export function environmentInfoColor(environmentName: string | undefined): strin
   }
 }
 
+/**
+ * `con_cmp_Header.Fill` (both canvas apps' `cmp_Header`) — the header band per environment:
+ * `Switch(gblEnvironmentName, "Hotfix", ColorValue("#9831A850"), "Nightly", ColorValue("#AAAAAA60"),
+ * "Budgeting", ColorValue("#85AD3760"), "QA", ColorValue("#E66C3780"), RGBA(255, 255, 255, 1))`.
+ * `ColorValue` and CSS both read `#RRGGBBAA` with the alpha last, and the band is translucent over the
+ * screen's #ebebeb (`.canvas-shell`) exactly as in the canvas — QA's salmon (17 Nov 2026).
+ */
+export function environmentHeaderFill(environmentName: string | undefined): string {
+  switch (environmentName) {
+    case "Hotfix": return "#9831A850";
+    case "Nightly": return "#AAAAAA60";
+    case "Budgeting": return "#85AD3760";
+    case "QA": return "#E66C3780";
+    default: return "#ffffff";
+  }
+}
+
+/** `con_cmp_Header_Version.Visible` (under "Cloud"): `gblEnvironmentName = "Prod" || = "Dev"`. */
+export const brandVersionVisible = (environmentName: string | undefined): boolean =>
+  environmentName === "Prod" || environmentName === "Dev";
+
+/**
+ * `con_cmp_Header_Version_4.Visible` (the environment block before Help): `If(Prod || Dev, false, true)` —
+ * the version moves from under "Cloud" to under the environment name everywhere else.
+ */
+export const environmentVersionVisible = (environmentName: string | undefined): boolean =>
+  !brandVersionVisible(environmentName);
+
 /* ═══════════════════════════════════════ the PM project status line (20 Oct 2026) ══ */
 
 /**

@@ -12,7 +12,8 @@ import { FluentProvider } from "@fluentui/react-components";
 import { vsbTheme } from "@/theme/fluent";
 import { AppHeader } from "./AppHeader";
 import {
-  environmentInfoColor, pmHeaderTitle, projectPermissionLabel, projectStatusColour, projectStatusIcon, projectStatusLabel,
+  brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
+  pmHeaderTitle, projectPermissionLabel, projectStatusColour, projectStatusIcon, projectStatusLabel,
   projectStatusVisible, PROJECT_PERMISSION_LABEL,
 } from "./headerRules";
 import { ALLOW_ALL, DENY_ALL, type PrivilegeProvider } from "@/platform/privileges";
@@ -134,6 +135,51 @@ describe("AppHeader environment info icon", () => {
       </FluentProvider>,
     );
     expect(screen.queryByTestId("ico_cmp_Header_Info")).toBeNull();
+  });
+
+  it("UT-HEADER-004a the band takes the canvas colour per environment (con_cmp_Header.Fill, 17 Nov 2026)", () => {
+    expect(environmentHeaderFill("QA")).toBe("#E66C3780");
+    expect(environmentHeaderFill("Hotfix")).toBe("#9831A850");
+    expect(environmentHeaderFill("Nightly")).toBe("#AAAAAA60");
+    expect(environmentHeaderFill("Budgeting")).toBe("#85AD3760");
+    expect(environmentHeaderFill("Dev")).toBe("#ffffff");
+    expect(environmentHeaderFill("Prod")).toBe("#ffffff");
+    expect(environmentHeaderFill(undefined)).toBe("#ffffff");
+    // The version sits under "Cloud" in Prod / Dev only, and under the environment name everywhere else.
+    expect(brandVersionVisible("Prod")).toBe(true);
+    expect(brandVersionVisible("Dev")).toBe(true);
+    expect(brandVersionVisible("QA")).toBe(false);
+    expect(environmentVersionVisible("QA")).toBe(true);
+    expect(environmentVersionVisible("Prod")).toBe(false);
+  });
+
+  it("UT-HEADER-004b QA: salmon band, \"Quality Assurance\" + version before Help, no version under Cloud", () => {
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} environmentName="QA" appVersion="1.21.780" />
+      </FluentProvider>,
+    );
+    // jsdom normalises the 8-digit hex to rgba().
+    expect(screen.getByTestId("con_cmp_Header").style.backgroundColor).toMatch(/^rgba\(230, 108, 55, 0\.5\d*\)$/);
+    expect(screen.getByTestId("con_cmp_Header_Title_4")).toHaveTextContent("Quality Assurance");
+    expect(screen.getByTestId("con_cmp_Header_Version_4")).toHaveTextContent("Version 1.21.780");
+    expect(screen.getByTestId("ico_cmp_Header_Info_4")).toBeInTheDocument();
+    // The only version line is the one before Help — none under "Cloud".
+    expect(screen.getAllByText("Version 1.21.780")).toEqual([screen.getByTestId("con_cmp_Header_Version_4")]);
+  });
+
+  it("UT-HEADER-004c Prod: white band, version under Cloud, no environment name, version or icon before Help", () => {
+    render(
+      <FluentProvider theme={vsbTheme}>
+        <AppHeader hasError={false} onReportProblem={() => undefined} environmentName="Prod" appVersion="1.21.780" />
+      </FluentProvider>,
+    );
+    expect(screen.getByTestId("con_cmp_Header").style.backgroundColor).toBe("rgb(255, 255, 255)");
+    // The one version line is the brand's, under "Cloud".
+    expect(screen.getAllByText("Version 1.21.780")).toHaveLength(1);
+    expect(screen.queryByTestId("con_cmp_Header_Title_4")).toBeNull();
+    expect(screen.queryByTestId("con_cmp_Header_Version_4")).toBeNull();
+    expect(screen.queryByTestId("ico_cmp_Header_Info_4")).toBeNull();
   });
 });
 

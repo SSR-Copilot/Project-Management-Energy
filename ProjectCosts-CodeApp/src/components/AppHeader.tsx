@@ -10,15 +10,17 @@
  *   `con_cmp_Header_Title.Text`   = "Cloud"
  *   `con_cmp_Header_Version.Text` = "Version " & gblAppVersion &
  *                                   If(gblEnvironmentName = "Dev", " (" & name & ")", "")
- *   `con_cmp_Header_Title_4.Text` = Switch(gblEnvironmentName, "Hotfix"…, "QA" → "Quality Assurance")
+ *   `con_cmp_Header_Title_4.Text` = Switch(gblEnvironmentName, "Hotfix"…, "QA" → "Quality Assurance"),
+ *                                   with its version and (i) in a block before Help (not a badge)
+ *   `con_cmp_Header.Fill`         = the per-environment band colour (`environmentHeaderFill`)
  *   `lbl_cmp_In_Header_UserName`  = "Hi " & User().FullName
  *   Help menu (`pcf_HeaderContainerReportError_CommandBar_1.Items`):
  *                                   "Help" → "Report Problem", "VSB Cloud InfoCenter"
  *   Warning icon tooltip           = "An error has occurred!…", shown once an error is captured
  */
 import {
-  Badge, Button, Menu, MenuItem, MenuList, MenuPopover, MenuTrigger,
-  Text, Tooltip, makeStyles, tokens,
+  Button, Menu, MenuItem, MenuList, MenuPopover, MenuTrigger,
+  Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
   BugRegular, InfoRegular, LockClosedRegular, PersonFilled, ProhibitedRegular, WarningFilled,
@@ -28,6 +30,7 @@ import type { Ref } from "react";
 import { layout, media, palette, space } from "@/theme/tokens";
 import { VsbLogo } from "./VsbLogo";
 import {
+  brandVersionVisible, environmentHeaderFill, environmentInfoColor, environmentVersionVisible,
   projectStatusColour, projectStatusIcon, projectStatusLabel, projectStatusVisible,
 } from "./headerRules";
 
@@ -63,7 +66,32 @@ const useStyles = makeStyles({
    */
   // The first command's icon at x 198, right after the 204 px brand block (canvas, 28 Oct 2026).
   commandSlot: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", paddingLeft: 0 },
-  right: { display: "flex", alignItems: "center", gap: space.s, flexShrink: 0 },
+  // Full height, so the environment block can place its parts against the band's top and bottom.
+  right: { display: "flex", alignItems: "center", alignSelf: "stretch", gap: space.s, flexShrink: 0 },
+  /*
+   * `con_cmp_Header_Logo_Title_4` — the environment block first in `con_cmp_Header_Service_ReportError`,
+   * before the error icon and Help: a 200-wide, full-height ManualLayout holding
+   *  - `ico_cmp_Header_Info_4`: `Icon.Information`, 16 x 16 at X 5, `Y: =Parent.Height - Self.Height - 6`;
+   *  - `con_cmp_Header_Title_4`: right-aligned Semibold 12 pt black, `PaddingLeft 10`, half the band high
+   *    and centred on it;
+   *  - `con_cmp_Header_Version_4`: right-aligned, `Lighter` ExtraExtraSmall (the brand version's look) at
+   *    X 7, 12 high, level with the icon.
+   */
+  envBlock: {
+    position: "relative", alignSelf: "stretch", width: "200px", minWidth: 0, flexShrink: 1,
+    [media.belowMd]: { width: "140px" },
+  },
+  envIcon: { position: "absolute", left: "5px", bottom: "6px", width: "16px", height: "16px", fontSize: "16px" },
+  envTitle: {
+    position: "absolute", left: 0, right: 0, top: "25%", height: "50%",
+    display: "flex", alignItems: "center", justifyContent: "flex-end",
+    paddingLeft: "10px", paddingRight: "5px", boxSizing: "border-box", overflow: "hidden", whiteSpace: "nowrap",
+    fontSize: "16px", lineHeight: "20px", fontWeight: tokens.fontWeightSemibold, color: palette.black,
+  },
+  envVersion: {
+    position: "absolute", left: "7px", right: 0, bottom: "10px", height: "12px", lineHeight: "12px",
+    paddingRight: "5px", boxSizing: "border-box", textAlign: "right", overflow: "hidden", whiteSpace: "nowrap",
+  },
   help: { fontWeight: tokens.fontWeightRegular, "& .fui-Button__icon": { color: tokens.colorNeutralForeground3 } },
   /*
    * `pcf_cmpHeader_User_ContextMenu_Info` is a `cat_PowerCAT.ContextMenu`, whose rows are
@@ -255,9 +283,16 @@ export function AppHeader({
 }: AppHeaderProps) {
   const styles = useStyles();
   const badge = environmentBadge(environmentName);
+  // `ico_cmp_Header_Info_4.Color` — transparent (no icon) for Prod and an unknown environment.
+  const envInfoColor = environmentInfoColor(environmentName);
 
   return (
-    <header className={`${styles.header}${onBack ? " canvas-pm-header" : ""}`}>
+    <header
+      className={`${styles.header}${onBack ? " canvas-pm-header" : ""}`}
+      // `con_cmp_Header.Fill` — the per-environment band colour (QA salmon, Nightly grey, …).
+      style={{ backgroundColor: environmentHeaderFill(environmentName) }}
+      data-testid="con_cmp_Header"
+    >
       <div className={`${styles.brand} canvas-brand`}>
         {/*
           `img_cmp_Header_Button` — a transparent button over the logo whose `OnSelect` runs the
@@ -285,11 +320,12 @@ export function AppHeader({
             commented out, cmp_Header:269-275), so no (i) icon renders beside the version
             (canvas screenshot, 28 Oct 2026). `environmentInfoColor` keeps its colour switch.
           */}
-          <span className={styles.versionLine}>
-            <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
-          </span>
+          {brandVersionVisible(environmentName) ? (
+            <span className={styles.versionLine}>
+              <Text className={`${styles.version} canvas-brand-version`}>{versionLabel(appVersion, environmentName)}</Text>
+            </span>
+          ) : null}
         </div>
-        {badge ? <Badge appearance="tint" color="warning">{badge}</Badge> : null}
       </div>
 
       {/*
@@ -358,6 +394,18 @@ export function AppHeader({
       <div className={styles.commandSlot} ref={commandSlotRef} />
 
       <div className={styles.right}>
+        <div className={styles.envBlock} data-testid="con_cmp_Header_Logo_Title_4">
+          {envInfoColor ? (
+            <InfoRegular className={styles.envIcon} color={envInfoColor} aria-hidden="true" data-testid="ico_cmp_Header_Info_4" />
+          ) : null}
+          {badge ? <Text className={styles.envTitle} data-testid="con_cmp_Header_Title_4">{badge}</Text> : null}
+          {environmentVersionVisible(environmentName) ? (
+            <Text className={mergeClasses(styles.version, styles.envVersion)} data-testid="con_cmp_Header_Version_4">
+              {`Version ${appVersion ?? ""}`}
+            </Text>
+          ) : null}
+        </div>
+
         {hasError ? (
           <Tooltip content={ERROR_TOOLTIP} relationship="description" withArrow>
             <Button
