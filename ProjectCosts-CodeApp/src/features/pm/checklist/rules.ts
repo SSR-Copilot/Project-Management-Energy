@@ -15,8 +15,9 @@
  * `btn_CheckList_BuildProjectStatesSequence` and
  * `btn_CheckList_EnsureSkippedClusterStatesCompleted` — is here as pure functions that
  * RETURN THE WRITES rather than performing them. `hooks.ts` runs each plan through
- * `usePlanWrite` (`data/executePlan.ts`), one write at a time IN THE CANVAS ORDER — the SDK has
- * no changeset, so a plan can still half-apply (KNOWN-RISKS) and the error says how far it got.
+ * `usePlanWrite` (`data/executePlan.ts`), in the canvas order (the template copy's creates are one concurrent
+ * group, `planChecklistMaterialisation`) — the SDK has no changeset, so a plan can still half-apply
+ * (KNOWN-RISKS) and the error says how far it got.
  *
  * D29 (19 Oct 2026) — CONNECTED. Product decisions:
  *  - The four flows — `PerformCommonRequestofGateApproval`, `PerformCommonRequestofCheckListApproval`
@@ -71,8 +72,9 @@
  */
 import { isBlank } from "@/domain/powerFxNumeric";
 import { dateOnly } from "@/data/odata";
+import { dateFormat } from "@/domain/locale";
 import { ES, ES_PROCESS, CHOICE, CHOICE_PROCESS, TEXT_MAX_LENGTH } from "@/data/dataverseNames";
-import { createdRowRef, emptyPlan, type PlannedWrite, type WritePlan } from "@/data/writePlan";
+import { createdRowRef, emptyPlan, together, type PlannedWrite, type WritePlan } from "@/data/writePlan";
 import type { GateCancellationPayload } from "@/data/flows";
 
 /* ═══════════════════════════════════════════════════════════════════ columns ════ */
@@ -149,6 +151,17 @@ export const PROJECT_COLUMN = {
 
 /** `gblAppConstants.DefaultLongMaxLength` — the comment box's cap. */
 export const COMMENT_MAX_LENGTH = TEXT_MAX_LENGTH.long;
+
+/**
+ * C10 (CW-6): the real column lengths of the note rows, read from `.power/schemas/dataverse` (17 Nov 2026):
+ * `vsb_projectstatetrackingnote` `vsb_name` 256 / `vsb_comment` 4000, `vsb_projectchecklisttrackingnote` `vsb_name` 850 /
+ * `vsb_comment` 4000. The notes were cut at the comment box's 300, which dropped the end of "Approval requested - <comment>"
+ * (the box allows 300, the prefix adds 20) although the columns hold far more. The box keeps its own 300 limit.
+ */
+// DIVERGENCE: D123 §11 (the canvas text would have been rejected by Dataverse past the column length).
+export const STATE_NOTE_NAME_MAX = 256;
+export const CHECKLIST_NOTE_NAME_MAX = 850;
+export const NOTE_COMMENT_MAX = 4000;
 
 const ACS = CHOICE_PROCESS.approvalClusterState;
 const TASK = CHOICE_PROCESS.taskState;
@@ -662,7 +675,13 @@ export function shouldMaterialiseChecklist(
 }
 
 /**
- * Rule 11's writes — one create per template, issued as one `$batch`.
+ * Rule 11's writes — one create per template.
+ *
+ * C5 (17 Nov 2026): the creates form ONE concurrent group (`together`, eight in flight at a time through the plan
+ * engine's gate, no new create is started after a failure), not N single requests one after the other. The earlier
+ * comment here said "one `$batch`"; there never was one. DIVERGENCE: the canvas `ForAll`/`Patch` ran them in
+ * sequence; D123 §4. The rows' display order is carried by the `Order` column, not by the
+ * order they were created in (the gallery sorts on it, `listClusterChecklist`).
  *
  * The country/technology filter (`'Associated Country And Technology'.Country.Country`
  * and `.Technology`) is applied SERVER-side by `hooks.ts`; the templates arriving here
@@ -677,6 +696,7 @@ export function planChecklistMaterialisation(
   },
 ): WritePlan {
   const plan = emptyPlan();
+  const creates: PlannedWrite[] = [];
   for (const t of templates) {
     const data: Record<string, unknown> = {
       [CHECKLIST_COL.name]: t.name,
@@ -695,11 +715,12 @@ export function planChecklistMaterialisation(
       data[`${LOOKUP.owningBusinessUnit}@odata.bind`] =
         `/businessunits(${ctx.owningBusinessUnitId})`;
     }
-    plan.writes.push({
+    creates.push({
       op: "create", entitySet: ES.projectChecklists, data,
       reason: `Checklist task “${t.name}” created from the default template`,
     });
   }
+  plan.writes.push(...together(creates, { stopOnFailure: true }));
   if (plan.writes.length) {
     plan.log.push(`Created ${plan.writes.length} checklist task(s) from the defaults.`);
   }
@@ -707,7 +728,7 @@ export function planChecklistMaterialisation(
 }
 
 /** The state `planEnsureTracking` creates a missing row with — what the materialisation guard then sees. */
-export const ensuredTrackingState = (selected: { name: string }): number =>
+const ensuredTrackingState = (selected: { name: string }): number =>
   selected.name === "Draft" ? ACS.inProgress : ACS.notStarted;
 
 /**
@@ -772,7 +793,7 @@ export function rowApprovalIcon(setting: ChecklistApprovalSetting | null): RowAp
  * `Visible` asks whether an ACTIVE row exists (`… && 'Gate active'`, Y:3660-3671). With one row per
  * template (the admin screen's rule) both are the same row.
  */
-export function rowApprovalIconFor(
+function rowApprovalIconFor(
   first: ChecklistApprovalSetting | null,
   active: ChecklistApprovalSetting | null,
 ): RowApprovalIcon {
@@ -784,7 +805,7 @@ export function rowApprovalIconFor(
 }
 
 /** "Visible but blank" counts as visible for `!ico_….Visible` (the Complete branch, Y:3217). */
-export const rowApprovalIconVisible = (active: ChecklistApprovalSetting | null): boolean => active !== null;
+const rowApprovalIconVisible = (active: ChecklistApprovalSetting | null): boolean => active !== null;
 
 /**
  * Rule 14 — the row action button's caption.
@@ -801,7 +822,7 @@ export function rowActionLabel(
 }
 
 /** `but_…_ListRow_Complete.Text` (Y:3275-3290) from the icon already resolved for the row. */
-export function rowActionLabelFor(
+function rowActionLabelFor(
   row: Pick<ChecklistRow, "approvalChecklistState">,
   icon: RowApprovalIcon,
 ): RowActionLabel {
@@ -901,7 +922,9 @@ export function rowActionKind(
 
 /** One-row write plan for a `'Project Checklists'` patch (Complete, In Progress, date, comment). */
 export function planChecklistRowPatch(rowId: string, data: Record<string, unknown>, reason: string): WritePlan {
-  return { writes: [{ op: "update", entitySet: ES.projectChecklists, id: rowId, data, reason }], log: [] };
+  // C6 (D123 §5): `guarded` reads the row first and sends nothing when it is gone, so a task another
+  // user or an admin deleted is not re-created by this PATCH (the SDK PATCH is an upsert).
+  return { writes: [{ op: "update", entitySet: ES.projectChecklists, id: rowId, data, reason, guarded: true }], log: [] };
 }
 
 /**
@@ -1372,6 +1395,7 @@ export function planClusterTransition(args: {
       op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id,
       data: currentData,
       reason: `${args.state.name} → Completed`,
+      guarded: true,
     });
   } else {
     plan.writes.push({
@@ -1395,6 +1419,7 @@ export function planClusterTransition(args: {
         op: "update", entitySet: ES.projectStateTrackings, id: args.nextTracking.id,
         data: nextData,
         reason: `${args.next.name} → In Progress`,
+        guarded: true,
       });
     } else {
       plan.writes.push({
@@ -1470,6 +1495,7 @@ export function planReturnToPreviousCluster(args: {
       op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id,
       data: { [TRACKING_COL.approvalClusterState]: ACS.notStarted, ...ownerBind(bu) },
       reason: `${args.state.name} → Not Started`,
+      guarded: true,
     });
   }
   if (args.previousTracking) {
@@ -1482,6 +1508,7 @@ export function planReturnToPreviousCluster(args: {
         ...ownerBind(bu),
       },
       reason: `${args.previous.name} → In Progress`,
+      guarded: true,
     });
   }
   plan.writes.push(
@@ -1621,6 +1648,7 @@ export function planTerminalStateChange(args: {
     },
     reason: `${primary.clusterStateName ?? "Tracking"} → ` +
       approvalStateLabel(args.staging.approvalClusterState),
+    guarded: true,
   });
 
   if (args.staging.targetClusterStateId) {
@@ -1644,6 +1672,7 @@ export function planTerminalStateChange(args: {
       op: "update", entitySet: ES.projectStateTrackings, id: t.id,
       data: { [TRACKING_COL.approvalClusterState]: ACS.notStarted },
       reason: `${t.clusterStateName ?? "Tracking"} reset to Not Started`,
+      guarded: true,
     });
   }
 
@@ -1663,7 +1692,7 @@ export function planTerminalStateChange(args: {
 export function approvalPersonaSnapshot(gate: GateSetting | null): Record<string, unknown> {
   // D29: each list is `Coalesce(Concat(ParseJSON(…).PersonaRole, Char(13)), "None")` and the PM is
   // `Coalesce('Portfolio Manager'.Mail, "None")` (Y:5603-5643) — before D29 the raw JSON was copied.
-  // Not run yet: it belongs to Request Approval, which starts the gate flow (excluded).
+  // It runs with Request Approval since D81 (`planGateApprovalRequestPatch`), before the gate flow starts.
   const list = (json: string | null | undefined): string => parsePersonaList(json ?? null).join("\r") || "None";
   return {
     [TRACKING_COL.lastTriggeredApprovalPersonas]: JSON.stringify([{
@@ -1880,6 +1909,7 @@ export function planGateCancelPatch(args: {
       ...ownerBind(args.project.owningBusinessUnitId),
     },
     reason: `${args.tracking.clusterStateName ?? "Cluster"} approval request cancelled`,
+    guarded: true,
   });
   return plan;
 }
@@ -1982,7 +2012,7 @@ export function planGateApprovalRequestPatch(args: {
     ...approvalPersonaSnapshot(args.gate),
   };
   plan.writes.push(args.tracking
-    ? { op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id, data, reason: `${args.state.name} approval requested` }
+    ? { op: "update", entitySet: ES.projectStateTrackings, id: args.tracking.id, data, reason: `${args.state.name} approval requested`, guarded: true }
     : {
       op: "create", entitySet: ES.projectStateTrackings, data: { ...data, [TRACKING_COL.name]: args.state.name },
       reason: `${args.state.name} created, approval requested`,
@@ -2037,6 +2067,7 @@ export function planChecklistApprovalRequestPatch(args: {
       [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress,
     },
     reason: `${args.row.title} approval requested`,
+    guarded: true,
   });
   return plan;
 }
@@ -2060,6 +2091,7 @@ export function planChecklistApprovalRequestFollowUp(args: {
       op: "update", entitySet: ES.projectChecklists, id: args.row.id,
       data: { [CHECKLIST_COL.approvalChecklistState]: ACS.inProgress, ...writeBack },
       reason: `${args.row.title} flow ids`,
+      guarded: true,
     });
   }
   const text = `${args.approvalRequested ? "Approval requested" : "Completed and notified about Check List"} ${args.row.title} for Project ${args.project.projectName ?? ""}`;
@@ -2115,8 +2147,8 @@ function trackingNoteWrite(args: {
   owningBusinessUnitId: string | null;
 }): PlannedWrite {
   const data: Record<string, unknown> = {
-    [NOTE_COL.name]: args.name.slice(0, COMMENT_MAX_LENGTH),
-    [NOTE_COL.comment]: args.comment.slice(0, COMMENT_MAX_LENGTH),
+    [NOTE_COL.name]: args.name.slice(0, STATE_NOTE_NAME_MAX),
+    [NOTE_COL.comment]: args.comment.slice(0, NOTE_COMMENT_MAX),
     [NOTE_COL.note]: args.note,
     [NOTE_COL.noteType]: args.noteType,
   };
@@ -2135,15 +2167,15 @@ function trackingNoteWrite(args: {
 }
 
 /** The checklist-side audit note the approval request writes. */
-export function checklistNoteWrite(args: {
+function checklistNoteWrite(args: {
   name: string;
   checklistId: string;
   comment: string;
   owningBusinessUnitId: string | null;
 }): PlannedWrite {
   const data: Record<string, unknown> = {
-    [NOTE_COL.name]: args.name.slice(0, COMMENT_MAX_LENGTH),
-    [NOTE_COL.comment]: args.comment.slice(0, COMMENT_MAX_LENGTH),
+    [NOTE_COL.name]: args.name.slice(0, CHECKLIST_NOTE_NAME_MAX),
+    [NOTE_COL.comment]: args.comment.slice(0, NOTE_COMMENT_MAX),
     [NOTE_COL.noteType]: CHOICE_PROCESS.noteType.checklistItem,
     [`${LOOKUP.projectChecklist}@odata.bind`]:
       `/${ES.projectChecklists}(${args.checklistId})`,
@@ -2468,8 +2500,6 @@ export const UI = {
   infoWaiting: "Please complete the previous cluster or wait for cluster approval.",
   /** `txt_Info_TipCluster_Checklist_1.Text` */
   technologyTip: "Tip: For selected technology cluster checklist is not available.",
-  /** The change-cluster panel's ✕ tooltip, as on the canvas. */
-  closeTooltip: "Home",
   /** `lbl_Checklist_DisplayProject_Body_Content_OverviewHeader_*.Text`, left to right. */
   header: {
     gateRelevance: "Gate Relevance",
@@ -2553,20 +2583,32 @@ export function requestApprovalCaption(panel: PanelState, next: { name: string }
     : `Move to ${next?.name ?? ""}`;
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+/** The abbreviation `Intl` gives for a part, without the trailing dot some locales add ("Mo." in German, "lun." in French). */
+const abbreviation = (locale: string, part: "weekday" | "month", d: Date): string => {
+  let text: string;
+  try {
+    text = dateFormat(locale, { [part]: "short" }).format(d);
+  } catch {
+    text = dateFormat("en-US", { [part]: "short" }).format(d);
+  }
+  return text.replace(/[.]$/, "");
+};
 
 /**
  * Power Fx `Text(d, "ddd, mmm. dd, yyyy")` (`lbl_…_ListRow_CompletionDate.Text`) and, with
  * `withTime`, `"ddd, mmm. dd, yyyy hh:mm"` (`lbl_CheckList_RightPanel_ChangeCluster_Form_ModifedOn`).
  * Blank for a blank or unparseable value.
+ *
+ * C10 (CU-17): the weekday and month names follow the user's language, as `Text()` does with the app language
+ * (they were hard-coded English). The field order and punctuation are the canvas's, and every en locale prints what
+ * it printed before ("Mon, Nov. 02, 2026").
  */
-export function fmtCanvasDate(value: string | null | undefined, withTime = false): string {
+export function fmtCanvasDate(value: string | null | undefined, withTime = false, locale = "en-US"): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  const date = `${WEEKDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]}. ${pad(d.getDate())}, ${d.getFullYear()}`;
+  const date = `${abbreviation(locale, "weekday", d)}, ${abbreviation(locale, "month", d)}. ${pad(d.getDate())}, ${d.getFullYear()}`;
   return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
 }
 
@@ -2675,6 +2717,17 @@ export function stepStateLabel(tracking: TrackingRow | null, index: number): str
   }
 }
 
+/**
+ * CU-2 (NEW TEXT, D123 §12): what a stepper card says besides its name, for `aria-describedby`: its state, then its gate
+ * (who will be asked), one line per person joined with commas. The card's aria-label stays the step name (rule 16).
+ */
+export function stepCardDescription(stateLabel: string, gateTooltip: string | null): string {
+  const parts = [stateLabel || "Not started"];
+  const gate = (gateTooltip ?? "").split(/[\r\n]+/).filter(Boolean).join(", ");
+  if (gate) parts.push(gate);
+  return parts.join(". ");
+}
+
 /** `lbl_State_Card_Data_Title.Text` — `Split(Description, ": ")`, one piece per line on a narrow card. */
 export const stepDescriptionLines = (entry: Pick<SequenceEntry, "clusterDescription" | "name">): string[] =>
   (entry.clusterDescription || entry.name).split(": ");
@@ -2699,7 +2752,7 @@ export const stepClockVisible = (tracking: TrackingRow | null): boolean =>
 interface PersonaLists { portfolioManager: string; contributors: string; approvers: string; notifications: string }
 
 /** The persona tooltip text per `Approval Mode` (`Char(13)` kept as "\r"); blank for no mode. */
-export function personaTooltipText(mode: number | null | undefined, p: PersonaLists): string | null {
+function personaTooltipText(mode: number | null | undefined, p: PersonaLists): string | null {
   const cr = "\r";
   if (mode === MODE.formalApproval) {
     return `Portfolio Manager:${cr}${p.portfolioManager}${cr}${cr}Contributors:${cr}${p.contributors}`
@@ -2875,6 +2928,131 @@ export const SCREEN_TEXT = {
   loadFailedTitle: "Checklist data is unavailable",
   loadFailedDescription: "The project's checklist could not be read from Dataverse. Use Refresh to try again.",
 } as const;
+
+/* ═══════════════════════════════════ 17 Nov 2026 — reads the actions depend on, stale state, app id ════ */
+
+/**
+ * NEW TEXT (no canvas equivalent; D123 §1): the canvas had every collection loaded behind its spinner before
+ * the screen showed, so a half-read approval setting, gate or tracking never existed there. The code app loads them in
+ * several queries, so the actions that depend on them wait, and say why.
+ */
+export const READ_GATE_MSG = {
+  /** The row's Complete / Approval tooltip while the approval settings of the cluster's tasks are being read. */
+  approvalsChecking: "Checking the approval settings of the tasks...",
+  /** The row's tooltip, and the banner, when that read failed. */
+  approvalsFailed:
+    "The approval settings of the tasks could not be read, so Complete and Approval are unavailable. Use Refresh to try again.",
+  /** The banner when a background refresh failed and the screen keeps the data it already has. */
+  refreshFailed:
+    "Some of this screen's data could not be refreshed, so what is shown may be out of date. Use Refresh to try again.",
+  /** The banner in the panel's history area when the notes could not be read. */
+  historyFailed: "The history could not be read. Use the refresh button next to History to try again.",
+} as const;
+
+/** Where the read of the approval settings of the selected cluster's tasks stands. */
+export type ApprovalSettingsState = "ready" | "checking" | "failed";
+
+/** The settings are read for the tasks that name a template; none named = nothing to read (the query is off). */
+export const approvalSettingsNeeded = (rows: readonly Pick<ChecklistRow, "projectDefaultChecklistId">[]): boolean =>
+  rows.some((r) => !isBlank(r.projectDefaultChecklistId));
+
+/**
+ * C1 — a read that has an answer is `ready`, even if a later refresh failed; nothing to read is `ready`; else a failure
+ * beats "still checking". Until it is `ready` the row actions that depend on it stay off: with no settings loaded no row
+ * shows an approval icon, so `rowActionKind` answered "complete" and one click set a task that needs approval straight to
+ * Completed, with no approval, mail or message (the canvas could not do this: its collections were loaded first).
+ * DIVERGENCE: D123 §1.
+ */
+export function approvalSettingsState(a: { needed: boolean; known: boolean; failed: boolean }): ApprovalSettingsState {
+  if (!a.needed || a.known) return "ready";
+  return a.failed ? "failed" : "checking";
+}
+
+/** The tooltip that explains a row action held back by `approvalSettingsState`; null when the actions are free. */
+export function approvalSettingsHint(state: ApprovalSettingsState): string | null {
+  if (state === "checking") return READ_GATE_MSG.approvalsChecking;
+  if (state === "failed") return READ_GATE_MSG.approvalsFailed;
+  return null;
+}
+
+/**
+ * C2 / C3 — the first load. The project, the states, the trackings and the gates must all have answered before the
+ * screen derives a cluster, a tip or an action from them: until then it showed "technology not available" for a Wind
+ * project, opened on Draft and treated a gated cluster as a direct move. New Project mode (no project id) loads nothing.
+ * DIVERGENCE: D123 §1.
+ */
+export function checklistIsLoading(a: { hasProjectId: boolean; projectLoading: boolean; sequenceLoading: boolean }): boolean {
+  return a.hasProjectId && (a.projectLoading || a.sequenceLoading);
+}
+
+/**
+ * C4 — what a failed read does to the screen. `blocking`: a failed query has NO data, so the screen cannot show it (the
+ * empty state, now with a Refresh button). `banner`: every failed query still has data (a failed background refresh, e.g.
+ * on window focus): the screen stays and a banner says the data may be stale. A double without `hasData` counts as "no
+ * data". DIVERGENCE: the canvas had no refresh; D123 §3.
+ */
+export function checklistLoadErrorMode(
+  queries: readonly { error: unknown; hasData?: boolean | undefined }[],
+): "none" | "blocking" | "banner" {
+  const failed = queries.filter((q) => q.error);
+  if (failed.length === 0) return "none";
+  return failed.some((q) => q.hasData !== true) ? "blocking" : "banner";
+}
+
+/**
+ * C6 — NEW TEXT (D123 §6). The plans re-read the trackings when the job starts, but the button that
+ * started it was drawn from a copy up to 30 s old. A job whose fresh read no longer matches what enabled the button is
+ * refused, with nothing written.
+ */
+export const STALE_MSG = {
+  saveNotInProgress: (name: string) =>
+    `The cluster '${name}' is no longer In Progress (another user or tab may have changed it), so nothing was saved. The screen now shows its current state.`,
+  returnNotResettable: (name: string) =>
+    `The cluster '${name}' can no longer be reset (another user or tab may have changed it), so nothing was changed. The screen now shows its current state.`,
+  clusterRequestStale: (name: string) =>
+    `An approval for '${name}' was already requested, or the cluster is completed (another user or tab may have done that), so nothing was sent. The screen now shows its current state.`,
+  taskRequestStale: (title: string) =>
+    `The approval for the task '${title}' was already requested or is completed (another user or tab may have done that), so nothing was sent. The screen now shows its current state.`,
+} as const;
+
+/** `showSave`'s tracking condition on a FRESH read: the cluster must still be In Progress. Returns the refusal text or null. */
+export function staleSaveRefusal(state: { name: string }, tracking: TrackingRow | null): string | null {
+  return tracking?.approvalClusterState === ACS.inProgress ? null : STALE_MSG.saveNotInProgress(state.name);
+}
+
+/** `showReturnToPrevious`'s tracking condition on a FRESH read: In Progress, Rejected or Request canceled. */
+export function staleReturnRefusal(state: { name: string }, tracking: TrackingRow | null): string | null {
+  const s = tracking?.approvalClusterState ?? null;
+  const resettable = s === ACS.inProgress || s === ACS.rejected || s === ACS.requestCanceled;
+  return resettable ? null : STALE_MSG.returnNotResettable(state.name);
+}
+
+/**
+ * Request Approval (cluster mode) on a FRESH read: refused when the cluster is Completed, or In Progress with a live flow
+ * run (an approval is already running; a second request would send a second mail and Teams card).
+ */
+export function staleClusterRequestRefusal(state: { name: string }, tracking: TrackingRow | null): string | null {
+  const s = tracking?.approvalClusterState ?? null;
+  const live = s === ACS.completed || (s === ACS.inProgress && !isBlank(tracking?.flowRunId));
+  return live ? STALE_MSG.clusterRequestStale(state.name) : null;
+}
+
+/** Request Approval (checklist mode) on a FRESH read of the row: refused when it is In Progress or Completed already. */
+export function staleTaskRequestRefusal(row: Pick<ChecklistRow, "title" | "approvalChecklistState">): string | null {
+  const s = row.approvalChecklistState;
+  return s === ACS.inProgress || s === ACS.completed ? STALE_MSG.taskRequestStale(row.title) : null;
+}
+
+/**
+ * C7 — NEW TEXT (D123 §7): the cancellation flow takes the app id (`gblProjectManagmentAppID`,
+ * `vsb_ProjectManagementAppID`). It is read in the background since D119, so it can still be blank; a blank one is refused
+ * BEFORE the tracking is patched (the canvas had it from App.OnStart).
+ */
+export const APP_ID_MSG =
+  "The environment variable vsb_ProjectManagementAppID could not be read, so the approval request cannot be cancelled. Reload the page and try again.";
+
+/** The refusal text for a blank app id, or null. */
+export const appIdRefusal = (appId: string | null | undefined): string | null => (isBlank(appId?.trim()) ? APP_ID_MSG : null);
 
 /** A stored date or date-time as the local `YYYY-MM-DD` a date input shows (rule 18: local parts). */
 export function toYmd(value: string | null | undefined): string {

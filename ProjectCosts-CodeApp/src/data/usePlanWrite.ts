@@ -60,6 +60,11 @@ export interface PlanJob {
   onWritten?: (ok: boolean) => void;
   /** The spinner text for the reload that follows the writes (the canvas's next pop-up, "Loading, please wait..."). */
   reloadProgress?: string;
+  /**
+   * The cache keys this job refreshes afterwards, INSTEAD of the hook's `invalidate` list. Optional; no caller sets it
+   * except the PM Checklist, whose cluster visit must not refetch the states, the gates and the Entra lookups it never changes.
+   */
+  invalidate?: readonly QueryKey[];
 }
 
 /**
@@ -158,8 +163,8 @@ export function usePlanWrite(opts: {
         if (job.reloadProgress) setProgress(job.reloadProgress);
       }
     },
-    onSettled: () => {
-      const reload = Promise.all(opts.invalidate.map((queryKey) => qc.invalidateQueries({ queryKey })));
+    onSettled: (_data, _error, job) => {
+      const reload = Promise.all((job?.invalidate ?? opts.invalidate).map((queryKey) => qc.invalidateQueries({ queryKey })));
       if (opts.refresh !== "background") return reload;
       pendingRefreshes.current += 1;
       setRefreshing(true);

@@ -19,7 +19,7 @@ import {
   InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
-import { ARIA, UI, type TerminalKind } from "./rules";
+import { ARIA, UI, stepCardDescription, type TerminalKind } from "./rules";
 
 /** Outline at rest, filled on hover (Fluent's bundled-icon pair). */
 const InfoBundle = bundleIcon(InfoFilled, InfoRegular);
@@ -78,14 +78,17 @@ const useStyles = makeStyles({
     ":hover": { backgroundColor: "transparent" },
     // No focus square after a click; the selected card's grey border and shadow are the only mark.
     "::after": { display: "none" },
-    ":focus, :focus-visible": { outlineStyle: "none" },
-    "&[data-fui-focus-visible]": { outlineStyle: "none" },
+    "&:focus:not(:focus-visible):not([data-fui-focus-visible])": { outlineStyle: "none" },
+    // CU-8 (17 Nov 2026): a KEYBOARD focus keeps a visible ring (it was removed for both).
+    "&:focus-visible, &[data-fui-focus-visible]": {
+      outlineStyle: "solid", outlineWidth: "2px", outlineColor: palette.themePrimary, outlineOffset: "-2px",
+    },
   },
   cardSelected: {
     backgroundColor: PM_GRAYSCALE40, ...edges(palette.Grayscale30), boxShadow: tokens.shadow4,
     ":hover": { backgroundColor: PM_GRAYSCALE40 },
-    // Fluent's keyboard-focus ring (a black 2-px outline) is not drawn; the grey border stays.
-    "&[data-fui-focus-visible], &:focus-visible": { ...edges(palette.Grayscale30), outlineStyle: "none", boxShadow: tokens.shadow4 },
+    // The grey border and the shadow stay on keyboard focus; the themePrimary ring of `card` shows on top of them.
+    "&[data-fui-focus-visible], &:focus-visible": { ...edges(palette.Grayscale30), boxShadow: tokens.shadow4 },
   },
   cardSkipped: { opacity: 0.55 },
   // `con_State_Card_Button` (the top half): rec_First (10 x 2) · but_State (24 high, radius 4) ·
@@ -264,6 +267,8 @@ export interface ProjectStateStep {
 export interface ProjectStatesProps {
   steps: ProjectStateStep[];
   onSelect: (id: string) => void;
+  /** CU-11: the cards cannot be pressed while a write runs (the selection would move under it). */
+  selectDisabled?: boolean;
   /**
    * The refresh button at the top right (`but_Project_States_CheckList_Refresh`'s action); null
    * hides it (its canvas container is Wind / PV only).
@@ -274,10 +279,30 @@ export interface ProjectStatesProps {
 /** The `Char(13)` tooltips, one line per piece. */
 const lines = (text: string | null): string => (text ?? "").replace(/\r/g, "\n");
 
-export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) {
+export function ProjectStates({ steps, onSelect, selectDisabled = false, refresh }: ProjectStatesProps) {
   const s = useStyles();
   return (
     <div className={s.wrap}>
+      {/*
+        * CU-16: the refresh button comes FIRST in the markup, as it does on screen (it was drawn above the steps with
+        * `order: -1` although it followed them, so keyboard order and visual order disagreed).
+        * The canvas shows `cmp_Project_States.btn_Refresh` (ArrowSync, 24 x 24) here, to developers
+        * only (`RefreshButtonVisibility`, not ported, D29). The visible refresh of this app is
+        * `but_Project_States_CheckList_Refresh` (canvas Width 0), shown in that place.
+        */}
+      {refresh ? (
+        <Tooltip content={UI.refresh} relationship="description" withArrow>
+          <Button appearance="transparent" size="small" className={s.refresh} icon={<ArrowClockwiseRegular />}
+            aria-label="RefreshProjectStates" data-testid="but_Project_States_CheckList_Refresh"
+            disabled={refresh.disabled} onClick={refresh.onClick} />
+        </Tooltip>
+      ) : null}
+      {/* CU-2: one description per card, outside the stepper so its children stay the cards. */}
+      <div hidden>
+        {steps.map((step) => (
+          <span key={step.id} id={`cmp_CheckList_Project_States-desc-${step.id}`}>{stepCardDescription(step.stateLabel, step.gate?.tooltip ?? null)}</span>
+        ))}
+      </div>
       <div className={mergeClasses(s.stepper, steps.length === 0 && s.stepperEmpty)} data-testid="cmp_CheckList_Project_States">
         {steps.map((step, index) => {
           const fill = BAR_FILL[step.stateLabel];
@@ -289,9 +314,11 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
               appearance="transparent"
               className={mergeClasses(s.card, step.selected && s.cardSelected, step.skipped && s.cardSkipped)}
               aria-label={step.name}
+              aria-describedby={`cmp_CheckList_Project_States-desc-${step.id}`}
               data-testid={`cmp_CheckList_Project_States-${step.id}`}
               aria-pressed={step.selected}
               title={step.name}
+              disabled={selectDisabled}
               onClick={() => onSelect(step.id)}
             >
               <span className={s.track}>
@@ -324,18 +351,6 @@ export function ProjectStates({ steps, onSelect, refresh }: ProjectStatesProps) 
           );
         })}
       </div>
-      {/*
-        * The canvas shows `cmp_Project_States.btn_Refresh` (ArrowSync, 24 x 24) here, to developers
-        * only (`RefreshButtonVisibility`, not ported, D29). The visible refresh of this app is
-        * `but_Project_States_CheckList_Refresh` (canvas Width 0), shown in that place.
-        */}
-      {refresh ? (
-        <Tooltip content={UI.refresh} relationship="description" withArrow>
-          <Button appearance="transparent" size="small" className={s.refresh} icon={<ArrowClockwiseRegular />}
-            aria-label="RefreshProjectStates" data-testid="but_Project_States_CheckList_Refresh"
-            disabled={refresh.disabled} onClick={refresh.onClick} />
-        </Tooltip>
-      ) : null}
     </div>
   );
 }

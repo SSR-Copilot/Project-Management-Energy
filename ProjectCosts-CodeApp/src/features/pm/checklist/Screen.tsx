@@ -24,9 +24,9 @@
  * Request Approval, Cancel Approval Request and the row's cancel ✕ run the approval flows through
  * `hooks.ts` / `data/flows.ts` (D81, 4 Nov 2026; under D29 they were visible and disabled).
  */
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
-  Button,
+  Button, MessageBar, MessageBarBody,
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Tooltip,
   makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
@@ -35,7 +35,7 @@ import {
   LightbulbRegular, MailRegular, PeopleRegular,
 } from "@fluentui/react-icons";
 import {
-  ConfirmDialog, DateField, DateInput, EmptyState, FormPanel, PanelButtons, PanelCancelButton,
+  ConfirmDialog, DateField, DateInput, EmptyState, FormPanel, LoadingOverlay, PanelButtons, PanelCancelButton,
   TextAreaField, TextField, WriteFeedback, HINTS,
 } from "@/components";
 import { DATE_PICKER_FORMAT } from "@/domain/canvasDate";
@@ -43,9 +43,9 @@ import { useSession } from "@/app/SessionContext";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import { palette, space } from "@/theme/tokens";
 import {
-  ARIA, COMMENT_MAX_LENGTH, COMPLETION_DATE_MESSAGE, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, UI,
-  approvalDueDateDefault, buildDisplaySequence, buildOperationalSequence, canCancelApproval, canRequestApproval, canSavePanel,
-  checklistPersonaTooltip, checklistTableTitle, checklistTitleTooltip, commentAsteriskVisible,
+  ARIA, COMMENT_MAX_LENGTH, COMPLETION_DATE_MESSAGE, MSG, PAGE_LOCK_TITLE, READ_GATE_MSG, SCREEN_TEXT, UI,
+  approvalDueDateDefault, approvalSettingsHint, approvalSettingsNeeded, approvalSettingsState, buildDisplaySequence, buildOperationalSequence, canCancelApproval, canRequestApproval, canSavePanel,
+  checklistIsLoading, checklistLoadErrorMode, checklistPersonaTooltip, checklistTableTitle, checklistTitleTooltip, commentAsteriskVisible,
   commentBlockVisible, commentError, commentPatch, commentReadOnly, completeTaskPatch, completionDatePatch,
   defaultSelectedCluster, fmtCanvasDate, gateFor, gatePersonaTooltip, gateRelevanceLabel, historyDescriptor,
   holdingColumnToggleLabel, inProgressTogglePatch, nextClusterCaption, nextClusterEnabled, nextClusterIcon,
@@ -288,8 +288,12 @@ const useStyles = makeStyles({
     "&.canvas-panel .canvas-panel-footer": { borderTopWidth: 0 },
     "&.canvas-panel .canvas-panel-footer .fui-Button": { fontWeight: tokens.fontWeightRegular },
     "&.canvas-panel .canvas-panel-header button::after": { display: "none" },
-    "&.canvas-panel .canvas-panel-header button:focus, &.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+    // No focus square after a CLICK; a keyboard focus keeps a visible ring (CU-8, 17 Nov 2026: the ring was removed for both).
+    "&.canvas-panel .canvas-panel-header button:focus:not(:focus-visible):not([data-fui-focus-visible])": {
       outlineStyle: "none", boxShadow: "none", backgroundColor: "transparent", ...border("transparent"),
+    },
+    "&.canvas-panel .canvas-panel-header button:focus-visible, &.canvas-panel .canvas-panel-header button[data-fui-focus-visible]": {
+      outlineStyle: "solid", outlineWidth: "2px", outlineColor: "#ffffff", outlineOffset: "-2px",
     },
   },
   // The change-cluster panel: the title 6 px and the body 5 px further left, Cancel 6 px further in.
@@ -321,8 +325,8 @@ const useStyles = makeStyles({
     "& .fui-Field__validationMessage": { fontSize: "12px", fontWeight: tokens.fontWeightRegular, paddingLeft: "9px", marginTop: "8px" },
   },
   /**
-   * Request Approval drawn as the canvas draws it — blue, white text and arrow, 170 x 30 — although
-   * the approval flow is not wired yet (D29), so it stays inert (PO, 3 Nov 2026).
+   * Request Approval drawn as the canvas draws it: blue, white text and arrow, 170 x 30, also while it is disabled
+   * (PO, 3 Nov 2026). The approval flows are connected since D81.
    */
   requestApproval: {
     minWidth: "170px", height: "30px", ...radius("0"),
@@ -377,6 +381,8 @@ const useStyles = makeStyles({
   },
   noteText: { fontSize: tokens.fontSizeBase100 },
   preLine: { whiteSpace: "pre-line" },
+  // The tooltip sits on a wrapper so it also shows while the button is disabled (a disabled button gets no hover events).
+  tipWrap: { display: "inline-flex", flexShrink: 0 },
 });
 
 /** The classic `Icon.Note`: a square sheet with its bottom-right corner folded. */
@@ -407,7 +413,17 @@ type PanelForm =
 
 /* ────────────────────────────────────────────────────────────────── screen */
 
+/**
+ * One screen instance PER PROJECT (C10, CF-6 / generators GR-6): the route element is the same component for every project, so
+ * an open panel, a selection and a date editor of project A would stay mounted over project B. Keying by the project id
+ * gives each project a fresh state (the Contracts and Generators screens do the same).
+ */
 export default function CheckListScreen() {
+  const { projectId } = useSession();
+  return <CheckListScreenBody key={projectId ?? "none"} />;
+}
+
+function CheckListScreenBody() {
   const s = useStyles();
   const { projectId, locale, envVars, session } = useSession();
 
@@ -427,26 +443,49 @@ export default function CheckListScreen() {
   /** The row whose Complete write is in flight — drawn green meanwhile, as the canvas does. */
   const [completingRowId, setCompletingRowId] = useState<string | null>(null);
   const [showHolding, setShowHolding] = useState(true);
+  /** CU-1: the pencil of each row, so focus can go back to it when the date editor closes; and the row whose editor just opened. */
+  const pencilRefs = useRef(new Map<string, HTMLElement>());
+  const focusPencilRow = useRef<string | null>(null);
+  const focusPickerRow = useRef<string | null>(null);
+  // Runs after every commit: when the editor has just closed, the pencil that is back in the cell takes focus.
+  useEffect(() => {
+    if (focusPencilRow.current === null) return;
+    pencilRefs.current.get(focusPencilRow.current)?.focus();
+    focusPencilRow.current = null;
+  });
 
   /* ── the two sequences and the selected cluster. */
   const startCluster = startClusterNo(project);
   const operational = buildOperationalSequence(states, startCluster, gates);
   const display = buildDisplaySequence(states, startCluster, gates);
-  const current: SequenceEntry | null =
-    operational.find((x) => x.id === selectedClusterId) ?? defaultSelectedCluster(operational, trackings);
+  // C2 / C3: nothing is derived from the first read until the project, the states, the trackings and the gates have all
+  // answered: no tip, no Draft fallback, no cluster actions (D123 §1).
+  const loading = checklistIsLoading({
+    hasProjectId: Boolean(projectId), projectLoading: projectQ.isLoading, sequenceLoading: sequenceQ.isLoading,
+  });
+  const current: SequenceEntry | null = loading ? null
+    : operational.find((x) => x.id === selectedClusterId) ?? defaultSelectedCluster(operational, trackings);
   const tracking = trackingFor(trackings, current?.id ?? null);
   const gate = gateFor(gates, current);
   const previous = previousState(operational, current?.id ?? null);
   const next = nextState(operational, current?.id ?? null);
   const previousTracking = trackingFor(trackings, previous?.id ?? null);
 
-  const sequenceReady = project !== null && !projectQ.isLoading && !sequenceQ.isLoading && !sequenceQ.isFetching;
+  // C10 (CF-3): the project's own refetch counts too, so a visit does not start from a half-refreshed project.
+  const sequenceReady = project !== null && !projectQ.isLoading && !projectQ.isFetching && !sequenceQ.isLoading && !sequenceQ.isFetching;
   const orchestration = useChecklistOrchestration({ project, states, trackings, sequenceReady, selected: current, writes });
 
   const checklistQ = useClusterChecklist(projectId, current?.id ?? null);
   const rows = checklistQ.data;
   const settingsQ = useChecklistApprovalSettings(projectId, rows);
   const settings = settingsQ.data;
+  // C1: the row actions that depend on the approval settings wait until they are KNOWN (a double without `hasData` counts as known).
+  const approvalsState = approvalSettingsState({
+    needed: approvalSettingsNeeded(rows),
+    known: settingsQ.hasData ?? (!settingsQ.isLoading && !settingsQ.error),
+    failed: Boolean(settingsQ.error),
+  });
+  const approvalsHint = approvalSettingsHint(approvalsState);
 
   const { abandoned: abandonedState, inactive: inactiveState } = terminalStates(states);
   // New Project mode (no project yet) opens locked, as the canvas does.
@@ -512,14 +551,14 @@ export default function CheckListScreen() {
       kind,
       label: staging?.label ?? (kind === "abandon" ? UI.abandon : UI.inactivate),
       active: own !== null && project?.clusterStateId === own.id,
-      disabled: !project || locked || busy || !staging,
+      disabled: !project || locked || busy || loading || !staging,
       onClick: () => { if (staging) setTerminal(staging); },
     };
     return [action];
   });
 
   /* ── the stepper cards (`cmp_CheckList_Project_States`) — every visible state; skipped clusters muted. */
-  const steps: ProjectStateStep[] = display.map((step, index) => {
+  const steps: ProjectStateStep[] = loading ? [] : display.map((step, index) => {
     const stepTracking = trackingFor(trackings, step.id);
     const stepGate = gateFor(gates, step);
     return {
@@ -557,6 +596,8 @@ export default function CheckListScreen() {
   const closePanel = () => setPanelForm(null);
 
   const onRowAction = (row: ChecklistRow) => {
+    // C1: never decide "complete" from settings that have not been read.
+    if (approvalsState !== "ready") return;
     const ra = rowApproval(settings, row);
     const kind = rowActionKind(row, ra.iconVisible);
     if (kind === "needDate") { setInfo(COMPLETION_DATE_MESSAGE); return; }
@@ -565,7 +606,8 @@ export default function CheckListScreen() {
     // the write runs, then the refetched row takes over (canvas pair, 3 Nov 2026).
     setCompletingRowId(row.id);
     void writes.patchRow(row, completeTaskPatch(), {
-      progress: MSG.taskChanged, error: MSG.taskError,
+      // C8 (CU-14): the canvas progress text is the one for a change in progress, not the success text.
+      progress: MSG.taskChanging(row.title), error: MSG.taskError,
     }).finally(() => setCompletingRowId(null));
   };
 
@@ -618,12 +660,18 @@ export default function CheckListScreen() {
   };
 
   const requestCaption = panel ? requestApprovalCaption(panel, next) : "";
-  const loadError = projectQ.error ?? sequenceQ.error ?? checklistQ.error;
+  // C4: a failed read with NO data blanks the screen (now with a Refresh button, which the text points to); a failed refresh that
+  // still has data (window focus, a write's reload) is a banner and the screen stays (D123 §3).
+  const mainReads = [projectQ, sequenceQ, checklistQ];
+  const blocking = checklistLoadErrorMode(mainReads) === "blocking";
+  const refreshFailed = !blocking
+    && checklistLoadErrorMode(settingsQ.hasData ? [...mainReads, settingsQ] : mainReads) === "banner";
 
-  if (loadError) {
+  if (blocking) {
     return (
       <div className={s.page} data-testid="Project General CheckList Screen">
-        <EmptyState title={SCREEN_TEXT.loadFailedTitle} description={SCREEN_TEXT.loadFailedDescription} />
+        <EmptyState title={SCREEN_TEXT.loadFailedTitle} description={SCREEN_TEXT.loadFailedDescription}
+          action={{ label: UI.refresh, onClick: refreshAll }} />
       </div>
     );
   }
@@ -633,7 +681,22 @@ export default function CheckListScreen() {
 
       {/* `portal`: the canvas spinner (`cmp_PopUp_GateProcess_Saving_LoadingDialog_1`) is the last control, full screen, ABOVE the
           open right panel; drawn in the page it sat under the drawer's portal (z-index 1000000) and the panel stayed clickable. */}
-      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="checklist" portal />
+      {/* CU-11: the blocking overlay is named by its own progress text. */}
+      <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="checklist" portal
+        overlayLabel={writes.progress ?? undefined} />
+
+      {/* C4 (NEW TEXT, D123 §3): a failed refresh keeps the screen and its data, and says so. */}
+      {refreshFailed ? (
+        <MessageBar intent="error" aria-label="checklist-data-unavailable" data-testid="checklist-data-unavailable">
+          <MessageBarBody>{READ_GATE_MSG.refreshFailed}</MessageBarBody>
+        </MessageBar>
+      ) : null}
+      {/* C1 (NEW TEXT, D123 §1): the approval settings could not be read; Complete and Approval stay off. */}
+      {approvalsState === "failed" ? (
+        <MessageBar intent="error" aria-label="checklist-approvals-unavailable" data-testid="checklist-approvals-unavailable">
+          <MessageBarBody>{READ_GATE_MSG.approvalsFailed}</MessageBarBody>
+        </MessageBar>
+      ) : null}
 
       {locked ? (
         <div className={s.lock} data-testid="con_Milestones_Page_LockMessage_3" role="status">
@@ -648,7 +711,8 @@ export default function CheckListScreen() {
       {/* `cmp_CheckList_Project_States` (`ProjectStates.tsx`), with the page's one refresh at its top right. */}
       <ProjectStates
         steps={steps}
-        onSelect={setSelectedClusterId}
+        onSelect={(id) => { setDateRowId(null); setSelectedClusterId(id); }}
+        selectDisabled={busy}
         refresh={{ onClick: refreshAll, disabled: refreshDisabled }}
       />
 
@@ -675,7 +739,9 @@ export default function CheckListScreen() {
         terminals={terminalButtons}
       />
 
-      {technologySupported ? (
+      {loading ? <LoadingOverlay mode="inline" label={MSG.loading} testId="checklist-loading" /> : null}
+
+      {!loading && technologySupported ? (
         <div className={s.titleRow}>
           <Tooltip content={checklistTitleTooltip(tracking)} relationship="description" withArrow>
             <Text className={s.title} data-testid="lbl_Checklist_DisplayProject_Body_Content_Title">
@@ -683,14 +749,14 @@ export default function CheckListScreen() {
             </Text>
           </Tooltip>
         </div>
-      ) : (
+      ) : !loading ? (
         <div className={s.tip} data-testid="con_Checklist_DisplayProject_Body_Content_Technology_Warning">
           <LightbulbRegular aria-hidden />
           <Text>{UI.technologyTip}</Text>
         </div>
-      )}
+      ) : null}
 
-      {technologySupported ? (
+      {!loading && technologySupported ? (
         <div className={s.scroll}>
           <Table size="small" className={mergeClasses(s.table, !showHolding && s.tableHoldingHidden)} aria-label={checklistTableTitle(current?.name ?? null)} data-testid="gal_Checklist_DisplayProject_Body_General_Content">
             <TableHeader>
@@ -724,13 +790,18 @@ export default function CheckListScreen() {
                 const holding = truncateHolding(row.holdingDescription);
                 const personaTip = checklistPersonaTooltip(ra.first, ra.iconVisible);
                 const disabledRow = locked || busy;
+                // C1: the actions that depend on the approval settings wait for them; the tooltip says why (it wins over the persona text).
+                const approvalsOff = approvalsState !== "ready";
+                const rowTip = approvalsHint ?? personaTip;
+                // CU-3: the row's buttons are described by the task's title (their aria-labels are the canvas ones and stay).
+                const taskTitleId = `checklist-task-${row.id}`;
                 const completeButton = (
-                  <Button size="small" appearance="secondary" aria-label={label}
+                  <Button size="small" appearance="secondary" aria-label={label} aria-describedby={taskTitleId}
                     // Already green: hovering keeps the colour (PO, 3 Nov 2026); otherwise the canvas hover.
                     className={mergeClasses(s.rowButton,
                       rowCompleteHighlighted(row, label) || completingRowId === row.id ? s.completeDone : s.completeHover)}
                     data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_Complete"
-                    disabled={disabledRow || !rowActionEnabled(row, label, cancelVisible)}
+                    disabled={disabledRow || approvalsOff || !rowActionEnabled(row, label, cancelVisible)}
                     onClick={() => onRowAction(row)}>
                     {label}
                   </Button>
@@ -739,13 +810,20 @@ export default function CheckListScreen() {
                   <Fragment key={row.id}>
                     <TableRow className={mergeClasses(s.bodyRow, rowIndex === 0 && s.firstRow)} data-testid="con_Checklist_DisplayProject_Body_Content_ListRow">
                       <TableCell className={s.colGate} title={taskStateLabel(row.taskState)}>{gateRelevanceLabel(row.gateRelevance)}</TableCell>
-                      <TableCell title={row.title}><span className={s.clip}>{row.title}</span></TableCell>
+                      <TableCell id={taskTitleId} title={row.title}><span className={s.clip}>{row.title}</span></TableCell>
                       <TableCell title={showHolding ? holding : undefined}>{showHolding ? <span className={s.clip}>{holding}</span> : null}</TableCell>
                       <TableCell>
                         {/* `con_…_ListRow_Container_CompletionDate`: the Edit button, then `Text(…, "ddd, mmm. dd, yyyy")`. */}
                         {row.isCompletionDate && dateRowId === row.id ? (
                           // The picker opens IN the cell, the ✕ beside it closes it (canvas pair, 3 Nov 2026).
-                          <span className={s.dateEdit} data-testid="date_con_Checklist_DisplayProject_Body_Content_CompletionDate">
+                          <span className={s.dateEdit} data-testid="date_con_Checklist_DisplayProject_Body_Content_CompletionDate"
+                            // CU-1: the picker's input takes focus when the editor opens.
+                            ref={(el) => {
+                              if (el && focusPickerRow.current === row.id) {
+                                focusPickerRow.current = null;
+                                el.querySelector("input")?.focus();
+                              }
+                            }}>
                             {/* `SelectedDate`: the stored date, or today. `DatePicker@0.0.46`, LongAbbreviated, no `IsEditable`. */}
                             <DateInput
                               name={ARIA.completionDate}
@@ -766,15 +844,21 @@ export default function CheckListScreen() {
                             <Button appearance="transparent" size="small" icon={<DismissRegular />} className={s.dateCancel}
                               aria-label="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel" title={UI.cancel}
                               data-testid="but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel"
-                              onClick={() => setDateRowId(null)} />
+                              // CU-1: focus goes back to the pencil that opened the editor.
+                              onClick={() => { focusPencilRow.current = row.id; setDateRowId(null); }} />
                           </span>
                         ) : row.isCompletionDate ? (
                           <span className={s.dateCell}>
                             <Button appearance="transparent" size="small" icon={<EditRegular />}
                               aria-label="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
+                              aria-describedby={taskTitleId}
                               data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate"
-                              disabled={disabledRow} onClick={() => setDateRowId(row.id)} />
-                            <Text size={200} title={taskStateLabel(row.taskState)}>{fmtCanvasDate(row.completionDate)}</Text>
+                              ref={(el: HTMLButtonElement | null) => {
+                                if (el) pencilRefs.current.set(row.id, el); else pencilRefs.current.delete(row.id);
+                              }}
+                              disabled={disabledRow}
+                              onClick={() => { focusPickerRow.current = row.id; setDateRowId(row.id); }} />
+                            <Text size={200} title={taskStateLabel(row.taskState)}>{fmtCanvasDate(row.completionDate, false, locale)}</Text>
                           </span>
                         ) : null}
                       </TableCell>
@@ -786,18 +870,19 @@ export default function CheckListScreen() {
                             {ra.icon === "People" ? <PeopleRegular className={s.approvalIcon} aria-hidden /> : null}
                           </span>
                           {!cancelVisible ? (
-                            <Button size="small" appearance="secondary" aria-label={UI.inProgress}
+                            <Button size="small" appearance="secondary" aria-label={UI.inProgress} aria-describedby={taskTitleId}
                               className={mergeClasses(s.rowButton, row.taskState === CHOICE_PROCESS.taskState.inProgress && s.inProgressOn, s.inProgressHover)}
                               aria-pressed={row.taskState === CHOICE_PROCESS.taskState.inProgress}
                               data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_InProgress"
-                              disabled={disabledRow}
+                              // C1: the toggle resets the task's approval state, so it waits for the approval settings too.
+                              disabled={disabledRow || approvalsOff}
                               onClick={() => void writes.patchRow(row, inProgressTogglePatch(row), {
-                                progress: MSG.taskChanged, error: MSG.taskError,
+                                progress: MSG.taskChanging(row.title), error: MSG.taskError,
                               })}>
                               {UI.inProgress}
                             </Button>
                           ) : (
-                            <Button size="small" appearance="transparent" aria-label={UI.history}
+                            <Button size="small" appearance="transparent" aria-label={UI.history} aria-describedby={taskTitleId}
                               className={mergeClasses(s.rowButton, s.historyButton)}
                               data-testid="but_Checklist_DisplayProject_Body_Content_ListRow_History"
                               disabled={disabledRow} onClick={() => openPanel({ kind: "checklist", row })}>
@@ -806,20 +891,21 @@ export default function CheckListScreen() {
                           )}
                           {cancelVisible ? (
                             <Button appearance="transparent" size="small" className={s.cancelIcon} icon={<DismissRegular />}
-                              aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
+                              aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval" aria-describedby={taskTitleId}
                               disabled={disabledRow} title={UI.cancelApproval}
                               data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_CancelApproval"
                               onClick={() => void writes.cancelChecklistApproval(row)} />
                           ) : null}
-                          {personaTip ? (
-                            <Tooltip content={<span className={s.preLine}>{lines(personaTip)}</span>} relationship="description" withArrow>
-                              {completeButton}
+                          {rowTip ? (
+                            // CU-12: on a wrapper, so the tooltip also shows while the button is disabled.
+                            <Tooltip content={<span className={s.preLine}>{lines(rowTip)}</span>} relationship="description" withArrow>
+                              <span className={s.tipWrap}>{completeButton}</span>
                             </Tooltip>
                           ) : completeButton}
                           {/* `ico_…_ListRow_Comments` — opens the comment form; no tooltip or message (PO, 3 Nov 2026). */}
                           <Button appearance="transparent" size="small" icon={<ClassicNoteIcon />}
                             className={mergeClasses(s.noteIcon, rowHasNote(row) ? s.notePresent : s.noteAbsent)}
-                            aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
+                            aria-label="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments" aria-describedby={taskTitleId}
                             data-testid="ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"
                             disabled={disabledRow}
                             onClick={() => setCommentForm({ row, text: row.note ?? "" })} />
@@ -841,7 +927,9 @@ export default function CheckListScreen() {
       <FormPanel
         open={panel !== null}
         title={panel ? rightPanelTitle(panel, next) : ""}
-        width="threeQuarter" panelClassName={mergeClasses(s.panelSkin, s.panelHistory)} closeTooltip={UI.closeTooltip}
+        width="threeQuarter" panelClassName={mergeClasses(s.panelSkin, s.panelHistory)}
+        // SOURCE DEFECT (CU-15, D123 §10): the canvas ✕ hint of this panel reads "Home", a copy-paste name; it says "Cancel" (rule 22).
+        closeTooltip={HINTS.cancel}
         // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
         keepOpenOnOutsideClick
         // A write is running: the canvas spinner blocks the whole screen, so ✕ and Escape do nothing until it ends.
@@ -940,6 +1028,12 @@ export default function CheckListScreen() {
             {/* `gal_…_Inputs_History`: per note, the header row, a themePrimary rule, the note's table.
                 The gallery scrolls on its own; the comment and the History card above stay put. */}
             <div className={s.historyScroll} data-testid="gal_CheckList_RightPanel_ChangeCluster_Form_Inputs_History">
+            {/* C4 (NEW TEXT, D123 §3): a failed history read is shown, not an empty list. */}
+            {historyQ.error ? (
+              <MessageBar intent="error" aria-label="checklist-history-unavailable" data-testid="checklist-history-unavailable">
+                <MessageBarBody>{READ_GATE_MSG.historyFailed}</MessageBarBody>
+              </MessageBar>
+            ) : null}
             {historyQ.data.map((e) => {
               const note = parseNoteHtml(e.note);
               const [head, ...body] = note.table ?? [];
@@ -948,7 +1042,7 @@ export default function CheckListScreen() {
                   <div className={s.entryHead}>
                     <span className={s.entryLabel}>{UI.commentPrefix}</span>
                     <span className={s.entryComment} title={e.comment ?? e.name ?? ""}>{e.comment ?? e.name ?? ""}</span>
-                    <span className={s.entryDate}>{fmtCanvasDate(e.createdOn, true)}</span>
+                    <span className={s.entryDate}>{fmtCanvasDate(e.createdOn, true, locale)}</span>
                     <span className={s.entryUser} title={e.modifiedByName ?? ""}>{e.modifiedByName ?? ""}</span>
                   </div>
                   <div className={s.entryRule} />
@@ -987,7 +1081,7 @@ export default function CheckListScreen() {
             setCommentForm(null);
             // No green success bar after a comment (PO, 3 Nov 2026).
             void writes.patchRow(row, commentPatch(text), {
-              progress: MSG.taskChanged, error: MSG.taskError,
+              progress: MSG.taskChanging(row.title), error: MSG.taskError,
             });
           }}
           onCancel={() => setCommentForm(null)}

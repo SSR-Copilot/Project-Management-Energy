@@ -7682,3 +7682,64 @@ The product owner supplied the browser console of the **deployed DEV app** (envi
 - The DEV host's request metrics reach the log with `statusCode` undefined (`→ undefined`), so the `statusCode >= 400` error trace never fires there. Cause not determined.
 
 **Not done:** the CSP change itself (an administrator action in each environment); a console check on QA; a check against a real, unblocked ingestion endpoint.
+
+## D123 — Cluster Checklist screen: approvals and gates must be known before actions, failed refreshes, quiet cluster visits, stale clicks and 12 smaller fixes (17 Nov 2026)
+
+**Status:** implemented on the local sub-branch `sub/cluster-checklist-analysis` (from `master` at `c1a292d`), **NOT product-approved, not run against DEV**. Type: ANALYSIS then BUG/OPTIMIZE/ACCESSIBILITY (product owner: "in depth testing on the functional and non functional aspect ... on the Cluster Checklist screen", then "proceed for fixing these issues"). The screen need not translate the canvas YAML literally; its utility, function, non-functional quality and UI must be the same or better. Tests: UT-CHKLST-083..107 and 923..944, UT-CHKHOOK-001..017, UT-CHKDATA-001..016.
+**How the issues were found:** five read-only reviews (load and display, writes and workflows, non-functional, UI and accessibility, test audit); the report is `CLUSTER-CHECKLIST-ANALYSIS-2026-11-17.md`. Nothing was reproduced live and no browser was used; the screen was not exercised on DEV. The two checklist approval flows (D81) have still never run live.
+
+### 1. Approvals, gates and the first load must be known before an action (§1)
+
+**Before:** the approval settings (a second query) and the gates (a third, after an Entra lookup) loaded after the rows and the project. Until then no approval icon existed, so **Complete patched a task that needs approval straight to Completed, with no approval, mail or message**, and a gated cluster looked ungated (Move and Save looked like a direct move). A failed settings read looked like "no approval rows". The first paint also showed "Tip: For selected technology cluster checklist is not available." and a Draft view that then jumped. **Now:** Complete and In Progress on a row stay disabled, with a tooltip (**NEW TEXT**), until the approval settings are known; a failed read shows the banner `checklist-approvals-unavailable` (**NEW TEXT**) and keeps both off, and `onRowAction` refuses as well. While the first load is pending the stepper is empty, "Move to", Reset and Cancel Approval are not drawn and Abandon / Inactivate are off; a loader (`checklist-loading`) replaces the tip and the table; the tip shows only once the project has loaded. **DIVERGENCE:** the canvas read the approval row live per row; the code app loads it in one query and waits. In Progress is gated too, because it resets the approval state (beyond the first scope text).
+
+### 2. A failed Entra lookup no longer drops the approval mode or the gates (§2)
+
+The mail lookup is one `aadusers` read per person, and one failure rejected the whole approval-settings and gates queries. It is now per person (`Promise.allSettled`): the persona tooltip loses the mail, the approval mode and the gates stay.
+
+### 3. A failed refresh keeps the screen (§3)
+
+The whole screen was replaced by the error page on any query error, even a failed background refresh with data (window focus, wake from sleep), taking an open panel with it; the page said "Use Refresh to try again" and had no Refresh. **Now:** the full-page error only for a failed read with no data; otherwise the banner `checklist-data-unavailable` (**NEW TEXT**) and the screen stays; the error page has a Refresh action; a failed history read shows `checklist-history-unavailable` (**NEW TEXT**) instead of an empty list. Same pattern as D120 §4 and D121 §3.
+
+### 4. Template creates run in parallel (§4)
+
+Opening a cluster created its N tasks one request at a time (the comment said "one `$batch`", which was wrong). They are now one concurrent group (8 at a time) with stop-on-failure. **Not done:** `createMany`, because the PM bulk backend registration is unverified.
+
+### 5. Guarded updates (§5)
+
+Row and tracking updates were plain PATCHes, which Dataverse treats as upserts: a row an admin deleted (`SynchroniseProjectTaskList`, `vsb_todelete`) was re-created with only the edited columns and no business unit. The row patch, the transition's two trackings, Reset, the terminal change, the cancel patch, both approval patches and the flow write-back are now guarded (an extra read per write) and report `RECORD_GONE_TEXT`. The project patches, the back-fill and ensure-tracking stay unguarded (low risk).
+
+### 6. Stale clicks are refused (§6)
+
+Save and Reset re-read the tracking and refuse when it no longer matches the button (Reset allows In Progress, Rejected or Request canceled, as the button does). Request Approval refuses on a Completed cluster, an In Progress cluster that already has a flow run id, or a task already In Progress or Completed (**NEW TEXT**). Two tabs can no longer both send an approval mail. The window between the read and the write remains (no `If-Match`).
+
+### 7. Cancel flow with a blank app id (§7)
+
+The cancel flow was called with `appId ?? ""` after the tracking had already been patched. It is now refused, with a message (**NEW TEXT**), before anything is read or patched.
+
+### 8. A quiet cluster visit (§8)
+
+`prepareCluster` always ran through the blocking write job, then every active query was refetched, states, gates and Entra lookups included (about 26 to 30 requests for a visit that wrote nothing, derived, not measured). Now it reads first without an overlay and **skips the job when the plan is empty**; a write refreshes only the project, trackings, rows, approvals, history and the other screens' project keys (`checklistWriteKeys`; `PlanJob` gained an optional per-job `invalidate` in `usePlanWrite.ts`, additive). The command bar Refresh still refreshes everything.
+
+### 9. Smaller fixes (§9 to §12)
+
+| Item | Change |
+|---|---|
+| §9 back-fill | Prepare runs only after a successful back-fill, so its error is no longer cleared by the next write |
+| §10 panel ✕ hint | **SOURCE DEFECT:** the canvas hint reads "Home" (the command bar item's name); it now says "Cancel" through `HINTS` (rule 22) |
+| §11 note length | Notes were cut at 300 characters; now at the real column lengths (state note 256, checklist note 850, comment 4,000, read from the schema); the input box keeps its 300 |
+| §12 accessibility | Focus moves to the completion-date picker when it opens and back to the pencil when it closes; focus rings restored on the panel ✕ and the stepper cards; each stepper card and each row button has an `aria-describedby` (state and gate line; the task title), no existing `aria-label` or `data-testid` changed; the blocking overlay has an accessible name (new optional `accessibleName` on `LoadingOverlay` and `overlayLabel` on `WriteFeedback`; no other screen passes them); stepper cards are off while a write runs; the Complete tooltip sits on a wrapper so it shows on a disabled button |
+| Progress text | The spinner said "Task state was successfully changed." while the write ran; it now says "…will be changed, please wait..." |
+| Others | The screen resets on a project change; the date cell uses the user's language (English output unchanged); `projectQ.isFetching` joins `sequenceReady`; six unused exports un-exported and stale comments fixed; ten tests got UT ids |
+| Tests | The data loaders, the orchestration in `hooks.ts` and the screen with the real hooks now run as real functions against a mocked SDK (`hooks.ts` had 0% and `data/checklist.ts` 26% coverage) |
+
+### 10. Not built (decision or live check needed)
+
+- **Re-creating missing tasks** after a half-copied checklist (the count guard `rows == 0` is canvas parity); a top-up by template id could duplicate rows the server flow `SynchroniseProjectTaskList` also adds.
+- **A resume step** after a failed "Move to" (3 to 4 non-transactional writes; if the second fails the cluster is Completed and nothing is In Progress).
+- **The order of the cancel patch and the cancel flow** (a failed flow leaves the cancel button gone and the approval live).
+- Contrast and colour-only signals (transcribed canvas colours), target sizes, three horizontal scrollers, page heading, repeating-row test ids (rule 16: never change an existing value), the cross-screen cache refresh from General Data, Milestones, Generators and Production, shared tracing in `usePlanWrite`, the flow timeout, focus restore after a write.
+- **Live checks owed:** the approval flows (real mails, Teams cards, approvals: `16-PM-FLOWS-IN-THE-CODE-APP.md` §7), the approval gate under a throttled network or a failing Entra read, two tabs, a keyboard and screen-reader pass.
+
+### 11. Verification
+
+`npm run verify` on the sub-branch worktree (17 Nov 2026, on top of `c1a292d`, run alone with no other test run active): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning in a touched file, the control-label and canvas-identity gates clean, **290 test files, 6,304 tests passed, 3 todo**, build OK. **Not run:** `knip` at this commit, the E2E parity suite, any check on DEV or in a browser (focus rings and the localised date were not seen), and the two checklist approval flows (D81) against live Dataverse.

@@ -621,3 +621,19 @@ The canvas apps had no Application Insights (`appinsightserrortracing: false`), 
 | Quiet console in the player (D122 addendum) | The SDK no longer registers the `unload` event the player forbids (about ten Permissions-Policy violations per load) | **fixed** |
 | The "sent" line no longer claims delivery (D122 addendum) | `SENT (not confirmed)` replaces `OK … telemetry is flowing`, which printed for items the browser then blocked | **fixed** |
 | Tests | `UT-AISDK-001…003` (the real SDK, network stubbed), `UT-AIDIAG-020` | **new** |
+
+## Cluster Checklist screen: approvals and gates before actions, failed refreshes, quiet visits, stale clicks, accessibility (17 Nov 2026, D123) — fixed / new (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Cluster Checklist | Complete and In Progress wait for the approval settings; a task that needs approval can no longer be completed directly while they load or after they fail; a failed read shows a banner | **fixed** (the canvas read the approval row live per row) |
+| Cluster Checklist | Move, Save, Reset and the stepper wait for the gates and the first load; a loader replaces the false "not available for this technology" tip | **new** |
+| Cluster Checklist | A failed Entra lookup only loses the mail in the tooltip, not the approval mode or the gates | **new** |
+| Cluster Checklist | A failed refresh keeps the screen and an open panel (banner); the error page has a Refresh button; a failed history read is shown | **new** (rule 19, as Contracts and Generators) |
+| Cluster Checklist | Opening a cluster creates its tasks in parallel, skips the write job when there is nothing to write, and no longer reloads the states, gates and Entra lookups | **new** (improvement over the earlier build and the canvas) |
+| Cluster Checklist | Guarded updates: a task or tracking an admin deleted is reported as gone instead of re-created without a business unit | **fixed** (also a canvas upsert risk) |
+| Cluster Checklist | Save, Reset and Request Approval refuse a stale click; the cancel flow is refused before any change when the app id is blank | **new** |
+| Cluster Checklist | The progress text no longer says "successfully" while saving; the panel ✕ says "Cancel" instead of "Home"; notes keep up to their column length; dates use the user's language | **fixed** (SOURCE DEFECT for the "Home" hint) |
+| Cluster Checklist | Keyboard focus moves with the date editor, focus rings are back, stepper cards and row buttons describe state and task to screen readers, the busy overlay has a name | **new** (no existing label or test id changed) |
+| Cluster Checklist | Real-function tests for the loaders, hooks and screen writes | **new** (test gate) |
+| Cluster Checklist | A resume step after a failed Move, re-creating missing tasks, the order of the cancel patch and flow, contrast colours, the cross-screen cache refresh | **proposed (not approved)**, see D123 §10 |

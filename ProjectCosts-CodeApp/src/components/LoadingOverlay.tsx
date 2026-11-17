@@ -99,16 +99,21 @@ export interface LoadingOverlayProps {
    * exactly as before; the Cost screens pass their own `<screen>-loading` / `<screen>-write-status`.
    */
   testId?: string;
+  /**
+   * Blocking mode only: the accessible name of the dialog (`aria-label`). Optional, so every caller that passes none renders
+   * exactly as before; the PM Checklist names its overlay after its progress text (a modal dialog needs a name).
+   */
+  accessibleName?: string | undefined;
 }
 
-export function LoadingOverlay({ mode = "blocking", label, portal = false, testId }: LoadingOverlayProps) {
+export function LoadingOverlay({ mode = "blocking", label, portal = false, testId, accessibleName }: LoadingOverlayProps) {
   if (mode === "blocking" && portal) {
-    return <Portal><LoadingOverlayBody mode="blocking" label={label} testId={testId} /></Portal>;
+    return <Portal><LoadingOverlayBody mode="blocking" label={label} testId={testId} accessibleName={accessibleName} /></Portal>;
   }
-  return <LoadingOverlayBody mode={mode} label={label} testId={testId} />;
+  return <LoadingOverlayBody mode={mode} label={label} testId={testId} accessibleName={accessibleName} />;
 }
 
-function LoadingOverlayBody({ mode = "blocking", label, testId }: Omit<LoadingOverlayProps, "portal">) {
+function LoadingOverlayBody({ mode = "blocking", label, testId, accessibleName }: Omit<LoadingOverlayProps, "portal">) {
   const styles = useStyles();
 
   if (mode === "inline") {
@@ -124,7 +129,7 @@ function LoadingOverlayBody({ mode = "blocking", label, testId }: Omit<LoadingOv
     // `aria-modal` plus a live region: the canvas version was a plain container with no
     // role at all, which is one of the 239 acc-AccessibleLabelNeeded findings.
     // `data-vsb-busy`: read by the test-only E2E idle hook (`platform/e2eHook.ts`); no visual effect.
-    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true" data-testid={testId} data-vsb-busy="true">
+    <div className={styles.scrim} role="dialog" aria-modal="true" aria-busy="true" aria-label={accessibleName} data-testid={testId} data-vsb-busy="true">
       <div className={styles.card}>
         {/* `InformationText = ""` (no label) ⇒ a 120 px spinner box; any text ⇒ 90 px. */}
         <div className={mergeClasses(styles.spinnerBox, label ? styles.spinnerBoxWithLabel : styles.spinnerBoxNoLabel)}>

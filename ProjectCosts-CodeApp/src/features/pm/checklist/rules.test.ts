@@ -237,7 +237,7 @@ describe("UT-CHKLST cluster ordinals", () => {
     expect(startClusterNo(project({ startCluster: 42 }))).toBe(0);
   });
 
-  it("only checklist-visible, recognised clusters take part", () => {
+  it("UT-CHKLST-083 only checklist-visible, recognised clusters take part", () => {
     const states = [
       ...ALL_STATES,
       { ...state("Operations", "ps-op", 7) },
@@ -286,7 +286,7 @@ describe("UT-CHKLST real gate progress", () => {
     expect(hasRealGateProgress([tracking()], 3)).toBe(false);
   });
 
-  it("a Draft row in any terminal state is real progress", () => {
+  it("UT-CHKLST-084 a Draft row in any terminal state is real progress", () => {
     for (const s of [ACS.completed, ACS.rejected, ACS.requestCanceled, ACS.canceling,
       ACS.abandoned, ACS.inactive]) {
       expect(hasRealGateProgress([tracking({ approvalClusterState: s })], 3)).toBe(true);
@@ -350,7 +350,7 @@ describe("UT-CHKLST the skipped-cluster back-fill", () => {
     expect(plan.writes).toEqual([]);
   });
 
-  it("a row at the target state but carrying a stale FlowRunId is still rewritten", () => {
+  it("UT-CHKLST-085 a row at the target state but carrying a stale FlowRunId is still rewritten", () => {
     const existing = [tracking({
       clusterStateId: STATE_IDS.c1, clusterStateName: "Cluster 1",
       approvalClusterState: ACS.completed, approvalComment: AUTO_SKIPPED_COMMENT,
@@ -396,7 +396,7 @@ describe("UT-CHKLST the two sequences", () => {
     expect(nextState(seq, "not-in-the-sequence")).toBeNull();
   });
 
-  it("the gate is resolved onto the sequence entry, active rows only", () => {
+  it("UT-CHKLST-086 the gate is resolved onto the sequence entry, active rows only", () => {
     const gates = [
       gate({ id: "g-3", clusterStateId: STATE_IDS.c3, gateActive: true }),
       gate({ id: "g-4", clusterStateId: STATE_IDS.c4, gateActive: false }),
@@ -451,7 +451,7 @@ describe("UT-CHKLST the self-heals", () => {
     expect(plan.writes[0]!.data![`${LOOKUP.owningBusinessUnit}@odata.bind`]).toBeUndefined();
   });
 
-  it("an existing tracking row produces no write", () => {
+  it("UT-CHKLST-087 an existing tracking row produces no write", () => {
     expect(planEnsureTracking(seqEntry(), tracking(), {
       projectId: "p-1", owningBusinessUnitId: null,
     }).writes).toEqual([]);
@@ -508,7 +508,7 @@ describe("UT-CHKLST the checklist rows", () => {
       .toBe("Complete");
   });
 
-  it("rule 13 — the icon follows the approval mode and the Gate active flag", () => {
+  it("UT-CHKLST-088 rule 13 — the icon follows the approval mode and the Gate active flag", () => {
     expect(rowApprovalIcon(setting({ approvalMode: MODE.onlyNotifications }))).toBe("Mail");
     expect(rowApprovalIcon(setting({ approvalMode: MODE.formalApproval }))).toBe("People");
     expect(rowApprovalIcon(setting({ approvalMode: MODE.localApproval }))).toBe("People");
@@ -538,7 +538,7 @@ describe("UT-CHKLST the checklist rows", () => {
     expect(completeTaskPatch()).toEqual({ [CHECKLIST_COL.taskState]: TASK.completed });
   });
 
-  it("the row button and the In Progress toggle follow the label", () => {
+  it("UT-CHKLST-089 the row button and the In Progress toggle follow the label", () => {
     expect(rowActionEnabled(row({ taskState: TASK.none }), "Complete")).toBe(true);
     expect(rowActionEnabled(row({ taskState: TASK.completed }), "Complete")).toBe(false);
     expect(rowActionEnabled(row({ taskState: TASK.completed }), "Approval")).toBe(true);
@@ -559,7 +559,7 @@ describe("UT-CHKLST the checklist rows", () => {
     expect(settingForRow(index, row({ projectDefaultChecklistId: null }))).toBeNull();
   });
 
-  it("the approval settings resolve once per cluster, not per row per property", () => {
+  it("UT-CHKLST-090 the approval settings resolve once per cluster, not per row per property", () => {
     const index = approvalSettingIndex([setting(), setting({
       id: "clda-2", projectDefaultChecklistId: "tpl-2",
     })]);
@@ -569,7 +569,7 @@ describe("UT-CHKLST the checklist rows", () => {
       .toBe("clda-2");
   });
 
-  it("rows sort by Order ascending", () => {
+  it("UT-CHKLST-091 rows sort by Order ascending", () => {
     const rows = [row({ id: "c", sort: 3 }), row({ id: "a", sort: 1 }), row({ id: "b", sort: 2 })];
     expect(sortChecklistRows(rows).map((r) => r.id)).toEqual(["a", "b", "c"]);
   });
@@ -678,7 +678,7 @@ describe("UT-CHKLST the panel buttons", () => {
     }))).toBe(false);
   });
 
-  it("Request Approval on the checklist branch", () => {
+  it("UT-CHKLST-092 Request Approval on the checklist branch", () => {
     expect(showRequestApproval(checklistPanel({
       row: row({ approvalChecklistState: null }),
     }))).toBe(true);
@@ -1424,7 +1424,7 @@ describe("UT-CHKLST D29 — the gallery", () => {
     expect(rowActionKind(row(), true)).toBe("panel");
     expect(planChecklistRowPatch("cl-1", completeTaskPatch(), "Land").writes).toEqual([{
       op: "update", entitySet: ES.projectChecklists, id: "cl-1",
-      data: { [CHECKLIST_COL.taskState]: TASK.completed }, reason: "Land",
+      data: { [CHECKLIST_COL.taskState]: TASK.completed }, reason: "Land", guarded: true,
     }]);
   });
 

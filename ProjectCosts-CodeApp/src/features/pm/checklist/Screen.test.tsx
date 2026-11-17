@@ -11,7 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { vsbTheme } from "@/theme/fluent";
 import { CHOICE_PROCESS } from "@/data/dataverseNames";
 import {
-  ARIA, CHECKLIST_COL, MSG, PAGE_LOCK_TITLE, SCREEN_TEXT, TRACKING_COL, UI,
+  ARIA, CHECKLIST_COL, MSG, PAGE_LOCK_TITLE, READ_GATE_MSG, SCREEN_TEXT, TRACKING_COL, UI,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
   type ProjectStateRef, type TrackingRow,
 } from "./rules";
@@ -55,6 +55,12 @@ const state = vi.hoisted(() => ({
   rows: [] as unknown[],
   settings: [] as unknown[],
   error: undefined as unknown,
+  /** The read-state overrides of the 17 Nov 2026 tests (loading, hasData, errors); empty = every query answered. */
+  projectMeta: {} as Record<string, unknown>,
+  sequenceMeta: {} as Record<string, unknown>,
+  checklistMeta: {} as Record<string, unknown>,
+  settingsMeta: {} as Record<string, unknown>,
+  historyError: undefined as unknown,
   /** useChecklistWrites().progress / .error: what the write hook is showing right now. */
   progress: null as string | null,
   writeError: null as string | null,
@@ -78,11 +84,13 @@ vi.mock("@/app/SessionContext", () => ({
 
 const ok = <T,>(data: T) => ({ data, isLoading: false, error: undefined, connected: true });
 vi.mock("./hooks", () => ({
-  useChecklistProject: () => ({ ...ok(state.project), error: state.error }),
-  useClusterSequence: () => ({ ...ok({ states: STATES, trackings: state.trackings, gates: state.gates }), isFetching: false }),
-  useClusterChecklist: () => ok(state.rows),
-  useChecklistApprovalSettings: () => ok(state.settings),
-  useHistory: () => ok([]),
+  useChecklistProject: () => ({ ...ok(state.project), error: state.error, isFetching: false, ...state.projectMeta }),
+  useClusterSequence: () => ({
+    ...ok({ states: STATES, trackings: state.trackings, gates: state.gates }), isFetching: false, ...state.sequenceMeta,
+  }),
+  useClusterChecklist: () => ({ ...ok(state.rows), ...state.checklistMeta }),
+  useChecklistApprovalSettings: () => ({ ...ok(state.settings), ...state.settingsMeta }),
+  useHistory: () => ({ ...ok([]), error: state.historyError }),
   useChecklistOrchestration: () => ({ restart: () => {} }),
   useChecklistWrites: () => ({
     progress: state.progress, error: state.writeError, success: null, clear: () => {},
@@ -97,10 +105,11 @@ vi.mock("./hooks", () => ({
 import CheckListScreen from "./Screen";
 
 function renderScreen(opts: {
-  project?: ChecklistProject; trackings?: TrackingRow[]; gates?: GateSetting[];
+  project?: ChecklistProject | null; trackings?: TrackingRow[]; gates?: GateSetting[];
   rows?: ChecklistRow[]; settings?: ChecklistApprovalSetting[];
 } = {}) {
-  state.project = opts.project ?? baseProject;
+  // `project: null` is a project that has not loaded yet.
+  state.project = opts.project === undefined ? baseProject : opts.project;
   state.trackings = opts.trackings ?? [trackingRow(0, ACS.inProgress)];
   state.gates = opts.gates ?? [];
   state.rows = opts.rows ?? [task()];
@@ -121,6 +130,12 @@ afterEach(() => {
   state.error = undefined;
   state.progress = null;
   state.writeError = null;
+  state.projectMeta = {};
+  state.sequenceMeta = {};
+  state.checklistMeta = {};
+  state.settingsMeta = {};
+  state.historyError = undefined;
+  state.refresh.mockClear();
 });
 
 describe("Project General CheckList Screen (connected)", () => {
@@ -159,7 +174,8 @@ describe("Project General CheckList Screen (connected)", () => {
     expect(rowArg.id).toBe("cl-1");
     expect(data).toEqual({ [CHECKLIST_COL.taskState]: TASK.completed });
     // The save popup carries the success text; no green bar afterwards (PO, 3 Nov 2026).
-    expect(texts.progress).toBe(MSG.taskChanged);
+    // C8: the progress text is the canvas's "will be changed, please wait...", not the success text.
+    expect(texts.progress).toBe(MSG.taskChanging("Land secured"));
     expect(texts.success).toBeUndefined();
   });
 
@@ -428,5 +444,163 @@ describe("Project General CheckList Screen (connected)", () => {
     again();
     expect(screen.getByTestId("checklist-write-error").textContent).toContain("Project Status was updated");
     expect(panelOpen()).toBe(false);
+  });
+
+  /* ═══════════════════════════ 17 Nov 2026: the reads the actions wait for, the refresh banner, the keyboard ═══════════════════════════ */
+
+  const formalSetting: ChecklistApprovalSetting = {
+    id: "s1", projectDefaultChecklistId: "tpl-1", approvalMode: MODE.formalApproval, gateActive: true,
+    portfolioManagerMail: "pm@x", defaultApprovers: null, defaultContributors: null, defaultNotifications: null,
+  };
+  const COMPLETE = "but_Checklist_DisplayProject_Body_Content_ListRow_Complete";
+  const IN_PROGRESS = "but_Checklist_DisplayProject_Body_Content_ListRow_InProgress";
+
+  it("UT-CHKLST-923 C1: while the approval settings are being read, Complete and In Progress are off and a click patches nothing", () => {
+    state.settingsMeta = { isLoading: true, hasData: false };
+    renderScreen({ settings: [] });
+    const complete = screen.getByTestId(COMPLETE) as HTMLButtonElement;
+    expect(complete.disabled).toBe(true);
+    expect((screen.getByTestId(IN_PROGRESS) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(complete);
+    expect(state.patchRow).not.toHaveBeenCalled();
+    // The tooltip's wrapper exists, so the reason shows although the button is disabled (CU-12).
+    expect(complete.parentElement?.tagName).toBe("SPAN");
+    expect(screen.queryByTestId("checklist-approvals-unavailable")).toBeNull();
+  });
+
+  it("UT-CHKLST-924 C1: a failed read of the approval settings says so and keeps Complete off (it used to complete the task with no approval)", () => {
+    state.settingsMeta = { isLoading: false, hasData: false, error: new Error("403") };
+    renderScreen({ settings: [] });
+    expect((screen.getByTestId(COMPLETE) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId(COMPLETE));
+    expect(state.patchRow).not.toHaveBeenCalled();
+    const banner = screen.getByTestId("checklist-approvals-unavailable");
+    expect(banner.textContent).toContain(READ_GATE_MSG.approvalsFailed);
+    expect(banner.getAttribute("aria-label")).toBe("checklist-approvals-unavailable");
+  });
+
+  it("UT-CHKLST-925 C1: once the settings are known the same row works again (an approval task opens the panel, no direct complete)", async () => {
+    state.settingsMeta = { isLoading: true, hasData: false };
+    const view = renderScreen({ settings: [] });
+    expect((screen.getByTestId(COMPLETE) as HTMLButtonElement).disabled).toBe(true);
+    state.settingsMeta = {};
+    state.settings = [formalSetting];
+    view.rerender(<FluentProvider theme={vsbTheme}><MemoryRouter><CheckListScreen /></MemoryRouter></FluentProvider>);
+    const button = screen.getByTestId(COMPLETE) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe("Approval");
+    fireEvent.click(button);
+    expect(state.patchRow).not.toHaveBeenCalled();
+    expect(await screen.findByText("Request Check List completion approval")).toBeTruthy();
+  });
+
+  it("UT-CHKLST-926 C4: a refresh that failed while the screen has its data keeps the screen and shows a banner", () => {
+    state.settingsMeta = { hasData: true, error: new Error("blip") };
+    state.checklistMeta = { hasData: true, error: new Error("blip") };
+    renderScreen();
+    expect(screen.getByTestId("checklist-data-unavailable").textContent).toContain(READ_GATE_MSG.refreshFailed);
+    expect(screen.getByTestId("gal_Checklist_DisplayProject_Body_General_Content")).toBeTruthy();
+    expect(screen.queryByText(SCREEN_TEXT.loadFailedTitle)).toBeNull();
+    // The old answer is kept, so the actions stay usable.
+    expect((screen.getByTestId(COMPLETE) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("UT-CHKLST-927 C4: a failed read with NO data is the error page, and the Refresh button the text points to runs the refresh", () => {
+    state.checklistMeta = { hasData: false, error: new Error("boom") };
+    renderScreen();
+    expect(screen.getByText(SCREEN_TEXT.loadFailedTitle)).toBeTruthy();
+    expect(screen.getByText(/Use Refresh to try again/)).toBeTruthy();
+    expect(screen.queryByTestId("gal_Checklist_DisplayProject_Body_General_Content")).toBeNull();
+    fireEvent.click(screen.getByTestId("empty-state-action"));
+    expect(state.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("UT-CHKLST-928 C3: on the first load the screen shows a loader, not the technology tip, the table or a Draft view", () => {
+    state.projectMeta = { isLoading: true, hasData: false };
+    state.sequenceMeta = { isLoading: true, hasData: false };
+    renderScreen({ project: null, trackings: [], rows: [] });
+    expect(screen.getByTestId("checklist-loading")).toBeTruthy();
+    expect(screen.queryByText(UI.technologyTip)).toBeNull();
+    expect(screen.queryByTestId("gal_Checklist_DisplayProject_Body_General_Content")).toBeNull();
+    expect(screen.queryByTestId("lbl_Checklist_DisplayProject_Body_Content_Title")).toBeNull();
+    expect(screen.getByTestId("cmp_CheckList_Project_States").children).toHaveLength(0);
+    // C2: no cluster action exists yet, and Abandon / Inactivate are off.
+    expect(screen.queryByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster")).toBeNull();
+    expect((screen.getByTestId(ARIA.abandon) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("UT-CHKLST-929 C3: with the project loaded and another technology the tip shows, and no loader", () => {
+    renderScreen({ project: { ...baseProject, technology: CHOICE_PROCESS.technology.bess } });
+    expect(screen.getByText(UI.technologyTip)).toBeTruthy();
+    expect(screen.queryByTestId("checklist-loading")).toBeNull();
+  });
+
+  it("UT-CHKLST-930 C4: a failed history read is shown in the panel's history area, not as an empty list", async () => {
+    state.historyError = new Error("history 500");
+    renderScreen({ trackings: [trackingRow(0, ACS.inProgress, { approvalComment: "Ready" })] });
+    fireEvent.click(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster"));
+    const banner = await screen.findByTestId("checklist-history-unavailable");
+    expect(banner.textContent).toContain(READ_GATE_MSG.historyFailed);
+  });
+
+  it("UT-CHKLST-931 C8: every task write shows the canvas 'will be changed, please wait...' text (In Progress, the comment form)", async () => {
+    renderScreen();
+    fireEvent.click(screen.getByTestId(IN_PROGRESS));
+    expect((state.patchRow.mock.calls[0]![2] as { progress: string }).progress).toBe(MSG.taskChanging("Land secured"));
+    fireEvent.click(screen.getByTestId("ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"));
+    fireEvent.change(await screen.findByTestId("txt_CheckList_RightPanel_BodyForm_Comments"), { target: { value: "x" } });
+    fireEvent.click(await screen.findByTestId("pcf_btn_CheckList_RightPanel_Checklist_Form_Buttons_Save"));
+    await waitFor(() => expect(state.patchRow).toHaveBeenCalledTimes(2));
+    expect((state.patchRow.mock.calls[1]![2] as { progress: string }).progress).toBe(MSG.taskChanging("Land secured"));
+  });
+
+  it("UT-CHKLST-932 C9 (CU-1): the date editor puts focus in the picker when it opens and back on the pencil when it closes", async () => {
+    renderScreen({ rows: [task({ isCompletionDate: true, completionDate: "2026-11-02T00:00:00" })] });
+    const pencil = screen.getByTestId("but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate");
+    fireEvent.click(pencil);
+    const editor = await screen.findByTestId("date_con_Checklist_DisplayProject_Body_Content_CompletionDate");
+    await waitFor(() => expect(document.activeElement).toBe(editor.querySelector("input")));
+    fireEvent.click(screen.getByTestId("but_Checklist_DisplayProject_Body_Content_CompletionDate_Cancel"));
+    const back = screen.getByTestId("but_Checklist_DisplayProject_Body_Content_ListRow_CompletionDate");
+    await waitFor(() => expect(document.activeElement).toBe(back));
+    // The cell shows the canvas date format in the user's (en-US) language.
+    expect(screen.getByText("Mon, Nov. 02, 2026")).toBeTruthy();
+  });
+
+  it("UT-CHKLST-933 C9 (CU-2, CU-3): a stepper card is described by its state, a row's buttons by the task title; the aria-labels stay the canvas ones", () => {
+    renderScreen({ trackings: [trackingRow(0, ACS.inProgress)] });
+    const card = screen.getByTestId("cmp_CheckList_Project_States-ps-0");
+    expect(card.getAttribute("aria-label")).toBe("Draft");
+    const describedBy = card.getAttribute("aria-describedby")!;
+    expect(document.getElementById(describedBy)?.textContent).toBe("In Progress");
+    const titleCell = document.getElementById("checklist-task-cl-1")!;
+    expect(titleCell.textContent).toBe("Land secured");
+    for (const testId of [COMPLETE, IN_PROGRESS, "ico_Checklist_DisplayProject_Body_Content_ListRow_Comments"]) {
+      expect(screen.getByTestId(testId).getAttribute("aria-describedby")).toBe("checklist-task-cl-1");
+    }
+    expect(screen.getByTestId(COMPLETE).getAttribute("aria-label")).toBe("Complete");
+    expect(screen.getByTestId(IN_PROGRESS).getAttribute("aria-label")).toBe(UI.inProgress);
+  });
+
+  it("UT-CHKLST-934 C9 (CU-11): the stepper cards cannot be pressed while a write runs, and the blocking overlay has an accessible name", () => {
+    state.progress = MSG.taskChanging("Land secured");
+    renderScreen();
+    expect((screen.getByTestId("cmp_CheckList_Project_States-ps-1") as HTMLButtonElement).disabled).toBe(true);
+    const dialog = document.querySelector("[role='dialog'][aria-busy='true']") as HTMLElement;
+    expect(dialog.getAttribute("aria-label")).toBe(MSG.taskChanging("Land secured"));
+  });
+
+  it("UT-CHKLST-935 C9 (CU-16): the refresh button comes before the steps in the markup, as it does on screen", () => {
+    renderScreen();
+    const refresh = screen.getByTestId("but_Project_States_CheckList_Refresh");
+    const stepper = screen.getByTestId("cmp_CheckList_Project_States");
+    expect(refresh.compareDocumentPosition(stepper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("UT-CHKLST-936 C10 (CU-15): the change-cluster panel's ✕ hint says Cancel, not the canvas copy-paste name 'Home'", async () => {
+    renderScreen({ trackings: [trackingRow(0, ACS.inProgress, { approvalComment: "Ready" })] });
+    fireEvent.click(screen.getByTestId("pcf_Checklist_DisplayProject_Body_Content_Buttons_NextCluster"));
+    await screen.findByTestId("pcf_CheckList_RightPanel_ChangeCluster_Form_Buttons_Save");
+    expect(screen.getAllByTestId("panel-close")[0]!.getAttribute("title")).toBe("Cancel");
   });
 });

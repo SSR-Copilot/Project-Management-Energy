@@ -21,12 +21,14 @@ export interface WriteFeedbackProps {
    * `cmp_PopUp_GateProcess_Saving_LoadingDialog_1`). Off by default, so every existing caller renders exactly where it did.
    */
   portal?: boolean;
+  /** Optional accessible name of the blocking overlay (a dialog). Callers that pass none render exactly as before. */
+  overlayLabel?: string | undefined;
 }
 
-export function WriteFeedback({ progress, error, success, testIdPrefix, portal = false }: WriteFeedbackProps) {
+export function WriteFeedback({ progress, error, success, testIdPrefix, portal = false, overlayLabel }: WriteFeedbackProps) {
   return (
     <>
-      {progress ? <LoadingOverlay mode="blocking" label={progress} portal={portal} /> : null}
+      {progress ? <LoadingOverlay mode="blocking" label={progress} portal={portal} accessibleName={overlayLabel} /> : null}
       {error ? (
         <MessageBar intent="error" data-testid={`${testIdPrefix}-write-error`}>
           <MessageBarBody>

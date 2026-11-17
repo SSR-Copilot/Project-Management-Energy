@@ -30,6 +30,7 @@ import {
 import { fetchAll, fetchPage } from "./client";
 import { listProjectStates } from "./generalData";
 import { findScopeCountryTechId, getEntraPeople, listChecklistApprovals, listGateApprovals } from "./adminGatesApprovals";
+import type { Persona } from "./adminGatesApprovals";
 import { ACTIVE, and, eq, guid, lookupEq } from "./odata";
 import { ES } from "./dataverseNames";
 
@@ -144,6 +145,20 @@ const toHistoryEntry = (idCol: string) => (r: Raw): HistoryEntry => ({
   modifiedByName: str(r[formatted("_modifiedby_value")]),
 });
 
+/**
+ * The Portfolio Manager's mail from Entra, WITHOUT letting a failed lookup take anything else down (C1 / C2, CF-4, CN-1).
+ * The mail only feeds a tooltip ("who will be asked"); the gate rows and the approval MODE (which decides whether a task
+ * needs approval at all) must survive a failed Graph read, so a failed lookup just has no mail.
+ * DIVERGENCE: D123 §2 (the canvas read the mail from the same collection and had no such failure).
+ */
+async function entraMails(ids: readonly string[]): Promise<Map<string, Persona>> {
+  const people = new Map<string, Persona>();
+  // One request per person (`getEntraPeople` fails whole when one lookup does), so one bad lookup loses one mail only.
+  const results = await Promise.allSettled([...new Set(ids)].map((id) => getEntraPeople([id])));
+  for (const r of results) if (r.status === "fulfilled") for (const [id, persona] of r.value) people.set(id, persona);
+  return people;
+}
+
 /* ═══════════════════════════════════════════════════════════════ the project ════ */
 
 const PROJECT_SELECT = [
@@ -246,7 +261,7 @@ export async function listChecklistGates(
       };
     });
   }
-  const people = await getEntraPeople(rows.map((g) => g.portfolioManagerId).filter((x): x is string => Boolean(x)));
+  const people = await entraMails(rows.map((g) => g.portfolioManagerId).filter((x): x is string => Boolean(x)));
   return rows.map((g) => ({
     ...g,
     portfolioManagerMail: g.portfolioManagerId ? people.get(g.portfolioManagerId)?.mail || null : null,
@@ -331,7 +346,7 @@ export async function listClusterTemplates(
  */
 export async function listChecklistApprovalSettings(templateIds: readonly string[]): Promise<ChecklistApprovalSetting[]> {
   const rows = await listChecklistApprovals(templateIds);
-  const people = await getEntraPeople(rows.map((r) => r.portfolioManagerId).filter((x): x is string => Boolean(x)));
+  const people = await entraMails(rows.map((r) => r.portfolioManagerId).filter((x): x is string => Boolean(x)));
   return rows.map((r) => ({
     id: r.id,
     projectDefaultChecklistId: r.projectDefaultChecklistId,

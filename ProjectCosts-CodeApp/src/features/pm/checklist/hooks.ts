@@ -48,11 +48,12 @@ import {
   type HistoryEntry,
 } from "@/data/checklist";
 import {
-  MSG, backfillNeeded, checklistCancelSucceeded, checklistHtmlTable, gateCancellationPayload, needsTemplates,
+  MSG, appIdRefusal, backfillNeeded, checklistCancelSucceeded, checklistHtmlTable, gateCancellationPayload, needsTemplates,
   planChecklistApprovalRequestFollowUp, planChecklistApprovalRequestPatch, planChecklistRowPatch, planClusterTransition,
   planGateApprovalRequestNote, planGateApprovalRequestPatch, planGateCancelNote, planGateCancelPatch,
   planPrepareCluster, planReturnToPreviousCluster, planSkippedClusterBackfill, planTerminalStateChange,
   shouldBackfillSkippedClusters, startClusterNo, trackingFor, clusterTransitionDone, flowMovesCluster,
+  staleClusterRequestRefusal, staleReturnRefusal, staleSaveRefusal, staleTaskRequestRefusal,
   type ChecklistApprovalSetting, type ChecklistProject, type ChecklistRow, type GateSetting,
   type HistoryQueryDescriptor, type ProjectStateRef, type SequenceEntry, type TerminalStaging,
   type TrackingRow, type WritePlan,
@@ -102,8 +103,26 @@ export const TABLES: readonly string[] = [
  */
 export const CAN_EDIT_SELECTED_PROJECT = true;
 
-const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
-  ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
+/**
+ * `ScreenData` plus `hasData` (C1 / C4): the query HAS an answer (possibly of an earlier refresh), so the Screen can tell "no
+ * answer yet" and "no answer, it failed" from "an empty answer", and a failed refetch need not blank the screen.
+ */
+export type ReadResult<T> = ScreenData<T> & { hasData?: boolean };
+
+const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ReadResult<T> =>
+  ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true, hasData: q.data !== undefined });
+
+/**
+ * The cache keys every checklist write refreshes (C5, CN-4): what a write can change (the project and its cluster state, the
+ * trackings, the rows, the approval settings and the history) plus the other screens' copies of the project. NOT the
+ * project states, the gates or the Entra lookups, which no write on this screen changes; `checklistAll` refetched them (and
+ * the Entra reads) after every visit to a cluster. The command bar's Refresh still refreshes everything (`refresh()`).
+ */
+export const checklistWriteKeys = (projectId: string) => [
+  qk.checklist(projectId, "project"), qk.checklist(projectId, "trackings"), qk.checklist(projectId, "rows"),
+  qk.checklist(projectId, "approvals"), qk.checklist(projectId, "history"),
+  qk.project(projectId), qk.generalDataProject(projectId), qk.stateTrackings(projectId), qk.milestoneProject(projectId),
+] as const;
 
 const NONE: never[] = [];
 
@@ -114,20 +133,20 @@ export interface ClusterSequenceData {
 }
 
 /** `gblRecordSelectedProject` — re-read on every visit, as `OnVisible` does. */
-export function useChecklistProject(projectId: string | undefined): ScreenData<ChecklistProject | null> {
+export function useChecklistProject(projectId: string | undefined): ReadResult<ChecklistProject | null> & { isFetching: boolean } {
   const q = useQuery({
     queryKey: qk.checklist(projectId ?? "", "project"),
     queryFn: () => loadChecklistProject(projectId!),
     enabled: Boolean(projectId),
   });
-  return out(q, null);
+  return { ...out(q, null), isFetching: q.isFetching };
 }
 
 /** The states, the project's trackings and its active gates — what the two sequences are built from. */
 export function useClusterSequence(
   projectId: string | undefined,
   project: ChecklistProject | null,
-): ScreenData<ClusterSequenceData> & { isFetching: boolean } {
+): ReadResult<ClusterSequenceData> & { isFetching: boolean } {
   const id = projectId ?? "";
   const states = useQuery({
     queryKey: qk.checklist(id, "states"),
@@ -150,11 +169,13 @@ export function useClusterSequence(
     isFetching: states.isFetching || trackings.isFetching || gates.isFetching,
     error: states.error ?? trackings.error ?? gates.error ?? undefined,
     connected: true,
+    // Every part that is asked for has an answer (the gates are asked for once the project is known).
+    hasData: states.data !== undefined && trackings.data !== undefined && (project === null || gates.data !== undefined),
   };
 }
 
 /** `colProjectCheckList` — the selected cluster's active tasks. */
-export function useClusterChecklist(projectId: string | undefined, clusterStateId: string | null): ScreenData<ChecklistRow[]> {
+export function useClusterChecklist(projectId: string | undefined, clusterStateId: string | null): ReadResult<ChecklistRow[]> {
   const q = useQuery({
     queryKey: qk.checklist(projectId ?? "", "rows", clusterStateId ?? ""),
     queryFn: () => listClusterChecklist(projectId!, clusterStateId!),
@@ -167,7 +188,7 @@ export function useClusterChecklist(projectId: string | undefined, clusterStateI
 export function useChecklistApprovalSettings(
   projectId: string | undefined,
   rows: readonly ChecklistRow[],
-): ScreenData<ChecklistApprovalSetting[]> {
+): ReadResult<ChecklistApprovalSetting[]> {
   const ids = [...new Set(rows.map((r) => r.projectDefaultChecklistId).filter((x): x is string => Boolean(x)))].sort();
   const q = useQuery({
     queryKey: qk.checklist(projectId ?? "", "approvals", ...ids),
@@ -178,7 +199,7 @@ export function useChecklistApprovalSettings(
 }
 
 /** The panel history for `historyDescriptor(panel)`. */
-export function useHistory(projectId: string | undefined, descriptor: HistoryQueryDescriptor | null): ScreenData<HistoryEntry[]> {
+export function useHistory(projectId: string | undefined, descriptor: HistoryQueryDescriptor | null): ReadResult<HistoryEntry[]> {
   const q = useQuery({
     queryKey: qk.checklist(projectId ?? "", "history", descriptor?.entitySet ?? "", descriptor?.lookupValue ?? ""),
     queryFn: () => listHistory(descriptor!),
@@ -254,7 +275,7 @@ export function useChecklistWrites(projectId: string | undefined) {
   const id = projectId ?? "";
   const qc = useQueryClient();
   const w = usePlanWrite({
-    invalidate: [qk.checklistAll(id), qk.project(id), qk.generalDataProject(id), qk.stateTrackings(id), qk.milestoneProject(id)],
+    invalidate: checklistWriteKeys(id),
     action: "change this project's checklist",
   });
   const ctx = (project: ChecklistProject) => ({ projectId: project.id, owningBusinessUnitId: project.owningBusinessUnitId });
@@ -272,18 +293,27 @@ export function useChecklistWrites(projectId: string | undefined) {
     },
   });
 
-  /** `but_Project_States_CheckList_Refresh` for the selected cluster: ensure the tracking, then copy the templates. */
-  const prepareCluster = (project: ChecklistProject, selected: SequenceEntry) => w.run({
-    progress: MSG.loading,
-    plan: async () => {
+  /**
+   * `but_Project_States_CheckList_Refresh` for the selected cluster: ensure the tracking, then copy the templates.
+   * C5: the reads come first, WITHOUT the blocking overlay; an empty plan (the usual visit: the tracking and the rows are
+   * there) skips the write job altogether: no overlay, no refetch of the screen's data. A failed read is still the job's
+   * error, shown as before. DIVERGENCE: D123 §8 (the canvas ran its spinner for every visit).
+   */
+  const prepareCluster = async (project: ChecklistProject, selected: SequenceEntry): Promise<string[] | null> => {
+    let plan: WritePlan;
+    try {
       const [trackings, count] = await Promise.all([
         listChecklistTrackings(id), countClusterChecklistRows(id, selected.id),
       ]);
       const tracking = trackingFor(trackings, selected.id);
       const templates = needsTemplates(tracking, selected, count) ? await listClusterTemplates(project, selected.id) : [];
-      return planPrepareCluster({ selected, tracking, existingRowCount: count, templates, ctx: ctx(project) });
-    },
-  });
+      plan = planPrepareCluster({ selected, tracking, existingRowCount: count, templates, ctx: ctx(project) });
+    } catch (e) {
+      return w.run({ progress: MSG.loading, plan: () => Promise.reject(e) });
+    }
+    if (plan.writes.length === 0) return [];
+    return w.run({ progress: MSG.loading, plan });
+  };
 
   const patchRow = (row: ChecklistRow, data: Record<string, unknown>, texts: { progress: string; success?: string; error: (d: string) => string }) =>
     w.run({ progress: texts.progress, ...(texts.success ? { success: texts.success } : {}), errorText: texts.error, plan: planChecklistRowPatch(row.id, data, row.title) });
@@ -296,6 +326,9 @@ export function useChecklistWrites(projectId: string | undefined) {
     errorText: MSG.projectStatusError,
     plan: async () => {
       const [trackings, rows] = await Promise.all([listChecklistTrackings(id), listClusterChecklist(id, req.state.id)]);
+      // C6: the fresh read must still show the cluster In Progress, as the button did when it was drawn.
+      const stale = staleSaveRefusal(req.state, trackingFor(trackings, req.state.id));
+      if (stale) return refusePlan(stale);
       return planClusterTransition({
         project: req.project, state: req.state, next: req.next,
         tracking: trackingFor(trackings, req.state.id),
@@ -314,6 +347,9 @@ export function useChecklistWrites(projectId: string | undefined) {
     plan: async () => {
       const trackings = await listChecklistTrackings(id);
       const tracking = trackingFor(trackings, req.state.id);
+      // C6: the cluster must still be In Progress, Rejected or Request canceled, as when the button was drawn.
+      const stale = staleReturnRefusal(req.state, tracking);
+      if (stale) return refusePlan(stale);
       return planReturnToPreviousCluster({
         project: req.project, state: req.state, previous: req.previous, tracking,
         previousTracking: trackingFor(trackings, req.previous.id),
@@ -342,9 +378,15 @@ export function useChecklistWrites(projectId: string | undefined) {
     if (req.kind === "checklist") {
       return w.run({
         progress: MSG.pleaseWait, errorText: MSG.projectStatusError, ...endOf(after),
-        plan: planChecklistApprovalRequestPatch({
-          row: req.row, comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
-        }),
+        plan: async () => {
+          // C6: a fresh read of the task; one whose approval was requested (or completed) meanwhile is not requested again.
+          const fresh = (await listClusterChecklist(id, req.currentStateId)).find((r) => r.id === req.row.id);
+          const stale = fresh ? staleTaskRequestRefusal(fresh) : null;
+          if (stale) return refusePlan(stale);
+          return planChecklistApprovalRequestPatch({
+            row: req.row, comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
+          });
+        },
         then: async () => planChecklistApprovalRequestFollowUp({
           project: req.project, row: req.row, approvalRequested: req.approvalRequested,
           result: await requestChecklistApproval({
@@ -360,6 +402,9 @@ export function useChecklistWrites(projectId: string | undefined) {
       plan: async () => {
         const tracking = trackingFor(await listChecklistTrackings(id), req.state.id);
         trackingId = tracking?.id ?? null;
+        // C6: no second request while an approval is running or the cluster is completed.
+        const stale = staleClusterRequestRefusal(req.state, tracking);
+        if (stale) return refusePlan(stale);
         return planGateApprovalRequestPatch({
           project: req.project, state: req.state, tracking, gate: req.gate,
           comment: req.comment, approvalDueDate: req.approvalDueDate, canEdit: CAN_EDIT_SELECTED_PROJECT,
@@ -391,6 +436,9 @@ export function useChecklistWrites(projectId: string | undefined) {
     return w.run({
       progress: MSG.cancelApprovalSent(req.state.name), errorText: MSG.projectStatusError,
       plan: async () => {
+        // C7: refused BEFORE anything is read or patched; the flow needs the app id and the patch cannot be undone.
+        const noApp = appIdRefusal(req.appId);
+        if (noApp) return refusePlan(noApp);
         tracking = trackingFor(await listChecklistTrackings(id), req.state.id);
         if (!tracking) return refusePlan(MSG.noTrackingToCancel);
         return planGateCancelPatch({ project: req.project, tracking, canEdit: CAN_EDIT_SELECTED_PROJECT });
@@ -454,7 +502,12 @@ export function useChecklistOrchestration(args: {
     const needed = shouldBackfillSkippedClusters({ startCluster: start, clusterStateName: project.clusterStateName, trackings })
       && backfillNeeded(states, trackings, start);
     const id = project.id;
-    void (needed ? writes.backfill(project, states) : Promise.resolve(null)).finally(() => setBackfillDone(id));
+    // C10 (CW-2): the cluster is prepared only after the back-fill succeeded (or was not needed). A failed back-fill leaves
+    // its error on screen, which the next job's run() would have cleared. Refresh runs the visit again.
+    // DIVERGENCE: D123 §9 (the canvas ran the preparation whatever the back-fill did).
+    void (needed ? writes.backfill(project, states) : Promise.resolve<string[] | null>([])).then((result) => {
+      if (result !== null) setBackfillDone(id);
+    });
   }, [project, sequenceReady, states, trackings, writes]);
 
   useEffect(() => {
