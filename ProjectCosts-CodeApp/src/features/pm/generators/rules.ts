@@ -54,6 +54,7 @@ import {
   isBlank, decimalSeparator, type Lang,
 } from "@/domain/powerFxNumeric";
 import { CHOICE_PLANT, ES, ES_PLANT } from "@/data/dataverseNames";
+import { bind, OWNING_BU_BIND } from "@/data/odata";
 import { foundationCostAdded, foundationCostAddedBooleanReading } from "@/domain/foundationCost";
 import {
   CREATED_ROW_ID, createdRowRef, createMany, emptyPlan, hardenedDelete, refusePlan, together, updateMany, type PlannedWrite, type WritePlan,
@@ -123,17 +124,6 @@ export const GEN_INSTANCE_COL = {
   hubHeightExclPlinth: "vsb_hubheightexclfoundationplinthm",
   totalHeight: "vsb_totalheight",
   owningBusinessUnit: "_owningbusinessunit_value",
-} as const;
-
-/** Bind (navigation-property) names for the writes. */
-export const PLANT_LOOKUP = {
-  project: "vsb_Project",
-  generator: "vsb_Generator",
-  moduleTypeInProject: "vsb_ModuleTypeInProjectId",
-  typeInProject: "vsb_TypeInProjectId",
-  projectCost: "vsb_ProjectCost",
-  generatorInProject: "vsb_GeneratorInProject",
-  owningBusinessUnit: "owningbusinessunit",
 } as const;
 
 /**
@@ -1222,6 +1212,85 @@ export const opexDependencyMessage = (
     ? `Generator "${name ?? ""}" cannot be deleted or deactivated because it is currently linked to O&M costs. Replace the generator, or unlink it from the associated O&M costs first.`
     : `PV Module type "${name ?? ""}" cannot be deleted because it is currently linked to O&M costs. Replace the PV Module, or unlink it from the associated O&M costs first.`;
 
+/* ═══════════════════ review fixes F1 / F3 / F7 — reads the guards and the saves depend on ════ */
+
+/**
+ * NEW TEXT (no canvas equivalent; D121 §2): the canvas ran the O&M guard against collections it had
+ * loaded behind its spinner, so a half-read guard never existed there.
+ */
+export const GUARD_READ_MSG = {
+  /** The command's tooltip while the O&M link of the selected type is still being read. */
+  opexChecking: "Checking whether the selected type is linked to O&M costs...",
+  /** The command's tooltip, and the banner, when that read failed. */
+  opexFailed:
+    "The link of the selected type to O&M costs could not be checked, so Delete and Deactivate are unavailable. Reload the page and try again.",
+  /** The command's tooltip while the turbines, the price index or the device costs are being (re)read. */
+  settling: "The screen is reloading its data. Please wait a moment.",
+  /** The banner when a background refresh failed and the screen keeps the data it already has. */
+  refreshFailed:
+    "Some of this screen's data could not be refreshed, so what is shown may be out of date. Reload the page to try again.",
+} as const;
+
+/** Where the O&M read of the selected WTG / PV type stands. `none`: nothing is selected, so no read is needed. */
+export type OpexReadState = "none" | "checking" | "failed" | "known";
+
+/** A read that has an answer is `known`, even if a later refresh failed; else a failure beats "still checking". */
+export function opexReadState(a: { needed: boolean; known: boolean; failed: boolean }): OpexReadState {
+  if (!a.needed) return "none";
+  if (a.known) return "known";
+  return a.failed ? "failed" : "checking";
+}
+
+/** The three commands whose guard reads the O&M dependency (`capacityGuardReason`). */
+export const OPEX_GUARDED_COMMANDS: readonly GeneratorCommandKey[] = [
+  "deleteGeneratorType", "deactivateGenerator", "deletePVModuleType",
+];
+
+/**
+ * F1 — a command whose guard needs the O&M dependency is disabled until it is KNOWN. A pending or failed read used to read as
+ * "no dependency", so Delete / Deactivate opened its confirmation for a type that O&M costs still point at.
+ * DIVERGENCE: the canvas had the data loaded before the screen showed (D121 §2).
+ * Returns the tooltip that explains the blocked command, or null when it is not blocked.
+ */
+export function opexGuardBlock(
+  key: GeneratorCommandKey, reads: { wtg: OpexReadState; pv: OpexReadState },
+): string | null {
+  if (!OPEX_GUARDED_COMMANDS.includes(key)) return null;
+  const state = key === "deletePVModuleType" ? reads.pv : reads.wtg;
+  if (state === "checking") return GUARD_READ_MSG.opexChecking;
+  if (state === "failed") return GUARD_READ_MSG.opexFailed;
+  return null;
+}
+
+/** F1 — the banner text while the SELECTED family's O&M read failed (the commands carry it as their tooltip too). */
+export function opexReadBanner(reads: { wtg: OpexReadState; pv: OpexReadState }): string | null {
+  return reads.wtg === "failed" || reads.pv === "failed" ? GUARD_READ_MSG.opexFailed : null;
+}
+
+/**
+ * F3 — writes and deletes wait while a read they build their rows from is not settled: the first read of the price index,
+ * the device costs or the turbines, or a turbine / model read that is still showing the previous type set's rows
+ * (`placeholderData`) after a save changed the set. A write built from an empty list can reuse a turbine name, and one built
+ * from index 0 or a missing device cost writes a zero cost.
+ */
+export function dataSettling(reads: readonly { loading: boolean; placeholder?: boolean | undefined }[]): boolean {
+  return reads.some((r) => r.loading || r.placeholder === true);
+}
+
+/**
+ * F7 — what a failed query does to the screen. `blocking`: a query failed and has NO data, so the screen cannot show it
+ * (the empty state, as before). `banner`: every failed query still has data (a failed background refresh): the screen stays and a
+ * banner says the data may be stale. A test double that sets no `hasData` counts as "no data" (blocking), as before.
+ * DIVERGENCE: the canvas had no refresh; this app refetches on window focus (D121 §3).
+ */
+export function loadErrorMode(
+  queries: readonly { error: unknown; hasData?: boolean | undefined }[],
+): "none" | "blocking" | "banner" {
+  const failed = queries.filter((q) => q.error);
+  if (failed.length === 0) return "none";
+  return failed.some((q) => q.hasData !== true) ? "blocking" : "banner";
+}
+
 /* ════════════════════════════ canvas 1.21.753 — Replace Generator / PV Module Type ════ */
 
 /** The two Replace panels' static text, verbatim. */
@@ -1750,12 +1819,6 @@ export interface TypeFormState {
   dirty: Set<string>;
 }
 
-/** The six `colPanelGeneratorFormValidation` row names, kept for parity of the gate. */
-export const TYPE_VALIDATION_ROWS = [
-  "Supplier", "TurbineType", "Hubheight", "RevisedHubheight",
-  "NumberOfGenerators", "Cost",
-] as const;
-
 export interface TypeFormErrors {
   Supplier: string | null;
   TurbineType: string | null;
@@ -2261,8 +2324,21 @@ export const PV_FIELD_LABELS = {
  */
 export const PV_SUPPLIER_PLACEHOLDER = "Find supplier";
 
-/** `txt_…PvModuleType_Fields_Label.MaxLength` / `_OtherSupplier.MaxLength` (Y:7343/7670) — 512. */
-export const PV_MODULE_LABEL_MAX_LENGTH = 512;
+/** `txt_…PvModuleType_Fields_Label.MaxLength` / `_OtherSupplier.MaxLength` (Y:7343/7670) — 512 (the canvas twin of the cap below). */
+export const PV_MODULE_LABEL_MAX_LENGTH_CANVAS = 512;
+/**
+ * DIVERGENCE (generators fix F5, D121 §4): `vsb_pvmoduletypeinproject` `vsb_label` and `vsb_othersupplier` hold 100
+ * characters (`.power/schemas/dataverse/pvmoduletypeinprojects.Schema.json`, pinned by a test), the canvas boxes accept 512. A
+ * longer text only failed at the create with a 400, and Replace PV deleted the old type first. The box and the Save gate now stop at 100.
+ */
+export const PV_MODULE_LABEL_MAX_LENGTH = 100;
+/**
+ * DIVERGENCE (F5, D121 §4): `vsb_name` and `vsb_supplier` of the BESS / Hydrogen / Substation type tables hold 100
+ * (`storagetypeinprojects` / `hydrogentypeinprojects` / `substationtypeinprojects` schemas, pinned by a test); the canvas has no limit.
+ */
+export const SIMPLE_TEXT_MAX_LENGTH = 100;
+/** NEW TEXT (F5): the error under a label / supplier box over the Dataverse limit. */
+export const textTooLongMessage = (max: number): string => `Please enter at most ${max} characters.`;
 /** `txt_…PvModuleType_Fields_PVCapacityMW.MaxLength` (Y:7447). */
 export const PV_CAPACITY_MAX_LENGTH = 6;
 /** `txt_…PvModuleType_Fields_Degradation{FirstYear,RemainingYears}.MaxLength` (Y:7774/7883). */
@@ -2318,6 +2394,23 @@ export const PV_MSG = {
   deleted: "PVModule type was successfully deleted.",
 } as const;
 
+/**
+ * F9 / GP-6: the PV panel's Degradation 1st Year prefill. The field accepts three decimals (`fn_Numeric_Generators.IsThreeDecimal`),
+ * so the stored value is shown as it is, as Degradation Remaining Years already is; the shared two-decimal prefill rounded 0.125
+ * to 0.13 and an unchanged Save then stored the rounded value.
+ * DIVERGENCE: the canvas (Y:7777) formats it `If(Int(x) = x, Text(x, "#"), Text(x, "0.0#"))`, two decimals (D121 §6).
+ */
+export const pvDegradationPrefill = (v: number | null | undefined, lang: Lang = "en-US"): string =>
+  v === null || v === undefined ? "" : forLanguage(String(v), lang);
+
+/**
+ * F9 / GP-10: whether the PV follow-up back-fills the AllWTG land-lease costs: the type is new, OR the follow-up has to CREATE
+ * the unit (`unitId` null). A first Add that failed after the type landed leaves a type with no unit; the edit that creates the unit
+ * must allocate it too, or it stays out of every AllWTG cost. DIVERGENCE: the canvas gates on `varIsNewPvModule` alone
+ * (D121 §7).
+ */
+export const pvFollowUpIsNew = (a: { editing: boolean; unitId: string | null }): boolean => !a.editing || a.unitId === null;
+
 /** `$"PV Module '{txt_…Label.Value}' will be saved, please wait..."` (Y:7979). INTERPOLATED. */
 export const pvSaveProgressText = (label: string): string =>
   `PV Module '${label}' will be saved, please wait...`;
@@ -2363,7 +2456,9 @@ export function validatePvTypeForm(
   const cap = form.capacity.trim();
   const other = (form.otherSupplier ?? "").trim();
   return {
-    moduleLabel: form.dirty.has("moduleLabel") && isBlank(form.moduleLabel.trim()) ? PV_MSG.blank : null,
+    moduleLabel: form.dirty.has("moduleLabel") && isBlank(form.moduleLabel.trim())
+      ? PV_MSG.blank
+      : form.moduleLabel.length > PV_MODULE_LABEL_MAX_LENGTH ? textTooLongMessage(PV_MODULE_LABEL_MAX_LENGTH) : null,
     capacity: isBlank(cap)
       ? null
       : !isDecimalWithPlaces(cap, 2, lang)
@@ -2371,7 +2466,9 @@ export function validatePvTypeForm(
         : !inRange(cap, 0, 500, lang) ? PV_MSG.capacityRange : null,
     supplier: null,
     otherSupplier: opts.otherSupplierChosen && form.dirty.has("otherSupplier") && isBlank(other)
-      ? PV_MSG.blank : null,
+      ? PV_MSG.blank
+      : opts.otherSupplierChosen && (form.otherSupplier ?? "").length > PV_MODULE_LABEL_MAX_LENGTH
+        ? textTooLongMessage(PV_MODULE_LABEL_MAX_LENGTH) : null,
     degradation1stYear: degradationError(form.degradation1stYear, PV_MSG.threeDecimals, lang),
     degradationRemainingYears: degradationError(form.degradationRemainingYears, PV_MSG.threeDecimalRemaining, lang),
   };
@@ -3026,7 +3123,9 @@ export function defaultSelection(lists: {
 
 /**
  * `con_…GeneratorType_CardDetails_Pagination_Buttons.Visible` (Y:1903) — only when the type has
- * more than one page. `TotalRows` is the type's `'Number of Generators'`.
+ * more than one page. `TotalRows` is the type's `'Number of Generators'` in the canvas.
+ * DIVERGENCE (F9 / GR-5, D121 §8): the Screen passes the number of LOADED turbines, because the stored count can
+ * be out of step with the rows (a save, another user) and then gave a page with no rows or a pager that hid rows.
  */
 export const pagerVisible = (numberOfGenerators: number | null | undefined): boolean =>
   pageCount(numberOfGenerators ?? 0) > 1;
@@ -3221,6 +3320,14 @@ export function turbineFormDefaults(args: {
 }
 
 /**
+ * F9 / GL-3: the read-only Total Height box. The sum of typed heights carries binary float noise in JS
+ * (140.2 + 2.2 + 0.5 x 141.2 is 212.99999999999997 where Power Fx shows 213), so the value is rounded to 10 places,
+ * which removes the noise and no real digit.
+ */
+export const fmtTurbineTotalHeightBox = (v: number | null | undefined, lang: Lang = "en-US"): string =>
+  v === null || v === undefined || !Number.isFinite(v) ? "" : forLanguage(String(pfxRound(v, 10)), lang);
+
+/**
  * `txt_…Fields_Total_Height.Value` (Y:11473): while any row is dirty, hub height + plinth + ½ rotor
  * from the inputs; otherwise the stored `'Total Height'`.
  */
@@ -3294,10 +3401,14 @@ export function validateSimpleForm(
 ): SimpleFormErrors {
   const places: 1 | 2 = family === "storage" ? 2 : 1;
   return {
-    label: form.dirty.has("label") && isBlank(form.label.trim()) ? SIMPLE_MSG.blank : null,
+    label: form.dirty.has("label") && isBlank(form.label.trim())
+      ? SIMPLE_MSG.blank
+      : form.label.length > SIMPLE_TEXT_MAX_LENGTH ? textTooLongMessage(SIMPLE_TEXT_MAX_LENGTH) : null,
     capacity: capacityError(form.capacity, places, 1000, lang),
     energyCapacity: family === "storage" ? capacityError(form.energyCapacity, 2, 10000, lang) : null,
-    supplier: form.dirty.has("supplier") && isBlank(form.supplier.trim()) ? SIMPLE_MSG.blank : null,
+    supplier: form.dirty.has("supplier") && isBlank(form.supplier.trim())
+      ? SIMPLE_MSG.blank
+      : form.supplier.length > SIMPLE_TEXT_MAX_LENGTH ? textTooLongMessage(SIMPLE_TEXT_MAX_LENGTH) : null,
   };
 }
 
@@ -3332,10 +3443,36 @@ export function simpleFormDefaults(family: SimpleCapacityFamily, row: SimpleType
 
 /* ═══════════════════════════════════════════════════════════ D27 — write plans ════ */
 
-/** The write form of the owner — lower-case `owningbusinessunit` (CONVENTIONS rule 4). */
-const OBU = "owningbusinessunit@odata.bind";
+/**
+ * The write form of the owner — lower-case `owningbusinessunit` (CONVENTIONS rule 4), from the shared key and bind of
+ * `data/odata.ts` (rule 17). Not `owningBusinessUnitBind`: that one validates the id as a GUID, and this folder's tests
+ * use ids such as "bu-1"; the output is the same for a real id.
+ */
 const owner = (businessUnitId: string | null | undefined): Record<string, unknown> =>
-  businessUnitId ? { [OBU]: `/businessunits(${businessUnitId})` } : {};
+  businessUnitId ? { [OWNING_BU_BIND]: bind("businessunits", businessUnitId) } : {};
+
+/**
+ * NEW TEXT (generators fix F6, D121 §5): a create without the owning business unit never errors, the row just
+ * becomes invisible to a business-unit-scoped colleague (CONVENTIONS rule 4). The canvas patched the project's own unit and had
+ * no such refusal.
+ */
+export const OWNING_BU_MSG = {
+  missing:
+    "This project has no business unit, so nothing was saved: a new row without one would be invisible to other users. Ask an administrator to set the project's business unit.",
+} as const;
+
+/**
+ * F6 — a plan that CREATES rows is refused, with nothing sent, when the project's owning business unit is blank. A plan with
+ * no create (an edit, a delete, a roll-up) passes as it was. DIVERGENCE (D121 §5): before, the create went out
+ * without the bind.
+ */
+export function requireOwningBusinessUnit<T extends WritePlan>(plan: T, businessUnitId: string | null | undefined): T {
+  if (plan.refusedReason !== undefined || (businessUnitId ?? "").trim() !== "") return plan;
+  // A refusal keeps the plan's extra fields (a follow-up's `unmatchedCount`) and drops its writes.
+  return plan.writes.some((w) => w.op === "create" || w.op === "createMany")
+    ? { ...plan, ...refusePlan(OWNING_BU_MSG.missing) }
+    : plan;
+}
 const ref = (entitySet: string, id: string): string => `/${entitySet}(${id})`;
 
 /** Navigation properties of the binds the screen writes (`customizations.xml` relationships). */
@@ -3541,7 +3678,7 @@ function allocationStep(args: Parameters<typeof allocationCreates>[0], opts: Pla
  * job, `planGeneratorTypeFollowUp`: they need the type's autonumber name and the new turbine ids. The
  * canvas runs them on both paths.
  */
-export function planCreateGeneratorType(args: {
+function planCreateGeneratorTypeUnchecked(args: {
   project: PlanProject;
   inCountry: boolean;
   model: Pick<CatalogModel, "id" | "specificCapacity" | "hubHeight" | "rotorDiameter">;
@@ -3606,6 +3743,10 @@ export function planCreateGeneratorType(args: {
   return { writes, log: [`Generator type with ${n} turbines`] };
 }
 
+/** `planCreateGeneratorType` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planCreateGeneratorType = (...a: Parameters<typeof planCreateGeneratorTypeUnchecked>): ReturnType<typeof planCreateGeneratorTypeUnchecked> =>
+  requireOwningBusinessUnit(planCreateGeneratorTypeUnchecked(...a), a[0].project.owningBusinessUnitId);
+
 /**
  * The second job of a new WTG / PV type — `btn_AutomatedFlow_TriggerWork_ForWTG_PV.OnSelect` (Y:65):
  * when no `DeviceTypesInProjects` row points at the type yet, `Patch(DeviceTypesInProjects,
@@ -3631,7 +3772,7 @@ export function deviceTypeShadow(args: {
  * cost × every new turbine, `{Name: 'Land Owner' & "-" & Description & "-" & <turbine>.Name,
  * 'Project Cost', 'Generator In Project', OBU}` (rule 20).
  */
-export function planGeneratorTypeFollowUp(args: {
+function planGeneratorTypeFollowUpUnchecked(args: {
   project: PlanProject;
   typeId: string;
   typeName: string;
@@ -3658,6 +3799,10 @@ export function planGeneratorTypeFollowUp(args: {
   // The device-type row and the allocations bind only to rows that already exist: one parallel run.
   return { writes: together(writes), log: [] };
 }
+
+/** `planGeneratorTypeFollowUp` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planGeneratorTypeFollowUp = (...a: Parameters<typeof planGeneratorTypeFollowUpUnchecked>): ReturnType<typeof planGeneratorTypeFollowUpUnchecked> =>
+  requireOwningBusinessUnit(planGeneratorTypeFollowUpUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /**
  * Sibling total heights after an apply-to-all. SOURCE DEFECT (D27): the canvas `UpdateIf` writes the
@@ -3694,7 +3839,7 @@ export function siblingTotalHeight(args: {
  *  4. the project roll-up;
  *  5. a NEW turbine is allocated to every AllWTG land-lease cost (`btn_Trigger_New_Allocate…`).
  */
-export function planSaveTurbine(args: {
+function planSaveTurbineUnchecked(args: {
   project: PlanProject;
   type: GeneratorTypeRow;
   model: Pick<CatalogModel, "prices" | "foundationCostIncluded" | "additionalFoundationCost" | "rotorDiameter"> | null;
@@ -3790,6 +3935,10 @@ export function planSaveTurbine(args: {
   // (parallel). Only rows inside one step go together, so the project trigger and a failure stop as before.
   return { writes, log: [name] };
 }
+
+/** `planSaveTurbine` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planSaveTurbine = (...a: Parameters<typeof planSaveTurbineUnchecked>): ReturnType<typeof planSaveTurbineUnchecked> =>
+  requireOwningBusinessUnit(planSaveTurbineUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /**
  * The turbine delete (`cmp_…ConfirmationDeleteGeneratorInProject.OnConfirm`, Y:15799): per allocation
@@ -4250,7 +4399,7 @@ const projectPvCost = (projectId: string, pv: SimpleTypeRow[], inverters: Simple
  * The PV save, first job: `Patch(PVModuleTypeInProjects, <row or Defaults>, {Project, Label, PVModule,
  * 'Other Supplier', degradations, 'Cost per Power', 'Capacity [MWp]', 'Cost [EUR]', OBU})` (Y:8001).
  */
-export function planSavePvType(args: {
+function planSavePvTypeUnchecked(args: {
   project: PlanProject;
   pv: SimpleTypeRow | null;
   form: PvTypeFormState;
@@ -4272,6 +4421,10 @@ export function planSavePvType(args: {
   return { writes: [write], log: [args.form.moduleLabel] };
 }
 
+/** `planSavePvType` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planSavePvType = (...a: Parameters<typeof planSavePvTypeUnchecked>): ReturnType<typeof planSavePvTypeUnchecked> =>
+  requireOwningBusinessUnit(planSavePvTypeUnchecked(...a), a[0].project.owningBusinessUnitId);
+
 /**
  * The PV save, second job (it needs the type's autonumber `Name`):
  *  1. `Patch(GeneratorInProjects, <the PV type's unit or Defaults>, {Name: <type>.Name,
@@ -4285,7 +4438,7 @@ export function planSavePvType(args: {
  *     permission branch is `If(true = false, …)` in the canvas, so this always runs;
  *  4. the queued `DeviceTypesInProjects` shadow when none exists (Y:8037 → Y:65).
  */
-export function planPvFollowUp(args: {
+function planPvFollowUpUnchecked(args: {
   project: PlanProject;
   pvId: string;
   pvName: string;
@@ -4328,6 +4481,10 @@ export function planPvFollowUp(args: {
   }
   return { writes, log: [] };
 }
+
+/** `planPvFollowUp` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planPvFollowUp = (...a: Parameters<typeof planPvFollowUpUnchecked>): ReturnType<typeof planPvFollowUpUnchecked> =>
+  requireOwningBusinessUnit(planPvFollowUpUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /**
  * The canvas PV delete, as shipped (`cmp_…ConfirmationDeletePVModuleType.OnConfirm`, Y:15466): `Remove`;
@@ -4443,7 +4600,7 @@ const SIMPLE_TABLE: Record<SimpleCapacityFamily, { set: string; capacity: string
  * = Σ of the project's rows. The hidden Type combobox (`colDummyTypes`) is not written — DIVERGENCE
  * (D27): the canvas re-wrote the row's own value (or blank for a new row), which leaves it as it is.
  */
-export function planSaveSimple(args: {
+function planSaveSimpleUnchecked(args: {
   project: PlanProject;
   family: SimpleCapacityFamily;
   row: SimpleTypeRow | null;
@@ -4472,6 +4629,10 @@ export function planSaveSimple(args: {
     log: [args.form.label],
   };
 }
+
+/** `planSaveSimple` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planSaveSimple = (...a: Parameters<typeof planSaveSimpleUnchecked>): ReturnType<typeof planSaveSimpleUnchecked> =>
+  requireOwningBusinessUnit(planSaveSimpleUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /** BESS / Hydrogen / Substation delete (Y:16315, 16298, 16281): `Remove`, then the capacity roll-up. */
 export function planDeleteSimple(args: {
@@ -4727,7 +4888,7 @@ export function canSaveInverter(
  * (Y:10243) skips that roll-up: the screen runs `RequestModulePermission` for the row instead (D97), and
  * the flow adds the inverter cost to the project once the request is approved.
  */
-export function planSaveInverter(args: {
+function planSaveInverterUnchecked(args: {
   project: PlanProject;
   row: SimpleTypeRow | null;
   form: InverterFormState;
@@ -4772,6 +4933,10 @@ export function planSaveInverter(args: {
     log: [args.form.label],
   };
 }
+
+/** `planSaveInverter` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planSaveInverter = (...a: Parameters<typeof planSaveInverterUnchecked>): ReturnType<typeof planSaveInverterUnchecked> =>
+  requireOwningBusinessUnit(planSaveInverterUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /** The Add / Edit Substructure panel. */
 export interface SubstructureFormState {
@@ -4893,7 +5058,7 @@ export function canSaveSubstructureCanvasParity(
  * then `'Plant PV Cost [EUR]'`. A non-blank Other Supplier (Y:8979) skips that roll-up: the screen runs
  * `RequestModulePermission` for the row instead (D97), and the flow adds the cost once it is approved.
  */
-export function planSaveSubstructure(args: {
+function planSaveSubstructureUnchecked(args: {
   project: PlanProject;
   row: SimpleTypeRow | null;
   form: SubstructureFormState;
@@ -4935,6 +5100,10 @@ export function planSaveSubstructure(args: {
     log: [args.form.label],
   };
 }
+
+/** `planSaveSubstructure` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planSaveSubstructure = (...a: Parameters<typeof planSaveSubstructureUnchecked>): ReturnType<typeof planSaveSubstructureUnchecked> =>
+  requireOwningBusinessUnit(planSaveSubstructureUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /* ═══════════════════ D27 G6 — Replace Generator / PV Module Type, the write plans (1.21.753) ════ */
 /*
@@ -5041,7 +5210,7 @@ function replaceDetachAndDelete(inputs: ReplaceInputs, typeSet: string, typeId: 
  * request has it cancelled first ("RDel001: Cancel pending permission for replaced generator") — both by the
  * screen, around this plan (D97).
  */
-export function planReplaceGeneratorType(args: {
+function planReplaceGeneratorTypeUnchecked(args: {
   project: PlanProject;
   oldType: GeneratorTypeRow;
   inCountry: boolean;
@@ -5070,6 +5239,10 @@ export function planReplaceGeneratorType(args: {
   };
 }
 
+/** `planReplaceGeneratorType` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planReplaceGeneratorType = (...a: Parameters<typeof planReplaceGeneratorTypeUnchecked>): ReturnType<typeof planReplaceGeneratorTypeUnchecked> =>
+  requireOwningBusinessUnit(planReplaceGeneratorTypeUnchecked(...a), a[0].project.owningBusinessUnitId);
+
 export interface ReplaceFollowUpPlan extends WritePlan {
   /** `locReplaceLandLeaseUnmatchedCount` — for `replaceSuccessText`. */
   unmatchedCount: number;
@@ -5081,7 +5254,7 @@ export interface ReplaceFollowUpPlan extends WritePlan {
  * units BY POSITION (`planReplaceLandLease`), surplus removed; T2i the old units' AllWTG rows removed by
  * id; T2f the detached O&M costs linked to the new device-type row.
  */
-export function planReplaceGeneratorTypeFollowUp(args: {
+function planReplaceGeneratorTypeFollowUpUnchecked(args: {
   project: PlanProject;
   newTypeId: string;
   newTypeName: string;
@@ -5141,12 +5314,16 @@ export function planReplaceGeneratorTypeFollowUp(args: {
   return { writes, log: [], unmatchedCount: ll.unmatchedCount };
 }
 
+/** `planReplaceGeneratorTypeFollowUp` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planReplaceGeneratorTypeFollowUp = (...a: Parameters<typeof planReplaceGeneratorTypeFollowUpUnchecked>): ReturnType<typeof planReplaceGeneratorTypeFollowUpUnchecked> =>
+  requireOwningBusinessUnit(planReplaceGeneratorTypeFollowUpUnchecked(...a), a[0].project.owningBusinessUnitId);
+
 /**
  * Replace PV Module Type, job 1 (`pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_2.OnChange`):
  * Detach, Delete, then the PV save body for the "Replace to" form (`planSavePvType`, a new row). An old type
  * with an open request has it cancelled first, by the screen (D97).
  */
-export function planReplacePvType(args: {
+function planReplacePvTypeUnchecked(args: {
   project: PlanProject;
   oldPv: SimpleTypeRow;
   form: PvTypeFormState;
@@ -5160,11 +5337,17 @@ export function planReplacePvType(args: {
     project: args.project, pv: null, form: args.form, deviceCostModules: args.deviceCostModules,
     otherSupplierChosen: args.otherSupplierChosen, lang: args.lang,
   });
+  // F6: a refused add (no owning business unit) must not be preceded by the detach and delete of the old type.
+  if (add.refusedReason) return add;
   return {
     writes: [...replaceDetachAndDelete(args.inputs, ES_PLANT.pvModuleTypeInProjects, args.oldPv.id, opts), ...add.writes],
     log: add.log,
   };
 }
+
+/** `planReplacePvType` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planReplacePvType = (...a: Parameters<typeof planReplacePvTypeUnchecked>): ReturnType<typeof planReplacePvTypeUnchecked> =>
+  requireOwningBusinessUnit(planReplacePvTypeUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /** A PV module has ONE unit: every manual allocation of the old unit moves to it; the old AllWTG rows go. */
 export function planReplacePvLandLease(allocations: readonly ReplaceAllocation[]): { repoint: string[]; removeAllWtg: string[] } {
@@ -5180,7 +5363,7 @@ export function planReplacePvLandLease(allocations: readonly ReplaceAllocation[]
  * Cost'`, then the O&M costs re-linked. The 1.21.753 hardening — O&M costs to re-link and no device-type
  * row — raises `PV_BRIDGE_MISSING` (unreachable here: the row is created when absent).
  */
-export function planReplacePvTypeFollowUp(args: {
+function planReplacePvTypeFollowUpUnchecked(args: {
   project: PlanProject;
   newPvId: string;
   newPvName: string;
@@ -5244,6 +5427,10 @@ export function planReplacePvTypeFollowUp(args: {
   }
   return { writes, log: [] };
 }
+
+/** `planReplacePvTypeFollowUp` with the F6 owning-business-unit refusal (a plan that creates rows is refused when the project has none). */
+export const planReplacePvTypeFollowUp = (...a: Parameters<typeof planReplacePvTypeFollowUpUnchecked>): ReturnType<typeof planReplacePvTypeFollowUpUnchecked> =>
+  requireOwningBusinessUnit(planReplacePvTypeFollowUpUnchecked(...a), a[0].project.owningBusinessUnitId);
 
 /* ══════════════════════════════════ D97 — the module-permission flows' texts, and the write texts ════ */
 

@@ -26,7 +26,7 @@
  * Both flows write the type row's request fields themselves; the app refreshes, it does not patch them.
  * Before D97 these controls were visible and disabled (D27: the flows send mails / Teams cards).
  */
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ES, ES_PLANT } from "@/data/dataverseNames";
 import { qk } from "@/data/keys";
 import type { ScreenData } from "@/data/notConnected";
@@ -76,13 +76,23 @@ export const TABLES: readonly string[] = [
 ];
 
 const REFERENCE_STALE = 30 * 60 * 1000;
-const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown }, empty: T): ScreenData<T> =>
-  ({ data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true });
+/**
+ * `ScreenData` plus what the Screen needs to tell "no answer yet" from "an empty answer" (generators fixes F1, F3, F7):
+ * - `hasData`: the query has data (possibly of a previous refresh), so a failed refetch need not blank the screen;
+ * - `placeholder`: the data shown is the PREVIOUS key's (`placeholderData: keepPreviousData`) while the new key loads.
+ */
+export type ReadResult<T> = ScreenData<T> & { hasData?: boolean; placeholder?: boolean };
+
+const out = <T,>(q: { data?: T; isLoading: boolean; error: unknown; isPlaceholderData?: boolean }, empty: T): ReadResult<T> =>
+  ({
+    data: q.data ?? empty, isLoading: q.isLoading, error: q.error ?? undefined, connected: true,
+    hasData: q.data !== undefined, placeholder: q.isPlaceholderData === true,
+  });
 
 const NONE: never[] = [];
 
 /** `gblRecordSelectedProject` (+ its country) — re-read on every visit, as `OnVisible` does. */
-export function useGeneratorsProject(projectId: string | undefined): ScreenData<GeneratorsProjectRow | null> {
+export function useGeneratorsProject(projectId: string | undefined): ReadResult<GeneratorsProjectRow | null> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "project"),
     queryFn: () => loadGeneratorsProject(projectId!),
@@ -92,7 +102,7 @@ export function useGeneratorsProject(projectId: string | undefined): ScreenData<
 }
 
 /** `locProjectPlanning` — the height limitation. */
-export function useProjectPlanning(projectId: string | undefined): ScreenData<ProjectPlanning | null> {
+export function useProjectPlanning(projectId: string | undefined): ReadResult<ProjectPlanning | null> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "planning"),
     queryFn: () => loadProjectPlanning(projectId!),
@@ -102,7 +112,7 @@ export function useProjectPlanning(projectId: string | undefined): ScreenData<Pr
 }
 
 /** The orderable catalogue for the type panel (phase-out after FID). */
-export function useGeneratorCatalog(fid: string | null | undefined): ScreenData<CatalogModel[]> {
+export function useGeneratorCatalog(fid: string | null | undefined): ReadResult<CatalogModel[]> {
   const q = useQuery({
     queryKey: qk.generatorCatalog(fid ?? ""),
     queryFn: () => listOrderableGenerators(fid ?? null),
@@ -113,13 +123,15 @@ export function useGeneratorCatalog(fid: string | null | undefined): ScreenData<
 }
 
 /** The `Generator` rows of the project's types, whatever their phase-out. */
-export function useGeneratorModels(ids: readonly string[]): ScreenData<CatalogModel[]> {
+export function useGeneratorModels(ids: readonly string[]): ReadResult<CatalogModel[]> {
   const sorted = [...new Set(ids)].sort();
   const q = useQuery({
     queryKey: qk.generatorModels(sorted),
     queryFn: () => listGeneratorsByIds(sorted),
     enabled: sorted.length > 0,
     staleTime: REFERENCE_STALE,
+    // F3: a save that adds or removes a type changes the key; keep the previous models until the new set has loaded.
+    placeholderData: keepPreviousData,
   });
   return out(q, NONE as CatalogModel[]);
 }
@@ -128,7 +140,7 @@ export function useGeneratorModels(ids: readonly string[]): ScreenData<CatalogMo
  * `gblEstimationPriceInflationDirectConstants.AdditionalCost.AccumulatedIndex` (Y:63):
  * `prev + (curr − prev) × Month(FID) / 12`, blanks as 0 (rule 7).
  */
-export function useInflationIndex(fid: string | null | undefined): ScreenData<number> {
+export function useInflationIndex(fid: string | null | undefined): ReadResult<number> {
   const year = fid ? Number(fid.slice(0, 4)) : NaN;
   const month = fid ? Number(fid.slice(5, 7)) : NaN;
   const q = useQuery({
@@ -144,7 +156,7 @@ export function useInflationIndex(fid: string | null | undefined): ScreenData<nu
 }
 
 /** `gblDiviceCoststConstants`. */
-export function useDeviceCosts(countryId: string | null | undefined): ScreenData<DeviceCosts> {
+export function useDeviceCosts(countryId: string | null | undefined): ReadResult<DeviceCosts> {
   const q = useQuery({
     queryKey: qk.deviceCosts(countryId ?? ""),
     queryFn: () => loadDeviceCosts(countryId ?? null),
@@ -153,7 +165,7 @@ export function useDeviceCosts(countryId: string | null | undefined): ScreenData
   return out(q, { modules: null, inverter: null, mountingFix: null, mountingTracker: null });
 }
 
-export function useGeneratorTypes(projectId: string | undefined): ScreenData<GeneratorTypeRow[]> {
+export function useGeneratorTypes(projectId: string | undefined): ReadResult<GeneratorTypeRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "types"),
     queryFn: () => listGeneratorTypes(projectId!),
@@ -163,18 +175,22 @@ export function useGeneratorTypes(projectId: string | undefined): ScreenData<Gen
 }
 
 /** Every turbine of the project's WTG types (`colGeneratorsInProjectsTemporary`). */
-export function useProjectTurbines(projectId: string | undefined, typeIds: readonly string[]): ScreenData<TurbineRow[]> {
+export function useProjectTurbines(projectId: string | undefined, typeIds: readonly string[]): ReadResult<TurbineRow[]> {
   const sorted = [...typeIds].sort();
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "turbines", ...sorted),
     queryFn: () => listProjectTurbines(sorted),
     enabled: Boolean(projectId) && sorted.length > 0,
+    // F3: the key embeds the type ids, so a save that adds or removes a type changes it; keep the previous turbines
+    // (flagged `placeholder`) until the new set has loaded, so the list never blinks empty and the actions wait. Another
+    // project's turbines are never kept (the key's second part is the project id).
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === projectId ? previous : undefined),
   });
   return out(q, NONE as TurbineRow[]);
 }
 
 /** `colPVModulesSuppliers`. */
-export function usePvModuleCatalog(): ScreenData<PvModuleOption[]> {
+export function usePvModuleCatalog(): ReadResult<PvModuleOption[]> {
   const q = useQuery({ queryKey: qk.pvModuleCatalog, queryFn: listPvModules, staleTime: REFERENCE_STALE });
   return out(q, NONE as PvModuleOption[]);
 }
@@ -183,7 +199,7 @@ export function usePvModuleCatalog(): ScreenData<PvModuleOption[]> {
  * G9 — the `Inverters` / `Substructures` catalogue for the Add / Edit panels, read only while that panel
  * is open (`enabled`); a failed read is shown in the panel.
  */
-export function usePlantSupplierCatalog(kind: "inverter" | "substructure", enabled: boolean): ScreenData<PlantSupplierOption[]> {
+export function usePlantSupplierCatalog(kind: "inverter" | "substructure", enabled: boolean): ReadResult<PlantSupplierOption[]> {
   const q = useQuery({
     queryKey: qk.plantSupplierCatalog(kind),
     queryFn: () => listPlantSupplierCatalogue(kind),
@@ -194,7 +210,7 @@ export function usePlantSupplierCatalog(kind: "inverter" | "substructure", enabl
 }
 
 /** The project's PV types, each with its `PVModule.Supplier` joined from the catalogue. */
-export function usePvModuleTypes(projectId: string | undefined, modules: readonly PvModuleOption[]): ScreenData<SimpleTypeRow[]> {
+export function usePvModuleTypes(projectId: string | undefined, modules: readonly PvModuleOption[]): ReadResult<SimpleTypeRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "pv"),
     queryFn: () => listPvTypes(projectId!),
@@ -205,7 +221,7 @@ export function usePvModuleTypes(projectId: string | undefined, modules: readonl
   return out({ ...q, data }, NONE as SimpleTypeRow[]);
 }
 
-export function useInverterTypes(projectId: string | undefined): ScreenData<SimpleTypeRow[]> {
+export function useInverterTypes(projectId: string | undefined): ReadResult<SimpleTypeRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "inverter"),
     queryFn: () => listInverterTypes(projectId!),
@@ -214,7 +230,7 @@ export function useInverterTypes(projectId: string | undefined): ScreenData<Simp
   return out(q, NONE as SimpleTypeRow[]);
 }
 
-export function useSubstructureTypes(projectId: string | undefined): ScreenData<SimpleTypeRow[]> {
+export function useSubstructureTypes(projectId: string | undefined): ReadResult<SimpleTypeRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "substructure"),
     queryFn: () => listSubstructureTypes(projectId!),
@@ -226,7 +242,7 @@ export function useSubstructureTypes(projectId: string | undefined): ScreenData<
 /** BESS / Hydrogen / Substation. */
 export function useSimpleTypes(
   family: "storage" | "hydrogen" | "substation", projectId: string | undefined,
-): ScreenData<SimpleTypeRow[]> {
+): ReadResult<SimpleTypeRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", family),
     queryFn: () => listSimpleTypes(family, projectId!),
@@ -236,7 +252,7 @@ export function useSimpleTypes(
 }
 
 /** The AllWTG land-lease costs a new turbine is allocated to (rule 20). */
-export function useAllWtgLandLeaseCosts(projectId: string | undefined): ScreenData<LandLeaseCostRow[]> {
+export function useAllWtgLandLeaseCosts(projectId: string | undefined): ReadResult<LandLeaseCostRow[]> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "allWtgCosts"),
     queryFn: () => listAllWtgLandLeaseCosts(projectId!),
@@ -248,12 +264,14 @@ export function useAllWtgLandLeaseCosts(projectId: string | undefined): ScreenDa
 /** 1.21.753 — the O&M half of the delete / deactivate guard for the selected WTG or PV type. */
 export function useOpexDependency(
   projectId: string | undefined, typeId: string | null | undefined,
-): ScreenData<{ hasActiveDeviceType: boolean; hasActiveOpexCost: boolean }> {
+): ReadResult<{ hasActiveDeviceType: boolean; hasActiveOpexCost: boolean }> {
   const q = useQuery({
     queryKey: qk.generators(projectId ?? "", "opexDependency", typeId ?? ""),
     queryFn: () => loadOpexDependency(projectId!, typeId!),
     enabled: Boolean(projectId) && Boolean(typeId),
   });
+  // F1: `data` falls back to "no dependency" while the read is pending or failed; the Screen must read `hasData` (is it KNOWN?)
+  // before it trusts that fallback.
   return out(q, { hasActiveDeviceType: false, hasActiveOpexCost: false });
 }
 

@@ -88,17 +88,19 @@ describe("phase 2: bulk allocation creates (flag GENERATORS_BULK.allocations)", 
     expect(ids.every((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))).toBe(true);
   });
 
-  it("UT-GEN-215 a cost that is not AllWTG, or a project without a business unit, follows today's data (no row for the first, no OBU key for the second)", () => {
-    const plan = R.planGeneratorTypeFollowUp({
-      project: { ...P, owningBusinessUnitId: null }, typeId: "t9", typeName: "x", hasDeviceType: true, turbines: units(1),
+  it("UT-GEN-215 a cost that is not AllWTG gets no row; a project without a business unit is refused, nothing sent (F6, D121 §5: it used to send rows without the OBU key)", () => {
+    const args = {
+      typeId: "t9", typeName: "x", hasDeviceType: true, turbines: units(1),
       landLeaseCosts: [{ id: "c1", landOwner: "M", description: "A", allWtgAllocated: false }, ...costs(1).map((c) => ({ ...c, id: "c2" }))],
-    }, { bulk: ON, newId: counter() });
+    };
+    const plan = R.planGeneratorTypeFollowUp({ ...args, project: P }, { bulk: ON, newId: counter() });
     expect(plan.writes).toHaveLength(1);
     const rows = plan.writes[0]!.rows!;
     expect(rows).toHaveLength(1);
-    // The builder never invents an owner: the backend refuses the missing bind (fail closed, CONVENTIONS rule 4).
-    expect(OBU in rows[0]!.data).toBe(false);
     expect(rows[0]!.data["vsb_ProjectCost@odata.bind"]).toBe("/vsb_landleaseprojectcosts(c2)");
+    const refused = R.planGeneratorTypeFollowUp({ ...args, project: { ...P, owningBusinessUnitId: null } }, { bulk: ON, newId: counter() });
+    expect(refused.refusedReason).toBe(R.OWNING_BU_MSG.missing);
+    expect(refused.writes).toEqual([]);
   });
 
   it("UT-GEN-216 new turbine: the allocations bind the row step 1 created (@created#0); flag off is a parallel run after the roll-up, flag on one createMany there, roll-up not last (canvas order kept)", () => {

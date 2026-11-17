@@ -67,7 +67,7 @@ import {
   HYDROGEN_PANEL_LABELS, INVERTER_CARD_LABELS, LAST_CAPACITY_MESSAGES, LAST_CAPACITY_TITLES, PAGER_TOOLTIPS,
   PAGE_LOCK_TITLE, PANEL_BUTTONS, PV_CAPACITY_MAX_LENGTH, PV_DEGRADATION_MAX_LENGTH, PV_FIELD_LABELS,
   PV_MODULE_LABEL_MAX_LENGTH, PV_MSG, PV_OTHER_SUPPLIER_LABEL, PV_PANEL_TITLES, PV_SUPPLIER_PLACEHOLDER,
-  SIMPLE_CAPACITY_MAX_LENGTH, STORAGE_CARD_LABELS, STORAGE_PANEL_LABELS, SUBSTATION_CARD_LABELS,
+  SIMPLE_CAPACITY_MAX_LENGTH, SIMPLE_TEXT_MAX_LENGTH, STORAGE_CARD_LABELS, STORAGE_PANEL_LABELS, SUBSTATION_CARD_LABELS,
   SUBSTATION_PANEL_LABELS, SUBSTRUCTURE_CARD_LABELS, SUBSTRUCTURE_COST_INFO, SUBSTRUCTURE_COST_NOTE,
   TOTAL_CAPACITY_LABEL, TURBINE_PANEL_LABELS, TURBINE_TABLE_LABELS, TYPE_DETAIL_FIELD_LABELS,
   TYPE_PANEL_LABELS, TYPE_PANEL_TOOLTIPS, WRITE_ERROR, WRITE_MSG, WTG_CARD_LABELS,
@@ -84,6 +84,8 @@ import {
   pvSaveErrorText, pvSaveProgressText, pvDeleteErrorText, pvSupplierOptions, resolveModel, rowClickFolds,
   selectedIn, selectionAfterAddPv, selectionAfterAddWtg, showsPermissionChip, simpleCardValues,
   simpleFormDefaults, simpleSaveProgressText, statusLabel,
+  GUARD_READ_MSG, dataSettling, fmtTurbineTotalHeightBox, loadErrorMode, opexGuardBlock, opexReadBanner, opexReadState,
+  pvDegradationPrefill, pvFollowUpIsNew,
   ROLLBACK_DETAIL_MAX, ROLLBACK_MSG, deletePartialMessage, describeLeftovers, planRollbackCreate, plannedDeleteRows, remainingRows,
   rollbackApplies, substructureCardValues,
   substructureCostNoteVisible, toggleExpanded, toggleSelection, turbineFormDefaults,
@@ -816,7 +818,17 @@ interface RollbackNotice {
 
 /* ──────────────────────────────────────────────────────────────────── screen */
 
+/**
+ * One screen instance PER PROJECT (generators review F9 / GR-6): the route element is the same component for every project,
+ * so an open panel, a selection, a pager position and a half-typed form of project A would stay mounted over project B.
+ * Keying by the project id gives each project a fresh state (same pattern as the Contracts screen).
+ */
 export default function GeneratorsScreen() {
+  const { projectId } = useSession();
+  return <GeneratorsScreenBody key={projectId ?? "none"} />;
+}
+
+function GeneratorsScreenBody() {
   const s = useStyles();
   // The user's language (`Language()` in the canvas): decimal separators in boxes, cards and messages follow it.
   const { projectId, locale: lang } = useSession();
@@ -911,7 +923,17 @@ export default function GeneratorsScreen() {
     inverterQ, substructureQ, storageQ, hydrogenQ, substationQ, allWtgQ,
   ];
   const loading = queries.some((q) => q.isLoading);
-  const loadError = queries.find((q) => q.error)?.error;
+  // F7: a failed query with NO data blanks the screen (the empty state); a failed refresh that still has data is a banner.
+  const loadErrorKind = loadErrorMode(queries);
+  /**
+   * F3: the reads a write builds its rows from have not settled — the first read of the index, the device costs or the
+   * turbines, or the turbines / models are still the PREVIOUS type set's after a save changed it.
+   */
+  const settling = dataSettling([
+    { loading: indexQ.isLoading }, { loading: deviceQ.isLoading }, { loading: typesQ.isLoading },
+    { loading: turbinesQ.isLoading, placeholder: turbinesQ.placeholder },
+    { loading: modelsQ.isLoading, placeholder: modelsQ.placeholder },
+  ]);
 
   /* ── selection and folding ── */
   const [selection, setSelection] = useState<SelectedRow | null>(null);
@@ -924,8 +946,17 @@ export default function GeneratorsScreen() {
   const selectedHydrogen = selectedIn(selection, "hydrogen", hydrogenQ.data);
   const selectedSubstation = selectedIn(selection, "substation", substationQ.data);
   const selectedTypeModel = modelOf(selectedType);
-  const opexWtg = useOpexDependency(projectId, selectedType?.id).data;
-  const opexPv = useOpexDependency(projectId, selectedPv?.id).data;
+  const opexWtgQ = useOpexDependency(projectId, selectedType?.id);
+  const opexPvQ = useOpexDependency(projectId, selectedPv?.id);
+  const opexWtg = opexWtgQ.data;
+  const opexPv = opexPvQ.data;
+  // F1: the O&M read must be KNOWN before Delete / Deactivate / Delete PV may open (a test double without `hasData` counts as known).
+  const readKnown = (q: { hasData?: boolean; isLoading: boolean; error: unknown }) => q.hasData ?? (!q.isLoading && !q.error);
+  const opexReads = {
+    wtg: opexReadState({ needed: Boolean(selectedType), known: readKnown(opexWtgQ), failed: Boolean(opexWtgQ.error) }),
+    pv: opexReadState({ needed: Boolean(selectedPv), known: readKnown(opexPvQ), failed: Boolean(opexPvQ.error) }),
+  };
+  const opexBanner = opexReadBanner(opexReads);
 
   const onRowClick = (family: PlantFamily, id: string) => {
     setSelection((p) => toggleSelection(p, family, id));
@@ -1163,7 +1194,8 @@ export default function GeneratorsScreen() {
    * Until it has, the actions that write or open a panel wait, so none starts from the data before the save
    * (e.g. a next turbine number taken from the old list). Selection and folding stay available.
    */
-  const actionsOpen = editable && !writes.refreshing;
+  // F3: also while the first read is running and while the turbines / index / device costs have not settled.
+  const actionsOpen = editable && !loading && !writes.refreshing && !settling;
   const cmdState = commandBarState({
     canEdit: perms.canEdit,
     project,
@@ -1189,12 +1221,16 @@ export default function GeneratorsScreen() {
     .map((key) => {
       const icon = generatorCommandIcon(key, cmdState[key]);
       const parentKey = commandParentKey(key, familySelected);
+      // F1 / F3 — NEW TEXT: why a command that would be enabled waits (the O&M read, or the data that is reloading).
+      const guard = opexGuardBlock(key, opexReads);
+      const waitReason = guard ?? (settling ? GUARD_READ_MSG.settling : null);
       return {
         key,
         label: cmdState[key].label,
         ...(icon ? { icon } : {}),
         ...(parentKey ? { parentKey } : {}),
-        enabled: commandEnabled(key),
+        enabled: commandEnabled(key) && guard === null,
+        ...(waitReason ? { reason: waitReason } : {}),
       };
     });
 
@@ -1222,6 +1258,8 @@ export default function GeneratorsScreen() {
   };
 
   const onCommand = (key: string) => {
+    // F1: Delete / Deactivate / Delete PV never open while the selected type's O&M link is unknown (pending or failed read).
+    if (opexGuardBlock(key as GeneratorCommandKey, opexReads) !== null) return;
     clearWrites();
     switch (key as GeneratorCommandKey) {
       case "addWTGType":
@@ -1234,7 +1272,7 @@ export default function GeneratorsScreen() {
           capacity: pvPrefill(selectedPv.capacity, lang),
           supplier: selectedPv.catalogueId ?? null,
           otherSupplier: selectedPv.otherSupplier ?? "",
-          degradation1stYear: pvPrefill(selectedPv.degradation1stYear, lang),
+          degradation1stYear: pvDegradationPrefill(selectedPv.degradation1stYear, lang),
           degradationRemainingYears: selectedPv.degradationRemainingYears === null ? "" : forLanguage(String(selectedPv.degradationRemainingYears), lang),
           dirty: new Set<string>(),
         } : emptyPvForm());
@@ -1314,11 +1352,24 @@ export default function GeneratorsScreen() {
 
   /* ── the writes ── */
   // A new write command forgets an earlier rollback notice and its leftover rows (rollback jobs call `writes.run` directly).
-  const run = (job: Parameters<typeof writes.run>[0]) => {
-    setRollbackNotice(null);
-    setCreateFailure(null);
-    setDeletePartial(null);
-    return writes.run(job);
+  /**
+   * F4 — one write job at a time. `writes.progress` only shows after the next render, so a second click on Save during the
+   * panel's exit animation (or a double click on a confirmation) would start a second job (a second create). A ref closes
+   * that gap; it also refuses a job while a rollback runs. A refused job resolves to null, like a failed one, and sends nothing.
+   */
+  const jobInFlight = useRef(false);
+  const writeBusy = () => jobInFlight.current || rollbackInFlight.current;
+  const run = async (job: Parameters<typeof writes.run>[0]) => {
+    if (writeBusy()) return null;
+    jobInFlight.current = true;
+    try {
+      setRollbackNotice(null);
+      setCreateFailure(null);
+      setDeletePartial(null);
+      return await writes.run(job);
+    } finally {
+      jobInFlight.current = false;
+    }
   };
 
   /**
@@ -1328,6 +1379,8 @@ export default function GeneratorsScreen() {
    * only the final roll-up failed), when NONE went (review F3 item 2), the plan never ran or it was refused. `typeName` names the one type row of a type delete.
    */
   const runDelete = async (job: Parameters<typeof writes.run>[0], typeName: string | null = null) => {
+    // F4: a delete refused by the one-job guard sent nothing, so it must not read the running job's deleted rows.
+    if (writeBusy()) return null;
     const box: { ran: WritePlan | null } = { ran: null };
     const plan = job.plan;
     const ids = await run({
@@ -1444,7 +1497,7 @@ export default function GeneratorsScreen() {
   });
 
   const saveType = async () => {
-    if (!project || !planProject || !resolvedModel) return;
+    if (!project || !planProject || !resolvedModel || writeBusy()) return;
     const header = project;
     const model = resolvedModel;
     const n = numericOr(typeForm.numberOfGenerators, 0, lang);
@@ -1517,7 +1570,7 @@ export default function GeneratorsScreen() {
   };
 
   const saveTurbine = async (fromPopup: boolean) => {
-    if (!planProject || !panelType) return;
+    if (!planProject || !panelType || writeBusy()) return;
     const job = {
       progress: turbineSaveProgressText(planProject.shortName, turbineForm.nameIndex.trim(), fromPopup),
       success: WRITE_MSG.turbineSaved,
@@ -1533,7 +1586,7 @@ export default function GeneratorsScreen() {
   };
 
   const savePv = async () => {
-    if (!planProject) return;
+    if (!planProject || writeBusy()) return;
     const editing = selectedPv;
     const label = pvForm.moduleLabel;
     const capacity = numericOr(pvForm.capacity, 0, lang);
@@ -1567,8 +1620,9 @@ export default function GeneratorsScreen() {
         return planPvFollowUp({
           project: planProject, pvId, pvName: inputs.pvName, unitId: inputs.unitId, hasDeviceType: inputs.hasDeviceType,
           pvRows: [...others, saved], inverters: inverterQ.data, substructures: substructureQ.data,
-          // G7 (1.21.753) — a new PV type's unit is back-filled into the AllWTG land-lease costs.
-          isNew: editing === null, landLeaseCosts: allWtgQ.data,
+          // G7 (1.21.753) — a new PV type's unit is back-filled into the AllWTG land-lease costs. F9 / GP-10: also when this
+          // follow-up creates the unit of an edited type (an earlier Add that failed after the type landed left it without one).
+          isNew: pvFollowUpIsNew({ editing: editing !== null, unitId: inputs.unitId }), landLeaseCosts: allWtgQ.data,
         });
       },
     });
@@ -1582,7 +1636,7 @@ export default function GeneratorsScreen() {
    * row is written and `RequestModulePermission` runs for it instead of the PV-cost roll-up (Y:10243).
    */
   const saveInverter = async () => {
-    if (!project || !planProject) return;
+    if (!project || !planProject || writeBusy()) return;
     const header = project;
     const editing = selectedInverter;
     const job = {
@@ -1613,7 +1667,7 @@ export default function GeneratorsScreen() {
    * the row is written and `RequestModulePermission` runs for it instead of the PV-cost roll-up (Y:8979).
    */
   const saveSubstructure = async () => {
-    if (!project || !planProject) return;
+    if (!project || !planProject || writeBusy()) return;
     const header = project;
     const editing = selectedSubstructure;
     const job = {
@@ -1658,7 +1712,7 @@ export default function GeneratorsScreen() {
    * device-type row, the land lease and the O&M re-link. The new type is selected afterwards.
    */
   const replaceGeneratorType = async () => {
-    if (!project || !planProject || !selectedType || !replaceModel) return;
+    if (!project || !planProject || !selectedType || !replaceModel || writeBusy()) return;
     const header = project;
     const oldType = selectedType;
     const model = replaceModel;
@@ -1710,7 +1764,7 @@ export default function GeneratorsScreen() {
 
   /** G6 — Replace PV Module Type (1.21.753), as ONE job in the same two steps (save performance, 6 Nov 2026). */
   const replacePvType = async () => {
-    if (!planProject || !selectedPv) return;
+    if (!planProject || !selectedPv || writeBusy()) return;
     const oldPv = selectedPv;
     const form = { ...replacePvForm, dirty: new Set(replacePvForm.dirty) };
     const capacity = numericOr(form.capacity, 0, lang);
@@ -1748,7 +1802,7 @@ export default function GeneratorsScreen() {
   };
 
   const saveSimple = async () => {
-    if (!planProject || !simpleFamily) return;
+    if (!planProject || !simpleFamily || writeBusy()) return;
     const family = simpleFamily;
     const cfg = SIMPLE_PANEL[family];
     const row = simpleSelectedOf(family);
@@ -1951,7 +2005,8 @@ export default function GeneratorsScreen() {
     const label = model?.turbineType ?? type.generatorDisplayName ?? type.name ?? "";
     const rows = turbinesByType.get(type.id) ?? [];
     const isOpen = expanded.has(type.id);
-    const pageTotal = pageCount(type.numberOfGenerators ?? rows.length, GENERATORS_PAGE_SIZE);
+    // F9 / GR-5: the pager counts the LOADED turbines, not the stored `Number of Generators` (DIVERGENCE: D121 §8).
+    const pageTotal = pageCount(rows.length, GENERATORS_PAGE_SIZE);
     const page = Math.min(pages[type.id] ?? 1, Math.max(pageTotal, 1));
     const pageRows = rows.slice((page - 1) * GENERATORS_PAGE_SIZE, page * GENERATORS_PAGE_SIZE);
     const addEnabled = canAddGenerator(rows.length, type.status);
@@ -2010,9 +2065,9 @@ export default function GeneratorsScreen() {
               </Tooltip>
             </span>
           ) : null}
-          {pagerVisible(type.numberOfGenerators) ? (
+          {pagerVisible(rows.length) ? (
             <div className={s.pager}>
-              <span className={s.pagerTotalRows}>{generatorsTotalRowsText(type.numberOfGenerators ?? 0)}</span>
+              <span className={s.pagerTotalRows}>{generatorsTotalRowsText(rows.length)}</span>
               {/* MDL2 `Previous` / `Back` / `Forward` → Fluent ArrowPrevious / ArrowLeft / ArrowRight, as on the Project list. */}
               <Button
                 appearance="primary" className={s.pagerButton} icon={<ArrowPreviousRegular />} title={PAGER_TOOLTIPS.first}
@@ -2173,7 +2228,7 @@ export default function GeneratorsScreen() {
   })();
 
   /* ── render ── */
-  if (loadError) {
+  if (loadErrorKind === "blocking") {
     return (
       <div className={s.page} data-testid="Project Generators Screen">
         <EmptyState title={GENERATORS_SCREEN_TEXT.loadFailedTitle} description={GENERATORS_SCREEN_TEXT.loadFailedDescription} />
@@ -2207,7 +2262,19 @@ export default function GeneratorsScreen() {
         <CommandBar commands={commands} onCommand={onCommand} ariaLabel={COMMAND_BAR_LABEL} />
       </div>
 
-      <WriteFeedback progress={writes.progress} error={shownNotice?.text ?? (writes.error && shownPartial ? `${writes.error} ${shownPartial}` : writes.error)} success={writes.success} testIdPrefix="generators" />
+      {/* F7 (NEW TEXT, D121 §3): a failed background refresh keeps the screen and its data and says so. */}
+      {loadErrorKind === "banner" ? (
+        <MessageBar intent="error" aria-label="generators-data-unavailable" data-testid="generators-data-unavailable">
+          <MessageBarBody>{GUARD_READ_MSG.refreshFailed}</MessageBarBody>
+        </MessageBar>
+      ) : null}
+      {/* F1 (NEW TEXT, D121 §2): the selected type's O&M link could not be read; the commands that need it stay off. */}
+      {opexBanner ? (
+        <MessageBar intent="warning" aria-label="generators-opex-unavailable" data-testid="generators-opex-unavailable">
+          <MessageBarBody>{opexBanner}</MessageBarBody>
+        </MessageBar>
+      ) : null}
+      <WriteFeedback portal progress={writes.progress} error={shownNotice?.text ?? (writes.error && shownPartial ? `${writes.error} ${shownPartial}` : writes.error)} success={writes.success} testIdPrefix="generators" />
       {shownNotice?.leftover ? (
         // NEW - no canvas equivalent (DIVERGENCE, plan §9.3): the cleanup of a failed save did not finish.
         <Button
@@ -2298,7 +2365,7 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel"
             primaryTooltip={TYPE_PANEL_TOOLTIPS.save} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            disabled={!typeSaveable}
+            disabled={!typeSaveable || settling}
             onCancel={close}
             onPrimary={onTypeSave}
           />
@@ -2386,7 +2453,7 @@ export default function GeneratorsScreen() {
             // SOURCE DEFECT: the canvas Save hint is "Filter projects details list view."; it says "Save".
             primaryTooltip={HINTS.save}
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Generator_Buttons_Cancel"
-            disabled={!turbineSaveable}
+            disabled={!turbineSaveable || settling}
             onCancel={close}
             onPrimary={onTurbineSave}
           />
@@ -2460,7 +2527,7 @@ export default function GeneratorsScreen() {
           <InputField
             label={TURBINE_PANEL_LABELS.totalHeight} name="txt_GeneratorData_RightPanel_Form_Fields_Total_Height"
             readOnly disabledLook className={s.turbineField}
-            value={turbineHeight === null ? "" : forLanguage(String(turbineHeight), lang)}
+            value={fmtTurbineTotalHeightBox(turbineHeight, lang)}
           />
           {turbineHeightBlocked ? <Text className={s.pmError}>{HEIGHT_LIMIT_PM_MESSAGE}</Text> : null}
         </div>
@@ -2475,7 +2542,7 @@ export default function GeneratorsScreen() {
             primary={PANEL_BUTTONS.save}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel"
-            disabled={!pvSaveable} onCancel={close} onPrimary={() => void savePv()}
+            disabled={!pvSaveable || settling} onCancel={close} onPrimary={() => void savePv()}
           />
         }
       >
@@ -2536,7 +2603,7 @@ export default function GeneratorsScreen() {
           <div className={s.panelBody}>
             <InputField
               label={simple.labelCaption} name={simple.label} ariaLabel={simple.label} required
-              value={simpleForm.label} error={simpleErrors?.label} onChange={(v) => touchSimple("label", v)}
+              maxLength={SIMPLE_TEXT_MAX_LENGTH} value={simpleForm.label} error={simpleErrors?.label} onChange={(v) => touchSimple("label", v)}
             />
             <InputField
               label={simple.capacityCaption} name={simple.capacity} ariaLabel={simple.capacity} required
@@ -2552,7 +2619,7 @@ export default function GeneratorsScreen() {
             ) : null}
             <InputField
               label={simple.supplierCaption} name={simple.supplier} ariaLabel={simple.supplierAria} required
-              value={simpleForm.supplier} error={simpleErrors?.supplier} onChange={(v) => touchSimple("supplier", v)}
+              maxLength={SIMPLE_TEXT_MAX_LENGTH} value={simpleForm.supplier} error={simpleErrors?.supplier} onChange={(v) => touchSimple("supplier", v)}
             />
           </div>
         ) : null}
@@ -2675,7 +2742,7 @@ export default function GeneratorsScreen() {
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Save_1"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_Buttons_Cancel_1"
             primaryTooltip={REPLACE_LABELS.replaceTooltip} cancelTooltip={TYPE_PANEL_TOOLTIPS.cancel}
-            disabled={!replaceWtgOk}
+            disabled={!replaceWtgOk || settling}
             onCancel={close} onPrimary={() => void replaceGeneratorType()}
           />
         }
@@ -2778,7 +2845,7 @@ export default function GeneratorsScreen() {
             primary={REPLACE_LABELS.replace}
             primaryName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Save_2"
             cancelName="pcf_btn_GeneratorData_RightPanel_Form_PvModuleType_Buttons_Cancel_1"
-            disabled={!replacePvOk}
+            disabled={!replacePvOk || settling}
             onCancel={close} onPrimary={() => void replacePvType()}
           />
         }
@@ -2807,7 +2874,7 @@ export default function GeneratorsScreen() {
             <InputField
               label={PV_FIELD_LABELS.degradation1stYear} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear_1"
               ariaLabel="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationFirstYear" readOnly disabledLook
-              value={selectedPv ? pvPrefill(selectedPv.degradation1stYear, lang) : ""}
+              value={selectedPv ? pvDegradationPrefill(selectedPv.degradation1stYear, lang) : ""}
             />
             <InputField
               label={PV_FIELD_LABELS.degradationRemainingYears} name="txt_GeneratorData_RightPanel_Form_PvModuleType_Fields_DegradationRemainingYears_1"

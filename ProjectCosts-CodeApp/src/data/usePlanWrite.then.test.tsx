@@ -74,7 +74,9 @@ describe("usePlanWrite then", () => {
     });
     expect(created).toBeNull();
     expect(seen.plans).toHaveLength(1);
-    expect(result.current.error).toBe("Error: flow Perform Common Request of Gate Approval failed: no");
+    expect(result.current.error).toBe(
+      "Error: “go” failed: flow Perform Common Request of Gate Approval failed: no. 1 of 1 changes had already been saved. The saved rows stay: do not repeat the action. The screen shows them once it has reloaded.",
+    );
   });
 
   /** A QueryClient whose reload (`invalidateQueries`) only finishes when the test says so. */
@@ -143,7 +145,7 @@ describe("usePlanWrite then", () => {
     expect(onWritten).toHaveBeenCalledTimes(1);
     expect(onWritten).toHaveBeenCalledWith(false);
     expect(created).toBeNull();
-    expect(result.current.error).toBe("Error: boom");
+    expect(result.current.error).toBe("Error: “go” failed: boom. 1 of 1 changes had already been saved. The saved rows stay: do not repeat the action. The screen shows them once it has reloaded.");
     expect(result.current.progress).toBeNull();
   });
 });

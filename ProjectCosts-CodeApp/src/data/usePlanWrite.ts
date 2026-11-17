@@ -62,6 +62,22 @@ export interface PlanJob {
   reloadProgress?: string;
 }
 
+/**
+ * A job's SECOND step (the `then` plan or the flow call in `then`) failed after the first plan's writes had landed
+ * (generators fix F2). `done` / `total` already include the first plan, so "N of M changes had already been saved"
+ * is true for the whole job, and the message says the saved rows exist so the user does not press Add again.
+ *
+ * DIVERGENCE: the canvas shows its generic error here and says nothing about the type that was already created
+ * (D121 §1).
+ */
+export class PartlySavedJobError extends PlanError {
+  readonly firstPlanSaved = true;
+}
+
+/** NEW TEXT (D121 §1): said after a job whose first writes stayed. */
+export const PARTLY_SAVED_NOTE =
+  "The saved rows stay: do not repeat the action. The screen shows them once it has reloaded.";
+
 /** The message for a refused or failed write — permission first, then how far a plan got. */
 export function writeErrorMessage(error: unknown, action: string, prefix?: (detail: string) => string): string {
   const denied = permissionMessage(error, action);
@@ -74,12 +90,14 @@ export function writeErrorMessage(error: unknown, action: string, prefix?: (deta
     // Rows can be gone MID-plan (a status toggle flips its type before a later step's guard fails): say what was saved.
     let gone = error.cause instanceof BulkRowsGoneError ? error.cause.message : error.message;
     if (error.done > 0) gone = `${gone} ${error.done} of ${error.total} changes had already been saved.`;
+    if (error instanceof PartlySavedJobError) gone = `${gone} ${PARTLY_SAVED_NOTE}`;
     return prefix ? prefix(gone) : gone;
   }
   let detail = error instanceof Error ? error.message : String(error);
   if (error instanceof PlanError) {
     const sent = error.done > 0 ? ` ${error.done} of ${error.total} changes had already been saved.` : "";
-    detail = `“${error.failedReason}” failed: ${error.message}.${sent}`;
+    const note = error instanceof PartlySavedJobError ? ` ${PARTLY_SAVED_NOTE}` : "";
+    detail = `“${error.failedReason}” failed: ${error.message}.${sent}${note}`;
   }
   return prefix ? prefix(detail) : detail;
 }
@@ -166,7 +184,17 @@ export function usePlanWrite(opts: {
       maybeLanded.push(...maybeLandedOf(first));
       deleted.push(...deletedOf(first));
       if (!job.then) return { ...first, plan };
-      const next = await job.then(first, { setProgress });
+      let next: WritePlan | null | undefined;
+      try {
+        next = await job.then(first, { setProgress });
+      } catch (e) {
+        // F2: a failure of the follow-up step (a flow call) after the first plan landed must say so: a plain Error would
+        // read as "nothing was saved" and the user would press Add again.
+        if (first.done > 0 && !(e instanceof PlanError)) {
+          throw new PartlySavedJobError(first.done, first.done, job.progress, e);
+        }
+        throw e;
+      }
       if (!next) return { ...first, plan };
       let second: PlanResult;
       try {
@@ -176,10 +204,19 @@ export function usePlanWrite(opts: {
         // like any part-way stop ("N of M changes had already been saved") instead of "nothing was saved".
         if (e instanceof PlanRefusedError && first.done > 0) {
           carriesFirstPlan = true;
-          throw new PlanError(
+          throw new PartlySavedJobError(
             first.done, first.done + next.writes.reduce((n, w) => n + changeCount(w), 0), job.progress, e,
             [...first.createdIds], [...landedOf(first)],
             { maybeLanded: [...maybeLandedOf(first)], deleted: [...deletedOf(first)] },
+          );
+        }
+        // F2: the second plan stopped part-way: the counts cover the whole job. The error carries the SECOND plan's rows
+        // only (the catch below merges them; the first plan's are already collected above).
+        if (e instanceof PlanError && first.done > 0) {
+          throw new PartlySavedJobError(
+            first.done + e.done, first.done + e.total, e.failedReason, e.cause,
+            [...first.createdIds, ...e.createdIds], [...e.landed],
+            { maybeLanded: [...e.maybeLanded], deleted: [...e.deleted], failures: e.failures },
           );
         }
         throw e;

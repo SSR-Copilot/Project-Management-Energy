@@ -591,3 +591,17 @@ The canvas ran about 40 sequential statements in `App.OnStart` before the first 
 | Contracts | Comment-only DIVERGENCE tags (LD-11, 12, 14, 15, 16) and strings moved into `MSG` | **new** (traceability) |
 | Contracts | The standard-assumption lookup is not cleared on Edit as the canvas does (WR-3); the card date locale, Payment Description gating, test-id names and raw error text were left | **proposed (not approved)**, see D120 §7 |
 | Contracts | Payment targets, DevCo links, DevCo CAPEX contracts and CAPEX cost rows keep `statecode eq 0` (the canvas has no state filter) | **proposed (not approved)**, joins D101 |
+## Generators screen: O&M guard, failed second saves, loading, double saves, text length and smaller fixes (17 Nov 2026, D121) — fixed / new (not approved, not run on DEV)
+
+| Screen | Change | Status |
+|---|---|---|
+| Generators | Delete Generator Type, Deactivate and Delete PV wait for the O&M check; a failed check keeps them off and shows a banner (the earlier build let the delete through and removed the O&M costs) | **fixed** (a canvas-style synchronous guard restored) |
+| Generators | A failure of the second save step says the type and rows were saved, so it is not added twice | **new** (NEW TEXT) |
+| Generators | The turbine and model data are kept while the type set reloads, and Save, Replace and the commands wait while data settles; a turbine, PV or type save no longer writes cost 0 or repeats names before the index and device costs have loaded | **new** |
+| Generators | A failed background refresh keeps the screen and an open panel and shows a banner | **new** (rule 19, as Contracts) |
+| Generators | A second Save, Replace or delete confirm is refused while a write runs; the progress spinner sits above the drawer | **new** |
+| Generators | PV label and Other Supplier, and the BESS, Hydrogen and Substation name and supplier, stop at 100 characters (Dataverse), so Replace PV can no longer delete the old type and then fail | **fixed** (DIVERGENCE: the canvas allowed more) |
+| Generators | A project without an owning business unit refuses create plans instead of creating rows other business units cannot see | **new** (fail-closed, rule 4) |
+| Generators | Degradation 1st Year opens with the stored value; the AllWTG back-fill also runs when an edit creates the missing PV unit; the pager counts the loaded turbines; Total Height shows 130.4; the screen resets on a project change | **fixed / new** |
+| Generators | The data loaders, the write hooks and the real `usePlanWrite` run in tests; permission chip labels and delete texts are pinned | **new** (test gate) |
+| Generators | A type left without its O&M row, refusing saves when the index or model is missing, the out-of-country Replace rollback and roll-up, the approval cancel for an Approved type, live reads at write time, retries and the UI parity items | **proposed (not approved)**, see D121 §7 |

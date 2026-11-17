@@ -7199,7 +7199,7 @@ turbine edit / delete, permission Cancel) while `refreshing`. Same rows and valu
 
 ## D115 — Generators bulk programme: parallel status toggle, tiered deletes, create rollback and bulk Dataverse writes behind flags (16 Nov 2026)
 
-**Status:** implemented and merged on `integration/generators-bulk` (engine, transport, plan builders, screen rollback), **NOT product-approved, NOT run against DEV, every flag off**. Nothing is on `RounakDev1`, `master` or DEV.
+**Status:** implemented and merged on `integration/generators-bulk` (engine, transport, plan builders, screen rollback), **NOT product-approved, NOT run against DEV, every flag off**. *(Corrected 17 Nov 2026, D121 §8: merged into `RounakDev1` and `master` in `dc9187d` on 16 Nov 2026 and deployed to DEV with later builds (the latest on 17 Nov 2026); the flags are still off and no D115 test plan has been run on DEV.)*
 **Documents:** `GENERATORS-BULK-DATAVERSE-ANALYSIS-AND-PLAN.md` (findings, request counts, risk register), `GENERATORS-BULK-IMPLEMENTATION-PLAN.md` (phases, §9 the decisions of 16 Nov 2026), `GENERATORS-SCREEN-FUNCTIONAL-ANALYSIS.md` (the screen), `GENERATORS-BULK-DEV-TEST-PLAN.md` (the manual DEV test, GB-01 onward).
 **Report:** speed up the Generators screen's saves (Add type, Activate / Deactivate, apply to all, Delete, Replace) with Dataverse bulk actions; every number in the analysis is computed from the code, none was timed live.
 
@@ -7310,7 +7310,7 @@ Known and still open, not fixed here:
 
 ## D116 — Generators delete hardening: hardened deletes, all-bridge O&M clean-up, truthful partial-delete and rollback messages, behind flags (16 Nov 2026)
 
-**Status:** implemented and merged on `integration/generators-delete` (cut from the D115 integration work), **NOT product-approved, NOT run against DEV**. Nothing is on `RounakDev1`, `master` or DEV. Of the four `GENERATORS_DELETE` flags only `tieredDeletes` is `true`; the other three are `false`. The hardened delete path itself has no flag and is live for every Generators delete (section 3, item 1).
+**Status:** implemented and merged on `integration/generators-delete` (cut from the D115 integration work), **NOT product-approved, NOT run against DEV**. *(Corrected 17 Nov 2026, D121 §8: merged into `RounakDev1` and `master` in `dc9187d` on 16 Nov 2026 and deployed to DEV with later builds (the latest on 17 Nov 2026); the D116 test plan has not been run on DEV.)* Of the four `GENERATORS_DELETE` flags only `tieredDeletes` is `true`; the other three are `false`. The hardened delete path itself has no flag and is live for every Generators delete (section 3, item 1).
 **Documents:** `GENERATORS-DELETE-HARDENING-PLAN.md` (the claims, scenarios S1 to S11, work packages DEL-0 to DEL-9, the eight product questions), `GENERATORS-DELETE-DEV-TEST-PLAN.md` (the manual DEV test, DEL-0 and DT-01 onward). Companion: D115 (`GENERATORS-BULK-*`).
 **Report:** a Generators delete or rollback can leave rows behind (S1 to S9 of the plan), says nothing about what it removed, and counted a delete answering 404 as done without looking. This work makes deletes retry on transient failures, reads "gone" rows back, cleans up the O&M costs of every bridge row, and tells the user what a failed delete or rollback really removed. Every statement below is read from the code; nothing was timed or run live.
 
@@ -7546,3 +7546,57 @@ The contract Add and Edit commands stay off until the contracts, accounts, cost 
 ### 8. Verification
 
 `npm run verify` on the working tree (17 Nov 2026, on top of `1706b7e`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no new warning (the one `set-state-in-effect` warning in `contracts/Screen.tsx` is the seed effect, present in the committed file too), the control-label and canvas-identity gates clean, **277 test files, 6,133 tests passed, 3 todo**, build OK. **Not run:** knip, the E2E parity suite, any check on DEV or against live Dataverse; the null-bind, the upsert-of-a-deleted-row and the lookup-join questions of §3 and §7 are open until a DEV test.
+## D121 — Generators screen: the O&M guard, failed second saves, data loading, double saves, text length, business unit and 12 smaller fixes (17 Nov 2026)
+
+**Status:** implemented in the working tree of `RounakDev1`, **uncommitted, NOT product-approved, not run against DEV**. Type: ANALYSIS then BUG (product owner: "run the detailed in depth testing and identify and flag the issues on the Generator Screen", then "proceed for these fixes"). Tests: UT-GEN-1211..1271, UT-GENDATA-READ-001..012, UT-GENHOOK-001..013, UT-PLANWRITE-027..031 (six new test files; the suite grew by 78 tests, from 6,133 to 6,211; the implementing agent counted 84 new cases, the difference is not explained; existing tests changed on purpose are listed in §9).
+**How the issues were found:** five read-only reviews (canvas load and display, canvas writes for WTG types and turbines, canvas writes for PV / BESS / Hydrogen / Substation / Replace / flows, a test and coverage audit, a robustness and rules review). Nothing was reproduced live; the screen was not exercised on DEV. Items already recorded in D27, D89, D97, D99, D115 and D116 were not re-reported.
+
+### 1. A failure of the second save step says the type was saved (§1)
+
+A WTG type save is two jobs: the type, its turbines and the roll-up, then the O&M device-type row and the allocations. A failure of the second job was reported with that job's counts only, so the user read "nothing saved" and pressed Add again (a duplicate type). Now any failure of the second plan or of the flow call between them raises `PartlySavedJobError`: whole-job counts ("N of M changes had already been saved") and a sentence that the rows stay (**NEW TEXT**). The landed / maybe-landed / deleted accounting the rollback uses is unchanged. A plain `Error` from a flow call is wrapped the same way.
+
+### 2. The O&M delete guard waits for its answer (§2)
+
+**Before:** Delete Generator Type, Deactivate and Delete PV Module read the O&M dependency from a query that returned "no dependency" while pending or failed, so a click in the first seconds, or after a 403, opened the confirm dialog and the delete removed the O&M costs. **Now:** the three commands are disabled until the read has answered, with a tooltip (`GUARD_READ_MSG.opexChecking`, **NEW TEXT**); a failed read keeps them disabled, shows the banner `generators-opex-unavailable` (`opexFailed`, **NEW TEXT**), and `onCommand` refuses as well.
+
+### 3. Loading and refresh (§3)
+
+- The turbine and model data are kept while a new set loads (`keepPreviousData`; for turbines only within the same project), and every Save and Replace button, and the commands, wait while the data settles (`dataSettling`; the tooltip `GUARD_READ_MSG.settling` is **NEW TEXT**). Before, a Save pressed right after another save worked on an empty turbine list and could repeat turbine names, and a turbine, PV or type save before the price index or the device costs had loaded wrote cost 0.
+- A failed background refresh (window focus, wake from sleep) keeps the screen and an open panel and shows the banner `generators-data-unavailable` (**NEW TEXT**); the full-screen empty state remains for a failed read with no data. The canvas ignored such failures.
+
+### 4. Name and supplier length (§4)
+
+The PV label and Other Supplier allowed 512 characters (the canvas value) where Dataverse allows 100, and **Replace PV deleted the old type before the create that then failed with HTTP 400**. The cap is now 100 for the PV label and Other Supplier and for the BESS, Hydrogen and Substation name and supplier (read from the schema JSONs and pinned by a test), with a message (**NEW TEXT**). **DIVERGENCE:** the canvas allowed more; the canvas value is kept as `PV_MODULE_LABEL_MAX_LENGTH_CANVAS`.
+
+### 5. A project with no owning business unit (§5)
+
+The 12 plan builders that create rows are refused (NEW TEXT) when the project's business unit is blank, as the bulk path already did; before, the single create omitted the bind and the rows were invisible to colleagues in other business units (CONVENTIONS rule 4). Edit and delete plans are unchanged; `planReplacePvType` propagates the refusal, so the old type is not deleted when the new one cannot be created. The shared `OWNING_BU_BIND` and `bind` are used; `owningBusinessUnitBind` was not, because it validates GUIDs and about 25 existing tests use ids like "bu-1".
+
+### 6. Smaller fixes (§6, §7, §8 and untagged)
+
+| Item | Change |
+|---|---|
+| §6 PV Degradation 1st Year | **DIVERGENCE:** opens with the raw stored value (three decimals); it rounded to two, so an unchanged edit saved 0.13 for 0.125. The canvas formats it with `0.0#` |
+| §7 Failed Add PV | The AllWTG allocation back-fill also runs when an edit creates the missing unit (before, only on a new type) |
+| §8 Pager | The pager and "Generators: N" use the loaded turbine rows, not the stored count |
+| Double save | A Save, Replace or delete confirm refuses a second job while one runs (a ref guard in `run`; every save handler returns early); the progress spinner is portalled above the drawer. A same-tick double click cannot be simulated in jsdom; the test covers a delete confirmed during a save |
+| Project switch | The screen is keyed by the project (as Contracts, D120 §6) |
+| Total Height box | Shows `130.4`, not `130.39999999999998` |
+| Tests | Real loaders against a mocked SDK (`data/generators.ts` had 24% statement coverage before; not re-measured), the write hooks, the real `usePlanWrite` for a refused delete; the permission chip labels, the delete confirmation texts and the flow set-up error are pinned; `UT-GEN-914` (used twice) is `UT-GEN-1211` on the newer one; the dead exports `PLANT_LOOKUP` and `TYPE_VALIDATION_ROWS` are removed |
+
+### 7. Not built (decision or live check needed)
+
+- **A type left without its O&M device-type row** when the first job fails (the row is created only in the second job; the canvas created it right after the type).
+- **Refusing a save when the price index or the model is missing** (cost 0 is also the canvas's behaviour).
+- **Out-of-country Replace Generator:** no rollback when the permission request fails, and no roll-up (a declined Replace leaves the old type in Plant WTG totals).
+- **The approval cancellation also runs for an Approved type** (the canvas gate is the same).
+- Counts and AllWTG costs read from the 30-second cache at write time instead of live; the flags-on guard gaps (`guardedUpdates`, `status`); the strict "already gone" delete check (needs DEL-0 on DEV); no retry for single writes; no `stopOnFailure`; panels closing on an outside click; the trailing-separator number ("5."); the card header click, tooltips, per-card test ids and turbine grid sort.
+- **`loadTurbineAllocations` drops an allocation that has no cost** (`if (costId)`); a delete never removes it. Pinned by UT-GENDATA-READ-007, not changed: product question.
+
+### 8. Corrections to this log
+
+D115 and D116 said "Nothing is on `RounakDev1`, `master` or DEV". Both are on `master` and `RounakDev1` since `dc9187d` (16 Nov 2026) and the code has been deployed to DEV with later builds (the latest on 17 Nov 2026); **the hardened delete path has no flag, was not exercised on DEV with the test plans, and is live** (D116 R1). The two Status lines are corrected.
+
+### 9. Verification
+
+`npm run verify` on the working tree (17 Nov 2026, on top of `255aaa8`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint with no warning in a file this change touched, the control-label and canvas-identity gates clean, **283 test files, 6,211 tests passed, 3 todo**, build OK. **Not run:** knip, the E2E parity suite, any check on DEV or against live Dataverse, the double-click case in a real browser (jsdom cannot send a same-tick double click), and the O&M guard against a slow or failing read. Existing tests changed on purpose: UT-PLANWRITE-008, 012 and 025 (the error text now carries the saved-rows note), UT-GEN-215 (a project with no unit now refuses instead of sending rows without the unit key), UT-GEN-914 renamed.

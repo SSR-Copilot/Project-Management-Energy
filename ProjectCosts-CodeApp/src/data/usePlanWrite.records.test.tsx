@@ -96,7 +96,7 @@ describe("a refusal in the second plan", () => {
     let ids: string[] | null = ["untouched"];
     await act(async () => { ids = await hook.current.run({ progress: "go", plan: plan("first", 2), then: async () => plan("second", 3) }); });
     expect(ids).toBeNull();
-    expect(hook.current.error).toBe("“go” failed: Row g1 has no business unit. Nothing was sent.. 2 of 5 changes had already been saved.");
+    expect(hook.current.error).toBe("“go” failed: Row g1 has no business unit. Nothing was sent.. 2 of 5 changes had already been saved. The saved rows stay: do not repeat the action. The screen shows them once it has reloaded.");
     expect(hook.current.lastLanded()).toEqual([L("a"), L("b")]);
   });
 

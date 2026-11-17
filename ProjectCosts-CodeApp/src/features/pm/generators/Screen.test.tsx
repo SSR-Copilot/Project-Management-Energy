@@ -242,7 +242,7 @@ describe("UT-GEN Screen (connected, D27)", () => {
     expect(save.getAttribute("title")).toBe(TYPE_PANEL_TOOLTIPS.save);
   });
 
-  it("UT-GEN-914 a WTG card with an open request: Cancel runs Request permission cancellation, not a card click (D97)", async () => {
+  it("UT-GEN-1211 a WTG card with an open request: Cancel runs Request permission cancellation, not a card click (D97)", async () => {
     const open: GeneratorTypeRow = {
       ...TYPE, flowRunId: "run-1", flowApprovalId: "ap-1", requestPermissionState: CHOICE_PLANT.requestPermissionState.pending,
     };
