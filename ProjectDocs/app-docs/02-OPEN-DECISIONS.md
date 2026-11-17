@@ -7683,7 +7683,7 @@ The product owner supplied the browser console of the **deployed DEV app** (envi
 
 **Not done:** the CSP change itself (an administrator action in each environment); a console check on QA; a check against a real, unblocked ingestion endpoint.
 
-## D123 — Cluster Checklist screen: approvals and gates must be known before actions, failed refreshes, quiet cluster visits, stale clicks and 12 smaller fixes (17 Nov 2026)
+## D127 — Cluster Checklist screen: approvals and gates must be known before actions, failed refreshes, quiet cluster visits, stale clicks and 12 smaller fixes (17 Nov 2026)
 
 **Status:** implemented on the local sub-branch `sub/cluster-checklist-analysis` (from `master` at `c1a292d`), **NOT product-approved, not run against DEV**. Type: ANALYSIS then BUG/OPTIMIZE/ACCESSIBILITY (product owner: "in depth testing on the functional and non functional aspect ... on the Cluster Checklist screen", then "proceed for fixing these issues"). The screen need not translate the canvas YAML literally; its utility, function, non-functional quality and UI must be the same or better. Tests: UT-CHKLST-083..107 and 923..944, UT-CHKHOOK-001..017, UT-CHKDATA-001..016.
 **How the issues were found:** five read-only reviews (load and display, writes and workflows, non-functional, UI and accessibility, test audit); the report is `CLUSTER-CHECKLIST-ANALYSIS-2026-11-17.md`. Nothing was reproduced live and no browser was used; the screen was not exercised on DEV. The two checklist approval flows (D81) have still never run live.

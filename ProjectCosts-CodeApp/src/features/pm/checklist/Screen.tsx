@@ -459,7 +459,7 @@ function CheckListScreenBody() {
   const operational = buildOperationalSequence(states, startCluster, gates);
   const display = buildDisplaySequence(states, startCluster, gates);
   // C2 / C3: nothing is derived from the first read until the project, the states, the trackings and the gates have all
-  // answered: no tip, no Draft fallback, no cluster actions (D123 §1).
+  // answered: no tip, no Draft fallback, no cluster actions (D127 §1).
   const loading = checklistIsLoading({
     hasProjectId: Boolean(projectId), projectLoading: projectQ.isLoading, sequenceLoading: sequenceQ.isLoading,
   });
@@ -661,7 +661,7 @@ function CheckListScreenBody() {
 
   const requestCaption = panel ? requestApprovalCaption(panel, next) : "";
   // C4: a failed read with NO data blanks the screen (now with a Refresh button, which the text points to); a failed refresh that
-  // still has data (window focus, a write's reload) is a banner and the screen stays (D123 §3).
+  // still has data (window focus, a write's reload) is a banner and the screen stays (D127 §3).
   const mainReads = [projectQ, sequenceQ, checklistQ];
   const blocking = checklistLoadErrorMode(mainReads) === "blocking";
   const refreshFailed = !blocking
@@ -685,13 +685,13 @@ function CheckListScreenBody() {
       <WriteFeedback progress={writes.progress} error={writes.error} success={writes.success} testIdPrefix="checklist" portal
         overlayLabel={writes.progress ?? undefined} />
 
-      {/* C4 (NEW TEXT, D123 §3): a failed refresh keeps the screen and its data, and says so. */}
+      {/* C4 (NEW TEXT, D127 §3): a failed refresh keeps the screen and its data, and says so. */}
       {refreshFailed ? (
         <MessageBar intent="error" aria-label="checklist-data-unavailable" data-testid="checklist-data-unavailable">
           <MessageBarBody>{READ_GATE_MSG.refreshFailed}</MessageBarBody>
         </MessageBar>
       ) : null}
-      {/* C1 (NEW TEXT, D123 §1): the approval settings could not be read; Complete and Approval stay off. */}
+      {/* C1 (NEW TEXT, D127 §1): the approval settings could not be read; Complete and Approval stay off. */}
       {approvalsState === "failed" ? (
         <MessageBar intent="error" aria-label="checklist-approvals-unavailable" data-testid="checklist-approvals-unavailable">
           <MessageBarBody>{READ_GATE_MSG.approvalsFailed}</MessageBarBody>
@@ -928,7 +928,7 @@ function CheckListScreenBody() {
         open={panel !== null}
         title={panel ? rightPanelTitle(panel, next) : ""}
         width="threeQuarter" panelClassName={mergeClasses(s.panelSkin, s.panelHistory)}
-        // SOURCE DEFECT (CU-15, D123 §10): the canvas ✕ hint of this panel reads "Home", a copy-paste name; it says "Cancel" (rule 22).
+        // SOURCE DEFECT (CU-15, D127 §10): the canvas ✕ hint of this panel reads "Home", a copy-paste name; it says "Cancel" (rule 22).
         closeTooltip={HINTS.cancel}
         // A click outside does not close it — only ✕ / Cancel / Escape (PO, 3 Nov 2026).
         keepOpenOnOutsideClick
@@ -1028,7 +1028,7 @@ function CheckListScreenBody() {
             {/* `gal_…_Inputs_History`: per note, the header row, a themePrimary rule, the note's table.
                 The gallery scrolls on its own; the comment and the History card above stay put. */}
             <div className={s.historyScroll} data-testid="gal_CheckList_RightPanel_ChangeCluster_Form_Inputs_History">
-            {/* C4 (NEW TEXT, D123 §3): a failed history read is shown, not an empty list. */}
+            {/* C4 (NEW TEXT, D127 §3): a failed history read is shown, not an empty list. */}
             {historyQ.error ? (
               <MessageBar intent="error" aria-label="checklist-history-unavailable" data-testid="checklist-history-unavailable">
                 <MessageBarBody>{READ_GATE_MSG.historyFailed}</MessageBarBody>

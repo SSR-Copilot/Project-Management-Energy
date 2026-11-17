@@ -622,7 +622,7 @@ The canvas apps had no Application Insights (`appinsightserrortracing: false`), 
 | The "sent" line no longer claims delivery (D122 addendum) | `SENT (not confirmed)` replaces `OK … telemetry is flowing`, which printed for items the browser then blocked | **fixed** |
 | Tests | `UT-AISDK-001…003` (the real SDK, network stubbed), `UT-AIDIAG-020` | **new** |
 
-## Cluster Checklist screen: approvals and gates before actions, failed refreshes, quiet visits, stale clicks, accessibility (17 Nov 2026, D123) — fixed / new (not approved, not run on DEV)
+## Cluster Checklist screen: approvals and gates before actions, failed refreshes, quiet visits, stale clicks, accessibility (17 Nov 2026, D127) — fixed / new (not approved, not run on DEV)
 
 | Screen | Change | Status |
 |---|---|---|
@@ -636,4 +636,4 @@ The canvas apps had no Application Insights (`appinsightserrortracing: false`), 
 | Cluster Checklist | The progress text no longer says "successfully" while saving; the panel ✕ says "Cancel" instead of "Home"; notes keep up to their column length; dates use the user's language | **fixed** (SOURCE DEFECT for the "Home" hint) |
 | Cluster Checklist | Keyboard focus moves with the date editor, focus rings are back, stepper cards and row buttons describe state and task to screen readers, the busy overlay has a name | **new** (no existing label or test id changed) |
 | Cluster Checklist | Real-function tests for the loaders, hooks and screen writes | **new** (test gate) |
-| Cluster Checklist | A resume step after a failed Move, re-creating missing tasks, the order of the cancel patch and flow, contrast colours, the cross-screen cache refresh | **proposed (not approved)**, see D123 §10 |
+| Cluster Checklist | A resume step after a failed Move, re-creating missing tasks, the order of the cancel patch and flow, contrast colours, the cross-screen cache refresh | **proposed (not approved)**, see D127 §10 |

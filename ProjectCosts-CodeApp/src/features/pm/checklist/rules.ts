@@ -158,7 +158,7 @@ export const COMMENT_MAX_LENGTH = TEXT_MAX_LENGTH.long;
  * `vsb_comment` 4000. The notes were cut at the comment box's 300, which dropped the end of "Approval requested - <comment>"
  * (the box allows 300, the prefix adds 20) although the columns hold far more. The box keeps its own 300 limit.
  */
-// DIVERGENCE: D123 §11 (the canvas text would have been rejected by Dataverse past the column length).
+// DIVERGENCE: D127 §11 (the canvas text would have been rejected by Dataverse past the column length).
 export const STATE_NOTE_NAME_MAX = 256;
 export const CHECKLIST_NOTE_NAME_MAX = 850;
 export const NOTE_COMMENT_MAX = 4000;
@@ -680,7 +680,7 @@ export function shouldMaterialiseChecklist(
  * C5 (17 Nov 2026): the creates form ONE concurrent group (`together`, eight in flight at a time through the plan
  * engine's gate, no new create is started after a failure), not N single requests one after the other. The earlier
  * comment here said "one `$batch`"; there never was one. DIVERGENCE: the canvas `ForAll`/`Patch` ran them in
- * sequence; D123 §4. The rows' display order is carried by the `Order` column, not by the
+ * sequence; D127 §4. The rows' display order is carried by the `Order` column, not by the
  * order they were created in (the gallery sorts on it, `listClusterChecklist`).
  *
  * The country/technology filter (`'Associated Country And Technology'.Country.Country`
@@ -922,7 +922,7 @@ export function rowActionKind(
 
 /** One-row write plan for a `'Project Checklists'` patch (Complete, In Progress, date, comment). */
 export function planChecklistRowPatch(rowId: string, data: Record<string, unknown>, reason: string): WritePlan {
-  // C6 (D123 §5): `guarded` reads the row first and sends nothing when it is gone, so a task another
+  // C6 (D127 §5): `guarded` reads the row first and sends nothing when it is gone, so a task another
   // user or an admin deleted is not re-created by this PATCH (the SDK PATCH is an upsert).
   return { writes: [{ op: "update", entitySet: ES.projectChecklists, id: rowId, data, reason, guarded: true }], log: [] };
 }
@@ -2718,7 +2718,7 @@ export function stepStateLabel(tracking: TrackingRow | null, index: number): str
 }
 
 /**
- * CU-2 (NEW TEXT, D123 §12): what a stepper card says besides its name, for `aria-describedby`: its state, then its gate
+ * CU-2 (NEW TEXT, D127 §12): what a stepper card says besides its name, for `aria-describedby`: its state, then its gate
  * (who will be asked), one line per person joined with commas. The card's aria-label stays the step name (rule 16).
  */
 export function stepCardDescription(stateLabel: string, gateTooltip: string | null): string {
@@ -2932,7 +2932,7 @@ export const SCREEN_TEXT = {
 /* ═══════════════════════════════════ 17 Nov 2026 — reads the actions depend on, stale state, app id ════ */
 
 /**
- * NEW TEXT (no canvas equivalent; D123 §1): the canvas had every collection loaded behind its spinner before
+ * NEW TEXT (no canvas equivalent; D127 §1): the canvas had every collection loaded behind its spinner before
  * the screen showed, so a half-read approval setting, gate or tracking never existed there. The code app loads them in
  * several queries, so the actions that depend on them wait, and say why.
  */
@@ -2961,7 +2961,7 @@ export const approvalSettingsNeeded = (rows: readonly Pick<ChecklistRow, "projec
  * beats "still checking". Until it is `ready` the row actions that depend on it stay off: with no settings loaded no row
  * shows an approval icon, so `rowActionKind` answered "complete" and one click set a task that needs approval straight to
  * Completed, with no approval, mail or message (the canvas could not do this: its collections were loaded first).
- * DIVERGENCE: D123 §1.
+ * DIVERGENCE: D127 §1.
  */
 export function approvalSettingsState(a: { needed: boolean; known: boolean; failed: boolean }): ApprovalSettingsState {
   if (!a.needed || a.known) return "ready";
@@ -2979,7 +2979,7 @@ export function approvalSettingsHint(state: ApprovalSettingsState): string | nul
  * C2 / C3 — the first load. The project, the states, the trackings and the gates must all have answered before the
  * screen derives a cluster, a tip or an action from them: until then it showed "technology not available" for a Wind
  * project, opened on Draft and treated a gated cluster as a direct move. New Project mode (no project id) loads nothing.
- * DIVERGENCE: D123 §1.
+ * DIVERGENCE: D127 §1.
  */
 export function checklistIsLoading(a: { hasProjectId: boolean; projectLoading: boolean; sequenceLoading: boolean }): boolean {
   return a.hasProjectId && (a.projectLoading || a.sequenceLoading);
@@ -2989,7 +2989,7 @@ export function checklistIsLoading(a: { hasProjectId: boolean; projectLoading: b
  * C4 — what a failed read does to the screen. `blocking`: a failed query has NO data, so the screen cannot show it (the
  * empty state, now with a Refresh button). `banner`: every failed query still has data (a failed background refresh, e.g.
  * on window focus): the screen stays and a banner says the data may be stale. A double without `hasData` counts as "no
- * data". DIVERGENCE: the canvas had no refresh; D123 §3.
+ * data". DIVERGENCE: the canvas had no refresh; D127 §3.
  */
 export function checklistLoadErrorMode(
   queries: readonly { error: unknown; hasData?: boolean | undefined }[],
@@ -3000,7 +3000,7 @@ export function checklistLoadErrorMode(
 }
 
 /**
- * C6 — NEW TEXT (D123 §6). The plans re-read the trackings when the job starts, but the button that
+ * C6 — NEW TEXT (D127 §6). The plans re-read the trackings when the job starts, but the button that
  * started it was drawn from a copy up to 30 s old. A job whose fresh read no longer matches what enabled the button is
  * refused, with nothing written.
  */
@@ -3044,7 +3044,7 @@ export function staleTaskRequestRefusal(row: Pick<ChecklistRow, "title" | "appro
 }
 
 /**
- * C7 — NEW TEXT (D123 §7): the cancellation flow takes the app id (`gblProjectManagmentAppID`,
+ * C7 — NEW TEXT (D127 §7): the cancellation flow takes the app id (`gblProjectManagmentAppID`,
  * `vsb_ProjectManagementAppID`). It is read in the background since D119, so it can still be blank; a blank one is refused
  * BEFORE the tracking is patched (the canvas had it from App.OnStart).
  */

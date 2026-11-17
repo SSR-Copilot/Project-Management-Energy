@@ -149,7 +149,7 @@ const toHistoryEntry = (idCol: string) => (r: Raw): HistoryEntry => ({
  * The Portfolio Manager's mail from Entra, WITHOUT letting a failed lookup take anything else down (C1 / C2, CF-4, CN-1).
  * The mail only feeds a tooltip ("who will be asked"); the gate rows and the approval MODE (which decides whether a task
  * needs approval at all) must survive a failed Graph read, so a failed lookup just has no mail.
- * DIVERGENCE: D123 §2 (the canvas read the mail from the same collection and had no such failure).
+ * DIVERGENCE: D127 §2 (the canvas read the mail from the same collection and had no such failure).
  */
 async function entraMails(ids: readonly string[]): Promise<Map<string, Persona>> {
   const people = new Map<string, Persona>();

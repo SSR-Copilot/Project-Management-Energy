@@ -297,7 +297,7 @@ export function useChecklistWrites(projectId: string | undefined) {
    * `but_Project_States_CheckList_Refresh` for the selected cluster: ensure the tracking, then copy the templates.
    * C5: the reads come first, WITHOUT the blocking overlay; an empty plan (the usual visit: the tracking and the rows are
    * there) skips the write job altogether: no overlay, no refetch of the screen's data. A failed read is still the job's
-   * error, shown as before. DIVERGENCE: D123 §8 (the canvas ran its spinner for every visit).
+   * error, shown as before. DIVERGENCE: D127 §8 (the canvas ran its spinner for every visit).
    */
   const prepareCluster = async (project: ChecklistProject, selected: SequenceEntry): Promise<string[] | null> => {
     let plan: WritePlan;
@@ -504,7 +504,7 @@ export function useChecklistOrchestration(args: {
     const id = project.id;
     // C10 (CW-2): the cluster is prepared only after the back-fill succeeded (or was not needed). A failed back-fill leaves
     // its error on screen, which the next job's run() would have cleared. Refresh runs the visit again.
-    // DIVERGENCE: D123 §9 (the canvas ran the preparation whatever the back-fill did).
+    // DIVERGENCE: D127 §9 (the canvas ran the preparation whatever the back-fill did).
     void (needed ? writes.backfill(project, states) : Promise.resolve<string[] | null>([])).then((result) => {
       if (result !== null) setBackfillDone(id);
     });
