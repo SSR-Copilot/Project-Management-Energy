@@ -237,7 +237,7 @@ describe("Add Period panel: the same rule (D61)", () => {
   });
 });
 
-describe("DevCo leaf rows as the canvas draws them (D120)", () => {
+describe("DevCo leaf rows as the canvas draws them (D124)", () => {
   it("UT-CONPANEL-011 an account with no DevCo cost row shows \"-\", not 0", async () => {
     await openNewDevelopmentContract();
     fireEvent.click(screen.getByTestId("btn_Contracts_RightPanel_NewEdit_DevCoCosts_TransparentButton-p1"));

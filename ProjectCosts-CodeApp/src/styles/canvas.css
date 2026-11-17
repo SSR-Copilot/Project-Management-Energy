@@ -571,11 +571,11 @@
    10 px on both sides, so its scrollbar sits inside the card. It has no height cap in the canvas; the panel column
    it sits in is what bounds it, so one is set here rather than letting a 40-account group push Comment off the
    panel. The 10 px canvas scrollbar (`canvasScrollbar`, applied in Screen.tsx) keeps its gutter reserved, so the
-   leaf checkboxes do not move when a long group starts to scroll (D120). The line under an open card is the
+   leaf checkboxes do not move when a long group starts to scroll (D124). The line under an open card is the
    card's own (it used to be the list's, which the inset would shorten). */
 .canvas-devco-leaves { max-height: 330px; overflow-y: auto; margin: 0 10px; padding-bottom: 10px; scrollbar-gutter: stable; }
 .canvas-devco-card[data-open="true"] { border-bottom: 1px solid #e3e3e3; }
-/* `con_…_CostssRow` — `Height: =30`, as wide as the inset gallery (W). D120, measured against the canvas panel
+/* `con_…_CostssRow` — `Height: =30`, as wide as the inset gallery (W). D124, measured against the canvas panel
    (user screenshots, 17 Nov 2026):
    - `lbl_…_CostssRow_Name`: `X: =40` (`lbl_Contracts_List_Card_Body_PaymentTargetsHeader_Name.X`), `Width: =W/2`,
      PaddingLeft/Right 6, `Size: =gblAppSizes.Font.ExtraExtraSmall` (8 pt), no wrap. `calc(50% + 25px)` is W/2 out of

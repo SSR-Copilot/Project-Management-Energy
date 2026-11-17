@@ -357,7 +357,7 @@ export function mapOpexRow(
     name: r.vsb_name ?? "",
     deviceId: r._vsb_devicetypeinproject_value || undefined,
     startDate: (r.vsb_startdate ?? "").slice(0, 10),
-    // D119: a blank duration / frequency / inflation % stays null — the canvas grid shows an empty cell
+    // D123: a blank duration / frequency / inflation % stays null — the canvas grid shows an empty cell
     // (`lbl_…_Duration`, `:1992-2040`; `lbl_…_DistributionFrequency`, `:1540`), not "0 years" / "1".
     years: r.vsb_opexprojectdurationyears ?? null,
     months: r.vsb_opexprojectdurationmonths ?? null,

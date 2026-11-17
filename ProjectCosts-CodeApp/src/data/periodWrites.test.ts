@@ -465,7 +465,7 @@ describe("saveOpexPeriod", () => {
     expect(fieldsOf(writes.find((w) => w.op === "update" && w.table === "opex")))
       .toHaveProperty("vsb_isstartdatestandardassumption", false);
   });
-  it("UT-PWRITE-049 an Edit re-binds the owning business unit, as the canvas' unconditional Patch (D119)", async () => {
+  it("UT-PWRITE-049 an Edit re-binds the owning business unit, as the canvas' unconditional Patch (D123)", async () => {
     // `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'` (`:8794`) — on every save.
     await savePeriod(CTX, { ...OM_PERIOD, id: HEAD_ID }, false);
     const upd = writes.find((w) => w.op === "update" && w.table === "opex" && w.id === HEAD_ID);
@@ -1362,7 +1362,7 @@ describe("period round trip", () => {
       currency: "Euro",
       inflation: false, countryInflation: false,
       // Inflation off means both numbers are cleared, so they round-trip as blank and not as
-      // whatever the row held before the toggle was turned off. D119: a blank % now reads back as
+      // whatever the row held before the toggle was turned off. D123: a blank % now reads back as
       // null (a stored 0.0 % stays 0); the start year still reads a blank as 0.
       inflationPercent: null, inflationYear: 0,
       align: false,

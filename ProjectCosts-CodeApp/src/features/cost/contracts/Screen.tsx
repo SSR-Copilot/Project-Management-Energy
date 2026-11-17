@@ -19,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Button, MessageBar, MessageBarBody, MessageBarTitle, Text, makeStyles, mergeClasses,
 } from "@fluentui/react-components";
-// The canvas classic scrollbar (10 px), shared with Land Lease and OPEX — the DevCo leaf list uses it too (D120).
+// The canvas classic scrollbar (10 px), shared with Land Lease and OPEX — the DevCo leaf list uses it too (D124).
 import { canvasScrollbar } from "@/features/cost/periods/canvasScrollbar";
 // The v9 date picker ships separately from the core package.
 import { DatePicker } from "@fluentui/react-datepicker-compat";
@@ -1506,7 +1506,7 @@ function ParentCheckbox({
 /**
  * `gal_Contracts_RightPanel_NewEdit_Costs`' vertical scrollbar: the canvas classic 10 px bar. Its gutter is
  * reserved (`.canvas-devco-leaves`), so the leaf checkboxes stay under the header's whether the list scrolls
- * or not, as on the canvas (D120).
+ * or not, as on the canvas (D124).
  */
 const useDevcoStyles = makeStyles({ leaves: { ...canvasScrollbar } });
 
@@ -1571,7 +1571,7 @@ function DevCoAccountPicker({
                   <div key={leaf.id} className="canvas-devco-row" data-used={leaf.used}>
                     <span className="canvas-devco-name">{`${leaf.number} ${leaf.name}`}</span>
                     {/* `lbl_…_CostssRow_TotalCosts` — `Coalesce(Text(Sum(monthly costs), "###,###,###,##0"), "-")`:
-                        "-" with no cost row, "0" when they add up to 0 (D120). */}
+                        "-" with no cost row, "0" when they add up to 0 (D124). */}
                     <span className="canvas-devco-total">
                       {devCoLeafTotalText(leafCosts, leaf.id, locale)}
                     </span>

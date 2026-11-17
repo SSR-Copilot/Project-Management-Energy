@@ -112,7 +112,7 @@ export type PeriodMode = "om" | "land" | "other";
 export interface CostPeriod {
   id: string; group: string; mode: PeriodMode; description: string;
   /**
-   * `years` / `months` (and `frequency`, `inflationPercent` below) are NULLABLE for OPEX (D119): the OPEX
+   * `years` / `months` (and `frequency`, `inflationPercent` below) are NULLABLE for OPEX (D123): the OPEX
    * columns are optional and a blank must stay blank — the canvas grid shows an empty cell, not "0 years" /
    * "1", and the panel opens a stored 0.0 % as "0.0" rather than empty. Land Lease still reads them with
    * `?? 0` / `?? 1`, so its periods always carry numbers.
@@ -330,7 +330,7 @@ export function periodEnd(p: Pick<CostPeriod, "startDate" | "years" | "months">)
   const start = new Date(p.startDate + "T12:00:00");
   if (Number.isNaN(+start)) return "";
   const day = start.getDate();
-  // A blank OPEX duration counts as 0, as `DateAdd(start, Blank())` does (D119 keeps the blank in the book).
+  // A blank OPEX duration counts as 0, as `DateAdd(start, Blank())` does (D123 keeps the blank in the book).
   start.setDate(1); start.setMonth(start.getMonth() + (p.years ?? 0) * 12 + (p.months ?? 0));
   const last = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
   start.setDate(Math.min(day, last)); start.setDate(start.getDate() - 1);

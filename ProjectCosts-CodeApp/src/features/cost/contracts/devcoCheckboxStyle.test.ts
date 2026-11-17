@@ -71,7 +71,7 @@ describe("DevCo checkbox size", () => {
     const button = px(rule(".canvas-devco-check")["width"]);
     const parentCentre = px(right) + px(chevron["width"]) + px(left) + button / 2;
     // Leaf: its right margin is `C - box / 2` and its box is `size` wide, so its centre is `C` from the ROW's
-    // right edge. D120: the list is inset (`gal_…_Costs.X: =10`) and keeps a 10 px scrollbar gutter, so the
+    // right edge. D124: the list is inset (`gal_…_Costs.X: =10`) and keeps a 10 px scrollbar gutter, so the
     // row's edge is inset + gutter in from the card's.
     const leafMargin = leafRule()["margin"] ?? "";
     const m = /^0 calc\((\d+)px - var\(--devco-check\) \/ 2\) 0 (?:auto|\d+px)$/.exec(leafMargin);
@@ -85,7 +85,7 @@ describe("DevCo checkbox size", () => {
     expect(leafCentre).toBe(parentCentre);
   });
 
-  it("UT-CONCHECK-006 the 'used' square centres on the leaf box, 20 x 20 (`rec_…_CostssRow_Used`, D120)", () => {
+  it("UT-CONCHECK-006 the 'used' square centres on the leaf box, 20 x 20 (`rec_…_CostssRow_Used`, D124)", () => {
     const used = rule(".canvas-devco-used");
     expect([used["width"], used["height"], used["top"]]).toEqual(["20px", "20px", "5px"]);
     const m = /^0 calc\((\d+)px/.exec(leafRule()["margin"] ?? "");

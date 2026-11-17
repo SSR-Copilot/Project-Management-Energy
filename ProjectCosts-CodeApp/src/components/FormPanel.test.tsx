@@ -388,7 +388,7 @@ describe("FormPanel", () => {
     expect(dismissed).toHaveBeenCalledTimes(1);
   });
 
-  it("UT-SETPANEL-025 keepOpenOnEscape (OPEX, D119): Escape and a backdrop click keep the panel open; ✕ still closes", async () => {
+  it("UT-SETPANEL-025 keepOpenOnEscape (OPEX, D123): Escape and a backdrop click keep the panel open; ✕ still closes", async () => {
     const backdrop = () => document.querySelector<HTMLElement>(".fui-OverlayDrawer__backdrop, [class*='backdrop']");
     const kept = vi.fn();
     render(

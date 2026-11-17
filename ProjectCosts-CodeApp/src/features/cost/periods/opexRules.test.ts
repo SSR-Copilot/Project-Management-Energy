@@ -2002,9 +2002,9 @@ describe("D117 OPEX grid cells in the user's language", () => {
   });
 });
 
-/* ═══════════════════════════════════════════════════════ D119 canvas parity ══ */
+/* ═══════════════════════════════════════════════════════ D123 canvas parity ══ */
 
-describe("OPEX — D119: the canvas-parity fixes", () => {
+describe("OPEX — D123: the canvas-parity fixes", () => {
   it("UT-OPEX-135 Add Contract Type / Add Period leave no row selected, the card owning the selection", () => {
     // `locSelectedOpexCost: Blank()` (`:593`, `:625`, `:3031`); Cancel / ✕ never restore it.
     expect(selectionOnAdd("card-1")).toEqual({

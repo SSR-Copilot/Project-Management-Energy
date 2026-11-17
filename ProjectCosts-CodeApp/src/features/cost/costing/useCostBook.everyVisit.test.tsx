@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D119 — the OPEX screen re-reads its cost book and its device cards on every visit, as the canvas `OnVisible`
+ * D123 — the OPEX screen re-reads its cost book and its device cards on every visit, as the canvas `OnVisible`
  * (`ClearCollect(colOpexProjectCosts, …)`, `colDeviceTypesInProject`) does, WITHOUT a loader on the second visit:
  * the cached rows show at once and the re-read runs behind them. The other Cost screens keep the app-wide cache.
  */
@@ -27,7 +27,7 @@ const wrapperFor = (client: QueryClient) => ({ children }: { children: ReactNode
 
 afterEach(() => { vi.clearAllMocks(); });
 
-describe("D119 — OPEX reads on every visit", () => {
+describe("D123 — OPEX reads on every visit", () => {
   it("UT-OPEXLOAD-001 the OPEX book is re-read on a second visit inside the 30 s cache, with no loader", async () => {
     const client = newClient();
     const first = renderHook(() => useCostBook(undefined, { everyVisit: true }), { wrapper: wrapperFor(client) });

@@ -1338,9 +1338,9 @@ describe("OpexScreen", () => {
     expect(omRow.querySelector("td[title]")).not.toBeNull();
   });
 
-  /* ── D119: the canvas-parity fixes ──────────────────────────────────────── */
+  /* ── D123: the canvas-parity fixes ──────────────────────────────────────── */
 
-  it("UT-OPEXUI-055 Escape and a click outside keep the panel open; only ✕ / Cancel close it (D119)", () => {
+  it("UT-OPEXUI-055 Escape and a click outside keep the panel open; only ✕ / Cancel close it (D123)", () => {
     openEditOm1();
     fireEvent.keyDown(panel().querySelector("input") as HTMLElement, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -1352,7 +1352,7 @@ describe("OpexScreen", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("UT-OPEXUI-056 Add Period then Cancel leaves no row selected, so one click selects it again (D119)", () => {
+  it("UT-OPEXUI-056 Add Period then Cancel leaves no row selected, so one click selects it again (D123)", () => {
     // `newOpexProjectCost`: `locSelectedOpexCost: Blank()` (`:3031`); Cancel never restores it.
     render(<Harness><OpexScreen mode="om" /></Harness>);
     fireEvent.click(screen.getByTestId("opex-select-om-2"));
@@ -1366,7 +1366,7 @@ describe("OpexScreen", () => {
     expect(scope.getByTestId("opex-editOpexProjectCost")).toBeEnabled();
   });
 
-  it("UT-OPEXUI-057 the Inflation Start Year follows the Start Date when its default depends on it (D119)", () => {
+  it("UT-OPEXUI-057 the Inflation Start Year follows the Start Date when its default depends on it (D123)", () => {
     // A stored blank year (0) on a root dated 2030: the box shows Year(2030) + 1; resetting the date to COD
     // (30 Aug 2027) moves it to 2028, as the canvas `Value` (`:7583-7594`) re-evaluates.
     book = makeBook([period({
@@ -1383,7 +1383,7 @@ describe("OpexScreen", () => {
     expect(year()).toHaveValue("2028");
   });
 
-  it("UT-OPEXUI-058 switching the threshold back to Individual shows the stored figure again (D119)", () => {
+  it("UT-OPEXUI-058 switching the threshold back to Individual shows the stored figure again (D123)", () => {
     // `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` resets to its Default, the edited row's value.
     book = makeBook([period({
       id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Initialized O&M Contract",
@@ -1399,7 +1399,7 @@ describe("OpexScreen", () => {
     expect(individual()).toHaveValue("2.5");
   });
 
-  it("UT-OPEXUI-059 a stored Custom Inflation of 0.0 % opens as 0.0, not empty (D119)", () => {
+  it("UT-OPEXUI-059 a stored Custom Inflation of 0.0 % opens as 0.0, not empty (D123)", () => {
     book = makeBook([period({
       id: "om-1", mode: "om", group: "WTG V150-6.0", description: "Initialized O&M Contract",
       periodIndex: 1, contractId: "om-1", inflation: true, countryInflation: false, inflationPercent: 0,
@@ -1408,7 +1408,7 @@ describe("OpexScreen", () => {
     expect(within(panel()).getByTestId("opex-inflation-profile")).toHaveValue("0.0");
   });
 
-  it("UT-OPEXUI-060 a blank Duration and Distribution Frequency show empty cells, not 0 years / 1 (D119)", () => {
+  it("UT-OPEXUI-060 a blank Duration and Distribution Frequency show empty cells, not 0 years / 1 (D123)", () => {
     book = makeBook([period({
       id: "other-1", mode: "other", group: "Insurance", description: "All-Risk Insurance",
       years: null, months: null, frequency: null, periodIndex: 1, contractId: "other-1",
@@ -1421,7 +1421,7 @@ describe("OpexScreen", () => {
     expect(cells[cells.length - 1]?.textContent).toBe("");
   });
 
-  it("UT-OPEXUI-061 an Italian Edit saves the project's own area, never the row's stored one (D119)", async () => {
+  it("UT-OPEXUI-061 an Italian Edit saves the project's own area, never the row's stored one (D123)", async () => {
     const before = { country: project.countryName, area: (project as Record<string, unknown>).areaStateProvince };
     project.countryName = "Italy";
     (project as Record<string, unknown>).areaStateProvince = "Lombardia"; // → zone "North"

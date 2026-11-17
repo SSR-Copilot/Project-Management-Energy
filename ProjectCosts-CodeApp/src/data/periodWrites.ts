@@ -443,7 +443,7 @@ export async function saveOpexPeriod(
       ? { "vsb_DeviceTypeInProject@odata.bind": bind("vsb_devicetypesinprojects", target.deviceTypeInProjectId) }
       : {}),
     // `'Owning Business Unit': gblSelectedProject.'Besitzer (Unternehmenseinheit)'` is in the same unconditional
-    // Patch (`:8794`), so an Edit re-binds it too and a cost follows its project's business unit (D119; it was
+    // Patch (`:8794`), so an Edit re-binds it too and a cost follows its project's business unit (D123; it was
     // written on create only).
     ...(ctx.owningBusinessUnitId
       ? { "owningbusinessunit@odata.bind": bind("businessunits", ctx.owningBusinessUnitId) } : {}),

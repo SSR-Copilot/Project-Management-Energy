@@ -64,7 +64,7 @@ function periodsEqual(a: CostPeriod, b: CostPeriod): boolean {
 /**
  * @param category DEVEX/CAPEX tab index. Omit it on screens that do not show cost lines —
  *   the Dataverse path then fetches none, instead of the project's whole cost set.
- * @param options.everyVisit re-read the book every time the screen opens, whatever its age (OPEX, D119:
+ * @param options.everyVisit re-read the book every time the screen opens, whatever its age (OPEX, D123:
  *   `OnVisible` runs `ClearCollect(colOpexProjectCosts, …)` on every visit; the app-wide 30 s cache showed
  *   the rows of the previous visit). Off by default, so the other Cost screens are unchanged.
  */
@@ -208,7 +208,7 @@ export function useAddStandardContract() {
       void queryClient.invalidateQueries({ queryKey: ["cost-book", projectId, "none"] });
       void queryClient.invalidateQueries({ queryKey: ["land-lease-contracts", projectId] });
       // The O&M import ends with `Refresh(DeviceTypesInProjects)` and rebuilds `colDeviceTypesInProject`
-      // (`:3327-3407`), so the device cards are re-read as well (D119).
+      // (`:3327-3407`), so the device cards are re-read as well (D123).
       void queryClient.invalidateQueries({ queryKey: ["opex-device-types", projectId ?? "none"] });
     },
   });
@@ -381,7 +381,7 @@ export function useOpexCatalog() {
 /**
  * `colDeviceTypesInProject` — `[generators, pvModules]`, for `deviceTypeList` to order.
  *
- * Re-read on every visit (D119): `OnVisible` rebuilds the collection each time (`:76-117`), and the empty-state
+ * Re-read on every visit (D123): `OnVisible` rebuilds the collection each time (`:76-117`), and the empty-state
  * text tells the user to "add a generator and refresh this page". The 5-minute cache kept a generator added on the
  * Generators screen off the O&M view; it now only spares a re-read on window focus.
  */

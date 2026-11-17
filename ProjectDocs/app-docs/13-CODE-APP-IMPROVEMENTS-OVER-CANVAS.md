@@ -550,7 +550,7 @@ Implemented and merged on `integration/generators-bulk`, not product-approved, n
 
 **Kept as is:** in `planSaveTurbine` and the PV follow-up the allocations come after the roll-up (the canvas order, kept on purpose), so the roll-up is not the last write in those two plans. The type create stays a single request (its autonumber name feeds the device-type row), as do the roll-ups, the device-type bridge create, the flow calls and every single-row save; Replace keeps delete-and-recreate (no repointing).
 
-## OPEX: 11 functional differences fixed to match the Canvas (17 Nov 2026, D119) — fixed
+## OPEX: 11 functional differences fixed to match the Canvas (17 Nov 2026, D123) — fixed
 
 | Screen | Change | Status |
 |---|---|---|
@@ -565,7 +565,7 @@ Implemented and merged on `integration/generators-bulk`, not product-approved, n
 | O&M, Other OPEX | The costs and the O&M device cards are re-read on every visit, as `OnVisible`; a second visit shows the cached rows at once with no loader and refreshes them behind. Add Standard Contract also refreshes the device cards. UT-OPEXLOAD-001…004 | fixed (stale data removed) |
 | O&M, Other OPEX | Every Save re-binds the owning business unit to the project's, as the Canvas Patch; it was set on create only. UT-PWRITE-049 | fixed |
 
-## Contracts: the opened DevCo account rows laid out as the Canvas (17 Nov 2026, D120) — reproduced
+## Contracts: the opened DevCo account rows laid out as the Canvas (17 Nov 2026, D124) — reproduced
 
 | Screen | Change | Status |
 |---|---|---|

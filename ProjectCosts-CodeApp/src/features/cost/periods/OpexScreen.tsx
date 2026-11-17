@@ -618,7 +618,7 @@ function toOpexCost(
     thresholdIndividual: period.thresholdIndividual ?? null,
     useInflationProfile: period.inflation,
     useCountryInflationProfile: period.countryInflation,
-    // Null for a blank column, 0 for a stored 0.0 % (D119); only the grid cell blanks a 0 (O-9).
+    // Null for a blank column, 0 for a stored 0.0 % (D123); only the grid cell blanks a 0 (O-9).
     inflationProfile: period.inflationPercent,
     inflationStartYear: period.inflationYear || null,
     inflationCountryArea: period.inflationCountryArea || null,
@@ -699,7 +699,7 @@ function seedForm(
   // `LookUp('Country Inflation Profiles', country && year [&& area]).Inflation` (`:7822-7847`).
   // For Italy the canvas adds the Area term, read from the hidden Area dropdown — whose default is
   // ALWAYS the project's own zone (`gblAreaWithRegion` minus its `Italy_` prefix; the row's stored area
-  // is commented out of `DefaultSelectedItems`, `:7684-7708`). D119: the row's area no longer wins.
+  // is commented out of `DefaultSelectedItems`, `:7684-7708`). D123: the row's area no longer wins.
   const projectArea = italyZone(areaRegion) || null;
   const countryProfile = countryInflationPercent(inflationRows, {
     year: inflationStartYear,
@@ -737,7 +737,7 @@ function seedForm(
       countryProfile,
     })),
     // The hidden Area dropdown's `DefaultSelectedItems` is the project's own zone (`:7618-7628`), on Edit too: the
-    // canvas never preselects the row's stored area, and the Save writes the dropdown (D119).
+    // canvas never preselects the row's stored area, and the Save writes the dropdown (D123).
     inflationCountryArea: projectArea,
     alignWithProjectDuration: alignWithProjectDurationDefault({ selected, parent }),
     externalContract: externalContractDefault({
@@ -758,7 +758,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   const { project, projectId } = useSession();
   // D58: while `isLoading` (TanStack's first load) there is no `book` yet, so the cards render
   // with an empty body; no masking is needed (Land Lease masks, because its load includes extras).
-  // D119: re-read on every visit, as `OnVisible`'s `ClearCollect(colOpexProjectCosts, …)` (`:118-124`).
+  // D123: re-read on every visit, as `OnVisible`'s `ClearCollect(colOpexProjectCosts, …)` (`:118-124`).
   const { data: book, isLoading: bookLoading, error, save } = useCostBook(undefined, { everyVisit: true });
   const extras = useProjectExtras(projectId);
   const addStandard = useAddStandardContract();
@@ -1082,7 +1082,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
    * chosen date.
    */
   const onStartDate = (value: string) => {
-    // D119: the Inflation Start Year box follows the date when its default depends on it (`:7583-7594`).
+    // D123: the Inflation Start Year box follows the date when its default depends on it (`:7583-7594`).
     const year = panel
       ? inflationStartYearOnDateChange({
         selected: panel.selected, parent: panel.parent, before: form?.startDate ?? null, after: value === "" ? null : value,
@@ -1104,7 +1104,7 @@ export default function OpexScreen({ mode }: OpexScreenProps) {
   /** `ico_ResetStartDay_NewEditCost_OPEXCosts.OnChange` (`:5941-5955`). */
   const onResetStartDate = () => {
     const cod = projectContext.codDate;
-    // D119: as a picked date — the start-year box follows when its default depends on the date.
+    // D123: as a picked date — the start-year box follows when its default depends on the date.
     const year = panel
       ? inflationStartYearOnDateChange({
         selected: panel.selected, parent: panel.parent, before: form?.startDate ?? null, after: cod,
@@ -1804,7 +1804,7 @@ function OpexPanel({
       // label and disabled-control colours (canvas.css), for this panel only.
       width={660}
       panelClassName="opex-canvas-panel"
-      // D119: `con_OpexCosts_RightPanel_NewEditCost` closes only through its ✕ and Cancel — the dark backdrop has no
+      // D123: `con_OpexCosts_RightPanel_NewEditCost` closes only through its ✕ and Cancel — the dark backdrop has no
       // OnSelect and there is no keyboard dismissal — so a stray click outside or Escape no longer throws away the form.
       keepOpenOnOutsideClick
       keepOpenOnEscape
@@ -2158,7 +2158,7 @@ function OpexPanel({
                               thresholdType: o.value,
                               // `rdg_….OnChange: Reset(txt_…_Threshold_Individual)` (`:8313`). Reset goes back to the
                               // box's Default, the EDITED row's `'Threshold individual'` (`:8317-8321`), not to empty:
-                              // on Edit, p75 → Individual shows the stored figure again; on Add it is empty (D119).
+                              // on Edit, p75 → Individual shows the stored figure again; on Add it is empty (D123).
                               thresholdIndividual: text(panel.selected?.thresholdIndividual),
                             })}
                           />

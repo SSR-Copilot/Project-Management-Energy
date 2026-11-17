@@ -467,12 +467,12 @@ describe("mapOpexRow", () => {
       { vsb_opexprojectcostid: "bare" }, "Some Group", "om",
     );
     expect(period).toMatchObject({
-      // D119: the duration halves stay NULL as well — the canvas grid shows an empty cell, not "0 years".
+      // D123: the duration halves stay NULL as well — the canvas grid shows an empty cell, not "0 years".
       description: "", startDate: "", years: null, months: null, currency: "",
       // The five MONEY columns default to NULL, not 0: `'Fix Costs': Value(txt.Value)` and
       // `Value("")` is `Blank()`, so an unset column means the user typed nothing.
       fixed: null, revenue: null, perMwh: null, perMw: null, perWtg: null,
-      // D119: a blank frequency is not "1", and a blank inflation % is not a stored 0.0 %.
+      // D123: a blank frequency is not "1", and a blank inflation % is not a stored 0.0 %.
       aggregation: "SUM", frequency: null,
       inflation: false, countryInflation: false, inflationYear: 0, inflationPercent: null,
       threshold: false, align: false, external: false, standard: false,
@@ -482,7 +482,7 @@ describe("mapOpexRow", () => {
     expect(period.hasOneTimePayment).toBeUndefined();
   });
 
-  it("UT-BOOK-077 D119: a blank duration, frequency or inflation % stays null; stored values, 0 included, pass through", () => {
+  it("UT-BOOK-077 D123: a blank duration, frequency or inflation % stays null; stored values, 0 included, pass through", () => {
     const blank = mapOpexRow({ vsb_opexprojectcostid: "b" }, "g", "other");
     expect([blank.years, blank.months, blank.frequency, blank.inflationPercent]).toEqual([null, null, null, null]);
     const stored = mapOpexRow({

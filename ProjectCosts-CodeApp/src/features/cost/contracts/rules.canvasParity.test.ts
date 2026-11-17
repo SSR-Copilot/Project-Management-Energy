@@ -101,7 +101,7 @@ describe("card figures and formats (CONTR-020/021/022/023/024/028/058)", () => {
     expect(targetPercentText(undefined, L)).toBe("");
   });
 
-  it("UT-CONTR-009 the DevCo leaf amount sums the monthly CAPEX costs of that account's contracts; none shows \"-\" (CONTR-058, D120)", () => {
+  it("UT-CONTR-009 the DevCo leaf amount sums the monthly CAPEX costs of that account's contracts; none shows \"-\" (CONTR-058, D124)", () => {
     const contracts = [
       { id: "k1", accountId: "a1", totalCost: 999 },
       { id: "k2", accountId: "a1", totalCost: 999 },

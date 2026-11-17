@@ -1264,7 +1264,7 @@ export function inflationColumnText(
     return project.countryName ?? "";
   }
   // O-9 (reproduced): the cell shows a stored 0.0 % as empty, like "no inflation". The panel, which reads the same
-  // value, opens a stored 0 as "0.0" (D119) — only this cell blanks it.
+  // value, opens a stored 0 as "0.0" (D123) — only this cell blanks it.
   return formatOneDecimalPercent(cost.inflationProfile === 0 ? null : cost.inflationProfile);
 }
 
@@ -1302,7 +1302,7 @@ export function thresholdColumnText(
   if (cost.thresholdType === THRESHOLD_TYPE.netYieldP90) return "p90";
   if (cost.thresholdIndividual === null || cost.thresholdIndividual === undefined) return "";
   // `Text(individual, "###,###.0")` follows the user's language like the other grid cells (D117); this cell was the
-  // one left in en-GB (D119). No locale means the browser's, as the screen reads its boxes.
+  // one left in en-GB (D123). No locale means the browser's, as the screen reads its boxes.
   return canvasNumberText(cost.thresholdIndividual, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
@@ -1333,7 +1333,7 @@ export function inflationStartYearDefault(args: {
 }
 
 /**
- * D119: the start-year box follows the Start Date. Its `Value` (`:7583-7594`) reads
+ * D123: the start-year box follows the Start Date. Its `Value` (`:7583-7594`) reads
  * `dte_…_StartDate.SelectedDate`, and a modern `TextInput` re-takes its `Value` whenever that formula's result
  * changes — so on a new cost type (and on an edited row with no stored year) picking another year's date moves
  * the box to `Year(date) + 1`. While adding a period (the parent's year) or editing a row that has its own year,
@@ -3295,7 +3295,7 @@ export function toggleRowSelection(args: {
 }
 
 /**
- * The selection once Add Contract Type / Add Period has opened the panel (D119): the canvas blanks the selected
+ * The selection once Add Contract Type / Add Period has opened the panel (D123): the canvas blanks the selected
  * row — `locSelectedOpexCost: Blank()` in `newOpexProjectCostType` (`:593`), `newOpexProjectCost` (`:625`) and
  * the O&M `newOpexProjectCost` (`:3031`) — and makes the card the selection's owner (`locSelectedSubaccount` /
  * `locSelectedDeviceTypeInProject: ThisItem`). Nothing restores the row on Cancel / ✕, so the radio is empty

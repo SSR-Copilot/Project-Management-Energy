@@ -7420,7 +7420,7 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
 **Tests:** UT-FIN-817, UT-PROD-132, UT-REV-163, UT-GDATA-089, UT-PLAN-064, UT-GEN-157, UT-CAPEXR-204, UT-OPEX-134, UT-LAND-146, UT-ADCOST-938; UT-FIN-204 now expects the canvas "10000000".
 
 
-## D119 — OPEX (Operation & Maintenance, Other OPEX): 11 functional differences fixed to match the Canvas (17 Nov 2026)
+## D123 — OPEX (Operation & Maintenance, Other OPEX): 11 functional differences fixed to match the Canvas (17 Nov 2026)
 
 **Status:** uncommitted (working tree, branch `fixes`), not on DEV. (D118 is taken on `master` / `RounakDev1`.)
 **Report:** the OPEX comparison of 13 Nov 2026, re-checked against the code of 17 Nov ("check for all the bugs if something is fixed then give me new list"); "fix 11 changes" (the "fix now" group of the recommendations).
@@ -7445,17 +7445,17 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
 **Needs a live check:** Esc / backdrop on the OPEX panel; Add Period → Cancel; a new cost type whose Start Date moves to another year; an Italian project Edit; a second visit to O&M / Other OPEX (no loader, fresh rows); a generator added on the Generators screen showing on O&M.
 
 
-## D120 — Contracts, Add / Edit Development Contract: the opened DevCo account rows laid out as the Canvas (17 Nov 2026)
+## D124 — Contracts, Add / Edit Development Contract: the opened DevCo account rows laid out as the Canvas (17 Nov 2026)
 
 **Status:** uncommitted (working tree, branch `fixes`), not on DEV.
 **Report:** "want same as canvas opening area checkbox alignment" (Edit Development Contract, an opened `10001 Development Expenses`, code app beside Canvas).
 **Canvas** (`gal_Contracts_RightPanel_NewEdit_Costs`, Contracts Screen Y:6294-6528): the leaf gallery is inset `X: =10` on both sides; each 30-high row has the name at `X: =40` (`lbl_Contracts_List_Card_Body_PaymentTargetsHeader_Name.X`), `Width: =Parent.Width/2`, 8 pt (`ExtraExtraSmall`), padding 6, no wrap; the 120-wide right-aligned 8 pt total right after it; the 32-wide checkbox at `Parent.Width-Self.Width-30`, its box under the header's checkbox; and, on a leaf another contract uses, `rec_…_CostssRow_Used`: a 20 x 20 square, 1 px `gblAppColors.Warning` border and a 12 % Warning fill, over the checked read-only box, with the "Used in contract" tooltip. The used leaf's caption is not greyed.
 **Code app before:** 14 px names from X 28 that ran to the total and were cut off with "…"; the total 22 px left of a checkbox column 15 px left of the header's (the browser scrollbar took the rest); a used leaf drawn as a native grey checkbox (its orange `accent-color` does not show on a disabled box) with a grey caption; no cost row showed "0".
-**Now:** `canvas.css` (D120 comments) places the name, total and checkbox as above, the list keeps a reserved 10 px canvas scrollbar (`canvasScrollbar`, shared with Land Lease / OPEX) so the column does not move when a group scrolls, and draws the orange square (`rec_Contracts_RightPanel_NewEdit_CostssRow_Used-<id>`, with the tooltip). The total is `devCoLeafTotalText`: **"-" when the account has no DevCo cost row**, as the canvas `Coalesce(Text(Sum(…)), "-")` shows it (the canvas `Sum` of an empty table is Blank — CONTR-058's reading that the dash is never reached was wrong); "0" when the rows add up to 0.
+**Now:** `canvas.css` (D124 comments) places the name, total and checkbox as above, the list keeps a reserved 10 px canvas scrollbar (`canvasScrollbar`, shared with Land Lease / OPEX) so the column does not move when a group scrolls, and draws the orange square (`rec_Contracts_RightPanel_NewEdit_CostssRow_Used-<id>`, with the tooltip). The total is `devCoLeafTotalText`: **"-" when the account has no DevCo cost row**, as the canvas `Coalesce(Text(Sum(…)), "-")` shows it (the canvas `Sum` of an empty table is Blank — CONTR-058's reading that the dash is never reached was wrong); "0" when the rows add up to 0.
 **Not changed (recorded product decision CONTR-057):** inactive CAPEX accounts stay hidden from the picker (`listCapexAccounts` keeps `statecode eq 0`); the canvas lists all states. That is most likely why "81005_0 Land Survey / Land Measurement" (used by another contract, "-") shows on the Canvas and not in the code app — not checked against the data.
 **Tests:** UT-CONCHECK-004 (now with the inset and the gutter), UT-CONCHECK-006, UT-CONTR-009 (the dash), UT-CONPANEL-011, UT-CONPANEL-012. jsdom has no layout, so the positions need a look beside the Canvas.
 
-## D121 — Finance: the `drp_` dropdowns open the canvas list (17 Nov 2026)
+## D125 — Finance: the `drp_` dropdowns open the canvas list (17 Nov 2026)
 
 **Status:** uncommitted (working tree), not on DEV.
 **Report:** "dropdown hover color is not same for Start Repayments month and year, KfW Tranche, Tenor, Commitment Fee period month and year".
@@ -7464,7 +7464,7 @@ Tests: UT-RETRY-002..015 (`data/retry.test.ts`), UT-PLAN-911..914 (`platform/err
 **Now:** `ChoiceField` exports its list style (`useCanvasListStyles`) and `SelectChoice` puts it on every non-combo dropdown: Senior Debt KfW-Tranche (Y:9562), Tenor YY / MM, Start Repayment YY / MM, Frequency of Repayment, Commitment Fee Free Period YY / MM, Fixed Interest Rate YY / MM, the Step-Up year, and DSRA / DSRF Base Rate (Y:16062). The five `cmb_` combos (VAT Base Rate, Bank, Duration of Saving, the two DSRA durations) keep Fluent's list, and their standard-value list colour.
 **Tests:** UT-FIN-924.
 
-## D122 — Contracts: the Payment Targets bar icons are blue (17 Nov 2026)
+## D126 — Contracts: the Payment Targets bar icons are blue (17 Nov 2026)
 
 **Status:** uncommitted (working tree), not on DEV.
 **Report:** "icon color should be blue, it is part of contract screen" (Payment Targets: Add Period, Edit, Delete).

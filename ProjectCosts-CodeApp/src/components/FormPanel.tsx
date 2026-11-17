@@ -92,7 +92,7 @@ export interface FormPanelProps {
    */
   keepOpenOnOutsideClick?: boolean;
   /**
-   * Opt-in (OPEX, D119): Escape does NOT close the panel either — the canvas panel has no keyboard dismissal, only its ✕
+   * Opt-in (OPEX, D123): Escape does NOT close the panel either — the canvas panel has no keyboard dismissal, only its ✕
    * and Cancel, so a stray Escape cannot throw away what was typed. ✕ and Cancel are unchanged.
    */
   keepOpenOnEscape?: boolean;
