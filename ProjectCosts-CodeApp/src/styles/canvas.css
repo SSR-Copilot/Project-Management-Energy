@@ -674,6 +674,10 @@
   position: relative; display: block; height: 20px; line-height: 20px; padding: 0; margin: 0;
   font-size: 14px; font-weight: 600; color: #242424;
 }
+/* `.canvas-panel .fui-Field label { font-weight: 400 }` above (0,2,1) out-ranked the rule just given (0,2,0), so the
+   Fluent `Field` captions of a PM panel (Contracted, Hedging, Swap Rate …) were regular while the span and radio
+   captions beside them were semibold (user screenshots, 18 Nov 2026). Same specificity, later in the file: 600 wins. */
+.pm-canvas-panel .fui-Field label { font-weight: 600; }
 .pm-canvas-panel .canvas-field > span:first-child,
 .pm-canvas-panel .fui-Field__label { margin-bottom: 5px; }
 .pm-canvas-panel .canvas-field > span[data-required="true"]::before,

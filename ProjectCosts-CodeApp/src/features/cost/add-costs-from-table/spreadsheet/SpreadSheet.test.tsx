@@ -21,7 +21,7 @@ const grid = (description: string): SheetGrid => [
     { value: "No" }, { value: "5" }],
 ];
 
-const props = { subaccountDataIn: [{}], addRowToken: 0, deleteRowToken: 0, copyTableToken: 0 };
+const props = { addRowToken: 0, deleteRowToken: 0, copyTableToken: 0 };
 
 describe("SpreadSheetComp mount", () => {
   it("UT-ADDCOST-070 reports the seeded grid exactly once on mount", () => {
@@ -86,5 +86,17 @@ describe("SpreadSheetComp year view (D73)", () => {
     const last = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
     expect(last[0]).toHaveLength(6 + 24);
     expect(last[2]?.[18]?.value).toBe("4");
+  });
+});
+
+describe("SpreadSheetComp Add Row", () => {
+  it("UT-ADDCOST-109 Add Row leaves Cost Paid By blank, Depreciation and Apply VAT 'Yes' (canvas, 18 Nov 2026)", () => {
+    const onDataChange = vi.fn();
+    const g = grid("Alpha");
+    const { rerender } = render(<SpreadSheetComp data={g} onDataChange={onDataChange} {...props} />);
+    rerender(<SpreadSheetComp data={g} onDataChange={onDataChange} {...props} addRowToken={1} />);
+    const last = onDataChange.mock.calls.at(-1)?.[0] as SheetGrid;
+    expect(last).toHaveLength(4);
+    expect(last[3]?.slice(0, 6).map((c) => c.value)).toEqual(["", "", "", "", "Yes", "Yes"]);
   });
 });

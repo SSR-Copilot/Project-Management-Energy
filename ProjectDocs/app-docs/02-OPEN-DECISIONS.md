@@ -7823,3 +7823,13 @@ Tests: UT-MSTONE-081 (all eleven keys LongAbbreviated), 082 (the canvas twin: Lo
 ### 4. Verification
 
 `npm run verify` on the working tree (18 Nov 2026, on top of `a66d8cf`): exit 0, `check:power` 96 registered / 0 problems, typecheck clean, lint clean in the Milestones folder, the control-label and canvas-identity gates clean, **291 test files, 6,343 tests passed, 3 todo**, build OK. **Not run:** `knip`, the E2E parity suite, a browser or DEV check of the Milestones screen (the date text was checked by the rendered-screen test UT-MSTONE-901 / 911, not by eye), and DEV still runs the build from before this change.
+
+## D129 — Add Costs from Table: Add Row leaves Cost Paid By blank (18 Nov 2026)
+
+**Status:** uncommitted (working tree), not on DEV.
+**Report:** "SPV should not be selected by default when adding a new row" (screenshots: the canvas's new rows show Cost Paid By empty, Depreciation and Apply VAT "Yes"; the code app's showed "SPV").
+**Canvas:** the `vsb_Dev.SpreadSheet` bundle (`Resources/Controls/Dev.SpreadSheet.bundle.js`) and its source (`vsbcloud-pcf-spreadsheet`) do look the nearest account header up in `SubaccountDataIN` (`colSubaccountMappedCostPaid`, from `'SPVDevCo Mapping Capex Devexes'`, Capex Costs Screen Y:2578) and compare `vsb_devcospv` with "952850002" / "952850001". The user's canvas screenshot shows new rows with the cell empty (they sat under 85002, an account row, which the mapping, keyed by sub-account number, does not list); the product call (user, 18 Nov 2026) is that a new row starts with no payer.
+**Code app before:** the screen handed the grid a mapping keyed exactly as that lookup reads it, so every new row under a mapped sub-account came in as SPV (or DevCo).
+**Now:** a new row's Cost Paid By starts blank; Depreciation and Apply VAT stay "Yes". The mapping input (`subaccountDataIn`), its builder in `Screen.tsx` and `util_dataset.ts` (`findNearestAccountHeaderRow`, used only there) are gone. A row saved without a payer is refused by Validation 4, "Please fill out the missing cost information." (`validateMissingMetadata`; canvas `locMissingValues`), as in the canvas.
+**Not changed:** `buildInitialSheet` still seeds the empty row of a sub-account with no contract from the mapping; that row is never drawn (`sheetRowsToGrid` drops rows with no description; the canvas has no such row).
+**Tests:** UT-ADDCOST-109.
