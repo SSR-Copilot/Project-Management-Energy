@@ -23,7 +23,7 @@ import {
   Text, Tooltip, makeStyles, mergeClasses, tokens,
 } from "@fluentui/react-components";
 import {
-  BugRegular, InfoRegular, LockClosedRegular, PersonFilled, ProhibitedRegular, WarningFilled,
+  BugRegular, InfoRegular, LockClosedRegular, PersonFilled, SubtractCircleRegular, WarningFilled,
   ChevronDownRegular,
 } from "@fluentui/react-icons";
 import type { Ref } from "react";
@@ -188,7 +188,9 @@ function ProjectStatusGlyph({ status }: { status: string | undefined }) {
     "aria-hidden": true as const,
   };
   const icon = projectStatusIcon(status);
-  if (icon === "blocked") return <ProhibitedRegular {...props} />;
+  // The classic `Icon.Blocked` is a circle with a HORIZONTAL bar (Fluent `SubtractCircle`); `Prohibited` drew a
+  // diagonal slash (user, 18 Nov 2026).
+  if (icon === "blocked") return <SubtractCircleRegular {...props} />;
   if (icon === "lock") return <LockClosedRegular {...props} />;
   return <InfoRegular {...props} />;
 }

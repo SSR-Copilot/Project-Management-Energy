@@ -327,6 +327,17 @@ describe("UT-REV Screen (connected)", () => {
     expect(input(`${FLD}Currency_1-r-1`).value).toBe("Euro");
   });
 
+  it("UT-REV-918 a locked page draws the cards' value boxes in the canvas Disabled look; an open page does not", () => {
+    // `gal_…_GridContracts_1.DisplayMode: Disabled` greys every card child (user screenshot, 18 Nov 2026).
+    state.project = { ...baseProject, clusterStateName: "Draft" };
+    const { unmount } = renderScreen();
+    expect(input(`${FLD}Currency_1-r-1`).getAttribute("data-blocked")).toBe("true");
+    unmount();
+    state.project = { ...baseProject };
+    renderScreen();
+    expect(input(`${FLD}Currency_1-r-1`).hasAttribute("data-blocked")).toBe(false);
+  });
+
   it("UT-REV-916 the contract panel: two sections, one Contract Duration caption, the country toggle only with inflation on", async () => {
     renderScreen();
     fireEvent.click(button("btn_Revenue_AddContract"));

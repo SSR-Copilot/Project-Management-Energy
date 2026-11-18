@@ -16,7 +16,7 @@ import type { ReactElement } from "react";
 import { Button, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import {
   ArrowClockwiseRegular, ArrowLeftRegular, CheckmarkFilled, CheckmarkRegular, ClockAlarmRegular, DismissRegular, FlashRegular,
-  InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleRegular,
+  InfoFilled, InfoRegular, LockClosedRegular, bundleIcon, MailRegular, PeopleRegular, SubtractCircleFilled, SubtractCircleRegular,
 } from "@fluentui/react-icons";
 import { palette } from "@/theme/tokens";
 import { ARIA, UI, stepCardDescription, type TerminalKind } from "./rules";
@@ -384,8 +384,10 @@ export interface ClusterActionsProps {
 
 export function ClusterActions({ cancelApproval, reset, next, info, terminals }: ClusterActionsProps) {
   const s = useStyles();
+  // `pcf_…_Buttons_Abandoned.IconName: If(<project abandoned>, "Blocked2Solid", "Blocked2")` (Y:2110-2115): the filled
+  // circle once it reads "Activate", the outlined one while it reads "Abandon". `pcf_…_Buttons_Inactive` is always "Lock".
   const terminalIcon = (t: TerminalAction): ReactElement =>
-    t.kind === "abandon" ? <SubtractCircleRegular /> : <LockClosedRegular />;
+    t.kind === "abandon" ? (t.active ? <SubtractCircleFilled /> : <SubtractCircleRegular />) : <LockClosedRegular />;
   return (
     <div className={s.actions}>
       {cancelApproval ? (
